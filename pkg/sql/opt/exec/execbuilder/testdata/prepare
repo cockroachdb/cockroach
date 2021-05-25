@@ -121,6 +121,7 @@ network usage: <hidden>
 ·
 • scan
   cluster nodes: <hidden>
+  cluster regions: <hidden>
   actual row count: 1
   KV rows read: 1
   KV bytes read: 8 B
@@ -140,6 +141,7 @@ network usage: <hidden>
 ·
 • scan
   cluster nodes: <hidden>
+  cluster regions: <hidden>
   actual row count: 0
   KV rows read: 0
   KV bytes read: 0 B

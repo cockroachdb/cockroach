@@ -125,6 +125,8 @@ type QueryLevelStats struct {
 	KVTime           time.Duration
 	NetworkMessages  int64
 	ContentionTime   time.Duration
+	Nodes            []string
+	Regions          []string
 }
 
 // Accumulate accumulates other's stats into the receiver.
@@ -141,6 +143,8 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.KVTime += other.KVTime
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
+	s.Nodes = util.CombinesUniqueString(s.Nodes, other.Nodes)
+	s.Regions = util.CombinesUniqueString(s.Regions, other.Regions)
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a

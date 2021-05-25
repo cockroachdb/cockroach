@@ -70,12 +70,14 @@ network usage: <hidden>
 ·
 • group
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 5
 │ group by: k
 │ ordered: +k
 │
 └── • merge join
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 5
     │ equality: (k) = (k)
     │ left cols are key
@@ -83,6 +85,7 @@ network usage: <hidden>
     │
     ├── • scan
     │     cluster nodes: <hidden>
+    │     cluster regions: <hidden>
     │     actual row count: 5
     │     KV rows read: 5
     │     KV bytes read: 40 B
@@ -92,6 +95,7 @@ network usage: <hidden>
     │
     └── • scan
           cluster nodes: <hidden>
+          cluster regions: <hidden>
           actual row count: 5
           KV rows read: 5
           KV bytes read: 40 B
@@ -115,22 +119,26 @@ network usage: <hidden>
 ·
 • sort
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 5
 │ order: +w
 │
 └── • distinct
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 5
     │ distinct on: w
     │
     └── • hash join
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 5
         │ equality: (k) = (w)
         │ left cols are key
         │
         ├── • scan
         │     cluster nodes: <hidden>
+        │     cluster regions: <hidden>
         │     actual row count: 5
         │     KV rows read: 5
         │     KV bytes read: 40 B
@@ -140,6 +148,7 @@ network usage: <hidden>
         │
         └── • scan
               cluster nodes: <hidden>
+              cluster regions: <hidden>
               actual row count: 5
               KV rows read: 5
               KV bytes read: 40 B
@@ -163,14 +172,17 @@ network usage: <hidden>
 ·
 • cross join
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 25
 │
 ├── • ordinality
 │   │ cluster nodes: <hidden>
+│   │ cluster regions: <hidden>
 │   │ actual row count: 5
 │   │
 │   └── • scan
 │         cluster nodes: <hidden>
+│         cluster regions: <hidden>
 │         actual row count: 5
 │         KV rows read: 5
 │         KV bytes read: 40 B
@@ -180,10 +192,12 @@ network usage: <hidden>
 │
 └── • ordinality
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 5
     │
     └── • scan
           cluster nodes: <hidden>
+          cluster regions: <hidden>
           actual row count: 5
           KV rows read: 5
           KV bytes read: 40 B
@@ -228,10 +242,12 @@ network usage: <hidden>
 ·
 • window
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 5
 │
 └── • scan
       cluster nodes: <hidden>
+      cluster regions: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
@@ -255,6 +271,7 @@ network usage: <hidden>
 ·
 • scan
   cluster nodes: <hidden>
+  cluster regions: <hidden>
   actual row count: 0
   KV rows read: 0
   KV bytes read: 0 B
@@ -285,6 +302,7 @@ network usage: <hidden>
 │
 ├── • insert
 │   │ cluster nodes: <hidden>
+│   │ cluster regions: <hidden>
 │   │ actual row count: 1
 │   │ into: child(c, p)
 │   │
@@ -301,10 +319,12 @@ network usage: <hidden>
 │   │
 │   └── • group (scalar)
 │       │ cluster nodes: <hidden>
+│       │ cluster regions: <hidden>
 │       │ actual row count: 1
 │       │
 │       └── • scan
 │             cluster nodes: <hidden>
+│             cluster regions: <hidden>
 │             actual row count: 1
 │             KV rows read: 1
 │             KV bytes read: 8 B
@@ -317,10 +337,12 @@ network usage: <hidden>
     │
     └── • error if rows
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 0
         │
         └── • lookup join (anti)
             │ cluster nodes: <hidden>
+            │ cluster regions: <hidden>
             │ actual row count: 0
             │ KV rows read: 1
             │ KV bytes read: 8 B
@@ -330,12 +352,14 @@ network usage: <hidden>
             │
             └── • filter
                 │ cluster nodes: <hidden>
+                │ cluster regions: <hidden>
                 │ actual row count: 1
                 │ estimated row count: 1
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer
                       cluster nodes: <hidden>
+                      cluster regions: <hidden>
                       actual row count: 1
                       label: buffer 1
 ·

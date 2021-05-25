@@ -61,10 +61,12 @@ network usage: <hidden>
 ·
 • group (scalar)
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 1
 │
 └── • scan
       cluster nodes: <hidden>
+      cluster regions: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
@@ -87,6 +89,7 @@ network usage: <hidden>
 ·
 • merge join
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 5
 │ equality: (k) = (k)
 │ left cols are key
@@ -94,6 +97,7 @@ network usage: <hidden>
 │
 ├── • scan
 │     cluster nodes: <hidden>
+│     cluster regions: <hidden>
 │     actual row count: 5
 │     KV rows read: 5
 │     KV bytes read: 40 B
@@ -103,6 +107,7 @@ network usage: <hidden>
 │
 └── • scan
       cluster nodes: <hidden>
+      cluster regions: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
