@@ -681,7 +681,7 @@ func (r *testRunner) runTest(
 
 				req := issues.PostRequest{
 					AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
-					Mention:         []string{string(alias)},
+					Mention:         []string{"@" + string(alias)},
 					ProjectColumnID: owner.TriageColumnID,
 					PackageName:     "roachtest",
 					TestName:        t.Name(),
