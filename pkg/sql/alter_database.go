@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -235,6 +236,13 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		jobDesc,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			if n.n.IfNotExists {
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("region %q already exists; skipping", n.n.Region),
+				)
+				return nil
+			}
 			return pgerror.Newf(
 				pgcode.DuplicateObject,
 				"region %q already added to database",

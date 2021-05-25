@@ -554,8 +554,9 @@ DATABASE alter_test_db  ALTER DATABASE alter_test_db CONFIGURE ZONE USING
                         lease_preferences = '[[+region=ca-central-1]]'
 
 # Test adding a region after first region.
-statement ok
-ALTER DATABASE alter_test_db ADD REGION "us-east-1"
+query T noticetrace
+ALTER DATABASE alter_test_db ADD REGION IF NOT EXISTS "us-east-1"
+----
 
 query TTBT colnames
 show regions from database alter_test_db
@@ -591,11 +592,24 @@ ALTER DATABASE alter_test_db ADD REGION "test"
 statement error pgcode 42710 region "ap-southeast-2" already added to database
 ALTER DATABASE alter_test_db ADD REGION "ap-southeast-2"
 
+query T noticetrace
+ALTER DATABASE alter_test_db ADD REGION IF NOT EXISTS "ap-southeast-2"
+----
+NOTICE: region "ap-southeast-2" already exists; skipping
+
 statement error cannot add region
 ALTER DATABASE new_db ADD REGION "us-west-1"
 
 statement error pq: database has no regions to drop
 ALTER DATABASE new_db DROP REGION "us-west-1"
+
+query TTBT colnames
+show regions from database alter_test_db
+----
+database       region          primary  zones
+alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 statement ok
 CREATE DATABASE alter_primary_region_db
