@@ -352,7 +352,7 @@ func (a *appStats) recordStatement(
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
 	s.mu.data.LastExecTimestamp = timeutil.Now()
-	s.mu.data.Nodes = util.CombinesUniqueInt64(s.mu.data.Nodes, nodes)
+	s.mu.data.Nodes = util.CombineUniqueInt64(s.mu.data.Nodes, nodes)
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
