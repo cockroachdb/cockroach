@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -89,6 +90,9 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
+	values := uri.Query()
+	values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	uri.RawQuery = values.Encode()
 	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
 }
 
