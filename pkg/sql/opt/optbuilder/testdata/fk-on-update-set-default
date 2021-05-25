@@ -84,7 +84,7 @@ CREATE TABLE child_multi (
   p INT DEFAULT 0,
   q INT DEFAULT 1,
   UNIQUE (c, q),
-  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi(p, q) ON UPDATE SET DEFAULT 
+  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi(p, q) ON UPDATE SET DEFAULT
 )
 ----
 
