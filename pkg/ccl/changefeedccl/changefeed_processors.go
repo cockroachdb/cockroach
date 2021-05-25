@@ -538,27 +538,27 @@ func (ca *changeAggregator) tick() error {
 	processingNanos := timeutil.Since(event.BufferGetTimestamp()).Nanoseconds()
 	ca.metrics.ProcessingNanos.Inc(processingNanos)
 
-	if event.Type() == kvfeed.KVEvent {
+	forceFlush := false
+	switch event.Type() {
+	case kvfeed.KVEvent:
 		if err := ca.eventConsumer.ConsumeEvent(ca.Ctx, event); err != nil {
 			return err
 		}
+	case kvfeed.ResolvedEvent:
+		resolved := event.Resolved()
+		if _, err := ca.spanFrontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
+			return err
+		}
+		ca.spansToFlush = append(ca.spansToFlush, resolved)
+		forceFlush = resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 	}
 
-	return ca.maybeFlush(event.Resolved())
+	return ca.maybeFlush(forceFlush)
 }
 
 // maybeFlush flushes sink and emits resolved timestamp if needed.
-func (ca *changeAggregator) maybeFlush(resolvedSpan *jobspb.ResolvedSpan) error {
-	if resolvedSpan != nil {
-		if _, err := ca.spanFrontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
-			return err
-		}
-		ca.spansToFlush = append(ca.spansToFlush, resolvedSpan)
-	}
-
-	boundaryReached := resolvedSpan != nil && resolvedSpan.DeprecatedBoundaryReached
-	if len(ca.spansToFlush) == 0 ||
-		(timeutil.Since(ca.lastFlush) < ca.flushFrequency && !boundaryReached) {
+func (ca *changeAggregator) maybeFlush(force bool) error {
+	if len(ca.spansToFlush) == 0 || (timeutil.Since(ca.lastFlush) < ca.flushFrequency && !force) {
 		return nil
 	}
 
@@ -576,8 +576,7 @@ func (ca *changeAggregator) maybeFlush(resolvedSpan *jobspb.ResolvedSpan) error 
 	// order. This will ultimately improve the efficiency of the checkpointing
 	// code which wants to checkpoint whenever the frontier changes.
 	for i := len(ca.spansToFlush) - 1; i >= 0; i-- {
-		resolvedSpan = ca.spansToFlush[i]
-		resolvedBytes, err := protoutil.Marshal(resolvedSpan)
+		resolvedBytes, err := protoutil.Marshal(ca.spansToFlush[i])
 		if err != nil {
 			return err
 		}
@@ -1224,20 +1223,6 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 	if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`unmarshalling resolved span: %x`, raw)
-	}
-
-	// Change aggregators running on v20.2 nodes will not know about the new
-	// BoundaryType field added in v21.1 and thus will only have the boolean
-	// populated. This code translates the boolean into the BoundaryType for the
-	// types that are possible in the mixed version state.
-	//
-	// TODO(ajwerner): Remove this code in 21.2.
-	if resolved.DeprecatedBoundaryReached && resolved.BoundaryType == jobspb.ResolvedSpan_NONE {
-		if cf.shouldFailOnSchemaChange() {
-			resolved.BoundaryType = jobspb.ResolvedSpan_EXIT
-		} else {
-			resolved.BoundaryType = jobspb.ResolvedSpan_BACKFILL
-		}
 	}
 
 	// Inserting a timestamp less than the one the changefeed flow started at
