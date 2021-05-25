@@ -205,3 +205,21 @@ func TestIdleExit(t *testing.T) {
 		t.Error("stop on idle didn't trigger")
 	}
 }
+
+func TestNonExistentTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := tc.Server(0).StartTenant(ctx,
+		base.TestTenantArgs{
+			TenantID:        serverutils.TestTenantID(),
+			Existing:        true,
+			SkipTenantCheck: true,
+		})
+	require.Error(t, err)
+	require.Equal(t, "system DB uninitialized, check if tenant is non existent", err.Error())
+}

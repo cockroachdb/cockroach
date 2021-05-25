@@ -47,8 +47,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -252,7 +254,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			codec = keys.MakeSQLCodec(override)
 		}
 	}
-
 	// Create blob service for inter-node file sharing.
 	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
 	if err != nil {
@@ -746,6 +747,28 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}, nil
 }
 
+// Checks if tenant exists. This function does a very superficial check to see if the system db
+// has been bootstrapped for the tenant. This is not a complete check and is only sufficient
+// to be used in the dev environment.
+func maybeCheckTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB) error {
+	if codec.ForSystemTenant() {
+		// Skip check for system tenant and return early.
+		return nil
+	}
+	key := catalogkeys.NewDatabaseKey(systemschema.SystemDatabaseName).Key(codec)
+	result, err := db.Get(ctx, key)
+	if err != nil {
+		return err
+	}
+	if result.Value == nil || result.ValueInt() != keys.SystemDatabaseID {
+		return errors.New("system DB uninitialized, check if tenant is non existent")
+	}
+	// Tenant has been confirmed to be bootstrapped successfully
+	// as the system database, which is a part of the bootstrap data for
+	// a tenant keyspace, exists in the namespace table.
+	return nil
+}
+
 func (s *SQLServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
@@ -763,6 +786,13 @@ func (s *SQLServer) preStart(
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
+	}
+	// Confirm tenant exists prior to initialization. This is a sanity
+	// check for the dev environment to ensure that a tenant has been
+	// successfully created before attempting to initialize a SQL
+	// server for it.
+	if err := maybeCheckTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
+		return err
 	}
 	s.connManager = connManager
 	s.pgL = pgL

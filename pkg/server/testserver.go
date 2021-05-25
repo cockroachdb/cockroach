@@ -716,18 +716,20 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
-	rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-		ctx, "testserver-check-tenant-active", nil,
-		"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
-		params.TenantID.ToUint64(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	if rowCount == 0 {
-		return nil, errors.New("not found")
-	}
+	if !params.SkipTenantCheck {
+		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-check-tenant-active", nil,
+			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
+			params.TenantID.ToUint64(),
+		)
 
+		if err != nil {
+			return nil, err
+		}
+		if rowCount == 0 {
+			return nil, errors.New("not found")
+		}
+	}
 	st := params.Settings
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
