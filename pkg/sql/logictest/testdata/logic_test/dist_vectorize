@@ -58,13 +58,16 @@ vectorized: <hidden>
 rows read from KV: 5 (40 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • group (scalar)
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 1
 │
 └── • scan
       cluster nodes: <hidden>
+      cluster regions: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
@@ -84,9 +87,11 @@ vectorized: <hidden>
 rows read from KV: 10 (80 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • merge join
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 5
 │ equality: (k) = (k)
 │ left cols are key
@@ -94,6 +99,7 @@ network usage: <hidden>
 │
 ├── • scan
 │     cluster nodes: <hidden>
+│     cluster regions: <hidden>
 │     actual row count: 5
 │     KV rows read: 5
 │     KV bytes read: 40 B
@@ -103,6 +109,7 @@ network usage: <hidden>
 │
 └── • scan
       cluster nodes: <hidden>
+      cluster regions: <hidden>
       actual row count: 5
       KV rows read: 5
       KV bytes read: 40 B
