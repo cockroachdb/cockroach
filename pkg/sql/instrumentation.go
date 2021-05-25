@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -105,6 +106,9 @@ type instrumentationHelper struct {
 	vectorized   bool
 
 	traceMetadata execNodeTraceMetadata
+
+	// Parameter used only on EXPLAIN ANALYZE to be displayed at as top-level stat.
+	regions []string
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -240,11 +244,11 @@ func (ih *instrumentationHelper) Finish(
 	}
 
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
-		ih.traceMetadata.annotateExplain(
+		ih.regions = ih.traceMetadata.annotateExplain(
 			ih.explainPlan,
-			p.curPlan.distSQLFlowInfos,
 			trace,
 			cfg.TestingKnobs.DeterministicExplain,
+			p,
 		)
 	}
 
@@ -434,6 +438,10 @@ func (ih *instrumentationHelper) buildExplainAnalyzePlan(
 	ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 	ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
 
+	if len(ih.regions) > 0 {
+		ob.AddRegionsStats(ih.regions)
+	}
+
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddTopLevelField("error emitting plan", fmt.Sprint(err))
 	}
@@ -512,9 +520,22 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 // annotateExplain aggregates the statistics in the trace and annotates
 // explain.Nodes with execution stats.
 func (m execNodeTraceMetadata) annotateExplain(
-	plan *explain.Plan, flowInfos []flowInfo, spans []tracingpb.RecordedSpan, makeDeterministic bool,
-) {
+	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool, p *planner,
+) []string {
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+	// List of all regions on which any of the statements where executed on.
+	allRegions := make([]string, 0)
+
+	// Retrieve which region each node is on.
+	regionsInfo := make(map[int64]string)
+	descriptors, _ := getAllNodeDescriptors(p)
+	for _, descriptor := range descriptors {
+		for _, tier := range descriptor.Locality.Tiers {
+			if tier.Key == "region" {
+				regionsInfo[int64(descriptor.NodeID)] = tier.Value
+			}
+		}
+	}
 
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
@@ -524,9 +545,11 @@ func (m execNodeTraceMetadata) annotateExplain(
 
 			incomplete := false
 			var nodes util.FastIntSet
+			regionsMap := make(map[string]struct{})
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
 					nodes.Add(int(c.SQLInstanceID))
+					regionsMap[regionsInfo[int64(c.SQLInstanceID)]] = struct{}{}
 				}
 				stats := statsMap[c]
 				if stats == nil {
@@ -545,6 +568,17 @@ func (m execNodeTraceMetadata) annotateExplain(
 				for i, ok := nodes.Next(0); ok; i, ok = nodes.Next(i + 1) {
 					nodeStats.Nodes = append(nodeStats.Nodes, fmt.Sprintf("n%d", i))
 				}
+				regions := make([]string, 0, len(regionsMap))
+				for r := range regionsMap {
+					// Add only if the region is not an empty string (it will be an
+					// empty string if the region is not setup).
+					if len(r) > 0 {
+						regions = append(regions, r)
+					}
+				}
+				sort.Strings(regions)
+				nodeStats.Regions = regions
+				allRegions = util.CombinesUniqueString(allRegions, regions)
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}
@@ -561,4 +595,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 	for i := range plan.Checks {
 		walk(plan.Checks[i])
 	}
+
+	return allRegions
 }
