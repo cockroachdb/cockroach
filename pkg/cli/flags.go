@@ -781,6 +781,7 @@ func init() {
 			demoCmd,
 			debugListFilesCmd,
 			debugTimeSeriesDumpCmd,
+			debugJobTraceFromClusterCmd,
 		},
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
