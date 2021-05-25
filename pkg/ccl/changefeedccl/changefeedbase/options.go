@@ -35,7 +35,7 @@ const (
 	OptKeyInValue               = `key_in_value`
 	OptResolvedTimestamps       = `resolved`
 	OptUpdatedTimestamps        = `updated`
-	OptNonLogicalTimestamps     = `non_logical_updated`
+	OptMVCCTimestamps           = `mvcc_timestamp`
 	OptDiff                     = `diff`
 	OptCompression              = `compression`
 	OptSchemaChangeEvents       = `schema_change_events`
@@ -122,7 +122,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptKeyInValue:               sql.KVStringOptRequireNoValue,
 	OptResolvedTimestamps:       sql.KVStringOptAny,
 	OptUpdatedTimestamps:        sql.KVStringOptRequireNoValue,
-	OptNonLogicalTimestamps:     sql.KVStringOptRequireNoValue,
+	OptMVCCTimestamps:           sql.KVStringOptRequireNoValue,
 	OptDiff:                     sql.KVStringOptRequireNoValue,
 	OptCompression:              sql.KVStringOptRequireValue,
 	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,

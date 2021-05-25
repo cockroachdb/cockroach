@@ -476,6 +476,36 @@ func TestChangefeedTimestamps(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 }
 
+func TestChangefeedMVCCTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE mvcc_timestamp_test_table (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`)
+
+		rowCount := 5
+		expectedPayloads := make([]string, rowCount)
+		for i := 0; i < rowCount; i++ {
+			row := sqlDB.QueryRow(t, `INSERT INTO mvcc_timestamp_test_table VALUES (DEFAULT) RETURNING id, cluster_logical_timestamp()`)
+
+			var id string
+			var mvccTimestamp string
+			row.Scan(&id, &mvccTimestamp)
+			expectedPayloads[i] = fmt.Sprintf(`mvcc_timestamp_test_table: ["%[1]s"]->{"after": {"id": "%[1]s"}, "mvcc_timestamp": "%[2]s"}`,
+				id, mvccTimestamp)
+		}
+
+		changeFeed := feed(t, f, `CREATE CHANGEFEED FOR mvcc_timestamp_test_table WITH mvcc_timestamp`)
+		defer closeFeed(t, changeFeed)
+		assertPayloads(t, changeFeed, expectedPayloads)
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
 func TestChangefeedResolvedFrequency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
