@@ -128,9 +128,7 @@ func joinRelativePath(filePath string, file string) string {
 	return path.Join(".", filePath, file)
 }
 
-func (l *localFileStorage) Writer(
-	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	return l.blobClient.Writer(ctx, joinRelativePath(l.base, basename))
 }
 

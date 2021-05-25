@@ -125,9 +125,7 @@ func (s *azureStorage) Settings() *cluster.Settings {
 	return s.settings
 }
 
-func (s *azureStorage) Writer(
-	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	blob := s.getBlob(basename)
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		_, err := azblob.UploadStreamToBlockBlob(

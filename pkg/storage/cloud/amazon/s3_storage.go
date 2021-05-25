@@ -285,9 +285,7 @@ func (s *s3Storage) Settings() *cluster.Settings {
 	return s.settings
 }
 
-func (s *s3Storage) Writer(
-	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	sess, err := s.newSession(ctx)
 	if err != nil {
 		return nil, err
