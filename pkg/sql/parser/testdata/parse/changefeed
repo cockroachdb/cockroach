@@ -2,7 +2,7 @@ parse
 EXPERIMENTAL CHANGEFEED FOR TABLE foo
 ----
 EXPERIMENTAL CHANGEFEED FOR TABLE foo
-EXPERIMENTAL CHANGEFEED FOR TABLE (foo) -- fully parenthetized
+EXPERIMENTAL CHANGEFEED FOR TABLE (foo) -- fully parenthesized
 EXPERIMENTAL CHANGEFEED FOR TABLE foo -- literals removed
 EXPERIMENTAL CHANGEFEED FOR TABLE _ -- identifiers removed
 
@@ -10,7 +10,7 @@ parse
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
 ----
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
-EXPLAIN CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthetized
+EXPLAIN CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO _ -- literals removed
 EXPLAIN CREATE CHANGEFEED FOR TABLE foo INTO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 EXPLAIN CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
@@ -19,7 +19,7 @@ parse
 CREATE CHANGEFEED FOR foo INTO 'sink'
 ----
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- normalized!
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthetized
+CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo INTO _ -- literals removed
 CREATE CHANGEFEED FOR TABLE foo INTO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
@@ -28,7 +28,7 @@ parse
 CREATE CHANGEFEED FOR TABLE foo INTO sink
 ----
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' -- normalized!
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthetized
+CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo INTO _ -- literals removed
 CREATE CHANGEFEED FOR TABLE foo INTO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
@@ -37,7 +37,7 @@ parse
 CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO 'sink'
 ----
 CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO 'sink'
-CREATE CHANGEFEED FOR TABLE (foo), (db.bar), (schema.db.foo) INTO ('sink') -- fully parenthetized
+CREATE CHANGEFEED FOR TABLE (foo), (db.bar), (schema.db.foo) INTO ('sink') -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO _ -- literals removed
 CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo INTO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 CREATE CHANGEFEED FOR TABLE _, _._, _._._ INTO 'sink' -- identifiers removed
@@ -46,7 +46,7 @@ parse
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
 ----
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink'
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthetized
+CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo INTO _ -- literals removed
 CREATE CHANGEFEED FOR TABLE foo INTO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 CREATE CHANGEFEED FOR TABLE _ INTO 'sink' -- identifiers removed
@@ -60,7 +60,7 @@ parse
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
 ----
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
-CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH bar = ('baz') -- fully parenthetized
+CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH bar = ('baz') -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo INTO _ WITH bar = _ -- literals removed
 CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH bar = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 CREATE CHANGEFEED FOR TABLE _ INTO 'sink' WITH _ = 'baz' -- identifiers removed
