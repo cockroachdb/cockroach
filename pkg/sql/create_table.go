@@ -1867,6 +1867,27 @@ func NewTableDesc(
 		return newColumns, nil
 	}
 
+	// Now that we have all the other columns set up, we can validate
+	// any computed columns.
+	for _, def := range n.Defs {
+		switch d := def.(type) {
+		case *tree.ColumnTableDef:
+			if d.IsComputed() {
+				serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
+					ctx, &desc, d, &n.Table, "computed column", semaCtx,
+				)
+				if err != nil {
+					return nil, err
+				}
+				col, err := desc.FindColumnWithName(d.Name)
+				if err != nil {
+					return nil, err
+				}
+				col.ColumnDesc().ComputeExpr = &serializedExpr
+			}
+		}
+	}
+
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1878,6 +1899,22 @@ func NewTableDesc(
 			// AllocateIDs is called.
 			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+			}
+			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
+				return nil, err
+			}
+			if err := replaceExpressionElemsWithVirtualCols(
+				ctx,
+				&desc,
+				&n.Table,
+				d.Columns,
+				d.Inverted,
+				true, /* isNewTable */
+				semaCtx,
+				evalCtx,
+				sessionData,
+			); err != nil {
+				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
@@ -1986,6 +2023,22 @@ func NewTableDesc(
 			// AllocateIDs is called.
 			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+			}
+			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
+				return nil, err
+			}
+			if err := replaceExpressionElemsWithVirtualCols(
+				ctx,
+				&desc,
+				&n.Table,
+				d.Columns,
+				false, /* isInverted */
+				true,  /* isNewTable */
+				semaCtx,
+				evalCtx,
+				sessionData,
+			); err != nil {
+				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
@@ -2291,27 +2344,6 @@ func NewTableDesc(
 
 		default:
 			return nil, errors.Errorf("unsupported table def: %T", def)
-		}
-	}
-
-	// Now that we have all the other columns set up, we can validate
-	// any computed columns.
-	for _, def := range n.Defs {
-		switch d := def.(type) {
-		case *tree.ColumnTableDef:
-			if d.IsComputed() {
-				serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
-					ctx, &desc, d, &n.Table, "computed column", semaCtx,
-				)
-				if err != nil {
-					return nil, err
-				}
-				col, err := desc.FindColumnWithName(d.Name)
-				if err != nil {
-					return nil, err
-				}
-				col.ColumnDesc().ComputeExpr = &serializedExpr
-			}
 		}
 	}
 
