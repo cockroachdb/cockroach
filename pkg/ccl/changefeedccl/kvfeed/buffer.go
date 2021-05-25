@@ -135,10 +135,10 @@ func (b *Event) Timestamp() hlc.Timestamp {
 	}
 }
 
-// LastNonlogicalWrite returns the Timestamp of the KV,
-// ignoring the backfillTimestamp if present. This helps
-// distinguish backfills from other events.
-func (b *Event) LastNonlogicalWrite() hlc.Timestamp {
+// MVCCTimestamp returns the Timestamp of the KV, ignoring the
+// backfillTimestamp if present. This helps distinguish backfills from
+// other events.
+func (b *Event) MVCCTimestamp() hlc.Timestamp {
 	switch b.Type() {
 	case ResolvedEvent:
 		return b.resolved.Timestamp
