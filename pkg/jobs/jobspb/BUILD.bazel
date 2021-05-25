@@ -11,7 +11,9 @@ go_library(
     deps = [
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/stats",
+        "//pkg/storage/cloud",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
     ],
 )
 

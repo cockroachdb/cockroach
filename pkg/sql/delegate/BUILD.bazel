@@ -6,6 +6,7 @@ go_library(
         "delegate.go",
         "job_control.go",
         "show_all_cluster_settings.go",
+        "show_changefeed_jobs.go",
         "show_database_indexes.go",
         "show_databases.go",
         "show_enums.go",
