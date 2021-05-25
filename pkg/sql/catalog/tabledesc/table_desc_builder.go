@@ -465,7 +465,14 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 // maybeUpgradeIndexFormatVersion tries to promote an index to version
 // descpb.StrictIndexColumnIDGuaranteesVersion whenever possible.
 func maybeUpgradeIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
-	if idx.Version != descpb.EmptyArraysInInvertedIndexesVersion {
+	switch idx.Version {
+	case descpb.SecondaryIndexFamilyFormatVersion:
+		if idx.Type == descpb.IndexDescriptor_INVERTED {
+			return false
+		}
+	case descpb.EmptyArraysInInvertedIndexesVersion:
+		break
+	default:
 		return false
 	}
 	slice := make([]descpb.ColumnID, 0, len(idx.KeyColumnIDs)+len(idx.KeySuffixColumnIDs)+len(idx.StoreColumnIDs))
