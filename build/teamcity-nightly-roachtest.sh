@@ -82,10 +82,10 @@ trap upload_stats EXIT
 # Set up the parameters for the roachtest invocation.
 
 ARTIFACTS="${artifacts}"
-PARALLELISM=16
-CPUQUOTA=1024
-ZONES=""
-TESTS=""
+PARALLELISM="${PARALLELISM-16}"
+CPUQUOTA="${CPUQUOTA-1024}"
+ZONES="${ZONES-}"
+TESTS="${TESTS-}"
 case "${CLOUD}" in
   gce)
     # We specify --zones below so that nodes are created in us-central1-b by

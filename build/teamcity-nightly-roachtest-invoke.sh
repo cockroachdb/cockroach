@@ -2,7 +2,7 @@
 set -euo pipefail
 
 set +e
-bin/roachtest run \
+echo bin/roachtest run \
   --cloud="${CLOUD}" \
   --artifacts="${ARTIFACTS}" \
   --parallelism="${PARALLELISM}" \
