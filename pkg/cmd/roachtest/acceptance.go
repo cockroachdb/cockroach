@@ -39,7 +39,10 @@ func registerAcceptance(r *testRegistry) {
 			minVersion: "v20.2.0", // multitenancy is introduced in this cycle
 			fn:         runAcceptanceMultitenant,
 		},
-		{name: "rapid-restart", fn: runRapidRestart},
+		{
+			name: "rapid-restart", fn: runRapidRestart,
+			skip: "https://github.com/cockroachdb/cockroach/issues/65295",
+		},
 		{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 		{
 			name: "many-splits", fn: runManySplits,
