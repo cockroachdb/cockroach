@@ -273,7 +273,7 @@ func (es *generatorExternalStorage) Size(ctx context.Context, basename string) (
 
 func (es *generatorExternalStorage) Writer(
 	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+) (io.WriteCloser, error) {
 	return nil, errors.New("unsupported")
 }
 

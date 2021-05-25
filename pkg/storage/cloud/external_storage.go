@@ -29,14 +29,6 @@ import (
 // This file is for interfaces only and should not contain any implementation
 // code. All concrete implementations should be added to pkg/storage/cloudimpl.
 
-// WriteCloserWithError extends WriteCloser with an extra CloseWithError func.
-type WriteCloserWithError interface {
-	io.WriteCloser
-	// CloseWithError closes the writer with an error, which may choose to abort
-	// rather than complete any write operations.
-	CloseWithError(error) error
-}
-
 // ExternalStorage provides an API to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
 // Generally an implementation is instantiated pointing to some base path or
@@ -75,18 +67,12 @@ type ExternalStorage interface {
 
 	// Writer returns a writer for the requested name.
 	//
-	// A Writer *must* be closed via either Close or CloseWithError, and if
-	// closing returns a non-nil error, that error should be handled or reported
-	// to the user (likely using errors.CombineErrors(closeErr, reasonErr). This
-	// is because an implementation may wait or buffer written data until Close
-	// or a Write call may return io.EOF if the writer's stream is closed due to
-	// an error that will be reported by Close.
-	//
-	// The CloseWithError(err) alternative to Close(), if passed a non-nil error
-	// may elect to abort the operation, skip flushing any buffers or otherwise
-	// end the operation with the minimum additional work in the event the
-	// caller no longer wishes to complete it, e.g. due to some other error.
-	Writer(ctx context.Context, basename string) (WriteCloserWithError, error)
+	// A Writer *must* be closed via either Close, and if closing returns a
+	// non-nil error, that error should be handled or reported to the user -- an
+	// implementation may buffer written data until Close and only then return
+	// an error, or Write may retrun an opaque io.EOF with the underlying cause
+	// returned by the subsequent Close().
+	Writer(ctx context.Context, basename string) (io.WriteCloser, error)
 
 	// ListFiles returns files that match a globs-style pattern. The returned
 	// results are usually relative to the base path, meaning an ExternalStorage

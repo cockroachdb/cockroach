@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -41,7 +40,8 @@ var _ copyMachineInterface = &fileUploadMachine{}
 
 type fileUploadMachine struct {
 	c              *copyMachine
-	w              cloud.WriteCloserWithError
+	w              io.WriteCloser
+	cancel         func()
 	failureCleanup func()
 }
 
@@ -131,7 +131,9 @@ func newFileUploadMachine(
 		return nil, err
 	}
 
-	f.w, err = store.Writer(ctx, "")
+	writeCtx, canecelWriteCtx := context.WithCancel(ctx)
+	f.cancel = canecelWriteCtx
+	f.w, err = store.Writer(writeCtx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -168,11 +170,10 @@ func CopyInFileStmt(destination, schema, table string) string {
 
 func (f *fileUploadMachine) run(ctx context.Context) error {
 	err := f.c.run(ctx)
-	if err != nil {
-		err = errors.CombineErrors(f.w.CloseWithError(err), err)
-	} else {
-		err = f.w.Close()
+	if err != nil && f.cancel != nil {
+		f.cancel()
 	}
+	err = errors.CombineErrors(f.w.Close(), err)
 
 	if err != nil {
 		f.failureCleanup()

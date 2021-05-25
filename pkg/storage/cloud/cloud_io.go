@@ -257,9 +257,9 @@ func CheckHTTPContentRangeHeader(h string, pos int64) (int64, error) {
 // that has a background process reading from it. It *must* be Closed().
 func BackgroundPipe(
 	ctx context.Context, fn func(ctx context.Context, pr io.Reader) error,
-) WriteCloserWithError {
+) io.WriteCloser {
 	pr, pw := io.Pipe()
-	w := &backgroundPipe{w: pw, grp: ctxgroup.WithContext(ctx)}
+	w := &backgroundPipe{w: pw, grp: ctxgroup.WithContext(ctx), ctx: ctx}
 	w.grp.GoCtx(func(ctc context.Context) error {
 		err := fn(ctx, pr)
 		if err != nil {
@@ -276,6 +276,7 @@ func BackgroundPipe(
 type backgroundPipe struct {
 	w   *io.PipeWriter
 	grp ctxgroup.Group
+	ctx context.Context
 }
 
 // Write writes to the writer.
@@ -285,27 +286,23 @@ func (s *backgroundPipe) Write(p []byte) (int, error) {
 
 // Close closes the writer, finishing the write operation.
 func (s *backgroundPipe) Close() error {
-	err := s.w.Close()
+	err := s.w.CloseWithError(s.ctx.Err())
 	return errors.CombineErrors(err, s.grp.Wait())
-}
-
-// CloseWithError closes the Writer with an error, which may discard prior
-// writes and abort the overall write operation.
-func (s *backgroundPipe) CloseWithError(err error) error {
-	e := s.w.CloseWithError(err)
-	return errors.CombineErrors(e, s.grp.Wait())
 }
 
 // WriteFile is a helper for writing the content of a Reader to the given path
 // of an ExternalStorage.
 func WriteFile(ctx context.Context, dest ExternalStorage, basename string, src io.Reader) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	w, err := dest.Writer(ctx, basename)
 	if err != nil {
 		return errors.Wrap(err, "opening object for writing")
 	}
 	if _, err := io.Copy(w, src); err != nil {
-		closeErr := w.CloseWithError(err)
-		return errors.CombineErrors(closeErr, err)
+		cancel()
+		return errors.CombineErrors(w.Close(), err)
 	}
 	return errors.Wrap(w.Close(), "closing object")
 }

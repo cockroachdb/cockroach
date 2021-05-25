@@ -241,9 +241,7 @@ func (f *fileTableStorage) ReadFileAt(
 
 // Writer implements the ExternalStorage interface and writes the file to the
 // user scoped FileToTableSystem.
-func (f *fileTableStorage) Writer(
-	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
 	if err != nil {
 		return nil, err

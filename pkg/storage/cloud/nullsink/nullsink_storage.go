@@ -73,11 +73,10 @@ func (n *nullSinkStorage) ReadFileAt(
 
 type nullWriter struct{}
 
-func (nullWriter) Write(p []byte) (int, error)  { return len(p), nil }
-func (nullWriter) Close() error                 { return nil }
-func (nullWriter) CloseWithError(_ error) error { return nil }
+func (nullWriter) Write(p []byte) (int, error) { return len(p), nil }
+func (nullWriter) Close() error                { return nil }
 
-func (n *nullSinkStorage) Writer(_ context.Context, _ string) (cloud.WriteCloserWithError, error) {
+func (n *nullSinkStorage) Writer(_ context.Context, _ string) (io.WriteCloser, error) {
 	return nullWriter{}, nil
 }
 

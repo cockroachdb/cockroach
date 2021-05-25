@@ -72,16 +72,21 @@ func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
 	}
 	reader := newPutStreamReader(stream)
 	defer reader.Close()
-	w, err := s.localStorage.Writer(filename[0])
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	w, err := s.localStorage.Writer(ctx, filename[0])
 	if err != nil {
+		cancel()
 		return err
 	}
-
 	if _, err := io.Copy(w, reader); err != nil {
-		closeErr := w.CloseWithError(err)
-		return errors.CombineErrors(err, closeErr)
+		cancel()
+		return errors.CombineErrors(w.Close(), err)
 	}
-	return w.Close()
+	err = w.Close()
+	cancel()
+	return err
 }
 
 // List implements the gRPC service.
