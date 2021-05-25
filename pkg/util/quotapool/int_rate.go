@@ -14,9 +14,6 @@ import (
 	"context"
 	"sync"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // Limit defines a rate in terms of quota per second.
@@ -26,7 +23,7 @@ type Limit float64
 // It has the added feature that quota acquired from the pool can be returned
 // in the case that they end up not getting used.
 type RateLimiter struct {
-	qp *QuotaPool
+	qp *AbstractPool
 }
 
 // NewRateLimiter defines a new RateLimiter. The limiter is implemented as a
@@ -35,17 +32,9 @@ type RateLimiter struct {
 // put the token bucket in debt.
 func NewRateLimiter(name string, rate Limit, burst int64, options ...Option) *RateLimiter {
 	rl := &RateLimiter{}
-	bucket := rateBucket{
-		limitConfig: limitConfig{
-			rate:  rate,
-			burst: burst,
-		},
-		p:           rl,
-		cur:         float64(burst),
-		lastUpdated: timeutil.Now(),
-	}
-	rl.qp = New(name, &bucket, options...)
-	bucket.lastUpdated = rl.qp.timeSource.Now()
+	tb := &TokenBucket{}
+	rl.qp = New(name, tb, options...)
+	tb.Init(TokensPerSecond(rate), Tokens(burst), rl.qp.timeSource)
 	return rl
 }
 
@@ -89,45 +78,11 @@ func (rl *RateLimiter) AdmitN(n int64) bool {
 // decreased by 10, the current quota will decrease accordingly, potentially
 // putting the limiter into debt.
 func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
-	cfg := limitConfig{rate: rate, burst: burst}
-	rl.qp.Add(&cfg)
-}
-
-// rateBucket is the implementation of Resource which remains in the quotapool
-// for a RateLimiter.
-type rateBucket struct {
-	limitConfig
-	p           *RateLimiter
-	cur         float64
-	lastUpdated time.Time
-}
-
-type limitConfig struct {
-	rate  Limit
-	burst int64
-}
-
-var _ Resource = (*rateBucket)(nil)
-
-func (r *rateBucket) Merge(v interface{}) (shouldNotify bool) {
-	switch v := v.(type) {
-	case *rateAlloc:
-		r.cur += float64(v.alloc)
-		v.rl.putRateAlloc(v)
-		if r.cur > float64(r.burst) {
-			r.cur = float64(r.burst)
-		}
+	rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		tb := res.(*TokenBucket)
+		tb.UpdateConfig(TokensPerSecond(rate), Tokens(burst))
 		return true
-	case *limitConfig:
-		shouldNotify = r.burst < v.burst || r.rate < v.rate
-		burstDelta := v.burst - r.burst
-		r.limitConfig = *v
-		r.cur += float64(burstDelta)
-		r.update(r.p.qp.TimeSource().Now())
-		return shouldNotify
-	default:
-		panic(errors.Errorf("unexpected merge value type %T", v))
-	}
+	})
 }
 
 // RateAlloc is an allocated quantity of quota which can be released back into
@@ -140,7 +95,12 @@ type RateAlloc struct {
 // Return returns the RateAlloc to the RateLimiter. It is not safe to call any
 // methods on the RateAlloc after this call.
 func (ra *RateAlloc) Return() {
-	ra.rl.qp.Add((*rateAlloc)(ra))
+	ra.rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		tb := res.(*TokenBucket)
+		tb.Adjust(Tokens(ra.alloc))
+		return true
+	})
+	ra.rl.putRateAlloc((*rateAlloc)(ra))
 }
 
 // Consume destroys the RateAlloc. It is not safe to call any methods on the
@@ -176,43 +136,8 @@ func (rl *RateLimiter) putRateRequest(r *rateRequest) {
 func (i *rateRequest) Acquire(
 	ctx context.Context, res Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
-	r := res.(*rateBucket)
-	now := r.p.qp.timeSource.Now()
-
-	r.update(now)
-
-	// Deal with the case where the allocation is larger than the burst size.
-	// In this case we'll allow the acquisition to complete if the current value
-	// is equal to the burst. If the acquisition succeeds, it will put the limiter
-	// into debt.
-	want := float64(i.want)
-	if i.want > r.burst {
-		want = float64(r.burst)
-	}
-	if delta := want - r.cur; delta > 0 {
-		// Compute the time it will take for r.cur to get to the needed capacity.
-		timeDelta := time.Duration((delta * float64(time.Second)) / float64(r.rate))
-
-		// Deal with the exceedingly edge case that timeDelta, as a floating point
-		// number, is less than 1ns by returning 1ns and looping back around.
-		if timeDelta == 0 {
-			timeDelta++
-		}
-
-		return false, timeDelta
-	}
-	r.cur -= float64(i.want)
-	return true, 0
-}
-
-func (r *rateBucket) update(now time.Time) {
-	if since := now.Sub(r.lastUpdated); since > 0 {
-		r.cur += float64(r.rate) * since.Seconds()
-		if r.cur > float64(r.burst) {
-			r.cur = float64(r.burst)
-		}
-		r.lastUpdated = now
-	}
+	tb := res.(*TokenBucket)
+	return tb.TryToFulfill(Tokens(i.want))
 }
 
 func (i *rateRequest) ShouldWait() bool {

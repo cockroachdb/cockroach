@@ -28,13 +28,10 @@ go_library(
 go_test(
     name = "tenantrate_test",
     size = "small",
-    srcs = [
-        "helpers_test.go",
-        "limiter_test.go",
-    ],
+    srcs = ["limiter_test.go"],
     data = glob(["testdata/**"]),
-    embed = [":tenantrate"],
     deps = [
+        ":tenantrate",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",
@@ -43,6 +40,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
