@@ -299,6 +299,13 @@ func (p *planner) AlterDatabaseDropRegion(
 	}
 
 	if !dbDesc.IsMultiRegion() {
+		if n.IfExists {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.Newf("region %q is not defined on the database; skipping", n.Region),
+			)
+			return &alterDatabaseDropRegionNode{}, nil
+		}
 		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
 	}
 
@@ -534,6 +541,9 @@ func removeLocalityConfigFromAllTablesInDB(
 }
 
 func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
+	if n.n == nil {
+		return nil
+	}
 	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 		params.ctx,
 		params.p.txn,
@@ -577,6 +587,13 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// for all the requisite validation.
 		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
 			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+				if n.n.IfExists {
+					params.p.BufferClientNotice(
+						params.ctx,
+						pgnotice.Newf("region %q is not defined on the database; skipping", n.n.Region),
+					)
+					return nil
+				}
 				return pgerror.Newf(
 					pgcode.UndefinedObject,
 					"region %q has not been added to the database",

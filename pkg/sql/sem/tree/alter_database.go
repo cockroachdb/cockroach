@@ -50,8 +50,9 @@ func (node *AlterDatabaseAddRegion) Format(ctx *FmtCtx) {
 
 // AlterDatabaseDropRegion represents a ALTER DATABASE DROP REGION statement.
 type AlterDatabaseDropRegion struct {
-	Name   Name
-	Region Name
+	Name     Name
+	Region   Name
+	IfExists bool
 }
 
 var _ Statement = &AlterDatabaseDropRegion{}
@@ -61,6 +62,9 @@ func (node *AlterDatabaseDropRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" DROP REGION ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
 	ctx.FormatNode(&node.Region)
 }
 
