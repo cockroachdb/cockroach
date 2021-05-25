@@ -52,12 +52,13 @@ func IsExpectedRelocateError(err error) bool {
 		"unable to remove replica .* which is not present",
 		"unable to add replica .* which is already present",
 		"received invalid ChangeReplicasTrigger .* to remove self",
-		"failed to apply snapshot: raft group deleted",
+		"raft group deleted",
 		"snapshot failed",
 		"breaker open",
 		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
 		"cannot up-replicate to .*; missing gossiped StoreDescriptor",
 		"remote couldn't accept .* snapshot",
+		"cannot add placeholder",
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)
