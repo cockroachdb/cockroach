@@ -450,7 +450,7 @@ type Store struct {
 	// renew. An object is sent on the signal whenever a new entry is added to
 	// the map.
 	renewableLeases       syncutil.IntMap // map[roachpb.RangeID]*Replica
-	renewableLeasesSignal chan struct{}
+	renewableLeasesSignal chan struct{}   // 1-buffered
 
 	// draining holds a bool which indicates whether this store is draining. See
 	// SetDraining() for a more detailed explanation of behavior changes.
@@ -845,7 +845,11 @@ func NewStore(
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
-	s.renewableLeasesSignal = make(chan struct{})
+	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
+		s.renewableLeasesSignal = ch
+	} else {
+		s.renewableLeasesSignal = make(chan struct{}, 1)
+	}
 
 	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
@@ -1720,7 +1724,6 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
 	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
-		repls := make(map[*Replica]struct{})
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
 
@@ -1732,8 +1735,13 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 		// attempting to accurately determine exactly when each iteration of a
 		// lease expires and when we should attempt to renew it as a result.
 		renewalDuration := s.cfg.RangeLeaseActiveDuration() / 5
+		if d := s.cfg.TestingKnobs.LeaseRenewalDurationOverride; d > 0 {
+			renewalDuration = d
+		}
 		for {
+			var numRenewableLeases int
 			s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
+				numRenewableLeases++
 				repl := (*Replica)(v)
 				annotatedCtx := repl.AnnotateCtx(ctx)
 				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
@@ -1745,8 +1753,11 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 				return true
 			})
 
-			if len(repls) > 0 {
+			if numRenewableLeases > 0 {
 				timer.Reset(renewalDuration)
+			}
+			if fn := s.cfg.TestingKnobs.LeaseRenewalOnPostCycle; fn != nil {
+				fn()
 			}
 			select {
 			case <-s.renewableLeasesSignal:
