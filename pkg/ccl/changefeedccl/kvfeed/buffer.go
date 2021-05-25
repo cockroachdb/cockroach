@@ -170,10 +170,9 @@ func (b *chanBuffer) AddResolved(
 	boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) error {
 	return b.addEvent(ctx, Event{resolved: &jobspb.ResolvedSpan{
-		Span:                      span,
-		Timestamp:                 ts,
-		DeprecatedBoundaryReached: boundaryType != jobspb.ResolvedSpan_NONE,
-		BoundaryType:              boundaryType,
+		Span:         span,
+		Timestamp:    ts,
+		BoundaryType: boundaryType,
 	}})
 }
 
