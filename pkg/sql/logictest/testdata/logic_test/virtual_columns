@@ -1093,6 +1093,72 @@ COMMIT;
 statement ok
 DROP TABLE t_ref;
 
+# Tests for virtual computed columns that reference foreign key columns.
+subtest referencing_fks
+
+statement ok
+CREATE TABLE p (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE c_update (
+  p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
+  p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON UPDATE SET NULL,
+  v_cascade INT AS (p_cascade) VIRTUAL,
+  v_default INT AS (p_default) VIRTUAL,
+  v_null INT AS (p_null) VIRTUAL
+)
+
+statement ok
+CREATE TABLE c_delete_cascade (
+  p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
+  v_cascade INT AS (p_cascade) VIRTUAL
+)
+
+statement ok
+CREATE TABLE c_delete_set (
+  p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
+  p_null INT REFERENCES p (p) ON DELETE SET NULL,
+  v_default INT AS (p_default) VIRTUAL,
+  v_null INT AS (p_null) VIRTUAL
+)
+
+statement ok
+INSERT INTO p VALUES (0), (1), (2), (3)
+
+statement ok
+INSERT INTO c_update VALUES (1), (2)
+
+statement ok
+UPDATE p SET p = 10 WHERE p = 1
+
+query IIIIII colnames,rowsort
+SELECT * FROM c_update
+----
+p_cascade  p_default  p_null  v_cascade  v_default  v_null
+2          0          NULL    2          0          NULL
+10         0          NULL    10         0          NULL
+
+statement ok
+INSERT INTO c_delete_cascade VALUES (2), (3);
+INSERT INTO c_delete_set VALUES (2), (3);
+
+statement ok
+DELETE FROM p WHERE p = 3
+
+query II colnames,rowsort
+SELECT * FROM c_delete_cascade
+----
+p_cascade  v_cascade
+2          2
+
+query IIII colnames,rowsort
+SELECT * FROM c_delete_set
+----
+p_default  p_null  v_default  v_null
+0          NULL    0          NULL
+2          NULL    2          NULL
+
 # Regression test for #63167. CREATE TABLE LIKE should copy VIRTUAL columns as
 # VIRTUAL, not STORED.
 statement ok
