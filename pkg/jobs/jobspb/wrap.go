@@ -11,12 +11,15 @@
 package jobspb
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/jsonpb"
 )
 
 // JobID is the ID of a job.
@@ -263,6 +266,16 @@ func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
 const NumJobTypes = 13
+
+// MarshalJSONPB redacts sensitive sink URI parameters from ChangefeedDetails.
+func (p ChangefeedDetails) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
+	var err error
+	p.SinkURI, err = cloud.SanitizeExternalStorageURI(p.SinkURI, nil)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(p)
+}
 
 func init() {
 	if len(Type_name) != NumJobTypes {

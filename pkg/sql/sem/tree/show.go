@@ -286,6 +286,23 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowChangefeedJobs represents a SHOW CHANGEFEED JOBS statement
+type ShowChangefeedJobs struct {
+	// If non-nil, a select statement that provides the job ids to be shown.
+	Jobs *Select
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowChangefeedJobs) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CHANGEFEED")
+	if node.Jobs != nil {
+		ctx.WriteString(" JOB")
+		ctx.FormatNode(node.Jobs)
+	} else {
+		ctx.WriteString(" JOBS")
+	}
+}
+
 // ShowSurvivalGoal represents a SHOW REGIONS statement
 type ShowSurvivalGoal struct {
 	DatabaseName Name
