@@ -58,7 +58,8 @@ func runSampleAggregator(
 	evalCtx *tree.EvalContext,
 	memLimitBytes int64,
 	expectOutOfMemory bool,
-	childNumSamples, aggNumSamples uint32,
+	childNumSamples, childMinNumSamples uint32,
+	aggNumSamples, aggMinNumSamples uint32,
 	maxBuckets, expectedMaxBuckets uint32,
 	inputRows [][]int,
 	expected []result,
@@ -121,11 +122,12 @@ func runSampleAggregator(
 		outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 		spec := &execinfrapb.SamplerSpec{
-			SampleSize: childNumSamples, Sketches: sketchSpecs,
+			SampleSize: childNumSamples,
+			Sketches:   sketchSpecs,
 		}
 		p, err := newSamplerProcessor(
-			&flowCtx, 0 /* processorID */, spec, defaultMinSampleSize, in, &execinfrapb.PostProcessSpec{},
-			outputs[i],
+			&flowCtx, 0 /* processorID */, spec, int(childMinNumSamples), in,
+			&execinfrapb.PostProcessSpec{}, outputs[i],
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -158,7 +160,7 @@ func runSampleAggregator(
 	}
 
 	agg, err := newSampleAggregator(
-		&flowCtx, 0 /* processorID */, spec, defaultMinSampleSize, samplerResults,
+		&flowCtx, 0 /* processorID */, spec, int(aggMinNumSamples), samplerResults,
 		&execinfrapb.PostProcessSpec{}, finalOut,
 	)
 	if err != nil {
@@ -232,7 +234,9 @@ func runSampleAggregator(
 			// some properties and then ignore it.
 			if childNumSamples < uint32(len(inputRows)) || aggNumSamples < uint32(len(inputRows)) {
 				if uint32(len(r.buckets)) > expectedMaxBuckets {
-					t.Errorf("Expected at most %d buckets, got:\n  %v", expectedMaxBuckets, r)
+					t.Errorf(
+						"Expected at most %d buckets, got %d:\n  %v", expectedMaxBuckets, len(r.buckets), r,
+					)
 				}
 				var count int
 				for _, bucket := range r.buckets {
@@ -271,13 +275,16 @@ func TestSampleAggregator(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	type sampAggTestCase struct {
-		memLimitBytes                  int64
-		expectOutOfMemory              bool
-		childNumSamples, aggNumSamples uint32
-		maxBuckets, expectedMaxBuckets uint32
+		memLimitBytes                       int64
+		expectOutOfMemory                   bool
+		childNumSamples, childMinNumSamples uint32
+		aggNumSamples, aggMinNumSamples     uint32
+		maxBuckets, expectedMaxBuckets      uint32
+		inputRows                           [][]int
+		expected                            []result
 	}
 
-	inputRows := [][]int{
+	inputRowsA := [][]int{
 		{-1, 1},
 		{1, 1},
 		{2, 2},
@@ -291,7 +298,7 @@ func TestSampleAggregator(t *testing.T) {
 		{1, -1},
 	}
 
-	expected := []result{
+	expectedA := []result{
 		{
 			tableID:       13,
 			name:          "a",
@@ -316,29 +323,65 @@ func TestSampleAggregator(t *testing.T) {
 		},
 	}
 
+	var inputRowsB [][]int
+	for i := 0; i < 1000; i++ {
+		inputRowsB = append(inputRowsB, []int{i, i})
+	}
+
+	expectedB := []result{
+		{
+			tableID:       13,
+			name:          "a",
+			colIDs:        "{100}",
+			rowCount:      1000,
+			distinctCount: 1000,
+			nullCount:     0,
+		},
+		{
+			tableID:       13,
+			name:          "<NULL>",
+			colIDs:        "{101}",
+			rowCount:      1000,
+			distinctCount: 1000,
+			nullCount:     0,
+			buckets: []resultBucket{
+				// The "B" cases will always sample fewer than 100% of rows, so the
+				// expected histogram just needs to have one dummy bucket and will not
+				// actually be checked.
+				{numEq: 0, numRange: 0, upper: 0},
+			},
+		},
+	}
+
 	for _, tc := range []sampAggTestCase{
 		// Sample all rows, check that stats match expected results exactly except
 		// with histograms disabled in cases when stats collection hits the memory
 		// limit.
-		{0, false, 100, 100, 4, 4},
-		{1 << 0, true, 100, 100, 4, 4},
-		{1 << 4, true, 100, 100, 4, 4},
-		{1 << 15, false, 100, 100, 4, 4},
+		{0, false, 100, 100, 100, 100, 4, 4, inputRowsA, expectedA},
+		{1 << 0, true, 100, 100, 100, 100, 4, 4, inputRowsA, expectedA},
+		{1 << 4, true, 100, 100, 100, 100, 4, 4, inputRowsA, expectedA},
+		{1 << 15, false, 100, 100, 100, 100, 4, 4, inputRowsA, expectedA},
 
 		// Sample some rows, check that stats match expected results except for
 		// histograms, which are nondeterministic. Only check the number of buckets
 		// and the number of rows counted by the histogram. This also tests that
 		// sampleAggregator can dynamically shrink capacity if fed from a
 		// lower-capacity samplerProcessor.
-		{0, false, 2, 2, 2, 2},
-		{0, false, 2, 2, 4, 2},
-		{0, false, 100, 2, 4, 2},
-		{0, false, 2, 100, 4, 2},
+		{0, false, 2, 2, 2, 2, 2, 2, inputRowsA, expectedA},
+		{0, false, 2, 2, 2, 2, 4, 2, inputRowsA, expectedA},
+		{0, false, 100, 100, 2, 2, 4, 2, inputRowsA, expectedA},
+		{0, false, 2, 2, 100, 100, 4, 2, inputRowsA, expectedA},
+
+		// Sample some rows with dynamic shrinking due to memory limits. Check that
+		// stats match and that histograms have the right number of buckets and
+		// number of rows.
+		{1 << 15, false, 200, 20, 200, 20, 200, 50, inputRowsB, expectedB},
+		{1 << 16, false, 200, 20, 200, 20, 200, 200, inputRowsB, expectedB},
 	} {
 		runSampleAggregator(
 			t, server, sqlDB, kvDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
-			tc.childNumSamples, tc.aggNumSamples, tc.maxBuckets, tc.expectedMaxBuckets,
-			inputRows, expected,
+			tc.childNumSamples, tc.childMinNumSamples, tc.aggNumSamples, tc.aggMinNumSamples,
+			tc.maxBuckets, tc.expectedMaxBuckets, tc.inputRows, tc.expected,
 		)
 	}
 }

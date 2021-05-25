@@ -434,7 +434,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				h, err := s.generateHistogram(
 					ctx,
 					s.EvalCtx,
-					s.sr.Get(),
+					&s.sr,
 					colIdx,
 					typ,
 					si.numRows-si.numNulls,
@@ -464,7 +464,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				h, err := s.generateHistogram(
 					ctx,
 					s.EvalCtx,
-					invSr.Get(),
+					invSr,
 					0, /* colIdx */
 					types.Bytes,
 					invSketch.numRows-invSketch.numNulls,
@@ -532,41 +532,23 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 func (s *sampleAggregator) generateHistogram(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	samples []stats.SampledRow,
+	sr *stats.SampleReservoir,
 	colIdx int,
 	colType *types.T,
 	numRows int64,
 	distinctCount int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
-	// Account for the memory we'll use copying the samples into values.
-	if err := s.tempMemAcc.Grow(ctx, sizeOfDatum*int64(len(samples))); err != nil {
+	prevCapacity := sr.Cap()
+	values, err := sr.GetNonNullDatums(ctx, &s.tempMemAcc, colIdx)
+	if err != nil {
 		return stats.HistogramData{}, err
 	}
-	values := make(tree.Datums, 0, len(samples))
-
-	var da rowenc.DatumAlloc
-	for _, sample := range samples {
-		ed := &sample.Row[colIdx]
-		// Ignore NULLs (they are counted separately).
-		if !ed.IsNull() {
-			beforeSize := ed.Datum.Size()
-			if err := ed.EnsureDecoded(colType, &da); err != nil {
-				return stats.HistogramData{}, err
-			}
-			afterSize := ed.Datum.Size()
-
-			// Perform memory accounting. This memory is not added to the temporary
-			// account since it won't be released until the sampleAggregator is
-			// destroyed.
-			if afterSize > beforeSize {
-				if err := s.memAcc.Grow(ctx, int64(afterSize-beforeSize)); err != nil {
-					return stats.HistogramData{}, err
-				}
-			}
-
-			values = append(values, ed.Datum)
-		}
+	if sr.Cap() != prevCapacity {
+		log.Infof(
+			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
+			prevCapacity, sr.Cap(),
+		)
 	}
 	return stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
 }
