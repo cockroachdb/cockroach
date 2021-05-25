@@ -34,6 +34,19 @@ pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto severi
 pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
 "
 
+EXISTING_BROKEN_TESTS_IN_BAZEL="
+pkg/acceptance/BUILD.bazel
+pkg/cmd/cockroach-oss/BUILD.bazel
+pkg/cmd/github-post/BUILD.bazel
+pkg/cmd/prereqs/BUILD.bazel
+pkg/cmd/publish-artifacts/BUILD.bazel
+pkg/cmd/roachtest/BUILD.bazel
+pkg/cmd/teamcity-trigger/BUILD.bazel
+pkg/server/debug/pprofui/BUILD.bazel
+pkg/util/caller/BUILD.bazel
+pkg/util/log/BUILD.bazel
+"
+
 git grep 'go:generate stringer' pkg | while read LINE; do
     dir=$(dirname $(echo $LINE | cut -d: -f1))
     type=$(echo $LINE | grep -o -- '-type[= ][^ ]*' | sed 's/-type[= ]//g' | awk '{print tolower($0)}')
@@ -60,5 +73,15 @@ git grep '//go:generate' -- './*.go' | grep -v stringer | grep -v 'add-leaktest\
     echo 'present in the Bazel build as well, then add the line to the'
     echo 'EXISTING_GO_GENERATE_COMMENTS in build/bazelutil/check-genfiles.sh.'
     echo 'Also see https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/1380090083/How+to+ensure+your+code+builds+with+Bazel'
+    exit 1
+done
+
+git grep 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v generate-test-suites | cut -d: -f1 | while read LINE; do
+    if [[ "$EXISTING_BROKEN_TESTS_IN_BAZEL" == *"$LINE"* ]]; then
+	# Grandfathered.
+	continue
+    fi
+    echo "A new broken test in Bazel was added in $LINE"
+    echo 'Ensure the test runs with Bazel, then remove the broken_in_bazel tag.'
     exit 1
 done

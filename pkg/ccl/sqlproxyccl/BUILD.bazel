@@ -45,7 +45,6 @@ go_test(
         ":testserver_config.cnf",
     ],
     embed = [":sqlproxyccl"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/utilccl",
