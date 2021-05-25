@@ -168,6 +168,7 @@ var tpccMeta = workload.Meta{
 			`conns`:              {RuntimeOnly: true},
 			`idle-conns`:         {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`use-tx-for-init`:    {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -620,6 +621,14 @@ func (w *tpcc) Ops(
 	w.reg = reg
 	w.usePostgres = parsedURL.Port() == "5432"
 
+	method, err := workload.StringToMethod(w.connFlags.Method)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	// We only Prepare statements if Prepare is explicitly specified.
+	noPrepare := method != workload.Prepare
+
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
 	cfg := workload.MultiConnPoolCfg{
@@ -627,6 +636,7 @@ func (w *tpcc) Ops(
 		// Limit the number of connections per pool (otherwise preparing statements
 		// at startup can be slow).
 		MaxConnsPerPool: 50,
+		NoPrepare:       noPrepare,
 	}
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 

@@ -39,6 +39,9 @@ type MultiConnPoolCfg struct {
 	// If 0, there is no per-pool maximum (other than the total maximum number of
 	// connections which still applies).
 	MaxConnsPerPool int
+
+	// NoPrepare determines whether or not prepared statements can be used or not.
+	NoPrepare bool
 }
 
 // NewMultiConnPool creates a new MultiConnPool.
@@ -59,6 +62,10 @@ func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, err
 	var warmupConns [][]*pgx.Conn
 	for i := range urls {
 		connCfg, err := pgx.ParseConnectionString(urls[i])
+
+		// If NoPrepare is specified, we want to set PreferSimpleProtocol to true
+		// to ensure we don't implicitly prepare statements.
+		connCfg.PreferSimpleProtocol = cfg.NoPrepare
 		if err != nil {
 			return nil, err
 		}

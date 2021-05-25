@@ -52,6 +52,8 @@ var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to 
 
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
+var runInsertInTx = initFlags.Bool("run-insert-in-tx", false,
+	"If set to true, each insert statement  by the dataloader will be run in a transaction")
 
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
@@ -297,7 +299,8 @@ func runInitImpl(
 	switch strings.ToLower(*dataLoader) {
 	case `insert`, `inserts`:
 		l = workloadsql.InsertsDataLoader{
-			Concurrency: *initConns,
+			Concurrency:            *initConns,
+			RunInsertInTransaction: *runInsertInTx,
 		}
 	case `import`, `imports`:
 		l = workload.ImportDataLoader
