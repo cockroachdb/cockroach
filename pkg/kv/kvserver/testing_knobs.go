@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // StoreTestingKnobs is a part of the context used to control parts of
@@ -334,6 +335,13 @@ type StoreTestingKnobs struct {
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
+	// LeaseRenewalSignalChan populates `Store.renewableLeasesSignal`.
+	LeaseRenewalSignalChan chan struct{}
+	// LeaseRenewalOnPostCycle is invoked after each lease renewal cycle.
+	LeaseRenewalOnPostCycle func(syncutil.IntMap)
+	// LeaseRenewalDurationOverride replaces the timer duration for proactively
+	// renewing expiration based leases.
+	LeaseRenewalDurationOverride time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
