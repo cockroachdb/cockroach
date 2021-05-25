@@ -51,18 +51,31 @@ func runSampleTest(
 			)
 		}
 	}
-	samples := sr.Get()
-	sampledRanks := make([]int, len(samples))
 
 	// Verify that the row and the ranks weren't mishandled.
-	for i, s := range samples {
+	for _, s := range sr.Get() {
 		if *s.Row[0].Datum.(*tree.DInt) != tree.DInt(s.Rank) {
 			t.Fatalf(
 				"mismatch between row %s and rank %d",
 				s.Row.String([]*types.T{types.Int}), s.Rank,
 			)
 		}
-		sampledRanks[i] = int(s.Rank)
+	}
+
+	prevCapacity := sr.Cap()
+	values, err := sr.GetNonNullDatums(ctx, memAcc, 0 /* colIdx */)
+	if err != nil {
+		t.Fatal(err)
+	} else if sr.Cap() != prevCapacity {
+		t.Logf(
+			"samples reduced from %d to %d during GetNonNullDatums",
+			prevCapacity, sr.Cap(),
+		)
+	}
+
+	sampledRanks := make([]int, len(values))
+	for i, v := range values {
+		sampledRanks[i] = int(*v.(*tree.DInt))
 	}
 
 	// Verify that the top (smallest) ranks made it.

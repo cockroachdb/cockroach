@@ -13,6 +13,7 @@ package stats
 import (
 	"container/heap"
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -21,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
+
+const sizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
 
 // SampledRow is a row that was sampled.
 type SampledRow struct {
@@ -206,6 +210,36 @@ func (sr *SampleReservoir) SampleRow(
 // Get returns the sampled rows.
 func (sr *SampleReservoir) Get() []SampledRow {
 	return sr.samples
+}
+
+// GetNonNullDatums returns the non-null values of the specified column. The
+// capacity of the reservoir (K) will shrink if we hit a memory limit while
+// building this return slice. If the capacity goes below minNumSamples,
+// GetNonNullDatums will return an error.
+func (sr *SampleReservoir) GetNonNullDatums(
+	ctx context.Context, memAcc *mon.BoundAccount, colIdx int,
+) (values tree.Datums, err error) {
+	err = sr.retryMaybeResize(ctx, func() error {
+		// Account for the memory we'll use copying the samples into values.
+		if memAcc != nil {
+			if err := memAcc.Grow(ctx, sizeOfDatum*int64(len(sr.samples))); err != nil {
+				return err
+			}
+		}
+		values = make(tree.Datums, 0, len(sr.samples))
+		for _, sample := range sr.samples {
+			ed := &sample.Row[colIdx]
+			if ed.Datum == nil {
+				values = nil
+				return errors.AssertionFailedf("value in column %d not decoded", colIdx)
+			}
+			if !ed.IsNull() {
+				values = append(values, ed.Datum)
+			}
+		}
+		return nil
+	})
+	return
 }
 
 func (sr *SampleReservoir) copyRow(
