@@ -299,6 +299,17 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
+statement ok
+CREATE TABLE x (
+  a INT
+)
+
+statement error expected computed column expression to have type string, but .* has type int
+ALTER TABLE x ADD COLUMN err STRING AS (10::INT) STORED
+
+statement ok
+DROP TABLE x
+
 statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMP AS (now()) STORED
@@ -329,7 +340,7 @@ CREATE TABLE y (
   a STRING AS (concat('foo', uuid_v4()::STRING)) STORED
 )
 
-statement error computed columns cannot reference other computed columns
+statement error computed column expression cannot reference computed columns
 CREATE TABLE y (
   a INT AS (3) STORED,
   b INT AS (a) STORED
@@ -345,7 +356,7 @@ CREATE TABLE y (
   b INT AS (count(1)) STORED
 )
 
-statement error computed columns cannot have default values
+statement error computed column cannot have default value
 CREATE TABLE y (
   a INT AS (3) STORED DEFAULT 4
 )
@@ -442,7 +453,7 @@ CREATE TABLE tt (i INT8 AS (1) STORED)
 statement error variable sub-expressions are not allowed in computed column
 ALTER TABLE tt ADD COLUMN c STRING AS ((SELECT NULL)) STORED
 
-statement error computed columns cannot reference other computed columns
+statement error computed column expression cannot reference computed columns
 ALTER TABLE tt ADD COLUMN c INT8 AS (i) STORED
 
 # Composite FK.

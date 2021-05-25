@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -40,12 +41,14 @@ func ValidateComputedColumnExpression(
 	desc catalog.TableDescriptor,
 	d *tree.ColumnTableDef,
 	tn *tree.TableName,
+	op string,
 	semaCtx *tree.SemaContext,
-) (serializedExpr string, _ error) {
+) (serializedExpr string, _ *types.T, _ error) {
 	if d.HasDefaultExpr() {
-		return "", pgerror.New(
+		return "", nil, pgerror.Newf(
 			pgcode.InvalidTableDefinition,
-			"computed columns cannot have default values",
+			"%s cannot have default value",
+			op,
 		)
 	}
 
@@ -53,45 +56,48 @@ func ValidateComputedColumnExpression(
 	// First, check that no column in the expression is a computed column.
 	err := iterColDescriptors(desc, d.Computed.Expr, func(c catalog.Column) error {
 		if c.IsComputed() {
-			return pgerror.New(pgcode.InvalidTableDefinition,
-				"computed columns cannot reference other computed columns")
+			return pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"%s expression cannot reference computed columns",
+				op,
+			)
 		}
 		depColIDs.Add(c.GetID())
 
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Resolve the type of the computed column expression.
 	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Check that the type of the expression is of type defType and that there
 	// are no variable expressions (besides dummyColumnItems) and no impure
 	// functions. In order to safely serialize user defined types and their
 	// members, we need to serialize the typed expression here.
-	expr, _, _, err := DequalifyAndValidateExpr(
+	expr, typ, _, err := DequalifyAndValidateExpr(
 		ctx,
 		desc,
 		d.Computed.Expr,
 		defType,
-		"computed column",
+		op,
 		semaCtx,
 		tree.VolatilityImmutable,
 		tn,
 	)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Virtual computed columns must not refer to mutation columns because it
-	// would not be safe in the case that the mutation column was being backfilled
-	// and the virtual computed column value needed to be computed for the purpose
-	// of writing to a secondary index.
+	// would not be safe in the case that the mutation column was being
+	// backfilled and the virtual computed column value needed to be computed
+	// for the purpose of writing to a secondary index.
 	if d.IsVirtual() {
 		var mutationColumnNames []string
 		var err error
@@ -110,16 +116,17 @@ func ValidateComputedColumnExpression(
 			}
 		})
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		if len(mutationColumnNames) > 0 {
-			return "", unimplemented.Newf(
+			return "", nil, unimplemented.Newf(
 				"virtual computed columns referencing mutation columns",
 				"virtual computed column %q referencing columns (%s) added in the "+
 					"current transaction", d.Name, strings.Join(mutationColumnNames, ", "))
 		}
 	}
-	return expr, nil
+
+	return expr, typ, nil
 }
 
 // ValidateColumnHasNoDependents verifies that the input column has no dependent

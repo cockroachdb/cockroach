@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -158,9 +159,23 @@ func (p *planner) setupFamilyAndConstraintForShard(
 func MakeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
+	tn, err := params.p.getQualifiedTableName(params.ctx, tableDesc)
+	if err != nil {
+		return nil, err
+	}
+
 	// Replace expression index elements with hidden virtual computed columns.
 	// The virtual columns are added as mutation columns to tableDesc.
-	if err := replaceExpressionElemsWithVirtualCols(params, tableDesc, &n); err != nil {
+	if err := replaceExpressionElemsWithVirtualCols(
+		params.ctx,
+		tableDesc,
+		n.Columns,
+		tn,
+		false, /* isNewTable */
+		params.p.SemaCtx(),
+		params.EvalContext(),
+		params.SessionData(),
+	); err != nil {
 		return nil, err
 	}
 
@@ -316,38 +331,51 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 }
 
 // replaceExpressionElemsWithVirtualCols replaces each IndexElem in n with a
-// non-nil Expr with a virtual column with the same expression. The virtual
-// column is added to desc as a mutation column.
+// non-nil Expr with a virtual column with the same expression. If a virtual
+// computed column with the same expression already exists in the table
+// descriptor, the column is used as a replacement for the IndexElem expression.
+// If not, a new virtual column is added to the table descriptor.
 func replaceExpressionElemsWithVirtualCols(
-	params runParams, desc *tabledesc.Mutable, n *tree.CreateIndex,
+	ctx context.Context,
+	desc *tabledesc.Mutable,
+	elems tree.IndexElemList,
+	tn *tree.TableName,
+	isNewTable bool,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	sessionData *sessiondata.SessionData,
 ) error {
-	tn, err := params.p.getQualifiedTableName(params.ctx, desc)
-	if err != nil {
-		return err
-	}
-
-	for i := range n.Columns {
-		elem := &n.Columns[i]
+	for i := range elems {
+		elem := &elems[i]
 		if elem.Expr != nil {
-			if !params.SessionData().EnableExpressionBasedIndexes {
+			if !sessionData.EnableExpressionBasedIndexes {
 				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
 			}
 
-			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionBasedIndexes) {
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.ExpressionBasedIndexes) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"version %v must be finalized to use expression-based indexes",
 					clusterversion.ExpressionBasedIndexes)
 			}
 
-			expr, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
-				params.ctx,
+			// Create a dummy ColumnTableDef to use for validating the
+			// expression. The type is Any because it is unknown until
+			// validation is performed.
+			colDef := &tree.ColumnTableDef{
+				Type: types.Any,
+			}
+			colDef.Computed.Computed = true
+			colDef.Computed.Expr = elem.Expr
+			colDef.Computed.Virtual = true
+
+			// Validate the expression and resolve its type.
+			expr, typ, err := schemaexpr.ValidateComputedColumnExpression(
+				ctx,
 				desc,
-				elem.Expr,
-				types.Any,
-				"index expression",
-				params.p.SemaCtx(),
-				tree.VolatilityImmutable,
+				colDef,
 				tn,
+				"index element",
+				semaCtx,
 			)
 			if err != nil {
 				return err
@@ -355,6 +383,7 @@ func replaceExpressionElemsWithVirtualCols(
 
 			// If a virtual column with the same expression already exists, use
 			// it instead of creating a new virtual column.
+			// TODO(mgartner): Check if the column is dropped.
 			if col, ok := desc.FindVirtualColumnWithExpr(expr); ok {
 				elem.Column = col.ColName()
 				elem.Expr = nil
@@ -363,28 +392,28 @@ func replaceExpressionElemsWithVirtualCols(
 
 			// Otherwise, create a new virtual column and add it to the table
 			// descriptor.
+			// TODO(mgartner): If we can determine the expression will never
+			// evaluate to NULL, the optimizer might be able to better optimize
+			// queries using the expression-based index if Nullable=false.
 			colName := tabledesc.GenerateUniqueName("crdb_idx_expr", func(name string) bool {
 				_, err := desc.FindColumnWithName(tree.Name(name))
 				return err == nil
 			})
-			addCol := &tree.AlterTableAddColumn{
-				ColumnDef: makeExpressionBasedIndexVirtualColumn(colName, typ, elem.Expr),
+			col := &descpb.ColumnDescriptor{
+				Name:        colName,
+				Hidden:      true,
+				Type:        typ,
+				ComputeExpr: &expr,
+				Virtual:     true,
+				Nullable:    true,
 			}
 
-			// Add the virtual column to desc as a mutation column.
-			if err := params.p.addColumnImpl(
-				params,
-				&alterTableNode{
-					tableDesc: desc,
-					n: &tree.AlterTable{
-						Cmds: []tree.AlterTableCmd{addCol},
-					},
-				},
-				tn,
-				desc,
-				addCol,
-			); err != nil {
-				return err
+			// Add the column to the table descriptor. If the table already
+			// exists, add it as a mutation column.
+			if isNewTable {
+				desc.AddColumn(col)
+			} else {
+				desc.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
 			}
 
 			// Set the column name and unset the expression.

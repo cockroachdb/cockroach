@@ -1882,6 +1882,27 @@ func NewTableDesc(
 		return newColumns, nil
 	}
 
+	// Now that we have all the other columns set up, we can validate
+	// any computed columns.
+	for _, def := range n.Defs {
+		switch d := def.(type) {
+		case *tree.ColumnTableDef:
+			if d.IsComputed() {
+				serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
+					ctx, &desc, d, &n.Table, "computed column", semaCtx,
+				)
+				if err != nil {
+					return nil, err
+				}
+				col, err := desc.FindColumnWithName(d.Name)
+				if err != nil {
+					return nil, err
+				}
+				col.ColumnDesc().ComputeExpr = &serializedExpr
+			}
+		}
+	}
+
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1893,6 +1914,18 @@ func NewTableDesc(
 			// AllocateIDs is called.
 			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+			}
+			if err := replaceExpressionElemsWithVirtualCols(
+				ctx,
+				&desc,
+				d.Columns,
+				&n.Table,
+				true, /* isNewTable */
+				semaCtx,
+				evalCtx,
+				sessionData,
+			); err != nil {
+				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
@@ -2298,27 +2331,6 @@ func NewTableDesc(
 
 		default:
 			return nil, errors.Errorf("unsupported table def: %T", def)
-		}
-	}
-
-	// Now that we have all the other columns set up, we can validate
-	// any computed columns.
-	for _, def := range n.Defs {
-		switch d := def.(type) {
-		case *tree.ColumnTableDef:
-			if d.IsComputed() {
-				serializedExpr, err := schemaexpr.ValidateComputedColumnExpression(
-					ctx, &desc, d, &n.Table, semaCtx,
-				)
-				if err != nil {
-					return nil, err
-				}
-				col, err := desc.FindColumnWithName(d.Name)
-				if err != nil {
-					return nil, err
-				}
-				col.ColumnDesc().ComputeExpr = &serializedExpr
-			}
 		}
 	}
 
@@ -2759,26 +2771,6 @@ func makeShardCheckConstraintDef(
 		},
 		Hidden: true,
 	}, nil
-}
-
-func makeExpressionBasedIndexVirtualColumn(
-	colName string, typ *types.T, expr tree.Expr,
-) *tree.ColumnTableDef {
-	c := &tree.ColumnTableDef{
-		Name:   tree.Name(colName),
-		Type:   typ,
-		Hidden: true,
-	}
-	c.Computed.Computed = true
-	c.Computed.Expr = expr
-	c.Computed.Virtual = true
-
-	// TODO(mgartner): If we can determine the expression will never evaluate to
-	// NULL, the optimizer might be able to better optimize queries using the
-	// expression-based index.
-	c.Nullable.Nullability = tree.Null
-
-	return c
 }
 
 // incTelemetryForNewColumn increments relevant telemetry every time a new column
