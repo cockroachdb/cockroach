@@ -50,6 +50,13 @@ func (desc *ColumnDescriptor) ColName() tree.Name {
 // CheckCanBeOutboundFKRef returns whether the given column can be on the
 // referencing (origin) side of a foreign key relation.
 func (desc *ColumnDescriptor) CheckCanBeOutboundFKRef() error {
+	if desc.Inaccessible {
+		return pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot reference a foreign key",
+			desc.Name,
+		)
+	}
 	if desc.Virtual {
 		return unimplemented.NewWithIssuef(
 			59671, "virtual column %q cannot reference a foreign key",

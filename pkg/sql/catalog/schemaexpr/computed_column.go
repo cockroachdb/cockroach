@@ -106,9 +106,9 @@ func ValidateComputedColumnExpression(
 	}
 
 	// Virtual computed columns must not refer to mutation columns because it
-	// would not be safe in the case that the mutation column was being backfilled
-	// and the virtual computed column value needed to be computed for the purpose
-	// of writing to a secondary index.
+	// would not be safe in the case that the mutation column was being
+	// backfilled and the virtual computed column value needed to be computed
+	// for the purpose of writing to a secondary index.
 	if d.IsVirtual() {
 		var mutationColumnNames []string
 		var err error
@@ -136,6 +136,7 @@ func ValidateComputedColumnExpression(
 					"current transaction", d.Name, strings.Join(mutationColumnNames, ", "))
 		}
 	}
+
 	return expr, typ, nil
 }
 

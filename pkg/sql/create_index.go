@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -162,13 +163,28 @@ func MakeIndexDescriptor(
 	// Ensure that the columns we want to index are accessible before trying to
 	// create the index. This must be checked before inaccessible columns are
 	// created for expression indexes in replaceExpressionElemsWithVirtualCols.
-	if err := validateIndexColumnsAreAccessible(tableDesc, n.Columns); err != nil {
+	if err := validateColumnsAreAccessible(tableDesc, n.Columns); err != nil {
+		return nil, err
+	}
+
+	tn, err := params.p.getQualifiedTableName(params.ctx, tableDesc)
+	if err != nil {
 		return nil, err
 	}
 
 	// Replace expression index elements with hidden virtual computed columns.
 	// The virtual columns are added as mutation columns to tableDesc.
-	if err := replaceExpressionElemsWithVirtualCols(params, tableDesc, &n); err != nil {
+	if err := replaceExpressionElemsWithVirtualCols(
+		params.ctx,
+		tableDesc,
+		tn,
+		n.Columns,
+		n.Inverted,
+		false, /* isNewTable */
+		params.p.SemaCtx(),
+		params.EvalContext(),
+		params.SessionData(),
+	); err != nil {
 		return nil, err
 	}
 
@@ -305,10 +321,10 @@ func MakeIndexDescriptor(
 	return &indexDesc, nil
 }
 
-// validateIndexColumnsAreAccessible validates that the columns for an index are
+// validateColumnsAreAccessible validates that the columns for an index are
 // accessible. This check must be performed before creating inaccessible columns
 // for expression indexes with replaceExpressionElemsWithVirtualCols.
-func validateIndexColumnsAreAccessible(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
+func validateColumnsAreAccessible(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
 	for _, column := range columns {
 		// Skip expression elements.
 		if column.Expr != nil {
@@ -321,7 +337,7 @@ func validateIndexColumnsAreAccessible(desc *tabledesc.Mutable, columns tree.Ind
 		if foundColumn.IsInaccessible() {
 			return pgerror.Newf(
 				pgcode.UndefinedColumn,
-				"column %q is inaccessible and cannot be indexed",
+				"column %q is inaccessible and cannot be referenced",
 				foundColumn.GetName(),
 			)
 		}
@@ -348,25 +364,29 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 }
 
 // replaceExpressionElemsWithVirtualCols replaces each IndexElem in n with a
-// non-nil Expr with a virtual column with the same expression. The virtual
-// column is added to desc as a mutation column.
+// non-nil Expr with an inaccessible virtual column with the same expression. If
+// isNewTable is true, the column is added directly to desc. Otherwise, the
+// virtual column is added to desc as a mutation column.
 func replaceExpressionElemsWithVirtualCols(
-	params runParams, desc *tabledesc.Mutable, n *tree.CreateIndex,
+	ctx context.Context,
+	desc *tabledesc.Mutable,
+	tn *tree.TableName,
+	elems tree.IndexElemList,
+	isInverted bool,
+	isNewTable bool,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	sessionData *sessiondata.SessionData,
 ) error {
-	tn, err := params.p.getQualifiedTableName(params.ctx, desc)
-	if err != nil {
-		return err
-	}
-
-	lastColumnIdx := len(n.Columns) - 1
-	for i := range n.Columns {
-		elem := &n.Columns[i]
+	lastColumnIdx := len(elems) - 1
+	for i := range elems {
+		elem := &elems[i]
 		if elem.Expr != nil {
-			if !params.SessionData().EnableExpressionIndexes {
+			if !sessionData.EnableExpressionIndexes {
 				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
 			}
 
-			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionIndexes) {
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.ExpressionIndexes) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"version %v must be finalized to use expression indexes",
 					clusterversion.ExpressionIndexes)
@@ -384,12 +404,12 @@ func replaceExpressionElemsWithVirtualCols(
 
 			// Validate the expression and resolve its type.
 			expr, typ, err := schemaexpr.ValidateComputedColumnExpression(
-				params.ctx,
+				ctx,
 				desc,
 				colDef,
 				tn,
 				"index element",
-				params.p.SemaCtx(),
+				semaCtx,
 			)
 			if err != nil {
 				return err
@@ -407,7 +427,7 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if !n.Inverted && !colinfo.ColumnTypeIsIndexable(typ) {
+			if !isInverted && !colinfo.ColumnTypeIsIndexable(typ) {
 				return pgerror.Newf(
 					pgcode.InvalidTableDefinition,
 					"index element %s of type %s is not indexable",
@@ -416,7 +436,7 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if n.Inverted {
+			if isInverted {
 				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
 					return errors.WithHint(
 						pgerror.Newf(
@@ -454,7 +474,14 @@ func replaceExpressionElemsWithVirtualCols(
 				Virtual:      true,
 				Nullable:     true,
 			}
-			desc.AddColumn(col)
+
+			// Add the column to the table descriptor. If the table already
+			// exists, add it as a mutation column.
+			if isNewTable {
+				desc.AddColumn(col)
+			} else {
+				desc.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
+			}
 
 			// Set the column name and unset the expression.
 			elem.Column = tree.Name(colName)
