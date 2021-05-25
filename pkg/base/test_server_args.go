@@ -268,4 +268,7 @@ type TestTenantArgs struct {
 	// automatically open a connection to the server. That's equivalent to running
 	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
 	UseDatabase string
+
+	// Skip check for tenant existence when running the test.
+	SkipTenantCheck bool
 }
