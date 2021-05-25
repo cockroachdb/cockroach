@@ -5043,9 +5043,9 @@ statements_or_queries:
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
 // %Text:
-// SHOW [AUTOMATIC] JOBS [select clause]
+// SHOW [AUTOMATIC | CHANGEFEED] JOBS [select clause]
 // SHOW JOBS FOR SCHEDULES [select clause]
-// SHOW JOB <jobid>
+// SHOW [CHANGEFEED] JOB <jobid>
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
   SHOW AUTOMATIC JOBS
@@ -5056,8 +5056,13 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowJobs{Automatic: false}
   }
+| SHOW CHANGEFEED JOBS
+  {
+    $$.val = &tree.ShowChangefeedJobs{}
+  }
 | SHOW AUTOMATIC JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS error // SHOW HELP: SHOW JOBS
+| SHOW CHANGEFEED JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS select_stmt
   {
     $$.val = &tree.ShowJobs{Jobs: $3.slct()}
@@ -5079,6 +5084,14 @@ show_jobs_stmt:
       },
     }
   }
+| SHOW CHANGEFEED JOB a_expr
+  {
+    $$.val = &tree.ShowChangefeedJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$4.expr()}}},
+      },
+    }
+  }
 | SHOW JOB WHEN COMPLETE a_expr
   {
     $$.val = &tree.ShowJobs{
@@ -5089,6 +5102,7 @@ show_jobs_stmt:
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
+| SHOW CHANGEFEED JOB error // SHOW HELP: SHOW JOBS
 
 // %Help: SHOW SCHEDULES - list periodic schedules
 // %Category: Misc
