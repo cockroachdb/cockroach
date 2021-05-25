@@ -56,13 +56,39 @@ which may or may not work (and are not officially supported).
 
 # Upgrading / extending the Docker image
 
+## Toolchains
+
+The `cockroachdb/builder` image has a number of cross-compilers
+installed for various targets. We build those cross-compilers in a
+separate step prior to the actual image build, and pull in tarballs
+to install them during the image build. This saves time and allows us to
+use the same toolchains for the Bazel build.
+
+Toolchains may need to be rebuilt infrequently. Follow this process to
+do so (if you don't need to update the toolchains, proceed to "basic
+process" below):
+
+- Edit files in `build/toolchains/toolchainbuild` as desired.
+- Run `build/toolchains/toolchainbuild/buildtoolchains.sh` to test --
+  this will build the tarballs locally and place them in your
+  `artifacts` directory.
+- When you're happy with the result, commit your changes, submit a pull
+  request, and have it reviewed.
+- Ask someone with permissions to run the
+  `Build and Publish Cross Toolchains` build configuration in TeamCity.
+  This will publish the toolchains to a new subdirectory in Google cloud
+  storage, and the build log will additionally contain the sha256 of
+  every tarball created.
+- Update the URL's in `build/builder/Dockerfile` and their sha256's
+  accordingly. Then proceed to follow the "Basic process" steps below.
+
 ## Basic Process
 
 - Edit `build/builder/Dockerfile` as desired.
 - Run `build/builder.sh init` to test -- this will build the image locally.
-  Beware this can take a lot of time. The result of `init` is a docker image
-  version which you can subsequently stick into the `version` variable inside
-  the `builder.sh` script for testing locally.
+  The result of `init` is a docker image version which you can subsequently
+  stick into the `version` variable inside the `builder.sh` script for
+  testing locally.
 - When you're happy with the result, commit your changes, submit a pull request,
   and have it reviewed.
 - Ask someone with permissions to run the `Build and Push new Builder Image`
