@@ -13,9 +13,9 @@ package scplan
 import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 func indexContainsColumn(idx *descpb.IndexDescriptor, colID descpb.ColumnID) bool {
-	return columnsContainsID(idx.ColumnIDs, colID) ||
+	return columnsContainsID(idx.KeyColumnIDs, colID) ||
 		columnsContainsID(idx.StoreColumnIDs, colID) ||
-		columnsContainsID(idx.ExtraColumnIDs, colID)
+		columnsContainsID(idx.KeySuffixColumnIDs, colID)
 }
 
 func columnsContainsID(haystack []descpb.ColumnID, needle descpb.ColumnID) bool {

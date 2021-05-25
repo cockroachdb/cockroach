@@ -140,11 +140,11 @@ CREATE TABLE db.t (
 	}
 
 	indexToAdd := descpb.IndexDescriptor{
-		ID:          2,
-		Name:        "foo",
-		ColumnIDs:   []descpb.ColumnID{1},
-		ColumnNames: []string{"i"},
-		ColumnDirections: []descpb.IndexDescriptor_Direction{
+		ID:             2,
+		Name:           "foo",
+		KeyColumnIDs:   []descpb.ColumnID{1},
+		KeyColumnNames: []string{"i"},
+		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 			descpb.IndexDescriptor_ASC,
 		},
 	}
@@ -239,13 +239,13 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
 					TableID: fooTable.GetID(),
 					Index: descpb.IndexDescriptor{
-						Name:             "new_primary_key",
-						ID:               2,
-						ColumnIDs:        []descpb.ColumnID{1},
-						ColumnNames:      []string{"i"},
-						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						Unique:           true,
-						Type:             descpb.IndexDescriptor_FORWARD,
+						Name:                "new_primary_key",
+						ID:                  2,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnNames:      []string{"i"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Unique:              true,
+						Type:                descpb.IndexDescriptor_FORWARD,
 					},
 					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
 					StoreColumnIDs:      []descpb.ColumnID{2},
@@ -266,13 +266,13 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
 					TableID: fooTable.GetID(),
 					Index: descpb.IndexDescriptor{
-						Name:             "primary",
-						ID:               1,
-						ColumnIDs:        []descpb.ColumnID{1},
-						ColumnNames:      []string{"i"},
-						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						Unique:           true,
-						Type:             descpb.IndexDescriptor_FORWARD,
+						Name:                "primary",
+						ID:                  1,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnNames:      []string{"i"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Unique:              true,
+						Type:                descpb.IndexDescriptor_FORWARD,
 					},
 					OtherPrimaryIndexID: 2,
 					StoreColumnIDs:      []descpb.ColumnID{},

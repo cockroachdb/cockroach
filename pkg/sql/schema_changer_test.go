@@ -3069,7 +3069,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		if len(tableDesc.AllMutations()) != 0 {
 			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.AllMutations()))
 		}
-		if tableDesc.GetPrimaryIndex().NumColumns() != 1 || tableDesc.GetPrimaryIndex().GetColumnName(0) != "rowid" {
+		if tableDesc.GetPrimaryIndex().NumKeyColumns() != 1 || tableDesc.GetPrimaryIndex().GetKeyColumnName(0) != "rowid" {
 			return errors.Errorf("expected primary key change to not succeed after cancellation")
 		}
 		return nil
@@ -3748,14 +3748,14 @@ CREATE TABLE d.t (
 	// Verify that this descriptor uses the new STORING encoding. Overwrite it
 	// with one that uses the old encoding.
 	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
-		if index.NumExtraColumns() != 1 {
-			t.Fatalf("ExtraColumnIDs not set properly: %s", tableDesc)
+		if index.NumKeySuffixColumns() != 1 {
+			t.Fatalf("KeySuffixColumnIDs not set properly: %s", tableDesc)
 		}
-		if index.NumStoredColumns() != 1 {
+		if index.NumSecondaryStoredColumns() != 1 {
 			t.Fatalf("StoreColumnIDs not set properly: %s", tableDesc)
 		}
-		newIndexDesc := *index.IndexDesc()
-		newIndexDesc.ExtraColumnIDs = append(newIndexDesc.ExtraColumnIDs, newIndexDesc.StoreColumnIDs...)
+		newIndexDesc := index.IndexDescDeepCopy()
+		newIndexDesc.KeySuffixColumnIDs = append(newIndexDesc.KeySuffixColumnIDs, newIndexDesc.StoreColumnIDs...)
 		newIndexDesc.StoreColumnIDs = nil
 		tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), newIndexDesc)
 	}

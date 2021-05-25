@@ -501,7 +501,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.GetID()) {
+			if n.tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(colToDrop.GetID()) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.GetName())
 			}
@@ -515,16 +515,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				containsThisColumn := false
 
 				// Analyze the index.
-				for j := 0; j < idx.NumColumns(); j++ {
-					if idx.GetColumnID(j) == colToDrop.GetID() {
+				for j := 0; j < idx.NumKeyColumns(); j++ {
+					if idx.GetKeyColumnID(j) == colToDrop.GetID() {
 						containsThisColumn = true
 						break
 					}
 				}
 				if !containsThisColumn {
-					for j := 0; j < idx.NumExtraColumns(); j++ {
-						id := idx.GetExtraColumnID(j)
-						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
+					for j := 0; j < idx.NumKeySuffixColumns(); j++ {
+						id := idx.GetKeySuffixColumnID(j)
+						if n.tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
 							// IndexDescriptor). The presence of a PK column in the
@@ -542,7 +542,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// The loop above this comment is for the old STORING encoding. The
 					// loop below is for the new encoding (where the STORING columns are
 					// always in the value part of a KV).
-					for j := 0; j < idx.NumStoredColumns(); j++ {
+					for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {
 						if idx.GetStoredColumnID(j) == colToDrop.GetID() {
 							containsThisColumn = true
 							break
@@ -1029,8 +1029,9 @@ func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableNode) Close(context.Context)        {}
 
-// addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given table descriptor, but sets up
-// the index with ExtraColumnIDs from the given index, rather than the table's primary key.
+// addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given
+// table descriptor, but sets up the index with KeySuffixColumnIDs from the
+// given index, rather than the table's primary key.
 func addIndexMutationWithSpecificPrimaryKey(
 	ctx context.Context,
 	table *tabledesc.Mutable,
@@ -1045,11 +1046,14 @@ func addIndexMutationWithSpecificPrimaryKey(
 	if err := table.AllocateIDs(ctx); err != nil {
 		return err
 	}
-	// Use the columns in the given primary index to construct this indexes ExtraColumnIDs list.
-	toAdd.ExtraColumnIDs = nil
-	for _, colID := range primary.ColumnIDs {
-		if !toAdd.ContainsColumnID(colID) {
-			toAdd.ExtraColumnIDs = append(toAdd.ExtraColumnIDs, colID)
+	// Use the columns in the given primary index to construct this indexes
+	// KeySuffixColumnIDs list.
+	presentColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
+	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
+	toAdd.KeySuffixColumnIDs = nil
+	for _, colID := range primary.KeyColumnIDs {
+		if !presentColIDs.Contains(colID) {
+			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
 		}
 	}
 	return nil
@@ -1150,7 +1154,7 @@ func applyColumnMutation(
 		}
 
 		// Prevent a column in a primary key from becoming non-null.
-		if tableDesc.GetPrimaryIndex().ContainsColumnID(col.GetID()) {
+		if tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
 				`column "%s" is in a primary index`, col.GetName())
 		}

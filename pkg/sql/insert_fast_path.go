@@ -109,10 +109,10 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	}
 	for i, ord := range c.InsertCols {
 		var colID descpb.ColumnID
-		if i < c.idx.NumColumns() {
-			colID = c.idx.GetColumnID(i)
+		if i < c.idx.NumKeyColumns() {
+			colID = c.idx.GetKeyColumnID(i)
 		} else {
-			colID = c.idx.GetExtraColumnID(i - c.idx.NumColumns())
+			colID = c.idx.GetKeySuffixColumnID(i - c.idx.NumKeyColumns())
 		}
 
 		c.colMap.Set(colID, int(ord))

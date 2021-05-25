@@ -202,7 +202,12 @@ func (n *dropIndexNode) maybeDropShardColumn(
 		return nil
 	}
 	if catalog.FindNonDropIndex(tableDesc, func(otherIdx catalog.Index) bool {
-		return otherIdx.ContainsColumnID(shardColDesc.GetID())
+		colIDs := otherIdx.CollectKeyColumnIDs()
+		if !otherIdx.Primary() {
+			colIDs.UnionWith(otherIdx.CollectSecondaryStoredColumnIDs())
+			colIDs.UnionWith(otherIdx.CollectKeySuffixColumnIDs())
+		}
+		return colIDs.Contains(shardColDesc.GetID())
 	}) != nil {
 		return nil
 	}

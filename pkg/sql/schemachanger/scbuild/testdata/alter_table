@@ -25,16 +25,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 2
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: new_primary_key
           partitioning: {}
           sharded: {}
@@ -52,16 +52,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 1
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: primary
           partitioning: {}
           sharded: {}
@@ -95,16 +95,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 2
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: new_primary_key
           partitioning: {}
           sharded: {}
@@ -122,16 +122,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 1
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: primary
           partitioning: {}
           sharded: {}
@@ -166,16 +166,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 2
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: new_primary_key
           partitioning: {}
           sharded: {}
@@ -195,16 +195,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 1
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: primary
           partitioning: {}
           sharded: {}
@@ -254,16 +254,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 2
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: new_primary_key
           partitioning: {}
           sharded: {}
@@ -281,16 +281,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 1
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: primary
           partitioning: {}
           sharded: {}
@@ -328,16 +328,16 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 2
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: new_primary_key
           partitioning: {}
           sharded: {}
@@ -355,16 +355,16 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 1
-          columnNames:
-          - i
           foreignKey: {}
           geoConfig: {}
           id: 1
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 1
+          keyColumnNames:
+          - i
           name: primary
           partitioning: {}
           sharded: {}
@@ -393,16 +393,16 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 2
-          columnNames:
-          - rowid
           foreignKey: {}
           geoConfig: {}
           id: 2
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 2
+          keyColumnNames:
+          - rowid
           name: new_primary_key
           partitioning: {}
           sharded: {}
@@ -421,16 +421,16 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     elementProto:
       primaryIndex:
         index:
-          columnDirections:
-          - ASC
-          columnIds:
-          - 2
-          columnNames:
-          - rowid
           foreignKey: {}
           geoConfig: {}
           id: 1
           interleave: {}
+          keyColumnDirections:
+          - ASC
+          keyColumnIds:
+          - 2
+          keyColumnNames:
+          - rowid
           name: primary
           partitioning: {}
           sharded: {}

@@ -394,9 +394,9 @@ func (idx index) toIndexDescriptor(id int) descpb.IndexDescriptor {
 	if len(idx.partitions) > 0 {
 		neededCols := idx.partitions.numCols()
 		for i := 0; i < neededCols; i++ {
-			idxDesc.ColumnIDs = append(idxDesc.ColumnIDs, descpb.ColumnID(i))
-			idxDesc.ColumnNames = append(idxDesc.ColumnNames, fmt.Sprintf("col%d", i))
-			idxDesc.ColumnDirections = append(idxDesc.ColumnDirections, descpb.IndexDescriptor_ASC)
+			idxDesc.KeyColumnIDs = append(idxDesc.KeyColumnIDs, descpb.ColumnID(i))
+			idxDesc.KeyColumnNames = append(idxDesc.KeyColumnNames, fmt.Sprintf("col%d", i))
+			idxDesc.KeyColumnDirections = append(idxDesc.KeyColumnDirections, descpb.IndexDescriptor_ASC)
 		}
 		idxDesc.Partitioning.NumColumns = uint32(len(idx.partitions[0].start))
 		for _, p := range idx.partitions {
@@ -1016,7 +1016,7 @@ func makeTableDesc(t table, tableID int, dbID int) (descpb.TableDescriptor, erro
 	}
 	numCols := 0
 	for _, idx := range desc.Indexes {
-		c := len(idx.ColumnIDs)
+		c := len(idx.KeyColumnIDs)
 		if c > numCols {
 			numCols = c
 		}

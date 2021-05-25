@@ -65,12 +65,6 @@ const (
 	UpdaterOnlyColumns rowUpdaterType = 1
 )
 
-type returnTrue struct{}
-
-func (returnTrue) Error() string { panic(errors.AssertionFailedf("unimplemented")) }
-
-var returnTruePseudoError error = returnTrue{}
-
 // MakeUpdater creates a Updater for the given table.
 //
 // UpdateCols are the columns being updated and correspond to the updateValues
@@ -97,8 +91,8 @@ func MakeUpdater(
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
 	var primaryIndexCols catalog.TableColSet
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
 		primaryIndexCols.Add(colID)
 	}
 
@@ -133,12 +127,15 @@ func MakeUpdater(
 		if index.IsPartial() {
 			return true
 		}
-		return index.ForEachColumnID(func(id descpb.ColumnID) error {
-			if _, ok := updateColIDtoRowIndex.Get(id); ok {
-				return returnTruePseudoError
+		colIDs := index.CollectKeyColumnIDs()
+		colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
+		for _, colID := range colIDs.Ordered() {
+			if _, ok := updateColIDtoRowIndex.Get(colID); ok {
+				return true
 			}
-			return nil
-		}) != nil
+		}
+		return false
 	}
 
 	includeIndexes := make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes()))
