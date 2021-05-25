@@ -334,6 +334,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
 			e.ob.AddRedactableField(RedactNodes, "cluster nodes", strings.Join(s.Nodes, ", "))
+			e.ob.AddRedactableField(RedactNodes, "cluster regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
 			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))

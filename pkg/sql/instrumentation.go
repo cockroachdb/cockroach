@@ -242,9 +242,9 @@ func (ih *instrumentationHelper) Finish(
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
 			ih.explainPlan,
-			p.curPlan.distSQLFlowInfos,
 			trace,
 			cfg.TestingKnobs.DeterministicExplain,
+			p,
 		)
 	}
 
@@ -512,9 +512,19 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 // annotateExplain aggregates the statistics in the trace and annotates
 // explain.Nodes with execution stats.
 func (m execNodeTraceMetadata) annotateExplain(
-	plan *explain.Plan, flowInfos []flowInfo, spans []tracingpb.RecordedSpan, makeDeterministic bool,
+	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool, p *planner,
 ) {
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+	// Retrieve which region each node is on.
+	regionsInfo := make(map[int64]string)
+	descriptors, _ := getAllNodeDescriptors(p)
+	for _, descriptor := range descriptors {
+		for _, tier := range descriptor.Locality.Tiers {
+			if tier.Key == "region" {
+				regionsInfo[int64(descriptor.NodeID)] = tier.Value
+			}
+		}
+	}
 
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
@@ -524,9 +534,11 @@ func (m execNodeTraceMetadata) annotateExplain(
 
 			incomplete := false
 			var nodes util.FastIntSet
+			regions := make([]string, 0)
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
 					nodes.Add(int(c.SQLInstanceID))
+					regions = util.CombinesUniqueString(regions, []string{regionsInfo[int64(c.SQLInstanceID)]})
 				}
 				stats := statsMap[c]
 				if stats == nil {
@@ -545,6 +557,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 				for i, ok := nodes.Next(0); ok; i, ok = nodes.Next(i + 1) {
 					nodeStats.Nodes = append(nodeStats.Nodes, fmt.Sprintf("n%d", i))
 				}
+				nodeStats.Regions = regions
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}
