@@ -346,7 +346,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	idx := &mut.Indexes[0]
 	id := idx.ColumnIDs[0]
 	name := idx.ColumnNames[0]
-	idx.Version = descpb.EmptyArraysInInvertedIndexesVersion
+	idx.Version = descpb.SecondaryIndexFamilyFormatVersion
 	idx.StoreColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
 	idx.StoreColumnNames = append([]string{}, name, name, name, name)
 	idx.ExtraColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
@@ -377,13 +377,14 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	var msg string
 	err = rows.Scan(&msg)
 	require.NoError(t, err)
-	require.Equal(t, `InitPut /Table/53/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, msg)
+	expected := fmt.Sprintf(`InitPut /Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, mut.GetID())
+	require.Equal(t, expected, msg)
 
 	// Test that with the strict guarantees, this table descriptor would have been
 	// considered invalid.
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-	require.EqualError(t, catalog.ValidateSelf(mut),
-		`relation "t" (53): index "sec" has duplicates in ExtraColumnIDs: [2 2 2 2]`)
+	expected = fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in ExtraColumnIDs: [2 2 2 2]`, mut.GetID())
+	require.EqualError(t, catalog.ValidateSelf(mut), expected)
 
 	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
 	require.NoError(t, err)
