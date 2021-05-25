@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -41,24 +40,34 @@ func runImportCLICommand(
 
 	var out string
 	var err error
-	var wg sync.WaitGroup
-	wg.Add(1)
 
+	errCh := make(chan error, 1)
 	go func() {
+		defer close(errCh)
 		out, err = c.RunWithCapture(cliCmd)
-		require.NoError(t, err)
-		wg.Done()
+		errCh <- err
 	}()
 
 	// The import will block after uploading to the userfile table, giving us
 	// a chance to verify that the dump file has been uploaded successfully.
-	<-knobs.uploadComplete
+	select {
+	case <-knobs.uploadComplete:
+	case err := <-errCh:
+		t.Fatalf("%s: import command returned before expected", err.Error())
+	}
 	data, err := ioutil.ReadFile(dumpFilePath)
 	require.NoError(t, err)
 	userfileURI := constructUserfileDestinationURI(dumpFilePath, "", security.RootUserName())
 	checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(), userfileURI, data)
-	knobs.pauseAfterUpload <- struct{}{}
-	wg.Wait()
+	select {
+	case knobs.pauseAfterUpload <- struct{}{}:
+	case err := <-errCh:
+		t.Fatalf("%s: import command returned before expected", err.Error())
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
 
 	// Check that the dump file has been cleaned up after the import CLI command
 	// has completed.
