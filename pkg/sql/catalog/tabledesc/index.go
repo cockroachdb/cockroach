@@ -139,28 +139,51 @@ func (w index) IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnI
 // HasOldStoredColumns returns whether the index has stored columns in the old
 // format (data encoded the same way as if they were in an implicit column).
 func (w index) HasOldStoredColumns() bool {
-	return w.desc.HasOldStoredColumns()
+	return w.NumKeySuffixColumns() > 0 &&
+		!w.Primary() &&
+		len(w.desc.StoreColumnIDs) < len(w.desc.StoreColumnNames)
 }
 
 // InvertedColumnID returns the ColumnID of the inverted column of the inverted
-// index. This is always the last column in ColumnIDs. Panics if the index is
+// index. This is always the last column in KeyColumnIDs. Panics if the index is
 // not inverted.
 func (w index) InvertedColumnID() descpb.ColumnID {
 	return w.desc.InvertedColumnID()
 }
 
 // InvertedColumnName returns the name of the inverted column of the inverted
-// index. This is always the last column in ColumnNames. Panics if the index is
+// index. This is always the last column in KeyColumnNames. Panics if the index is
 // not inverted.
 func (w index) InvertedColumnName() string {
 	return w.desc.InvertedColumnName()
 }
 
-// ContainsColumnID returns true if the index descriptor contains the specified
-// column ID either in its explicit column IDs, the extra column IDs, or the
-// stored column IDs.
-func (w index) ContainsColumnID(colID descpb.ColumnID) bool {
-	return w.desc.ContainsColumnID(colID)
+// CollectKeyColumnIDs creates a new set containing the column IDs in the key
+// of this index.
+func (w index) CollectKeyColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.KeyColumnIDs...)
+}
+
+// CollectSecondaryStoredColumnIDs creates a new set containing the column IDs
+// stored in this index if it is a secondary index.
+func (w index) CollectSecondaryStoredColumnIDs() catalog.TableColSet {
+	if w.Primary() {
+		return catalog.TableColSet{}
+	}
+	return catalog.MakeTableColSet(w.desc.StoreColumnIDs...)
+}
+
+// CollectKeySuffixColumnIDs creates a new set containing the key suffix column
+// IDs in this index. These are the columns from the table's primary index which
+// are otherwise not in this index.
+func (w index) CollectKeySuffixColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.KeySuffixColumnIDs...)
+}
+
+// CollectCompositeColumnIDs creates a new set containing the composite column
+// IDs.
+func (w index) CollectCompositeColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.CompositeColumnIDs...)
 }
 
 // GetGeoConfig returns the geo config in the index descriptor.
@@ -219,36 +242,35 @@ func (w index) GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyRefer
 	return w.desc.InterleavedBy[interleavedByOrdinal]
 }
 
-// NumColumns returns the number of columns as per the index descriptor.
-func (w index) NumColumns() int {
-	return len(w.desc.ColumnIDs)
+// NumKeyColumns returns the number of columns in the index key.
+func (w index) NumKeyColumns() int {
+	return len(w.desc.KeyColumnIDs)
 }
 
-// GetColumnID returns the ID of the columnOrdinal-th column.
-func (w index) GetColumnID(columnOrdinal int) descpb.ColumnID {
-	return w.desc.ColumnIDs[columnOrdinal]
+// GetKeyColumnID returns the ID of the columnOrdinal-th column in the index key.
+func (w index) GetKeyColumnID(columnOrdinal int) descpb.ColumnID {
+	return w.desc.KeyColumnIDs[columnOrdinal]
 }
 
-// GetColumnName returns the name of the columnOrdinal-th column.
-func (w index) GetColumnName(columnOrdinal int) string {
-	return w.desc.ColumnNames[columnOrdinal]
+// GetKeyColumnName returns the name of the columnOrdinal-th column in the index
+// key.
+func (w index) GetKeyColumnName(columnOrdinal int) string {
+	return w.desc.KeyColumnNames[columnOrdinal]
 }
 
-// GetColumnDirection returns the direction of the columnOrdinal-th column.
-func (w index) GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction {
-	return w.desc.ColumnDirections[columnOrdinal]
+// GetKeyColumnDirection returns the direction of the columnOrdinal-th column in
+// the index key.
+func (w index) GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction {
+	return w.desc.KeyColumnDirections[columnOrdinal]
 }
 
-// ForEachColumnID applies its argument fn to each of the column IDs in the
-// index descriptor. If there is an error, that error is returned immediately.
-func (w index) ForEachColumnID(fn func(colID descpb.ColumnID) error) error {
-	return w.desc.RunOverAllColumns(fn)
-}
-
-// NumStoredColumns returns the number of columns which the index stores in
-// addition to the columns which are explicitly part of the index (STORING
-// clause). Only used for secondary indexes.
-func (w index) NumStoredColumns() int {
+// NumSecondaryStoredColumns returns the number of columns which the index
+// stores in addition to the columns which are explicitly part of the index
+// (STORING clause). Returns 0 if the index isn't secondary.
+func (w index) NumSecondaryStoredColumns() int {
+	if w.Primary() {
+		return 0
+	}
 	return len(w.desc.StoreColumnIDs)
 }
 
@@ -262,15 +284,17 @@ func (w index) GetStoredColumnName(storedColumnOrdinal int) string {
 	return w.desc.StoreColumnNames[storedColumnOrdinal]
 }
 
-// NumExtraColumns returns the number of additional columns referenced by the
-// index descriptor.
-func (w index) NumExtraColumns() int {
-	return len(w.desc.ExtraColumnIDs)
+// NumKeySuffixColumns returns the number of additional columns referenced by
+// the index descriptor, which are not part of the index key but which are part
+// of the table's primary key.
+func (w index) NumKeySuffixColumns() int {
+	return len(w.desc.KeySuffixColumnIDs)
 }
 
-// GetExtraColumnID returns the ID of the extraColumnOrdinal-th extra column.
-func (w index) GetExtraColumnID(extraColumnOrdinal int) descpb.ColumnID {
-	return w.desc.ExtraColumnIDs[extraColumnOrdinal]
+// GetKeySuffixColumnID returns the ID of the extraColumnOrdinal-th key suffix
+// column.
+func (w index) GetKeySuffixColumnID(keySuffixColumnOrdinal int) descpb.ColumnID {
+	return w.desc.KeySuffixColumnIDs[keySuffixColumnOrdinal]
 }
 
 // NumCompositeColumns returns the number of composite columns referenced by the
@@ -403,8 +427,8 @@ func (p partitioning) NumColumns() int {
 
 // NumImplicitColumns specifies the number of columns that implicitly prefix a
 // given index. This occurs if a user specifies a PARTITION BY which is not a
-// prefix of the given index, in which case the ColumnIDs are added in front of
-// the index and this field denotes the number of columns added as a prefix.
+// prefix of the given index, in which case the KeyColumnIDs are added in front
+// of the index and this field denotes the number of columns added as a prefix.
 // If NumImplicitColumns is 0, no implicit columns are defined for the index.
 func (p partitioning) NumImplicitColumns() int {
 	return int(p.desc.NumImplicitColumns)

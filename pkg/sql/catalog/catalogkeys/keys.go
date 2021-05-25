@@ -70,7 +70,7 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 		return nil
 	}
 
-	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumColumns())
+	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumKeyColumns())
 
 	colIdx := 0
 	for i := 0; i < index.NumInterleaveAncestors(); i++ {
@@ -78,7 +78,7 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 		// Table/Index IDs are always encoded ascending.
 		dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 		for i := 0; i < int(ancs.SharedPrefixLen); i++ {
-			d, err := index.GetColumnDirection(colIdx).ToEncodingDirection()
+			d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 			if err != nil {
 				panic(err)
 			}
@@ -95,8 +95,8 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	// The index's table/index ID.
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 
-	for colIdx < index.NumColumns() {
-		d, err := index.GetColumnDirection(colIdx).ToEncodingDirection()
+	for colIdx < index.NumKeyColumns() {
+		d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}

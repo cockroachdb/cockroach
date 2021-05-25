@@ -93,19 +93,19 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 		ID:      test.tableID,
 		Columns: columns,
 		PrimaryIndex: descpb.IndexDescriptor{
-			ID:               1,
-			ColumnIDs:        primaryColumnIDs,
-			ColumnDirections: make([]descpb.IndexDescriptor_Direction, len(primaryColumnIDs)),
-			Interleave:       makeInterleave(1, test.primaryInterleaves),
+			ID:                  1,
+			KeyColumnIDs:        primaryColumnIDs,
+			KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(primaryColumnIDs)),
+			Interleave:          makeInterleave(1, test.primaryInterleaves),
 		},
 		Indexes: []descpb.IndexDescriptor{{
-			ID:               2,
-			ColumnIDs:        secondaryColumnIDs,
-			ExtraColumnIDs:   primaryColumnIDs,
-			Unique:           true,
-			ColumnDirections: make([]descpb.IndexDescriptor_Direction, len(secondaryColumnIDs)),
-			Interleave:       makeInterleave(2, test.secondaryInterleaves),
-			Type:             secondaryType,
+			ID:                  2,
+			KeyColumnIDs:        secondaryColumnIDs,
+			KeySuffixColumnIDs:  primaryColumnIDs,
+			Unique:              true,
+			KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(secondaryColumnIDs)),
+			Interleave:          makeInterleave(2, test.secondaryInterleaves),
+			Type:                secondaryType,
 		}},
 	}
 	return tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), colMap
@@ -114,12 +114,12 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 func decodeIndex(
 	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, index catalog.Index, key []byte,
 ) ([]tree.Datum, error) {
-	types, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().ColumnIDs, nil)
+	types, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().KeyColumnIDs, nil)
 	if err != nil {
 		return nil, err
 	}
-	values := make([]EncDatum, index.NumColumns())
-	colDirs := index.IndexDesc().ColumnDirections
+	values := make([]EncDatum, index.NumKeyColumns())
+	colDirs := index.IndexDesc().KeyColumnDirections
 	_, ok, _, err := DecodeIndexKey(codec, tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
@@ -254,7 +254,7 @@ func TestIndexKey(t *testing.T) {
 			}
 
 			for j, value := range values {
-				testValue := testValues[colMap.GetDefault(index.GetColumnID(j))]
+				testValue := testValues[colMap.GetDefault(index.GetKeyColumnID(j))]
 				if value.Compare(evalCtx, testValue) != 0 {
 					t.Fatalf("%d: value %d got %q but expected %q", i, j, value, testValue)
 				}
@@ -1090,7 +1090,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
 			pkIndexDesc := desc.GetPrimaryIndex().IndexDesc()
-			colVals, null, err := EncodeColumns(pkIndexDesc.ColumnIDs, pkIndexDesc.ColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, null, err := EncodeColumns(pkIndexDesc.KeyColumnIDs, pkIndexDesc.KeyColumnDirections, colMap, tc.table.values, nil /*key*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1374,13 +1374,13 @@ func ExtractIndexKey(
 		return nil, err
 	}
 
-	// Extract the values for index.ColumnIDs.
-	indexTypes, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().ColumnIDs, nil)
+	// Extract the values for index.KeyColumnIDs.
+	indexTypes, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().KeyColumnIDs, nil)
 	if err != nil {
 		return nil, err
 	}
-	values := make([]EncDatum, index.NumColumns())
-	dirs := index.IndexDesc().ColumnDirections
+	values := make([]EncDatum, index.NumKeyColumns())
+	dirs := index.IndexDesc().KeyColumnDirections
 	if index.NumInterleaveAncestors() > 0 {
 		// TODO(dan): In the interleaved index case, we parse the key twice; once to
 		// find the index id so we can look up the descriptor, and once to extract
@@ -1400,14 +1400,14 @@ func ExtractIndexKey(
 		}
 	}
 
-	// Extract the values for index.ExtraColumnIDs
-	extraTypes, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().ExtraColumnIDs, nil)
+	// Extract the values for index.KeySuffixColumnIDs
+	extraTypes, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().KeySuffixColumnIDs, nil)
 	if err != nil {
 		return nil, err
 	}
-	extraValues := make([]EncDatum, index.NumExtraColumns())
-	dirs = make([]descpb.IndexDescriptor_Direction, index.NumExtraColumns())
-	for i := 0; i < index.NumExtraColumns(); i++ {
+	extraValues := make([]EncDatum, index.NumKeySuffixColumns())
+	dirs = make([]descpb.IndexDescriptor_Direction, index.NumKeySuffixColumns())
+	for i := 0; i < index.NumKeySuffixColumns(); i++ {
 		// Implicit columns are always encoded Ascending.
 		dirs[i] = descpb.IndexDescriptor_ASC
 	}
@@ -1425,13 +1425,13 @@ func ExtractIndexKey(
 
 	// Encode the index key from its components.
 	var colMap catalog.TableColMap
-	for i := 0; i < index.NumColumns(); i++ {
-		columnID := index.GetColumnID(i)
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		columnID := index.GetKeyColumnID(i)
 		colMap.Set(columnID, i)
 	}
-	for i := 0; i < index.NumExtraColumns(); i++ {
-		columnID := index.GetExtraColumnID(i)
-		colMap.Set(columnID, i+index.NumColumns())
+	for i := 0; i < index.NumKeySuffixColumns(); i++ {
+		columnID := index.GetKeySuffixColumnID(i)
+		colMap.Set(columnID, i+index.NumKeyColumns())
 	}
 	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
 

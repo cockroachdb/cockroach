@@ -146,9 +146,9 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error
 func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 	colIdxByID := catalog.ColumnIDToOrdinalMap(row.tableDesc.PublicColumns())
 	primaryIndex := row.tableDesc.GetPrimaryIndex()
-	jsonEntries := make([]interface{}, primaryIndex.NumColumns())
-	for i := 0; i < primaryIndex.NumColumns(); i++ {
-		colID := primaryIndex.GetColumnID(i)
+	jsonEntries := make([]interface{}, primaryIndex.NumKeyColumns())
+	for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
+		colID := primaryIndex.GetKeyColumnID(i)
 		idx, ok := colIdxByID.Get(colID)
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)

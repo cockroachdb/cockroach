@@ -1786,7 +1786,7 @@ func ValidateForwardIndexes(
 							ctx,
 							tableDesc,
 							idx.GetName(),
-							idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
+							idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
 							idx.GetPredicate(),
 							ie,
 							txn,
