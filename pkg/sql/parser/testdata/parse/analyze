@@ -2,7 +2,7 @@ parse
 ANALYZE t
 ----
 ANALYZE t
-ANALYZE t -- fully parenthetized
+ANALYZE t -- fully parenthesized
 ANALYZE t -- literals removed
 ANALYZE _ -- identifiers removed
 
@@ -10,6 +10,6 @@ parse
 ANALYZE db.sc.t
 ----
 ANALYZE db.sc.t
-ANALYZE db.sc.t -- fully parenthetized
+ANALYZE db.sc.t -- fully parenthesized
 ANALYZE db.sc.t -- literals removed
 ANALYZE _._._ -- identifiers removed
