@@ -19,11 +19,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,7 +47,6 @@ func TestStorage(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -59,6 +59,7 @@ func TestStorage(t *testing.T) {
 			`CREATE TABLE system.sqlliveness`,
 			`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
 		tDB.Exec(t, schema)
+		tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 		timeSource := timeutil.NewManualTime(t0)
 		clock := hlc.NewClock(func() int64 {
@@ -66,8 +67,8 @@ func TestStorage(t *testing.T) {
 		}, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper()
-		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
-			dbName, timeSource.NewTimer)
+		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+			tableID, timeSource.NewTimer)
 		return clock, timeSource, settings, stopper, storage
 	}
 
@@ -303,7 +304,6 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	dbName := t.Name()
@@ -312,6 +312,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		`CREATE TABLE system.sqlliveness`,
 		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
 	tDB.Exec(t, schema)
+	tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClock(func() int64 {
@@ -321,8 +322,8 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(&settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
-		dbName, timeSource.NewTimer)
+	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
 	const (
@@ -438,4 +439,18 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		step(t)
 	}
 	wg.Wait()
+}
+
+func getTableID(
+	t *testing.T, db *sqlutils.SQLRunner, dbName, tableName string,
+) (tableID descpb.ID) {
+	t.Helper()
+	db.QueryRow(t, `
+select u.id 
+  from system.namespace t
+  join system.namespace u 
+    on t.id = u."parentID" 
+ where t.name = $1 and u.name = $2`,
+		dbName, tableName).Scan(&tableID)
+	return tableID
 }

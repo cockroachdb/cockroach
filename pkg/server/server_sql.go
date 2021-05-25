@@ -265,7 +265,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 
 		cfg.sqlLivenessProvider = slprovider.New(
-			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, cfg.Settings,
+			cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
 		)
 		cfg.registry.AddMetricStruct(cfg.sqlLivenessProvider.Metrics())
 
