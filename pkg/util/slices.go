@@ -36,3 +36,30 @@ func CombinesUniqueInt64(a []int64, b []int64) []int64 {
 	}
 	return res
 }
+
+// CombinesUniqueString combine two ordered string slices and return the result without
+// duplicates.
+func CombinesUniqueString(a []string, b []string) []string {
+	res := make([]string, 0, len(a))
+	aIter, bIter := 0, 0
+	for aIter < len(a) && bIter < len(b) {
+		if a[aIter] == b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+			bIter++
+		} else if a[aIter] < b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+		} else {
+			res = append(res, b[bIter])
+			bIter++
+		}
+	}
+	if aIter < len(a) {
+		res = append(res, a[aIter:]...)
+	}
+	if bIter < len(b) {
+		res = append(res, b[bIter:]...)
+	}
+	return res
+}
