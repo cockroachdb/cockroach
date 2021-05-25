@@ -11,6 +11,7 @@
 package blobs
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -66,6 +67,7 @@ func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 
 type localWriter struct {
 	f         *os.File
+	ctx       context.Context
 	tmp, dest string
 }
 
@@ -74,6 +76,12 @@ func (l localWriter) Write(p []byte) (int, error) {
 }
 
 func (l localWriter) Close() error {
+	if err := l.ctx.Err(); err != nil {
+		closeErr := l.f.Close()
+		rmErr := os.Remove(l.tmp)
+		return errors.CombineErrors(err, errors.Wrap(errors.CombineErrors(rmErr, closeErr), "cleaning up"))
+	}
+
 	syncErr := l.f.Sync()
 	closeErr := l.f.Close()
 	if err := errors.CombineErrors(closeErr, syncErr); err != nil {
@@ -87,19 +95,13 @@ func (l localWriter) Close() error {
 	)
 }
 
-func (l localWriter) CloseWithError(err error) error {
-	if err == nil {
-		return l.Close()
-	}
-	closeErr := l.f.Close()
-	rmErr := os.Remove(l.tmp)
-	return errors.CombineErrors(rmErr, closeErr)
-}
-
 // Writer prepends IO dir to filename and writes the content to that local file.
-func (l *LocalStorage) Writer(filename string) (WriteCloserWithError, error) {
+func (l *LocalStorage) Writer(ctx context.Context, filename string) (io.WriteCloser, error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
@@ -121,7 +123,7 @@ func (l *LocalStorage) Writer(filename string) (WriteCloserWithError, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temporary file")
 	}
-	return localWriter{tmp: tmpFile.Name(), dest: fullPath, f: tmpFile}, nil
+	return localWriter{tmp: tmpFile.Name(), dest: fullPath, f: tmpFile, ctx: ctx}, nil
 }
 
 // ReadFile prepends IO dir to filename and reads the content of that local file.

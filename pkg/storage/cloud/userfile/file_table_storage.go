@@ -243,7 +243,7 @@ func (f *fileTableStorage) ReadFileAt(
 // user scoped FileToTableSystem.
 func (f *fileTableStorage) Writer(
 	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+) (io.WriteCloser, error) {
 	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
 	if err != nil {
 		return nil, err

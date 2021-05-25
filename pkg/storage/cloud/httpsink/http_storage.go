@@ -177,7 +177,7 @@ func (h *httpStorage) ReadFileAt(
 
 func (h *httpStorage) Writer(
 	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+) (io.WriteCloser, error) {
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		_, err := h.reqNoBody(ctx, "PUT", basename, r)
 		return err

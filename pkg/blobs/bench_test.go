@@ -90,12 +90,12 @@ func benchmarkStreamingReadFile(b *testing.B, tc *benchmarkTestCase) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		w, err := writeTo.Writer(tc.fileName)
+		w, err := writeTo.Writer(context.Background(), tc.fileName)
 		if err != nil {
 			b.Fatal(err)
 		}
 		if _, err := io.Copy(w, reader); err != nil {
-			b.Fatal(errors.CombineErrors(err, w.CloseWithError(err)))
+			b.Fatal(errors.CombineErrors(err, w.Close()))
 		}
 		if err := w.Close(); err != nil {
 			b.Fatal(err)
@@ -147,7 +147,7 @@ func benchmarkStreamingWriteFile(b *testing.B, tc *benchmarkTestCase) {
 			b.Fatal(err)
 		}
 		if _, err := io.Copy(w, bytes.NewReader(content)); err != nil {
-			b.Fatal(errors.CombineErrors(err, w.CloseWithError(err)))
+			b.Fatal(errors.CombineErrors(w.Close(), err))
 		}
 		if err := w.Close(); err != nil {
 			b.Fatal(err)
