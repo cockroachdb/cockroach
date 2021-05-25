@@ -30,8 +30,9 @@ func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
 
 // AlterDatabaseAddRegion represents a ALTER DATABASE ADD REGION statement.
 type AlterDatabaseAddRegion struct {
-	Name   Name
-	Region Name
+	Name        Name
+	Region      Name
+	IfNotExists bool
 }
 
 var _ Statement = &AlterDatabaseAddRegion{}
@@ -41,6 +42,9 @@ func (node *AlterDatabaseAddRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ADD REGION ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
 	ctx.FormatNode(&node.Region)
 }
 
