@@ -106,9 +106,11 @@ type saramaConfig struct {
 		Frequency   jsonDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
 	}
+
+	Version string `json:",omitempty"`
 }
 
-var defaultSaramaConfig = func() *saramaConfig {
+func defaultSaramaConfig() *saramaConfig {
 	config := &saramaConfig{}
 
 	// When we emit messages to sarama, they're placed in a queue (as does any
@@ -147,7 +149,7 @@ var defaultSaramaConfig = func() *saramaConfig {
 	config.Flush.Frequency = jsonDuration(time.Hour)
 
 	return config
-}()
+}
 
 func (s *kafkaSink) start() {
 	s.stopWorkerCh = make(chan struct{})
@@ -422,19 +424,25 @@ func (j *jsonDuration) UnmarshalJSON(b []byte) error {
 }
 
 // Apply configures provided kafka configuration struct based on this config.
-func (c *saramaConfig) Apply(kafka *sarama.Config) {
+func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	kafka.Producer.Flush.Bytes = c.Flush.Bytes
 	kafka.Producer.Flush.Messages = c.Flush.Messages
 	kafka.Producer.Flush.Frequency = time.Duration(c.Flush.Frequency)
 	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
+	if c.Version != "" {
+		parsedVersion, err := sarama.ParseKafkaVersion(c.Version)
+		if err != nil {
+			return err
+		}
+		kafka.Version = parsedVersion
+	}
+	return nil
 }
 
 func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
+	config = defaultSaramaConfig()
 	if configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]; haveOverride {
-		config = &saramaConfig{}
 		err = json.Unmarshal([]byte(configStr), config)
-	} else {
-		config = defaultSaramaConfig
 	}
 	return
 }
@@ -601,7 +609,9 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		return nil, errors.Wrapf(err,
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
-	saramaCfg.Apply(config)
+	if err := saramaCfg.Apply(config); err != nil {
+		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
+	}
 	return config, nil
 }
 
