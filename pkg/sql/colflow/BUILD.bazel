@@ -68,7 +68,6 @@ go_test(
         "vectorized_panic_propagation_test.go",
     ],
     embed = [":colflow"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/col/coldata",
