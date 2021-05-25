@@ -1745,6 +1745,7 @@ alter_database_add_region_stmt ::=
 
 alter_database_drop_region_stmt ::=
 	'ALTER' 'DATABASE' database_name 'DROP' 'REGION' region_name
+	| 'ALTER' 'DATABASE' database_name 'DROP' 'REGION' 'IF' 'EXISTS' region_name
 
 alter_database_survival_goal_stmt ::=
 	'ALTER' 'DATABASE' database_name survival_goal_clause

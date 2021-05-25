@@ -1534,6 +1534,14 @@ alter_database_drop_region_stmt:
       Region: tree.Name($6),
     }
   }
+| ALTER DATABASE database_name DROP REGION IF EXISTS region_name
+  {
+    $$.val = &tree.AlterDatabaseDropRegion{
+      Name: tree.Name($3),
+      Region: tree.Name($8),
+      IfExists: true,
+    }
+  }
 
 alter_database_survival_goal_stmt:
   ALTER DATABASE database_name survival_goal_clause
