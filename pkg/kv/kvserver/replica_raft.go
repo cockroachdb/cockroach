@@ -991,7 +991,17 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	}
 
 	r.mu.ticks++
+	preTickState := r.mu.internalRaftGroup.BasicStatus().RaftState
 	r.mu.internalRaftGroup.Tick()
+	postTickState := r.mu.internalRaftGroup.BasicStatus().RaftState
+	if preTickState != postTickState {
+		if postTickState == raft.StatePreCandidate {
+			r.store.Metrics().RaftTimeoutCampaign.Inc(1)
+			if k := r.store.TestingKnobs(); k != nil && k.OnRaftTimeoutCampaign != nil {
+				k.OnRaftTimeoutCampaign(r.RangeID)
+			}
+		}
+	}
 
 	refreshAtDelta := r.store.cfg.RaftElectionTimeoutTicks
 	if knob := r.store.TestingKnobs().RefreshReasonTicksPeriod; knob > 0 {

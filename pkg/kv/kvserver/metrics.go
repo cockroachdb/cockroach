@@ -532,6 +532,12 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRaftTimeoutCampaign = metric.Metadata{
+		Name:        "raft.timeoutcampaign",
+		Help:        "Number of Raft replicas campaigning after missed heartbeats from leader",
+		Measurement: "Elections called after timeout",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
@@ -1145,6 +1151,7 @@ type StoreMetrics struct {
 	RaftHandleReadyLatency    *metric.Histogram
 	RaftApplyCommittedLatency *metric.Histogram
 	RaftSchedulerLatency      *metric.Histogram
+	RaftTimeoutCampaign       *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -1514,6 +1521,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftHandleReadyLatency:    metric.NewLatency(metaRaftHandleReadyLatency, histogramWindow),
 		RaftApplyCommittedLatency: metric.NewLatency(metaRaftApplyCommittedLatency, histogramWindow),
 		RaftSchedulerLatency:      metric.NewLatency(metaRaftSchedulerLatency, histogramWindow),
+		RaftTimeoutCampaign:       metric.NewCounter(metaRaftTimeoutCampaign),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [...]*metric.Counter{
