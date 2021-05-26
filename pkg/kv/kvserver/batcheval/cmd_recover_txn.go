@@ -85,7 +85,7 @@ func RecoverTxn(
 		// returned even if it is possible that the transaction was actually
 		// COMMITTED. This is safe because a COMMITTED transaction must have
 		// resolved all of its intents before garbage collecting its intents.
-		synthTxn := SynthesizeTxnFromMeta(cArgs.EvalCtx, args.Txn)
+		synthTxn := SynthesizeTxnFromMeta(ctx, cArgs.EvalCtx, args.Txn)
 		if synthTxn.Status != roachpb.ABORTED {
 			err := errors.Errorf("txn record synthesized with non-ABORTED status: %v", synthTxn)
 			return result.Result{}, err

@@ -76,7 +76,7 @@ type EvalContext interface {
 	// for the provided transaction information. See Replica.CanCreateTxnRecord
 	// for details about its arguments, return values, and preconditions.
 	CanCreateTxnRecord(
-		txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
+		ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 	) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason)
 
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
@@ -234,7 +234,7 @@ func (m *mockEvalCtxImpl) GetLastSplitQPS() float64 {
 	return m.QPS
 }
 func (m *mockEvalCtxImpl) CanCreateTxnRecord(
-	uuid.UUID, []byte, hlc.Timestamp,
+	context.Context, uuid.UUID, []byte, hlc.Timestamp,
 ) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
 	return m.CanCreateTxn()
 }

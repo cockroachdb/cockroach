@@ -130,7 +130,7 @@ func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) error {
 	// The transaction could not have written a transaction record previously
 	// with a timestamp below txn.MinTimestamp.
-	ok, minCommitTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
+	ok, minCommitTS, reason := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
 	if !ok {
 		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
 		return roachpb.NewTransactionAbortedError(reason)
@@ -159,7 +159,9 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 // TxnMeta. Proceeding to KV reads or intent resolution without this
 // information would cause a partial rollback, if any, to be reverted
 // and yield inconsistent data.
-func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transaction {
+func SynthesizeTxnFromMeta(
+	ctx context.Context, rec EvalContext, txn enginepb.TxnMeta,
+) roachpb.Transaction {
 	synth := roachpb.TransactionRecord{
 		TxnMeta: txn,
 		Status:  roachpb.PENDING,
@@ -182,7 +184,7 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 	// Determine whether the record could ever be allowed to be written in the
 	// future. The transaction could not have written a transaction record
 	// previously with a timestamp below txn.MinTimestamp.
-	ok, minCommitTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
+	ok, minCommitTS, _ := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
 	if ok {
 		// Forward the provisional commit timestamp by the minimum timestamp that
 		// the transaction would be able to create a transaction record at.
