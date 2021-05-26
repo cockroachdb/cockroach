@@ -2,7 +2,7 @@ parse
 ALTER VIEW v SET SCHEMA s
 ----
 ALTER VIEW v SET SCHEMA s
-ALTER VIEW v SET SCHEMA s -- fully parenthetized
+ALTER VIEW v SET SCHEMA s -- fully parenthesized
 ALTER VIEW v SET SCHEMA s -- literals removed
 ALTER VIEW _ SET SCHEMA _ -- identifiers removed
 
@@ -10,7 +10,7 @@ parse
 ALTER VIEW IF EXISTS a SET SCHEMA s
 ----
 ALTER VIEW IF EXISTS a SET SCHEMA s
-ALTER VIEW IF EXISTS a SET SCHEMA s -- fully parenthetized
+ALTER VIEW IF EXISTS a SET SCHEMA s -- fully parenthesized
 ALTER VIEW IF EXISTS a SET SCHEMA s -- literals removed
 ALTER VIEW IF EXISTS _ SET SCHEMA _ -- identifiers removed
 
@@ -18,7 +18,7 @@ parse
 ALTER MATERIALIZED VIEW v SET SCHEMA s
 ----
 ALTER MATERIALIZED VIEW v SET SCHEMA s
-ALTER MATERIALIZED VIEW v SET SCHEMA s -- fully parenthetized
+ALTER MATERIALIZED VIEW v SET SCHEMA s -- fully parenthesized
 ALTER MATERIALIZED VIEW v SET SCHEMA s -- literals removed
 ALTER MATERIALIZED VIEW _ SET SCHEMA _ -- identifiers removed
 
@@ -26,7 +26,7 @@ parse
 ALTER MATERIALIZED VIEW IF EXISTS a SET SCHEMA s
 ----
 ALTER MATERIALIZED VIEW IF EXISTS a SET SCHEMA s
-ALTER MATERIALIZED VIEW IF EXISTS a SET SCHEMA s -- fully parenthetized
+ALTER MATERIALIZED VIEW IF EXISTS a SET SCHEMA s -- fully parenthesized
 ALTER MATERIALIZED VIEW IF EXISTS a SET SCHEMA s -- literals removed
 ALTER MATERIALIZED VIEW IF EXISTS _ SET SCHEMA _ -- identifiers removed
 
@@ -34,7 +34,7 @@ parse
 ALTER VIEW v RENAME TO v
 ----
 ALTER VIEW v RENAME TO v
-ALTER VIEW v RENAME TO v -- fully parenthetized
+ALTER VIEW v RENAME TO v -- fully parenthesized
 ALTER VIEW v RENAME TO v -- literals removed
 ALTER VIEW _ RENAME TO _ -- identifiers removed
 
@@ -42,7 +42,7 @@ parse
 ALTER VIEW IF EXISTS v RENAME TO v
 ----
 ALTER VIEW IF EXISTS v RENAME TO v
-ALTER VIEW IF EXISTS v RENAME TO v -- fully parenthetized
+ALTER VIEW IF EXISTS v RENAME TO v -- fully parenthesized
 ALTER VIEW IF EXISTS v RENAME TO v -- literals removed
 ALTER VIEW IF EXISTS _ RENAME TO _ -- identifiers removed
 
@@ -50,7 +50,7 @@ parse
 ALTER MATERIALIZED VIEW v RENAME TO v
 ----
 ALTER MATERIALIZED VIEW v RENAME TO v
-ALTER MATERIALIZED VIEW v RENAME TO v -- fully parenthetized
+ALTER MATERIALIZED VIEW v RENAME TO v -- fully parenthesized
 ALTER MATERIALIZED VIEW v RENAME TO v -- literals removed
 ALTER MATERIALIZED VIEW _ RENAME TO _ -- identifiers removed
 
@@ -58,6 +58,6 @@ parse
 ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v
 ----
 ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v
-ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v -- fully parenthetized
+ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v -- fully parenthesized
 ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v -- literals removed
 ALTER MATERIALIZED VIEW IF EXISTS _ RENAME TO _ -- identifiers removed

@@ -2,7 +2,7 @@ parse
 SET a = 3
 ----
 SET a = 3
-SET a = (3) -- fully parenthetized
+SET a = (3) -- fully parenthesized
 SET a = _ -- literals removed
 SET a = 3 -- identifiers removed
 
@@ -10,7 +10,7 @@ parse
 EXPLAIN SET a = 3
 ----
 EXPLAIN SET a = 3
-EXPLAIN SET a = (3) -- fully parenthetized
+EXPLAIN SET a = (3) -- fully parenthesized
 EXPLAIN SET a = _ -- literals removed
 EXPLAIN SET a = 3 -- identifiers removed
 
@@ -18,7 +18,7 @@ parse
 SET a = INDEX
 ----
 SET a = "index" -- normalized!
-SET a = ("index") -- fully parenthetized
+SET a = ("index") -- fully parenthesized
 SET a = "index" -- literals removed
 SET a = _ -- identifiers removed
 
@@ -26,7 +26,7 @@ parse
 SET a = NOTHING
 ----
 SET a = "nothing" -- normalized!
-SET a = ("nothing") -- fully parenthetized
+SET a = ("nothing") -- fully parenthesized
 SET a = "nothing" -- literals removed
 SET a = _ -- identifiers removed
 
@@ -35,7 +35,7 @@ parse
 SET a = 3, 4
 ----
 SET a = 3, 4
-SET a = (3), (4) -- fully parenthetized
+SET a = (3), (4) -- fully parenthesized
 SET a = _, _ -- literals removed
 SET a = 3, 4 -- identifiers removed
 
@@ -43,7 +43,7 @@ parse
 SET a = '3'
 ----
 SET a = '3'
-SET a = ('3') -- fully parenthetized
+SET a = ('3') -- fully parenthesized
 SET a = _ -- literals removed
 SET a = '3' -- identifiers removed
 
@@ -51,7 +51,7 @@ parse
 SET a = 3.0
 ----
 SET a = 3.0
-SET a = (3.0) -- fully parenthetized
+SET a = (3.0) -- fully parenthesized
 SET a = _ -- literals removed
 SET a = 3.0 -- identifiers removed
 
@@ -59,7 +59,7 @@ parse
 SET a = $1
 ----
 SET a = $1
-SET a = ($1) -- fully parenthetized
+SET a = ($1) -- fully parenthesized
 SET a = $1 -- literals removed
 SET a = $1 -- identifiers removed
 
@@ -67,7 +67,7 @@ parse
 SET a = off
 ----
 SET a = off
-SET a = (off) -- fully parenthetized
+SET a = (off) -- fully parenthesized
 SET a = off -- literals removed
 SET a = _ -- identifiers removed
 
@@ -75,7 +75,7 @@ parse
 SET a = on
 ----
 SET a = "on" -- normalized!
-SET a = ("on") -- fully parenthetized
+SET a = ("on") -- fully parenthesized
 SET a = "on" -- literals removed
 SET a = _ -- identifiers removed
 
@@ -83,7 +83,7 @@ parse
 SET a = default
 ----
 SET a = DEFAULT -- normalized!
-SET a = (DEFAULT) -- fully parenthetized
+SET a = (DEFAULT) -- fully parenthesized
 SET a = DEFAULT -- literals removed
 SET a = DEFAULT -- identifiers removed
 
@@ -92,7 +92,7 @@ parse
 SET TRANSACTION READ ONLY
 ----
 SET TRANSACTION READ ONLY
-SET TRANSACTION READ ONLY -- fully parenthetized
+SET TRANSACTION READ ONLY -- fully parenthesized
 SET TRANSACTION READ ONLY -- literals removed
 SET TRANSACTION READ ONLY -- identifiers removed
 
@@ -100,7 +100,7 @@ parse
 SET TRANSACTION READ WRITE
 ----
 SET TRANSACTION READ WRITE
-SET TRANSACTION READ WRITE -- fully parenthetized
+SET TRANSACTION READ WRITE -- fully parenthesized
 SET TRANSACTION READ WRITE -- literals removed
 SET TRANSACTION READ WRITE -- identifiers removed
 
@@ -108,7 +108,7 @@ parse
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
 ----
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE -- fully parenthetized
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE -- fully parenthesized
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE -- literals removed
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE -- identifiers removed
 
@@ -116,7 +116,7 @@ parse
 SET TRANSACTION PRIORITY LOW
 ----
 SET TRANSACTION PRIORITY LOW
-SET TRANSACTION PRIORITY LOW -- fully parenthetized
+SET TRANSACTION PRIORITY LOW -- fully parenthesized
 SET TRANSACTION PRIORITY LOW -- literals removed
 SET TRANSACTION PRIORITY LOW -- identifiers removed
 
@@ -124,7 +124,7 @@ parse
 SET TRANSACTION PRIORITY NORMAL
 ----
 SET TRANSACTION PRIORITY NORMAL
-SET TRANSACTION PRIORITY NORMAL -- fully parenthetized
+SET TRANSACTION PRIORITY NORMAL -- fully parenthesized
 SET TRANSACTION PRIORITY NORMAL -- literals removed
 SET TRANSACTION PRIORITY NORMAL -- identifiers removed
 
@@ -132,7 +132,7 @@ parse
 SET TRANSACTION PRIORITY HIGH
 ----
 SET TRANSACTION PRIORITY HIGH
-SET TRANSACTION PRIORITY HIGH -- fully parenthetized
+SET TRANSACTION PRIORITY HIGH -- fully parenthesized
 SET TRANSACTION PRIORITY HIGH -- literals removed
 SET TRANSACTION PRIORITY HIGH -- identifiers removed
 
@@ -140,7 +140,7 @@ parse
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
 ----
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH -- fully parenthetized
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH -- fully parenthesized
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH -- literals removed
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH -- identifiers removed
 
@@ -148,7 +148,7 @@ parse
 SET TRANSACTION DEFERRABLE
 ----
 SET TRANSACTION DEFERRABLE
-SET TRANSACTION DEFERRABLE -- fully parenthetized
+SET TRANSACTION DEFERRABLE -- fully parenthesized
 SET TRANSACTION DEFERRABLE -- literals removed
 SET TRANSACTION DEFERRABLE -- identifiers removed
 
@@ -156,7 +156,7 @@ parse
 SET TRANSACTION NOT DEFERRABLE
 ----
 SET TRANSACTION NOT DEFERRABLE
-SET TRANSACTION NOT DEFERRABLE -- fully parenthetized
+SET TRANSACTION NOT DEFERRABLE -- fully parenthesized
 SET TRANSACTION NOT DEFERRABLE -- literals removed
 SET TRANSACTION NOT DEFERRABLE -- identifiers removed
 
@@ -164,7 +164,7 @@ parse
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME '-1s', NOT DEFERRABLE
 ----
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME '-1s', NOT DEFERRABLE
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME ('-1s'), NOT DEFERRABLE -- fully parenthetized
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME ('-1s'), NOT DEFERRABLE -- fully parenthesized
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME _, NOT DEFERRABLE -- literals removed
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH, AS OF SYSTEM TIME '-1s', NOT DEFERRABLE -- identifiers removed
 
@@ -172,7 +172,7 @@ parse
 SET TRACING = off
 ----
 SET TRACING = off
-SET TRACING = (off) -- fully parenthetized
+SET TRACING = (off) -- fully parenthesized
 SET TRACING = off -- literals removed
 SET TRACING = _ -- identifiers removed
 
@@ -180,7 +180,7 @@ parse
 EXPLAIN SET TRACING = off
 ----
 EXPLAIN SET TRACING = off
-EXPLAIN SET TRACING = (off) -- fully parenthetized
+EXPLAIN SET TRACING = (off) -- fully parenthesized
 EXPLAIN SET TRACING = off -- literals removed
 EXPLAIN SET TRACING = _ -- identifiers removed
 
@@ -188,7 +188,7 @@ parse
 SET TRACING TO off
 ----
 SET TRACING = off -- normalized!
-SET TRACING = (off) -- fully parenthetized
+SET TRACING = (off) -- fully parenthesized
 SET TRACING = off -- literals removed
 SET TRACING = _ -- identifiers removed
 
@@ -196,7 +196,7 @@ parse
 SET TRACING = 'cluster', 'kv'
 ----
 SET TRACING = 'cluster', 'kv'
-SET TRACING = ('cluster'), ('kv') -- fully parenthetized
+SET TRACING = ('cluster'), ('kv') -- fully parenthesized
 SET TRACING = _, _ -- literals removed
 SET TRACING = 'cluster', 'kv' -- identifiers removed
 
@@ -204,7 +204,7 @@ parse
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
 ----
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
-SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE -- fully parenthetized
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE -- fully parenthesized
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE -- literals removed
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE -- identifiers removed
 
@@ -212,7 +212,7 @@ parse
 SET CLUSTER SETTING a = 3
 ----
 SET CLUSTER SETTING a = 3
-SET CLUSTER SETTING a = (3) -- fully parenthetized
+SET CLUSTER SETTING a = (3) -- fully parenthesized
 SET CLUSTER SETTING a = _ -- literals removed
 SET CLUSTER SETTING a = 3 -- identifiers removed
 
@@ -220,7 +220,7 @@ parse
 EXPLAIN SET CLUSTER SETTING a = 3
 ----
 EXPLAIN SET CLUSTER SETTING a = 3
-EXPLAIN SET CLUSTER SETTING a = (3) -- fully parenthetized
+EXPLAIN SET CLUSTER SETTING a = (3) -- fully parenthesized
 EXPLAIN SET CLUSTER SETTING a = _ -- literals removed
 EXPLAIN SET CLUSTER SETTING a = 3 -- identifiers removed
 
@@ -228,7 +228,7 @@ parse
 SET CLUSTER SETTING a = '3s'
 ----
 SET CLUSTER SETTING a = '3s'
-SET CLUSTER SETTING a = ('3s') -- fully parenthetized
+SET CLUSTER SETTING a = ('3s') -- fully parenthesized
 SET CLUSTER SETTING a = _ -- literals removed
 SET CLUSTER SETTING a = '3s' -- identifiers removed
 
@@ -236,7 +236,7 @@ parse
 SET CLUSTER SETTING a = '3'
 ----
 SET CLUSTER SETTING a = '3'
-SET CLUSTER SETTING a = ('3') -- fully parenthetized
+SET CLUSTER SETTING a = ('3') -- fully parenthesized
 SET CLUSTER SETTING a = _ -- literals removed
 SET CLUSTER SETTING a = '3' -- identifiers removed
 
@@ -244,7 +244,7 @@ parse
 SET CLUSTER SETTING a = 3.0
 ----
 SET CLUSTER SETTING a = 3.0
-SET CLUSTER SETTING a = (3.0) -- fully parenthetized
+SET CLUSTER SETTING a = (3.0) -- fully parenthesized
 SET CLUSTER SETTING a = _ -- literals removed
 SET CLUSTER SETTING a = 3.0 -- identifiers removed
 
@@ -252,7 +252,7 @@ parse
 SET CLUSTER SETTING a = $1
 ----
 SET CLUSTER SETTING a = $1
-SET CLUSTER SETTING a = ($1) -- fully parenthetized
+SET CLUSTER SETTING a = ($1) -- fully parenthesized
 SET CLUSTER SETTING a = $1 -- literals removed
 SET CLUSTER SETTING a = $1 -- identifiers removed
 
@@ -260,7 +260,7 @@ parse
 SET CLUSTER SETTING a = off
 ----
 SET CLUSTER SETTING a = off
-SET CLUSTER SETTING a = (off) -- fully parenthetized
+SET CLUSTER SETTING a = (off) -- fully parenthesized
 SET CLUSTER SETTING a = off -- literals removed
 SET CLUSTER SETTING a = _ -- identifiers removed
 
@@ -269,7 +269,7 @@ parse
 SET CLUSTER SETTING a = on
 ----
 SET CLUSTER SETTING a = "on" -- normalized!
-SET CLUSTER SETTING a = ("on") -- fully parenthetized
+SET CLUSTER SETTING a = ("on") -- fully parenthesized
 SET CLUSTER SETTING a = "on" -- literals removed
 SET CLUSTER SETTING a = _ -- identifiers removed
 
@@ -277,7 +277,7 @@ parse
 SET CLUSTER SETTING a TO 1
 ----
 SET CLUSTER SETTING a = 1 -- normalized!
-SET CLUSTER SETTING a = (1) -- fully parenthetized
+SET CLUSTER SETTING a = (1) -- fully parenthesized
 SET CLUSTER SETTING a = _ -- literals removed
 SET CLUSTER SETTING a = 1 -- identifiers removed
 
@@ -286,7 +286,7 @@ parse
 DISCARD ALL
 ----
 DISCARD ALL
-DISCARD ALL -- fully parenthetized
+DISCARD ALL -- fully parenthesized
 DISCARD ALL -- literals removed
 DISCARD ALL -- identifiers removed
 
@@ -295,7 +295,7 @@ parse
 SET ROW (1, true, NULL)
 ----
 SET ROW (1, true, NULL)
-SET ROW ((1), (true), (NULL)) -- fully parenthetized
+SET ROW ((1), (true), (NULL)) -- fully parenthesized
 SET ROW (_, _, _) -- literals removed
 SET ROW (1, true, NULL) -- identifiers removed
 
@@ -304,7 +304,7 @@ parse
 SET SCHEMA 'public'
 ----
 SET search_path = 'public' -- normalized!
-SET search_path = ('public') -- fully parenthetized
+SET search_path = ('public') -- fully parenthesized
 SET search_path = _ -- literals removed
 SET search_path = 'public' -- identifiers removed
 
@@ -312,7 +312,7 @@ parse
 SET TIME ZONE 'pst8pdt'
 ----
 SET timezone = 'pst8pdt' -- normalized!
-SET timezone = ('pst8pdt') -- fully parenthetized
+SET timezone = ('pst8pdt') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = 'pst8pdt' -- identifiers removed
 
@@ -320,7 +320,7 @@ parse
 SET TIME ZONE 'Europe/Rome'
 ----
 SET timezone = 'Europe/Rome' -- normalized!
-SET timezone = ('Europe/Rome') -- fully parenthetized
+SET timezone = ('Europe/Rome') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = 'Europe/Rome' -- identifiers removed
 
@@ -328,7 +328,7 @@ parse
 SET TIME ZONE -7
 ----
 SET timezone = -7 -- normalized!
-SET timezone = (-7) -- fully parenthetized
+SET timezone = (-7) -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = -7 -- identifiers removed
 
@@ -336,7 +336,7 @@ parse
 SET TIME ZONE -7.3
 ----
 SET timezone = -7.3 -- normalized!
-SET timezone = (-7.3) -- fully parenthetized
+SET timezone = (-7.3) -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = -7.3 -- identifiers removed
 
@@ -344,7 +344,7 @@ parse
 SET TIME ZONE DEFAULT
 ----
 SET timezone = DEFAULT -- normalized!
-SET timezone = (DEFAULT) -- fully parenthetized
+SET timezone = (DEFAULT) -- fully parenthesized
 SET timezone = DEFAULT -- literals removed
 SET timezone = DEFAULT -- identifiers removed
 
@@ -352,7 +352,7 @@ parse
 SET TIME ZONE LOCAL
 ----
 SET timezone = 'local' -- normalized!
-SET timezone = ('local') -- fully parenthetized
+SET timezone = ('local') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = 'local' -- identifiers removed
 
@@ -360,7 +360,7 @@ parse
 SET TIME ZONE pst8pdt
 ----
 SET timezone = 'pst8pdt' -- normalized!
-SET timezone = ('pst8pdt') -- fully parenthetized
+SET timezone = ('pst8pdt') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = 'pst8pdt' -- identifiers removed
 
@@ -368,7 +368,7 @@ parse
 SET TIME ZONE "Europe/Rome"
 ----
 SET timezone = 'Europe/Rome' -- normalized!
-SET timezone = ('Europe/Rome') -- fully parenthetized
+SET timezone = ('Europe/Rome') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = 'Europe/Rome' -- identifiers removed
 
@@ -376,7 +376,7 @@ parse
 SET TIME ZONE INTERVAL '-7h'
 ----
 SET timezone = '-07:00:00' -- normalized!
-SET timezone = ('-07:00:00') -- fully parenthetized
+SET timezone = ('-07:00:00') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = '-07:00:00' -- identifiers removed
 
@@ -384,7 +384,7 @@ parse
 SET TIME ZONE INTERVAL(3) '-7h'
 ----
 SET timezone = '-07:00:00' -- normalized!
-SET timezone = ('-07:00:00') -- fully parenthetized
+SET timezone = ('-07:00:00') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = '-07:00:00' -- identifiers removed
 
@@ -392,7 +392,7 @@ parse
 SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE
 ----
 SET timezone = '-06:59:00' -- normalized!
-SET timezone = ('-06:59:00') -- fully parenthetized
+SET timezone = ('-06:59:00') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = '-06:59:00' -- identifiers removed
 
@@ -401,7 +401,7 @@ parse
 SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SERIALIZABLE
 ----
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY NORMAL -- normalized!
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY NORMAL -- fully parenthetized
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY NORMAL -- fully parenthesized
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY NORMAL -- literals removed
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY NORMAL -- identifiers removed
 
@@ -409,7 +409,7 @@ parse
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE
 ----
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE -- normalized!
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE -- fully parenthetized
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE -- fully parenthesized
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE -- literals removed
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE -- identifiers removed
 
@@ -417,7 +417,7 @@ parse
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT READ ONLY
 ----
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY -- normalized!
-SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY -- fully parenthetized
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY -- fully parenthesized
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY -- literals removed
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY -- identifiers removed
 
@@ -425,7 +425,7 @@ parse
 USE foo
 ----
 SET database = foo -- normalized!
-SET database = (foo) -- fully parenthetized
+SET database = (foo) -- fully parenthesized
 SET database = foo -- literals removed
 SET database = _ -- identifiers removed
 
@@ -433,7 +433,7 @@ parse
 SET NAMES foo
 ----
 SET client_encoding = foo -- normalized!
-SET client_encoding = (foo) -- fully parenthetized
+SET client_encoding = (foo) -- fully parenthesized
 SET client_encoding = foo -- literals removed
 SET client_encoding = _ -- identifiers removed
 
@@ -441,7 +441,7 @@ parse
 SET NAMES 'foo'
 ----
 SET client_encoding = 'foo' -- normalized!
-SET client_encoding = ('foo') -- fully parenthetized
+SET client_encoding = ('foo') -- fully parenthesized
 SET client_encoding = _ -- literals removed
 SET client_encoding = 'foo' -- identifiers removed
 
@@ -449,7 +449,7 @@ parse
 SET NAMES DEFAULT
 ----
 SET client_encoding = DEFAULT -- normalized!
-SET client_encoding = (DEFAULT) -- fully parenthetized
+SET client_encoding = (DEFAULT) -- fully parenthesized
 SET client_encoding = DEFAULT -- literals removed
 SET client_encoding = DEFAULT -- identifiers removed
 
@@ -457,7 +457,7 @@ parse
 SET NAMES
 ----
 SET client_encoding = DEFAULT -- normalized!
-SET client_encoding = (DEFAULT) -- fully parenthetized
+SET client_encoding = (DEFAULT) -- fully parenthesized
 SET client_encoding = DEFAULT -- literals removed
 SET client_encoding = DEFAULT -- identifiers removed
 
@@ -465,7 +465,7 @@ parse
 RESET a
 ----
 SET a = DEFAULT -- normalized!
-SET a = (DEFAULT) -- fully parenthetized
+SET a = (DEFAULT) -- fully parenthesized
 SET a = DEFAULT -- literals removed
 SET a = DEFAULT -- identifiers removed
 
@@ -473,7 +473,7 @@ parse
 RESET CLUSTER SETTING a
 ----
 SET CLUSTER SETTING a = DEFAULT -- normalized!
-SET CLUSTER SETTING a = (DEFAULT) -- fully parenthetized
+SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
 SET CLUSTER SETTING a = DEFAULT -- literals removed
 SET CLUSTER SETTING a = DEFAULT -- identifiers removed
 
@@ -481,6 +481,6 @@ parse
 RESET NAMES
 ----
 SET client_encoding = DEFAULT -- normalized!
-SET client_encoding = (DEFAULT) -- fully parenthetized
+SET client_encoding = (DEFAULT) -- fully parenthesized
 SET client_encoding = DEFAULT -- literals removed
 SET client_encoding = DEFAULT -- identifiers removed

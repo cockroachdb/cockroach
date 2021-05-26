@@ -5,7 +5,7 @@ parse
 GRANT SELECT ON TABLE foo TO root
 ----
 GRANT SELECT ON TABLE foo TO root
-GRANT SELECT ON TABLE (foo) TO root -- fully parenthetized
+GRANT SELECT ON TABLE (foo) TO root -- fully parenthesized
 GRANT SELECT ON TABLE foo TO root -- literals removed
 GRANT SELECT ON TABLE _ TO _ -- identifiers removed
 
@@ -13,7 +13,7 @@ parse
 GRANT SELECT ON foo TO root
 ----
 GRANT SELECT ON TABLE foo TO root -- normalized!
-GRANT SELECT ON TABLE (foo) TO root -- fully parenthetized
+GRANT SELECT ON TABLE (foo) TO root -- fully parenthesized
 GRANT SELECT ON TABLE foo TO root -- literals removed
 GRANT SELECT ON TABLE _ TO _ -- identifiers removed
 
@@ -21,7 +21,7 @@ parse
 GRANT SELECT, DELETE, UPDATE ON TABLE foo, db.foo TO root, bar
 ----
 GRANT SELECT, DELETE, UPDATE ON TABLE foo, db.foo TO root, bar
-GRANT SELECT, DELETE, UPDATE ON TABLE (foo), (db.foo) TO root, bar -- fully parenthetized
+GRANT SELECT, DELETE, UPDATE ON TABLE (foo), (db.foo) TO root, bar -- fully parenthesized
 GRANT SELECT, DELETE, UPDATE ON TABLE foo, db.foo TO root, bar -- literals removed
 GRANT SELECT, DELETE, UPDATE ON TABLE _, _._ TO _, _ -- identifiers removed
 
@@ -30,7 +30,7 @@ parse
 GRANT SELECT, DELETE, UPDATE ON foo, db.foo TO root, bar
 ----
 GRANT SELECT, DELETE, UPDATE ON TABLE foo, db.foo TO root, bar -- normalized!
-GRANT SELECT, DELETE, UPDATE ON TABLE (foo), (db.foo) TO root, bar -- fully parenthetized
+GRANT SELECT, DELETE, UPDATE ON TABLE (foo), (db.foo) TO root, bar -- fully parenthesized
 GRANT SELECT, DELETE, UPDATE ON TABLE foo, db.foo TO root, bar -- literals removed
 GRANT SELECT, DELETE, UPDATE ON TABLE _, _._ TO _, _ -- identifiers removed
 
@@ -38,7 +38,7 @@ parse
 GRANT SELECT ON role TO root
 ----
 GRANT SELECT ON TABLE role TO root -- normalized!
-GRANT SELECT ON TABLE (role) TO root -- fully parenthetized
+GRANT SELECT ON TABLE (role) TO root -- fully parenthesized
 GRANT SELECT ON TABLE role TO root -- literals removed
 GRANT SELECT ON TABLE _ TO _ -- identifiers removed
 
@@ -46,7 +46,7 @@ parse
 REVOKE SELECT ON foo FROM root
 ----
 REVOKE SELECT ON TABLE foo FROM root -- normalized!
-REVOKE SELECT ON TABLE (foo) FROM root -- fully parenthetized
+REVOKE SELECT ON TABLE (foo) FROM root -- fully parenthesized
 REVOKE SELECT ON TABLE foo FROM root -- literals removed
 REVOKE SELECT ON TABLE _ FROM _ -- identifiers removed
 
@@ -54,7 +54,7 @@ parse
 GRANT DROP ON DATABASE foo TO root
 ----
 GRANT DROP ON DATABASE foo TO root
-GRANT DROP ON DATABASE foo TO root -- fully parenthetized
+GRANT DROP ON DATABASE foo TO root -- fully parenthesized
 GRANT DROP ON DATABASE foo TO root -- literals removed
 GRANT DROP ON DATABASE _ TO _ -- identifiers removed
 
@@ -62,7 +62,7 @@ parse
 GRANT ALL ON DATABASE foo TO root, test
 ----
 GRANT ALL ON DATABASE foo TO root, test
-GRANT ALL ON DATABASE foo TO root, test -- fully parenthetized
+GRANT ALL ON DATABASE foo TO root, test -- fully parenthesized
 GRANT ALL ON DATABASE foo TO root, test -- literals removed
 GRANT ALL ON DATABASE _ TO _, _ -- identifiers removed
 
@@ -70,7 +70,7 @@ parse
 GRANT ALL PRIVILEGES ON DATABASE foo TO root
 ----
 GRANT ALL ON DATABASE foo TO root -- normalized!
-GRANT ALL ON DATABASE foo TO root -- fully parenthetized
+GRANT ALL ON DATABASE foo TO root -- fully parenthesized
 GRANT ALL ON DATABASE foo TO root -- literals removed
 GRANT ALL ON DATABASE _ TO _ -- identifiers removed
 
@@ -79,7 +79,7 @@ parse
 GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz
 ----
 GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz
-GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz -- fully parenthetized
+GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz -- fully parenthesized
 GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz -- literals removed
 GRANT SELECT, INSERT ON DATABASE _ TO _, _, _ -- identifiers removed
 
@@ -87,7 +87,7 @@ parse
 GRANT SELECT, INSERT ON DATABASE db1, db2 TO foo, bar, baz
 ----
 GRANT SELECT, INSERT ON DATABASE db1, db2 TO foo, bar, baz
-GRANT SELECT, INSERT ON DATABASE db1, db2 TO foo, bar, baz -- fully parenthetized
+GRANT SELECT, INSERT ON DATABASE db1, db2 TO foo, bar, baz -- fully parenthesized
 GRANT SELECT, INSERT ON DATABASE db1, db2 TO foo, bar, baz -- literals removed
 GRANT SELECT, INSERT ON DATABASE _, _ TO _, _, _ -- identifiers removed
 
@@ -95,7 +95,7 @@ parse
 GRANT SELECT, INSERT ON DATABASE db1, db2 TO "test-user"
 ----
 GRANT SELECT, INSERT ON DATABASE db1, db2 TO "test-user"
-GRANT SELECT, INSERT ON DATABASE db1, db2 TO "test-user" -- fully parenthetized
+GRANT SELECT, INSERT ON DATABASE db1, db2 TO "test-user" -- fully parenthesized
 GRANT SELECT, INSERT ON DATABASE db1, db2 TO "test-user" -- literals removed
 GRANT SELECT, INSERT ON DATABASE _, _ TO _ -- identifiers removed
 
@@ -103,7 +103,7 @@ parse
 GRANT rolea, roleb TO usera, userb
 ----
 GRANT rolea, roleb TO usera, userb
-GRANT rolea, roleb TO usera, userb -- fully parenthetized
+GRANT rolea, roleb TO usera, userb -- fully parenthesized
 GRANT rolea, roleb TO usera, userb -- literals removed
 GRANT _, _ TO _, _ -- identifiers removed
 
@@ -111,7 +111,7 @@ parse
 GRANT rolea, roleb TO usera, userb WITH ADMIN OPTION
 ----
 GRANT rolea, roleb TO usera, userb WITH ADMIN OPTION
-GRANT rolea, roleb TO usera, userb WITH ADMIN OPTION -- fully parenthetized
+GRANT rolea, roleb TO usera, userb WITH ADMIN OPTION -- fully parenthesized
 GRANT rolea, roleb TO usera, userb WITH ADMIN OPTION -- literals removed
 GRANT _, _ TO _, _ WITH ADMIN OPTION -- identifiers removed
 
@@ -120,7 +120,7 @@ parse
 GRANT ALL PRIVILEGES ON TABLE foo TO root
 ----
 GRANT ALL ON TABLE foo TO root -- normalized!
-GRANT ALL ON TABLE (foo) TO root -- fully parenthetized
+GRANT ALL ON TABLE (foo) TO root -- fully parenthesized
 GRANT ALL ON TABLE foo TO root -- literals removed
 GRANT ALL ON TABLE _ TO _ -- identifiers removed
 
@@ -130,7 +130,7 @@ parse
 GRANT USAGE ON TYPE foo TO root
 ----
 GRANT USAGE ON TYPE foo TO root
-GRANT USAGE ON TYPE foo TO root -- fully parenthetized
+GRANT USAGE ON TYPE foo TO root -- fully parenthesized
 GRANT USAGE ON TYPE foo TO root -- literals removed
 GRANT USAGE ON TYPE _ TO _ -- identifiers removed
 
@@ -138,7 +138,7 @@ parse
 GRANT USAGE, GRANT ON TYPE foo TO root
 ----
 GRANT USAGE, GRANT ON TYPE foo TO root
-GRANT USAGE, GRANT ON TYPE foo TO root -- fully parenthetized
+GRANT USAGE, GRANT ON TYPE foo TO root -- fully parenthesized
 GRANT USAGE, GRANT ON TYPE foo TO root -- literals removed
 GRANT USAGE, GRANT ON TYPE _ TO _ -- identifiers removed
 
@@ -146,7 +146,7 @@ parse
 GRANT ALL ON TYPE foo TO root
 ----
 GRANT ALL ON TYPE foo TO root
-GRANT ALL ON TYPE foo TO root -- fully parenthetized
+GRANT ALL ON TYPE foo TO root -- fully parenthesized
 GRANT ALL ON TYPE foo TO root -- literals removed
 GRANT ALL ON TYPE _ TO _ -- identifiers removed
 
@@ -156,7 +156,7 @@ parse
 GRANT USAGE ON SCHEMA foo TO root
 ----
 GRANT USAGE ON SCHEMA foo TO root
-GRANT USAGE ON SCHEMA foo TO root -- fully parenthetized
+GRANT USAGE ON SCHEMA foo TO root -- fully parenthesized
 GRANT USAGE ON SCHEMA foo TO root -- literals removed
 GRANT USAGE ON SCHEMA _ TO _ -- identifiers removed
 
@@ -164,7 +164,7 @@ parse
 GRANT USAGE ON SCHEMA foo.bar TO root
 ----
 GRANT USAGE ON SCHEMA foo.bar TO root
-GRANT USAGE ON SCHEMA foo.bar TO root -- fully parenthetized
+GRANT USAGE ON SCHEMA foo.bar TO root -- fully parenthesized
 GRANT USAGE ON SCHEMA foo.bar TO root -- literals removed
 GRANT USAGE ON SCHEMA _._ TO _ -- identifiers removed
 
@@ -172,7 +172,7 @@ parse
 GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root
 ----
 GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root -- fully parenthetized
+GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root -- fully parenthesized
 GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root -- literals removed
 GRANT USAGE, GRANT, CREATE ON SCHEMA _ TO _ -- identifiers removed
 
@@ -180,7 +180,7 @@ parse
 GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root
 ----
 GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root -- fully parenthetized
+GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root -- fully parenthesized
 GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root -- literals removed
 GRANT USAGE, GRANT, CREATE ON SCHEMA _._ TO _ -- identifiers removed
 
@@ -188,7 +188,7 @@ parse
 GRANT ALL ON SCHEMA foo, bar, baz TO root
 ----
 GRANT ALL ON SCHEMA foo, bar, baz TO root
-GRANT ALL ON SCHEMA foo, bar, baz TO root -- fully parenthetized
+GRANT ALL ON SCHEMA foo, bar, baz TO root -- fully parenthesized
 GRANT ALL ON SCHEMA foo, bar, baz TO root -- literals removed
 GRANT ALL ON SCHEMA _, _, _ TO _ -- identifiers removed
 
@@ -196,7 +196,7 @@ parse
 GRANT ALL ON SCHEMA a.b, c.d, e.f TO root
 ----
 GRANT ALL ON SCHEMA a.b, c.d, e.f TO root
-GRANT ALL ON SCHEMA a.b, c.d, e.f TO root -- fully parenthetized
+GRANT ALL ON SCHEMA a.b, c.d, e.f TO root -- fully parenthesized
 GRANT ALL ON SCHEMA a.b, c.d, e.f TO root -- literals removed
 GRANT ALL ON SCHEMA _._, _._, _._ TO _ -- identifiers removed
 
@@ -204,7 +204,7 @@ parse
 GRANT ALL PRIVILEGES ON SCHEMA foo TO root
 ----
 GRANT ALL ON SCHEMA foo TO root -- normalized!
-GRANT ALL ON SCHEMA foo TO root -- fully parenthetized
+GRANT ALL ON SCHEMA foo TO root -- fully parenthesized
 GRANT ALL ON SCHEMA foo TO root -- literals removed
 GRANT ALL ON SCHEMA _ TO _ -- identifiers removed
 
@@ -212,7 +212,7 @@ parse
 GRANT ALL PRIVILEGES ON SCHEMA foo.bar TO root
 ----
 GRANT ALL ON SCHEMA foo.bar TO root -- normalized!
-GRANT ALL ON SCHEMA foo.bar TO root -- fully parenthetized
+GRANT ALL ON SCHEMA foo.bar TO root -- fully parenthesized
 GRANT ALL ON SCHEMA foo.bar TO root -- literals removed
 GRANT ALL ON SCHEMA _._ TO _ -- identifiers removed
 
@@ -220,7 +220,7 @@ parse
 GRANT ALL PRIVILEGES ON SCHEMA a.b, c.d TO root
 ----
 GRANT ALL ON SCHEMA a.b, c.d TO root -- normalized!
-GRANT ALL ON SCHEMA a.b, c.d TO root -- fully parenthetized
+GRANT ALL ON SCHEMA a.b, c.d TO root -- fully parenthesized
 GRANT ALL ON SCHEMA a.b, c.d TO root -- literals removed
 GRANT ALL ON SCHEMA _._, _._ TO _ -- identifiers removed
 
@@ -231,7 +231,7 @@ parse
 REVOKE SELECT ON TABLE foo FROM root
 ----
 REVOKE SELECT ON TABLE foo FROM root
-REVOKE SELECT ON TABLE (foo) FROM root -- fully parenthetized
+REVOKE SELECT ON TABLE (foo) FROM root -- fully parenthesized
 REVOKE SELECT ON TABLE foo FROM root -- literals removed
 REVOKE SELECT ON TABLE _ FROM _ -- identifiers removed
 
@@ -239,7 +239,7 @@ parse
 REVOKE UPDATE, DELETE ON TABLE foo, db.foo FROM root, bar
 ----
 REVOKE UPDATE, DELETE ON TABLE foo, db.foo FROM root, bar
-REVOKE UPDATE, DELETE ON TABLE (foo), (db.foo) FROM root, bar -- fully parenthetized
+REVOKE UPDATE, DELETE ON TABLE (foo), (db.foo) FROM root, bar -- fully parenthesized
 REVOKE UPDATE, DELETE ON TABLE foo, db.foo FROM root, bar -- literals removed
 REVOKE UPDATE, DELETE ON TABLE _, _._ FROM _, _ -- identifiers removed
 
@@ -247,7 +247,7 @@ parse
 REVOKE UPDATE, DELETE ON foo, db.foo FROM root, bar
 ----
 REVOKE UPDATE, DELETE ON TABLE foo, db.foo FROM root, bar -- normalized!
-REVOKE UPDATE, DELETE ON TABLE (foo), (db.foo) FROM root, bar -- fully parenthetized
+REVOKE UPDATE, DELETE ON TABLE (foo), (db.foo) FROM root, bar -- fully parenthesized
 REVOKE UPDATE, DELETE ON TABLE foo, db.foo FROM root, bar -- literals removed
 REVOKE UPDATE, DELETE ON TABLE _, _._ FROM _, _ -- identifiers removed
 
@@ -255,7 +255,7 @@ parse
 REVOKE INSERT ON DATABASE foo FROM root
 ----
 REVOKE INSERT ON DATABASE foo FROM root
-REVOKE INSERT ON DATABASE foo FROM root -- fully parenthetized
+REVOKE INSERT ON DATABASE foo FROM root -- fully parenthesized
 REVOKE INSERT ON DATABASE foo FROM root -- literals removed
 REVOKE INSERT ON DATABASE _ FROM _ -- identifiers removed
 
@@ -263,7 +263,7 @@ parse
 REVOKE ALL ON DATABASE foo FROM root, test
 ----
 REVOKE ALL ON DATABASE foo FROM root, test
-REVOKE ALL ON DATABASE foo FROM root, test -- fully parenthetized
+REVOKE ALL ON DATABASE foo FROM root, test -- fully parenthesized
 REVOKE ALL ON DATABASE foo FROM root, test -- literals removed
 REVOKE ALL ON DATABASE _ FROM _, _ -- identifiers removed
 
@@ -271,7 +271,7 @@ parse
 REVOKE ALL PRIVILEGES ON DATABASE foo FROM root
 ----
 REVOKE ALL ON DATABASE foo FROM root -- normalized!
-REVOKE ALL ON DATABASE foo FROM root -- fully parenthetized
+REVOKE ALL ON DATABASE foo FROM root -- fully parenthesized
 REVOKE ALL ON DATABASE foo FROM root -- literals removed
 REVOKE ALL ON DATABASE _ FROM _ -- identifiers removed
 
@@ -280,7 +280,7 @@ parse
 REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz
 ----
 REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz
-REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz -- fully parenthetized
+REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz -- fully parenthesized
 REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz -- literals removed
 REVOKE SELECT, INSERT ON DATABASE _ FROM _, _, _ -- identifiers removed
 
@@ -288,7 +288,7 @@ parse
 REVOKE SELECT, INSERT ON DATABASE db1, db2 FROM foo, bar, baz
 ----
 REVOKE SELECT, INSERT ON DATABASE db1, db2 FROM foo, bar, baz
-REVOKE SELECT, INSERT ON DATABASE db1, db2 FROM foo, bar, baz -- fully parenthetized
+REVOKE SELECT, INSERT ON DATABASE db1, db2 FROM foo, bar, baz -- fully parenthesized
 REVOKE SELECT, INSERT ON DATABASE db1, db2 FROM foo, bar, baz -- literals removed
 REVOKE SELECT, INSERT ON DATABASE _, _ FROM _, _, _ -- identifiers removed
 
@@ -296,7 +296,7 @@ parse
 REVOKE rolea, roleb FROM usera, userb
 ----
 REVOKE rolea, roleb FROM usera, userb
-REVOKE rolea, roleb FROM usera, userb -- fully parenthetized
+REVOKE rolea, roleb FROM usera, userb -- fully parenthesized
 REVOKE rolea, roleb FROM usera, userb -- literals removed
 REVOKE _, _ FROM _, _ -- identifiers removed
 
@@ -304,7 +304,7 @@ parse
 REVOKE ADMIN OPTION FOR rolea, roleb FROM usera, userb
 ----
 REVOKE ADMIN OPTION FOR rolea, roleb FROM usera, userb
-REVOKE ADMIN OPTION FOR rolea, roleb FROM usera, userb -- fully parenthetized
+REVOKE ADMIN OPTION FOR rolea, roleb FROM usera, userb -- fully parenthesized
 REVOKE ADMIN OPTION FOR rolea, roleb FROM usera, userb -- literals removed
 REVOKE ADMIN OPTION FOR _, _ FROM _, _ -- identifiers removed
 
@@ -312,7 +312,7 @@ parse
 REVOKE ALL PRIVILEGES ON TABLE foo FROM root
 ----
 REVOKE ALL ON TABLE foo FROM root -- normalized!
-REVOKE ALL ON TABLE (foo) FROM root -- fully parenthetized
+REVOKE ALL ON TABLE (foo) FROM root -- fully parenthesized
 REVOKE ALL ON TABLE foo FROM root -- literals removed
 REVOKE ALL ON TABLE _ FROM _ -- identifiers removed
 
@@ -323,7 +323,7 @@ parse
 REVOKE USAGE ON TYPE foo FROM root
 ----
 REVOKE USAGE ON TYPE foo FROM root
-REVOKE USAGE ON TYPE foo FROM root -- fully parenthetized
+REVOKE USAGE ON TYPE foo FROM root -- fully parenthesized
 REVOKE USAGE ON TYPE foo FROM root -- literals removed
 REVOKE USAGE ON TYPE _ FROM _ -- identifiers removed
 
@@ -331,7 +331,7 @@ parse
 REVOKE USAGE, GRANT ON TYPE foo FROM root
 ----
 REVOKE USAGE, GRANT ON TYPE foo FROM root
-REVOKE USAGE, GRANT ON TYPE foo FROM root -- fully parenthetized
+REVOKE USAGE, GRANT ON TYPE foo FROM root -- fully parenthesized
 REVOKE USAGE, GRANT ON TYPE foo FROM root -- literals removed
 REVOKE USAGE, GRANT ON TYPE _ FROM _ -- identifiers removed
 
@@ -339,7 +339,7 @@ parse
 REVOKE ALL ON TYPE foo FROM root
 ----
 REVOKE ALL ON TYPE foo FROM root
-REVOKE ALL ON TYPE foo FROM root -- fully parenthetized
+REVOKE ALL ON TYPE foo FROM root -- fully parenthesized
 REVOKE ALL ON TYPE foo FROM root -- literals removed
 REVOKE ALL ON TYPE _ FROM _ -- identifiers removed
 
@@ -349,7 +349,7 @@ parse
 REVOKE USAGE ON SCHEMA foo FROM root
 ----
 REVOKE USAGE ON SCHEMA foo FROM root
-REVOKE USAGE ON SCHEMA foo FROM root -- fully parenthetized
+REVOKE USAGE ON SCHEMA foo FROM root -- fully parenthesized
 REVOKE USAGE ON SCHEMA foo FROM root -- literals removed
 REVOKE USAGE ON SCHEMA _ FROM _ -- identifiers removed
 
@@ -357,7 +357,7 @@ parse
 REVOKE USAGE ON SCHEMA foo.bar FROM root
 ----
 REVOKE USAGE ON SCHEMA foo.bar FROM root
-REVOKE USAGE ON SCHEMA foo.bar FROM root -- fully parenthetized
+REVOKE USAGE ON SCHEMA foo.bar FROM root -- fully parenthesized
 REVOKE USAGE ON SCHEMA foo.bar FROM root -- literals removed
 REVOKE USAGE ON SCHEMA _._ FROM _ -- identifiers removed
 
@@ -365,7 +365,7 @@ parse
 REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root
 ----
 REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root -- fully parenthetized
+REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root -- fully parenthesized
 REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root -- literals removed
 REVOKE USAGE, GRANT, CREATE ON SCHEMA _ FROM _ -- identifiers removed
 
@@ -373,7 +373,7 @@ parse
 REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root
 ----
 REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root -- fully parenthetized
+REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root -- fully parenthesized
 REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root -- literals removed
 REVOKE USAGE, GRANT, CREATE ON SCHEMA _._ FROM _ -- identifiers removed
 
@@ -381,7 +381,7 @@ parse
 REVOKE ALL ON SCHEMA foo, bar, baz FROM root
 ----
 REVOKE ALL ON SCHEMA foo, bar, baz FROM root
-REVOKE ALL ON SCHEMA foo, bar, baz FROM root -- fully parenthetized
+REVOKE ALL ON SCHEMA foo, bar, baz FROM root -- fully parenthesized
 REVOKE ALL ON SCHEMA foo, bar, baz FROM root -- literals removed
 REVOKE ALL ON SCHEMA _, _, _ FROM _ -- identifiers removed
 
@@ -389,7 +389,7 @@ parse
 REVOKE ALL ON SCHEMA a.b, c.d, e.f FROM root
 ----
 REVOKE ALL ON SCHEMA a.b, c.d, e.f FROM root
-REVOKE ALL ON SCHEMA a.b, c.d, e.f FROM root -- fully parenthetized
+REVOKE ALL ON SCHEMA a.b, c.d, e.f FROM root -- fully parenthesized
 REVOKE ALL ON SCHEMA a.b, c.d, e.f FROM root -- literals removed
 REVOKE ALL ON SCHEMA _._, _._, _._ FROM _ -- identifiers removed
 
@@ -397,7 +397,7 @@ parse
 REVOKE ALL PRIVILEGES ON SCHEMA foo FROM root
 ----
 REVOKE ALL ON SCHEMA foo FROM root -- normalized!
-REVOKE ALL ON SCHEMA foo FROM root -- fully parenthetized
+REVOKE ALL ON SCHEMA foo FROM root -- fully parenthesized
 REVOKE ALL ON SCHEMA foo FROM root -- literals removed
 REVOKE ALL ON SCHEMA _ FROM _ -- identifiers removed
 
@@ -405,7 +405,7 @@ parse
 REVOKE ALL PRIVILEGES ON SCHEMA foo.bar FROM root
 ----
 REVOKE ALL ON SCHEMA foo.bar FROM root -- normalized!
-REVOKE ALL ON SCHEMA foo.bar FROM root -- fully parenthetized
+REVOKE ALL ON SCHEMA foo.bar FROM root -- fully parenthesized
 REVOKE ALL ON SCHEMA foo.bar FROM root -- literals removed
 REVOKE ALL ON SCHEMA _._ FROM _ -- identifiers removed
 
@@ -413,6 +413,6 @@ parse
 REVOKE ALL PRIVILEGES ON SCHEMA a.b, c.d FROM root
 ----
 REVOKE ALL ON SCHEMA a.b, c.d FROM root -- normalized!
-REVOKE ALL ON SCHEMA a.b, c.d FROM root -- fully parenthetized
+REVOKE ALL ON SCHEMA a.b, c.d FROM root -- fully parenthesized
 REVOKE ALL ON SCHEMA a.b, c.d FROM root -- literals removed
 REVOKE ALL ON SCHEMA _._, _._ FROM _ -- identifiers removed

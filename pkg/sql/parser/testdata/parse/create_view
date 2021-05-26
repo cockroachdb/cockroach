@@ -2,7 +2,7 @@ parse
 CREATE VIEW a AS SELECT * FROM b
 ----
 CREATE VIEW a AS SELECT * FROM b
-CREATE VIEW a AS SELECT (*) FROM b -- fully parenthetized
+CREATE VIEW a AS SELECT (*) FROM b -- fully parenthesized
 CREATE VIEW a AS SELECT * FROM b -- literals removed
 CREATE VIEW _ AS SELECT * FROM _ -- identifiers removed
 
@@ -10,7 +10,7 @@ parse
 CREATE OR REPLACE VIEW a AS SELECT * FROM b
 ----
 CREATE OR REPLACE VIEW a AS SELECT * FROM b
-CREATE OR REPLACE VIEW a AS SELECT (*) FROM b -- fully parenthetized
+CREATE OR REPLACE VIEW a AS SELECT (*) FROM b -- fully parenthesized
 CREATE OR REPLACE VIEW a AS SELECT * FROM b -- literals removed
 CREATE OR REPLACE VIEW _ AS SELECT * FROM _ -- identifiers removed
 
@@ -18,7 +18,7 @@ parse
 EXPLAIN CREATE VIEW a AS SELECT * FROM b
 ----
 EXPLAIN CREATE VIEW a AS SELECT * FROM b
-EXPLAIN CREATE VIEW a AS SELECT (*) FROM b -- fully parenthetized
+EXPLAIN CREATE VIEW a AS SELECT (*) FROM b -- fully parenthesized
 EXPLAIN CREATE VIEW a AS SELECT * FROM b -- literals removed
 EXPLAIN CREATE VIEW _ AS SELECT * FROM _ -- identifiers removed
 
@@ -26,7 +26,7 @@ parse
 CREATE VIEW a AS SELECT b.* FROM b LIMIT 5
 ----
 CREATE VIEW a AS SELECT b.* FROM b LIMIT 5
-CREATE VIEW a AS SELECT (b.*) FROM b LIMIT (5) -- fully parenthetized
+CREATE VIEW a AS SELECT (b.*) FROM b LIMIT (5) -- fully parenthesized
 CREATE VIEW a AS SELECT b.* FROM b LIMIT _ -- literals removed
 CREATE VIEW _ AS SELECT _.* FROM _ LIMIT 5 -- identifiers removed
 
@@ -34,7 +34,7 @@ parse
 CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)
 ----
 CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)
-CREATE VIEW a AS (SELECT (c), (d) FROM b WHERE ((c) > (0)) ORDER BY (c)) -- fully parenthetized
+CREATE VIEW a AS (SELECT (c), (d) FROM b WHERE ((c) > (0)) ORDER BY (c)) -- fully parenthesized
 CREATE VIEW a AS (SELECT c, d FROM b WHERE c > _ ORDER BY c) -- literals removed
 CREATE VIEW _ AS (SELECT _, _ FROM _ WHERE _ > 0 ORDER BY _) -- identifiers removed
 
@@ -42,7 +42,7 @@ parse
 CREATE VIEW a (x, y) AS SELECT c, d FROM b
 ----
 CREATE VIEW a (x, y) AS SELECT c, d FROM b
-CREATE VIEW a (x, y) AS SELECT (c), (d) FROM b -- fully parenthetized
+CREATE VIEW a (x, y) AS SELECT (c), (d) FROM b -- fully parenthesized
 CREATE VIEW a (x, y) AS SELECT c, d FROM b -- literals removed
 CREATE VIEW _ (_, _) AS SELECT _, _ FROM _ -- identifiers removed
 
@@ -50,7 +50,7 @@ parse
 CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')
 ----
 CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')
-CREATE VIEW a AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthetized
+CREATE VIEW a AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthesized
 CREATE VIEW a AS VALUES (_, _), (__more1__) -- literals removed
 CREATE VIEW _ AS VALUES (1, 'one'), (2, 'two') -- identifiers removed
 
@@ -58,7 +58,7 @@ parse
 CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')
 ----
 CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')
-CREATE VIEW a (x, y) AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthetized
+CREATE VIEW a (x, y) AS VALUES ((1), ('one')), ((2), ('two')) -- fully parenthesized
 CREATE VIEW a (x, y) AS VALUES (_, _), (__more1__) -- literals removed
 CREATE VIEW _ (_, _) AS VALUES (1, 'one'), (2, 'two') -- identifiers removed
 
@@ -66,7 +66,7 @@ parse
 CREATE VIEW a AS TABLE b
 ----
 CREATE VIEW a AS TABLE b
-CREATE VIEW a AS TABLE b -- fully parenthetized
+CREATE VIEW a AS TABLE b -- fully parenthesized
 CREATE VIEW a AS TABLE b -- literals removed
 CREATE VIEW _ AS TABLE _ -- identifiers removed
 
@@ -74,7 +74,7 @@ parse
 CREATE TEMPORARY VIEW a AS SELECT b
 ----
 CREATE TEMPORARY VIEW a AS SELECT b
-CREATE TEMPORARY VIEW a AS SELECT (b) -- fully parenthetized
+CREATE TEMPORARY VIEW a AS SELECT (b) -- fully parenthesized
 CREATE TEMPORARY VIEW a AS SELECT b -- literals removed
 CREATE TEMPORARY VIEW _ AS SELECT _ -- identifiers removed
 
@@ -82,7 +82,7 @@ parse
 CREATE MATERIALIZED VIEW a AS SELECT * FROM b
 ----
 CREATE MATERIALIZED VIEW a AS SELECT * FROM b
-CREATE MATERIALIZED VIEW a AS SELECT (*) FROM b -- fully parenthetized
+CREATE MATERIALIZED VIEW a AS SELECT (*) FROM b -- fully parenthesized
 CREATE MATERIALIZED VIEW a AS SELECT * FROM b -- literals removed
 CREATE MATERIALIZED VIEW _ AS SELECT * FROM _ -- identifiers removed
 
@@ -90,7 +90,7 @@ parse
 CREATE MATERIALIZED VIEW IF NOT EXISTS a AS SELECT * FROM b
 ----
 CREATE MATERIALIZED VIEW IF NOT EXISTS a AS SELECT * FROM b
-CREATE MATERIALIZED VIEW IF NOT EXISTS a AS SELECT (*) FROM b -- fully parenthetized
+CREATE MATERIALIZED VIEW IF NOT EXISTS a AS SELECT (*) FROM b -- fully parenthesized
 CREATE MATERIALIZED VIEW IF NOT EXISTS a AS SELECT * FROM b -- literals removed
 CREATE MATERIALIZED VIEW IF NOT EXISTS _ AS SELECT * FROM _ -- identifiers removed
 
@@ -98,7 +98,7 @@ parse
 REFRESH MATERIALIZED VIEW a.b
 ----
 REFRESH MATERIALIZED VIEW a.b
-REFRESH MATERIALIZED VIEW a.b -- fully parenthetized
+REFRESH MATERIALIZED VIEW a.b -- fully parenthesized
 REFRESH MATERIALIZED VIEW a.b -- literals removed
 REFRESH MATERIALIZED VIEW _._ -- identifiers removed
 
@@ -106,7 +106,7 @@ parse
 REFRESH MATERIALIZED VIEW CONCURRENTLY a.b
 ----
 REFRESH MATERIALIZED VIEW CONCURRENTLY a.b
-REFRESH MATERIALIZED VIEW CONCURRENTLY a.b -- fully parenthetized
+REFRESH MATERIALIZED VIEW CONCURRENTLY a.b -- fully parenthesized
 REFRESH MATERIALIZED VIEW CONCURRENTLY a.b -- literals removed
 REFRESH MATERIALIZED VIEW CONCURRENTLY _._ -- identifiers removed
 
@@ -114,7 +114,7 @@ parse
 REFRESH MATERIALIZED VIEW a.b WITH DATA
 ----
 REFRESH MATERIALIZED VIEW a.b WITH DATA
-REFRESH MATERIALIZED VIEW a.b WITH DATA -- fully parenthetized
+REFRESH MATERIALIZED VIEW a.b WITH DATA -- fully parenthesized
 REFRESH MATERIALIZED VIEW a.b WITH DATA -- literals removed
 REFRESH MATERIALIZED VIEW _._ WITH DATA -- identifiers removed
 
@@ -122,6 +122,6 @@ parse
 REFRESH MATERIALIZED VIEW a.b WITH NO DATA
 ----
 REFRESH MATERIALIZED VIEW a.b WITH NO DATA
-REFRESH MATERIALIZED VIEW a.b WITH NO DATA -- fully parenthetized
+REFRESH MATERIALIZED VIEW a.b WITH NO DATA -- fully parenthesized
 REFRESH MATERIALIZED VIEW a.b WITH NO DATA -- literals removed
 REFRESH MATERIALIZED VIEW _._ WITH NO DATA -- identifiers removed

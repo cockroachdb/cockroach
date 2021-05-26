@@ -64,12 +64,6 @@ CREATE TABLE child (
   a INT
 )
 
-# An expression-based index cannot reference non-restricted FK columns.
-# TODO(mgartner): This error message should be more clear. The user would not
-# think that they are creating a computed column at all.
-statement error computed columns cannot reference non-restricted FK columns
-CREATE INDEX err ON child ((fk + 10))
-
 # An expression-based index cannot reference columns in other tables.
 statement error no data source matches prefix: t in this context
 CREATE INDEX err ON child ((t.a + 10))
