@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sessionphase",
+    srcs = ["session_phase.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessionphase",
+    visibility = ["//visibility:public"],
+)
