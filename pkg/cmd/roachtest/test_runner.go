@@ -299,7 +299,7 @@ func (r *testRunner) Run(
 				l,
 			); err != nil {
 				// A worker returned an error. Let's shut down.
-				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %+v", i, err)
+				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %v", i, err)
 				shout(ctx, l, lopt.stdout, msg)
 				errs.AddErr(err)
 				// Stop the stopper. This will cause all workers to not pick up more
@@ -921,6 +921,9 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	}
 	if err := c.FetchDiskUsage(ctx); err != nil {
 		l.Printf("failed to fetch disk uage summary: %s", err)
+	}
+	if err := c.FetchTimeseriesData(ctx); err != nil {
+		l.Printf("failed to fetch timeseries data: %s", err)
 	}
 	if err := c.FetchDebugZip(ctx); err != nil {
 		l.Printf("failed to collect zip: %s", err)
