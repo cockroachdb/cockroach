@@ -9,10 +9,7 @@
 // licenses/APL.txt.
 
 import React, { MouseEvent } from "react";
-import {
-  ColumnDescriptor,
-  SortedTable,
-} from "src/views/shared/components/sortedtable";
+import _ from "lodash";
 import { cockroach } from "src/js/protos";
 import { TimestampToMoment } from "src/util/convert";
 import { DATE_FORMAT } from "src/util/format";
@@ -23,40 +20,50 @@ import { isEqual, map } from "lodash";
 import { JobDescriptionCell } from "src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/cluster-ui";
+import {
+  ColumnDescriptor,
+  Pagination,
+  ResultsPerPageLabel,
+} from "@cockroachlabs/cluster-ui";
 import { jobTable } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
 import { EmptyTable } from "@cockroachlabs/cluster-ui";
 import { Anchor } from "src/components";
 import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
 import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
+import { SortedTable } from "../shared/components/sortedtable";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
 const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
+    name: "description",
     title: "Description",
     className: "cl-table__col-query-text",
     cell: (job) => <JobDescriptionCell job={job} />,
-    sort: (job) => job.description,
+    sort: (job) => job.description || job.type,
   },
   {
+    name: "jobId",
     title: "Job ID",
     titleAlign: "right",
     cell: (job) => String(job.id),
     sort: (job) => job.id,
   },
   {
+    name: "users",
     title: "Users",
     cell: (job) => job.username,
     sort: (job) => job.username,
   },
   {
+    name: "creationTime",
     title: "Creation Time",
-    cell: (job) => TimestampToMoment(job.created).format(DATE_FORMAT),
-    sort: (job) => TimestampToMoment(job.created).valueOf(),
+    cell: (job) => TimestampToMoment(job?.created).format(DATE_FORMAT),
+    sort: (job) => TimestampToMoment(job?.created).valueOf(),
   },
   {
+    name: "status",
     title: "Status",
     cell: (job) => <JobStatusCell job={job} compact />,
     sort: (job) => job.fraction_completed,
@@ -157,6 +164,23 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
   redirectToLearnMore = (e: MouseEvent<HTMLAnchorElement>) => {
     trackDocsLink(e.currentTarget.text);
   };
+
+  shouldComponentUpdate(nextProps: JobTableProps, nextState: JobTableState) {
+    const { sort, jobs, pageSize, current, isUsedFilter } = this.props;
+
+    if (
+      isEqual(nextProps.sort, sort) &&
+      isEqual(nextProps.jobs, jobs) &&
+      isEqual(nextProps.pageSize, pageSize) &&
+      isEqual(nextProps.current, current) &&
+      isEqual(nextProps.isUsedFilter, isUsedFilter) &&
+      isEqual(nextState.pagination, this.state.pagination)
+    ) {
+      return false;
+    } else {
+      return true;
+    }
+  }
 
   render() {
     const jobs = this.props.jobs.data.jobs;

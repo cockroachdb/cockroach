@@ -132,19 +132,35 @@ export class SortedTable<T> extends React.Component<
     (props: SortedTableProps<T>) => props.data,
     (props: SortedTableProps<T>) => props.sortSetting,
     (props: SortedTableProps<T>) => props.columns,
+    (props: SortedTableProps<T>) => props.pagination,
     (
       data: T[],
       sortSetting: SortSetting,
       columns: ColumnDescriptor<T>[],
+      pagination: ISortedTablePagination,
     ): T[] => {
+      const paginatedData = (sortData?: T[]) => {
+        const { data } = this.props;
+        if (!pagination) {
+          return sortData || data;
+        }
+        const currentDefault = pagination.current - 1;
+        const start = currentDefault * pagination.pageSize;
+        const end = currentDefault * pagination.pageSize + pagination.pageSize;
+        const pdata = sortData
+          ? sortData.slice(start, end)
+          : data.slice(start, end);
+        return pdata;
+      };
+
       if (!sortSetting) {
-        return this.paginatedData();
+        return paginatedData();
       }
       const sortColumn = columns[sortSetting.sortKey];
       if (!sortColumn || !sortColumn.sort) {
-        return this.paginatedData();
+        return paginatedData();
       }
-      return this.paginatedData(
+      return paginatedData(
         _.orderBy(
           data,
           sortColumn.sort,
@@ -229,17 +245,6 @@ export class SortedTable<T> extends React.Component<
     return this.props.expandableConfig.expandedContent(item);
   };
 
-  paginatedData = (sortData?: T[]) => {
-    const { pagination, data } = this.props;
-    if (!pagination) {
-      return sortData || data;
-    }
-    const currentDefault = pagination.current - 1;
-    const start = currentDefault * pagination.pageSize;
-    const end = currentDefault * pagination.pageSize + pagination.pageSize;
-    return sortData ? sortData.slice(start, end) : data.slice(start, end);
-  };
-
   render() {
     const {
       data,
@@ -258,9 +263,12 @@ export class SortedTable<T> extends React.Component<
         onChangeExpansion: this.onChangeExpansion,
       };
     }
+
+    const count = data ? this.sortedAndPaginated(this.props).length : 0;
+
     return (
       <SortableTable
-        count={data ? this.paginatedData().length : 0}
+        count={count}
         sortSetting={sortSetting}
         onChangeSortSetting={onChangeSortSetting}
         columns={this.columns(this.props)}
