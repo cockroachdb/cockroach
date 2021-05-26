@@ -22,9 +22,7 @@ import (
 // These constants are single bytes for performance. They allow single-byte
 // comparisons which are considerably faster than bytes.HasPrefix.
 const (
-	LocalPrefixByte  = '\x01'
-	localMaxByte     = '\x02'
-	meta1PrefixByte  = localMaxByte
+	meta1PrefixByte  = roachpb.LocalMaxByte
 	meta2PrefixByte  = '\x03'
 	metaMaxByte      = '\x04'
 	systemPrefixByte = metaMaxByte
@@ -43,10 +41,9 @@ var (
 	MaxKey = roachpb.KeyMax
 
 	// LocalPrefix is the prefix for all local keys.
-	LocalPrefix = roachpb.Key{LocalPrefixByte}
-	// LocalMax is the end of the local key range. It is itself a global
-	// key.
-	LocalMax = roachpb.Key{localMaxByte}
+	LocalPrefix = roachpb.LocalPrefix
+	// LocalMax is the end of the local key range. It is itself a global key.
+	LocalMax = roachpb.LocalMax
 
 	// localSuffixLength specifies the length in bytes of all local
 	// key suffixes.
