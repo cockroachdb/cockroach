@@ -11,11 +11,18 @@
 package admission
 
 import (
+	"context"
+	"math"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 )
 
@@ -51,6 +58,8 @@ type requester interface {
 	// are now no waiting requests. The grantChainID is used when calling
 	// continueGrantChain -- see the comment with that method below.
 	granted(grantChainID grantChainID) bool
+	// getAdmittedCount returns the cumulative count of admitted work.
+	getAdmittedCount() uint64
 }
 
 // grantKind represents the two kind of ways we grant admission: using a slot
@@ -419,6 +428,103 @@ func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 	tg.coord.continueGrantChain(tg.workKind, grantChainID)
 }
 
+// kvGranter implements granterWithLockedCalls. It is used for grants to
+// KVWork, that are limited by both slots (CPU bound work) and tokens (IO
+// bound work).
+type kvGranter struct {
+	coord           *GrantCoordinator
+	requester       requester
+	usedSlots       int
+	totalSlots      int
+	ioTokensEnabled bool
+	// There is no rate limiting in granting these tokens. That is, they are all
+	// burst tokens.
+	availableIOTokens int64
+
+	usedSlotsMetric                 *metric.Gauge
+	IOTokensExhaustedDurationMetric *metric.Counter
+	exhaustedStart                  time.Time
+}
+
+var _ granterWithLockedCalls = &kvGranter{}
+
+func (sg *kvGranter) getPairedRequester() requester {
+	return sg.requester
+}
+
+func (sg *kvGranter) grantKind() grantKind {
+	// Slot represents that there is a completion indicator, and it does not
+	// matter that kvGranter internally uses both slots and tokens.
+	return slot
+}
+
+func (sg *kvGranter) tryGet() bool {
+	return sg.coord.tryGet(KVWork)
+}
+
+func (sg *kvGranter) tryGetLocked() grantResult {
+	if sg.usedSlots < sg.totalSlots {
+		if !sg.ioTokensEnabled || sg.availableIOTokens > 0 {
+			sg.usedSlots++
+			sg.usedSlotsMetric.Update(int64(sg.usedSlots))
+			if sg.ioTokensEnabled {
+				sg.availableIOTokens--
+				if sg.availableIOTokens == 0 {
+					sg.exhaustedStart = timeutil.Now()
+				}
+			}
+			return grantSuccess
+		}
+		return grantFailLocal
+	}
+	return grantFailDueToSharedResource
+}
+
+func (sg *kvGranter) returnGrant() {
+	sg.coord.returnGrant(KVWork)
+}
+
+func (sg *kvGranter) returnGrantLocked() {
+	sg.usedSlots--
+	if sg.usedSlots < 0 {
+		panic(errors.AssertionFailedf("used slots is negative %d", sg.usedSlots))
+	}
+	sg.usedSlotsMetric.Update(int64(sg.usedSlots))
+}
+
+func (sg *kvGranter) tookWithoutPermission() {
+	sg.coord.tookWithoutPermission(KVWork)
+}
+
+func (sg *kvGranter) tookWithoutPermissionLocked() {
+	sg.usedSlots++
+	sg.usedSlotsMetric.Update(int64(sg.usedSlots))
+	if sg.ioTokensEnabled {
+		sg.availableIOTokens--
+		if sg.availableIOTokens == 0 {
+			sg.exhaustedStart = timeutil.Now()
+		}
+	}
+}
+
+func (sg *kvGranter) continueGrantChain(grantChainID grantChainID) {
+	sg.coord.continueGrantChain(KVWork, grantChainID)
+}
+
+func (sg *kvGranter) setAvailableIOTokensLocked(tokens int64) {
+	sg.ioTokensEnabled = true
+	if sg.availableIOTokens <= 0 && tokens > 0 {
+		exhaustedMicros := timeutil.Since(sg.exhaustedStart).Microseconds()
+		sg.IOTokensExhaustedDurationMetric.Inc(exhaustedMicros)
+	}
+	// sg.availableIOTokens could be negative due to tookWithoutPermission, so
+	// increment by tokens, and don't let the result go above tokens.
+	sg.availableIOTokens += tokens
+	if sg.availableIOTokens > tokens {
+		sg.availableIOTokens = tokens
+	}
+}
+
 // GrantCoordinator is the top-level object that coordinates grants across
 // different WorkKinds (for more context see the comment in doc.go, and the
 // comment where WorkKind is declared). Typically there will one
@@ -435,6 +541,7 @@ type GrantCoordinator struct {
 	queues               [numWorkKinds]requester
 	cpuOverloadIndicator cpuOverloadIndicator
 	cpuLoadListener      CPULoadListener
+	ioLoadListener       *ioLoadListener
 
 	// The latest value of GOMAXPROCS, received via CPULoad.
 	numProcs int
@@ -496,17 +603,17 @@ func NewGrantCoordinator(opts Options) (*GrantCoordinator, []metric.Struct) {
 		grantChainID:         1,
 	}
 
-	sg := &slotGranter{
-		coord:           coord,
-		workKind:        KVWork,
-		totalSlots:      opts.MinCPUSlots,
-		usedSlotsMetric: metrics.KVUsedSlots,
+	kvg := &kvGranter{
+		coord:                           coord,
+		totalSlots:                      opts.MinCPUSlots,
+		usedSlotsMetric:                 metrics.KVUsedSlots,
+		IOTokensExhaustedDurationMetric: metrics.KVIOTokensExhaustedDuration,
 	}
-	kvSlotAdjuster.granter = sg
+	kvSlotAdjuster.granter = kvg
 	coord.queues[KVWork] = makeRequester(
-		KVWork, sg, false /* usesTokens */, true /* tiedToRange */, st)
-	sg.requester = coord.queues[KVWork]
-	coord.granters[KVWork] = sg
+		KVWork, kvg, false /* usesTokens */, true /* tiedToRange */, st)
+	kvg.requester = coord.queues[KVWork]
+	coord.granters[KVWork] = kvg
 
 	tg := &tokenGranter{
 		coord:                coord,
@@ -532,7 +639,7 @@ func NewGrantCoordinator(opts Options) (*GrantCoordinator, []metric.Struct) {
 	tg.requester = coord.queues[SQLSQLResponseWork]
 	coord.granters[SQLSQLResponseWork] = tg
 
-	sg = &slotGranter{
+	sg := &slotGranter{
 		coord:           coord,
 		workKind:        SQLStatementLeafStartWork,
 		totalSlots:      opts.SQLStatementLeafStartWorkSlots,
@@ -585,17 +692,17 @@ func NewGrantCoordinatorMultiTenantKV(opts Options) (*GrantCoordinator, []metric
 		grantChainID:         1,
 	}
 
-	sg := &slotGranter{
-		coord:           coord,
-		workKind:        KVWork,
-		totalSlots:      opts.MinCPUSlots,
-		usedSlotsMetric: metrics.KVUsedSlots,
+	kvg := &kvGranter{
+		coord:                           coord,
+		totalSlots:                      opts.MinCPUSlots,
+		usedSlotsMetric:                 metrics.KVUsedSlots,
+		IOTokensExhaustedDurationMetric: metrics.KVIOTokensExhaustedDuration,
 	}
-	kvSlotAdjuster.granter = sg
+	kvSlotAdjuster.granter = kvg
 	coord.queues[KVWork] = makeRequester(
-		KVWork, sg, false /* usesTokens */, true /* tiedToRange */, st)
-	sg.requester = coord.queues[KVWork]
-	coord.granters[KVWork] = sg
+		KVWork, kvg, false /* usesTokens */, true /* tiedToRange */, st)
+	kvg.requester = coord.queues[KVWork]
+	coord.granters[KVWork] = kvg
 
 	return coord, appendMetricStructs(metricStructs, coord)
 }
@@ -670,6 +777,37 @@ func NewGrantCoordinatorSQL(opts Options) (*GrantCoordinator, []metric.Struct) {
 	coord.granters[SQLStatementRootStartWork] = sg
 
 	return coord, appendMetricStructs(metricStructs, coord)
+}
+
+// Experimental observations: sub-level count of ~40 caused a node heartbeat
+// latency p90, p99 of 2.5s, 4s. With the following setting that limits
+// sub-level count to 10, before the system is considered overloaded, we see
+// the actual sub-level count ranging from 5-30, with p90, p99 node heartbeat
+// latency showing a similar wide range, with 1s, 2s being the middle of the
+// range respectively.
+//
+// We've set these overload thresholds in a way that allows the system to
+// absorb short durations (say a few minutes) of heavy write load.
+//
+// TODO(sumeer): make these configurable since it is possible that different
+// users have different tolerance for read slowness caused by higher
+// read-amplification.
+const l0FileCountOverloadThreshold = 1000
+const l0SubLevelCountOverloadThreshold = 10
+
+func (coord *GrantCoordinator) SetPebbleMetricsProvider(pmp PebbleMetricsProvider) {
+	if coord.ioLoadListener != nil {
+		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
+	}
+	coord.ioLoadListener = &ioLoadListener{
+		l0FileCountOverloadThreshold:     l0FileCountOverloadThreshold,
+		l0SubLevelCountOverloadThreshold: l0SubLevelCountOverloadThreshold,
+		pebbleMetricsProvider:            pmp,
+		kvRequester:                      coord.queues[KVWork],
+		mu:                               &coord.mu,
+		kvGranter:                        coord.granters[KVWork].(*kvGranter),
+	}
+	coord.ioLoadListener.start()
 }
 
 func appendMetricStructs(ms []metric.Struct, coord *GrantCoordinator) []metric.Struct {
@@ -865,6 +1003,9 @@ func (coord *GrantCoordinator) Close() {
 			q.close()
 		}
 	}
+	if coord.ioLoadListener != nil {
+		coord.ioLoadListener.close()
+	}
 }
 
 func (coord *GrantCoordinator) String() string {
@@ -885,7 +1026,13 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 	for i := range coord.granters {
 		kind := WorkKind(i)
 		switch kind {
-		case KVWork, SQLStatementLeafStartWork, SQLStatementRootStartWork:
+		case KVWork:
+			g := coord.granters[i].(*kvGranter)
+			s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
+			if g.ioTokensEnabled {
+				s.Printf(" io-avail: %d", g.availableIOTokens)
+			}
+		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
 			g := coord.granters[i].(*slotGranter)
 			s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
 		case SQLKVResponseWork, SQLSQLResponseWork:
@@ -936,21 +1083,11 @@ type kvSlotAdjuster struct {
 	// - these are potentially long-lived work items and not CPU bound
 	// - we don't know how to coordinate adjustment of those slots and the KV
 	//   slots.
-	granter     *slotGranter
+	granter     *kvGranter
 	minCPUSlots int
 	maxCPUSlots int
 
 	totalSlotsMetric *metric.Gauge
-
-	// TODO(sumeer): also compute slots for disk IO and use min(totalCPUSlots,
-	// totalIOSlots) to configure granter. In this setting the
-	// cpuOverloadIndicator.isOverloaded implementation will compare usedSlots
-	// >= totalCPUSlots. That is, if totalIOSlots < totalCPUSlots, which means
-	// KV is constrained by IO, the isOverloaded signal will be false, and will
-	// therefore not constrain admission of non-KVWork. If this lack of
-	// constraint on non-KVWork overloads the CPU, totalCPUSlots will be
-	// decreased, and eventually totalCPUSlots could become <= totalIOSlots and
-	// the isOverloaded signal will become true.
 }
 
 var _ cpuOverloadIndicator = &kvSlotAdjuster{}
@@ -982,6 +1119,12 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int) {
 		// Used all its slots and can increase further, so additive increase.
 		if kvsa.granter.usedSlots >= kvsa.granter.totalSlots &&
 			kvsa.granter.totalSlots < kvsa.maxCPUSlots {
+			// NB: If the workload is IO bound, the slot count here will keep
+			// incrementing until these slots are no longer the bottleneck for
+			// admission. So it is not unreasonable to see this slot count go into
+			// the 1000s. If the workload switches to being CPU bound, we can
+			// decrease by 1000 slots every second (because the CPULoad ticks are at
+			// 1ms intervals, and we do additive decrease).
 			kvsa.granter.totalSlots++
 		}
 	}
@@ -1003,6 +1146,212 @@ func (kvsa *kvSlotAdjuster) isOverloaded() bool {
 //
 // TODO(sumeer): implement.
 type sqlNodeCPUOverloadIndicator struct {
+}
+
+// PebbleMetricsProvider provides the pebble.Metrics for all stores.
+type PebbleMetricsProvider interface {
+	GetPebbleMetrics() []*pebble.Metrics
+}
+
+// TODO(sumeer): distinguish KVWork that is read-only, so that it is not
+// subject to this write overload admission control. Also distinguish which
+// store is needed by a KVWork and only constrain writes on stores that are
+// overloaded.
+
+// ioLoadListener adjusts tokens in kvGranter for IO, specifically due to
+// overload caused by writes. Currently we are making no distinction at
+// admission time between work that needs to only read and work that also
+// needs to write -- both require a token. IO uses tokens and not slots since
+// work completion is not an indicator that the "resource usage" has ceased --
+// it just means that the write has been applied to the WAL. Most of the work
+// is in flushing to sstables and the following compactions, which happens
+// later.
+type ioLoadListener struct {
+	l0FileCountOverloadThreshold     int64
+	l0SubLevelCountOverloadThreshold int32
+	pebbleMetricsProvider            PebbleMetricsProvider
+	kvRequester                      requester
+	// mu is used when changing state in kvGranter.
+	mu        *syncutil.Mutex
+	kvGranter *kvGranter
+
+	// Cumulative stats used to compute interval stats.
+	admittedCount uint64
+	l0Bytes       int64
+	l0AddedBytes  uint64
+	// Exponentially smoothed per interval values.
+	smoothedBytesRemoved int64
+	smoothedNumAdmit     float64
+
+	// totalTokens represents the tokens to give out until the next call to
+	// adjustTokens. They are given out with smoothing -- tokensAllocated
+	// represents what has been given out.
+	totalTokens     int64
+	tokensAllocated int64
+	closeCh         chan struct{}
+}
+
+const unlimitedTokens = math.MaxInt64
+
+func (io *ioLoadListener) start() {
+	io.closeCh = make(chan struct{})
+	// Initialize cumulative stats.
+	io.admittedCount = io.kvRequester.getAdmittedCount()
+	m := io.pebbleMetricsProvider.GetPebbleMetrics()
+	for i := range m {
+		io.l0Bytes += m[i].Levels[0].Size
+		io.l0AddedBytes += m[i].Levels[0].BytesFlushed + m[i].Levels[0].BytesIngested
+	}
+
+	// Token changes are made at a coarse time granularity of 1min since
+	// compactions can take ~10s to complete. The totalTokens to give out over
+	// the 1min interval are given out in a smoothed manner, at 1s intervals.
+	//
+	// In an experiment with extreme overload using KV0 with block size 64KB,
+	// and 4096 clients, we observed the following states of L0 at 1min
+	// intervals (r-amp is the L0 sub-level count), in the absence of any
+	// admission control:
+	//
+	// __level_____count____size___score______in__ingest(sz_cnt)____move(sz_cnt)___write(sz_cnt)____read___r-amp___w-amp›
+	//       0        96   158 M    2.09   315 M     0 B       0     0 B       0   305 M     178     0 B       3     1.0›
+	//       0      1026   1.7 G    3.15   4.7 G     0 B       0     0 B       0   4.7 G   2.8 K     0 B      24     1.0›
+	//       0      1865   3.0 G    2.86   9.1 G     0 B       0     0 B       0   9.1 G   5.5 K     0 B      38     1.0›
+	//       0      3225   4.9 G    3.46    13 G     0 B       0     0 B       0    13 G   8.3 K     0 B      59     1.0›
+	//       0      4720   7.0 G    3.46    17 G     0 B       0     0 B       0    17 G    11 K     0 B      85     1.0›
+	//       0      6120   9.0 G    4.13    21 G     0 B       0     0 B       0    21 G    14 K     0 B     109     1.0›
+	//
+	//
+	// Note the fast growth in sub-level count. Production issues typically have
+	// slower growth towards an unhealthy state (remember that similar stats in
+	// the logs of a regular CockroachDB node are at 10min intervals, and not at
+	// 1min).
+	//
+	// In the above experiment, L0 compaction durations at 200+ sub-levels were
+	// usually sane, with most L0 compactions < 10s, and with a bandwidth of
+	// ~80MB/s. There were some 1-2GB compactions that took ~20s. The
+	// expectation is that with the throttling done by admission control here,
+	// we should almost never see multi-minute compactions. Which makes it
+	// reasonable to simply use metrics that are updated when compactions
+	// complete (as opposed to also tracking progress in bytes of on-going
+	// compactions).
+	const adjustmentInterval = 60
+	// allocateTokens gives out 1/60th of totalTokens every 1s.
+	allocateTokens := func() {
+		toAllocate := int64(math.Ceil(float64(io.totalTokens) / adjustmentInterval))
+		if io.totalTokens != unlimitedTokens && toAllocate+io.tokensAllocated > io.totalTokens {
+			toAllocate = io.totalTokens - io.tokensAllocated
+		}
+		if toAllocate > 0 {
+			io.mu.Lock()
+			defer io.mu.Unlock()
+			io.kvGranter.setAvailableIOTokensLocked(toAllocate)
+			io.tokensAllocated += toAllocate
+		}
+	}
+	// First tick.
+	io.totalTokens = unlimitedTokens
+	allocateTokens()
+	go func() {
+		var ticks int64
+		ticker := time.NewTicker(time.Second)
+		done := false
+		for !done {
+			select {
+			case <-ticker.C:
+				ticks++
+				if ticks%adjustmentInterval == 0 {
+					io.adjustTokens()
+				}
+				allocateTokens()
+			case <-io.closeCh:
+				done = true
+			}
+		}
+		close(io.closeCh)
+	}()
+}
+
+func (io *ioLoadListener) adjustTokens() {
+	var tokens int64 = unlimitedTokens
+	// Grab the cumulative stats.
+	admittedCount := io.kvRequester.getAdmittedCount()
+	m := io.pebbleMetricsProvider.GetPebbleMetrics()
+	if len(m) == 0 {
+		// No store, which is odd.
+		return
+	}
+	var l0Bytes int64
+	var l0AddedBytes uint64
+	for i := range m {
+		l0Bytes = m[i].Levels[0].Size
+		l0AddedBytes = m[i].Levels[0].BytesFlushed + m[i].Levels[0].BytesIngested
+	}
+
+	// Compute the stats for the interval.
+	bytesAdded := int64(l0AddedBytes - io.l0AddedBytes)
+	// bytesRemoved are due to finished compactions.
+	bytesRemoved := io.l0Bytes + bytesAdded - l0Bytes
+	if bytesRemoved < 0 {
+		bytesRemoved = 0
+	}
+	const alpha = 0.5
+	// Compaction scheduling can be uneven in prioritizing L0 for compactions,
+	// so smooth out what is being removed by compactions.
+	io.smoothedBytesRemoved =
+		int64(alpha*float64(bytesRemoved) + (1-alpha)*float64(io.smoothedBytesRemoved))
+	admitted := admittedCount - io.admittedCount
+	doLog := true
+	if admitted == 0 {
+		admitted = 1
+		// Admission control is likely disabled, given there was no KVWork
+		// admitted for 60s. And even if it is enabled, this is not an interesting
+		// situation.
+		doLog = false
+	}
+	// We constrain admission if any store if over the threshold.
+	overThreshold := false
+	for i := range m {
+		if m[i].Levels[0].NumFiles > io.l0FileCountOverloadThreshold ||
+			m[i].Levels[0].Sublevels > io.l0SubLevelCountOverloadThreshold {
+			overThreshold = true
+			break
+		}
+	}
+	if overThreshold {
+		// Attribute the bytesAdded equally to all the admitted work.
+		bytesAddedPerWork := float64(bytesAdded) / float64(admitted)
+		// Don't admit more work than we can remove via compactions.
+		numAdmit := float64(io.smoothedBytesRemoved) / bytesAddedPerWork
+		// Scale down since we want to get under the thresholds over time. This
+		// scaling could be adjusted based on how much above the threshold we are,
+		// but for now we just use a constant.
+		numAdmit /= 2.0
+		// Smooth it out in case our estimation of numAdmit goes awry in some
+		// intervals.
+		io.smoothedNumAdmit = alpha*numAdmit + (1-alpha)*io.smoothedNumAdmit
+		tokens = int64(io.smoothedNumAdmit)
+		if doLog {
+			log.Infof(context.Background(),
+				"IO overload: admitted: %d, added: %d, removed (%d, %d), admit: (%f, %f)",
+				admitted, bytesAdded, bytesRemoved, io.smoothedBytesRemoved, numAdmit, io.smoothedNumAdmit)
+		}
+	} else {
+		// Under the threshold. Maintain a smoothedNumAdmit so that it is not 0
+		// when we first go over the threshold. Instead use what we actually
+		// admitted.
+		io.smoothedNumAdmit = alpha*float64(admitted) + (1-alpha)*io.smoothedNumAdmit
+	}
+	// Install the latest cumulative stats.
+	io.admittedCount = admittedCount
+	io.l0Bytes = l0Bytes
+	io.l0AddedBytes = l0AddedBytes
+	// Set the tokens.
+	io.totalTokens = tokens
+	io.tokensAllocated = 0
+}
+
+func (io *ioLoadListener) close() {
+	io.closeCh <- struct{}{}
 }
 
 var _ cpuOverloadIndicator = &sqlNodeCPUOverloadIndicator{}
@@ -1028,14 +1377,21 @@ var (
 		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
 	}
+	kvIOTokensExhaustedDuration = metric.Metadata{
+		Name:        "admission.granter.io_tokens_exhausted_duration.kv",
+		Help:        "Total duration when IO tokens were exhausted, in micros",
+		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // GranterMetrics are metrics associated with a GrantCoordinator.
 type GranterMetrics struct {
-	KVTotalSlots          *metric.Gauge
-	KVUsedSlots           *metric.Gauge
-	SQLLeafStartUsedSlots *metric.Gauge
-	SQLRootStartUsedSlots *metric.Gauge
+	KVTotalSlots                *metric.Gauge
+	KVUsedSlots                 *metric.Gauge
+	KVIOTokensExhaustedDuration *metric.Counter
+	SQLLeafStartUsedSlots       *metric.Gauge
+	SQLRootStartUsedSlots       *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -1043,8 +1399,9 @@ func (GranterMetrics) MetricStruct() {}
 
 func makeGranterMetrics() GranterMetrics {
 	m := GranterMetrics{
-		KVTotalSlots: metric.NewGauge(totalSlots),
-		KVUsedSlots:  metric.NewGauge(addName(string(workKindString(KVWork)), usedSlots)),
+		KVTotalSlots:                metric.NewGauge(totalSlots),
+		KVUsedSlots:                 metric.NewGauge(addName(string(workKindString(KVWork)), usedSlots)),
+		KVIOTokensExhaustedDuration: metric.NewCounter(kvIOTokensExhaustedDuration),
 		SQLLeafStartUsedSlots: metric.NewGauge(
 			addName(string(workKindString(SQLStatementLeafStartWork)), usedSlots)),
 		SQLRootStartUsedSlots: metric.NewGauge(

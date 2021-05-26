@@ -2626,6 +2626,12 @@ var charts = []sectionDescription{
 					"admission.granter.used_slots.sql-root-start",
 				},
 			},
+			{
+				Title: "IO Tokens Exhausted Duration Sum",
+				Metrics: []string{
+					"admission.granter.io_tokens_exhausted_duration.kv",
+				},
+			},
 		},
 	},
 }

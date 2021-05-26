@@ -64,6 +64,11 @@ func (tr *testRequester) continueGrantChain() {
 	tr.granter.continueGrantChain(tr.grantChainID)
 }
 
+func (tr *testRequester) getAdmittedCount() uint64 {
+	// Only used by ioLoadListener, so don't bother.
+	return 0
+}
+
 // TestGranterBasic is a datadriven test with the following commands:
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
