@@ -909,6 +909,8 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecsel/default_cmp_sel_ops.eg.go \
   pkg/sql/colexec/colexecsel/selection_ops.eg.go \
   pkg/sql/colexec/colexecsel/sel_like_ops.eg.go \
+  pkg/sql/colexec/colexecwindow/lag.eg.go \
+  pkg/sql/colexec/colexecwindow/lead.eg.go \
   pkg/sql/colexec/colexecwindow/ntile.eg.go \
   pkg/sql/colexec/colexecwindow/rank.eg.go \
   pkg/sql/colexec/colexecwindow/relative_rank.eg.go \

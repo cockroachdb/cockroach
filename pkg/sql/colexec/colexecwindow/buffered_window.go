@@ -12,6 +12,7 @@ package colexecwindow
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
-	"math"
 )
 
 // newBufferedWindowOperator creates a new Operator that computes the given
@@ -44,7 +44,7 @@ func newBufferedWindowOperator(
 	copy(outputTypes, inputTypes)
 	outputTypes = append(outputTypes, outputColType)
 	input = colexecutils.NewVectorTypeEnforcer(unlimitedAllocator, input, outputColType, outputColIdx)
-	return &bufferedWindowOp {
+	return &bufferedWindowOp{
 		windowInitFields: windowInitFields{
 			OneInputNode: colexecop.NewOneInputNode(input),
 			allocator:    unlimitedAllocator,
@@ -125,7 +125,7 @@ type bufferedWindower interface {
 	// within the given batch, or the length of the batch if the next partition
 	// does not begin within it.
 	seekNextPartition(batch coldata.Batch, startIdx int, isPartitionStart bool) (nextPartitionIdx int)
-	
+
 	// processBatch is called during windowProcessing when a windower needs to
 	// fill in the output column values in the given range for the given batch.
 	processBatch(batch coldata.Batch, startIdx, endIdx int)
@@ -274,8 +274,8 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			startIdx := 0
 			if isPartitionStart {
 				// We have transitioned to a new partition that starts within the
-				// current batch at index nextPartitionIdx. Since nextPartitionIdx 
-				// hasn't been updated yet, it refers to the start of what is now the 
+				// current batch at index nextPartitionIdx. Since nextPartitionIdx
+				// hasn't been updated yet, it refers to the start of what is now the
 				// current partition.
 				startIdx = b.nextPartitionIdx
 			}
