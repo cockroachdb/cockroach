@@ -889,3 +889,107 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 	}
 
 }
+
+// TestMaybeFixSchemaPrivileges ensures that invalid privileges are removed
+// from a schema's privilege descriptor.
+func TestMaybeFixSchemaPrivileges(t *testing.T) {
+	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
+	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
+
+	type userPrivileges map[security.SQLUsername]privilege.List
+
+	testCases := []struct {
+		input  userPrivileges
+		output userPrivileges
+	}{
+		{
+			userPrivileges{
+				fooUser: privilege.List{
+					privilege.ALL,
+					privilege.CONNECT,
+					privilege.CREATE,
+					privilege.DROP,
+					privilege.GRANT,
+					privilege.SELECT,
+					privilege.INSERT,
+					privilege.DELETE,
+					privilege.UPDATE,
+					privilege.USAGE,
+					privilege.ZONECONFIG,
+				},
+				barUser: privilege.List{
+					privilege.CONNECT,
+					privilege.CREATE,
+					privilege.DROP,
+					privilege.GRANT,
+					privilege.SELECT,
+					privilege.INSERT,
+					privilege.DELETE,
+					privilege.UPDATE,
+					privilege.USAGE,
+					privilege.ZONECONFIG,
+				},
+			},
+			userPrivileges{
+				fooUser: privilege.List{privilege.ALL},
+				barUser: privilege.List{
+					privilege.GRANT,
+					privilege.CREATE,
+					privilege.USAGE,
+				},
+			},
+		},
+		{
+			userPrivileges{
+				fooUser: privilege.List{privilege.GRANT},
+			},
+			userPrivileges{
+				fooUser: privilege.List{privilege.GRANT},
+			},
+		},
+		{
+			userPrivileges{
+				fooUser: privilege.List{privilege.CREATE},
+			},
+			userPrivileges{
+				fooUser: privilege.List{privilege.CREATE},
+			},
+		},
+		{
+			userPrivileges{
+				fooUser: privilege.List{privilege.USAGE},
+			},
+			userPrivileges{
+				fooUser: privilege.List{privilege.USAGE},
+			},
+		},
+	}
+
+	for num, tc := range testCases {
+		desc := &PrivilegeDescriptor{}
+		for u, p := range tc.input {
+			desc.Grant(u, p)
+		}
+		MaybeFixSchemaPrivileges(&desc)
+
+		for u, p := range tc.output {
+			outputUser, ok := desc.findUser(u)
+			if !ok {
+				t.Errorf("#%d: expected user %s in output, but not found (%v)",
+					num, u, desc.Users,
+				)
+			}
+			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
+				t.Errorf("#%d: user %s: expected privileges %v, got %v",
+					num, u, e, a,
+				)
+			}
+
+			err := privilege.ValidatePrivileges(p, privilege.Schema)
+			if err != nil {
+				t.Errorf("%s\n", err.Error())
+			}
+		}
+
+	}
+}
