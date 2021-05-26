@@ -1582,14 +1582,14 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 		}
 
 		if err := execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */); err != nil {
-			log.Infof(ctx, "failed to fetch logs: %v", err)
+			c.l.Printf("failed to fetch logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
 		}
 
 		if err := c.RunE(ctx, c.All(), "mkdir -p logs/redacted && ./cockroach debug merge-logs --redact logs/*.log > logs/redacted/combined.log"); err != nil {
-			log.Infof(ctx, "failed to redact logs: %v", err)
+			c.l.Printf("failed to redact logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
