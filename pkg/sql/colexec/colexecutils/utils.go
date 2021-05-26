@@ -184,6 +184,23 @@ func (b *AppendOnlyBufferedBatch) ResetInternalBatch() {
 	b.batch.ResetInternalBatch()
 }
 
+// DeepInternalReset is similar to ResetInternalBatch, but it also resets the
+// columns and selection vector so that the memory can be released.
+func (b *AppendOnlyBufferedBatch) DeepInternalReset(allocator *colmem.Allocator) {
+	typs := make([]*types.T, b.Width())
+	for i, vec := range b.colVecs {
+		typs[i] = vec.Type()
+	}
+	b.batch = allocator.NewMemBatchWithFixedCapacity(typs, 0 /* capacity */)
+	for i := range b.colVecs {
+		// Mutate the slice instead of creating a new one so that an allocator can
+		// track the change in memory footprint.
+		b.colVecs[i] = b.batch.ColVec(i)
+	}
+	b.sel = nil
+	b.SetLength(0 /* n */)
+}
+
 // String implements the coldata.Batch interface.
 func (b *AppendOnlyBufferedBatch) String() string {
 	// String should not be used in the fast paths, so we will set the length on
