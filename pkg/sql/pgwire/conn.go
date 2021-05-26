@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -774,6 +775,7 @@ func (c *conn) handleSimpleQuery(
 func (c *conn) handleParse(
 	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
 ) error {
+	telemetry.Inc(sqltelemetry.ParseRequestCounter)
 	name, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -870,6 +872,7 @@ func (c *conn) handleParse(
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+	telemetry.Inc(sqltelemetry.DescribeRequestCounter)
 	typ, err := buf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -889,6 +892,7 @@ func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) e
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleClose(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+	telemetry.Inc(sqltelemetry.CloseRequestCounter)
 	typ, err := buf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -914,6 +918,7 @@ var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+	telemetry.Inc(sqltelemetry.BindRequestCounter)
 	portalName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -1039,6 +1044,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 func (c *conn) handleExecute(
 	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
 ) error {
+	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -1055,6 +1061,7 @@ func (c *conn) handleExecute(
 }
 
 func (c *conn) handleFlush(ctx context.Context) error {
+	telemetry.Inc(sqltelemetry.FlushRequestCounter)
 	return c.stmtBuf.Push(ctx, sql.Flush{})
 }
 
