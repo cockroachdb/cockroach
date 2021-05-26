@@ -230,8 +230,9 @@ func doCreateBackupSchedules(
 	// Prepare backup statement (full).
 	backupNode := &tree.Backup{
 		Options: tree.BackupOptions{
-			CaptureRevisionHistory: eval.BackupOptions.CaptureRevisionHistory,
-			Detached:               true,
+			CaptureRevisionHistory:       eval.BackupOptions.CaptureRevisionHistory,
+			Detached:                     true,
+			IncludeDeprecatedInterleaves: eval.BackupOptions.IncludeDeprecatedInterleaves,
 		},
 		Nested:         true,
 		AppendToLatest: false,
