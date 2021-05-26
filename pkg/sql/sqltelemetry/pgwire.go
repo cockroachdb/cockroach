@@ -44,3 +44,27 @@ var InterleavedPortalRequestCounter = telemetry.GetCounterOnce("pgwire.#40195.in
 // PortalWithLimitRequestCounter is to be incremented every time a portal request is
 // made.
 var PortalWithLimitRequestCounter = telemetry.GetCounterOnce("pgwire.portal_with_limit_request")
+
+// ParseRequestCounter is to be incremented every time a parse request
+// is made.
+var ParseRequestCounter = telemetry.GetCounterOnce("pgwire.command.parse")
+
+// BindRequestCounter is to be incremented every time a bind request
+// is made.
+var BindRequestCounter = telemetry.GetCounterOnce("pgwire.command.bind")
+
+// DescribeRequestCounter is to be incremented every time a describe request
+// is made.
+var DescribeRequestCounter = telemetry.GetCounterOnce("pgwire.command.describe")
+
+// ExecuteRequestCounter is to be incremented every time a execute request
+// is made.
+var ExecuteRequestCounter = telemetry.GetCounterOnce("pgwire.command.execute")
+
+// CloseRequestCounter is to be incremented every time a close request
+// is made.
+var CloseRequestCounter = telemetry.GetCounterOnce("pgwire.command.close")
+
+// FlushRequestCounter is to be incremented every time a flush request
+// is made.
+var FlushRequestCounter = telemetry.GetCounterOnce("pgwire.command.flush")
