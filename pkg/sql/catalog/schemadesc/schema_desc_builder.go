@@ -51,6 +51,8 @@ func (sdb *schemaDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
+	privDesc := sdb.original.GetPrivileges()
+	descpb.MaybeFixSchemaPrivileges(&privDesc)
 	return nil
 }
 

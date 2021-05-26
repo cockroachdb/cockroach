@@ -249,6 +249,27 @@ func MaybeFixUsagePrivForTablesAndDBs(ptr **PrivilegeDescriptor) bool {
 	return modified
 }
 
+// MaybeFixSchemaPrivileges removes all invalid bits set on a schema's
+// PrivilegeDescriptor.
+// This is necessary due to ALTER DATABASE ... CONVERT TO SCHEMA originally
+// copying all database privileges to the schema. Not all database privileges
+// are valid for schemas thus after running ALTER DATABASE ... CONVERT TO SCHEMA,
+// the schema may become unusable.
+func MaybeFixSchemaPrivileges(ptr **PrivilegeDescriptor) {
+	if *ptr == nil {
+		*ptr = &PrivilegeDescriptor{}
+	}
+	p := *ptr
+
+	validPrivs := privilege.GetValidPrivilegesForObject(privilege.Schema).ToBitField()
+
+	for i := range p.Users {
+		// Users is a slice of values, we need pointers to make them mutable.
+		userPrivileges := &p.Users[i]
+		userPrivileges.Privileges &= validPrivs
+	}
+}
+
 // MaybeFixPrivileges fixes the privilege descriptor if needed, including:
 // * adding default privileges for the "admin" role
 // * fixing default privileges for the "root" user
