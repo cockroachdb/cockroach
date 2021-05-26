@@ -62,12 +62,13 @@ import (
 
 // Test data files.
 const (
-	testdata        = "testdata" // testdata directory
-	catalogPkg      = "catalog"
-	catconstantsPkg = "catconstants"
-	constantsGo     = "constants.go"
-	vtablePkg       = "vtable"
-	pgCatalogGo     = "pg_catalog.go"
+	testdata            = "testdata" // testdata directory
+	catalogPkg          = "catalog"
+	catconstantsPkg     = "catconstants"
+	constantsGo         = "constants.go"
+	vtablePkg           = "vtable"
+	pgCatalogGo         = "pg_catalog.go"
+	informationSchemaGo = "information_schema.go"
 )
 
 // When running test with -rewrite-diffs test will pass and re-create pg_catalog_test-diffs.json.
@@ -79,16 +80,19 @@ var (
 
 // strings used on constants creations and text manipulation.
 const (
-	pgCatalogPrefix            = "PgCatalog"
-	pgCatalogIDConstant        = "PgCatalogID"
-	tableIDSuffix              = "TableID"
-	tableDefsDeclaration       = `tableDefs: map[descpb.ID]virtualSchemaDef{`
-	tableDefsTerminal          = `},`
-	undefinedTablesDeclaration = `undefinedTables: buildStringSet(`
-	undefinedTablesTerminal    = `),`
-	virtualTablePosition       = `// typOid is the only OID generation approach that does not use oidHasher, because`
-	virtualTableSchemaField    = "schema"
-	virtualTablePopulateField  = "populate"
+	informationSchemaPrefix                = "InformationSchema"
+	informationSchemaIDConstant            = "InformationSchemaID"
+	informationSchemaNewTableInsertionText = `// forEachSchema iterates over the physical and virtual schemas.`
+	pgCatalogPrefix                        = "PgCatalog"
+	pgCatalogIDConstant                    = "PgCatalogID"
+	tableIDSuffix                          = "TableID"
+	tableDefsDeclaration                   = `tableDefs: map[descpb.ID]virtualSchemaDef{`
+	tableDefsTerminal                      = `},`
+	undefinedTablesDeclaration             = `undefinedTables: buildStringSet(`
+	undefinedTablesTerminal                = `),`
+	pgCatalogNewTableInsertionText         = `// typOid is the only OID generation approach that does not use oidHasher, because`
+	virtualTableSchemaField                = "schema"
+	virtualTablePopulateField              = "populate"
 )
 
 // virtualTableTemplate is used to create new virtualSchemaTable objects when
@@ -139,6 +143,56 @@ var mappedPopulateFunctions = map[string]string{
 	"addPGTypeRow": "PGCatalogType",
 }
 
+// schemaCodeFixer have specific configurations to fix the files with virtual
+// schema definitions.
+type schemaCodeFixer struct {
+	// catConstantsSchemaID contains the constant in catconstants which is the
+	// id for the virtualSchema, it usually have the same prefix as in
+	// catConstantsPrefix + ID but this is sorted and placed before the other
+	// ids that are for the tables in that virtualSchema.
+	catConstantsSchemaID string
+	// catConstantsPrefix is the prefix for the catconstants of the tables in
+	// this virtualSchema.
+	catConstantsPrefix string
+	// vtableFilename is the location of the vtable constants for the
+	// virtualSchema.
+	vtableFilename string
+	// catalogGoFilename is the go filename where the virtualSchema is defined
+	// (like pg_catalog.go or information_schema.go).
+	catalogGoFilename string
+	// fixColumnsAllowed indicates if new columns can be added on the
+	// virtualSchema.
+	fixColumnsAllowed bool
+	// textForNewTableInsertion is the place where new tables will be added
+	// in the catalogGoFilename one line before the indicated text.
+	textForNewTableInsertion string
+	// schema is the virtualSchema that the codeFixer will fix.
+	schema virtualSchema
+}
+
+// codeFixers have the the allowed virtualSchema's which can be fixed (add
+// new tables/columns). Based on the diff tool analysis.
+var codeFixers = map[string]schemaCodeFixer{
+	"pg_catalog": {
+		catConstantsSchemaID:     pgCatalogIDConstant,
+		catConstantsPrefix:       pgCatalogPrefix,
+		vtableFilename:           getVTablePGCatalogFile(),
+		catalogGoFilename:        getSQLPGCatalogFile(),
+		fixColumnsAllowed:        true,
+		textForNewTableInsertion: pgCatalogNewTableInsertionText,
+		schema:                   pgCatalog,
+	},
+	"information_schema": {
+		catConstantsSchemaID:     informationSchemaIDConstant,
+		catConstantsPrefix:       informationSchemaPrefix,
+		vtableFilename:           getVTableInformationSchemaFile(),
+		catalogGoFilename:        getSQLInformationSchemaFile(),
+		fixColumnsAllowed:        false,
+		textForNewTableInsertion: informationSchemaNewTableInsertionText,
+		schema:                   informationSchema,
+	},
+}
+
 // expectedDiffsFilename returns where to find the diffs that will not cause
 // diff tool tests to fail
 func expectedDiffsFilename() string {
@@ -151,6 +205,11 @@ func expectedDiffsFilename() string {
 // loadTestData retrieves the pg_catalog from the dumpfile generated from Postgres.
 func loadTestData(t testing.TB, testdataFile string, isDiffFile bool) PGMetadataFile {
 	var pgCatalogFile PGMetadataFile
+
+	// Expected diffs will not be loaded if rewriteFlag is enabled.
+	if isDiffFile && *rewriteFlag {
+		return pgCatalogFile
+	}
 
 	f, err := os.Open(testdataFile)
 	if err != nil {
@@ -216,11 +275,11 @@ func rewriteDiffs(t *testing.T, diffs PGMetadataTables, source PGMetadataFile, s
 }
 
 // fixConstants updates catconstants that are needed for pgCatalog.
-func fixConstants(t *testing.T, notImplemented PGMetadataTables) {
+func (scf schemaCodeFixer) fixConstants(t *testing.T, notImplemented PGMetadataTables) {
 	constantsFileName := filepath.Join(".", catalogPkg, catconstantsPkg, constantsGo)
 	// pgConstants will contains all the pgCatalog tableID constant adding the
 	// new tables and preventing duplicates.
-	pgConstants := getPgCatalogConstants(t, constantsFileName, notImplemented)
+	pgConstants := scf.getCatalogConstants(t, constantsFileName, notImplemented)
 	sort.Strings(pgConstants)
 
 	// Rewrite will place all the pgConstants in alphabetical order after
@@ -233,14 +292,14 @@ func fixConstants(t *testing.T, notImplemented PGMetadataTables) {
 
 			// Skips PgCatalog constants (except PgCatalogID) as these will be
 			// written from pgConstants slice.
-			if strings.HasPrefix(trimText, pgCatalogPrefix) && trimText != pgCatalogIDConstant {
+			if strings.HasPrefix(trimText, scf.catConstantsPrefix) && trimText != scf.catConstantsSchemaID {
 				continue
 			}
 
 			output.appendString(text)
 			output.appendString("\n")
 
-			if trimText == pgCatalogIDConstant {
+			if trimText == scf.catConstantsSchemaID {
 				for _, pgConstant := range pgConstants {
 					output.appendString("\t")
 					output.appendString(pgConstant)
@@ -252,13 +311,13 @@ func fixConstants(t *testing.T, notImplemented PGMetadataTables) {
 }
 
 // fixVtable adds missing table's create table constants.
-func fixVtable(
+func (scf schemaCodeFixer) fixVtable(
 	t *testing.T,
 	unimplemented PGMetadataTables,
 	unimplementedColumns PGMetadataTables,
 	pgCode *pgCatalogCode,
 ) {
-	fileName := getVTablePGCatalogFile()
+	fileName := scf.vtableFilename
 
 	// rewriteFile first will check existing create table constants to avoid
 	// duplicates.
@@ -290,7 +349,8 @@ func fixVtable(
 			// nextIsIndex helps to avoid detecting an INDEX line as column name.
 			nextIsIndex := indexRE.MatchString(strings.ToUpper(trimText))
 			// fixedTables keep track of all the tables which we added new columns.
-			if _, fixed := fixedTables[tableName]; !fixed && (text == ")`" || nextIsIndex) {
+			// fixing columns is only compatible with postgres and pg_catalog.
+			if _, fixed := fixedTables[tableName]; pgCode != nil && (!fixed && (text == ")`" || nextIsIndex)) {
 				missingColumnsText := getMissingColumnsText(constName, tableName, nextIsIndex, unimplementedColumns, pgCode)
 				if len(missingColumnsText) > 0 {
 					// Right parenthesis is already printed in the output, but we need to
@@ -313,7 +373,7 @@ func fixVtable(
 				// Table already implemented.
 				continue
 			}
-			createTable, err := createTableConstant(tableName, columns)
+			createTable, err := scf.createTableConstant(tableName, columns)
 			if err != nil {
 				// We can not implement this table as this uses types not implemented.
 				t.Log(err)
@@ -370,24 +430,24 @@ func getMissingColumnsText(
 	return sb.String()
 }
 
-// fixPgCatalogGo will update pgCatalog.undefinedTables, pgCatalog.tableDefs and
+// fixCatalogGo will update pgCatalog.undefinedTables, pgCatalog.tableDefs and
 // will add needed virtualSchemas.
-func fixPgCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
-	undefinedTablesText, err := getUndefinedTablesText(notImplemented, pgCatalog)
+func (scf schemaCodeFixer) fixCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
+	undefinedTablesText, err := getUndefinedTablesText(notImplemented, scf.schema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableDefinitionText := getTableDefinitionsText(getSQLPGCatalogFile(), notImplemented)
+	tableDefinitionText := scf.getTableDefinitionsText(scf.catalogGoFilename, notImplemented)
 
-	rewriteFile(getSQLPGCatalogFile(), func(input *os.File, output outputFile) {
+	rewriteFile(scf.catalogGoFilename, func(input *os.File, output outputFile) {
 		reader := bufio.NewScanner(input)
 		for reader.Scan() {
 			text := reader.Text()
 			trimText := strings.TrimSpace(text)
-			if trimText == virtualTablePosition {
+			if trimText == scf.textForNewTableInsertion {
 				//VirtualSchemas doesn't have a particular place to start we just print
 				// it before virtualTablePosition.
-				output.appendString(printVirtualSchemas(notImplemented))
+				output.appendString(scf.printVirtualSchemas(notImplemented))
 			}
 			output.appendString(text)
 			output.appendString("\n")
@@ -402,7 +462,13 @@ func fixPgCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
 	})
 }
 
-func fixPgCatalogGoColumns(positions addRowPositionList) {
+func fixPgCatalogGoColumns(pgCode *pgCatalogCode) {
+	// pgCode might have nil value if fixColumnsAllowed is false in the
+	// schemaCodeFixer.
+	if pgCode == nil {
+		return
+	}
+	positions := pgCode.addRowPositions.singleSortedList()
 	rewriteFile(getSQLPGCatalogFile(), func(input *os.File, output outputFile) {
 		reader := bufio.NewScanner(input)
 		scannedUntil := 0
@@ -477,9 +543,9 @@ func printBeforeTerminalString(
 	}
 }
 
-// getPgCatalogConstants reads catconstant and retrieves all the constant with
+// getCatalogConstants reads catconstant and retrieves all the constant with
 // `PgCatalog` prefix.
-func getPgCatalogConstants(
+func (scf schemaCodeFixer) getCatalogConstants(
 	t *testing.T, inputFileName string, notImplemented PGMetadataTables,
 ) []string {
 	pgConstantSet := make(map[string]struct{})
@@ -492,15 +558,15 @@ func getPgCatalogConstants(
 	reader := bufio.NewScanner(f)
 	for reader.Scan() {
 		text := strings.TrimSpace(reader.Text())
-		if strings.HasPrefix(text, pgCatalogPrefix) {
-			if text == pgCatalogIDConstant {
+		if strings.HasPrefix(text, scf.catConstantsPrefix) {
+			if text == scf.catConstantsSchemaID {
 				continue
 			}
 			pgConstantSet[text] = none
 		}
 	}
 	for tableName := range notImplemented {
-		pgConstantSet[constantName(tableName, tableIDSuffix)] = none
+		pgConstantSet[scf.constantName(tableName, tableIDSuffix)] = none
 	}
 	pgConstants := make([]string, 0, len(pgConstantSet))
 	for pgConstantName := range pgConstantSet {
@@ -576,14 +642,22 @@ func dClose(f io.Closer) {
 var acronyms = map[string]struct{}{
 	"acl": none,
 	"id":  none,
+	"sql": none,
 }
 
 // constantName create constant names for pg_catalog fixableTables following
 // constant names standards.
-func constantName(tableName string, suffix string) string {
+func (scf schemaCodeFixer) constantName(tableName string, suffix string) string {
 	var sb strings.Builder
-	snakeWords := strings.Split(tableName, "_")[1:]
-	sb.WriteString("PgCatalog")
+	skip := 0
+	tableName = strings.TrimPrefix(tableName, "_")
+	words := strings.Split(tableName, "_")
+	// only pg_catalog have "pg" prefix.
+	if words[0] == "pg" {
+		skip = 1
+	}
+	snakeWords := words[skip:]
+	sb.WriteString(scf.catConstantsPrefix)
 
 	for _, word := range snakeWords {
 		if _, ok := acronyms[word]; ok {
@@ -599,9 +673,11 @@ func constantName(tableName string, suffix string) string {
 }
 
 // createTableConstant formats the text for vtable constants.
-func createTableConstant(tableName string, columns PGMetadataColumns) (string, error) {
+func (scf schemaCodeFixer) createTableConstant(
+	tableName string, columns PGMetadataColumns,
+) (string, error) {
 	var sb strings.Builder
-	constName := constantName(tableName, "")
+	constName := scf.constantName(tableName, "")
 	if notImplementedTypes := columns.getUnimplementedTypes(); len(notImplementedTypes) > 0 {
 		return "", fmt.Errorf("not all types are implemented %s: %v", tableName, notImplementedTypes)
 	}
@@ -612,7 +688,9 @@ func createTableConstant(tableName string, columns PGMetadataColumns) (string, e
 	sb.WriteString("const ")
 	sb.WriteString(constName)
 	sb.WriteString(" = `\n")
-	sb.WriteString("CREATE TABLE pg_catalog.")
+	sb.WriteString("CREATE TABLE ")
+	sb.WriteString(scf.schema.name)
+	sb.WriteString(".")
 	sb.WriteString(tableName)
 	sb.WriteString(" (\n")
 	prefix := ""
@@ -641,11 +719,13 @@ func formatColumn(
 
 // printVirtualSchemas formats the golang code to create the virtualSchema
 // structure.
-func printVirtualSchemas(newTableNameList PGMetadataTables) string {
+func (scf schemaCodeFixer) printVirtualSchemas(newTableNameList PGMetadataTables) string {
 	var sb strings.Builder
 	for tableName := range newTableNameList {
-		variableName := "p" + constantName(tableName, "Table")[1:]
-		vTableName := constantName(tableName, "")
+
+		variableName := scf.constantName(tableName, "Table")
+		variableName = strings.ToLower(variableName[:1]) + variableName[1:]
+		vTableName := scf.constantName(tableName, "")
 		sb.WriteString(fmt.Sprintf(virtualTableTemplate, variableName, tableName, vTableName))
 	}
 	return sb.String()
@@ -715,7 +795,9 @@ func formatUndefinedTablesText(newTableNameList []string) string {
 // getTableDefinitionsText creates the text that will replace current
 // definition of pgCatalog.tableDefs (at pg_catalog.go), by adding the new
 // table definitions.
-func getTableDefinitionsText(fileName string, notImplemented PGMetadataTables) string {
+func (scf schemaCodeFixer) getTableDefinitionsText(
+	fileName string, notImplemented PGMetadataTables,
+) string {
 	tableDefs := make(map[string]string)
 	maxLength := 0
 	f, err := os.Open(fileName)
@@ -746,13 +828,14 @@ func getTableDefinitionsText(fileName string, notImplemented PGMetadataTables) s
 	}
 
 	for tableName := range notImplemented {
-		defName := "catconstants." + constantName(tableName, tableIDSuffix)
+		defName := "catconstants." + scf.constantName(tableName, tableIDSuffix)
 		if _, ok := tableDefs[defName]; ok {
 			// Not overriding existing tableDefinitions
 			delete(notImplemented, tableName)
 			continue
 		}
-		defValue := "p" + constantName(tableName, "Table")[1:]
+		defValue := scf.constantName(tableName, "Table")
+		defValue = strings.ToLower(defValue[:1]) + defValue[1:]
 		tableDefs[defName] = defValue
 		length := len(defName)
 		if length > maxLength {
@@ -793,7 +876,11 @@ func getSortedDefKeys(tableDefs map[string]string) []string {
 // goParsePgCatalogGo parses pg_catalog.go using go/parser to get the list of
 // tables that are unimplemented (return zero rows) and get where to insert
 // new columns (if needed) by mapping all the addRow calls with the table.
-func goParsePgCatalogGo(t *testing.T) *pgCatalogCode {
+func (scf schemaCodeFixer) goParsePgCatalogGo(t *testing.T) *pgCatalogCode {
+	if !scf.fixColumnsAllowed {
+		return nil
+	}
+
 	fs := token.NewFileSet()
 	f, err := goParser.ParseFile(fs, getSQLPGCatalogFile(), nil, goParser.AllErrors)
 	if err != nil {
@@ -1239,7 +1326,7 @@ func TestPGCatalog(t *testing.T) {
 		}
 	}()
 
-	if *addMissingTables && (*rdbmsName != Postgres || *catalogName != "pg_catalog") {
+	if _, codeFixerExists := codeFixers[*catalogName]; *addMissingTables && (*rdbmsName != Postgres || !codeFixerExists) {
 		t.Fatal("--add-missing-tables only work for pg_catalog on postgres rdbms")
 	}
 
@@ -1297,14 +1384,15 @@ func TestPGCatalog(t *testing.T) {
 	rewriteDiffs(t, diffs, source, sum)
 
 	if *addMissingTables {
+		scf := codeFixers[*catalogName]
 		validateUndefinedTablesField(t)
 		unimplemented := diffs.getUnimplementedTables(pgTables)
 		unimplementedColumns := diffs.getUnimplementedColumns(pgTables)
-		pgCode := goParsePgCatalogGo(t)
-		fixConstants(t, unimplemented)
-		fixVtable(t, unimplemented, unimplementedColumns, pgCode)
-		fixPgCatalogGoColumns(pgCode.addRowPositions.singleSortedList())
-		fixPgCatalogGo(t, unimplemented)
+		pgCode := scf.goParsePgCatalogGo(t)
+		scf.fixConstants(t, unimplemented)
+		scf.fixVtable(t, unimplemented, unimplementedColumns, pgCode)
+		fixPgCatalogGoColumns(pgCode)
+		scf.fixCatalogGo(t, unimplemented)
 	}
 }
 
@@ -1326,7 +1414,9 @@ func TestPGMetadataCanFixCode(t *testing.T) {
 // validatePGCatalogCodeParser will test that pg_catalog.go can be fixed.
 func validatePGCatalogCodeParser(t *testing.T) {
 	t.Run("validatePGCatalogCodeParser", func(t *testing.T) {
-		pgCode := goParsePgCatalogGo(t)
+		// This tests can be done only on pg_catalog.
+		scf := codeFixers["pg_catalog"]
+		pgCode := scf.goParsePgCatalogGo(t)
 		constants := readAllVTableConstants(t)
 		for _, vTableConstant := range constants {
 			if _, ok := pgCode.fixableTables[vTableConstant]; !ok {
@@ -1446,3 +1536,5 @@ func getCachedFileLookupFn(file string) func() string {
 
 var getSQLPGCatalogFile = getCachedFileLookupFn(pgCatalogGo)
 var getVTablePGCatalogFile = getCachedFileLookupFn(filepath.Join(vtablePkg, pgCatalogGo))
+var getSQLInformationSchemaFile = getCachedFileLookupFn(informationSchemaGo)
+var getVTableInformationSchemaFile = getCachedFileLookupFn(filepath.Join(vtablePkg, informationSchemaGo))
