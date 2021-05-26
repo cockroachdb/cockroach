@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -137,7 +138,7 @@ func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode, explainFla
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
 	cfg *ExecutorConfig,
-	appStats *appStats,
+	statsCollector sqlstats.StatsCollector,
 	p *planner,
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	fingerprint string,
@@ -167,13 +168,8 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
-	// We don't know yet if we will hit an error, so we assume we don't. The
-	// worst that can happen is that for statements that always error out, we
-	// will always save the tree plan.
-	stats, _, _, _, _ := appStats.getStatsForStmt(
-		fingerprint, implicitTxn, p.SessionData().Database, nil /* stmtErr */, false /* createIfNonexistent */)
-
-	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(stats)
+	ih.savePlanForStats =
+		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database)
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if sp.IsVerbose() {
@@ -190,7 +186,8 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	ih.collectExecStats = collectTxnExecStats
-	if !collectTxnExecStats && stats == nil {
+
+	if !collectTxnExecStats && ih.savePlanForStats {
 		// We don't collect the execution stats for statements in this txn, but
 		// this is the first time we see this statement ever, so we'll collect
 		// its execution stats anyway (unless the user disabled txn stats
@@ -220,10 +217,9 @@ func (ih *instrumentationHelper) Setup(
 
 func (ih *instrumentationHelper) Finish(
 	cfg *ExecutorConfig,
-	appStats *appStats,
+	statsCollector sqlstats.StatsCollector,
 	txnStats *execstats.QueryLevelStats,
 	collectTxnExecStats bool,
-	statsCollector *sqlStatsCollector,
 	p *planner,
 	ast tree.Statement,
 	stmtRawSQL string,
@@ -266,20 +262,20 @@ func (ih *instrumentationHelper) Finish(
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
-		// TODO(radu): this should be unified with other stmt stats accesses.
-		stmtStats, _, _, _, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, p.SessionData().Database, retErr, false)
-		if stmtStats != nil {
-			stmtStats.recordExecStats(queryLevelStats)
-			if collectTxnExecStats || ih.implicitTxn {
-				// Only accumulate into the txn stats if we're collecting
-				// execution stats for all statements in the txn or the txn is
-				// implicit (indicating that it consists of a single statement).
-				//
-				// The goal is that we don't want to provide an incomplete
-				// picture for explicit txns for which we didn't decide to
-				// collect the execution stats on a txn level.
-				txnStats.Accumulate(queryLevelStats)
+		stmtStatsKey := &roachpb.StatementStatisticsKey{
+			Query:       ih.fingerprint,
+			ImplicitTxn: ih.implicitTxn,
+			Database:    p.SessionData().Database,
+			Failed:      retErr != nil,
+		}
+		err = statsCollector.RecordStatementExecStats(stmtStatsKey, queryLevelStats)
+		if err != nil {
+			if log.V(2 /* level */) {
+				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
 			}
+		}
+		if collectTxnExecStats || ih.implicitTxn {
+			txnStats.Accumulate(queryLevelStats)
 		}
 	}
 
@@ -289,7 +285,7 @@ func (ih *instrumentationHelper) Finish(
 		placeholders := p.extendedEvalCtx.Placeholders
 		ob := ih.buildExplainAnalyzePlan(
 			explain.Flags{Verbose: true, ShowTypes: true},
-			statsCollector.phaseTimes,
+			statsCollector.PhaseTimes(),
 			&queryLevelStats,
 		)
 		bundle = buildStatementBundle(
@@ -313,12 +309,11 @@ func (ih *instrumentationHelper) Finish(
 		return setExplainBundleResult(ctx, res, bundle, cfg)
 
 	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
-		phaseTimes := statsCollector.phaseTimes
 		var flows []flowInfo
 		if ih.outputMode == explainAnalyzeDistSQLOutput {
 			flows = p.curPlan.distSQLFlowInfos
 		}
-		return ih.setExplainAnalyzeResult(ctx, res, phaseTimes, &queryLevelStats, flows, trace)
+		return ih.setExplainAnalyzeResult(ctx, res, statsCollector.PhaseTimes(), &queryLevelStats, flows, trace)
 
 	default:
 		return nil
