@@ -136,6 +136,17 @@ message BackupProgress {
 
 }
 
+// BulkJobTraceEvent is a free form proto to be used by bulk jobs to record
+// information in trace spans.
+message BulkJobTraceEvent {
+  string message = 1;
+}
+
+message BulkJobRetryTraceEvent {
+  int32 retries = 1;
+  string previous_retry_error = 2;
+}
+
 message RestoreDetails {
   message DescriptorRewrite {
     uint32 id = 1 [

@@ -166,3 +166,18 @@ message RestoreProgress {
   int64 progressIdx = 2;
   roachpb.Span dataSpan = 3 [(gogoproto.nullable) = false];
 }
+
+message BackupPlanningTraceEvent {
+  message Spans {
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  }
+  map<int32, Spans> node_to_spans = 1 [(gogoproto.nullable) = false];
+  int64 total_num_spans = 2;
+}
+
+message BackupProgressTraceEvent {
+  int64 total_num_files = 1;
+  RowCount total_entry_counts = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp revision_start_time = 3 [(gogoproto.nullable) = false];
+}
+

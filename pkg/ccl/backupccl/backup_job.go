@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -165,6 +166,7 @@ func backup(
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
+	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
@@ -240,6 +242,7 @@ func backup(
 	g.GoCtx(func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
+		var numBackedUpFiles int64
 		for progress := range progCh {
 			var progDetails BackupManifest_Progress
 			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
@@ -251,11 +254,17 @@ func backup(
 			for _, file := range progDetails.Files {
 				backupManifest.Files = append(backupManifest.Files, file)
 				backupManifest.EntryCounts.add(file.EntryCounts)
+				numBackedUpFiles++
 			}
 
 			// Signal that an ExportRequest finished to update job progress.
 			requestFinishedCh <- struct{}{}
 			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
+				resumerSpan.RecordStructured(&BackupProgressTraceEvent{
+					TotalNumFiles:     numBackedUpFiles,
+					TotalEntryCounts:  backupManifest.EntryCounts,
+					RevisionStartTime: backupManifest.RevisionStartTime,
+				})
 				err := writeBackupManifest(
 					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
 				)
@@ -269,6 +278,7 @@ func backup(
 		return nil
 	})
 
+	resumerSpan.RecordStructured(&jobspb.BulkJobTraceEvent{Message: "starting DistSQL backup execution"})
 	if err := distBackup(
 		ctx,
 		execCtx,
@@ -288,6 +298,7 @@ func backup(
 	backupManifest.ID = backupID
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
+		resumerSpan.RecordStructured(&jobspb.BulkJobTraceEvent{Message: "writing partition descriptors for partitioned backup"})
 		filesByLocalityKV := make(map[string][]BackupManifest_File)
 		for _, file := range backupManifest.Files {
 			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
@@ -322,6 +333,7 @@ func backup(
 		}
 	}
 
+	resumerSpan.RecordStructured(&jobspb.BulkJobTraceEvent{Message: "writing backup manifest"})
 	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
 		return RowCount{}, err
 	}
@@ -350,6 +362,7 @@ func backup(
 		Statistics: tableStatistics,
 	}
 
+	resumerSpan.RecordStructured(&jobspb.BulkJobTraceEvent{Message: "writing backup table statistics"})
 	if err := writeTableStatistics(ctx, defaultStore, backupStatisticsFileName, encryption, &statsTable); err != nil {
 		return RowCount{}, err
 	}
@@ -385,8 +398,15 @@ type backupResumer struct {
 	}
 }
 
+var _ jobs.TraceableJob = &backupResumer{}
+
+// ForceRealSpan implements the TraceableJob interface.
+func (b *backupResumer) ForceRealSpan() {}
+
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	// The span is finished by the registry executing the job.
+	resumerSpan := tracing.SpanFromContext(ctx)
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
@@ -451,7 +471,11 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var res RowCount
+	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		retryCount++
+		resumerSpan.RecordStructured(&jobspb.BulkJobRetryTraceEvent{Retries: retryCount,
+			PreviousRetryError: fmt.Sprintf("%v", err)})
 		res, err = backup(
 			ctx,
 			p,

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -38,6 +39,7 @@ func distBackupPlanSpecs(
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 ) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
+	resumerSpan := tracing.SpanFromContext(planCtx.EvalContext().Context)
 	user := execCtx.User()
 	execCfg := execCtx.ExecCfg()
 
@@ -119,6 +121,18 @@ func distBackupPlanSpecs(
 			nodeToSpec[partition.Node] = spec
 		}
 	}
+
+	backupPlanningTraceEvent := BackupPlanningTraceEvent{
+		NodeToSpans: make(map[int32]BackupPlanningTraceEvent_Spans),
+	}
+	for node, spec := range nodeToSpec {
+		spans := BackupPlanningTraceEvent_Spans{}
+		spans.Spans = append(spans.Spans, spec.Spans...)
+		spans.Spans = append(spans.Spans, spec.IntroducedSpans...)
+		backupPlanningTraceEvent.NodeToSpans[int32(node)] = spans
+		backupPlanningTraceEvent.TotalNumSpans += int64(len(spec.Spans) + len(spec.IntroducedSpans))
+	}
+	resumerSpan.RecordStructured(&backupPlanningTraceEvent)
 
 	return nodeToSpec, nil
 }
