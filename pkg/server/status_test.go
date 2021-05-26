@@ -1781,7 +1781,7 @@ func TestListContentionEventsSecurity(t *testing.T) {
 	ts := s.(*TestServer)
 	defer ts.Stopper().Stop(ctx)
 
-	expectedErrNoPermission := "does not have permission to view contention events"
+	expectedErrNoPermission := "does not have permission to view the activity"
 
 	// HTTP requests respect the authenticated username from the HTTP session.
 	testCases := []struct {

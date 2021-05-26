@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
-	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -290,10 +289,10 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	return nil
 }
 
-// hasContentionEventsPermissions checks whether the session user is allowed to
-// query contention events (which is the case when it is a superuser or has
-// VIEWACTIVITY permission) and returns an error if not.
-func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) error {
+// hasViewActivityPermissions checks whether the session user has permissions to
+// view the activity on the server (which is the case when it is a superuser or
+// has VIEWACTIVITY permission) and returns an error if not.
+func (b *baseStatusServer) hasViewActivityPermissions(ctx context.Context) error {
 	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 	if err != nil {
 		return err
@@ -304,26 +303,29 @@ func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) e
 	}
 	if !isAdmin && !hasViewActivity {
 		// Only superusers and users with VIEWACTIVITY permission are allowed
-		// to query contention information.
+		// to view the activity on the server.
 		return status.Errorf(
 			codes.PermissionDenied,
-			"client user %q does not have permission to view contention events",
+			"client user %q does not have permission to view the activity",
 			sessionUser)
 	}
 	return nil
 }
 
-func (b *baseStatusServer) getLocalContentionEvents(
+// ListLocalContentionEvents returns a list of contention events on this node.
+func (b *baseStatusServer) ListLocalContentionEvents(
 	ctx context.Context, _ *serverpb.ListContentionEventsRequest,
-) (contentionpb.SerializedRegistry, error) {
+) (*serverpb.ListContentionEventsResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
-	if err := b.hasContentionEventsPermissions(ctx); err != nil {
-		return contentionpb.SerializedRegistry{}, err
+	if err := b.hasViewActivityPermissions(ctx); err != nil {
+		return nil, err
 	}
 
-	return b.contentionRegistry.Serialize(), nil
+	return &serverpb.ListContentionEventsResponse{
+		Events: b.contentionRegistry.Serialize(),
+	}, nil
 }
 
 // A statusServer provides a RESTful status API.
@@ -1845,17 +1847,6 @@ func (s *statusServer) ListLocalSessions(
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
-// ListLocalContentionEvents returns a list of contention events on this node.
-func (s *statusServer) ListLocalContentionEvents(
-	ctx context.Context, req *serverpb.ListContentionEventsRequest,
-) (*serverpb.ListContentionEventsResponse, error) {
-	events, err := s.getLocalContentionEvents(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return &serverpb.ListContentionEventsResponse{Events: events}, nil
-}
-
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
 // It then calls nodeResponse for every valid result of nodeFn, and
 // nodeError on every error result.
@@ -2152,7 +2143,7 @@ func (s *statusServer) ListContentionEvents(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Check permissions early to avoid fan-out to all nodes.
-	if err := s.hasContentionEventsPermissions(ctx); err != nil {
+	if err := s.hasViewActivityPermissions(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2180,7 +2171,7 @@ func (s *statusServer) ListContentionEvents(
 		response.Events = contention.MergeSerializedRegistries(response.Events, events)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
-		errResponse := serverpb.ListContentionEventsError{NodeID: nodeID, Message: err.Error()}
+		errResponse := serverpb.ListActivityError{NodeID: nodeID, Message: err.Error()}
 		response.Errors = append(response.Errors, errResponse)
 	}
 
