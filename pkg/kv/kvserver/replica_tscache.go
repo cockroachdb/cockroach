@@ -600,14 +600,16 @@ func collectReadSummaryFromTimestampCache(
 func applyReadSummaryToTimestampCache(
 	tc tscache.Cache, desc *roachpb.RangeDescriptor, s rspb.ReadSummary,
 ) {
-	tc.SetLowWater(
+	tc.Add(
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 		s.Local.LowWater,
+		uuid.Nil, /* txnID */
 	)
-	tc.SetLowWater(
+	tc.Add(
 		desc.StartKey.AsRawKey(),
 		desc.EndKey.AsRawKey(),
 		s.Global.LowWater,
+		uuid.Nil, /* txnID */
 	)
 }

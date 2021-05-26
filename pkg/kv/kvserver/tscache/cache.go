@@ -53,11 +53,9 @@ const MinRetentionWindow = 10 * time.Second
 type Cache interface {
 	// Add adds the specified timestamp to the cache covering the range of keys
 	// from start to end. If end is nil, the range covers the start key only.
-	// txnID is nil for no transaction.
+	// An empty txnID can be passed when the operation is not done on behalf of a
+	// particular txn.
 	Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID)
-	// SetLowWater sets the low water mark of the cache for the specified span
-	// to the provided timestamp.
-	SetLowWater(start, end roachpb.Key, ts hlc.Timestamp)
 
 	// GetMax returns the maximum timestamp which overlaps the interval spanning
 	// from start to end. If that maximum timestamp belongs to a single
