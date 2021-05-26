@@ -161,11 +161,11 @@ func htmlLabel(o interface{}) dot.HTML {
 	return dot.HTML(buf.String())
 }
 
-// toMap converts a struct to a map, field by field. If at any point a protobuf
+// ToMap converts a struct to a map, field by field. If at any point a protobuf
 // message is encountered, it is converted to a map using jsonpb to marshal it
 // to json and then marshaling it back to a map. This approach allows zero
 // values to be effectively omitted.
-func toMap(v interface{}) (interface{}, error) {
+func ToMap(v interface{}) (interface{}, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -202,7 +202,7 @@ func toMap(v interface{}) (interface{}, error) {
 			continue
 		}
 		var err error
-		if m[vt.Field(i).Name], err = toMap(vvf.Interface()); err != nil {
+		if m[vt.Field(i).Name], err = ToMap(vvf.Interface()); err != nil {
 			return nil, err
 		}
 	}
@@ -231,7 +231,7 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 	"isStruct": func(v interface{}) bool {
 		return reflect.ValueOf(v).Kind() == reflect.Struct
 	},
-	"toMap": toMap,
+	"ToMap": ToMap,
 }).Parse(`
 {{- define "key" -}}
 <td>
@@ -271,7 +271,7 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- typeOf . -}}
 </td>
 <td>
-{{- template "mapVal" (toMap $v) -}}
+{{- template "mapVal" (ToMap $v) -}}
 </td>
 {{- else -}}
 -{{- template "val" $v -}}
@@ -291,7 +291,7 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 <table class="outer">
 {{- template "header" . -}}
 <tr><td>
-{{- template "mapVal" (toMap .) -}}
+{{- template "mapVal" (ToMap .) -}}
 </td></tr>
 </table>
 `))
