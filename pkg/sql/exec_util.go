@@ -13,6 +13,9 @@ package sql
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/url"
@@ -45,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
@@ -53,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -68,7 +71,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -2468,90 +2470,70 @@ func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
 	m.data.StubCatalogTablesEnabled = enabled
 }
 
-type sqlStatsCollector struct {
-	// sqlStats tracks per-application statistics for all applications on each
-	// node.
-	sqlStats *sqlStats
-	// appStats track per-application SQL usage statistics. This is a pointer
-	// into sqlStats set as the session's current app.
-	appStats *appStats
-	// phaseTimes tracks session-level phase times.
-	phaseTimes *sessionphase.Times
-	// previousPhaseTimes tracks the session-level phase times for the previous
-	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
-	previousPhaseTimes *sessionphase.Times
+// Utility functions related to scrubbing sensitive information on SQL Stats.
+
+// quantizeCounts ensures that the Count field in the
+// roachpb.StatementStatistics is bucketed to the order of magnitude base 10s
+// and recomputes the squared differences using the new Count value.
+func quantizeCounts(d *roachpb.StatementStatistics) {
+	oldCount := d.Count
+	newCount := telemetry.Bucket10(oldCount)
+	d.Count = newCount
+	// The SquaredDiffs values are meant to enable computing the variance
+	// via the formula variance = squareddiffs / (count - 1).
+	// Since we're adjusting the count, we must re-compute a value
+	// for SquaredDiffs that keeps the same variance with the new count.
+	oldCountMinusOne := float64(oldCount - 1)
+	newCountMinusOne := float64(newCount - 1)
+	d.NumRows.SquaredDiffs = (d.NumRows.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ParseLat.SquaredDiffs = (d.ParseLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.PlanLat.SquaredDiffs = (d.PlanLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.RunLat.SquaredDiffs = (d.RunLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ServiceLat.SquaredDiffs = (d.ServiceLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.OverheadLat.SquaredDiffs = (d.OverheadLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+
+	d.MaxRetries = telemetry.Bucket10(d.MaxRetries)
+
+	d.FirstAttemptCount = int64((float64(d.FirstAttemptCount) / float64(oldCount)) * float64(newCount))
 }
 
-// newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
-// phaseTimes is copied by value.
-func newSQLStatsCollector(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *sessionphase.Times,
-) *sqlStatsCollector {
-	return &sqlStatsCollector{
-		sqlStats:   sqlStats,
-		appStats:   appStats,
-		phaseTimes: phaseTimes.Clone(),
+func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
+	// Re-parse the statement to obtain its AST.
+	stmt, err := parser.ParseOne(key)
+	if err != nil {
+		return "", false
 	}
+
+	// Re-format to remove most names.
+	f := tree.NewFmtCtx(tree.FmtAnonymize)
+	f.SetReformatTableNames(hideNonVirtualTableNameFunc(vt))
+	f.FormatNode(stmt.AST)
+	return f.CloseAndGetString(), true
 }
 
-// recordStatement records stats for one statement. samplePlanDescription can
-// be nil, as these are only sampled periodically per unique fingerprint. It
-// returns the statement ID of the recorded statement.
-func (s *sqlStatsCollector) recordStatement(
-	ctx context.Context,
-	stmt *Statement,
-	samplePlanDescription *roachpb.ExplainTreePlanNode,
-	distSQLUsed bool,
-	vectorized bool,
-	implicitTxn bool,
-	fullScan bool,
-	automaticRetryCount int,
-	numRows int,
-	err error,
-	parseLat, planLat, runLat, svcLat, ovhLat float64,
-	stats topLevelQueryStats,
-	planner *planner,
-) (roachpb.StmtFingerprintID, error) {
-	return s.appStats.recordStatement(
-		ctx, stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn, fullScan,
-		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
-		ovhLat, stats, planner,
-	)
-}
+// FailedHashedValue is used as a default return value for when HashForReporting
+// cannot hash a value correctly.
+const FailedHashedValue = "unknown"
 
-// recordTransaction records statistics for one transaction.
-func (s *sqlStatsCollector) recordTransaction(
-	ctx context.Context,
-	key txnKey,
-	txnTimeSec float64,
-	ev txnEvent,
-	implicit bool,
-	retryCount int,
-	statementFingerprintIDs []roachpb.StmtFingerprintID,
-	serviceLat time.Duration,
-	retryLat time.Duration,
-	commitLat time.Duration,
-	numRows int,
-	collectedExecStats bool,
-	execStats execstats.QueryLevelStats,
-	rowsRead int64,
-	bytesRead int64,
-) error {
-	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
-	return s.appStats.recordTransaction(
-		ctx, key, int64(retryCount), statementFingerprintIDs, serviceLat, retryLat, commitLat,
-		numRows, collectedExecStats, execStats, rowsRead, bytesRead,
-	)
-}
-
-func (s *sqlStatsCollector) reset(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *sessionphase.Times,
-) {
-	previousPhaseTimes := s.phaseTimes
-	*s = sqlStatsCollector{
-		sqlStats:           sqlStats,
-		appStats:           appStats,
-		previousPhaseTimes: previousPhaseTimes,
-		phaseTimes:         phaseTimes.Clone(),
+// HashForReporting 1-way hashes values for use in stat reporting. The secret
+// should be the cluster.secret setting.
+func HashForReporting(secret, appName string) string {
+	// If no secret is provided, we cannot irreversibly hash the value, so return
+	// a default value.
+	if len(secret) == 0 {
+		return FailedHashedValue
 	}
+	hash := hmac.New(sha256.New, []byte(secret))
+	if _, err := hash.Write([]byte(appName)); err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err,
+			`"It never returns an error." -- https://golang.org/pkg/hash`))
+	}
+	return hex.EncodeToString(hash.Sum(nil)[:4])
+}
+
+func anonymizeStmt(ast tree.Statement) string {
+	if ast == nil {
+		return ""
+	}
+	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }

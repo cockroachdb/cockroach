@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlstats",
+    srcs = [
+        "cluster_settings.go",
+        "ssprovider.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/sql/execstats",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessionphase",
+        "//pkg/util/stop",
+    ],
+)
