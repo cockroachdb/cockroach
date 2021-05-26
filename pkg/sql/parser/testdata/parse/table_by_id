@@ -2,7 +2,7 @@ parse
 SELECT * FROM [123 AS t]
 ----
 SELECT * FROM [123 AS t]
-SELECT (*) FROM [123 AS t] -- fully parenthetized
+SELECT (*) FROM [123 AS t] -- fully parenthesized
 SELECT * FROM [123 AS t] -- literals removed
 SELECT * FROM [123 AS _] -- identifiers removed
 
@@ -10,7 +10,7 @@ parse
 SELECT * FROM [123(1, 2, 3) AS t]
 ----
 SELECT * FROM [123(1, 2, 3) AS t]
-SELECT (*) FROM [123(1, 2, 3) AS t] -- fully parenthetized
+SELECT (*) FROM [123(1, 2, 3) AS t] -- fully parenthesized
 SELECT * FROM [123(1, 2, 3) AS t] -- literals removed
 SELECT * FROM [123(1, 2, 3) AS _] -- identifiers removed
 
@@ -18,7 +18,7 @@ parse
 SELECT * FROM [123() AS t]
 ----
 SELECT * FROM [123() AS t]
-SELECT (*) FROM [123() AS t] -- fully parenthetized
+SELECT (*) FROM [123() AS t] -- fully parenthesized
 SELECT * FROM [123() AS t] -- literals removed
 SELECT * FROM [123() AS _] -- identifiers removed
 
@@ -26,7 +26,7 @@ parse
 SELECT * FROM t@[123]
 ----
 SELECT * FROM t@[123]
-SELECT (*) FROM t@[123] -- fully parenthetized
+SELECT (*) FROM t@[123] -- fully parenthesized
 SELECT * FROM t@[123] -- literals removed
 SELECT * FROM _@[123] -- identifiers removed
 
@@ -34,7 +34,7 @@ parse
 SELECT * FROM [123 AS t]@[456]
 ----
 SELECT * FROM [123 AS t]@[456]
-SELECT (*) FROM [123 AS t]@[456] -- fully parenthetized
+SELECT (*) FROM [123 AS t]@[456] -- fully parenthesized
 SELECT * FROM [123 AS t]@[456] -- literals removed
 SELECT * FROM [123 AS _]@[456] -- identifiers removed
 
@@ -42,7 +42,7 @@ parse
 SELECT 'a' FROM t@{FORCE_INDEX=[123]}
 ----
 SELECT 'a' FROM t@[123] -- normalized!
-SELECT ('a') FROM t@[123] -- fully parenthetized
+SELECT ('a') FROM t@[123] -- fully parenthesized
 SELECT _ FROM t@[123] -- literals removed
 SELECT 'a' FROM _@[123] -- identifiers removed
 
@@ -50,7 +50,7 @@ parse
 SELECT 'a' FROM [123 AS t]@{FORCE_INDEX=[456]}
 ----
 SELECT 'a' FROM [123 AS t]@[456] -- normalized!
-SELECT ('a') FROM [123 AS t]@[456] -- fully parenthetized
+SELECT ('a') FROM [123 AS t]@[456] -- fully parenthesized
 SELECT _ FROM [123 AS t]@[456] -- literals removed
 SELECT 'a' FROM [123 AS _]@[456] -- identifiers removed
 
@@ -59,7 +59,7 @@ parse
 INSERT INTO [123 AS t] VALUES (1)
 ----
 INSERT INTO [123 AS t] VALUES (1)
-INSERT INTO [123 AS t] VALUES ((1)) -- fully parenthetized
+INSERT INTO [123 AS t] VALUES ((1)) -- fully parenthesized
 INSERT INTO [123 AS t] VALUES (_) -- literals removed
 INSERT INTO [123 AS _] VALUES (1) -- identifiers removed
 
@@ -67,7 +67,7 @@ parse
 INSERT INTO [123(1, 2) AS t] VALUES (1, 2)
 ----
 INSERT INTO [123(1, 2) AS t] VALUES (1, 2)
-INSERT INTO [123(1, 2) AS t] VALUES ((1), (2)) -- fully parenthetized
+INSERT INTO [123(1, 2) AS t] VALUES ((1), (2)) -- fully parenthesized
 INSERT INTO [123(1, 2) AS t] VALUES (_, _) -- literals removed
 INSERT INTO [123(1, 2) AS _] VALUES (1, 2) -- identifiers removed
 
@@ -75,7 +75,7 @@ parse
 INSERT INTO [123 AS t](col1, col2) VALUES (1, 2)
 ----
 INSERT INTO [123 AS t](col1, col2) VALUES (1, 2)
-INSERT INTO [123 AS t](col1, col2) VALUES ((1), (2)) -- fully parenthetized
+INSERT INTO [123 AS t](col1, col2) VALUES ((1), (2)) -- fully parenthesized
 INSERT INTO [123 AS t](col1, col2) VALUES (_, _) -- literals removed
 INSERT INTO [123 AS _](_, _) VALUES (1, 2) -- identifiers removed
 
@@ -83,7 +83,7 @@ parse
 UPSERT INTO [123 AS t] VALUES (1)
 ----
 UPSERT INTO [123 AS t] VALUES (1)
-UPSERT INTO [123 AS t] VALUES ((1)) -- fully parenthetized
+UPSERT INTO [123 AS t] VALUES ((1)) -- fully parenthesized
 UPSERT INTO [123 AS t] VALUES (_) -- literals removed
 UPSERT INTO [123 AS _] VALUES (1) -- identifiers removed
 
@@ -91,7 +91,7 @@ parse
 UPDATE [123 AS t] SET b = 3
 ----
 UPDATE [123 AS t] SET b = 3
-UPDATE [123 AS t] SET b = (3) -- fully parenthetized
+UPDATE [123 AS t] SET b = (3) -- fully parenthesized
 UPDATE [123 AS t] SET b = _ -- literals removed
 UPDATE [123 AS _] SET _ = 3 -- identifiers removed
 
@@ -99,7 +99,7 @@ parse
 UPDATE [123 AS t]@idx SET b = 3
 ----
 UPDATE [123 AS t]@idx SET b = 3
-UPDATE [123 AS t]@idx SET b = (3) -- fully parenthetized
+UPDATE [123 AS t]@idx SET b = (3) -- fully parenthesized
 UPDATE [123 AS t]@idx SET b = _ -- literals removed
 UPDATE [123 AS _]@_ SET _ = 3 -- identifiers removed
 
@@ -107,7 +107,7 @@ parse
 DELETE FROM [123 AS t]
 ----
 DELETE FROM [123 AS t]
-DELETE FROM [123 AS t] -- fully parenthetized
+DELETE FROM [123 AS t] -- fully parenthesized
 DELETE FROM [123 AS t] -- literals removed
 DELETE FROM [123 AS _] -- identifiers removed
 
@@ -115,6 +115,6 @@ parse
 DELETE FROM [123 AS t]@idx
 ----
 DELETE FROM [123 AS t]@idx
-DELETE FROM [123 AS t]@idx -- fully parenthetized
+DELETE FROM [123 AS t]@idx -- fully parenthesized
 DELETE FROM [123 AS t]@idx -- literals removed
 DELETE FROM [123 AS _]@_ -- identifiers removed

@@ -8,7 +8,7 @@ parse
 SELECT 1 FROM t -- hello world
 ----
 SELECT 1 FROM t -- normalized!
-SELECT (1) FROM t -- fully parenthetized
+SELECT (1) FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
@@ -16,7 +16,7 @@ parse
 SELECT /* hello world */ 1 FROM t
 ----
 SELECT 1 FROM t -- normalized!
-SELECT (1) FROM t -- fully parenthetized
+SELECT (1) FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
@@ -24,7 +24,7 @@ parse
 SELECT /* hello */ 1 FROM /* world */ t
 ----
 SELECT 1 FROM t -- normalized!
-SELECT (1) FROM t -- fully parenthetized
+SELECT (1) FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
@@ -32,7 +32,7 @@ parse
 SELECT e'a\'a' FROM t
 ----
 SELECT e'a\'a' FROM t
-SELECT (e'a\'a') FROM t -- fully parenthetized
+SELECT (e'a\'a') FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT e'a\'a' FROM _ -- identifiers removed
 
@@ -40,7 +40,7 @@ parse
 SELECT e'a\\\\na' FROM t
 ----
 SELECT e'a\\\\na' FROM t
-SELECT (e'a\\\\na') FROM t -- fully parenthetized
+SELECT (e'a\\\\na') FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT e'a\\\\na' FROM _ -- identifiers removed
 
@@ -48,7 +48,7 @@ parse
 SELECT e'\\\\n' FROM t
 ----
 SELECT e'\\\\n' FROM t
-SELECT (e'\\\\n') FROM t -- fully parenthetized
+SELECT (e'\\\\n') FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT e'\\\\n' FROM _ -- identifiers removed
 
@@ -56,7 +56,7 @@ parse
 SELECT "a""a" FROM t
 ----
 SELECT "a""a" FROM t
-SELECT ("a""a") FROM t -- fully parenthetized
+SELECT ("a""a") FROM t -- fully parenthesized
 SELECT "a""a" FROM t -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -64,7 +64,7 @@ parse
 SELECT a FROM "t\n" -- no escaping in sql identifiers
 ----
 SELECT a FROM "t\n" -- normalized!
-SELECT (a) FROM "t\n" -- fully parenthetized
+SELECT (a) FROM "t\n" -- fully parenthesized
 SELECT a FROM "t\n" -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -72,7 +72,7 @@ parse
 SELECT a FROM "t""" -- no escaping in sql identifiers
 ----
 SELECT a FROM "t""" -- normalized!
-SELECT (a) FROM "t""" -- fully parenthetized
+SELECT (a) FROM "t""" -- fully parenthesized
 SELECT a FROM "t""" -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -80,7 +80,7 @@ parse
 SELECT "full" FROM t -- must quote column name keyword
 ----
 SELECT "full" FROM t -- normalized!
-SELECT ("full") FROM t -- fully parenthetized
+SELECT ("full") FROM t -- fully parenthesized
 SELECT "full" FROM t -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -88,7 +88,7 @@ parse
 SELECT "FROM" FROM t
 ----
 SELECT "FROM" FROM t
-SELECT ("FROM") FROM t -- fully parenthetized
+SELECT ("FROM") FROM t -- fully parenthesized
 SELECT "FROM" FROM t -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -96,7 +96,7 @@ parse
 SELECT 1 FROM t
 ----
 SELECT 1 FROM t
-SELECT (1) FROM t -- fully parenthetized
+SELECT (1) FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT 1 FROM _ -- identifiers removed
 
@@ -104,7 +104,7 @@ parse
 SELECT 1, 2 FROM t
 ----
 SELECT 1, 2 FROM t
-SELECT (1), (2) FROM t -- fully parenthetized
+SELECT (1), (2) FROM t -- fully parenthesized
 SELECT _, _ FROM t -- literals removed
 SELECT 1, 2 FROM _ -- identifiers removed
 
@@ -112,7 +112,7 @@ parse
 SELECT * FROM t
 ----
 SELECT * FROM t
-SELECT (*) FROM t -- fully parenthetized
+SELECT (*) FROM t -- fully parenthesized
 SELECT * FROM t -- literals removed
 SELECT * FROM _ -- identifiers removed
 
@@ -120,7 +120,7 @@ parse
 SELECT "*" FROM t
 ----
 SELECT "*" FROM t
-SELECT ("*") FROM t -- fully parenthetized
+SELECT ("*") FROM t -- fully parenthesized
 SELECT "*" FROM t -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -128,7 +128,7 @@ parse
 SELECT "a'a" FROM t
 ----
 SELECT "a'a" FROM t
-SELECT ("a'a") FROM t -- fully parenthetized
+SELECT ("a'a") FROM t -- fully parenthesized
 SELECT "a'a" FROM t -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -137,7 +137,7 @@ parse
 SELECT a, b FROM t
 ----
 SELECT a, b FROM t
-SELECT (a), (b) FROM t -- fully parenthetized
+SELECT (a), (b) FROM t -- fully parenthesized
 SELECT a, b FROM t -- literals removed
 SELECT _, _ FROM _ -- identifiers removed
 
@@ -145,7 +145,7 @@ parse
 SELECT a AS b FROM t
 ----
 SELECT a AS b FROM t
-SELECT (a) AS b FROM t -- fully parenthetized
+SELECT (a) AS b FROM t -- fully parenthesized
 SELECT a AS b FROM t -- literals removed
 SELECT _ AS _ FROM _ -- identifiers removed
 
@@ -153,7 +153,7 @@ parse
 SELECT 1 FROM t t1
 ----
 SELECT 1 FROM t AS t1 -- normalized!
-SELECT (1) FROM t AS t1 -- fully parenthetized
+SELECT (1) FROM t AS t1 -- fully parenthesized
 SELECT _ FROM t AS t1 -- literals removed
 SELECT 1 FROM _ AS _ -- identifiers removed
 
@@ -161,7 +161,7 @@ parse
 SELECT 1 FROM t t1 (c1, c2)
 ----
 SELECT 1 FROM t AS t1 (c1, c2) -- normalized!
-SELECT (1) FROM t AS t1 (c1, c2) -- fully parenthetized
+SELECT (1) FROM t AS t1 (c1, c2) -- fully parenthesized
 SELECT _ FROM t AS t1 (c1, c2) -- literals removed
 SELECT 1 FROM _ AS _ (_, _) -- identifiers removed
 
@@ -170,7 +170,7 @@ parse
 SELECT a.* FROM t
 ----
 SELECT a.* FROM t
-SELECT (a.*) FROM t -- fully parenthetized
+SELECT (a.*) FROM t -- fully parenthesized
 SELECT a.* FROM t -- literals removed
 SELECT _.* FROM _ -- identifiers removed
 
@@ -178,7 +178,7 @@ parse
 SELECT a = b FROM t
 ----
 SELECT a = b FROM t
-SELECT ((a) = (b)) FROM t -- fully parenthetized
+SELECT ((a) = (b)) FROM t -- fully parenthesized
 SELECT a = b FROM t -- literals removed
 SELECT _ = _ FROM _ -- identifiers removed
 
@@ -186,7 +186,7 @@ parse
 SELECT $1 FROM t
 ----
 SELECT $1 FROM t
-SELECT ($1) FROM t -- fully parenthetized
+SELECT ($1) FROM t -- fully parenthesized
 SELECT $1 FROM t -- literals removed
 SELECT $1 FROM _ -- identifiers removed
 
@@ -194,7 +194,7 @@ parse
 SELECT $1, $2 FROM t
 ----
 SELECT $1, $2 FROM t
-SELECT ($1), ($2) FROM t -- fully parenthetized
+SELECT ($1), ($2) FROM t -- fully parenthesized
 SELECT $1, $2 FROM t -- literals removed
 SELECT $1, $2 FROM _ -- identifiers removed
 
@@ -202,7 +202,7 @@ parse
 SELECT NULL FROM t
 ----
 SELECT NULL FROM t
-SELECT (NULL) FROM t -- fully parenthetized
+SELECT (NULL) FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT NULL FROM _ -- identifiers removed
 
@@ -210,7 +210,7 @@ parse
 SELECT 0.1 FROM t
 ----
 SELECT 0.1 FROM t
-SELECT (0.1) FROM t -- fully parenthetized
+SELECT (0.1) FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT 0.1 FROM _ -- identifiers removed
 
@@ -218,7 +218,7 @@ parse
 SELECT a FROM t
 ----
 SELECT a FROM t
-SELECT (a) FROM t -- fully parenthetized
+SELECT (a) FROM t -- fully parenthesized
 SELECT a FROM t -- literals removed
 SELECT _ FROM _ -- identifiers removed
 
@@ -226,7 +226,7 @@ parse
 SELECT a.b FROM t
 ----
 SELECT a.b FROM t
-SELECT (a.b) FROM t -- fully parenthetized
+SELECT (a.b) FROM t -- fully parenthesized
 SELECT a.b FROM t -- literals removed
 SELECT _._ FROM _ -- identifiers removed
 
@@ -234,7 +234,7 @@ parse
 SELECT a.b.* FROM t
 ----
 SELECT a.b.* FROM t
-SELECT (a.b.*) FROM t -- fully parenthetized
+SELECT (a.b.*) FROM t -- fully parenthesized
 SELECT a.b.* FROM t -- literals removed
 SELECT _._.* FROM _ -- identifiers removed
 
@@ -242,7 +242,7 @@ parse
 SELECT a.b[1] FROM t
 ----
 SELECT a.b[1] FROM t
-SELECT ((a.b)[(1)]) FROM t -- fully parenthetized
+SELECT ((a.b)[(1)]) FROM t -- fully parenthesized
 SELECT a.b[_] FROM t -- literals removed
 SELECT _._[1] FROM _ -- identifiers removed
 
@@ -250,7 +250,7 @@ parse
 SELECT a.b[1 + 1:4][3] FROM t
 ----
 SELECT a.b[1 + 1:4][3] FROM t
-SELECT ((a.b)[((1) + (1)):(4)][(3)]) FROM t -- fully parenthetized
+SELECT ((a.b)[((1) + (1)):(4)][(3)]) FROM t -- fully parenthesized
 SELECT a.b[_ + _:_][_] FROM t -- literals removed
 SELECT _._[1 + 1:4][3] FROM _ -- identifiers removed
 
@@ -258,7 +258,7 @@ parse
 SELECT a.b[:4][3] FROM t
 ----
 SELECT a.b[:4][3] FROM t
-SELECT ((a.b)[:(4)][(3)]) FROM t -- fully parenthetized
+SELECT ((a.b)[:(4)][(3)]) FROM t -- fully parenthesized
 SELECT a.b[:_][_] FROM t -- literals removed
 SELECT _._[:4][3] FROM _ -- identifiers removed
 
@@ -266,7 +266,7 @@ parse
 SELECT a.b[1 + 1:][3] FROM t
 ----
 SELECT a.b[1 + 1:][3] FROM t
-SELECT ((a.b)[((1) + (1)):][(3)]) FROM t -- fully parenthetized
+SELECT ((a.b)[((1) + (1)):][(3)]) FROM t -- fully parenthesized
 SELECT a.b[_ + _:][_] FROM t -- literals removed
 SELECT _._[1 + 1:][3] FROM _ -- identifiers removed
 
@@ -274,7 +274,7 @@ parse
 SELECT a.b[:][3] FROM t
 ----
 SELECT a.b[:][3] FROM t
-SELECT ((a.b)[:][(3)]) FROM t -- fully parenthetized
+SELECT ((a.b)[:][(3)]) FROM t -- fully parenthesized
 SELECT a.b[:][_] FROM t -- literals removed
 SELECT _._[:][3] FROM _ -- identifiers removed
 
@@ -282,7 +282,7 @@ parse
 SELECT 'a' FROM t
 ----
 SELECT 'a' FROM t
-SELECT ('a') FROM t -- fully parenthetized
+SELECT ('a') FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT 'a' FROM _ -- identifiers removed
 
@@ -290,7 +290,7 @@ parse
 SELECT 'a' FROM t@bar
 ----
 SELECT 'a' FROM t@bar
-SELECT ('a') FROM t@bar -- fully parenthetized
+SELECT ('a') FROM t@bar -- fully parenthesized
 SELECT _ FROM t@bar -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
@@ -298,7 +298,7 @@ parse
 SELECT 'a' FROM t@primary
 ----
 SELECT 'a' FROM t@primary
-SELECT ('a') FROM t@primary -- fully parenthetized
+SELECT ('a') FROM t@primary -- fully parenthesized
 SELECT _ FROM t@primary -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
@@ -306,7 +306,7 @@ parse
 SELECT 'a' FROM t@like
 ----
 SELECT 'a' FROM t@like
-SELECT ('a') FROM t@like -- fully parenthetized
+SELECT ('a') FROM t@like -- fully parenthesized
 SELECT _ FROM t@like -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
@@ -314,7 +314,7 @@ parse
 SELECT 'a' FROM t@{NO_INDEX_JOIN}
 ----
 SELECT 'a' FROM t@{NO_INDEX_JOIN}
-SELECT ('a') FROM t@{NO_INDEX_JOIN} -- fully parenthetized
+SELECT ('a') FROM t@{NO_INDEX_JOIN} -- fully parenthesized
 SELECT _ FROM t@{NO_INDEX_JOIN} -- literals removed
 SELECT 'a' FROM _@{NO_INDEX_JOIN} -- identifiers removed
 
@@ -322,7 +322,7 @@ parse
 SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
 ----
 SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
-SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS} -- fully parenthetized
+SELECT ('a') FROM t@{IGNORE_FOREIGN_KEYS} -- fully parenthesized
 SELECT _ FROM t@{IGNORE_FOREIGN_KEYS} -- literals removed
 SELECT 'a' FROM _@{IGNORE_FOREIGN_KEYS} -- identifiers removed
 
@@ -330,7 +330,7 @@ parse
 SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}
 ----
 SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}
-SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthetized
+SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthesized
 SELECT _ FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
 
@@ -338,7 +338,7 @@ parse
 SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS}
 ----
 SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS}
-SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS} -- fully parenthetized
+SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS} -- fully parenthesized
 SELECT _ FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,DESC,IGNORE_FOREIGN_KEYS} -- identifiers removed
 
@@ -346,7 +346,7 @@ parse
 SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'
 ----
 SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'
-SELECT (*) FROM t AS "of" AS OF SYSTEM TIME ('2016-01-01') -- fully parenthetized
+SELECT (*) FROM t AS "of" AS OF SYSTEM TIME ('2016-01-01') -- fully parenthesized
 SELECT * FROM t AS "of" AS OF SYSTEM TIME _ -- literals removed
 SELECT * FROM _ AS _ AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
 
@@ -354,7 +354,7 @@ parse
 SELECT a FROM t WHERE a <> b
 ----
 SELECT a FROM t WHERE a != b -- normalized!
-SELECT (a) FROM t WHERE ((a) != (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) != (b)) -- fully parenthesized
 SELECT a FROM t WHERE a != b -- literals removed
 SELECT _ FROM _ WHERE _ != _ -- identifiers removed
 
@@ -362,7 +362,7 @@ parse
 SELECT a FROM t WHERE b = - 2
 ----
 SELECT a FROM t WHERE b = -2 -- normalized!
-SELECT (a) FROM t WHERE ((b) = (-2)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((b) = (-2)) -- fully parenthesized
 SELECT a FROM t WHERE b = _ -- literals removed
 SELECT _ FROM _ WHERE _ = -2 -- identifiers removed
 
@@ -370,7 +370,7 @@ parse
 SELECT a FROM t WHERE a = b AND a = c
 ----
 SELECT a FROM t WHERE (a = b) AND (a = c) -- normalized!
-SELECT (a) FROM t WHERE ((((a) = (b))) AND (((a) = (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((((a) = (b))) AND (((a) = (c)))) -- fully parenthesized
 SELECT a FROM t WHERE (a = b) AND (a = c) -- literals removed
 SELECT _ FROM _ WHERE (_ = _) AND (_ = _) -- identifiers removed
 
@@ -378,7 +378,7 @@ parse
 SELECT a FROM t WHERE a = b OR a = c
 ----
 SELECT a FROM t WHERE (a = b) OR (a = c) -- normalized!
-SELECT (a) FROM t WHERE ((((a) = (b))) OR (((a) = (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((((a) = (b))) OR (((a) = (c)))) -- fully parenthesized
 SELECT a FROM t WHERE (a = b) OR (a = c) -- literals removed
 SELECT _ FROM _ WHERE (_ = _) OR (_ = _) -- identifiers removed
 
@@ -386,7 +386,7 @@ parse
 SELECT a FROM t WHERE NOT a = b
 ----
 SELECT a FROM t WHERE NOT (a = b) -- normalized!
-SELECT (a) FROM t WHERE (NOT (((a) = (b)))) -- fully parenthetized
+SELECT (a) FROM t WHERE (NOT (((a) = (b)))) -- fully parenthesized
 SELECT a FROM t WHERE NOT (a = b) -- literals removed
 SELECT _ FROM _ WHERE NOT (_ = _) -- identifiers removed
 
@@ -394,7 +394,7 @@ parse
 SELECT a FROM t WHERE a = b & c
 ----
 SELECT a FROM t WHERE a = (b & c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) & (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) & (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b & c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ & _) -- identifiers removed
 
@@ -402,7 +402,7 @@ parse
 SELECT a FROM t WHERE a = b | c
 ----
 SELECT a FROM t WHERE a = (b | c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) | (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) | (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b | c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ | _) -- identifiers removed
 
@@ -410,7 +410,7 @@ parse
 SELECT a FROM t WHERE a = b # c
 ----
 SELECT a FROM t WHERE a = (b # c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) # (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) # (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b # c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ # _) -- identifiers removed
 
@@ -418,7 +418,7 @@ parse
 SELECT a FROM t WHERE a = b ^ c
 ----
 SELECT a FROM t WHERE a = (b ^ c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) ^ (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) ^ (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b ^ c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ ^ _) -- identifiers removed
 
@@ -426,7 +426,7 @@ parse
 SELECT a FROM t WHERE a = b + c
 ----
 SELECT a FROM t WHERE a = (b + c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) + (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) + (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b + c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ + _) -- identifiers removed
 
@@ -434,7 +434,7 @@ parse
 SELECT a FROM t WHERE a = b - c
 ----
 SELECT a FROM t WHERE a = (b - c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) - (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) - (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b - c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ - _) -- identifiers removed
 
@@ -442,7 +442,7 @@ parse
 SELECT a FROM t WHERE a = b * c
 ----
 SELECT a FROM t WHERE a = (b * c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) * (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) * (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b * c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ * _) -- identifiers removed
 
@@ -450,7 +450,7 @@ parse
 SELECT a FROM t WHERE a = b / c
 ----
 SELECT a FROM t WHERE a = (b / c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) / (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) / (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b / c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ / _) -- identifiers removed
 
@@ -458,7 +458,7 @@ parse
 SELECT a FROM t WHERE a = b % c
 ----
 SELECT a FROM t WHERE a = (b % c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) % (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) % (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b % c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ % _) -- identifiers removed
 
@@ -466,7 +466,7 @@ parse
 SELECT a FROM t WHERE a = b || c
 ----
 SELECT a FROM t WHERE a = (b || c) -- normalized!
-SELECT (a) FROM t WHERE ((a) = (((b) || (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b) || (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b || c) -- literals removed
 SELECT _ FROM _ WHERE _ = (_ || _) -- identifiers removed
 
@@ -474,7 +474,7 @@ parse
 SELECT a FROM t WHERE a = + b
 ----
 SELECT a FROM t WHERE a = b -- normalized!
-SELECT (a) FROM t WHERE ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (b)) -- fully parenthesized
 SELECT a FROM t WHERE a = b -- literals removed
 SELECT _ FROM _ WHERE _ = _ -- identifiers removed
 
@@ -482,7 +482,7 @@ parse
 SELECT a FROM t WHERE a = - b
 ----
 SELECT a FROM t WHERE a = (-b) -- normalized!
-SELECT (a) FROM t WHERE ((a) = ((-(b)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ((-(b)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (-b) -- literals removed
 SELECT _ FROM _ WHERE _ = (-_) -- identifiers removed
 
@@ -490,7 +490,7 @@ parse
 SELECT a FROM t WHERE a = ~ b
 ----
 SELECT a FROM t WHERE a = (~b) -- normalized!
-SELECT (a) FROM t WHERE ((a) = ((~(b)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ((~(b)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (~b) -- literals removed
 SELECT _ FROM _ WHERE _ = (~_) -- identifiers removed
 
@@ -499,7 +499,7 @@ parse
 SELECT a FROM t AS bar
 ----
 SELECT a FROM t AS bar
-SELECT (a) FROM t AS bar -- fully parenthetized
+SELECT (a) FROM t AS bar -- fully parenthesized
 SELECT a FROM t AS bar -- literals removed
 SELECT _ FROM _ AS _ -- identifiers removed
 
@@ -507,7 +507,7 @@ parse
 SELECT a FROM t AS bar (bar1)
 ----
 SELECT a FROM t AS bar (bar1)
-SELECT (a) FROM t AS bar (bar1) -- fully parenthetized
+SELECT (a) FROM t AS bar (bar1) -- fully parenthesized
 SELECT a FROM t AS bar (bar1) -- literals removed
 SELECT _ FROM _ AS _ (_) -- identifiers removed
 
@@ -515,7 +515,7 @@ parse
 SELECT a FROM t AS bar (bar1, bar2, bar3)
 ----
 SELECT a FROM t AS bar (bar1, bar2, bar3)
-SELECT (a) FROM t AS bar (bar1, bar2, bar3) -- fully parenthetized
+SELECT (a) FROM t AS bar (bar1, bar2, bar3) -- fully parenthesized
 SELECT a FROM t AS bar (bar1, bar2, bar3) -- literals removed
 SELECT _ FROM _ AS _ (_, _, _) -- identifiers removed
 
@@ -523,7 +523,7 @@ parse
 SELECT a FROM t WITH ORDINALITY
 ----
 SELECT a FROM t WITH ORDINALITY
-SELECT (a) FROM t WITH ORDINALITY -- fully parenthetized
+SELECT (a) FROM t WITH ORDINALITY -- fully parenthesized
 SELECT a FROM t WITH ORDINALITY -- literals removed
 SELECT _ FROM _ WITH ORDINALITY -- identifiers removed
 
@@ -531,7 +531,7 @@ parse
 SELECT a FROM t WITH ORDINALITY AS bar
 ----
 SELECT a FROM t WITH ORDINALITY AS bar
-SELECT (a) FROM t WITH ORDINALITY AS bar -- fully parenthetized
+SELECT (a) FROM t WITH ORDINALITY AS bar -- fully parenthesized
 SELECT a FROM t WITH ORDINALITY AS bar -- literals removed
 SELECT _ FROM _ WITH ORDINALITY AS _ -- identifiers removed
 
@@ -539,7 +539,7 @@ parse
 SELECT a FROM (SELECT 1 FROM t)
 ----
 SELECT a FROM (SELECT 1 FROM t)
-SELECT (a) FROM ((SELECT (1) FROM t)) -- fully parenthetized
+SELECT (a) FROM ((SELECT (1) FROM t)) -- fully parenthesized
 SELECT a FROM (SELECT _ FROM t) -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) -- identifiers removed
 
@@ -547,7 +547,7 @@ parse
 SELECT a FROM (SELECT 1 FROM t) AS bar
 ----
 SELECT a FROM (SELECT 1 FROM t) AS bar
-SELECT (a) FROM ((SELECT (1) FROM t)) AS bar -- fully parenthetized
+SELECT (a) FROM ((SELECT (1) FROM t)) AS bar -- fully parenthesized
 SELECT a FROM (SELECT _ FROM t) AS bar -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) AS _ -- identifiers removed
 
@@ -555,7 +555,7 @@ parse
 SELECT a FROM (SELECT 1 FROM t) AS bar (bar1)
 ----
 SELECT a FROM (SELECT 1 FROM t) AS bar (bar1)
-SELECT (a) FROM ((SELECT (1) FROM t)) AS bar (bar1) -- fully parenthetized
+SELECT (a) FROM ((SELECT (1) FROM t)) AS bar (bar1) -- fully parenthesized
 SELECT a FROM (SELECT _ FROM t) AS bar (bar1) -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) AS _ (_) -- identifiers removed
 
@@ -563,7 +563,7 @@ parse
 SELECT a FROM (SELECT 1 FROM t) AS bar (bar1, bar2, bar3)
 ----
 SELECT a FROM (SELECT 1 FROM t) AS bar (bar1, bar2, bar3)
-SELECT (a) FROM ((SELECT (1) FROM t)) AS bar (bar1, bar2, bar3) -- fully parenthetized
+SELECT (a) FROM ((SELECT (1) FROM t)) AS bar (bar1, bar2, bar3) -- fully parenthesized
 SELECT a FROM (SELECT _ FROM t) AS bar (bar1, bar2, bar3) -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) AS _ (_, _, _) -- identifiers removed
 
@@ -571,7 +571,7 @@ parse
 SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY
 ----
 SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY
-SELECT (a) FROM ((SELECT (1) FROM t)) WITH ORDINALITY -- fully parenthetized
+SELECT (a) FROM ((SELECT (1) FROM t)) WITH ORDINALITY -- fully parenthesized
 SELECT a FROM (SELECT _ FROM t) WITH ORDINALITY -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) WITH ORDINALITY -- identifiers removed
 
@@ -579,7 +579,7 @@ parse
 SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY AS bar
 ----
 SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY AS bar
-SELECT (a) FROM ((SELECT (1) FROM t)) WITH ORDINALITY AS bar -- fully parenthetized
+SELECT (a) FROM ((SELECT (1) FROM t)) WITH ORDINALITY AS bar -- fully parenthesized
 SELECT a FROM (SELECT _ FROM t) WITH ORDINALITY AS bar -- literals removed
 SELECT _ FROM (SELECT 1 FROM _) WITH ORDINALITY AS _ -- identifiers removed
 
@@ -587,7 +587,7 @@ parse
 SELECT a FROM ROWS FROM (a(x), b(y), c(z))
 ----
 SELECT a FROM ROWS FROM (a(x), b(y), c(z))
-SELECT (a) FROM ROWS FROM (((a)((x))), ((b)((y))), ((c)((z)))) -- fully parenthetized
+SELECT (a) FROM ROWS FROM (((a)((x))), ((b)((y))), ((c)((z)))) -- fully parenthesized
 SELECT a FROM ROWS FROM (a(x), b(y), c(z)) -- literals removed
 SELECT _ FROM ROWS FROM (a(_), b(_), c(_)) -- identifiers removed
 
@@ -595,7 +595,7 @@ parse
 SELECT a FROM generate_series(1, 32)
 ----
 SELECT a FROM ROWS FROM (generate_series(1, 32)) -- normalized!
-SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) -- fully parenthetized
+SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) -- fully parenthesized
 SELECT a FROM ROWS FROM (generate_series(_, _)) -- literals removed
 SELECT _ FROM ROWS FROM (generate_series(1, 32)) -- identifiers removed
 
@@ -603,7 +603,7 @@ parse
 SELECT a FROM generate_series(1, 32) AS s (x)
 ----
 SELECT a FROM ROWS FROM (generate_series(1, 32)) AS s (x) -- normalized!
-SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) AS s (x) -- fully parenthetized
+SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) AS s (x) -- fully parenthesized
 SELECT a FROM ROWS FROM (generate_series(_, _)) AS s (x) -- literals removed
 SELECT _ FROM ROWS FROM (generate_series(1, 32)) AS _ (_) -- identifiers removed
 
@@ -611,7 +611,7 @@ parse
 SELECT a FROM generate_series(1, 32) WITH ORDINALITY AS s (x)
 ----
 SELECT a FROM ROWS FROM (generate_series(1, 32)) WITH ORDINALITY AS s (x) -- normalized!
-SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) WITH ORDINALITY AS s (x) -- fully parenthetized
+SELECT (a) FROM ROWS FROM (((generate_series)((1), (32)))) WITH ORDINALITY AS s (x) -- fully parenthesized
 SELECT a FROM ROWS FROM (generate_series(_, _)) WITH ORDINALITY AS s (x) -- literals removed
 SELECT _ FROM ROWS FROM (generate_series(1, 32)) WITH ORDINALITY AS _ (_) -- identifiers removed
 
@@ -620,7 +620,7 @@ parse
 SELECT a FROM t1, t2
 ----
 SELECT a FROM t1, t2
-SELECT (a) FROM t1, t2 -- fully parenthetized
+SELECT (a) FROM t1, t2 -- fully parenthesized
 SELECT a FROM t1, t2 -- literals removed
 SELECT _ FROM _, _ -- identifiers removed
 
@@ -628,7 +628,7 @@ parse
 SELECT a FROM t1, LATERAL (SELECT * FROM t2 WHERE a = b)
 ----
 SELECT a FROM t1, LATERAL (SELECT * FROM t2 WHERE a = b)
-SELECT (a) FROM t1, LATERAL ((SELECT (*) FROM t2 WHERE ((a) = (b)))) -- fully parenthetized
+SELECT (a) FROM t1, LATERAL ((SELECT (*) FROM t2 WHERE ((a) = (b)))) -- fully parenthesized
 SELECT a FROM t1, LATERAL (SELECT * FROM t2 WHERE a = b) -- literals removed
 SELECT _ FROM _, LATERAL (SELECT * FROM _ WHERE _ = _) -- identifiers removed
 
@@ -636,7 +636,7 @@ parse
 SELECT a FROM t1, LATERAL ROWS FROM (generate_series(1, t1.x))
 ----
 SELECT a FROM t1, LATERAL ROWS FROM (generate_series(1, t1.x))
-SELECT (a) FROM t1, LATERAL ROWS FROM (((generate_series)((1), (t1.x)))) -- fully parenthetized
+SELECT (a) FROM t1, LATERAL ROWS FROM (((generate_series)((1), (t1.x)))) -- fully parenthesized
 SELECT a FROM t1, LATERAL ROWS FROM (generate_series(_, t1.x)) -- literals removed
 SELECT _ FROM _, LATERAL ROWS FROM (generate_series(1, _._)) -- identifiers removed
 
@@ -644,7 +644,7 @@ parse
 SELECT a FROM LATERAL generate_series(1, 32)
 ----
 SELECT a FROM LATERAL ROWS FROM (generate_series(1, 32)) -- normalized!
-SELECT (a) FROM LATERAL ROWS FROM (((generate_series)((1), (32)))) -- fully parenthetized
+SELECT (a) FROM LATERAL ROWS FROM (((generate_series)((1), (32)))) -- fully parenthesized
 SELECT a FROM LATERAL ROWS FROM (generate_series(_, _)) -- literals removed
 SELECT _ FROM LATERAL ROWS FROM (generate_series(1, 32)) -- identifiers removed
 
@@ -653,7 +653,7 @@ parse
 SELECT a FROM t AS t1
 ----
 SELECT a FROM t AS t1
-SELECT (a) FROM t AS t1 -- fully parenthetized
+SELECT (a) FROM t AS t1 -- fully parenthesized
 SELECT a FROM t AS t1 -- literals removed
 SELECT _ FROM _ AS _ -- identifiers removed
 
@@ -661,7 +661,7 @@ parse
 SELECT a FROM t AS t1 (c1)
 ----
 SELECT a FROM t AS t1 (c1)
-SELECT (a) FROM t AS t1 (c1) -- fully parenthetized
+SELECT (a) FROM t AS t1 (c1) -- fully parenthesized
 SELECT a FROM t AS t1 (c1) -- literals removed
 SELECT _ FROM _ AS _ (_) -- identifiers removed
 
@@ -669,7 +669,7 @@ parse
 SELECT a FROM t AS t1 (c1, c2, c3, c4)
 ----
 SELECT a FROM t AS t1 (c1, c2, c3, c4)
-SELECT (a) FROM t AS t1 (c1, c2, c3, c4) -- fully parenthetized
+SELECT (a) FROM t AS t1 (c1, c2, c3, c4) -- fully parenthesized
 SELECT a FROM t AS t1 (c1, c2, c3, c4) -- literals removed
 SELECT _ FROM _ AS _ (_, _, _, _) -- identifiers removed
 
@@ -677,7 +677,7 @@ parse
 SELECT a FROM s.t
 ----
 SELECT a FROM s.t
-SELECT (a) FROM s.t -- fully parenthetized
+SELECT (a) FROM s.t -- fully parenthesized
 SELECT a FROM s.t -- literals removed
 SELECT _ FROM _._ -- identifiers removed
 
@@ -685,7 +685,7 @@ parse
 SELECT count(DISTINCT a) FROM t
 ----
 SELECT count(DISTINCT a) FROM t
-SELECT ((count)(DISTINCT (a))) FROM t -- fully parenthetized
+SELECT ((count)(DISTINCT (a))) FROM t -- fully parenthesized
 SELECT count(DISTINCT a) FROM t -- literals removed
 SELECT count(DISTINCT _) FROM _ -- identifiers removed
 
@@ -693,7 +693,7 @@ parse
 SELECT count(ALL a) FROM t
 ----
 SELECT count(ALL a) FROM t
-SELECT ((count)(ALL (a))) FROM t -- fully parenthetized
+SELECT ((count)(ALL (a))) FROM t -- fully parenthesized
 SELECT count(ALL a) FROM t -- literals removed
 SELECT count(ALL _) FROM _ -- identifiers removed
 
@@ -701,7 +701,7 @@ parse
 SELECT a FROM t WHERE a = b
 ----
 SELECT a FROM t WHERE a = b
-SELECT (a) FROM t WHERE ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (b)) -- fully parenthesized
 SELECT a FROM t WHERE a = b -- literals removed
 SELECT _ FROM _ WHERE _ = _ -- identifiers removed
 
@@ -709,7 +709,7 @@ parse
 SELECT a FROM t WHERE NOT (a = b)
 ----
 SELECT a FROM t WHERE NOT (a = b)
-SELECT (a) FROM t WHERE (NOT ((((a) = (b))))) -- fully parenthetized
+SELECT (a) FROM t WHERE (NOT ((((a) = (b))))) -- fully parenthesized
 SELECT a FROM t WHERE NOT (a = b) -- literals removed
 SELECT _ FROM _ WHERE NOT (_ = _) -- identifiers removed
 
@@ -717,7 +717,7 @@ parse
 SELECT a FROM t WHERE EXISTS (SELECT 1 FROM t)
 ----
 SELECT a FROM t WHERE EXISTS (SELECT 1 FROM t)
-SELECT (a) FROM t WHERE (EXISTS (SELECT (1) FROM t)) -- fully parenthetized
+SELECT (a) FROM t WHERE (EXISTS (SELECT (1) FROM t)) -- fully parenthesized
 SELECT a FROM t WHERE EXISTS (SELECT _ FROM t) -- literals removed
 SELECT _ FROM _ WHERE EXISTS (SELECT 1 FROM _) -- identifiers removed
 
@@ -725,7 +725,7 @@ parse
 SELECT a FROM t WHERE NOT true
 ----
 SELECT a FROM t WHERE NOT true
-SELECT (a) FROM t WHERE (NOT (true)) -- fully parenthetized
+SELECT (a) FROM t WHERE (NOT (true)) -- fully parenthesized
 SELECT a FROM t WHERE NOT _ -- literals removed
 SELECT _ FROM _ WHERE NOT true -- identifiers removed
 
@@ -733,7 +733,7 @@ parse
 SELECT a FROM t WHERE NOT false
 ----
 SELECT a FROM t WHERE NOT false
-SELECT (a) FROM t WHERE (NOT (false)) -- fully parenthetized
+SELECT (a) FROM t WHERE (NOT (false)) -- fully parenthesized
 SELECT a FROM t WHERE NOT _ -- literals removed
 SELECT _ FROM _ WHERE NOT false -- identifiers removed
 
@@ -741,7 +741,7 @@ parse
 SELECT a FROM t WHERE a IN (b,)
 ----
 SELECT a FROM t WHERE a IN (b,)
-SELECT (a) FROM t WHERE ((a) IN (((b),))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IN (((b),))) -- fully parenthesized
 SELECT a FROM t WHERE a IN (b,) -- literals removed
 SELECT _ FROM _ WHERE _ IN (_,) -- identifiers removed
 
@@ -749,7 +749,7 @@ parse
 SELECT a FROM t WHERE a IN (b, c)
 ----
 SELECT a FROM t WHERE a IN (b, c)
-SELECT (a) FROM t WHERE ((a) IN (((b), (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IN (((b), (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a IN (b, c) -- literals removed
 SELECT _ FROM _ WHERE _ IN (_, _) -- identifiers removed
 
@@ -757,7 +757,7 @@ parse
 SELECT a FROM t WHERE a IN (SELECT a FROM t)
 ----
 SELECT a FROM t WHERE a IN (SELECT a FROM t)
-SELECT (a) FROM t WHERE ((a) IN ((SELECT (a) FROM t))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IN ((SELECT (a) FROM t))) -- fully parenthesized
 SELECT a FROM t WHERE a IN (SELECT a FROM t) -- literals removed
 SELECT _ FROM _ WHERE _ IN (SELECT _ FROM _) -- identifiers removed
 
@@ -765,7 +765,7 @@ parse
 SELECT a FROM t WHERE a NOT IN (b, c)
 ----
 SELECT a FROM t WHERE a NOT IN (b, c)
-SELECT (a) FROM t WHERE ((a) NOT IN (((b), (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) NOT IN (((b), (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a NOT IN (b, c) -- literals removed
 SELECT _ FROM _ WHERE _ NOT IN (_, _) -- identifiers removed
 
@@ -773,7 +773,7 @@ parse
 SELECT a FROM t WHERE a = ANY (ARRAY[b, c])
 ----
 SELECT a FROM t WHERE a = ANY (ARRAY[b, c])
-SELECT (a) FROM t WHERE ((a) = ANY (((ARRAY[(b), (c)])))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ANY (((ARRAY[(b), (c)])))) -- fully parenthesized
 SELECT a FROM t WHERE a = ANY (ARRAY[b, c]) -- literals removed
 SELECT _ FROM _ WHERE _ = ANY (ARRAY[_, _]) -- identifiers removed
 
@@ -781,7 +781,7 @@ parse
 SELECT a FROM t WHERE a = ANY ARRAY[b, c]
 ----
 SELECT a FROM t WHERE a = ANY ARRAY[b, c]
-SELECT (a) FROM t WHERE ((a) = ANY (ARRAY[(b), (c)])) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ANY (ARRAY[(b), (c)])) -- fully parenthesized
 SELECT a FROM t WHERE a = ANY ARRAY[b, c] -- literals removed
 SELECT _ FROM _ WHERE _ = ANY ARRAY[_, _] -- identifiers removed
 
@@ -789,7 +789,7 @@ parse
 SELECT a FROM t WHERE a != SOME (ARRAY[b, c])
 ----
 SELECT a FROM t WHERE a != SOME (ARRAY[b, c])
-SELECT (a) FROM t WHERE ((a) != SOME (((ARRAY[(b), (c)])))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) != SOME (((ARRAY[(b), (c)])))) -- fully parenthesized
 SELECT a FROM t WHERE a != SOME (ARRAY[b, c]) -- literals removed
 SELECT _ FROM _ WHERE _ != SOME (ARRAY[_, _]) -- identifiers removed
 
@@ -797,7 +797,7 @@ parse
 SELECT a FROM t WHERE a != SOME ARRAY[b, c]
 ----
 SELECT a FROM t WHERE a != SOME ARRAY[b, c]
-SELECT (a) FROM t WHERE ((a) != SOME (ARRAY[(b), (c)])) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) != SOME (ARRAY[(b), (c)])) -- fully parenthesized
 SELECT a FROM t WHERE a != SOME ARRAY[b, c] -- literals removed
 SELECT _ FROM _ WHERE _ != SOME ARRAY[_, _] -- identifiers removed
 
@@ -805,7 +805,7 @@ parse
 SELECT a FROM t WHERE a = ANY (SELECT 1)
 ----
 SELECT a FROM t WHERE a = ANY (SELECT 1)
-SELECT (a) FROM t WHERE ((a) = ANY ((SELECT (1)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ANY ((SELECT (1)))) -- fully parenthesized
 SELECT a FROM t WHERE a = ANY (SELECT _) -- literals removed
 SELECT _ FROM _ WHERE _ = ANY (SELECT 1) -- identifiers removed
 
@@ -813,7 +813,7 @@ parse
 SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c])
 ----
 SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c])
-SELECT (a) FROM t WHERE ((a) LIKE ALL (((ARRAY[(b), (c)])))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) LIKE ALL (((ARRAY[(b), (c)])))) -- fully parenthesized
 SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c]) -- literals removed
 SELECT _ FROM _ WHERE _ LIKE ALL (ARRAY[_, _]) -- identifiers removed
 
@@ -821,7 +821,7 @@ parse
 SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]
 ----
 SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]
-SELECT (a) FROM t WHERE ((a) LIKE ALL (ARRAY[(b), (c)])) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) LIKE ALL (ARRAY[(b), (c)])) -- fully parenthesized
 SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c] -- literals removed
 SELECT _ FROM _ WHERE _ LIKE ALL ARRAY[_, _] -- identifiers removed
 
@@ -829,7 +829,7 @@ parse
 SELECT a FROM t WHERE a LIKE b
 ----
 SELECT a FROM t WHERE a LIKE b
-SELECT (a) FROM t WHERE ((a) LIKE (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) LIKE (b)) -- fully parenthesized
 SELECT a FROM t WHERE a LIKE b -- literals removed
 SELECT _ FROM _ WHERE _ LIKE _ -- identifiers removed
 
@@ -837,7 +837,7 @@ parse
 SELECT a FROM t WHERE a NOT LIKE b
 ----
 SELECT a FROM t WHERE a NOT LIKE b
-SELECT (a) FROM t WHERE ((a) NOT LIKE (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) NOT LIKE (b)) -- fully parenthesized
 SELECT a FROM t WHERE a NOT LIKE b -- literals removed
 SELECT _ FROM _ WHERE _ NOT LIKE _ -- identifiers removed
 
@@ -845,7 +845,7 @@ parse
 SELECT a FROM t WHERE a ILIKE b
 ----
 SELECT a FROM t WHERE a ILIKE b
-SELECT (a) FROM t WHERE ((a) ILIKE (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) ILIKE (b)) -- fully parenthesized
 SELECT a FROM t WHERE a ILIKE b -- literals removed
 SELECT _ FROM _ WHERE _ ILIKE _ -- identifiers removed
 
@@ -853,7 +853,7 @@ parse
 SELECT a FROM t WHERE a NOT ILIKE b
 ----
 SELECT a FROM t WHERE a NOT ILIKE b
-SELECT (a) FROM t WHERE ((a) NOT ILIKE (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) NOT ILIKE (b)) -- fully parenthesized
 SELECT a FROM t WHERE a NOT ILIKE b -- literals removed
 SELECT _ FROM _ WHERE _ NOT ILIKE _ -- identifiers removed
 
@@ -861,7 +861,7 @@ parse
 SELECT a FROM t WHERE a SIMILAR TO b
 ----
 SELECT a FROM t WHERE a SIMILAR TO b
-SELECT (a) FROM t WHERE ((a) SIMILAR TO (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) SIMILAR TO (b)) -- fully parenthesized
 SELECT a FROM t WHERE a SIMILAR TO b -- literals removed
 SELECT _ FROM _ WHERE _ SIMILAR TO _ -- identifiers removed
 
@@ -869,7 +869,7 @@ parse
 SELECT a FROM t WHERE a NOT SIMILAR TO b
 ----
 SELECT a FROM t WHERE a NOT SIMILAR TO b
-SELECT (a) FROM t WHERE ((a) NOT SIMILAR TO (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) NOT SIMILAR TO (b)) -- fully parenthesized
 SELECT a FROM t WHERE a NOT SIMILAR TO b -- literals removed
 SELECT _ FROM _ WHERE _ NOT SIMILAR TO _ -- identifiers removed
 
@@ -877,7 +877,7 @@ parse
 SELECT a FROM t WHERE a ~ b
 ----
 SELECT a FROM t WHERE a ~ b
-SELECT (a) FROM t WHERE ((a) ~ (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) ~ (b)) -- fully parenthesized
 SELECT a FROM t WHERE a ~ b -- literals removed
 SELECT _ FROM _ WHERE _ ~ _ -- identifiers removed
 
@@ -885,7 +885,7 @@ parse
 SELECT a FROM t WHERE a !~ b
 ----
 SELECT a FROM t WHERE a !~ b
-SELECT (a) FROM t WHERE ((a) !~ (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) !~ (b)) -- fully parenthesized
 SELECT a FROM t WHERE a !~ b -- literals removed
 SELECT _ FROM _ WHERE _ !~ _ -- identifiers removed
 
@@ -893,7 +893,7 @@ parse
 SELECT a FROM t WHERE a ~* c
 ----
 SELECT a FROM t WHERE a ~* c
-SELECT (a) FROM t WHERE ((a) ~* (c)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) ~* (c)) -- fully parenthesized
 SELECT a FROM t WHERE a ~* c -- literals removed
 SELECT _ FROM _ WHERE _ ~* _ -- identifiers removed
 
@@ -901,7 +901,7 @@ parse
 SELECT a FROM t WHERE a !~* c
 ----
 SELECT a FROM t WHERE a !~* c
-SELECT (a) FROM t WHERE ((a) !~* (c)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) !~* (c)) -- fully parenthesized
 SELECT a FROM t WHERE a !~* c -- literals removed
 SELECT _ FROM _ WHERE _ !~* _ -- identifiers removed
 
@@ -909,7 +909,7 @@ parse
 SELECT a FROM t WHERE a BETWEEN b AND c
 ----
 SELECT a FROM t WHERE a BETWEEN b AND c
-SELECT (a) FROM t WHERE ((a) BETWEEN (b) AND (c)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) BETWEEN (b) AND (c)) -- fully parenthesized
 SELECT a FROM t WHERE a BETWEEN b AND c -- literals removed
 SELECT _ FROM _ WHERE _ BETWEEN _ AND _ -- identifiers removed
 
@@ -917,7 +917,7 @@ parse
 SELECT a FROM t WHERE a BETWEEN SYMMETRIC b AND c
 ----
 SELECT a FROM t WHERE a BETWEEN SYMMETRIC b AND c
-SELECT (a) FROM t WHERE ((a) BETWEEN SYMMETRIC (b) AND (c)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) BETWEEN SYMMETRIC (b) AND (c)) -- fully parenthesized
 SELECT a FROM t WHERE a BETWEEN SYMMETRIC b AND c -- literals removed
 SELECT _ FROM _ WHERE _ BETWEEN SYMMETRIC _ AND _ -- identifiers removed
 
@@ -925,7 +925,7 @@ parse
 SELECT a FROM t WHERE a NOT BETWEEN b AND c
 ----
 SELECT a FROM t WHERE a NOT BETWEEN b AND c
-SELECT (a) FROM t WHERE ((a) NOT BETWEEN (b) AND (c)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) NOT BETWEEN (b) AND (c)) -- fully parenthesized
 SELECT a FROM t WHERE a NOT BETWEEN b AND c -- literals removed
 SELECT _ FROM _ WHERE _ NOT BETWEEN _ AND _ -- identifiers removed
 
@@ -933,7 +933,7 @@ parse
 SELECT a FROM t WHERE a NOT BETWEEN SYMMETRIC b AND c
 ----
 SELECT a FROM t WHERE a NOT BETWEEN SYMMETRIC b AND c
-SELECT (a) FROM t WHERE ((a) NOT BETWEEN SYMMETRIC (b) AND (c)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) NOT BETWEEN SYMMETRIC (b) AND (c)) -- fully parenthesized
 SELECT a FROM t WHERE a NOT BETWEEN SYMMETRIC b AND c -- literals removed
 SELECT _ FROM _ WHERE _ NOT BETWEEN SYMMETRIC _ AND _ -- identifiers removed
 
@@ -941,7 +941,7 @@ parse
 SELECT a FROM t WHERE a BETWEEN ASYMMETRIC b AND c
 ----
 SELECT a FROM t WHERE a BETWEEN b AND c -- normalized!
-SELECT (a) FROM t WHERE ((a) BETWEEN (b) AND (c)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) BETWEEN (b) AND (c)) -- fully parenthesized
 SELECT a FROM t WHERE a BETWEEN b AND c -- literals removed
 SELECT _ FROM _ WHERE _ BETWEEN _ AND _ -- identifiers removed
 
@@ -950,7 +950,7 @@ parse
 SELECT a FROM t WHERE a IS NULL
 ----
 SELECT a FROM t WHERE a IS NULL
-SELECT (a) FROM t WHERE ((a) IS NULL) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NULL) -- fully parenthesized
 SELECT a FROM t WHERE a IS NULL -- literals removed
 SELECT _ FROM _ WHERE _ IS NULL -- identifiers removed
 
@@ -958,7 +958,7 @@ parse
 SELECT a FROM t WHERE a IS NOT NULL
 ----
 SELECT a FROM t WHERE a IS NOT NULL
-SELECT (a) FROM t WHERE ((a) IS NOT NULL) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NOT NULL) -- fully parenthesized
 SELECT a FROM t WHERE a IS NOT NULL -- literals removed
 SELECT _ FROM _ WHERE _ IS NOT NULL -- identifiers removed
 
@@ -966,7 +966,7 @@ parse
 SELECT a FROM t WHERE (a, b) IS NULL
 ----
 SELECT a FROM t WHERE (a, b) IS NULL
-SELECT (a) FROM t WHERE ((((a), (b))) IS NULL) -- fully parenthetized
+SELECT (a) FROM t WHERE ((((a), (b))) IS NULL) -- fully parenthesized
 SELECT a FROM t WHERE (a, b) IS NULL -- literals removed
 SELECT _ FROM _ WHERE (_, _) IS NULL -- identifiers removed
 
@@ -974,7 +974,7 @@ parse
 SELECT a FROM t WHERE (a, b) IS NOT NULL
 ----
 SELECT a FROM t WHERE (a, b) IS NOT NULL
-SELECT (a) FROM t WHERE ((((a), (b))) IS NOT NULL) -- fully parenthetized
+SELECT (a) FROM t WHERE ((((a), (b))) IS NOT NULL) -- fully parenthesized
 SELECT a FROM t WHERE (a, b) IS NOT NULL -- literals removed
 SELECT _ FROM _ WHERE (_, _) IS NOT NULL -- identifiers removed
 
@@ -982,7 +982,7 @@ parse
 SELECT a FROM t WHERE a ISNULL
 ----
 SELECT a FROM t WHERE a IS NULL -- normalized!
-SELECT (a) FROM t WHERE ((a) IS NULL) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NULL) -- fully parenthesized
 SELECT a FROM t WHERE a IS NULL -- literals removed
 SELECT _ FROM _ WHERE _ IS NULL -- identifiers removed
 
@@ -990,7 +990,7 @@ parse
 SELECT a FROM t WHERE a NOTNULL
 ----
 SELECT a FROM t WHERE a IS NOT NULL -- normalized!
-SELECT (a) FROM t WHERE ((a) IS NOT NULL) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NOT NULL) -- fully parenthesized
 SELECT a FROM t WHERE a IS NOT NULL -- literals removed
 SELECT _ FROM _ WHERE _ IS NOT NULL -- identifiers removed
 
@@ -998,7 +998,7 @@ parse
 SELECT a FROM t WHERE a IS UNKNOWN
 ----
 SELECT a FROM t WHERE a IS NOT DISTINCT FROM NULL -- normalized!
-SELECT (a) FROM t WHERE ((a) IS NOT DISTINCT FROM (NULL)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NOT DISTINCT FROM (NULL)) -- fully parenthesized
 SELECT a FROM t WHERE a IS NOT DISTINCT FROM _ -- literals removed
 SELECT _ FROM _ WHERE _ IS NOT DISTINCT FROM NULL -- identifiers removed
 
@@ -1006,7 +1006,7 @@ parse
 SELECT a FROM t WHERE a IS NOT UNKNOWN
 ----
 SELECT a FROM t WHERE a IS DISTINCT FROM NULL -- normalized!
-SELECT (a) FROM t WHERE ((a) IS DISTINCT FROM (NULL)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS DISTINCT FROM (NULL)) -- fully parenthesized
 SELECT a FROM t WHERE a IS DISTINCT FROM _ -- literals removed
 SELECT _ FROM _ WHERE _ IS DISTINCT FROM NULL -- identifiers removed
 
@@ -1014,7 +1014,7 @@ parse
 SELECT a FROM t WHERE a IS true
 ----
 SELECT a FROM t WHERE a IS true
-SELECT (a) FROM t WHERE ((a) IS (true)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS (true)) -- fully parenthesized
 SELECT a FROM t WHERE a IS _ -- literals removed
 REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS true -- identifiers removed
@@ -1023,7 +1023,7 @@ parse
 SELECT a FROM t WHERE a IS NOT true
 ----
 SELECT a FROM t WHERE a IS NOT true
-SELECT (a) FROM t WHERE ((a) IS NOT (true)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NOT (true)) -- fully parenthesized
 SELECT a FROM t WHERE a IS NOT _ -- literals removed
 REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS NOT true -- identifiers removed
@@ -1032,7 +1032,7 @@ parse
 SELECT a FROM t WHERE a IS false
 ----
 SELECT a FROM t WHERE a IS false
-SELECT (a) FROM t WHERE ((a) IS (false)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS (false)) -- fully parenthesized
 SELECT a FROM t WHERE a IS _ -- literals removed
 REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS false -- identifiers removed
@@ -1041,7 +1041,7 @@ parse
 SELECT a FROM t WHERE a IS NOT false
 ----
 SELECT a FROM t WHERE a IS NOT false
-SELECT (a) FROM t WHERE ((a) IS NOT (false)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NOT (false)) -- fully parenthesized
 SELECT a FROM t WHERE a IS NOT _ -- literals removed
 REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS NOT false -- identifiers removed
@@ -1050,7 +1050,7 @@ parse
 SELECT a FROM t WHERE a IS OF (INT8)
 ----
 SELECT a FROM t WHERE a IS OF (INT8)
-SELECT (a) FROM t WHERE ((a) IS OF (INT8)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS OF (INT8)) -- fully parenthesized
 SELECT a FROM t WHERE a IS OF (INT8) -- literals removed
 SELECT _ FROM _ WHERE _ IS OF (INT8) -- identifiers removed
 
@@ -1058,7 +1058,7 @@ parse
 SELECT a FROM t WHERE a IS NOT OF (FLOAT8, STRING)
 ----
 SELECT a FROM t WHERE a IS NOT OF (FLOAT8, STRING)
-SELECT (a) FROM t WHERE ((a) IS NOT OF (FLOAT8, STRING)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NOT OF (FLOAT8, STRING)) -- fully parenthesized
 SELECT a FROM t WHERE a IS NOT OF (FLOAT8, STRING) -- literals removed
 SELECT _ FROM _ WHERE _ IS NOT OF (FLOAT8, STRING) -- identifiers removed
 
@@ -1066,7 +1066,7 @@ parse
 SELECT a FROM t WHERE a IS DISTINCT FROM b
 ----
 SELECT a FROM t WHERE a IS DISTINCT FROM b
-SELECT (a) FROM t WHERE ((a) IS DISTINCT FROM (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS DISTINCT FROM (b)) -- fully parenthesized
 SELECT a FROM t WHERE a IS DISTINCT FROM b -- literals removed
 SELECT _ FROM _ WHERE _ IS DISTINCT FROM _ -- identifiers removed
 
@@ -1074,7 +1074,7 @@ parse
 SELECT a FROM t WHERE a IS NOT DISTINCT FROM b
 ----
 SELECT a FROM t WHERE a IS NOT DISTINCT FROM b
-SELECT (a) FROM t WHERE ((a) IS NOT DISTINCT FROM (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) IS NOT DISTINCT FROM (b)) -- fully parenthesized
 SELECT a FROM t WHERE a IS NOT DISTINCT FROM b -- literals removed
 SELECT _ FROM _ WHERE _ IS NOT DISTINCT FROM _ -- identifiers removed
 
@@ -1082,7 +1082,7 @@ parse
 SELECT a FROM t WHERE (a, b) IS NOT DISTINCT FROM NULL
 ----
 SELECT a FROM t WHERE (a, b) IS NOT DISTINCT FROM NULL
-SELECT (a) FROM t WHERE ((((a), (b))) IS NOT DISTINCT FROM (NULL)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((((a), (b))) IS NOT DISTINCT FROM (NULL)) -- fully parenthesized
 SELECT a FROM t WHERE (a, b) IS NOT DISTINCT FROM _ -- literals removed
 SELECT _ FROM _ WHERE (_, _) IS NOT DISTINCT FROM NULL -- identifiers removed
 
@@ -1090,7 +1090,7 @@ parse
 SELECT a FROM t WHERE (a, b) IS DISTINCT FROM NULL
 ----
 SELECT a FROM t WHERE (a, b) IS DISTINCT FROM NULL
-SELECT (a) FROM t WHERE ((((a), (b))) IS DISTINCT FROM (NULL)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((((a), (b))) IS DISTINCT FROM (NULL)) -- fully parenthesized
 SELECT a FROM t WHERE (a, b) IS DISTINCT FROM _ -- literals removed
 SELECT _ FROM _ WHERE (_, _) IS DISTINCT FROM NULL -- identifiers removed
 
@@ -1098,7 +1098,7 @@ parse
 SELECT a FROM t WHERE a < b
 ----
 SELECT a FROM t WHERE a < b
-SELECT (a) FROM t WHERE ((a) < (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) < (b)) -- fully parenthesized
 SELECT a FROM t WHERE a < b -- literals removed
 SELECT _ FROM _ WHERE _ < _ -- identifiers removed
 
@@ -1106,7 +1106,7 @@ parse
 SELECT a FROM t WHERE a <= b
 ----
 SELECT a FROM t WHERE a <= b
-SELECT (a) FROM t WHERE ((a) <= (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) <= (b)) -- fully parenthesized
 SELECT a FROM t WHERE a <= b -- literals removed
 SELECT _ FROM _ WHERE _ <= _ -- identifiers removed
 
@@ -1114,7 +1114,7 @@ parse
 SELECT a FROM t WHERE a >= b
 ----
 SELECT a FROM t WHERE a >= b
-SELECT (a) FROM t WHERE ((a) >= (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) >= (b)) -- fully parenthesized
 SELECT a FROM t WHERE a >= b -- literals removed
 SELECT _ FROM _ WHERE _ >= _ -- identifiers removed
 
@@ -1122,7 +1122,7 @@ parse
 SELECT a FROM t WHERE a != b
 ----
 SELECT a FROM t WHERE a != b
-SELECT (a) FROM t WHERE ((a) != (b)) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) != (b)) -- fully parenthesized
 SELECT a FROM t WHERE a != b -- literals removed
 SELECT _ FROM _ WHERE _ != _ -- identifiers removed
 
@@ -1130,7 +1130,7 @@ parse
 SELECT a FROM t WHERE a = (SELECT a FROM t)
 ----
 SELECT a FROM t WHERE a = (SELECT a FROM t)
-SELECT (a) FROM t WHERE ((a) = ((SELECT (a) FROM t))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ((SELECT (a) FROM t))) -- fully parenthesized
 SELECT a FROM t WHERE a = (SELECT a FROM t) -- literals removed
 SELECT _ FROM _ WHERE _ = (SELECT _ FROM _) -- identifiers removed
 
@@ -1138,7 +1138,7 @@ parse
 SELECT a FROM t WHERE a = (b)
 ----
 SELECT a FROM t WHERE a = (b)
-SELECT (a) FROM t WHERE ((a) = (((b)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (((b)))) -- fully parenthesized
 SELECT a FROM t WHERE a = (b) -- literals removed
 SELECT _ FROM _ WHERE _ = (_) -- identifiers removed
 
@@ -1146,7 +1146,7 @@ parse
 SELECT a FROM t WHERE CASE WHEN a = b THEN c END
 ----
 SELECT a FROM t WHERE CASE WHEN a = b THEN c END
-SELECT (a) FROM t WHERE (CASE WHEN ((a) = (b)) THEN (c) END) -- fully parenthetized
+SELECT (a) FROM t WHERE (CASE WHEN ((a) = (b)) THEN (c) END) -- fully parenthesized
 SELECT a FROM t WHERE CASE WHEN a = b THEN c END -- literals removed
 SELECT _ FROM _ WHERE CASE WHEN _ = _ THEN _ END -- identifiers removed
 
@@ -1154,7 +1154,7 @@ parse
 SELECT a FROM t WHERE CASE WHEN a = b THEN c ELSE d END
 ----
 SELECT a FROM t WHERE CASE WHEN a = b THEN c ELSE d END
-SELECT (a) FROM t WHERE (CASE WHEN ((a) = (b)) THEN (c) ELSE (d) END) -- fully parenthetized
+SELECT (a) FROM t WHERE (CASE WHEN ((a) = (b)) THEN (c) ELSE (d) END) -- fully parenthesized
 SELECT a FROM t WHERE CASE WHEN a = b THEN c ELSE d END -- literals removed
 SELECT _ FROM _ WHERE CASE WHEN _ = _ THEN _ ELSE _ END -- identifiers removed
 
@@ -1162,7 +1162,7 @@ parse
 SELECT a FROM t WHERE CASE WHEN a = b THEN c WHEN b = d THEN d ELSE d END
 ----
 SELECT a FROM t WHERE CASE WHEN a = b THEN c WHEN b = d THEN d ELSE d END
-SELECT (a) FROM t WHERE (CASE WHEN ((a) = (b)) THEN (c) WHEN ((b) = (d)) THEN (d) ELSE (d) END) -- fully parenthetized
+SELECT (a) FROM t WHERE (CASE WHEN ((a) = (b)) THEN (c) WHEN ((b) = (d)) THEN (d) ELSE (d) END) -- fully parenthesized
 SELECT a FROM t WHERE CASE WHEN a = b THEN c WHEN b = d THEN d ELSE d END -- literals removed
 SELECT _ FROM _ WHERE CASE WHEN _ = _ THEN _ WHEN _ = _ THEN _ ELSE _ END -- identifiers removed
 
@@ -1170,7 +1170,7 @@ parse
 SELECT a FROM t WHERE CASE aa WHEN a = b THEN c END
 ----
 SELECT a FROM t WHERE CASE aa WHEN a = b THEN c END
-SELECT (a) FROM t WHERE (CASE (aa) WHEN ((a) = (b)) THEN (c) END) -- fully parenthetized
+SELECT (a) FROM t WHERE (CASE (aa) WHEN ((a) = (b)) THEN (c) END) -- fully parenthesized
 SELECT a FROM t WHERE CASE aa WHEN a = b THEN c END -- literals removed
 SELECT _ FROM _ WHERE CASE _ WHEN _ = _ THEN _ END -- identifiers removed
 
@@ -1178,7 +1178,7 @@ parse
 SELECT a FROM t WHERE a = b()
 ----
 SELECT a FROM t WHERE a = b()
-SELECT (a) FROM t WHERE ((a) = ((b)())) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ((b)())) -- fully parenthesized
 SELECT a FROM t WHERE a = b() -- literals removed
 SELECT _ FROM _ WHERE _ = b() -- identifiers removed
 
@@ -1186,7 +1186,7 @@ parse
 SELECT a FROM t WHERE a = b(c)
 ----
 SELECT a FROM t WHERE a = b(c)
-SELECT (a) FROM t WHERE ((a) = ((b)((c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ((b)((c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = b(c) -- literals removed
 SELECT _ FROM _ WHERE _ = b(_) -- identifiers removed
 
@@ -1194,7 +1194,7 @@ parse
 SELECT a FROM t WHERE a = b(c, d)
 ----
 SELECT a FROM t WHERE a = b(c, d)
-SELECT (a) FROM t WHERE ((a) = ((b)((c), (d)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ((b)((c), (d)))) -- fully parenthesized
 SELECT a FROM t WHERE a = b(c, d) -- literals removed
 SELECT _ FROM _ WHERE _ = b(_, _) -- identifiers removed
 
@@ -1202,7 +1202,7 @@ parse
 SELECT a FROM t WHERE a = count(*)
 ----
 SELECT a FROM t WHERE a = count(*)
-SELECT (a) FROM t WHERE ((a) = ((count)((*)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = ((count)((*)))) -- fully parenthesized
 SELECT a FROM t WHERE a = count(*) -- literals removed
 SELECT _ FROM _ WHERE _ = count(*) -- identifiers removed
 
@@ -1210,7 +1210,7 @@ parse
 SELECT a FROM t WHERE a = IF(b, c, d)
 ----
 SELECT a FROM t WHERE a = IF(b, c, d)
-SELECT (a) FROM t WHERE ((a) = (IF((b), (c), (d)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (IF((b), (c), (d)))) -- fully parenthesized
 SELECT a FROM t WHERE a = IF(b, c, d) -- literals removed
 SELECT _ FROM _ WHERE _ = IF(_, _, _) -- identifiers removed
 
@@ -1218,7 +1218,7 @@ parse
 SELECT a FROM t WHERE a = IFERROR(b, c, d)
 ----
 SELECT a FROM t WHERE a = IFERROR(b, c, d)
-SELECT (a) FROM t WHERE ((a) = (IFERROR((b), (c), (d)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (IFERROR((b), (c), (d)))) -- fully parenthesized
 SELECT a FROM t WHERE a = IFERROR(b, c, d) -- literals removed
 SELECT _ FROM _ WHERE _ = IFERROR(_, _, _) -- identifiers removed
 
@@ -1226,7 +1226,7 @@ parse
 SELECT a FROM t WHERE a = IFERROR(b, c)
 ----
 SELECT a FROM t WHERE a = IFERROR(b, c)
-SELECT (a) FROM t WHERE ((a) = (IFERROR((b), (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (IFERROR((b), (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = IFERROR(b, c) -- literals removed
 SELECT _ FROM _ WHERE _ = IFERROR(_, _) -- identifiers removed
 
@@ -1234,7 +1234,7 @@ parse
 SELECT a FROM t WHERE a = ISERROR(b)
 ----
 SELECT a FROM t WHERE a = ISERROR(b)
-SELECT (a) FROM t WHERE ((a) = (ISERROR((b)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (ISERROR((b)))) -- fully parenthesized
 SELECT a FROM t WHERE a = ISERROR(b) -- literals removed
 SELECT _ FROM _ WHERE _ = ISERROR(_) -- identifiers removed
 
@@ -1242,7 +1242,7 @@ parse
 SELECT a FROM t WHERE a = ISERROR(b, c)
 ----
 SELECT a FROM t WHERE a = ISERROR(b, c)
-SELECT (a) FROM t WHERE ((a) = (ISERROR((b), (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (ISERROR((b), (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = ISERROR(b, c) -- literals removed
 SELECT _ FROM _ WHERE _ = ISERROR(_, _) -- identifiers removed
 
@@ -1250,7 +1250,7 @@ parse
 SELECT a FROM t WHERE a = IFNULL(b, c)
 ----
 SELECT a FROM t WHERE a = IFNULL(b, c)
-SELECT (a) FROM t WHERE ((a) = (IFNULL((b), (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (IFNULL((b), (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = IFNULL(b, c) -- literals removed
 SELECT _ FROM _ WHERE _ = IFNULL(_, _) -- identifiers removed
 
@@ -1258,7 +1258,7 @@ parse
 SELECT a FROM t WHERE a = NULLIF(b, c)
 ----
 SELECT a FROM t WHERE a = NULLIF(b, c)
-SELECT (a) FROM t WHERE ((a) = (NULLIF((b), (c)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (NULLIF((b), (c)))) -- fully parenthesized
 SELECT a FROM t WHERE a = NULLIF(b, c) -- literals removed
 SELECT _ FROM _ WHERE _ = NULLIF(_, _) -- identifiers removed
 
@@ -1266,7 +1266,7 @@ parse
 SELECT a FROM t WHERE a = COALESCE(a, b, c, d, e)
 ----
 SELECT a FROM t WHERE a = COALESCE(a, b, c, d, e)
-SELECT (a) FROM t WHERE ((a) = (COALESCE((a), (b), (c), (d), (e)))) -- fully parenthetized
+SELECT (a) FROM t WHERE ((a) = (COALESCE((a), (b), (c), (d), (e)))) -- fully parenthesized
 SELECT a FROM t WHERE a = COALESCE(a, b, c, d, e) -- literals removed
 SELECT _ FROM _ WHERE _ = COALESCE(_, _, _, _, _) -- identifiers removed
 
@@ -1274,7 +1274,7 @@ parse
 SELECT (a.b) FROM t WHERE (b.c) = 2
 ----
 SELECT (a.b) FROM t WHERE (b.c) = 2
-SELECT (((a.b))) FROM t WHERE ((((b.c))) = (2)) -- fully parenthetized
+SELECT (((a.b))) FROM t WHERE ((((b.c))) = (2)) -- fully parenthesized
 SELECT (a.b) FROM t WHERE (b.c) = _ -- literals removed
 SELECT (_._) FROM _ WHERE (_._) = 2 -- identifiers removed
 
@@ -1282,7 +1282,7 @@ parse
 SELECT a FROM t ORDER BY a
 ----
 SELECT a FROM t ORDER BY a
-SELECT (a) FROM t ORDER BY (a) -- fully parenthetized
+SELECT (a) FROM t ORDER BY (a) -- fully parenthesized
 SELECT a FROM t ORDER BY a -- literals removed
 SELECT _ FROM _ ORDER BY _ -- identifiers removed
 
@@ -1290,7 +1290,7 @@ parse
 SELECT a FROM t ORDER BY a ASC
 ----
 SELECT a FROM t ORDER BY a ASC
-SELECT (a) FROM t ORDER BY (a) ASC -- fully parenthetized
+SELECT (a) FROM t ORDER BY (a) ASC -- fully parenthesized
 SELECT a FROM t ORDER BY a ASC -- literals removed
 SELECT _ FROM _ ORDER BY _ ASC -- identifiers removed
 
@@ -1298,7 +1298,7 @@ parse
 SELECT a FROM t ORDER BY a DESC
 ----
 SELECT a FROM t ORDER BY a DESC
-SELECT (a) FROM t ORDER BY (a) DESC -- fully parenthetized
+SELECT (a) FROM t ORDER BY (a) DESC -- fully parenthesized
 SELECT a FROM t ORDER BY a DESC -- literals removed
 SELECT _ FROM _ ORDER BY _ DESC -- identifiers removed
 
@@ -1306,7 +1306,7 @@ parse
 SELECT a FROM t ORDER BY PRIMARY KEY t
 ----
 SELECT a FROM t ORDER BY PRIMARY KEY t
-SELECT (a) FROM t ORDER BY PRIMARY KEY t -- fully parenthetized
+SELECT (a) FROM t ORDER BY PRIMARY KEY t -- fully parenthesized
 SELECT a FROM t ORDER BY PRIMARY KEY t -- literals removed
 SELECT _ FROM _ ORDER BY PRIMARY KEY _ -- identifiers removed
 
@@ -1314,7 +1314,7 @@ parse
 SELECT a FROM t ORDER BY PRIMARY KEY t ASC
 ----
 SELECT a FROM t ORDER BY PRIMARY KEY t ASC
-SELECT (a) FROM t ORDER BY PRIMARY KEY t ASC -- fully parenthetized
+SELECT (a) FROM t ORDER BY PRIMARY KEY t ASC -- fully parenthesized
 SELECT a FROM t ORDER BY PRIMARY KEY t ASC -- literals removed
 SELECT _ FROM _ ORDER BY PRIMARY KEY _ ASC -- identifiers removed
 
@@ -1322,7 +1322,7 @@ parse
 SELECT a FROM t ORDER BY PRIMARY KEY t DESC
 ----
 SELECT a FROM t ORDER BY PRIMARY KEY t DESC
-SELECT (a) FROM t ORDER BY PRIMARY KEY t DESC -- fully parenthetized
+SELECT (a) FROM t ORDER BY PRIMARY KEY t DESC -- fully parenthesized
 SELECT a FROM t ORDER BY PRIMARY KEY t DESC -- literals removed
 SELECT _ FROM _ ORDER BY PRIMARY KEY _ DESC -- identifiers removed
 
@@ -1330,7 +1330,7 @@ parse
 SELECT a FROM t ORDER BY INDEX t@foo
 ----
 SELECT a FROM t ORDER BY INDEX t@foo
-SELECT (a) FROM t ORDER BY INDEX t@foo -- fully parenthetized
+SELECT (a) FROM t ORDER BY INDEX t@foo -- fully parenthesized
 SELECT a FROM t ORDER BY INDEX t@foo -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ -- identifiers removed
 
@@ -1338,7 +1338,7 @@ parse
 SELECT a FROM t ORDER BY INDEX t@foo ASC
 ----
 SELECT a FROM t ORDER BY INDEX t@foo ASC
-SELECT (a) FROM t ORDER BY INDEX t@foo ASC -- fully parenthetized
+SELECT (a) FROM t ORDER BY INDEX t@foo ASC -- fully parenthesized
 SELECT a FROM t ORDER BY INDEX t@foo ASC -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ ASC -- identifiers removed
 
@@ -1346,7 +1346,7 @@ parse
 SELECT a FROM t ORDER BY INDEX t@foo DESC
 ----
 SELECT a FROM t ORDER BY INDEX t@foo DESC
-SELECT (a) FROM t ORDER BY INDEX t@foo DESC -- fully parenthetized
+SELECT (a) FROM t ORDER BY INDEX t@foo DESC -- fully parenthesized
 SELECT a FROM t ORDER BY INDEX t@foo DESC -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ DESC -- identifiers removed
 
@@ -1354,7 +1354,7 @@ parse
 SELECT a FROM t ORDER BY INDEX t@primary
 ----
 SELECT a FROM t ORDER BY INDEX t@primary
-SELECT (a) FROM t ORDER BY INDEX t@primary -- fully parenthetized
+SELECT (a) FROM t ORDER BY INDEX t@primary -- fully parenthesized
 SELECT a FROM t ORDER BY INDEX t@primary -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ -- identifiers removed
 
@@ -1362,7 +1362,7 @@ parse
 SELECT a FROM t ORDER BY INDEX t@like
 ----
 SELECT a FROM t ORDER BY INDEX t@like
-SELECT (a) FROM t ORDER BY INDEX t@like -- fully parenthetized
+SELECT (a) FROM t ORDER BY INDEX t@like -- fully parenthesized
 SELECT a FROM t ORDER BY INDEX t@like -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ -- identifiers removed
 
@@ -1370,7 +1370,7 @@ parse
 SELECT a FROM t ORDER BY a NULLS FIRST
 ----
 SELECT a FROM t ORDER BY a NULLS FIRST
-SELECT (a) FROM t ORDER BY (a) NULLS FIRST -- fully parenthetized
+SELECT (a) FROM t ORDER BY (a) NULLS FIRST -- fully parenthesized
 SELECT a FROM t ORDER BY a NULLS FIRST -- literals removed
 SELECT _ FROM _ ORDER BY _ NULLS FIRST -- identifiers removed
 
@@ -1378,7 +1378,7 @@ parse
 SELECT a FROM t ORDER BY a ASC NULLS FIRST
 ----
 SELECT a FROM t ORDER BY a ASC NULLS FIRST
-SELECT (a) FROM t ORDER BY (a) ASC NULLS FIRST -- fully parenthetized
+SELECT (a) FROM t ORDER BY (a) ASC NULLS FIRST -- fully parenthesized
 SELECT a FROM t ORDER BY a ASC NULLS FIRST -- literals removed
 SELECT _ FROM _ ORDER BY _ ASC NULLS FIRST -- identifiers removed
 
@@ -1386,7 +1386,7 @@ parse
 SELECT a FROM t ORDER BY a DESC NULLS LAST
 ----
 SELECT a FROM t ORDER BY a DESC NULLS LAST
-SELECT (a) FROM t ORDER BY (a) DESC NULLS LAST -- fully parenthetized
+SELECT (a) FROM t ORDER BY (a) DESC NULLS LAST -- fully parenthesized
 SELECT a FROM t ORDER BY a DESC NULLS LAST -- literals removed
 SELECT _ FROM _ ORDER BY _ DESC NULLS LAST -- identifiers removed
 
@@ -1394,7 +1394,7 @@ parse
 SELECT 1 FROM t GROUP BY a
 ----
 SELECT 1 FROM t GROUP BY a
-SELECT (1) FROM t GROUP BY (a) -- fully parenthetized
+SELECT (1) FROM t GROUP BY (a) -- fully parenthesized
 SELECT _ FROM t GROUP BY a -- literals removed
 SELECT 1 FROM _ GROUP BY _ -- identifiers removed
 
@@ -1402,7 +1402,7 @@ parse
 SELECT 1 FROM t GROUP BY a, b
 ----
 SELECT 1 FROM t GROUP BY a, b
-SELECT (1) FROM t GROUP BY (a), (b) -- fully parenthetized
+SELECT (1) FROM t GROUP BY (a), (b) -- fully parenthesized
 SELECT _ FROM t GROUP BY a, b -- literals removed
 SELECT 1 FROM _ GROUP BY _, _ -- identifiers removed
 
@@ -1410,7 +1410,7 @@ parse
 SELECT 1 FROM t GROUP BY ()
 ----
 SELECT 1 FROM t GROUP BY ()
-SELECT (1) FROM t GROUP BY (()) -- fully parenthetized
+SELECT (1) FROM t GROUP BY (()) -- fully parenthesized
 SELECT _ FROM t GROUP BY () -- literals removed
 SELECT 1 FROM _ GROUP BY () -- identifiers removed
 
@@ -1418,7 +1418,7 @@ parse
 SELECT sum(x ORDER BY y) FROM t
 ----
 SELECT sum(x ORDER BY y) FROM t
-SELECT ((sum)((x) ORDER BY (y))) FROM t -- fully parenthetized
+SELECT ((sum)((x) ORDER BY (y))) FROM t -- fully parenthesized
 SELECT sum(x ORDER BY y) FROM t -- literals removed
 SELECT sum(_ ORDER BY _) FROM _ -- identifiers removed
 
@@ -1426,7 +1426,7 @@ parse
 SELECT sum(x ORDER BY y, z) FROM t
 ----
 SELECT sum(x ORDER BY y, z) FROM t
-SELECT ((sum)((x) ORDER BY (y), (z))) FROM t -- fully parenthetized
+SELECT ((sum)((x) ORDER BY (y), (z))) FROM t -- fully parenthesized
 SELECT sum(x ORDER BY y, z) FROM t -- literals removed
 SELECT sum(_ ORDER BY _, _) FROM _ -- identifiers removed
 
@@ -1434,7 +1434,7 @@ parse
 SELECT a FROM t HAVING a = b
 ----
 SELECT a FROM t HAVING a = b
-SELECT (a) FROM t HAVING ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t HAVING ((a) = (b)) -- fully parenthesized
 SELECT a FROM t HAVING a = b -- literals removed
 SELECT _ FROM _ HAVING _ = _ -- identifiers removed
 
@@ -1442,7 +1442,7 @@ parse
 SELECT a FROM t WINDOW w AS ()
 ----
 SELECT a FROM t WINDOW w AS ()
-SELECT (a) FROM t WINDOW w AS () -- fully parenthetized
+SELECT (a) FROM t WINDOW w AS () -- fully parenthesized
 SELECT a FROM t WINDOW w AS () -- literals removed
 SELECT _ FROM _ WINDOW _ AS () -- identifiers removed
 
@@ -1450,7 +1450,7 @@ parse
 SELECT a FROM t WINDOW w AS (w2)
 ----
 SELECT a FROM t WINDOW w AS (w2)
-SELECT (a) FROM t WINDOW w AS (w2) -- fully parenthetized
+SELECT (a) FROM t WINDOW w AS (w2) -- fully parenthesized
 SELECT a FROM t WINDOW w AS (w2) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (_) -- identifiers removed
 
@@ -1458,7 +1458,7 @@ parse
 SELECT a FROM t WINDOW w AS (PARTITION BY b)
 ----
 SELECT a FROM t WINDOW w AS (PARTITION BY b)
-SELECT (a) FROM t WINDOW w AS (PARTITION BY (b)) -- fully parenthetized
+SELECT (a) FROM t WINDOW w AS (PARTITION BY (b)) -- fully parenthesized
 SELECT a FROM t WINDOW w AS (PARTITION BY b) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (PARTITION BY _) -- identifiers removed
 
@@ -1466,7 +1466,7 @@ parse
 SELECT a FROM t WINDOW w AS (PARTITION BY b, 1 + 2)
 ----
 SELECT a FROM t WINDOW w AS (PARTITION BY b, 1 + 2)
-SELECT (a) FROM t WINDOW w AS (PARTITION BY (b), ((1) + (2))) -- fully parenthetized
+SELECT (a) FROM t WINDOW w AS (PARTITION BY (b), ((1) + (2))) -- fully parenthesized
 SELECT a FROM t WINDOW w AS (PARTITION BY b, _ + _) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (PARTITION BY _, 1 + 2) -- identifiers removed
 
@@ -1474,7 +1474,7 @@ parse
 SELECT a FROM t WINDOW w AS (ORDER BY c)
 ----
 SELECT a FROM t WINDOW w AS (ORDER BY c)
-SELECT (a) FROM t WINDOW w AS (ORDER BY (c)) -- fully parenthetized
+SELECT (a) FROM t WINDOW w AS (ORDER BY (c)) -- fully parenthesized
 SELECT a FROM t WINDOW w AS (ORDER BY c) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (ORDER BY _) -- identifiers removed
 
@@ -1482,7 +1482,7 @@ parse
 SELECT a FROM t WINDOW w AS (ORDER BY c, 1 + 2)
 ----
 SELECT a FROM t WINDOW w AS (ORDER BY c, 1 + 2)
-SELECT (a) FROM t WINDOW w AS (ORDER BY (c), ((1) + (2))) -- fully parenthetized
+SELECT (a) FROM t WINDOW w AS (ORDER BY (c), ((1) + (2))) -- fully parenthesized
 SELECT a FROM t WINDOW w AS (ORDER BY c, _ + _) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (ORDER BY _, 1 + 2) -- identifiers removed
 
@@ -1490,7 +1490,7 @@ parse
 SELECT a FROM t WINDOW w AS (PARTITION BY b ORDER BY c)
 ----
 SELECT a FROM t WINDOW w AS (PARTITION BY b ORDER BY c)
-SELECT (a) FROM t WINDOW w AS (PARTITION BY (b) ORDER BY (c)) -- fully parenthetized
+SELECT (a) FROM t WINDOW w AS (PARTITION BY (b) ORDER BY (c)) -- fully parenthesized
 SELECT a FROM t WINDOW w AS (PARTITION BY b ORDER BY c) -- literals removed
 SELECT _ FROM _ WINDOW _ AS (PARTITION BY _ ORDER BY _) -- identifiers removed
 
@@ -1498,7 +1498,7 @@ parse
 SELECT avg(1) OVER w FROM t
 ----
 SELECT avg(1) OVER w FROM t
-SELECT ((avg)((1)) OVER w) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER w) FROM t -- fully parenthesized
 SELECT avg(_) OVER w FROM t -- literals removed
 SELECT avg(1) OVER _ FROM _ -- identifiers removed
 
@@ -1506,7 +1506,7 @@ parse
 SELECT avg(1) OVER () FROM t
 ----
 SELECT avg(1) OVER () FROM t
-SELECT ((avg)((1)) OVER ()) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER ()) FROM t -- fully parenthesized
 SELECT avg(_) OVER () FROM t -- literals removed
 SELECT avg(1) OVER () FROM _ -- identifiers removed
 
@@ -1514,7 +1514,7 @@ parse
 SELECT avg(1) OVER (w) FROM t
 ----
 SELECT avg(1) OVER (w) FROM t
-SELECT ((avg)((1)) OVER (w)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w) FROM t -- literals removed
 SELECT avg(1) OVER (_) FROM _ -- identifiers removed
 
@@ -1522,7 +1522,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b))) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b))) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _) FROM _ -- identifiers removed
 
@@ -1530,7 +1530,7 @@ parse
 SELECT avg(1) OVER (ORDER BY c) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c) FROM t
-SELECT ((avg)((1)) OVER (ORDER BY (c))) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ORDER BY (c))) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ORDER BY c) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _) FROM _ -- identifiers removed
 
@@ -1538,7 +1538,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c))) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c))) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b ORDER BY c) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _) FROM _ -- identifiers removed
 
@@ -1546,7 +1546,7 @@ parse
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c) FROM t
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c) FROM t
-SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c))) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c))) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w PARTITION BY b ORDER BY c) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _) FROM _ -- identifiers removed
 
@@ -1554,7 +1554,7 @@ parse
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1562,7 +1562,7 @@ parse
 SELECT avg(1) OVER (ROWS 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (ROWS (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1570,7 +1570,7 @@ parse
 SELECT avg(1) OVER (ROWS CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (ROWS CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1578,7 +1578,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1586,7 +1586,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1594,7 +1594,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1602,7 +1602,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1610,7 +1610,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1618,7 +1618,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1626,7 +1626,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1634,7 +1634,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN _ PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1642,7 +1642,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1650,7 +1650,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN CURRENT ROW AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1658,7 +1658,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1666,7 +1666,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN _ FOLLOWING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1674,7 +1674,7 @@ parse
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS BETWEEN _ FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1682,7 +1682,7 @@ parse
 SELECT avg(1) OVER (w ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w ROWS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (w ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1690,7 +1690,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1698,7 +1698,7 @@ parse
 SELECT avg(1) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1706,7 +1706,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1714,7 +1714,7 @@ parse
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) ROWS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w PARTITION BY b ORDER BY c ROWS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _ ROWS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1722,7 +1722,7 @@ parse
 SELECT avg(1) OVER (RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1730,7 +1730,7 @@ parse
 SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (RANGE (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1738,7 +1738,7 @@ parse
 SELECT avg(1) OVER (RANGE CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (RANGE CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1746,7 +1746,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1754,7 +1754,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1762,7 +1762,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1770,7 +1770,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1778,7 +1778,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1786,7 +1786,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1794,7 +1794,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1802,7 +1802,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN _ PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1810,7 +1810,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1818,7 +1818,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN CURRENT ROW AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1826,7 +1826,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1834,7 +1834,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN _ FOLLOWING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1842,7 +1842,7 @@ parse
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (RANGE BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (RANGE BETWEEN _ FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1850,7 +1850,7 @@ parse
 SELECT avg(1) OVER (w RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w RANGE UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (w RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1858,7 +1858,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b RANGE UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1866,7 +1866,7 @@ parse
 SELECT avg(1) OVER (ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1874,7 +1874,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1882,7 +1882,7 @@ parse
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) RANGE UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w PARTITION BY b ORDER BY c RANGE UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _ RANGE UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1890,7 +1890,7 @@ parse
 SELECT avg(1) OVER (GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -1898,7 +1898,7 @@ parse
 SELECT avg(1) OVER (GROUPS 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1906,7 +1906,7 @@ parse
 SELECT avg(1) OVER (GROUPS CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (GROUPS CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1914,7 +1914,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1922,7 +1922,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1930,7 +1930,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1938,7 +1938,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1946,7 +1946,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND (1) PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND _ PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 PRECEDING) FROM _ -- identifiers removed
 
@@ -1954,7 +1954,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1962,7 +1962,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1970,7 +1970,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) PRECEDING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN _ PRECEDING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -1978,7 +1978,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM _ -- identifiers removed
 
@@ -1986,7 +1986,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN CURRENT ROW AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -1994,7 +1994,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -2002,7 +2002,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) FOLLOWING AND (1) FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN _ FOLLOWING AND _ FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM _ -- identifiers removed
 
@@ -2010,7 +2010,7 @@ parse
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
 ----
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
-SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (GROUPS BETWEEN (1) FOLLOWING AND UNBOUNDED FOLLOWING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (GROUPS BETWEEN _ FOLLOWING AND UNBOUNDED FOLLOWING) FROM t -- literals removed
 SELECT avg(1) OVER (GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM _ -- identifiers removed
 
@@ -2018,7 +2018,7 @@ parse
 SELECT avg(1) OVER (w GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w GROUPS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (w GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -2026,7 +2026,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b GROUPS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -2034,7 +2034,7 @@ parse
 SELECT avg(1) OVER (ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (ORDER BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -2042,7 +2042,7 @@ parse
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (PARTITION BY (b) ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (PARTITION BY _ ORDER BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -2050,7 +2050,7 @@ parse
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
 ----
 SELECT avg(1) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t
-SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (w PARTITION BY (b) ORDER BY (c) GROUPS UNBOUNDED PRECEDING)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t -- literals removed
 SELECT avg(1) OVER (_ PARTITION BY _ ORDER BY _ GROUPS UNBOUNDED PRECEDING) FROM _ -- identifiers removed
 
@@ -2058,7 +2058,7 @@ parse
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t
-SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM _ -- identifiers removed
 
@@ -2066,7 +2066,7 @@ parse
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t
-SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM _ -- identifiers removed
 
@@ -2074,7 +2074,7 @@ parse
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t
 ----
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t
-SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES)) FROM t -- fully parenthetized
+SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES)) FROM t -- fully parenthesized
 SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM _ -- identifiers removed
 
@@ -2082,7 +2082,7 @@ parse
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c) FROM t
-SELECT ((percentile_disc)((0.50)) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthetized
+SELECT ((percentile_disc)((0.50)) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
 SELECT percentile_disc(_) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
@@ -2090,7 +2090,7 @@ parse
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c DESC) FROM t
 ----
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c DESC) FROM t
-SELECT ((percentile_disc)((0.50)) WITHIN GROUP (ORDER BY (c) DESC)) FROM t -- fully parenthetized
+SELECT ((percentile_disc)((0.50)) WITHIN GROUP (ORDER BY (c) DESC)) FROM t -- fully parenthesized
 SELECT percentile_disc(_) WITHIN GROUP (ORDER BY c DESC) FROM t -- literals removed
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY _ DESC) FROM _ -- identifiers removed
 
@@ -2098,7 +2098,7 @@ parse
 SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY c) FROM t
-SELECT ((percentile_cont)((0.50)) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthetized
+SELECT ((percentile_cont)((0.50)) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
 SELECT percentile_cont(_) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
@@ -2106,7 +2106,7 @@ parse
 SELECT percentile_disc(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_disc(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
-SELECT ((percentile_disc)((ARRAY[(0.95), (0.90)])) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthetized
+SELECT ((percentile_disc)((ARRAY[(0.95), (0.90)])) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
 SELECT percentile_disc(ARRAY[_, _]) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_disc(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
@@ -2114,7 +2114,7 @@ parse
 SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
 ----
 SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
-SELECT ((percentile_cont)((ARRAY[(0.95), (0.90)])) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthetized
+SELECT ((percentile_cont)((ARRAY[(0.95), (0.90)])) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
 SELECT percentile_cont(ARRAY[_, _]) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
 
@@ -2122,7 +2122,7 @@ parse
 SELECT avg(1) FILTER (WHERE a > b)
 ----
 SELECT avg(1) FILTER (WHERE a > b)
-SELECT ((avg)((1)) FILTER (WHERE ((a) > (b)))) -- fully parenthetized
+SELECT ((avg)((1)) FILTER (WHERE ((a) > (b)))) -- fully parenthesized
 SELECT avg(_) FILTER (WHERE a > b) -- literals removed
 SELECT avg(1) FILTER (WHERE _ > _) -- identifiers removed
 
@@ -2130,7 +2130,7 @@ parse
 SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)
 ----
 SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)
-SELECT ((avg)((1)) FILTER (WHERE ((a) > (b))) OVER (ORDER BY (c))) -- fully parenthetized
+SELECT ((avg)((1)) FILTER (WHERE ((a) > (b))) OVER (ORDER BY (c))) -- fully parenthesized
 SELECT avg(_) FILTER (WHERE a > b) OVER (ORDER BY c) -- literals removed
 SELECT avg(1) FILTER (WHERE _ > _) OVER (ORDER BY _) -- identifiers removed
 
@@ -2138,7 +2138,7 @@ parse
 SELECT a FROM t UNION SELECT 1 FROM t
 ----
 SELECT a FROM t UNION SELECT 1 FROM t
-SELECT (a) FROM t UNION SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t UNION SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t UNION SELECT _ FROM t -- literals removed
 SELECT _ FROM _ UNION SELECT 1 FROM _ -- identifiers removed
 
@@ -2146,7 +2146,7 @@ parse
 SELECT a FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t
 ----
 SELECT a FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t
-SELECT (a) FROM t UNION SELECT (1) FROM t UNION SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t UNION SELECT (1) FROM t UNION SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t UNION SELECT _ FROM t UNION SELECT _ FROM t -- literals removed
 SELECT _ FROM _ UNION SELECT 1 FROM _ UNION SELECT 1 FROM _ -- identifiers removed
 
@@ -2154,7 +2154,7 @@ parse
 SELECT a FROM t UNION ALL SELECT 1 FROM t
 ----
 SELECT a FROM t UNION ALL SELECT 1 FROM t
-SELECT (a) FROM t UNION ALL SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t UNION ALL SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t UNION ALL SELECT _ FROM t -- literals removed
 SELECT _ FROM _ UNION ALL SELECT 1 FROM _ -- identifiers removed
 
@@ -2162,7 +2162,7 @@ parse
 SELECT a FROM t UNION DISTINCT SELECT 1 FROM t
 ----
 SELECT a FROM t UNION SELECT 1 FROM t -- normalized!
-SELECT (a) FROM t UNION SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t UNION SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t UNION SELECT _ FROM t -- literals removed
 SELECT _ FROM _ UNION SELECT 1 FROM _ -- identifiers removed
 
@@ -2171,7 +2171,7 @@ parse
 SELECT a FROM t EXCEPT SELECT 1 FROM t
 ----
 SELECT a FROM t EXCEPT SELECT 1 FROM t
-SELECT (a) FROM t EXCEPT SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t EXCEPT SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t EXCEPT SELECT _ FROM t -- literals removed
 SELECT _ FROM _ EXCEPT SELECT 1 FROM _ -- identifiers removed
 
@@ -2179,7 +2179,7 @@ parse
 SELECT a FROM t EXCEPT ALL SELECT 1 FROM t
 ----
 SELECT a FROM t EXCEPT ALL SELECT 1 FROM t
-SELECT (a) FROM t EXCEPT ALL SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t EXCEPT ALL SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t EXCEPT ALL SELECT _ FROM t -- literals removed
 SELECT _ FROM _ EXCEPT ALL SELECT 1 FROM _ -- identifiers removed
 
@@ -2187,7 +2187,7 @@ parse
 SELECT a FROM t EXCEPT DISTINCT SELECT 1 FROM t
 ----
 SELECT a FROM t EXCEPT SELECT 1 FROM t -- normalized!
-SELECT (a) FROM t EXCEPT SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t EXCEPT SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t EXCEPT SELECT _ FROM t -- literals removed
 SELECT _ FROM _ EXCEPT SELECT 1 FROM _ -- identifiers removed
 
@@ -2195,7 +2195,7 @@ parse
 SELECT a FROM t INTERSECT SELECT 1 FROM t
 ----
 SELECT a FROM t INTERSECT SELECT 1 FROM t
-SELECT (a) FROM t INTERSECT SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t INTERSECT SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t INTERSECT SELECT _ FROM t -- literals removed
 SELECT _ FROM _ INTERSECT SELECT 1 FROM _ -- identifiers removed
 
@@ -2203,7 +2203,7 @@ parse
 SELECT a FROM t INTERSECT ALL SELECT 1 FROM t
 ----
 SELECT a FROM t INTERSECT ALL SELECT 1 FROM t
-SELECT (a) FROM t INTERSECT ALL SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t INTERSECT ALL SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t INTERSECT ALL SELECT _ FROM t -- literals removed
 SELECT _ FROM _ INTERSECT ALL SELECT 1 FROM _ -- identifiers removed
 
@@ -2211,7 +2211,7 @@ parse
 SELECT a FROM t INTERSECT DISTINCT SELECT 1 FROM t
 ----
 SELECT a FROM t INTERSECT SELECT 1 FROM t -- normalized!
-SELECT (a) FROM t INTERSECT SELECT (1) FROM t -- fully parenthetized
+SELECT (a) FROM t INTERSECT SELECT (1) FROM t -- fully parenthesized
 SELECT a FROM t INTERSECT SELECT _ FROM t -- literals removed
 SELECT _ FROM _ INTERSECT SELECT 1 FROM _ -- identifiers removed
 
@@ -2219,7 +2219,7 @@ parse
 SELECT a FROM t1 JOIN t2 ON a = b
 ----
 SELECT a FROM t1 JOIN t2 ON a = b
-SELECT (a) FROM t1 JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ JOIN _ ON _ = _ -- identifiers removed
 
@@ -2227,7 +2227,7 @@ parse
 SELECT a FROM t1 JOIN t2 USING (a)
 ----
 SELECT a FROM t1 JOIN t2 USING (a)
-SELECT (a) FROM t1 JOIN t2 USING (a) -- fully parenthetized
+SELECT (a) FROM t1 JOIN t2 USING (a) -- fully parenthesized
 SELECT a FROM t1 JOIN t2 USING (a) -- literals removed
 SELECT _ FROM _ JOIN _ USING (_) -- identifiers removed
 
@@ -2235,7 +2235,7 @@ parse
 SELECT a FROM t1 INNER MERGE JOIN t2 USING (a)
 ----
 SELECT a FROM t1 INNER MERGE JOIN t2 USING (a)
-SELECT (a) FROM t1 INNER MERGE JOIN t2 USING (a) -- fully parenthetized
+SELECT (a) FROM t1 INNER MERGE JOIN t2 USING (a) -- fully parenthesized
 SELECT a FROM t1 INNER MERGE JOIN t2 USING (a) -- literals removed
 SELECT _ FROM _ INNER MERGE JOIN _ USING (_) -- identifiers removed
 
@@ -2243,7 +2243,7 @@ parse
 SELECT a FROM t1 LEFT JOIN t2 ON a = b
 ----
 SELECT a FROM t1 LEFT JOIN t2 ON a = b
-SELECT (a) FROM t1 LEFT JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 LEFT JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 LEFT JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ LEFT JOIN _ ON _ = _ -- identifiers removed
 
@@ -2251,7 +2251,7 @@ parse
 SELECT a FROM t1 LEFT OUTER JOIN t2 ON a = b
 ----
 SELECT a FROM t1 LEFT JOIN t2 ON a = b -- normalized!
-SELECT (a) FROM t1 LEFT JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 LEFT JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 LEFT JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ LEFT JOIN _ ON _ = _ -- identifiers removed
 
@@ -2259,7 +2259,7 @@ parse
 SELECT a FROM t1 LEFT LOOKUP JOIN t2 ON a = b
 ----
 SELECT a FROM t1 LEFT LOOKUP JOIN t2 ON a = b
-SELECT (a) FROM t1 LEFT LOOKUP JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 LEFT LOOKUP JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 LEFT LOOKUP JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ LEFT LOOKUP JOIN _ ON _ = _ -- identifiers removed
 
@@ -2267,7 +2267,7 @@ parse
 SELECT a FROM t1 LEFT INVERTED JOIN t2 ON a @> b
 ----
 SELECT a FROM t1 LEFT INVERTED JOIN t2 ON a @> b
-SELECT (a) FROM t1 LEFT INVERTED JOIN t2 ON ((a) @> (b)) -- fully parenthetized
+SELECT (a) FROM t1 LEFT INVERTED JOIN t2 ON ((a) @> (b)) -- fully parenthesized
 SELECT a FROM t1 LEFT INVERTED JOIN t2 ON a @> b -- literals removed
 SELECT _ FROM _ LEFT INVERTED JOIN _ ON _ @> _ -- identifiers removed
 
@@ -2275,7 +2275,7 @@ parse
 SELECT a FROM t1 RIGHT JOIN t2 ON a = b
 ----
 SELECT a FROM t1 RIGHT JOIN t2 ON a = b
-SELECT (a) FROM t1 RIGHT JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 RIGHT JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 RIGHT JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ RIGHT JOIN _ ON _ = _ -- identifiers removed
 
@@ -2283,7 +2283,7 @@ parse
 SELECT a FROM t1 RIGHT OUTER JOIN t2 ON a = b
 ----
 SELECT a FROM t1 RIGHT JOIN t2 ON a = b -- normalized!
-SELECT (a) FROM t1 RIGHT JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 RIGHT JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 RIGHT JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ RIGHT JOIN _ ON _ = _ -- identifiers removed
 
@@ -2291,7 +2291,7 @@ parse
 SELECT a FROM t1 RIGHT OUTER MERGE JOIN t2 ON a = b
 ----
 SELECT a FROM t1 RIGHT MERGE JOIN t2 ON a = b -- normalized!
-SELECT (a) FROM t1 RIGHT MERGE JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 RIGHT MERGE JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 RIGHT MERGE JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ RIGHT MERGE JOIN _ ON _ = _ -- identifiers removed
 
@@ -2300,7 +2300,7 @@ parse
 SELECT a FROM t1 INNER JOIN t2 ON a = b
 ----
 SELECT a FROM t1 INNER JOIN t2 ON a = b
-SELECT (a) FROM t1 INNER JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 INNER JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 INNER JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ INNER JOIN _ ON _ = _ -- identifiers removed
 
@@ -2308,7 +2308,7 @@ parse
 SELECT a FROM t1 INNER HASH JOIN t2 ON a = b
 ----
 SELECT a FROM t1 INNER HASH JOIN t2 ON a = b
-SELECT (a) FROM t1 INNER HASH JOIN t2 ON ((a) = (b)) -- fully parenthetized
+SELECT (a) FROM t1 INNER HASH JOIN t2 ON ((a) = (b)) -- fully parenthesized
 SELECT a FROM t1 INNER HASH JOIN t2 ON a = b -- literals removed
 SELECT _ FROM _ INNER HASH JOIN _ ON _ = _ -- identifiers removed
 
@@ -2316,7 +2316,7 @@ parse
 SELECT a FROM t1 CROSS JOIN t2
 ----
 SELECT a FROM t1 CROSS JOIN t2
-SELECT (a) FROM t1 CROSS JOIN t2 -- fully parenthetized
+SELECT (a) FROM t1 CROSS JOIN t2 -- fully parenthesized
 SELECT a FROM t1 CROSS JOIN t2 -- literals removed
 SELECT _ FROM _ CROSS JOIN _ -- identifiers removed
 
@@ -2324,7 +2324,7 @@ parse
 SELECT a FROM t1 CROSS LOOKUP JOIN t2
 ----
 SELECT a FROM t1 CROSS LOOKUP JOIN t2
-SELECT (a) FROM t1 CROSS LOOKUP JOIN t2 -- fully parenthetized
+SELECT (a) FROM t1 CROSS LOOKUP JOIN t2 -- fully parenthesized
 SELECT a FROM t1 CROSS LOOKUP JOIN t2 -- literals removed
 SELECT _ FROM _ CROSS LOOKUP JOIN _ -- identifiers removed
 
@@ -2332,7 +2332,7 @@ parse
 SELECT a FROM t1 CROSS INVERTED JOIN t2
 ----
 SELECT a FROM t1 CROSS INVERTED JOIN t2
-SELECT (a) FROM t1 CROSS INVERTED JOIN t2 -- fully parenthetized
+SELECT (a) FROM t1 CROSS INVERTED JOIN t2 -- fully parenthesized
 SELECT a FROM t1 CROSS INVERTED JOIN t2 -- literals removed
 SELECT _ FROM _ CROSS INVERTED JOIN _ -- identifiers removed
 
@@ -2340,7 +2340,7 @@ parse
 SELECT a FROM t1 NATURAL JOIN t2
 ----
 SELECT a FROM t1 NATURAL JOIN t2
-SELECT (a) FROM t1 NATURAL JOIN t2 -- fully parenthetized
+SELECT (a) FROM t1 NATURAL JOIN t2 -- fully parenthesized
 SELECT a FROM t1 NATURAL JOIN t2 -- literals removed
 SELECT _ FROM _ NATURAL JOIN _ -- identifiers removed
 
@@ -2348,7 +2348,7 @@ parse
 SELECT a FROM t1 NATURAL INNER MERGE JOIN t2
 ----
 SELECT a FROM t1 NATURAL INNER MERGE JOIN t2
-SELECT (a) FROM t1 NATURAL INNER MERGE JOIN t2 -- fully parenthetized
+SELECT (a) FROM t1 NATURAL INNER MERGE JOIN t2 -- fully parenthesized
 SELECT a FROM t1 NATURAL INNER MERGE JOIN t2 -- literals removed
 SELECT _ FROM _ NATURAL INNER MERGE JOIN _ -- identifiers removed
 
@@ -2356,7 +2356,7 @@ parse
 SELECT a FROM t1 INNER JOIN t2 USING (a)
 ----
 SELECT a FROM t1 INNER JOIN t2 USING (a)
-SELECT (a) FROM t1 INNER JOIN t2 USING (a) -- fully parenthetized
+SELECT (a) FROM t1 INNER JOIN t2 USING (a) -- fully parenthesized
 SELECT a FROM t1 INNER JOIN t2 USING (a) -- literals removed
 SELECT _ FROM _ INNER JOIN _ USING (_) -- identifiers removed
 
@@ -2364,7 +2364,7 @@ parse
 SELECT a FROM t1 FULL JOIN t2 USING (a)
 ----
 SELECT a FROM t1 FULL JOIN t2 USING (a)
-SELECT (a) FROM t1 FULL JOIN t2 USING (a) -- fully parenthetized
+SELECT (a) FROM t1 FULL JOIN t2 USING (a) -- fully parenthesized
 SELECT a FROM t1 FULL JOIN t2 USING (a) -- literals removed
 SELECT _ FROM _ FULL JOIN _ USING (_) -- identifiers removed
 
@@ -2372,7 +2372,7 @@ parse
 SELECT a FROM t1 FULL MERGE JOIN t2 USING (a)
 ----
 SELECT a FROM t1 FULL MERGE JOIN t2 USING (a)
-SELECT (a) FROM t1 FULL MERGE JOIN t2 USING (a) -- fully parenthetized
+SELECT (a) FROM t1 FULL MERGE JOIN t2 USING (a) -- fully parenthesized
 SELECT a FROM t1 FULL MERGE JOIN t2 USING (a) -- literals removed
 SELECT _ FROM _ FULL MERGE JOIN _ USING (_) -- identifiers removed
 
@@ -2380,7 +2380,7 @@ parse
 SELECT * FROM (t1 WITH ORDINALITY AS o1 CROSS JOIN t2 WITH ORDINALITY AS o2) WITH ORDINALITY AS o3
 ----
 SELECT * FROM (t1 WITH ORDINALITY AS o1 CROSS JOIN t2 WITH ORDINALITY AS o2) WITH ORDINALITY AS o3
-SELECT (*) FROM (t1 WITH ORDINALITY AS o1 CROSS JOIN t2 WITH ORDINALITY AS o2) WITH ORDINALITY AS o3 -- fully parenthetized
+SELECT (*) FROM (t1 WITH ORDINALITY AS o1 CROSS JOIN t2 WITH ORDINALITY AS o2) WITH ORDINALITY AS o3 -- fully parenthesized
 SELECT * FROM (t1 WITH ORDINALITY AS o1 CROSS JOIN t2 WITH ORDINALITY AS o2) WITH ORDINALITY AS o3 -- literals removed
 SELECT * FROM (_ WITH ORDINALITY AS _ CROSS JOIN _ WITH ORDINALITY AS _) WITH ORDINALITY AS _ -- identifiers removed
 
@@ -2388,7 +2388,7 @@ parse
 SELECT a FROM t1 AS OF SYSTEM TIME '2016-01-01'
 ----
 SELECT a FROM t1 AS OF SYSTEM TIME '2016-01-01'
-SELECT (a) FROM t1 AS OF SYSTEM TIME ('2016-01-01') -- fully parenthetized
+SELECT (a) FROM t1 AS OF SYSTEM TIME ('2016-01-01') -- fully parenthesized
 SELECT a FROM t1 AS OF SYSTEM TIME _ -- literals removed
 SELECT _ FROM _ AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
 
@@ -2396,7 +2396,7 @@ parse
 SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'
 ----
 SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'
-SELECT (a) FROM t1, t2 AS OF SYSTEM TIME ('2016-01-01') -- fully parenthetized
+SELECT (a) FROM t1, t2 AS OF SYSTEM TIME ('2016-01-01') -- fully parenthesized
 SELECT a FROM t1, t2 AS OF SYSTEM TIME _ -- literals removed
 SELECT _ FROM _, _ AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
 
@@ -2404,7 +2404,7 @@ parse
 SELECT a FROM t1 AS OF SYSTEM TIME -('a' || 'b')::INTERVAL
 ----
 SELECT a FROM t1 AS OF SYSTEM TIME -('a' || 'b')::INTERVAL
-SELECT (a) FROM t1 AS OF SYSTEM TIME (-((((('a') || ('b'))))::INTERVAL)) -- fully parenthetized
+SELECT (a) FROM t1 AS OF SYSTEM TIME (-((((('a') || ('b'))))::INTERVAL)) -- fully parenthesized
 SELECT a FROM t1 AS OF SYSTEM TIME -(_ || _)::INTERVAL -- literals removed
 SELECT _ FROM _ AS OF SYSTEM TIME -('a' || 'b')::INTERVAL -- identifiers removed
 
@@ -2412,7 +2412,7 @@ parse
 SELECT * FROM t LIMIT ALL
 ----
 SELECT * FROM t LIMIT ALL
-SELECT (*) FROM t LIMIT ALL -- fully parenthetized
+SELECT (*) FROM t LIMIT ALL -- fully parenthesized
 SELECT * FROM t LIMIT ALL -- literals removed
 SELECT * FROM _ LIMIT ALL -- identifiers removed
 
@@ -2420,7 +2420,7 @@ parse
 SELECT EXISTS ((((TABLE error FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE)) AS is FROM ident
 ----
 SELECT EXISTS ((((TABLE error FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE)) AS is FROM ident
-SELECT (EXISTS ((((TABLE error FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE))) AS is FROM ident -- fully parenthetized
+SELECT (EXISTS ((((TABLE error FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE))) AS is FROM ident -- fully parenthesized
 SELECT EXISTS ((((TABLE error FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE)) AS is FROM ident -- literals removed
 SELECT EXISTS ((((TABLE _ FOR KEY SHARE)) LIMIT ALL FOR KEY SHARE)) AS _ FROM _ -- identifiers removed
 
@@ -2428,7 +2428,7 @@ parse
 SELECT a FROM t LIMIT a
 ----
 SELECT a FROM t LIMIT a
-SELECT (a) FROM t LIMIT (a) -- fully parenthetized
+SELECT (a) FROM t LIMIT (a) -- fully parenthesized
 SELECT a FROM t LIMIT a -- literals removed
 SELECT _ FROM _ LIMIT _ -- identifiers removed
 
@@ -2436,7 +2436,7 @@ parse
 SELECT a FROM t OFFSET b
 ----
 SELECT a FROM t OFFSET b
-SELECT (a) FROM t OFFSET (b) -- fully parenthetized
+SELECT (a) FROM t OFFSET (b) -- fully parenthesized
 SELECT a FROM t OFFSET b -- literals removed
 SELECT _ FROM _ OFFSET _ -- identifiers removed
 
@@ -2444,7 +2444,7 @@ parse
 SELECT a FROM t LIMIT a OFFSET b
 ----
 SELECT a FROM t LIMIT a OFFSET b
-SELECT (a) FROM t LIMIT (a) OFFSET (b) -- fully parenthetized
+SELECT (a) FROM t LIMIT (a) OFFSET (b) -- fully parenthesized
 SELECT a FROM t LIMIT a OFFSET b -- literals removed
 SELECT _ FROM _ LIMIT _ OFFSET _ -- identifiers removed
 
@@ -2452,7 +2452,7 @@ parse
 SELECT a FROM t1 OFFSET a ROW
 ----
 SELECT a FROM t1 OFFSET a -- normalized!
-SELECT (a) FROM t1 OFFSET (a) -- fully parenthetized
+SELECT (a) FROM t1 OFFSET (a) -- fully parenthesized
 SELECT a FROM t1 OFFSET a -- literals removed
 SELECT _ FROM _ OFFSET _ -- identifiers removed
 
@@ -2460,7 +2460,7 @@ parse
 SELECT a FROM t1 OFFSET a ROWS
 ----
 SELECT a FROM t1 OFFSET a -- normalized!
-SELECT (a) FROM t1 OFFSET (a) -- fully parenthetized
+SELECT (a) FROM t1 OFFSET (a) -- fully parenthesized
 SELECT a FROM t1 OFFSET a -- literals removed
 SELECT _ FROM _ OFFSET _ -- identifiers removed
 
@@ -2468,7 +2468,7 @@ parse
 SELECT a FROM t OFFSET a LIMIT b
 ----
 SELECT a FROM t LIMIT b OFFSET a -- normalized!
-SELECT (a) FROM t LIMIT (b) OFFSET (a) -- fully parenthetized
+SELECT (a) FROM t LIMIT (b) OFFSET (a) -- fully parenthesized
 SELECT a FROM t LIMIT b OFFSET a -- literals removed
 SELECT _ FROM _ LIMIT _ OFFSET _ -- identifiers removed
 
@@ -2476,7 +2476,7 @@ parse
 SELECT a FROM t FETCH FIRST 3 ROWS ONLY
 ----
 SELECT a FROM t LIMIT 3 -- normalized!
-SELECT (a) FROM t LIMIT (3) -- fully parenthetized
+SELECT (a) FROM t LIMIT (3) -- fully parenthesized
 SELECT a FROM t LIMIT _ -- literals removed
 SELECT _ FROM _ LIMIT 3 -- identifiers removed
 
@@ -2484,7 +2484,7 @@ parse
 SELECT a FROM t FETCH NEXT 3 ROWS ONLY
 ----
 SELECT a FROM t LIMIT 3 -- normalized!
-SELECT (a) FROM t LIMIT (3) -- fully parenthetized
+SELECT (a) FROM t LIMIT (3) -- fully parenthesized
 SELECT a FROM t LIMIT _ -- literals removed
 SELECT _ FROM _ LIMIT 3 -- identifiers removed
 
@@ -2492,7 +2492,7 @@ parse
 SELECT a FROM t FETCH FIRST ROW ONLY
 ----
 SELECT a FROM t LIMIT 1 -- normalized!
-SELECT (a) FROM t LIMIT (1) -- fully parenthetized
+SELECT (a) FROM t LIMIT (1) -- fully parenthesized
 SELECT a FROM t LIMIT _ -- literals removed
 SELECT _ FROM _ LIMIT 1 -- identifiers removed
 
@@ -2500,7 +2500,7 @@ parse
 SELECT a FROM t FETCH FIRST (2 * a) ROWS ONLY
 ----
 SELECT a FROM t LIMIT (2 * a) -- normalized!
-SELECT (a) FROM t LIMIT ((((2) * (a)))) -- fully parenthetized
+SELECT (a) FROM t LIMIT ((((2) * (a)))) -- fully parenthesized
 SELECT a FROM t LIMIT (_ * a) -- literals removed
 SELECT _ FROM _ LIMIT (2 * _) -- identifiers removed
 
@@ -2508,7 +2508,7 @@ parse
 SELECT a FROM t OFFSET b FETCH FIRST (2 * a) ROWS ONLY
 ----
 SELECT a FROM t LIMIT (2 * a) OFFSET b -- normalized!
-SELECT (a) FROM t LIMIT ((((2) * (a)))) OFFSET (b) -- fully parenthetized
+SELECT (a) FROM t LIMIT ((((2) * (a)))) OFFSET (b) -- fully parenthesized
 SELECT a FROM t LIMIT (_ * a) OFFSET b -- literals removed
 SELECT _ FROM _ LIMIT (2 * _) OFFSET _ -- identifiers removed
 
@@ -2516,7 +2516,7 @@ parse
 SELECT a FROM t FETCH FIRST (2 * a) ROWS ONLY OFFSET b ROWS
 ----
 SELECT a FROM t LIMIT (2 * a) OFFSET b -- normalized!
-SELECT (a) FROM t LIMIT ((((2) * (a)))) OFFSET (b) -- fully parenthetized
+SELECT (a) FROM t LIMIT ((((2) * (a)))) OFFSET (b) -- fully parenthesized
 SELECT a FROM t LIMIT (_ * a) OFFSET b -- literals removed
 SELECT _ FROM _ LIMIT (2 * _) OFFSET _ -- identifiers removed
 
@@ -2524,7 +2524,7 @@ parse
 SELECT a FROM t FETCH FIRST $1 ROWS ONLY OFFSET $2 ROWS
 ----
 SELECT a FROM t LIMIT $1 OFFSET $2 -- normalized!
-SELECT (a) FROM t LIMIT ($1) OFFSET ($2) -- fully parenthetized
+SELECT (a) FROM t LIMIT ($1) OFFSET ($2) -- fully parenthesized
 SELECT a FROM t LIMIT $1 OFFSET $2 -- literals removed
 SELECT _ FROM _ LIMIT $1 OFFSET $2 -- identifiers removed
 
@@ -2532,7 +2532,7 @@ parse
 SELECT a FROM t FETCH FIRST +3 ROWS ONLY OFFSET +3 ROWS
 ----
 SELECT a FROM t LIMIT 3 OFFSET 3 -- normalized!
-SELECT (a) FROM t LIMIT (3) OFFSET (3) -- fully parenthetized
+SELECT (a) FROM t LIMIT (3) OFFSET (3) -- fully parenthesized
 SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
 SELECT _ FROM _ LIMIT 3 OFFSET 3 -- identifiers removed
 
@@ -2540,7 +2540,7 @@ parse
 SELECT a FROM t FETCH FIRST -3 ROWS ONLY OFFSET -3 ROWS
 ----
 SELECT a FROM t LIMIT -3 OFFSET -3 -- normalized!
-SELECT (a) FROM t LIMIT (-3) OFFSET (-3) -- fully parenthetized
+SELECT (a) FROM t LIMIT (-3) OFFSET (-3) -- fully parenthesized
 SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
 SELECT _ FROM _ LIMIT -3 OFFSET -3 -- identifiers removed
 
@@ -2548,7 +2548,7 @@ parse
 SELECT a FROM t FETCH FIRST +3.0 ROWS ONLY OFFSET +3.0 ROWS
 ----
 SELECT a FROM t LIMIT 3.0 OFFSET 3.0 -- normalized!
-SELECT (a) FROM t LIMIT (3.0) OFFSET (3.0) -- fully parenthetized
+SELECT (a) FROM t LIMIT (3.0) OFFSET (3.0) -- fully parenthesized
 SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
 SELECT _ FROM _ LIMIT 3.0 OFFSET 3.0 -- identifiers removed
 
@@ -2556,7 +2556,7 @@ parse
 SELECT a FROM t FETCH FIRST -3.0 ROWS ONLY OFFSET -3.0 ROWS
 ----
 SELECT a FROM t LIMIT -3.0 OFFSET -3.0 -- normalized!
-SELECT (a) FROM t LIMIT (-3.0) OFFSET (-3.0) -- fully parenthetized
+SELECT (a) FROM t LIMIT (-3.0) OFFSET (-3.0) -- fully parenthesized
 SELECT a FROM t LIMIT _ OFFSET _ -- literals removed
 SELECT _ FROM _ LIMIT -3.0 OFFSET -3.0 -- identifiers removed
 
@@ -2566,7 +2566,7 @@ parse
 SELECT DISTINCT * FROM t
 ----
 SELECT DISTINCT * FROM t
-SELECT DISTINCT (*) FROM t -- fully parenthetized
+SELECT DISTINCT (*) FROM t -- fully parenthesized
 SELECT DISTINCT * FROM t -- literals removed
 SELECT DISTINCT * FROM _ -- identifiers removed
 
@@ -2574,7 +2574,7 @@ parse
 SELECT DISTINCT a, b FROM t
 ----
 SELECT DISTINCT a, b FROM t
-SELECT DISTINCT (a), (b) FROM t -- fully parenthetized
+SELECT DISTINCT (a), (b) FROM t -- fully parenthesized
 SELECT DISTINCT a, b FROM t -- literals removed
 SELECT DISTINCT _, _ FROM _ -- identifiers removed
 
@@ -2582,7 +2582,7 @@ parse
 SELECT DISTINCT ON (a, b) c FROM t
 ----
 SELECT DISTINCT ON (a, b) c FROM t
-SELECT DISTINCT ON ((a), (b)) (c) FROM t -- fully parenthetized
+SELECT DISTINCT ON ((a), (b)) (c) FROM t -- fully parenthesized
 SELECT DISTINCT ON (a, b) c FROM t -- literals removed
 SELECT DISTINCT ON (_, _) _ FROM _ -- identifiers removed
 
@@ -2590,7 +2590,7 @@ parse
 SELECT * FROM (VALUES (1, 2)) AS foo
 ----
 SELECT * FROM (VALUES (1, 2)) AS foo
-SELECT (*) FROM ((VALUES ((1), (2)))) AS foo -- fully parenthetized
+SELECT (*) FROM ((VALUES ((1), (2)))) AS foo -- fully parenthesized
 SELECT * FROM (VALUES (_, _)) AS foo -- literals removed
 SELECT * FROM (VALUES (1, 2)) AS _ -- identifiers removed
 
@@ -2598,7 +2598,7 @@ parse
 SELECT * FROM (VALUES (1, 2)) AS foo (a, b)
 ----
 SELECT * FROM (VALUES (1, 2)) AS foo (a, b)
-SELECT (*) FROM ((VALUES ((1), (2)))) AS foo (a, b) -- fully parenthetized
+SELECT (*) FROM ((VALUES ((1), (2)))) AS foo (a, b) -- fully parenthesized
 SELECT * FROM (VALUES (_, _)) AS foo (a, b) -- literals removed
 SELECT * FROM (VALUES (1, 2)) AS _ (_, _) -- identifiers removed
 
@@ -2606,7 +2606,7 @@ parse
 SELECT 'a' FROM t@{FORCE_INDEX=bar}
 ----
 SELECT 'a' FROM t@bar -- normalized!
-SELECT ('a') FROM t@bar -- fully parenthetized
+SELECT ('a') FROM t@bar -- fully parenthesized
 SELECT _ FROM t@bar -- literals removed
 SELECT 'a' FROM _@_ -- identifiers removed
 
@@ -2614,7 +2614,7 @@ parse
 SELECT 'a' FROM t@{ASC,FORCE_INDEX=idx}
 ----
 SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC} -- normalized!
-SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthetized
+SELECT ('a') FROM t@{FORCE_INDEX=idx,ASC} -- fully parenthesized
 SELECT _ FROM t@{FORCE_INDEX=idx,ASC} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,ASC} -- identifiers removed
 
@@ -2623,7 +2623,7 @@ parse
 SELECT 1 FOR UPDATE
 ----
 SELECT 1 FOR UPDATE
-SELECT (1) FOR UPDATE -- fully parenthetized
+SELECT (1) FOR UPDATE -- fully parenthesized
 SELECT _ FOR UPDATE -- literals removed
 SELECT 1 FOR UPDATE -- identifiers removed
 
@@ -2631,7 +2631,7 @@ parse
 SELECT 1 FOR NO KEY UPDATE
 ----
 SELECT 1 FOR NO KEY UPDATE
-SELECT (1) FOR NO KEY UPDATE -- fully parenthetized
+SELECT (1) FOR NO KEY UPDATE -- fully parenthesized
 SELECT _ FOR NO KEY UPDATE -- literals removed
 SELECT 1 FOR NO KEY UPDATE -- identifiers removed
 
@@ -2639,7 +2639,7 @@ parse
 SELECT 1 FOR SHARE
 ----
 SELECT 1 FOR SHARE
-SELECT (1) FOR SHARE -- fully parenthetized
+SELECT (1) FOR SHARE -- fully parenthesized
 SELECT _ FOR SHARE -- literals removed
 SELECT 1 FOR SHARE -- identifiers removed
 
@@ -2647,7 +2647,7 @@ parse
 SELECT 1 FOR KEY SHARE
 ----
 SELECT 1 FOR KEY SHARE
-SELECT (1) FOR KEY SHARE -- fully parenthetized
+SELECT (1) FOR KEY SHARE -- fully parenthesized
 SELECT _ FOR KEY SHARE -- literals removed
 SELECT 1 FOR KEY SHARE -- identifiers removed
 
@@ -2655,7 +2655,7 @@ parse
 SELECT 1 FOR UPDATE OF a
 ----
 SELECT 1 FOR UPDATE OF a
-SELECT (1) FOR UPDATE OF a -- fully parenthetized
+SELECT (1) FOR UPDATE OF a -- fully parenthesized
 SELECT _ FOR UPDATE OF a -- literals removed
 SELECT 1 FOR UPDATE OF _ -- identifiers removed
 
@@ -2663,7 +2663,7 @@ parse
 SELECT 1 FOR NO KEY UPDATE OF a, b
 ----
 SELECT 1 FOR NO KEY UPDATE OF a, b
-SELECT (1) FOR NO KEY UPDATE OF a, b -- fully parenthetized
+SELECT (1) FOR NO KEY UPDATE OF a, b -- fully parenthesized
 SELECT _ FOR NO KEY UPDATE OF a, b -- literals removed
 SELECT 1 FOR NO KEY UPDATE OF _, _ -- identifiers removed
 
@@ -2671,7 +2671,7 @@ parse
 SELECT 1 FOR UPDATE SKIP LOCKED
 ----
 SELECT 1 FOR UPDATE SKIP LOCKED
-SELECT (1) FOR UPDATE SKIP LOCKED -- fully parenthetized
+SELECT (1) FOR UPDATE SKIP LOCKED -- fully parenthesized
 SELECT _ FOR UPDATE SKIP LOCKED -- literals removed
 SELECT 1 FOR UPDATE SKIP LOCKED -- identifiers removed
 
@@ -2679,7 +2679,7 @@ parse
 SELECT 1 FOR NO KEY UPDATE OF a, b NOWAIT
 ----
 SELECT 1 FOR NO KEY UPDATE OF a, b NOWAIT
-SELECT (1) FOR NO KEY UPDATE OF a, b NOWAIT -- fully parenthetized
+SELECT (1) FOR NO KEY UPDATE OF a, b NOWAIT -- fully parenthesized
 SELECT _ FOR NO KEY UPDATE OF a, b NOWAIT -- literals removed
 SELECT 1 FOR NO KEY UPDATE OF _, _ NOWAIT -- identifiers removed
 
@@ -2687,7 +2687,7 @@ parse
 SELECT 1 ORDER BY 1 FOR UPDATE
 ----
 SELECT 1 ORDER BY 1 FOR UPDATE
-SELECT (1) ORDER BY (1) FOR UPDATE -- fully parenthetized
+SELECT (1) ORDER BY (1) FOR UPDATE -- fully parenthesized
 SELECT _ ORDER BY _ FOR UPDATE -- literals removed
 SELECT 1 ORDER BY 1 FOR UPDATE -- identifiers removed
 
@@ -2695,7 +2695,7 @@ parse
 SELECT 1 LIMIT 1 FOR UPDATE
 ----
 SELECT 1 LIMIT 1 FOR UPDATE
-SELECT (1) LIMIT (1) FOR UPDATE -- fully parenthetized
+SELECT (1) LIMIT (1) FOR UPDATE -- fully parenthesized
 SELECT _ LIMIT _ FOR UPDATE -- literals removed
 SELECT 1 LIMIT 1 FOR UPDATE -- identifiers removed
 
@@ -2703,7 +2703,7 @@ parse
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE
 ----
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE
-SELECT (1) ORDER BY (1) LIMIT (1) FOR UPDATE -- fully parenthetized
+SELECT (1) ORDER BY (1) LIMIT (1) FOR UPDATE -- fully parenthesized
 SELECT _ ORDER BY _ LIMIT _ FOR UPDATE -- literals removed
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE -- identifiers removed
 
@@ -2711,7 +2711,7 @@ parse
 SELECT 1 ORDER BY 1 FOR UPDATE LIMIT 1
 ----
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE -- normalized!
-SELECT (1) ORDER BY (1) LIMIT (1) FOR UPDATE -- fully parenthetized
+SELECT (1) ORDER BY (1) LIMIT (1) FOR UPDATE -- fully parenthesized
 SELECT _ ORDER BY _ LIMIT _ FOR UPDATE -- literals removed
 SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE -- identifiers removed
 
@@ -2719,7 +2719,7 @@ parse
 SELECT 1 FOR READ ONLY
 ----
 SELECT 1 -- normalized!
-SELECT (1) -- fully parenthetized
+SELECT (1) -- fully parenthesized
 SELECT _ -- literals removed
 SELECT 1 -- identifiers removed
 
@@ -2727,7 +2727,7 @@ parse
 SELECT 1 FOR UPDATE FOR UPDATE
 ----
 SELECT 1 FOR UPDATE FOR UPDATE
-SELECT (1) FOR UPDATE FOR UPDATE -- fully parenthetized
+SELECT (1) FOR UPDATE FOR UPDATE -- fully parenthesized
 SELECT _ FOR UPDATE FOR UPDATE -- literals removed
 SELECT 1 FOR UPDATE FOR UPDATE -- identifiers removed
 
@@ -2735,7 +2735,7 @@ parse
 SELECT 1 FOR SHARE OF a FOR KEY SHARE SKIP LOCKED
 ----
 SELECT 1 FOR SHARE OF a FOR KEY SHARE SKIP LOCKED
-SELECT (1) FOR SHARE OF a FOR KEY SHARE SKIP LOCKED -- fully parenthetized
+SELECT (1) FOR SHARE OF a FOR KEY SHARE SKIP LOCKED -- fully parenthesized
 SELECT _ FOR SHARE OF a FOR KEY SHARE SKIP LOCKED -- literals removed
 SELECT 1 FOR SHARE OF _ FOR KEY SHARE SKIP LOCKED -- identifiers removed
 
@@ -2746,7 +2746,7 @@ parse
 SELECT * FROM "0" JOIN "0" USING (id, "0")
 ----
 SELECT * FROM "0" JOIN "0" USING (id, "0")
-SELECT (*) FROM "0" JOIN "0" USING (id, "0") -- fully parenthetized
+SELECT (*) FROM "0" JOIN "0" USING (id, "0") -- fully parenthesized
 SELECT * FROM "0" JOIN "0" USING (id, "0") -- literals removed
 SELECT * FROM _ JOIN _ USING (_, _) -- identifiers removed
 
@@ -2756,6 +2756,6 @@ parse
 SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2
 ----
 SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2
-SELECT (*) FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2 -- fully parenthetized
+SELECT (*) FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2 -- fully parenthesized
 SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2 -- literals removed
 SELECT * FROM ((_ NATURAL JOIN _ WITH ORDINALITY AS _)) WITH ORDINALITY AS _ -- identifiers removed

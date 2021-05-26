@@ -2,7 +2,7 @@ parse
 CANCEL JOBS SELECT a
 ----
 CANCEL JOBS SELECT a
-CANCEL JOBS SELECT (a) -- fully parenthetized
+CANCEL JOBS SELECT (a) -- fully parenthesized
 CANCEL JOBS SELECT a -- literals removed
 CANCEL JOBS SELECT _ -- identifiers removed
 
@@ -10,7 +10,7 @@ parse
 EXPLAIN CANCEL JOBS SELECT a
 ----
 EXPLAIN CANCEL JOBS SELECT a
-EXPLAIN CANCEL JOBS SELECT (a) -- fully parenthetized
+EXPLAIN CANCEL JOBS SELECT (a) -- fully parenthesized
 EXPLAIN CANCEL JOBS SELECT a -- literals removed
 EXPLAIN CANCEL JOBS SELECT _ -- identifiers removed
 
@@ -18,7 +18,7 @@ parse
 RESUME JOBS SELECT a
 ----
 RESUME JOBS SELECT a
-RESUME JOBS SELECT (a) -- fully parenthetized
+RESUME JOBS SELECT (a) -- fully parenthesized
 RESUME JOBS SELECT a -- literals removed
 RESUME JOBS SELECT _ -- identifiers removed
 
@@ -26,7 +26,7 @@ parse
 EXPLAIN RESUME JOBS SELECT a
 ----
 EXPLAIN RESUME JOBS SELECT a
-EXPLAIN RESUME JOBS SELECT (a) -- fully parenthetized
+EXPLAIN RESUME JOBS SELECT (a) -- fully parenthesized
 EXPLAIN RESUME JOBS SELECT a -- literals removed
 EXPLAIN RESUME JOBS SELECT _ -- identifiers removed
 
@@ -34,7 +34,7 @@ parse
 PAUSE JOBS SELECT a
 ----
 PAUSE JOBS SELECT a
-PAUSE JOBS SELECT (a) -- fully parenthetized
+PAUSE JOBS SELECT (a) -- fully parenthesized
 PAUSE JOBS SELECT a -- literals removed
 PAUSE JOBS SELECT _ -- identifiers removed
 
@@ -42,7 +42,7 @@ parse
 EXPLAIN PAUSE JOBS SELECT a
 ----
 EXPLAIN PAUSE JOBS SELECT a
-EXPLAIN PAUSE JOBS SELECT (a) -- fully parenthetized
+EXPLAIN PAUSE JOBS SELECT (a) -- fully parenthesized
 EXPLAIN PAUSE JOBS SELECT a -- literals removed
 EXPLAIN PAUSE JOBS SELECT _ -- identifiers removed
 
@@ -50,7 +50,7 @@ parse
 PAUSE SCHEDULES SELECT a
 ----
 PAUSE SCHEDULES SELECT a
-PAUSE SCHEDULES SELECT (a) -- fully parenthetized
+PAUSE SCHEDULES SELECT (a) -- fully parenthesized
 PAUSE SCHEDULES SELECT a -- literals removed
 PAUSE SCHEDULES SELECT _ -- identifiers removed
 
@@ -58,7 +58,7 @@ parse
 EXPLAIN PAUSE SCHEDULES SELECT a
 ----
 EXPLAIN PAUSE SCHEDULES SELECT a
-EXPLAIN PAUSE SCHEDULES SELECT (a) -- fully parenthetized
+EXPLAIN PAUSE SCHEDULES SELECT (a) -- fully parenthesized
 EXPLAIN PAUSE SCHEDULES SELECT a -- literals removed
 EXPLAIN PAUSE SCHEDULES SELECT _ -- identifiers removed
 
@@ -66,7 +66,7 @@ parse
 RESUME SCHEDULES SELECT a
 ----
 RESUME SCHEDULES SELECT a
-RESUME SCHEDULES SELECT (a) -- fully parenthetized
+RESUME SCHEDULES SELECT (a) -- fully parenthesized
 RESUME SCHEDULES SELECT a -- literals removed
 RESUME SCHEDULES SELECT _ -- identifiers removed
 
@@ -74,7 +74,7 @@ parse
 EXPLAIN RESUME SCHEDULES SELECT a
 ----
 EXPLAIN RESUME SCHEDULES SELECT a
-EXPLAIN RESUME SCHEDULES SELECT (a) -- fully parenthetized
+EXPLAIN RESUME SCHEDULES SELECT (a) -- fully parenthesized
 EXPLAIN RESUME SCHEDULES SELECT a -- literals removed
 EXPLAIN RESUME SCHEDULES SELECT _ -- identifiers removed
 
@@ -82,7 +82,7 @@ parse
 RESUME SCHEDULE a
 ----
 RESUME SCHEDULES VALUES (a) -- normalized!
-RESUME SCHEDULES VALUES ((a)) -- fully parenthetized
+RESUME SCHEDULES VALUES ((a)) -- fully parenthesized
 RESUME SCHEDULES VALUES (a) -- literals removed
 RESUME SCHEDULES VALUES (_) -- identifiers removed
 
@@ -90,7 +90,7 @@ parse
 EXPLAIN RESUME SCHEDULE a
 ----
 EXPLAIN RESUME SCHEDULES VALUES (a) -- normalized!
-EXPLAIN RESUME SCHEDULES VALUES ((a)) -- fully parenthetized
+EXPLAIN RESUME SCHEDULES VALUES ((a)) -- fully parenthesized
 EXPLAIN RESUME SCHEDULES VALUES (a) -- literals removed
 EXPLAIN RESUME SCHEDULES VALUES (_) -- identifiers removed
 
@@ -99,7 +99,7 @@ parse
 DROP SCHEDULES SELECT a
 ----
 DROP SCHEDULES SELECT a
-DROP SCHEDULES SELECT (a) -- fully parenthetized
+DROP SCHEDULES SELECT (a) -- fully parenthesized
 DROP SCHEDULES SELECT a -- literals removed
 DROP SCHEDULES SELECT _ -- identifiers removed
 
@@ -107,7 +107,7 @@ parse
 EXPLAIN DROP SCHEDULES SELECT a
 ----
 EXPLAIN DROP SCHEDULES SELECT a
-EXPLAIN DROP SCHEDULES SELECT (a) -- fully parenthetized
+EXPLAIN DROP SCHEDULES SELECT (a) -- fully parenthesized
 EXPLAIN DROP SCHEDULES SELECT a -- literals removed
 EXPLAIN DROP SCHEDULES SELECT _ -- identifiers removed
 
@@ -115,7 +115,7 @@ parse
 DROP SCHEDULE a
 ----
 DROP SCHEDULES VALUES (a) -- normalized!
-DROP SCHEDULES VALUES ((a)) -- fully parenthetized
+DROP SCHEDULES VALUES ((a)) -- fully parenthesized
 DROP SCHEDULES VALUES (a) -- literals removed
 DROP SCHEDULES VALUES (_) -- identifiers removed
 
@@ -123,7 +123,7 @@ parse
 EXPLAIN DROP SCHEDULE a
 ----
 EXPLAIN DROP SCHEDULES VALUES (a) -- normalized!
-EXPLAIN DROP SCHEDULES VALUES ((a)) -- fully parenthetized
+EXPLAIN DROP SCHEDULES VALUES ((a)) -- fully parenthesized
 EXPLAIN DROP SCHEDULES VALUES (a) -- literals removed
 EXPLAIN DROP SCHEDULES VALUES (_) -- identifiers removed
 
@@ -131,7 +131,7 @@ parse
 SHOW JOB a
 ----
 SHOW JOBS VALUES (a) -- normalized!
-SHOW JOBS VALUES ((a)) -- fully parenthetized
+SHOW JOBS VALUES ((a)) -- fully parenthesized
 SHOW JOBS VALUES (a) -- literals removed
 SHOW JOBS VALUES (_) -- identifiers removed
 
@@ -139,7 +139,7 @@ parse
 EXPLAIN SHOW JOB a
 ----
 EXPLAIN SHOW JOBS VALUES (a) -- normalized!
-EXPLAIN SHOW JOBS VALUES ((a)) -- fully parenthetized
+EXPLAIN SHOW JOBS VALUES ((a)) -- fully parenthesized
 EXPLAIN SHOW JOBS VALUES (a) -- literals removed
 EXPLAIN SHOW JOBS VALUES (_) -- identifiers removed
 
@@ -147,7 +147,7 @@ parse
 SHOW JOBS SELECT a
 ----
 SHOW JOBS SELECT a
-SHOW JOBS SELECT (a) -- fully parenthetized
+SHOW JOBS SELECT (a) -- fully parenthesized
 SHOW JOBS SELECT a -- literals removed
 SHOW JOBS SELECT _ -- identifiers removed
 
@@ -155,7 +155,7 @@ parse
 EXPLAIN SHOW JOBS SELECT a
 ----
 EXPLAIN SHOW JOBS SELECT a
-EXPLAIN SHOW JOBS SELECT (a) -- fully parenthetized
+EXPLAIN SHOW JOBS SELECT (a) -- fully parenthesized
 EXPLAIN SHOW JOBS SELECT a -- literals removed
 EXPLAIN SHOW JOBS SELECT _ -- identifiers removed
 
@@ -163,7 +163,7 @@ parse
 SHOW JOB WHEN COMPLETE a
 ----
 SHOW JOBS WHEN COMPLETE VALUES (a) -- normalized!
-SHOW JOBS WHEN COMPLETE VALUES ((a)) -- fully parenthetized
+SHOW JOBS WHEN COMPLETE VALUES ((a)) -- fully parenthesized
 SHOW JOBS WHEN COMPLETE VALUES (a) -- literals removed
 SHOW JOBS WHEN COMPLETE VALUES (_) -- identifiers removed
 
@@ -171,7 +171,7 @@ parse
 EXPLAIN SHOW JOB WHEN COMPLETE a
 ----
 EXPLAIN SHOW JOBS WHEN COMPLETE VALUES (a) -- normalized!
-EXPLAIN SHOW JOBS WHEN COMPLETE VALUES ((a)) -- fully parenthetized
+EXPLAIN SHOW JOBS WHEN COMPLETE VALUES ((a)) -- fully parenthesized
 EXPLAIN SHOW JOBS WHEN COMPLETE VALUES (a) -- literals removed
 EXPLAIN SHOW JOBS WHEN COMPLETE VALUES (_) -- identifiers removed
 
@@ -180,7 +180,7 @@ parse
 SHOW JOBS WHEN COMPLETE SELECT a
 ----
 SHOW JOBS WHEN COMPLETE SELECT a
-SHOW JOBS WHEN COMPLETE SELECT (a) -- fully parenthetized
+SHOW JOBS WHEN COMPLETE SELECT (a) -- fully parenthesized
 SHOW JOBS WHEN COMPLETE SELECT a -- literals removed
 SHOW JOBS WHEN COMPLETE SELECT _ -- identifiers removed
 
@@ -188,7 +188,7 @@ parse
 EXPLAIN SHOW JOBS WHEN COMPLETE SELECT a
 ----
 EXPLAIN SHOW JOBS WHEN COMPLETE SELECT a
-EXPLAIN SHOW JOBS WHEN COMPLETE SELECT (a) -- fully parenthetized
+EXPLAIN SHOW JOBS WHEN COMPLETE SELECT (a) -- fully parenthesized
 EXPLAIN SHOW JOBS WHEN COMPLETE SELECT a -- literals removed
 EXPLAIN SHOW JOBS WHEN COMPLETE SELECT _ -- identifiers removed
 
@@ -196,7 +196,7 @@ parse
 PAUSE JOBS FOR SCHEDULES SELECT 1
 ----
 PAUSE JOBS FOR SCHEDULES SELECT 1
-PAUSE JOBS FOR SCHEDULES SELECT (1) -- fully parenthetized
+PAUSE JOBS FOR SCHEDULES SELECT (1) -- fully parenthesized
 PAUSE JOBS FOR SCHEDULES SELECT _ -- literals removed
 PAUSE JOBS FOR SCHEDULES SELECT 1 -- identifiers removed
 
@@ -204,7 +204,7 @@ parse
 EXPLAIN PAUSE JOBS FOR SCHEDULES SELECT 1
 ----
 EXPLAIN PAUSE JOBS FOR SCHEDULES SELECT 1
-EXPLAIN PAUSE JOBS FOR SCHEDULES SELECT (1) -- fully parenthetized
+EXPLAIN PAUSE JOBS FOR SCHEDULES SELECT (1) -- fully parenthesized
 EXPLAIN PAUSE JOBS FOR SCHEDULES SELECT _ -- literals removed
 EXPLAIN PAUSE JOBS FOR SCHEDULES SELECT 1 -- identifiers removed
 
@@ -212,7 +212,7 @@ parse
 PAUSE JOB a
 ----
 PAUSE JOBS VALUES (a) -- normalized!
-PAUSE JOBS VALUES ((a)) -- fully parenthetized
+PAUSE JOBS VALUES ((a)) -- fully parenthesized
 PAUSE JOBS VALUES (a) -- literals removed
 PAUSE JOBS VALUES (_) -- identifiers removed
 
@@ -220,7 +220,7 @@ parse
 EXPLAIN PAUSE JOB a
 ----
 EXPLAIN PAUSE JOBS VALUES (a) -- normalized!
-EXPLAIN PAUSE JOBS VALUES ((a)) -- fully parenthetized
+EXPLAIN PAUSE JOBS VALUES ((a)) -- fully parenthesized
 EXPLAIN PAUSE JOBS VALUES (a) -- literals removed
 EXPLAIN PAUSE JOBS VALUES (_) -- identifiers removed
 
@@ -228,7 +228,7 @@ parse
 PAUSE JOBS FOR SCHEDULE a
 ----
 PAUSE JOBS FOR SCHEDULES VALUES (a) -- normalized!
-PAUSE JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+PAUSE JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 PAUSE JOBS FOR SCHEDULES VALUES (a) -- literals removed
 PAUSE JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -236,7 +236,7 @@ parse
 EXPLAIN PAUSE JOBS FOR SCHEDULE a
 ----
 EXPLAIN PAUSE JOBS FOR SCHEDULES VALUES (a) -- normalized!
-EXPLAIN PAUSE JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+EXPLAIN PAUSE JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 EXPLAIN PAUSE JOBS FOR SCHEDULES VALUES (a) -- literals removed
 EXPLAIN PAUSE JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -244,7 +244,7 @@ parse
 PAUSE SCHEDULE a
 ----
 PAUSE SCHEDULES VALUES (a) -- normalized!
-PAUSE SCHEDULES VALUES ((a)) -- fully parenthetized
+PAUSE SCHEDULES VALUES ((a)) -- fully parenthesized
 PAUSE SCHEDULES VALUES (a) -- literals removed
 PAUSE SCHEDULES VALUES (_) -- identifiers removed
 
@@ -252,7 +252,7 @@ parse
 EXPLAIN PAUSE SCHEDULE a
 ----
 EXPLAIN PAUSE SCHEDULES VALUES (a) -- normalized!
-EXPLAIN PAUSE SCHEDULES VALUES ((a)) -- fully parenthetized
+EXPLAIN PAUSE SCHEDULES VALUES ((a)) -- fully parenthesized
 EXPLAIN PAUSE SCHEDULES VALUES (a) -- literals removed
 EXPLAIN PAUSE SCHEDULES VALUES (_) -- identifiers removed
 
@@ -262,7 +262,7 @@ parse
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
 ----
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
-RESUME JOBS FOR SCHEDULES SELECT ((unnest)((ARRAY[(1), (2), (3)]))) -- fully parenthetized
+RESUME JOBS FOR SCHEDULES SELECT ((unnest)((ARRAY[(1), (2), (3)]))) -- fully parenthesized
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[_, _, __more1__]) -- literals removed
 RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3]) -- identifiers removed
 
@@ -270,7 +270,7 @@ parse
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
 ----
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])
-EXPLAIN RESUME JOBS FOR SCHEDULES SELECT ((unnest)((ARRAY[(1), (2), (3)]))) -- fully parenthetized
+EXPLAIN RESUME JOBS FOR SCHEDULES SELECT ((unnest)((ARRAY[(1), (2), (3)]))) -- fully parenthesized
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[_, _, __more1__]) -- literals removed
 EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3]) -- identifiers removed
 
@@ -278,7 +278,7 @@ parse
 RESUME JOB a
 ----
 RESUME JOBS VALUES (a) -- normalized!
-RESUME JOBS VALUES ((a)) -- fully parenthetized
+RESUME JOBS VALUES ((a)) -- fully parenthesized
 RESUME JOBS VALUES (a) -- literals removed
 RESUME JOBS VALUES (_) -- identifiers removed
 
@@ -286,7 +286,7 @@ parse
 EXPLAIN RESUME JOB a
 ----
 EXPLAIN RESUME JOBS VALUES (a) -- normalized!
-EXPLAIN RESUME JOBS VALUES ((a)) -- fully parenthetized
+EXPLAIN RESUME JOBS VALUES ((a)) -- fully parenthesized
 EXPLAIN RESUME JOBS VALUES (a) -- literals removed
 EXPLAIN RESUME JOBS VALUES (_) -- identifiers removed
 
@@ -294,7 +294,7 @@ parse
 RESUME JOBS FOR SCHEDULE a
 ----
 RESUME JOBS FOR SCHEDULES VALUES (a) -- normalized!
-RESUME JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+RESUME JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 RESUME JOBS FOR SCHEDULES VALUES (a) -- literals removed
 RESUME JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -302,7 +302,7 @@ parse
 EXPLAIN RESUME JOBS FOR SCHEDULE a
 ----
 EXPLAIN RESUME JOBS FOR SCHEDULES VALUES (a) -- normalized!
-EXPLAIN RESUME JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+EXPLAIN RESUME JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 EXPLAIN RESUME JOBS FOR SCHEDULES VALUES (a) -- literals removed
 EXPLAIN RESUME JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -311,7 +311,7 @@ parse
 CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = true)
 ----
 CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = true)
-CANCEL JOBS FOR SCHEDULES (SELECT (schedule_id) FROM somewhere WHERE ((something) = (true))) -- fully parenthetized
+CANCEL JOBS FOR SCHEDULES (SELECT (schedule_id) FROM somewhere WHERE ((something) = (true))) -- fully parenthesized
 CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = _) -- literals removed
 CANCEL JOBS FOR SCHEDULES (SELECT _ FROM _ WHERE _ = true) -- identifiers removed
 
@@ -319,7 +319,7 @@ parse
 EXPLAIN CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = true)
 ----
 EXPLAIN CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = true)
-EXPLAIN CANCEL JOBS FOR SCHEDULES (SELECT (schedule_id) FROM somewhere WHERE ((something) = (true))) -- fully parenthetized
+EXPLAIN CANCEL JOBS FOR SCHEDULES (SELECT (schedule_id) FROM somewhere WHERE ((something) = (true))) -- fully parenthesized
 EXPLAIN CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = _) -- literals removed
 EXPLAIN CANCEL JOBS FOR SCHEDULES (SELECT _ FROM _ WHERE _ = true) -- identifiers removed
 
@@ -327,7 +327,7 @@ parse
 CANCEL JOB a
 ----
 CANCEL JOBS VALUES (a) -- normalized!
-CANCEL JOBS VALUES ((a)) -- fully parenthetized
+CANCEL JOBS VALUES ((a)) -- fully parenthesized
 CANCEL JOBS VALUES (a) -- literals removed
 CANCEL JOBS VALUES (_) -- identifiers removed
 
@@ -335,7 +335,7 @@ parse
 EXPLAIN CANCEL JOB a
 ----
 EXPLAIN CANCEL JOBS VALUES (a) -- normalized!
-EXPLAIN CANCEL JOBS VALUES ((a)) -- fully parenthetized
+EXPLAIN CANCEL JOBS VALUES ((a)) -- fully parenthesized
 EXPLAIN CANCEL JOBS VALUES (a) -- literals removed
 EXPLAIN CANCEL JOBS VALUES (_) -- identifiers removed
 
@@ -343,7 +343,7 @@ parse
 CANCEL JOBS FOR SCHEDULE a
 ----
 CANCEL JOBS FOR SCHEDULES VALUES (a) -- normalized!
-CANCEL JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+CANCEL JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 CANCEL JOBS FOR SCHEDULES VALUES (a) -- literals removed
 CANCEL JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -351,7 +351,7 @@ parse
 EXPLAIN CANCEL JOBS FOR SCHEDULE a
 ----
 EXPLAIN CANCEL JOBS FOR SCHEDULES VALUES (a) -- normalized!
-EXPLAIN CANCEL JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+EXPLAIN CANCEL JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 EXPLAIN CANCEL JOBS FOR SCHEDULES VALUES (a) -- literals removed
 EXPLAIN CANCEL JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -359,7 +359,7 @@ parse
 SHOW JOBS FOR SCHEDULE a
 ----
 SHOW JOBS FOR SCHEDULES VALUES (a) -- normalized!
-SHOW JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+SHOW JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 SHOW JOBS FOR SCHEDULES VALUES (a) -- literals removed
 SHOW JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -367,7 +367,7 @@ parse
 EXPLAIN SHOW JOBS FOR SCHEDULE a
 ----
 EXPLAIN SHOW JOBS FOR SCHEDULES VALUES (a) -- normalized!
-EXPLAIN SHOW JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthetized
+EXPLAIN SHOW JOBS FOR SCHEDULES VALUES ((a)) -- fully parenthesized
 EXPLAIN SHOW JOBS FOR SCHEDULES VALUES (a) -- literals removed
 EXPLAIN SHOW JOBS FOR SCHEDULES VALUES (_) -- identifiers removed
 
@@ -376,7 +376,7 @@ parse
 SHOW JOBS FOR SCHEDULES SELECT 123
 ----
 SHOW JOBS FOR SCHEDULES SELECT 123
-SHOW JOBS FOR SCHEDULES SELECT (123) -- fully parenthetized
+SHOW JOBS FOR SCHEDULES SELECT (123) -- fully parenthesized
 SHOW JOBS FOR SCHEDULES SELECT _ -- literals removed
 SHOW JOBS FOR SCHEDULES SELECT 123 -- identifiers removed
 
@@ -384,7 +384,7 @@ parse
 EXPLAIN SHOW JOBS FOR SCHEDULES SELECT 123
 ----
 EXPLAIN SHOW JOBS FOR SCHEDULES SELECT 123
-EXPLAIN SHOW JOBS FOR SCHEDULES SELECT (123) -- fully parenthetized
+EXPLAIN SHOW JOBS FOR SCHEDULES SELECT (123) -- fully parenthesized
 EXPLAIN SHOW JOBS FOR SCHEDULES SELECT _ -- literals removed
 EXPLAIN SHOW JOBS FOR SCHEDULES SELECT 123 -- identifiers removed
 
@@ -392,7 +392,7 @@ parse
 SHOW SCHEDULE 123
 ----
 SHOW SCHEDULE 123
-SHOW SCHEDULE (123) -- fully parenthetized
+SHOW SCHEDULE (123) -- fully parenthesized
 SHOW SCHEDULE _ -- literals removed
 SHOW SCHEDULE 123 -- identifiers removed
 
@@ -400,7 +400,7 @@ parse
 EXPLAIN SHOW SCHEDULE 123
 ----
 EXPLAIN SHOW SCHEDULE 123
-EXPLAIN SHOW SCHEDULE (123) -- fully parenthetized
+EXPLAIN SHOW SCHEDULE (123) -- fully parenthesized
 EXPLAIN SHOW SCHEDULE _ -- literals removed
 EXPLAIN SHOW SCHEDULE 123 -- identifiers removed
 
@@ -408,7 +408,7 @@ parse
 SHOW SCHEDULES
 ----
 SHOW SCHEDULES
-SHOW SCHEDULES -- fully parenthetized
+SHOW SCHEDULES -- fully parenthesized
 SHOW SCHEDULES -- literals removed
 SHOW SCHEDULES -- identifiers removed
 
@@ -416,7 +416,7 @@ parse
 EXPLAIN SHOW SCHEDULES
 ----
 EXPLAIN SHOW SCHEDULES
-EXPLAIN SHOW SCHEDULES -- fully parenthetized
+EXPLAIN SHOW SCHEDULES -- fully parenthesized
 EXPLAIN SHOW SCHEDULES -- literals removed
 EXPLAIN SHOW SCHEDULES -- identifiers removed
 
@@ -424,7 +424,7 @@ parse
 SHOW SCHEDULES FOR BACKUP
 ----
 SHOW SCHEDULES FOR BACKUP
-SHOW SCHEDULES FOR BACKUP -- fully parenthetized
+SHOW SCHEDULES FOR BACKUP -- fully parenthesized
 SHOW SCHEDULES FOR BACKUP -- literals removed
 SHOW SCHEDULES FOR BACKUP -- identifiers removed
 
@@ -432,7 +432,7 @@ parse
 EXPLAIN SHOW SCHEDULES FOR BACKUP
 ----
 EXPLAIN SHOW SCHEDULES FOR BACKUP
-EXPLAIN SHOW SCHEDULES FOR BACKUP -- fully parenthetized
+EXPLAIN SHOW SCHEDULES FOR BACKUP -- fully parenthesized
 EXPLAIN SHOW SCHEDULES FOR BACKUP -- literals removed
 EXPLAIN SHOW SCHEDULES FOR BACKUP -- identifiers removed
 
@@ -440,7 +440,7 @@ parse
 SHOW PAUSED SCHEDULES
 ----
 SHOW PAUSED SCHEDULES
-SHOW PAUSED SCHEDULES -- fully parenthetized
+SHOW PAUSED SCHEDULES -- fully parenthesized
 SHOW PAUSED SCHEDULES -- literals removed
 SHOW PAUSED SCHEDULES -- identifiers removed
 
@@ -448,7 +448,7 @@ parse
 EXPLAIN SHOW PAUSED SCHEDULES
 ----
 EXPLAIN SHOW PAUSED SCHEDULES
-EXPLAIN SHOW PAUSED SCHEDULES -- fully parenthetized
+EXPLAIN SHOW PAUSED SCHEDULES -- fully parenthesized
 EXPLAIN SHOW PAUSED SCHEDULES -- literals removed
 EXPLAIN SHOW PAUSED SCHEDULES -- identifiers removed
 
@@ -456,7 +456,7 @@ parse
 SHOW RUNNING SCHEDULES
 ----
 SHOW RUNNING SCHEDULES
-SHOW RUNNING SCHEDULES -- fully parenthetized
+SHOW RUNNING SCHEDULES -- fully parenthesized
 SHOW RUNNING SCHEDULES -- literals removed
 SHOW RUNNING SCHEDULES -- identifiers removed
 
@@ -464,7 +464,7 @@ parse
 EXPLAIN SHOW RUNNING SCHEDULES
 ----
 EXPLAIN SHOW RUNNING SCHEDULES
-EXPLAIN SHOW RUNNING SCHEDULES -- fully parenthetized
+EXPLAIN SHOW RUNNING SCHEDULES -- fully parenthesized
 EXPLAIN SHOW RUNNING SCHEDULES -- literals removed
 EXPLAIN SHOW RUNNING SCHEDULES -- identifiers removed
 
@@ -472,7 +472,7 @@ parse
 SHOW PAUSED SCHEDULES FOR BACKUP
 ----
 SHOW PAUSED SCHEDULES FOR BACKUP
-SHOW PAUSED SCHEDULES FOR BACKUP -- fully parenthetized
+SHOW PAUSED SCHEDULES FOR BACKUP -- fully parenthesized
 SHOW PAUSED SCHEDULES FOR BACKUP -- literals removed
 SHOW PAUSED SCHEDULES FOR BACKUP -- identifiers removed
 
@@ -480,7 +480,7 @@ parse
 EXPLAIN SHOW PAUSED SCHEDULES FOR BACKUP
 ----
 EXPLAIN SHOW PAUSED SCHEDULES FOR BACKUP
-EXPLAIN SHOW PAUSED SCHEDULES FOR BACKUP -- fully parenthetized
+EXPLAIN SHOW PAUSED SCHEDULES FOR BACKUP -- fully parenthesized
 EXPLAIN SHOW PAUSED SCHEDULES FOR BACKUP -- literals removed
 EXPLAIN SHOW PAUSED SCHEDULES FOR BACKUP -- identifiers removed
 
@@ -490,7 +490,7 @@ parse
 SHOW RUNNING SCHEDULES FOR BACKUP
 ----
 SHOW RUNNING SCHEDULES FOR BACKUP
-SHOW RUNNING SCHEDULES FOR BACKUP -- fully parenthetized
+SHOW RUNNING SCHEDULES FOR BACKUP -- fully parenthesized
 SHOW RUNNING SCHEDULES FOR BACKUP -- literals removed
 SHOW RUNNING SCHEDULES FOR BACKUP -- identifiers removed
 
@@ -498,6 +498,6 @@ parse
 EXPLAIN SHOW RUNNING SCHEDULES FOR BACKUP
 ----
 EXPLAIN SHOW RUNNING SCHEDULES FOR BACKUP
-EXPLAIN SHOW RUNNING SCHEDULES FOR BACKUP -- fully parenthetized
+EXPLAIN SHOW RUNNING SCHEDULES FOR BACKUP -- fully parenthesized
 EXPLAIN SHOW RUNNING SCHEDULES FOR BACKUP -- literals removed
 EXPLAIN SHOW RUNNING SCHEDULES FOR BACKUP -- identifiers removed

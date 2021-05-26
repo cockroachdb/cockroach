@@ -55,7 +55,7 @@ func TestParseDatadriven(t *testing.T) {
 				// Check roundtrip and formatting with flags.
 				var buf bytes.Buffer
 				fmt.Fprintf(&buf, "%s%s\n", ref, note)
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthetized")
+				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthesized")
 				constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
 				fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
 
