@@ -107,16 +107,6 @@ func (t *tenantStatusServer) ListContentionEvents(
 	return t.ListLocalContentionEvents(ctx, request)
 }
 
-func (t *tenantStatusServer) ListLocalContentionEvents(
-	ctx context.Context, request *serverpb.ListContentionEventsRequest,
-) (*serverpb.ListContentionEventsResponse, error) {
-	events, err := t.getLocalContentionEvents(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	return &serverpb.ListContentionEventsResponse{Events: events}, nil
-}
-
 func (t *tenantStatusServer) ResetSQLStats(
 	ctx context.Context, _ *serverpb.ResetSQLStatsRequest,
 ) (*serverpb.ResetSQLStatsResponse, error) {
