@@ -2,6 +2,9 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
+# Set a larger timeout as partitioning can be slow.
+set timeout 300
+
 # The following tests want to access the licensing server.
 set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "false"
 
