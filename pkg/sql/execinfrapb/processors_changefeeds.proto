@@ -31,7 +31,14 @@ message ChangeAggregatorSpec {
     optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false];
     optional roachpb.Span span = 2 [(gogoproto.nullable) = false];
   }
+  // Checkpoint is the list of watches that were previously completed to specified
+  // timestamp.
+  message Checkpoint {
+    repeated Watch watches = 1 [(gogoproto.nullable) = false];
+  }
+
   repeated Watch watches = 1 [(gogoproto.nullable) = false];
+  optional Checkpoint checkpoint  = 5 [(gogoproto.nullable) = false];
 
   // Feed is the specification for this changefeed.
   optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
