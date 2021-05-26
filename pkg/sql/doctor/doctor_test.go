@@ -97,10 +97,14 @@ func TestExamineDescriptors(t *testing.T) {
 		tbl.State = descpb.DescriptorState_DROP
 	}
 
-	inSchemaValidTableDesc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
+	// Use 51 as the Schema ID, we do not want to use a reserved system ID (1-49)
+	// for the Schema because there should be no schemas with 1-49. A schema with
+	// an ID from 1-49 would fail privilege checks due to incompatible privileges
+	// the privileges returned from the SystemAllowedPrivileges map in privilege.go.
+	validTableDescWithParentSchema := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 	{
-		tbl, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(inSchemaValidTableDesc, hlc.Timestamp{WallTime: 1})
-		tbl.UnexposedParentSchemaID = 3
+		tbl, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(validTableDescWithParentSchema, hlc.Timestamp{WallTime: 1})
+		tbl.UnexposedParentSchemaID = 51
 	}
 
 	tests := []struct {
@@ -199,17 +203,17 @@ func TestExamineDescriptors(t *testing.T) {
 		{ // 8
 			descTable: doctor.DescriptorTable{
 				{
-					ID: 1,
+					ID: 51,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
-						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 1, ParentID: 2},
+						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 51, ParentID: 2},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 1},
+				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 51},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-  ParentID   2, ParentSchemaID  0: schema "schema" (1): referenced database ID 2: descriptor not found
+  ParentID   2, ParentSchemaID  0: schema "schema" (51): referenced database ID 2: descriptor not found
 `,
 		},
 		{ // 9
@@ -295,7 +299,7 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{ // 12
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(t, inSchemaValidTableDesc)},
+				{ID: 1, DescBytes: toBytes(t, validTableDescWithParentSchema)},
 				{
 					ID: 2,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
@@ -303,9 +307,9 @@ func TestExamineDescriptors(t *testing.T) {
 					}}),
 				},
 				{
-					ID: 3,
+					ID: 51,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
-						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 3, ParentID: 4},
+						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 51, ParentID: 4},
 					}}),
 				},
 				{
@@ -316,14 +320,14 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 3, Name: "t"}, ID: 1},
+				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 51, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
-				{NameInfo: descpb.NameInfo{ParentID: 4, Name: "schema"}, ID: 3},
+				{NameInfo: descpb.NameInfo{ParentID: 4, Name: "schema"}, ID: 51},
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 4},
 			},
 			expected: `Examining 4 descriptors and 4 namespace entries...
-  ParentID   2, ParentSchemaID  3: relation "t" (1): parent schema 3 is in different database 4
-  ParentID   4, ParentSchemaID  0: schema "schema" (3): not present in parent database [4] schemas mapping
+  ParentID   2, ParentSchemaID 51: relation "t" (1): parent schema 51 is in different database 4
+  ParentID   4, ParentSchemaID  0: schema "schema" (51): not present in parent database [4] schemas mapping
 `,
 		},
 		{ // 13
