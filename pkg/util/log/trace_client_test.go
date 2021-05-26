@@ -14,11 +14,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTrace(t *testing.T) {
@@ -47,26 +45,6 @@ func TestTrace(t *testing.T) {
 	`); err != nil {
 					t.Fatal(err)
 				}
-			},
-		},
-		{
-			name: "zipkin",
-			init: func(ctx context.Context) (context.Context, *tracing.Span) {
-				tr := tracing.NewTracer()
-				st := cluster.MakeTestingClusterSettings()
-				tracing.ZipkinCollector.Override(ctx, &st.SV, "127.0.0.1:9000000")
-				tr.Configure(ctx, &st.SV)
-				return tr.StartSpanCtx(context.Background(), "foo")
-			},
-			check: func(t *testing.T, ctx context.Context, sp *tracing.Span) {
-				// This isn't quite a real end-to-end-check, but it is good enough
-				// to give us confidence that we're really passing log events to
-				// the span, and the tracing package in turn has tests that verify
-				// that a span so configured will actually log them to the external
-				// trace.
-				require.True(t, sp.Tracer().HasExternalSink())
-				require.True(t, log.HasSpanOrEvent(ctx))
-				require.True(t, log.ExpensiveLogEnabled(ctx, 0 /* level */))
 			},
 		},
 	} {

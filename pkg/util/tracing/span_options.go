@@ -12,7 +12,26 @@ package tracing
 
 import (
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
+	oteltrace "go.opentelemetry.io/otel/trace"
+)
+
+// SpanReferenceType describes the relationship between a parent and a child
+// span. This is an OpenTracing concept that we've maintained back from when
+// CRDB was exporting traces to OpenTrancing collectors. We no longer use
+// OpenTracing, and OpenTelemetry doesn't (yet?) have an analogous concept.
+//
+// TODO(andrei): Follow
+// https://github.com/open-telemetry/opentelemetry-specification/issues/65 and
+// see how the OpenTelemetry concepts evolve.
+type SpanReferenceType int
+
+const (
+	// ChildOfRef means that the parent span will wait for the child span's
+	// termination.
+	ChildOfRef SpanReferenceType = iota
+	// FollowsFromRef means the child operation will run asynchronously with
+	// respect to the parent span.
+	FollowsFromRef
 )
 
 // spanOptions are the options to `Tracer.StartSpan`. This struct is
@@ -20,12 +39,12 @@ import (
 // field comment below are invoked as arguments to `Tracer.StartSpan`.
 // See the SpanOption interface for a synopsis.
 type spanOptions struct {
-	Parent        *Span                         // see WithParentAndAutoCollection
-	RemoteParent  SpanMeta                      // see WithParentAndManualCollection
-	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
-	LogTags       *logtags.Buffer               // see WithLogTags
-	Tags          map[string]interface{}        // see WithTags
-	ForceRealSpan bool                          // see WithForceRealSpan
+	Parent        *Span                  // see WithParentAndAutoCollection
+	RemoteParent  SpanMeta               // see WithParentAndManualCollection
+	RefType       SpanReferenceType      // see WithFollowsFrom
+	LogTags       *logtags.Buffer        // see WithLogTags
+	Tags          map[string]interface{} // see WithTags
+	ForceRealSpan bool                   // see WithForceRealSpan
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
@@ -63,24 +82,18 @@ func (opts *spanOptions) recordingType() RecordingType {
 	return recordingType
 }
 
-func (opts *spanOptions) shadowTrTyp() (string, bool) {
-	if opts.Parent != nil {
-		return opts.Parent.i.ot.shadowTr.Type()
-	} else if !opts.RemoteParent.Empty() {
-		s := opts.RemoteParent.shadowTracerType
-		return s, s != ""
+// otelContext returns information about the OpenTelemetry parent span. If there
+// is a parent, open of a Span (if the parent is local) or a SpanContext (if the
+// parent is remote) will be returned. If there's no OpenTelemetry parent, both
+// return values will be empty.
+func (opts *spanOptions) otelContext() (oteltrace.Span, oteltrace.SpanContext) {
+	if opts.Parent != nil && opts.Parent.i.otelSpan != nil {
+		return opts.Parent.i.otelSpan, oteltrace.SpanContext{}
 	}
-	return "", false
-}
-
-func (opts *spanOptions) shadowContext() opentracing.SpanContext {
-	if opts.Parent != nil && opts.Parent.i.ot.shadowSpan != nil {
-		return opts.Parent.i.ot.shadowSpan.Context()
+	if !opts.RemoteParent.Empty() && opts.RemoteParent.otelCtx.IsValid() {
+		return nil, opts.RemoteParent.otelCtx
 	}
-	if !opts.RemoteParent.Empty() && opts.RemoteParent.shadowCtx != nil {
-		return opts.RemoteParent.shadowCtx
-	}
-	return nil
+	return nil, oteltrace.SpanContext{}
 }
 
 // SpanOption is the interface satisfied by options to `Tracer.StartSpan`.
@@ -179,7 +192,7 @@ func WithFollowsFrom() SpanOption {
 }
 
 func (o followsFromOpt) apply(opts spanOptions) spanOptions {
-	opts.RefType = opentracing.FollowsFromRef
+	opts.RefType = FollowsFromRef
 	return opts
 }
 
