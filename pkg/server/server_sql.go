@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -211,6 +212,10 @@ type sqlServerArgs struct {
 	// Used to track the contention events on this node.
 	contentionRegistry *contention.Registry
 
+	// Used to track the DistSQL flows scheduled on this node but initiated on
+	// behalf of other nodes.
+	flowScheduler *flowinfra.FlowScheduler
+
 	// KV depends on the internal executor, so we pass a pointer to an empty
 	// struct in this configuration, which newSQLServer fills.
 	//
@@ -229,7 +234,8 @@ type sqlServerArgs struct {
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
 
-	// Used to list sessions and contention events and cancel sessions/queries.
+	// Used to list activity (sessions, queries, contention, DistSQL flows) on
+	// the node/cluster and cancel sessions/queries.
 	sqlStatusServer serverpb.SQLStatusServer
 
 	// Used to watch settings and descriptor changes.
@@ -449,7 +455,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if cfg.TestingKnobs.JobsTestingKnobs != nil {
 		distSQLCfg.TestingKnobs.JobsTestingKnobs = cfg.TestingKnobs.JobsTestingKnobs
 	}
-	distSQLServer := distsql.NewServer(ctx, distSQLCfg)
+	distSQLServer := distsql.NewServer(ctx, distSQLCfg, cfg.flowScheduler)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
 
 	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)

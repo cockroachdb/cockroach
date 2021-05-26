@@ -90,6 +90,17 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
    grantee STRING NOT NULL,
    privilege_type STRING NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.cluster_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  CREATE TABLE crdb_internal.cluster_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.cluster_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
@@ -544,6 +555,17 @@ CREATE TABLE crdb_internal.node_contention_events (
    key BYTES NOT NULL,
    txn_id UUID NOT NULL,
    count INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  CREATE TABLE crdb_internal.node_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_inflight_trace_spans (
    trace_id INT8 NOT NULL,

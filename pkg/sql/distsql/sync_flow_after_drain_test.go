@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -39,7 +40,13 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	cfg := s.DistSQLServer().(*ServerImpl).ServerConfig
 
-	distSQLSrv := NewServer(ctx, cfg)
+	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings)
+	flowScheduler.Init(cfg.Metrics)
+	distSQLSrv := NewServer(
+		ctx,
+		cfg,
+		flowScheduler,
+	)
 	distSQLSrv.flowRegistry.Drain(
 		time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */, nil /* reporter */)
 

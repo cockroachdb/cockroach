@@ -70,12 +70,14 @@ type ServerImpl struct {
 var _ execinfrapb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
+func NewServer(
+	ctx context.Context, cfg execinfra.ServerConfig, flowScheduler *flowinfra.FlowScheduler,
+) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
 		flowRegistry:  flowinfra.NewFlowRegistry(cfg.NodeID.SQLInstanceID()),
-		flowScheduler: flowinfra.NewFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
+		flowScheduler: flowScheduler,
 		memMonitor: mon.NewMonitor(
 			"distsql",
 			mon.MemoryResource,
@@ -120,6 +122,7 @@ func (ds *ServerImpl) Start() {
 		panic(err)
 	}
 
+	ds.flowScheduler.Init(ds.Metrics)
 	ds.flowScheduler.Start()
 }
 
@@ -134,6 +137,12 @@ func (ds *ServerImpl) NumRemoteFlowsInQueue() int {
 // concurrency-safe.
 func (ds *ServerImpl) SetCancelDeadFlowsCallback(cb func(int)) {
 	ds.flowScheduler.TestingKnobs.CancelDeadFlowsCallback = cb
+}
+
+// NumRemoteRunningFlows returns the number of remote flows currently running on
+// this server.
+func (ds *ServerImpl) NumRemoteRunningFlows() int {
+	return ds.flowScheduler.NumRunningFlows()
 }
 
 // Drain changes the node's draining state through gossip and drains the
