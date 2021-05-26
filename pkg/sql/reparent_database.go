@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -114,6 +115,16 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+
+	// Not all Privileges on databases are valid on schemas.
+	// Remove any privileges that are not valid for schemas.
+	schemaPrivs := privilege.GetValidPrivilegesForObject(privilege.Schema).ToBitField()
+	privs := n.db.GetPrivileges()
+	for i, u := range privs.Users {
+		// Remove privileges that are valid for databases but not for schemas.
+		privs.Users[i].Privileges = u.Privileges & schemaPrivs
+	}
+
 	schema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
