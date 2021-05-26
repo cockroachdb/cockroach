@@ -416,3 +416,23 @@ REVOKE ALL ON SCHEMA a.b, c.d FROM root -- normalized!
 REVOKE ALL ON SCHEMA a.b, c.d FROM root -- fully parenthesized
 REVOKE ALL ON SCHEMA a.b, c.d FROM root -- literals removed
 REVOKE ALL ON SCHEMA _._, _._ FROM _ -- identifiers removed
+
+# Ensure that the support for ON ROLE <namelist> doesn't leak
+# where it should not be recognized.
+error
+GRANT SELECT ON ROLE foo, bar TO blix
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+GRANT SELECT ON ROLE foo, bar TO blix
+                     ^
+HINT: try \h GRANT
+
+error
+REVOKE SELECT ON ROLE foo, bar FROM blix
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+REVOKE SELECT ON ROLE foo, bar FROM blix
+                      ^
+HINT: try \h REVOKE

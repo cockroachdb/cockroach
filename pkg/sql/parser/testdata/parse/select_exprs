@@ -70,6 +70,15 @@ SELECT (1.2e-1) -- fully parenthesized
 SELECT _ -- literals removed
 SELECT 1.2e-1 -- identifiers removed
 
+error
+SELECT 1e-\n-1
+----
+lexical error: invalid floating point literal
+DETAIL: source SQL:
+SELECT 1e-\n-1
+       ^
+HINT: try \h SELECT
+
 parse
 SELECT *,-/* comment */-5
 ----
@@ -167,6 +176,22 @@ SELECT ((((ARRAY[(1), (2)])))[(1)]) -- fully parenthesized
 SELECT (ARRAY[_, _])[_] -- literals removed
 SELECT (ARRAY[1, 2])[1] -- identifiers removed
 
+error
+SELECT ARRAY[]::unknown[]
+----
+at or near "EOF": syntax error: type unknown[] does not exist
+DETAIL: source SQL:
+SELECT ARRAY[]::unknown[]
+                         ^
+
+error
+SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
+                                                                 ^
+
 parse
 SELECT FAMILY (x)
 ----
@@ -254,6 +279,14 @@ SELECT EXISTS (SELECT 1)
 SELECT (EXISTS (SELECT (1))) -- fully parenthesized
 SELECT EXISTS (SELECT _) -- literals removed
 SELECT EXISTS (SELECT 1) -- identifiers removed
+
+error
+SELECT EXISTS(SELECT 1)[1]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+SELECT EXISTS(SELECT 1)[1]
+                       ^
 
 parse
 SELECT (VALUES (1))
@@ -550,6 +583,15 @@ SELECT ||/a
 SELECT (||/(a)) -- fully parenthesized
 SELECT ||/a -- literals removed
 SELECT ||/_ -- identifiers removed
+
+error
+SELECT 1 ||/ 5
+----
+at or near "5": syntax error
+DETAIL: source SQL:
+SELECT 1 ||/ 5
+             ^
+HINT: try \h SELECT
 
 
 parse
@@ -1070,6 +1112,14 @@ SELECT (('10:00:13.123456')::INTERVAL MINUTE TO SECOND(3)) -- fully parenthesize
 SELECT _::INTERVAL MINUTE TO SECOND(3) -- literals removed
 SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND(3) -- identifiers removed
 
+error
+SELECT INTERVAL 'foo'
+----
+at or near "EOF": syntax error: could not parse "foo" as type interval: interval: missing number at position 0: "foo"
+DETAIL: source SQL:
+SELECT INTERVAL 'foo'
+                     ^
+
 
 parse
 SELECT 'foo'::BOX2D
@@ -1257,6 +1307,33 @@ SELECT (0xF0) FROM t -- fully parenthesized
 SELECT _ FROM t -- literals removed
 SELECT 0xF0 FROM _ -- identifiers removed
 
+error
+SELECT 0x FROM t
+----
+lexical error: invalid hexadecimal numeric literal
+DETAIL: source SQL:
+SELECT 0x FROM t
+       ^
+HINT: try \h SELECT
+
+error
+SELECT x'fail' FROM t
+----
+lexical error: invalid hexadecimal bytes literal
+DETAIL: source SQL:
+SELECT x'fail' FROM t
+       ^
+HINT: try \h SELECT
+
+error
+SELECT x'AAB' FROM t
+----
+lexical error: invalid hexadecimal bytes literal
+DETAIL: source SQL:
+SELECT x'AAB' FROM t
+       ^
+HINT: try \h SELECT
+
 parse
 SELECT CAST(1 AS STRING)
 ----
@@ -1323,6 +1400,14 @@ SELECT (1 + 2).col
 SELECT ((((1) + (2))).col) -- fully parenthesized
 SELECT (_ + _).col -- literals removed
 SELECT (1 + 2)._ -- identifiers removed
+
+error
+SELECT 1 + ANY ARRAY[1, 2, 3]
+----
+at or near "EOF": syntax error: + ANY <array> is invalid because "+" is not a boolean operator
+DETAIL: source SQL:
+SELECT 1 + ANY ARRAY[1, 2, 3]
+                             ^
 
 parse
 SELECT (abc.def).col
@@ -1647,3 +1732,98 @@ SELECT OPERATOR(~)1 COLLATE ident AS ilike FROM ident -- normalized!
 SELECT (OPERATOR(~)((1) COLLATE ident)) AS ilike FROM ident -- fully parenthesized
 SELECT OPERATOR(~)_ COLLATE ident AS ilike FROM ident -- literals removed
 SELECT OPERATOR(~)1 COLLATE ident AS _ FROM _ -- identifiers removed
+
+error
+SELECT OPERATOR(#) 5
+----
+at or near "EOF": syntax error: unknown unary operator #
+DETAIL: source SQL:
+SELECT OPERATOR(#) 5
+                    ^
+
+error
+SELECT2 1
+----
+at or near "select2": syntax error
+DETAIL: source SQL:
+SELECT2 1
+^
+
+error
+SELECT 1 FROM (t)
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+SELECT 1 FROM (t)
+                ^
+HINT: try \h <SOURCE>
+
+error
+SELECT 1 /* hello
+----
+lexical error: unterminated comment
+DETAIL: source SQL:
+SELECT 1 /* hello
+         ^
+
+error
+SELECT '1
+----
+lexical error: unterminated string
+DETAIL: source SQL:
+SELECT '1
+       ^
+HINT: try \h SELECT
+
+error
+SELECT family FROM test
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SELECT family FROM test
+              ^
+HINT: try \h SELECT
+
+error
+SELECT FROM t
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SELECT FROM t
+       ^
+HINT: try \h SELECT
+
+error
+SELECT $0
+----
+lexical error: placeholder index must be between 1 and 65536
+DETAIL: source SQL:
+SELECT $0
+       ^
+HINT: try \h SELECT
+
+error
+SELECT $-1
+----
+at or near "$": syntax error
+DETAIL: source SQL:
+SELECT $-1
+       ^
+HINT: try \h SELECT
+
+error
+SELECT $123456789
+----
+lexical error: placeholder index must be between 1 and 65536
+DETAIL: source SQL:
+SELECT $123456789
+       ^
+HINT: try \h SELECT
+
+error
+SELECT (0) FROM y[array[]]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+SELECT (0) FROM y[array[]]
+                 ^

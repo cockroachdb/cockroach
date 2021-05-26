@@ -135,6 +135,15 @@ CREATE USER _ WITH LOGIN VALID UNTIL _ PASSWORD _ -- literals removed
 CREATE USER '_' WITH LOGIN VALID UNTIL '_' PASSWORD '*****' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 CREATE USER 'foo' WITH LOGIN VALID UNTIL NULL PASSWORD NULL -- identifiers removed
 
+error
+CREATE USER foo WITH PASSWORD
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CREATE USER foo WITH PASSWORD
+                             ^
+HINT: try \h CREATE ROLE
+
 parse
 CREATE USER foo VALID UNTIL '1970-01-01'
 ----

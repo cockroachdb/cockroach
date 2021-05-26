@@ -82,6 +82,21 @@ func TestParseDatadriven(t *testing.T) {
 				}
 
 				return buf.String()
+
+			case "error":
+				_, err := parser.Parse(d.Input)
+				if err == nil {
+					return ""
+				}
+				pgerr := pgerror.Flatten(err)
+				msg := pgerr.Message
+				if pgerr.Detail != "" {
+					msg += "\nDETAIL: " + pgerr.Detail
+				}
+				if pgerr.Hint != "" {
+					msg += "\nHINT: " + pgerr.Hint
+				}
+				return msg
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""
@@ -143,29 +158,6 @@ func TestParseSyntax(t *testing.T) {
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 		})
 	}
-}
-
-func TestParseErrors(t *testing.T) {
-	datadriven.RunTest(t, "testdata/errors", func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "error":
-			_, err := parser.Parse(d.Input)
-			if err == nil {
-				return ""
-			}
-			pgerr := pgerror.Flatten(err)
-			msg := pgerr.Message
-			if pgerr.Detail != "" {
-				msg += "\nDETAIL: " + pgerr.Detail
-			}
-			if pgerr.Hint != "" {
-				msg += "\nHINT: " + pgerr.Hint
-			}
-			return msg
-		}
-		d.Fatalf(t, "unsupported command: %s", d.Cmd)
-		return ""
-	})
 }
 
 func TestParsePanic(t *testing.T) {
