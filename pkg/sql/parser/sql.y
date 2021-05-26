@@ -5974,7 +5974,7 @@ alter_schema_stmt:
 // Table constraints:
 //    PRIMARY KEY ( <colnames...> ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>]
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
-//    UNIQUE ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
+//    UNIQUE ( <colname> [ASC | DESC] [, ...] ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
@@ -6620,17 +6620,18 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE opt_without_index '(' index_params ')'
+| UNIQUE opt_without_index '(' index_params ')' opt_hash_sharded
     opt_storing opt_interleave opt_partition_by_index opt_deferrable opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
       WithoutIndex: $2.bool(),
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
-        Storing: $6.nameList(),
-        Interleave: $7.interleave(),
-        PartitionByIndex: $8.partitionByIndex(),
-        Predicate: $10.expr(),
+        Sharded: $6.shardedIndexDef(),
+        Storing: $7.nameList(),
+        Interleave: $8.interleave(),
+        PartitionByIndex: $9.partitionByIndex(),
+        Predicate: $11.expr(),
       },
     }
   }

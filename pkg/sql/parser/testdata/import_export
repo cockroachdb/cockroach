@@ -150,3 +150,14 @@ EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH delimiter = ('|') FROM SELECT (
 EXPORT INTO CSV _ WITH delimiter = _ FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
 EXPORT INTO CSV '_' WITH delimiter = '_' FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH _ = '|' FROM SELECT _, sum(_) FROM _ WHERE _ = 1 ORDER BY sum(_) DESC LIMIT 10 -- identifiers removed
+
+# Regression test for #65475. Unique hash-sharded indexes should be
+# round-trippable.
+parse
+IMPORT TABLE foo (a INT, UNIQUE INDEX (a) USING HASH WITH BUCKET_COUNT = 8) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'
+----
+IMPORT TABLE foo (a INT8, UNIQUE (a) USING HASH WITH BUCKET_COUNT = 8) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp' -- normalized!
+IMPORT TABLE foo (a INT8, UNIQUE (a) USING HASH WITH BUCKET_COUNT = (8)) CSV DATA (('path/to/some/file'), ($1)) WITH temp = ('path/to/temp') -- fully parenthesized
+IMPORT TABLE foo (a INT8, UNIQUE (a) USING HASH WITH BUCKET_COUNT = _) CSV DATA (_, $1) WITH temp = _ -- literals removed
+IMPORT TABLE foo (a INT8, UNIQUE (a) USING HASH WITH BUCKET_COUNT = _) CSV DATA ('_', $1) WITH temp = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+IMPORT TABLE _ (_ INT8, UNIQUE (_) USING HASH WITH BUCKET_COUNT = 8) CSV DATA ('path/to/some/file', $1) WITH _ = 'path/to/temp' -- identifiers removed
