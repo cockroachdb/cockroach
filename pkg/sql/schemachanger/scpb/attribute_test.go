@@ -30,7 +30,7 @@ func TestGetAttribute(t *testing.T) {
 
 	// Sanity: Validate basic string conversion, equality,
 	// and inequality.
-	expectedStr := `[ Type: 4, DescID: 3, DepID: 1, ColumnID: 2 ]`
+	expectedStr := `SequenceDependency:{DescID: 3, DepID: 1, ColumnID: 2}`
 	require.Equal(t, expectedStr, seqElem.GetAttributes().String(), "Attribute string conversion is broken.")
 	require.True(t, seqElem.GetAttributes().Equal(seqElem.GetAttributes()))
 	require.False(t, seqElem.GetAttributes().Equal(seqElemDiff.GetAttributes()))
@@ -38,7 +38,7 @@ func TestGetAttribute(t *testing.T) {
 	// Sanity: Validate type references, then check if type comparisons
 	// work.
 	typeBackRef := TypeReference{TypeID: 3, DescID: 1}
-	expectedStr = `[ Type: 10, DescID: 3, DepID: 1 ]`
+	expectedStr = `TypeReference:{DescID: 3, DepID: 1}`
 	require.Equal(t, expectedStr, typeBackRef.GetAttributes().String(), "Attribute string conversion is broken.")
 	require.False(t, seqElem.GetAttributes().Equal(typeBackRef.GetAttributes()))
 	require.False(t, typeBackRef.GetAttributes().Equal(seqElem.GetAttributes()))
@@ -46,6 +46,6 @@ func TestGetAttribute(t *testing.T) {
 	// Sanity: Validate attribute fetching for both types.
 	require.Equal(t, "1", typeBackRef.GetAttributes().Get(AttributeDepID).String())
 	require.Equal(t, "3", typeBackRef.GetAttributes().Get(AttributeDescID).String())
-	require.Equal(t, "10", typeBackRef.GetAttributes().Get(AttributeType).String())
+	require.Equal(t, "TypeReference", typeBackRef.GetAttributes().Get(AttributeType).String())
 	require.Equal(t, "4", seqElemDiff.GetAttributes().Get(AttributeColumnID).String())
 }

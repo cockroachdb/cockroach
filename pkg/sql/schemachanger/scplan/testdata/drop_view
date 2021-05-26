@@ -1,0 +1,103 @@
+create-table
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256))
+----
+
+create-view
+CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
+----
+
+ops
+DROP VIEW defaultdb.v1
+----
+Stage 0
+  *scop.MarkDescriptorAsDropped
+    TableID: 53
+Stage 1
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
+  *scop.DrainDescriptorName
+    TableID: 53
+
+deps
+DROP VIEW defaultdb.v1
+----
+
+create-view
+CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
+----
+
+create-view
+CREATE VIEW defaultdb.v3 AS (SELECT name, n1 FROM v1, v2);
+----
+
+create-view
+CREATE VIEW defaultdb.v4 AS (SELECT n2, n1 FROM v2);
+----
+
+create-type
+CREATE TYPE defaultdb.typ AS ENUM('a')
+----
+
+create-view
+CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb.v4)
+----
+
+ops
+DROP VIEW defaultdb.v1 CASCADE
+----
+Stage 0
+  *scop.RemoveTypeBackRef
+    DescID: 59
+    TypeID: 57
+  *scop.RemoveTypeBackRef
+    DescID: 59
+    TypeID: 58
+  *scop.MarkDescriptorAsDropped
+    TableID: 53
+  *scop.MarkDescriptorAsDropped
+    TableID: 54
+  *scop.MarkDescriptorAsDropped
+    TableID: 55
+  *scop.MarkDescriptorAsDropped
+    TableID: 56
+  *scop.MarkDescriptorAsDropped
+    TableID: 59
+Stage 1
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
+  *scop.CreateGcJobForDescriptor
+    DescID: 54
+  *scop.CreateGcJobForDescriptor
+    DescID: 55
+  *scop.CreateGcJobForDescriptor
+    DescID: 56
+  *scop.CreateGcJobForDescriptor
+    DescID: 59
+  *scop.DrainDescriptorName
+    TableID: 53
+  *scop.DrainDescriptorName
+    TableID: 54
+  *scop.DrainDescriptorName
+    TableID: 55
+  *scop.DrainDescriptorName
+    TableID: 56
+  *scop.DrainDescriptorName
+    TableID: 59
+
+deps
+DROP VIEW defaultdb.v1 CASCADE
+----
+- from: [View:{DescID: 53}, DELETE_ONLY]
+  to:   [View:{DescID: 54}, DELETE_ONLY]
+- from: [View:{DescID: 53}, DELETE_ONLY]
+  to:   [View:{DescID: 55}, DELETE_ONLY]
+- from: [View:{DescID: 54}, DELETE_ONLY]
+  to:   [View:{DescID: 55}, DELETE_ONLY]
+- from: [View:{DescID: 54}, DELETE_ONLY]
+  to:   [View:{DescID: 56}, DELETE_ONLY]
+- from: [View:{DescID: 56}, DELETE_ONLY]
+  to:   [View:{DescID: 59}, DELETE_ONLY]
+- from: [View:{DescID: 59}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 57, DepID: 59}, ABSENT]
+- from: [View:{DescID: 59}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 58, DepID: 59}, ABSENT]

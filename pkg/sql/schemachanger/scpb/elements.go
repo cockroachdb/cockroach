@@ -63,10 +63,12 @@ func NewTarget(dir Target_Direction, elem Element) *Target {
 type ElementTypeID int
 
 var typeToElementID map[reflect.Type]ElementTypeID
+var elementIDToString map[ElementTypeID]string
 
 func init() {
 	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
 	typeToElementID = make(map[reflect.Type]ElementTypeID, typ.NumField())
+	elementIDToString = make(map[ElementTypeID]string, typ.NumField())
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		protoFlags := strings.Split(f.Tag.Get("protobuf"), ",")
@@ -75,12 +77,18 @@ func init() {
 			panic(errors.Wrapf(err, "failed to extract ID from protobuf tag: %q", protoFlags))
 		}
 		typeToElementID[f.Type] = ElementTypeID(id)
+		elementIDToString[ElementTypeID(id)] = strings.TrimPrefix(f.Type.String(), "*scpb.")
 	}
 }
 
 // ElementType determines the type ID of a element
 func ElementType(el Element) ElementTypeID {
 	return typeToElementID[reflect.TypeOf(el)]
+}
+
+// ElementIDToString determines the type ID of a element
+func ElementIDToString(id ElementTypeID) string {
+	return elementIDToString[id]
 }
 
 // DescriptorID implements the Element interface.

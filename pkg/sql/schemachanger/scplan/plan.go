@@ -56,6 +56,9 @@ type Params struct {
 	//
 	// This doesn't do anything right now.
 	CreatedDescriptorIDs catalog.DescriptorIDSet
+	// DisableOpRandomization disables randomization for the final set of
+	// operations.
+	DisableOpRandomization bool
 }
 
 // A Plan is a schema change plan, primarily containing ops to be executed that
@@ -110,7 +113,7 @@ func MakePlan(initialStates []*scpb.Node, params Params) (_ Plan, err error) {
 	}); err != nil {
 		return Plan{}, err
 	}
-	stages := buildStages(initialStates, g)
+	stages := buildStages(initialStates, g, params)
 	return Plan{
 		Params:       params,
 		InitialNodes: initialStates,
@@ -119,7 +122,7 @@ func MakePlan(initialStates []*scpb.Node, params Params) (_ Plan, err error) {
 	}, nil
 }
 
-func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
+func buildStages(init []*scpb.Node, g *scgraph.Graph, params Params) []Stage {
 	// TODO(ajwerner): deal with the case where the target state was
 	// fulfilled by something that preceded the initial state.
 	cur := init
@@ -236,12 +239,15 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 		// be order independent, however we will
 		// try to execute non-failing ones first.
 		opsSlice := s.Ops.Slice()
-		rand.Seed(timeutil.Now().UnixNano())
-		rand.Shuffle(len(opsSlice), func(i, j int) {
-			tmp := opsSlice[i]
-			opsSlice[i] = opsSlice[j]
-			opsSlice[j] = tmp
-		})
+		if !params.DisableOpRandomization {
+
+			rand.Seed(timeutil.Now().UnixNano())
+			rand.Shuffle(len(opsSlice), func(i, j int) {
+				tmp := opsSlice[i]
+				opsSlice[i] = opsSlice[j]
+				opsSlice[j] = tmp
+			})
+		}
 		// Place non-revertible operations at the end
 		sort.SliceStable(opsSlice, func(i, j int) bool {
 			if opsSlice[i].Revertible() == opsSlice[j].Revertible() {
@@ -251,6 +257,7 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 		})
 		stages = append(stages, s)
 		cur = s.After
+
 	}
 	return stages
 }
