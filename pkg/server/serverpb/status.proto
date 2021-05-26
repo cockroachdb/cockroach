@@ -15,12 +15,14 @@ option go_package = "serverpb";
 import "build/info.proto";
 import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
+import "roachpb/api.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
+import "sql/execinfrapb/api.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
@@ -657,7 +659,8 @@ message CancelSessionResponse {
 // Request object for ListContentionEvents and ListLocalContentionEvents.
 message ListContentionEventsRequest {}
 
-// An error wrapper object for ListContentionEventsResponse.
+// An error wrapper object for ListContentionEventsResponse and
+// ListDistSQLFlowsResponse.
 message ListActivityError {
   // ID of node that was being contacted when this error occurred.
   int32 node_id = 1 [
@@ -673,6 +676,43 @@ message ListActivityError {
 message ListContentionEventsResponse {
   // All available contention information on this node or cluster.
   cockroach.sql.contentionpb.SerializedRegistry events = 1 [ (gogoproto.nullable) = false ];
+
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListActivityError errors = 2 [ (gogoproto.nullable) = false ];
+}
+
+// Request object for ListDistSQLFlows and ListLocalDistSQLFlows.
+message ListDistSQLFlowsRequest {}
+
+// DistSQLRemoteFlow describes a DistSQL flow scheduled to run on remote nodes.
+// The gateway node that initiated the setup of this flow isn't included in
+// either slice.
+message DistSQLRemoteFlow {
+  bytes flow_id = 1 [(gogoproto.nullable) = false,
+                     (gogoproto.customname) = "FlowID",
+                     (gogoproto.customtype) =
+                         "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb.FlowID"
+  ];
+
+  // RunningOn contains the nodes on which the flow is running, in a sorted
+  // order without duplicates. The intersection with QueuedOn is an empty set.
+  repeated roachpb.NodeIDWithTimestamp running_on = 2 [
+    (gogoproto.nullable) = false
+  ];
+
+  // QueuedOn contains the nodes on which the flow is waiting in the queue to be
+  // scheduled, in a sorted order without duplicates. The intersection with
+  // RunningOn is an empty set.
+  repeated roachpb.NodeIDWithTimestamp queued_on = 3 [
+    (gogoproto.nullable) = false
+  ];
+}
+
+// Response object for ListDistSQLFlows and ListLocalDistSQLFlows.
+message ListDistSQLFlowsResponse {
+  // Flows are ordered by FlowID lexicographically and do not contain
+  // duplicates.
+  repeated DistSQLRemoteFlow flows = 1 [ (gogoproto.nullable) = false ];
 
   // Any errors that occurred during fan-out calls to other nodes.
   repeated ListActivityError errors = 2 [ (gogoproto.nullable) = false ];
@@ -1178,6 +1218,29 @@ service Status {
   rpc ListLocalContentionEvents(ListContentionEventsRequest) returns (ListContentionEventsResponse) {
     option (google.api.http) = {
       get : "/_status/local_contention_events"
+    };
+  }
+
+  // ListDistSQLFlows retrieves all of the remote flows of the DistSQL execution
+  // that are currently running or queued on any node in the cluster. The local
+  // flows (those that are running on the same node as the query originated on)
+  // are not included.
+  //
+  // Flows are ordered lexicographically by the flow ID.
+  rpc ListDistSQLFlows(ListDistSQLFlowsRequest) returns (ListDistSQLFlowsResponse) {
+    option (google.api.http) = {
+      get : "/_status/distsql_flows"
+    };
+  }
+
+  // ListLocalDistSQLFlows retrieves all of the remote flows of the DistSQL
+  // execution that are currently running or queued on this node in the cluster.
+  // Queries that originated on this node are not be included.
+  //
+  // Flows are ordered lexicographically by the flow ID.
+  rpc ListLocalDistSQLFlows(ListDistSQLFlowsRequest) returns (ListDistSQLFlowsResponse) {
+    option (google.api.http) = {
+      get : "/_status/local_distsql_flows"
     };
   }
 

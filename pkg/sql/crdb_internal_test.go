@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,15 +32,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -609,5 +614,192 @@ func TestExplainTreePlanNodeToJSON(t *testing.T) {
 		explainTreeJSON := sql.ExplainTreePlanNodeToJSON(&testData.explainTree)
 		require.Equal(t, testData.expected, explainTreeJSON.String())
 	}
+}
 
+func TestDistSQLFlowsVirtualTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 3
+	const gatewayNodeID = 0
+
+	var queryRunningAtomic, stallAtomic int64
+	unblock := make(chan struct{})
+
+	tableKey := keys.SystemSQLCodec.TablePrefix(keys.MinNonPredefinedUserDescID + 1)
+	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+
+	// Install a store filter which, if both queryRunningAtomic and stallAtomic
+	// are 1, will block the scan requests until 'unblock' channel is closed.
+	//
+	// The filter is needed in order to pause the execution of the running flows
+	// in order to observe them in the virtual tables.
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
+					if atomic.LoadInt64(&stallAtomic) == 1 {
+						if req.IsSingleRequest() {
+							scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+							if ok && tableSpan.ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
+								t.Logf("stalling on scan at %s and waiting for test to unblock...", scan.Key)
+								<-unblock
+							}
+						}
+					}
+					return nil
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      params,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a table with 3 rows, split them into 3 ranges with each node
+	// having one.
+	db := tc.ServerConn(gatewayNodeID)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		3,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+	sqlDB.Exec(t, "ALTER TABLE test.foo SPLIT AT VALUES (1), (2)")
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 1), (ARRAY[%d], 2)",
+			tc.Server(0).GetFirstStoreID(),
+			tc.Server(1).GetFirstStoreID(),
+			tc.Server(2).GetFirstStoreID(),
+		),
+	)
+
+	// When maxRunningFlows is 0, we expect the remote flows to be queued up and
+	// the test query will error out; when it is 1, we block the execution of
+	// running flows.
+	for maxRunningFlows := range []int{0, 1} {
+		t.Run(fmt.Sprintf("MaxRunningFlows=%d", maxRunningFlows), func(t *testing.T) {
+			// Limit the execution of remote flows and shorten the timeout.
+			const flowStreamTimeout = 1 // in seconds
+			sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=$1", maxRunningFlows)
+			sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_stream_timeout=$1", fmt.Sprintf("%ds", flowStreamTimeout))
+
+			// Wait for all nodes to get the updated values of these cluster
+			// settings.
+			testutils.SucceedsSoon(t, func() error {
+				for nodeID := 0; nodeID < numNodes; nodeID++ {
+					conn := tc.ServerConn(nodeID)
+					db := sqlutils.MakeSQLRunner(conn)
+					var flows int
+					db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows").Scan(&flows)
+					if flows != maxRunningFlows {
+						return errors.New("old max_running_flows value")
+					}
+					var timeout string
+					db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.flow_stream_timeout").Scan(&timeout)
+					if timeout != fmt.Sprintf("00:00:0%d", flowStreamTimeout) {
+						return errors.Errorf("old flow_stream_timeout value")
+					}
+				}
+				return nil
+			})
+
+			if maxRunningFlows == 1 {
+				atomic.StoreInt64(&stallAtomic, 1)
+				defer func() {
+					atomic.StoreInt64(&stallAtomic, 0)
+				}()
+			}
+
+			// Spin up a separate goroutine that will run the query. If
+			// maxRunningFlows is 0, the query eventually will error out because
+			// the remote flows don't connect in time; if maxRunningFlows is 1,
+			// the query will succeed once we close 'unblock' channel.
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			g := ctxgroup.WithContext(ctx)
+			g.GoCtx(func(ctx context.Context) error {
+				conn := tc.ServerConn(gatewayNodeID)
+				atomic.StoreInt64(&queryRunningAtomic, 1)
+				_, err := conn.ExecContext(ctx, "SELECT * FROM test.foo")
+				atomic.StoreInt64(&queryRunningAtomic, 0)
+				return err
+			})
+
+			t.Log("waiting for remote flows to be scheduled or run")
+			testutils.SucceedsSoon(t, func() error {
+				for idx, s := range []*distsql.ServerImpl{
+					tc.Server(1).DistSQLServer().(*distsql.ServerImpl),
+					tc.Server(2).DistSQLServer().(*distsql.ServerImpl),
+				} {
+					numQueued := s.NumRemoteFlowsInQueue()
+					if numQueued != 1-maxRunningFlows {
+						return errors.Errorf("%d flows are found in the queue of node %d, %d expected", numQueued, idx+1, 1-maxRunningFlows)
+					}
+					numRunning := s.NumRemoteRunningFlows()
+					if numRunning != maxRunningFlows {
+						return errors.Errorf("%d flows are found in the queue of node %d, %d expected", numRunning, idx+1, maxRunningFlows)
+					}
+				}
+				return nil
+			})
+
+			t.Log("checking the virtual tables")
+			for nodeID := 0; nodeID < numNodes; nodeID++ {
+				conn := tc.ServerConn(nodeID)
+				db := sqlutils.MakeSQLRunner(conn)
+				var runningOn, queuedOn string
+
+				// Check cluster level table.
+				db.QueryRow(t, "SELECT running_on_nodes, queued_on_nodes FROM crdb_internal.cluster_distsql_flows").Scan(&runningOn, &queuedOn)
+				expRunningOn, expQueuedOn := "{}", "{2,3}"
+				if maxRunningFlows == 1 {
+					expRunningOn, expQueuedOn = expQueuedOn, expRunningOn
+				}
+				if runningOn != expRunningOn || queuedOn != expQueuedOn {
+					t.Fatalf("unexpected output from cluster_distsql_flows on node %d", nodeID+1)
+				}
+
+				// Check node level table.
+				localQuery := "SELECT running_on_nodes, queued_on_nodes FROM crdb_internal.node_distsql_flows"
+				if nodeID == gatewayNodeID {
+					r := db.Query(t, localQuery)
+					defer func() {
+						_ = r.Close()
+					}()
+					if r.Next() {
+						t.Fatal("unexpectedly non empty output from node_distsql_flows on the gateway")
+					}
+				} else {
+					db.QueryRow(t, localQuery).Scan(&runningOn, &queuedOn)
+					expRunningOn, expQueuedOn = "{}", fmt.Sprintf("{%d}", nodeID+1)
+					if maxRunningFlows == 1 {
+						expRunningOn, expQueuedOn = expQueuedOn, expRunningOn
+					}
+					if runningOn != expRunningOn || queuedOn != expQueuedOn {
+						t.Fatalf("unexpected output from node_distsql_flows on node %d", nodeID+1)
+					}
+				}
+			}
+
+			if maxRunningFlows == 1 {
+				// Unblock the scan requests.
+				close(unblock)
+			}
+
+			t.Log("waiting for query to finish")
+			err := g.Wait()
+			if maxRunningFlows == 0 {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

@@ -23,6 +23,7 @@ import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -2246,4 +2247,17 @@ message ContentionEvent {
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
+}
+
+// NodeIDWithTimestamp is a message associating a NodeID with some arbitrary
+// timestamp (in the UTC timezone).
+message NodeIDWithTimestamp {
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"
+  ];
+
+  // Timestamp must be in the UTC timezone.
+  google.protobuf.Timestamp timestamp = 2 [
+    (gogoproto.nullable) = false, (gogoproto.stdtime) = true
+  ];
 }
