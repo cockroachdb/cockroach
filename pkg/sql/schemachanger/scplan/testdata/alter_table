@@ -1,0 +1,824 @@
+create-table
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
+----
+
+ops
+ALTER TABLE defaultdb.foo ADD COLUMN j INT
+----
+Stage 0
+ =======
+Op Idx: 0 *scop.MakeAddedColumnDeleteOnly
+=========
+Column:
+  alter_column_type_in_progress: false
+  hidden: false
+  id: 2
+  name: j
+  nullable: true
+  pg_attribute_num: 0
+  system_column_kind: 0
+  type:
+    InternalType:
+      family: 1
+      locale: ""
+      oid: 20
+      precision: 0
+      time_precision_is_set: false
+      visible_type: 0
+      width: 64
+    TypeMeta:
+      EnumData: null
+      Name: null
+      Version: 0
+  virtual: false
+FamilyID: 0
+FamilyName: primary
+TableID: 52
+Op Idx: 1 *scop.MakeAddedIndexDeleteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  store_column_ids:
+  - 2
+  store_column_names:
+  - j
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Stage 1
+ =======
+Op Idx: 0 *scop.MakeAddedColumnDeleteAndWriteOnly
+=========
+ColumnID: 2
+TableID: 52
+Op Idx: 1 *scop.MakeAddedIndexDeleteAndWriteOnly
+=========
+IndexID: 2
+TableID: 52
+Stage 2
+ =======
+Op Idx: 0 scop.BackfillIndex
+=========
+IndexID: 2
+TableID: 52
+Stage 3
+ =======
+Op Idx: 0 scop.ValidateUniqueIndex
+=========
+IndexID: 2
+PrimaryIndexID: 1
+TableID: 52
+Stage 4
+ =======
+Op Idx: 0 *scop.MakeColumnPublic
+=========
+ColumnID: 2
+TableID: 52
+Op Idx: 1 *scop.MakeAddedPrimaryIndexPublic
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 0
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Op Idx: 2 *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 1
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: primary
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Stage 5
+ =======
+Op Idx: 0 *scop.MakeDroppedIndexDeleteOnly
+=========
+IndexID: 1
+TableID: 52
+Stage 6
+ =======
+Op Idx: 0 *scop.MakeIndexAbsent
+=========
+IndexID: 1
+TableID: 52
+
+ops
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
+----
+Stage 0
+ =======
+Op Idx: 0 *scop.MakeAddedColumnDeleteOnly
+=========
+Column:
+  alter_column_type_in_progress: false
+  default_expr: 123:::INT8
+  hidden: false
+  id: 2
+  name: j
+  nullable: true
+  pg_attribute_num: 0
+  system_column_kind: 0
+  type:
+    InternalType:
+      family: 1
+      locale: ""
+      oid: 20
+      precision: 0
+      time_precision_is_set: false
+      visible_type: 0
+      width: 64
+    TypeMeta:
+      EnumData: null
+      Name: null
+      Version: 0
+  virtual: false
+FamilyID: 0
+FamilyName: primary
+TableID: 52
+Op Idx: 1 *scop.MakeAddedIndexDeleteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  store_column_ids:
+  - 2
+  store_column_names:
+  - j
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Stage 1
+ =======
+Op Idx: 0 *scop.MakeAddedColumnDeleteAndWriteOnly
+=========
+ColumnID: 2
+TableID: 52
+Op Idx: 1 *scop.MakeAddedIndexDeleteAndWriteOnly
+=========
+IndexID: 2
+TableID: 52
+Stage 2
+ =======
+Op Idx: 0 scop.BackfillIndex
+=========
+IndexID: 2
+TableID: 52
+Stage 3
+ =======
+Op Idx: 0 scop.ValidateUniqueIndex
+=========
+IndexID: 2
+PrimaryIndexID: 1
+TableID: 52
+Stage 4
+ =======
+Op Idx: 0 *scop.MakeColumnPublic
+=========
+ColumnID: 2
+TableID: 52
+Op Idx: 1 *scop.MakeAddedPrimaryIndexPublic
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 0
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Op Idx: 2 *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 1
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: primary
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Stage 5
+ =======
+Op Idx: 0 *scop.MakeDroppedIndexDeleteOnly
+=========
+IndexID: 1
+TableID: 52
+Stage 6
+ =======
+Op Idx: 0 *scop.MakeIndexAbsent
+=========
+IndexID: 1
+TableID: 52
+
+plan
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
+ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
+----
+unknown command: plan
+
+plan
+ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
+----
+unknown command: plan
+
+create-table
+CREATE TABLE defaultdb.bar (j INT);
+----
+
+ops
+ALTER TABLE defaultdb.foo ADD COLUMN a INT;
+ALTER TABLE defaultdb.bar ADD COLUMN b INT;
+----
+Stage 0
+ =======
+Op Idx: 0 *scop.MakeAddedColumnDeleteOnly
+=========
+Column:
+  alter_column_type_in_progress: false
+  hidden: false
+  id: 2
+  name: a
+  nullable: true
+  pg_attribute_num: 0
+  system_column_kind: 0
+  type:
+    InternalType:
+      family: 1
+      locale: ""
+      oid: 20
+      precision: 0
+      time_precision_is_set: false
+      visible_type: 0
+      width: 64
+    TypeMeta:
+      EnumData: null
+      Name: null
+      Version: 0
+  virtual: false
+FamilyID: 0
+FamilyName: primary
+TableID: 52
+Op Idx: 1 *scop.MakeAddedIndexDeleteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  store_column_ids:
+  - 2
+  store_column_names:
+  - a
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Op Idx: 2 *scop.MakeAddedColumnDeleteOnly
+=========
+Column:
+  alter_column_type_in_progress: false
+  hidden: false
+  id: 3
+  name: b
+  nullable: true
+  pg_attribute_num: 0
+  system_column_kind: 0
+  type:
+    InternalType:
+      family: 1
+      locale: ""
+      oid: 20
+      precision: 0
+      time_precision_is_set: false
+      visible_type: 0
+      width: 64
+    TypeMeta:
+      EnumData: null
+      Name: null
+      Version: 0
+  virtual: false
+FamilyID: 0
+FamilyName: primary
+TableID: 53
+Op Idx: 3 *scop.MakeAddedIndexDeleteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 2
+  key_column_names:
+  - rowid
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  store_column_ids:
+  - 1
+  - 3
+  store_column_names:
+  - j
+  - b
+  type: 0
+  unique: true
+  version: 0
+TableID: 53
+Stage 1
+ =======
+Op Idx: 0 *scop.MakeAddedColumnDeleteAndWriteOnly
+=========
+ColumnID: 2
+TableID: 52
+Op Idx: 1 *scop.MakeAddedIndexDeleteAndWriteOnly
+=========
+IndexID: 2
+TableID: 52
+Op Idx: 2 *scop.MakeAddedColumnDeleteAndWriteOnly
+=========
+ColumnID: 3
+TableID: 53
+Op Idx: 3 *scop.MakeAddedIndexDeleteAndWriteOnly
+=========
+IndexID: 2
+TableID: 53
+Stage 2
+ =======
+Op Idx: 0 scop.BackfillIndex
+=========
+IndexID: 2
+TableID: 52
+Op Idx: 1 scop.BackfillIndex
+=========
+IndexID: 2
+TableID: 53
+Stage 3
+ =======
+Op Idx: 0 scop.ValidateUniqueIndex
+=========
+IndexID: 2
+PrimaryIndexID: 1
+TableID: 52
+Op Idx: 1 scop.ValidateUniqueIndex
+=========
+IndexID: 2
+PrimaryIndexID: 1
+TableID: 53
+Stage 4
+ =======
+Op Idx: 0 *scop.MakeColumnPublic
+=========
+ColumnID: 2
+TableID: 52
+Op Idx: 1 *scop.MakeAddedPrimaryIndexPublic
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 0
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Op Idx: 2 *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 1
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 1
+  key_column_names:
+  - i
+  name: primary
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  type: 0
+  unique: true
+  version: 3
+TableID: 52
+Op Idx: 3 *scop.MakeColumnPublic
+=========
+ColumnID: 3
+TableID: 53
+Op Idx: 4 *scop.MakeAddedPrimaryIndexPublic
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 0
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 2
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 2
+  key_column_names:
+  - rowid
+  name: new_primary_key
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  type: 0
+  unique: true
+  version: 0
+TableID: 53
+Op Idx: 5 *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+=========
+Index:
+  created_explicitly: false
+  disabled: false
+  encoding_type: 1
+  foreign_key:
+    index: 0
+    match: SIMPLE
+    name: ""
+    on_delete: NO_ACTION
+    on_update: NO_ACTION
+    shared_prefix_len: 0
+    table: 0
+    validity: 0
+  geo_config: {}
+  id: 1
+  interleave:
+    ancestors: null
+  interleaved_by: null
+  key_column_directions:
+  - 0
+  key_column_ids:
+  - 2
+  key_column_names:
+  - rowid
+  name: primary
+  partitioning:
+    list: null
+    num_columns: 0
+    num_implicit_columns: 0
+    range: null
+  predicate: ""
+  referenced_by: null
+  sharded:
+    is_sharded: false
+    name: ""
+    shard_buckets: 0
+  store_column_ids:
+  - 1
+  store_column_names:
+  - j
+  type: 0
+  unique: true
+  version: 0
+TableID: 53
+Stage 5
+ =======
+Op Idx: 0 *scop.MakeDroppedIndexDeleteOnly
+=========
+IndexID: 1
+TableID: 52
+Op Idx: 1 *scop.MakeDroppedIndexDeleteOnly
+=========
+IndexID: 1
+TableID: 53
+Stage 6
+ =======
+Op Idx: 0 *scop.MakeIndexAbsent
+=========
+IndexID: 1
+TableID: 52
+Op Idx: 1 *scop.MakeIndexAbsent
+=========
+IndexID: 1
+TableID: 53
