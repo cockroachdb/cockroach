@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -209,22 +210,18 @@ func (r *Replica) executeWriteBatch(
 			// resolution is semi-synchronous in that there is a limited number of
 			// outstanding asynchronous resolution tasks allowed after which
 			// further calls will block.
-			if len(propResult.EncounteredIntents) > 0 {
-				// TODO(peter): Re-proposed and canceled (but executed) commands can
-				// both leave intents to GC that don't hit this code path. No good
-				// solution presents itself at the moment and such intents will be
-				// resolved on reads.
-				if err := r.store.intentResolver.CleanupIntentsAsync(
-					ctx, propResult.EncounteredIntents, true, /* allowSync */
-				); err != nil {
-					log.Warningf(ctx, "%v", err)
-				}
-			}
 			if len(propResult.EndTxns) > 0 {
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
-					log.Warningf(ctx, "%v", err)
+					log.Warningf(ctx, "transaction cleanup failed: %v", err)
+				}
+			}
+			if len(propResult.EncounteredIntents) > 0 {
+				if err := r.store.intentResolver.CleanupIntentsAsync(
+					ctx, propResult.EncounteredIntents, true, /* allowSync */
+				); err != nil {
+					log.Warningf(ctx, "intent cleanup failed: %v", err)
 				}
 			}
 			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
@@ -281,6 +278,7 @@ func (r *Replica) executeWriteBatch(
 				propResult.Err = roachpb.NewError(applicationErr)
 			}
 			return propResult.Reply, nil, propResult.Err
+
 		case <-slowTimer.C:
 			slowTimer.Read = true
 			r.store.metrics.SlowRaftRequests.Inc(1)
@@ -289,13 +287,45 @@ func (r *Replica) executeWriteBatch(
 			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
 				r.RaftStatus(), ba, timeutil.Since(startPropTime))
 			log.Errorf(ctx, "range unavailable: %v", s)
+
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
+			//
+			// If the batch contained an EndTxnRequest, asynchronously wait
+			// around for the result for a while and try to clean up after the
+			// txn. If the resolver's async task pool is full, just skip cleanup
+			// by setting allowSync=false, since we won't be able to
+			// backpressure clients.
+			if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+				const taskName = "async txn cleanup"
+				_ = r.store.stopper.RunAsyncTask(
+					r.AnnotateCtx(context.Background()),
+					taskName,
+					func(ctx context.Context) {
+						err := contextutil.RunWithTimeout(ctx, taskName, 20*time.Second,
+							func(ctx context.Context) error {
+								select {
+								case propResult := <-ch:
+									if len(propResult.EndTxns) > 0 {
+										return r.store.intentResolver.CleanupTxnIntentsAsync(ctx,
+											r.RangeID, propResult.EndTxns, false /* allowSync */)
+									}
+								case <-shouldQuiesce:
+								case <-ctx.Done():
+								}
+								return nil
+							})
+						if err != nil {
+							log.Warningf(ctx, "transaction cleanup failed: %v", err)
+						}
+					})
+			}
 			abandon()
 			log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
 			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error()))
+
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError, which indicates
 			// to the caller that the command may have executed.
