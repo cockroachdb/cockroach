@@ -396,6 +396,14 @@ SET timezone = ('-06:59:00') -- fully parenthesized
 SET timezone = _ -- literals removed
 SET timezone = '-06:59:00' -- identifiers removed
 
+error
+SET TIME ZONE INTERVAL 'foobar'
+----
+at or near "EOF": syntax error: could not parse "foobar" as type interval: interval: missing number at position 0: "foobar"
+DETAIL: source SQL:
+SET TIME ZONE INTERVAL 'foobar'
+                               ^
+
 
 parse
 SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SERIALIZABLE

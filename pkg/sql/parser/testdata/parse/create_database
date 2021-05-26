@@ -346,3 +346,20 @@ CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1"
 CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1" -- fully parenthesized
 CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1" -- literals removed
 CREATE DATABASE IF NOT EXISTS _ PRIMARY REGION _ -- identifiers removed
+
+
+error
+CREATE DATABASE a b
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+CREATE DATABASE a b
+                  ^
+
+error
+CREATE DATABASE a b c
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+CREATE DATABASE a b c
+                  ^

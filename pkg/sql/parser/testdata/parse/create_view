@@ -70,6 +70,24 @@ CREATE VIEW a AS TABLE b -- fully parenthesized
 CREATE VIEW a AS TABLE b -- literals removed
 CREATE VIEW _ AS TABLE _ -- identifiers removed
 
+error
+CREATE VIEW a
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CREATE VIEW a
+             ^
+HINT: try \h CREATE VIEW
+
+error
+CREATE VIEW a () AS select * FROM b
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+CREATE VIEW a () AS select * FROM b
+               ^
+HINT: try \h CREATE VIEW
+
 parse
 CREATE TEMPORARY VIEW a AS SELECT b
 ----

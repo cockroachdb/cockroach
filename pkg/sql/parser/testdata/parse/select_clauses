@@ -342,6 +342,72 @@ SELECT ('a') FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS} -- fully parenthe
 SELECT _ FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS} -- literals removed
 SELECT 'a' FROM _@{FORCE_INDEX=_,DESC,IGNORE_FOREIGN_KEYS} -- identifiers removed
 
+error
+SELECT a FROM foo@{FORCE_INDEX}
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX}
+                              ^
+HINT: try \h <SOURCE>
+
+error
+SELECT a FROM foo@{FORCE_INDEX=}
+----
+at or near "}": syntax error
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=}
+                               ^
+HINT: try \h <SOURCE>
+
+error
+SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
+----
+at or near "baz": syntax error: FORCE_INDEX specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
+                                               ^
+
+error
+SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
+----
+at or near "}": syntax error: FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN
+DETAIL: source SQL:
+SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
+                                                ^
+
+error
+SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
+----
+at or near "no_index_join": syntax error: NO_INDEX_JOIN specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
+                                 ^
+
+error
+SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
+----
+at or near "ignore_foreign_keys": syntax error: IGNORE_FOREIGN_KEYS specified multiple times
+DETAIL: source SQL:
+SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
+                                       ^
+
+error
+SELECT a FROM foo@{ASC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT a FROM foo@{ASC}
+                      ^
+
+error
+SELECT a FROM foo@{DESC}
+----
+at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
+DETAIL: source SQL:
+SELECT a FROM foo@{DESC}
+                       ^
+
 parse
 SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'
 ----
@@ -1278,6 +1344,15 @@ SELECT (((a.b))) FROM t WHERE ((((b.c))) = (2)) -- fully parenthesized
 SELECT (a.b) FROM t WHERE (b.c) = _ -- literals removed
 SELECT (_._) FROM _ WHERE (_._) = 2 -- identifiers removed
 
+error
+SELECT * FROM t WHERE k=
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SELECT * FROM t WHERE k=
+                        ^
+HINT: try \h SELECT
+
 parse
 SELECT a FROM t ORDER BY a
 ----
@@ -2078,6 +2153,62 @@ SELECT ((avg)((1)) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES)) FROM t -- fully
 SELECT avg(_) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t -- literals removed
 SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM _ -- identifiers removed
 
+error
+SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
+----
+at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
+                                   ^
+
+error
+SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
+----
+at or near "following": syntax error: frame starting from following row cannot end with current row
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
+                           ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
+----
+at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
+                                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
+----
+at or near "preceding": syntax error: frame end cannot be UNBOUNDED PRECEDING
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
+                                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
+----
+at or near "preceding": syntax error: frame starting from current row cannot have preceding rows
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
+                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
+----
+at or near "preceding": syntax error: frame starting from following row cannot have preceding rows
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
+                                                   ^
+
+error
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
+----
+at or near "row": syntax error: frame starting from following row cannot have preceding rows
+DETAIL: source SQL:
+SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
+                                                         ^
+
 parse
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c) FROM t
 ----
@@ -2117,6 +2248,14 @@ SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t
 SELECT ((percentile_cont)((ARRAY[(0.95), (0.90)])) WITHIN GROUP (ORDER BY (c))) FROM t -- fully parenthesized
 SELECT percentile_cont(ARRAY[_, _]) WITHIN GROUP (ORDER BY c) FROM t -- literals removed
 SELECT percentile_cont(ARRAY[0.95, 0.90]) WITHIN GROUP (ORDER BY _) FROM _ -- identifiers removed
+
+error
+SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x;
+----
+at or near ")": syntax error: multiple ORDER BY clauses are not supported in this function
+DETAIL: source SQL:
+SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x
+                                                        ^
 
 parse
 SELECT avg(1) FILTER (WHERE a > b)

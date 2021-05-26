@@ -25,6 +25,14 @@ TABLE [123 AS a] -- fully parenthesized
 TABLE [123 AS a] -- literals removed
 TABLE [123 AS _] -- identifiers removed
 
+error
+TABLE abc[TRUE]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+TABLE abc[TRUE]
+         ^
+
 parse
 VALUES ("") -- nb: double quote is an identifier, not a string
 ----

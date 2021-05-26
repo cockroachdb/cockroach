@@ -183,6 +183,14 @@ CREATE TABLE a (b VARCHAR, c VARCHAR(3)) -- fully parenthesized
 CREATE TABLE a (b VARCHAR, c VARCHAR(3)) -- literals removed
 CREATE TABLE _ (_ VARCHAR, _ VARCHAR(3)) -- identifiers removed
 
+error
+CREATE TABLE foo(a CHAR(0))
+----
+at or near ")": syntax error: length for type CHAR must be at least 1
+DETAIL: source SQL:
+CREATE TABLE foo(a CHAR(0))
+                         ^
+
 parse
 CREATE TABLE a (b BIT VARYING(2), c BIT(1))
 ----
@@ -190,6 +198,17 @@ CREATE TABLE a (b VARBIT(2), c BIT) -- normalized!
 CREATE TABLE a (b VARBIT(2), c BIT) -- fully parenthesized
 CREATE TABLE a (b VARBIT(2), c BIT) -- literals removed
 CREATE TABLE _ (_ VARBIT(2), _ BIT) -- identifiers removed
+
+error
+CREATE TABLE test (
+  foo BIT(0)
+)
+----
+at or near ")": syntax error: length for type bit must be at least 1
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo BIT(0)
+           ^
 
 
 parse
@@ -475,6 +494,30 @@ CREATE TABLE a (b INT8 CONSTRAINT always NOT NULL) -- fully parenthesized
 CREATE TABLE a (b INT8 CONSTRAINT always NOT NULL) -- literals removed
 CREATE TABLE _ (_ INT8 CONSTRAINT _ NOT NULL) -- identifiers removed
 
+error
+CREATE TABLE test (
+  foo INT8 NOT NULL NULL
+)
+----
+at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 NOT NULL NULL
+)
+^
+
+error
+CREATE TABLE test (
+  foo INT8 NULL NOT NULL
+)
+----
+at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 NULL NOT NULL
+)
+^
+
 parse
 CREATE TABLE a (b INT8 PRIMARY KEY)
 ----
@@ -562,6 +605,18 @@ CREATE TABLE a (b INT8 DEFAULT now())
 CREATE TABLE a (b INT8 DEFAULT ((now)())) -- fully parenthesized
 CREATE TABLE a (b INT8 DEFAULT now()) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT now()) -- identifiers removed
+
+error
+CREATE TABLE test (
+  foo INT8 DEFAULT 1 DEFAULT 2
+)
+----
+at or near ")": syntax error: multiple default values specified for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 DEFAULT 1 DEFAULT 2
+)
+^
 
 parse
 CREATE TABLE a (a INT8 CHECK (a > 0))
@@ -675,6 +730,18 @@ CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other)
 CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other) -- fully parenthesized
 CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _) -- identifiers removed
+
+error
+CREATE TABLE test (
+  foo INT8 REFERENCES t1 REFERENCES t2
+)
+----
+at or near ")": syntax error: multiple foreign key constraints specified for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 REFERENCES t1 REFERENCES t2
+)
+^
 
 parse
 CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT)
@@ -1237,6 +1304,18 @@ CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PAREN
 CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- fully parenthesized
 CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE (_, _) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
+
+error
+CREATE TABLE test (
+  CONSTRAINT foo INDEX (bar)
+)
+----
+at or near "index": syntax error
+DETAIL: source SQL:
+CREATE TABLE test (
+  CONSTRAINT foo INDEX (bar)
+                 ^
+HINT: try \h CREATE TABLE
 
 parse
 CREATE TABLE a (b INT8, UNIQUE (b))
@@ -1996,6 +2075,18 @@ CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b
 CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT (*) FROM b -- fully parenthesized
 CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b -- literals removed
 CREATE TABLE IF NOT EXISTS _ (_, _ FAMILY _) AS SELECT * FROM _ -- identifiers removed
+
+error
+CREATE TABLE test (
+  foo INT8 FAMILY a FAMILY b
+)
+----
+at or near ")": syntax error: multiple column families specified for column "foo"
+DETAIL: source SQL:
+CREATE TABLE test (
+  foo INT8 FAMILY a FAMILY b
+)
+^
 
 parse
 CREATE TABLE a (b STRING COLLATE de)

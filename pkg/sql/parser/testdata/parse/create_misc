@@ -106,3 +106,27 @@ CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01' -
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME ('2016-01-01') -- fully parenthesized
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME _ -- literals removed
 CREATE STATISTICS _ ON _ FROM _ WITH OPTIONS AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
+
+error
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0
+----
+at or near "2.0": syntax error: THROTTLING fraction must be between 0 and 1
+DETAIL: source SQL:
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0
+                                                           ^
+
+error
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
+----
+at or near "0.5": syntax error: THROTTLING specified multiple times
+DETAIL: source SQL:
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
+                                                                          ^
+
+error
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
+----
+at or near "EOF": syntax error: AS OF specified multiple times
+DETAIL: source SQL:
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
+                                                                                                              ^

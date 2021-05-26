@@ -182,6 +182,15 @@ SELECT (strpos(('high'), ('ig'))) -- fully parenthesized
 SELECT strpos(_, _) -- literals removed
 SELECT strpos('high', 'ig') -- identifiers removed
 
+error
+SELECT POSITION('high', 'a')
+----
+at or near ",": syntax error
+DETAIL: source SQL:
+SELECT POSITION('high', 'a')
+                      ^
+HINT: try \h SELECT
+
 parse
 SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3)
 ----
