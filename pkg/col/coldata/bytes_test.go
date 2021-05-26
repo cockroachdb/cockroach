@@ -18,11 +18,11 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 )
 
 type bytesMethod int
@@ -471,7 +471,7 @@ func TestToArrowSerializationFormat(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nullChance := 0.2
 	maxStringLength := 10
-	numElements := rng.Intn(BatchSize())
+	numElements := 1 + rng.Intn(BatchSize())
 
 	b := NewBytes(numElements)
 	for i := 0; i < numElements; i++ {
@@ -485,7 +485,10 @@ func TestToArrowSerializationFormat(t *testing.T) {
 	b.UpdateOffsetsToBeNonDecreasing(numElements)
 
 	startIdx := rng.Intn(numElements)
-	endIdx := 1 + startIdx + rng.Intn(numElements-startIdx-1)
+	endIdx := startIdx + rng.Intn(numElements-startIdx)
+	if endIdx == startIdx {
+		endIdx++
+	}
 	wind := b.Window(startIdx, endIdx)
 
 	data, offsets := wind.ToArrowSerializationFormat(wind.Len())
@@ -497,7 +500,7 @@ func TestToArrowSerializationFormat(t *testing.T) {
 	// Verify that the offsets maintain the non-decreasing invariant.
 	for i := 1; i < len(offsets); i++ {
 		if offsets[i] < offsets[i-1] {
-			panic(errors.AssertionFailedf("unexpectedly found decreasing offsets: %v", offsets))
+			require.GreaterOrEqualf(t, offsets[i], offsets[i-1], "unexpectedly found decreasing offsets: %v", offsets)
 		}
 	}
 
