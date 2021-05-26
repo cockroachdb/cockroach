@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 )
 
 type bytesMethod int
@@ -460,4 +461,49 @@ func TestProportionalSize(t *testing.T) {
 	// Notably we don't start the window from the beginning.
 	quarterSize := b.Window(fullCapacity/4, fullCapacity/2).ProportionalSize(int64(fullCapacity / 4))
 	require.Equal(t, int(fullSize-FlatBytesOverhead)/4, int(quarterSize-FlatBytesOverhead))
+}
+
+const letters = "abcdefghijklmnopqrstuvwxyz"
+
+func TestToArrowSerializationFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, _ := randutil.NewPseudoRand()
+	nullChance := 0.2
+	maxStringLength := 10
+	numElements := rng.Intn(BatchSize())
+
+	b := NewBytes(numElements)
+	for i := 0; i < numElements; i++ {
+		if rng.Float64() < nullChance {
+			continue
+		}
+		element := []byte(randgen.RandString(rng, 1+rng.Intn(maxStringLength), letters))
+		b.Set(i, element)
+	}
+	// We have to call this in case there are trailing nulls.
+	b.UpdateOffsetsToBeNonDecreasing(numElements)
+
+	startIdx := rng.Intn(numElements)
+	endIdx := 1 + startIdx + rng.Intn(numElements-startIdx-1)
+	wind := b.Window(startIdx, endIdx)
+
+	data, offsets := wind.ToArrowSerializationFormat(wind.Len())
+
+	require.Equal(t, wind.Len(), len(offsets)-1)
+	require.Equal(t, int32(0), offsets[0])
+	require.Equal(t, len(data), int(offsets[len(offsets)-1]))
+
+	// Verify that the offsets maintain the non-decreasing invariant.
+	for i := 1; i < len(offsets); i++ {
+		if offsets[i] < offsets[i-1] {
+			panic(errors.AssertionFailedf("unexpectedly found decreasing offsets: %v", offsets))
+		}
+	}
+
+	// Verify that the data contains the correct values.
+	for i := 0; i < len(offsets)-1; i++ {
+		element := data[offsets[i]:offsets[i+1]]
+		require.Equal(t, wind.Get(i), element)
+	}
 }
