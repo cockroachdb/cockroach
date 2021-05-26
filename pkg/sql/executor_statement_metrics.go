@@ -13,7 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -86,7 +88,7 @@ func (ex *connExecutor) recordStatementSummary(
 	stmtErr error,
 	stats topLevelQueryStats,
 ) {
-	phaseTimes := ex.statsCollector.phaseTimes
+	phaseTimes := ex.statsCollector.PhaseTimes()
 
 	// Collect the statistics.
 	runLatRaw := phaseTimes.GetRunLatency()
@@ -124,13 +126,14 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 	}
 
-	stmtID, err := ex.statsCollector.recordStatement(
-		ctx, stmt, planner.instrumentation.PlanForStats(ctx),
+	stmtID, err := ex.statsCollector.RecordStatement(
+		ctx, stmt.AnonymizedStr, planner.instrumentation.PlanForStats(ctx),
 		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn),
 		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
-		automaticRetryCount, rowsAffected, stmtErr,
-		parseLat, planLat, runLat, svcLat, execOverhead, stats, planner,
+		automaticRetryCount, rowsAffected, stmtErr, parseLat, planLat, runLat,
+		svcLat, execOverhead, planner.SessionData().Database, stmt.AST.StatementType(),
+		stats.bytesRead, stats.rowsRead, getNodesFromPlanner(planner),
 	)
 
 	if err != nil {
@@ -145,11 +148,12 @@ func (ex *connExecutor) recordStatementSummary(
 
 	// We limit the number of statementIDs stored for a transaction, as dictated
 	// by the TxnStatsNumStmtIDsToRecord cluster setting.
-	maxStmtIDsLen := TxnStatsNumStmtIDsToRecord.Get(&ex.server.cfg.Settings.SV)
+	maxStmtIDsLen := sqlstats.TxnStatsNumStmtIDsToRecord.Get(&ex.server.cfg.Settings.SV)
 	if int64(len(ex.extraTxnState.transactionStatementIDs)) < maxStmtIDsLen {
 		ex.extraTxnState.transactionStatementIDs = append(
 			ex.extraTxnState.transactionStatementIDs, stmtID)
 	}
+
 	// Add the current statement's ID to the hash. We don't track queries issued
 	// by the internal executor, in which case the hash is uninitialized, and
 	// can therefore be safely ignored.
@@ -192,4 +196,18 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 // We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
 func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
 	return stmt.AST.StatementType() == tree.TypeDML
+}
+
+func getNodesFromPlanner(planner *planner) []int64 {
+	// Retrieve the list of all nodes which the statement was executed on.
+	var nodes []int64
+	if planner.instrumentation.sp != nil {
+		trace := planner.instrumentation.sp.GetRecording()
+		// ForEach returns nodes in order.
+		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
+			nodes = append(nodes, int64(i))
+		})
+	}
+
+	return nodes
 }

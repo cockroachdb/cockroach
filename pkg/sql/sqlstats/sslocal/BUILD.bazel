@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sslocal",
+    srcs = [
+        "app_stats.go",
+        "sql_stats.go",
+        "sslocal_provider.go",
+        "sslocal_stats_collector.go",
+        "sslocal_writer.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/execstats",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessionphase",
+        "//pkg/sql/sqlstats",
+        "//pkg/util",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_pkg_errors//:errors",
+    ],
+)

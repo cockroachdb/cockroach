@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -86,7 +87,7 @@ func (ex *connExecutor) execStmt(
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := ast.(tree.ObserverStatement); ok {
-		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+		ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, ast, res)
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
@@ -352,7 +353,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+	ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutator.paramStatusUpdater = res
 	p.noticeSender = res
@@ -397,7 +398,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
-		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
+		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
 		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
 	)
 	if needFinish {
@@ -405,10 +406,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		defer func() {
 			retErr = ih.Finish(
 				ex.server.cfg,
-				ex.appStats,
+				ex.statsCollector,
 				&ex.extraTxnState.accumulatedStats,
 				ex.extraTxnState.shouldCollectTxnExecutionStats,
-				ex.statsCollector,
 				p,
 				ast,
 				sql,
@@ -808,7 +808,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 ) error {
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
-	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
+	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
 
 	// If adminAuditLogging is enabled, we want to check for HasAdminRole
 	// before the deferred maybeLogStatement.
@@ -851,12 +851,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),
 			res.Err(),
-			ex.statsCollector.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 		)
 	}()
 
-	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
+	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
 	ex.sessionTracing.TracePlanEnd(ctx, err)
 
 	// Finally, process the planning error from above.
@@ -884,7 +884,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
 	}
 
-	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, timeutil.Now())
+	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, timeutil.Now())
 
 	ex.mu.Lock()
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.QueryID]
@@ -926,7 +926,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
 	)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
-	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
+	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
 
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
@@ -1108,7 +1108,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
 		return rwMode, now, nil, nil
 	}
-	ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+	ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
 	p := &ex.planner
 
 	// NB: this use of p.txn is totally bogus. The planner's txn should
@@ -1333,7 +1333,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 ) error {
 	res.SetColumns(ctx, colinfo.ShowLastQueryStatisticsColumns)
 
-	phaseTimes := ex.statsCollector.previousPhaseTimes
+	phaseTimes := ex.statsCollector.PreviousPhaseTimes()
 	runLat := phaseTimes.GetRunLatency().Seconds()
 	parseLat := phaseTimes.GetParsingLatency().Seconds()
 	planLat := phaseTimes.GetPlanningLatency().Seconds()
@@ -1573,13 +1573,13 @@ func (ex *connExecutor) recordTransaction(
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
-	return ex.statsCollector.recordTransaction(
+	return ex.statsCollector.RecordTransaction(
 		ctx,
-		txnKey(ex.extraTxnState.transactionStatementsHash.Sum()),
+		sqlstats.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum()),
 		txnTime.Seconds(),
-		ev,
+		ev == txnCommit,
 		implicit,
-		ex.extraTxnState.autoRetryCounter,
+		int64(ex.extraTxnState.autoRetryCounter),
 		ex.extraTxnState.transactionStatementIDs,
 		txnServiceLat,
 		txnRetryLat,
