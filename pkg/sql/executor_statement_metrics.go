@@ -56,6 +56,8 @@ const (
 	sessionEndExecTransaction             // Transaction is committed/rolled back.
 	sessionStartTransactionCommit         // Transaction `COMMIT` starts.
 	sessionEndTransactionCommit           // Transaction `COMMIT` ends.
+	sessionStartPostCommitJob             // Post transaction `COMMIT` jobs start.
+	sessionEndPostCommitJob               // Post transaction `COMMIT` jobs end.
 
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
@@ -113,6 +115,12 @@ func (p *phaseTimes) getPlanningLatency() time.Duration {
 // getParsingLatency returns the time it takes for a query to be parsed.
 func (p *phaseTimes) getParsingLatency() time.Duration {
 	return p[sessionEndParse].Sub(p[sessionStartParse])
+}
+
+// getPostCommitJobsLatency returns the time spent running the post transaction
+// commit jobs, such as schema changes.
+func (p *phaseTimes) getPostCommitJobsLatency() time.Duration {
+	return p[sessionEndPostCommitJob].Sub(p[sessionStartPostCommitJob])
 }
 
 func (p *phaseTimes) getTransactionRetryLatency() time.Duration {
