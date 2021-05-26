@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -2460,21 +2461,21 @@ type sqlStatsCollector struct {
 	// into sqlStats set as the session's current app.
 	appStats *appStats
 	// phaseTimes tracks session-level phase times.
-	phaseTimes phaseTimes
+	phaseTimes sessionphase.PhaseTimes
 	// previousPhaseTimes tracks the session-level phase times for the previous
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
-	previousPhaseTimes phaseTimes
+	previousPhaseTimes sessionphase.PhaseTimes
 }
 
 // newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
-// phaseTimes is an array, not a slice, so this performs a copy-by-value.
+// PhaseTimes is an array, not a slice, so this performs a copy-by-value.
 func newSQLStatsCollector(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
+	sqlStats *sqlStats, appStats *appStats, phaseTimes sessionphase.PhaseTimes,
 ) *sqlStatsCollector {
 	return &sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		phaseTimes: phaseTimes,
 	}
 }
 
@@ -2528,7 +2529,9 @@ func (s *sqlStatsCollector) recordTransaction(
 	)
 }
 
-func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
+func (s *sqlStatsCollector) reset(
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *sessionphase.PhaseTimes,
+) {
 	previousPhaseTimes := &s.phaseTimes
 	*s = sqlStatsCollector{
 		sqlStats:           sqlStats,

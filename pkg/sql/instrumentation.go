@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -284,7 +285,7 @@ func (ih *instrumentationHelper) Finish(
 		placeholders := p.extendedEvalCtx.Placeholders
 		ob := ih.buildExplainAnalyzePlan(
 			explain.Flags{Verbose: true, ShowTypes: true},
-			&statsCollector.phaseTimes,
+			statsCollector.phaseTimes,
 			&queryLevelStats,
 		)
 		bundle = buildStatementBundle(
@@ -308,7 +309,7 @@ func (ih *instrumentationHelper) Finish(
 		return setExplainBundleResult(ctx, res, bundle, cfg)
 
 	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
-		phaseTimes := &statsCollector.phaseTimes
+		phaseTimes := statsCollector.phaseTimes
 		var flows []flowInfo
 		if ih.outputMode == explainAnalyzeDistSQLOutput {
 			flows = p.curPlan.distSQLFlowInfos
@@ -408,15 +409,15 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 // with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can be used on the
 // result.
 func (ih *instrumentationHelper) buildExplainAnalyzePlan(
-	flags explain.Flags, phaseTimes *phaseTimes, queryStats *execstats.QueryLevelStats,
+	flags explain.Flags, phaseTimes sessionphase.PhaseTimes, queryStats *execstats.QueryLevelStats,
 ) *explain.OutputBuilder {
 	ob := explain.NewOutputBuilder(flags)
 	if ih.explainPlan == nil {
 		// Return an empty builder if there is no plan.
 		return ob
 	}
-	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
-	ob.AddExecutionTime(phaseTimes.getRunLatency())
+	ob.AddPlanningTime(phaseTimes.GetPlanningLatency())
+	ob.AddExecutionTime(phaseTimes.GetRunLatency())
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 
@@ -447,7 +448,7 @@ func (ih *instrumentationHelper) buildExplainAnalyzePlan(
 func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	ctx context.Context,
 	res RestrictedCommandResult,
-	phaseTimes *phaseTimes,
+	phaseTimes sessionphase.PhaseTimes,
 	queryLevelStats *execstats.QueryLevelStats,
 	distSQLFlowInfos []flowInfo,
 	trace tracing.Recording,
