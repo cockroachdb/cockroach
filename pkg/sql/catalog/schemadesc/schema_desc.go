@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -260,4 +261,11 @@ func IsSchemaNameValid(name string) error {
 		return err
 	}
 	return nil
+}
+
+// Validate validates that the schema descriptor is well formed.
+// This only checks that the privileges for the schema are valid.
+func (desc *Immutable) Validate() error {
+	descpb.MaybeFixSchemaPrivileges(&desc.Privileges)
+	return desc.Privileges.Validate(desc.GetID(), privilege.Schema)
 }

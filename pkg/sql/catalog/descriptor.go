@@ -109,6 +109,8 @@ type DatabaseDescriptor interface {
 type SchemaDescriptor interface {
 	Descriptor
 	SchemaDesc() *descpb.SchemaDescriptor
+
+	Validate() error
 }
 
 // TableDescriptor is an interface around the table descriptor types.

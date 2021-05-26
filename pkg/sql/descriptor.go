@@ -182,6 +182,9 @@ func (p *planner) createDescriptorWithID(
 			}
 		}
 	case *schemadesc.Mutable:
+		if err := desc.Validate(); err != nil {
+			return err
+		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}

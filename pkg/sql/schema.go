@@ -56,6 +56,9 @@ func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable)
 func (p *planner) writeSchemaDescChange(
 	ctx context.Context, desc *schemadesc.Mutable, jobDesc string,
 ) error {
+	if err := desc.Validate(); err != nil {
+		return err
+	}
 	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[desc.ID]
 	if jobExists {
 		// Update it.

@@ -290,7 +290,7 @@ func validateDescriptor(ctx context.Context, dg catalog.DescGetter, desc catalog
 		// TODO(ajwerner): Validate type descriptor.
 		return nil
 	case catalog.SchemaDescriptor:
-		return nil
+		return desc.Validate()
 	default:
 		return errors.AssertionFailedf("unknown descriptor type %T", desc)
 	}
@@ -363,7 +363,11 @@ func unwrapDescriptorMutable(
 	case typ != nil:
 		return typedesc.NewExistingMutable(*typ), nil
 	case schema != nil:
-		return schemadesc.NewMutableExisting(*schema), nil
+		schemaDesc := schemadesc.NewMutableExisting(*schema)
+		if err := schemaDesc.Validate(); err != nil {
+			return nil, err
+		}
+		return schemaDesc, nil
 	default:
 		return nil, nil
 	}
