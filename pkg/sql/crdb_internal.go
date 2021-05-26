@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -807,32 +808,6 @@ CREATE TABLE crdb_internal.jobs (
 	},
 }
 
-type stmtList []stmtKey
-
-func (s stmtList) Len() int {
-	return len(s)
-}
-func (s stmtList) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-func (s stmtList) Less(i, j int) bool {
-	return s[i].anonymizedStmt < s[j].anonymizedStmt
-}
-
-type txnList []txnKey
-
-func (t txnList) Len() int {
-	return len(t)
-}
-
-func (t txnList) Swap(i, j int) {
-	t[i], t[j] = t[j], t[i]
-}
-
-func (t txnList) Less(i, j int) bool {
-	return t[i] < t[j]
-}
-
 // execStatAvg is a helper for execution stats shown in virtual tables. Returns
 // NULL when the count is 0, or the mean of the given NumericStat.
 func execStatAvg(count int64, n roachpb.NumericStat) tree.Datum {
@@ -851,14 +826,14 @@ func execStatVar(count int64, n roachpb.NumericStat) tree.Datum {
 	return tree.NewDFloat(tree.DFloat(n.GetVariance(count)))
 }
 
-// getSQLStats retrieves a sqlStats object from the planner or returns an error
-// if not available. virtualTableName specifies the virtual table for which this
-// sqlStats object is needed.
-func getSQLStats(p *planner, virtualTableName string) (*sqlStats, error) {
-	if p.extendedEvalCtx.sqlStatsCollector == nil || p.extendedEvalCtx.sqlStatsCollector.sqlStats == nil {
+// getSQLStats retrieves a sqlStats storage subsystem from the planner or
+// returns an error if not available. virtualTableName specifies the virtual
+// table for which this sqlStats object is needed.
+func getSQLStats(p *planner, virtualTableName string) (sqlstats.Storage, error) {
+	if p.extendedEvalCtx.statsStorage == nil {
 		return nil, errors.Newf("%s cannot be used in this context", virtualTableName)
 	}
-	return p.extendedEvalCtx.sqlStatsCollector.sqlStats, nil
+	return p.extendedEvalCtx.statsStorage, nil
 }
 
 // ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
@@ -947,120 +922,88 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
-		// Retrieve the application names and sort them to ensure the
-		// output is deterministic.
-		var appNames []string
-		sqlStats.mu.Lock()
-		for n := range sqlStats.mu.apps {
-			appNames = append(appNames, n)
-		}
-		sqlStats.mu.Unlock()
-		sort.Strings(appNames)
-
-		// Now retrieve the application stats proper.
-		for _, appName := range appNames {
-			appStats := sqlStats.getStatsForApplication(appName)
-
-			// Retrieve the statement keys and sort them to ensure the
-			// output is deterministic.
-			var stmtKeys stmtList
-			appStats.Lock()
-			for k := range appStats.stmts {
-				stmtKeys = append(stmtKeys, k)
+		statementVisitor := func(stats *roachpb.CollectedStatementStatistics) error {
+			anonymized := tree.DNull
+			anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stats.Key.Query)
+			if ok {
+				anonymized = tree.NewDString(anonStr)
 			}
-			appStats.Unlock()
-			sort.Sort(stmtKeys)
 
-			// Now retrieve the per-stmt stats proper.
-			for _, stmtKey := range stmtKeys {
-				anonymized := tree.DNull
-				anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stmtKey.anonymizedStmt)
-				if ok {
-					anonymized = tree.NewDString(anonStr)
-				}
+			errString := tree.DNull
+			if stats.Stats.SensitiveInfo.LastErr != "" {
+				errString = tree.NewDString(stats.Stats.SensitiveInfo.LastErr)
+			}
+			var flags string
+			if stats.Key.DistSQL {
+				flags = "+"
+			}
+			if stats.Key.Failed {
+				flags = "!" + flags
+			}
 
-				stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
-				s, _, _ := appStats.getStatsForStmtWithKey(stmtKey, stmtFingerprintID, false /* createIfNonexistent */)
+			samplePlan := ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription)
 
-				// If the key is not found (and we expected to find it), the table must
-				// have been cleared between now and the time we read all the keys. In
-				// that case we simply skip this key as there are no metrics to report.
-				if s == nil {
-					continue
-				}
-
-				s.mu.Lock()
-				errString := tree.DNull
-				if s.mu.data.SensitiveInfo.LastErr != "" {
-					errString = tree.NewDString(s.mu.data.SensitiveInfo.LastErr)
-				}
-				var flags string
-				if s.mu.distSQLUsed {
-					flags = "+"
-				}
-				if stmtKey.failed {
-					flags = "!" + flags
-				}
-
-				samplePlan := ExplainTreePlanNodeToJSON(&s.mu.data.SensitiveInfo.MostRecentPlanDescription)
-
-				execNodeIDs := tree.NewDArray(types.Int)
-				for _, nodeID := range s.mu.data.Nodes {
-					if err := execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
-						return err
-					}
-				}
-
-				err := addRow(
-					tree.NewDInt(tree.DInt(nodeID)), // node_id
-					tree.NewDString(appName),        // application_name
-					tree.NewDString(flags),          // flags
-					tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10)), // statement_id
-					tree.NewDString(stmtKey.anonymizedStmt),                            // key
-					anonymized,                                                         // anonymized
-					tree.NewDInt(tree.DInt(s.mu.data.Count)),                           // count
-					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)),               // first_attempt_count
-					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),                      // max_retries
-					errString, // last_error
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),                             // rows_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),     // rows_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.Mean)),                            // parse_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.GetVariance(s.mu.data.Count))),    // parse_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.Mean)),                             // plan_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.GetVariance(s.mu.data.Count))),     // plan_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.Mean)),                              // run_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.GetVariance(s.mu.data.Count))),      // run_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),                          // service_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))),  // service_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.Mean)),                         // overhead_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.GetVariance(s.mu.data.Count))), // overhead_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.Mean)),                           // bytes_read_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.GetVariance(s.mu.data.Count))),   // bytes_read_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.Mean)),                            // rows_read_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.GetVariance(s.mu.data.Count))),    // rows_read_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),        // network_bytes_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),        // network_bytes_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),     // network_msgs_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),     // network_msgs_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),         // max_mem_usage_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),         // max_mem_usage_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),        // max_disk_usage_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),        // max_disk_usage_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_var
-					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),                                 // implicit_txn
-					tree.MakeDBool(tree.DBool(s.mu.fullScan)),                                       // full_scan
-					tree.NewDJSON(samplePlan),         // sample_plan
-					tree.NewDString(stmtKey.database), // database_name
-					execNodeIDs,                       // exec_node_ids
-				)
-				s.mu.Unlock()
-				if err != nil {
+			execNodeIDs := tree.NewDArray(types.Int)
+			for _, nodeID := range stats.Stats.Nodes {
+				if err := execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
 					return err
 				}
 			}
+
+			err := addRow(
+				tree.NewDInt(tree.DInt(nodeID)),                           // node_id
+				tree.NewDString(stats.Key.App),                            // application_name
+				tree.NewDString(flags),                                    // flags
+				tree.NewDString(strconv.FormatUint(uint64(stats.ID), 10)), // statement_id
+				tree.NewDString(stats.Key.Query),                          // key
+				anonymized,                                                // anonymized
+				tree.NewDInt(tree.DInt(stats.Stats.Count)),                // count
+				tree.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)),    // first_attempt_count
+				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),           // max_retries
+				errString, // last_error
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                               // rows_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),     // rows_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.Mean)),                              // parse_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.GetVariance(stats.Stats.Count))),    // parse_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.PlanLat.Mean)),                               // plan_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.PlanLat.GetVariance(stats.Stats.Count))),     // plan_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RunLat.Mean)),                                // run_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RunLat.GetVariance(stats.Stats.Count))),      // run_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.Mean)),                            // service_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.GetVariance(stats.Stats.Count))),  // service_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.Mean)),                           // overhead_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.GetVariance(stats.Stats.Count))), // overhead_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.Mean)),                             // bytes_read_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.GetVariance(stats.Stats.Count))),   // bytes_read_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.Mean)),                              // rows_read_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.GetVariance(stats.Stats.Count))),    // rows_read_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),        // network_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),        // network_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),     // network_msgs_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),     // network_msgs_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),         // max_mem_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),         // max_mem_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),        // max_disk_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),        // max_disk_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),      // contention_time_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),      // contention_time_var
+				tree.MakeDBool(tree.DBool(stats.Key.ImplicitTxn)),                                   // implicit_txn
+				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                      // full_scan
+				tree.NewDJSON(samplePlan),           // sample_plan
+				tree.NewDString(stats.Key.Database), // database_name
+				execNodeIDs,                         // exec_node_ids
+			)
+			if err != nil {
+				return err
+			}
+
+			return nil
 		}
-		return nil
+
+		return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
+			SortedAppNames: true,
+			SortedKey:      true,
+		}, statementVisitor)
 	},
 }
 
@@ -1114,86 +1057,52 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
-		// Retrieve the application names and sort them to ensure the
-		// output is deterministic.
-		var appNames []string
-		sqlStats.mu.Lock()
-
-		for n := range sqlStats.mu.apps {
-			appNames = append(appNames, n)
-		}
-		sqlStats.mu.Unlock()
-		sort.Strings(appNames)
-
-		for _, appName := range appNames {
-			appStats := sqlStats.getStatsForApplication(appName)
-
-			// Retrieve the statement keys and sort them to ensure the
-			// output is deterministic.
-			var txnKeys txnList
-			appStats.Lock()
-			for k := range appStats.txns {
-				txnKeys = append(txnKeys, k)
-			}
-			appStats.Unlock()
-			sort.Sort(txnKeys)
-
-			// Now retrieve the per-txn stats proper.
-			for _, txnKey := range txnKeys {
-				// We don't want to create the key if it doesn't exist, so it's okay to
-				// pass nil for the statementFingerprintIDs, as they are only set when a key is
-				// constructed.
-				s, _, _ := appStats.getStatsForTxnWithKey(txnKey, nil, false /* createIfNonexistent */)
-				// If the key is not found (and we expected to find it), the table must
-				// have been cleared between now and the time we read all the keys. In
-				// that case we simply skip this key as there are no metrics to report.
-				if s == nil {
-					continue
-				}
-				stmtFingerprintIDsDatum := tree.NewDArray(types.String)
-				for _, stmtFingerprintID := range s.statementFingerprintIDs {
-					if err := stmtFingerprintIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10))); err != nil {
-						return err
-					}
-				}
-
-				s.mu.Lock()
-
-				err := addRow(
-					tree.NewDInt(tree.DInt(nodeID)),                                                // node_id
-					tree.NewDString(appName),                                                       // application_name
-					tree.NewDString(strconv.FormatUint(uint64(txnKey), 10)),                        // key
-					stmtFingerprintIDsDatum,                                                        // statement_ids
-					tree.NewDInt(tree.DInt(s.mu.data.Count)),                                       // count
-					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),                                  // max_retries
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),                         // service_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))), // service_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.Mean)),                           // retry_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.GetVariance(s.mu.data.Count))),   // retry_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.Mean)),                          // commit_lat_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.GetVariance(s.mu.data.Count))),  // commit_lat_var
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),                            // rows_read_avg
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),    // rows_read_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),       // network_bytes_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),       // network_bytes_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),    // network_msgs_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),    // network_msgs_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),        // max_mem_usage_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),        // max_mem_usage_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),       // max_disk_usage_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),       // max_disk_usage_var
-					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),     // contention_time_avg
-					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),     // contention_time_var
-				)
-
-				s.mu.Unlock()
-				if err != nil {
+		transactionVisitor := func(txnID sqlstats.TransactionFingerprintID, stats *roachpb.CollectedTransactionStatistics) error {
+			stmtFingerprintIDsDatum := tree.NewDArray(types.String)
+			for _, stmtFingerprintID := range stats.StatementFingerprintIDs {
+				if err := stmtFingerprintIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10))); err != nil {
 					return err
 				}
 			}
 
+			err := addRow(
+				tree.NewDInt(tree.DInt(nodeID)),                                                    // node_id
+				tree.NewDString(stats.App),                                                         // application_name
+				tree.NewDString(strconv.FormatUint(uint64(txnID), 10)),                             // key
+				stmtFingerprintIDsDatum,                                                            // statement_ids
+				tree.NewDInt(tree.DInt(stats.Stats.Count)),                                         // count
+				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                                    // max_retries
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.Mean)),                           // service_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.GetVariance(stats.Stats.Count))), // service_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RetryLat.Mean)),                             // retry_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RetryLat.GetVariance(stats.Stats.Count))),   // retry_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.Mean)),                            // commit_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.GetVariance(stats.Stats.Count))),  // commit_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                              // rows_read_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),    // rows_read_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),       // network_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),       // network_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),    // network_msgs_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),    // network_msgs_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),        // max_mem_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),        // max_mem_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),       // max_disk_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),       // max_disk_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),     // contention_time_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),     // contention_time_var
+			)
+
+			if err != nil {
+				return err
+			}
+
+			return nil
 		}
-		return nil
+
+		return sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
+			SortedAppNames: true,
+			SortedKey:      true,
+		}, transactionVisitor)
 	},
 }
 
@@ -1222,33 +1131,21 @@ CREATE TABLE crdb_internal.node_txn_stats (
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
-		// Retrieve the application names and sort them to ensure the
-		// output is deterministic.
-		var appNames []string
-		sqlStats.mu.Lock()
-		for n := range sqlStats.mu.apps {
-			appNames = append(appNames, n)
-		}
-		sqlStats.mu.Unlock()
-		sort.Strings(appNames)
-
-		for _, appName := range appNames {
-			appStats := sqlStats.getStatsForApplication(appName)
-			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txnCounts.getStats()
-			err := addRow(
+		appTxnStatsVisitor := func(appName string, stats *roachpb.TxnStats) error {
+			return addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDString(appName),
-				tree.NewDInt(tree.DInt(txnCount)),
-				tree.NewDFloat(tree.DFloat(txnTimeAvg)),
-				tree.NewDFloat(tree.DFloat(txnTimeVar)),
-				tree.NewDInt(tree.DInt(committedCount)),
-				tree.NewDInt(tree.DInt(implicitCount)),
+				tree.NewDInt(tree.DInt(stats.TxnCount)),
+				tree.NewDFloat(tree.DFloat(stats.TxnTimeSec.Mean)),
+				tree.NewDFloat(tree.DFloat(stats.TxnTimeSec.GetVariance(stats.TxnCount))),
+				tree.NewDInt(tree.DInt(stats.CommittedCount)),
+				tree.NewDInt(tree.DInt(stats.ImplicitCount)),
 			)
-			if err != nil {
-				return err
-			}
 		}
-		return nil
+
+		return sqlStats.IterateAggregatedTransactionStats(ctx, &sqlstats.IteratorOptions{
+			SortedAppNames: true,
+		}, appTxnStatsVisitor)
 	},
 }
 

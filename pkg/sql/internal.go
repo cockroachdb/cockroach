@@ -167,7 +167,7 @@ func (ie *InternalExecutor) initConnEx(
 		// If this is already an "internal app", don't put more prefix.
 		appStatsBucketName = sd.ApplicationName
 	}
-	appStats := ie.s.sqlStats.getStatsForApplication(appStatsBucketName)
+	statsWriter := ie.s.sqlStats.GetWriterForApplication(appStatsBucketName)
 
 	var ex *connExecutor
 	if txn == nil {
@@ -179,7 +179,7 @@ func (ie *InternalExecutor) initConnEx(
 			clientComm,
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
-			appStats,
+			statsWriter,
 		)
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
@@ -193,9 +193,10 @@ func (ie *InternalExecutor) initConnEx(
 			&ie.s.InternalMetrics,
 			txn,
 			ie.syntheticDescriptors,
-			appStats,
+			statsWriter,
 		)
 	}
+
 	ex.executorType = executorTypeInternal
 
 	wg.Add(1)
