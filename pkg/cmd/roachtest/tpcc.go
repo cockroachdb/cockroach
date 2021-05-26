@@ -349,6 +349,52 @@ func registerTPCC(r *testRegistry) {
 		},
 	})
 
+	for _, survivalGoal := range []string{"az", "region"} {
+		zs := []string{
+			"us-east1-b", "us-west1-b", "europe-west2-b",
+		}
+		regions := []string{
+			"us-east1",
+			"us-west1",
+			"europe-west2",
+		}
+		r.Add(testSpec{
+			Name:       fmt.Sprintf("tpcc/multiregion/survive=%s/chaos=true", survivalGoal),
+			Owner:      OwnerMultiRegion,
+			MinVersion: "v21.1.0",
+			Cluster:    makeClusterSpec(10, geo(), zones(strings.Join(zs, ","))),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				duration := 90 * time.Minute
+				partitionArgs := fmt.Sprintf(
+					`--survival-goal=%s --regions=%s --partitions=%d`,
+					survivalGoal,
+					strings.Join(regions, ","),
+					len(regions),
+				)
+				// TODO(#multiregion): setup workload to run specifically for a given partition
+				// on each node of a cluster, instead of one node using a workload on all clusters.
+				runTPCC(ctx, t, c, tpccOptions{
+					Warehouses:     9,
+					Duration:       duration,
+					ExtraSetupArgs: partitionArgs,
+					ExtraRunArgs:   `--method=simple --wait=false --tolerate-errors ` + partitionArgs,
+					Chaos: func() Chaos {
+						return Chaos{
+							Timer: Periodic{
+								Period:   300 * time.Second,
+								DownTime: 300 * time.Second,
+							},
+							Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.spec.NodeCount-1)) },
+							Stopper:      time.After(duration),
+							DrainAndQuit: false,
+						}
+					},
+					SetupType: usingInit,
+				})
+			},
+		})
+	}
+
 	r.Add(testSpec{
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
 		Owner:      OwnerKV,
