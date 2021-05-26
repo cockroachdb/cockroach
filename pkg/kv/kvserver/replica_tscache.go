@@ -605,9 +605,15 @@ func applyReadSummaryToTimestampCache(
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 		s.Local.LowWater,
 	)
+	//tc.SetLowWater(
+	//	desc.StartKey.AsRawKey(),
+	//	desc.EndKey.AsRawKey(),
+	//	s.Global.LowWater,
+	//)
+	userKeys := desc.KeySpan()
 	tc.SetLowWater(
-		desc.StartKey.AsRawKey(),
-		desc.EndKey.AsRawKey(),
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
 		s.Global.LowWater,
 	)
 }

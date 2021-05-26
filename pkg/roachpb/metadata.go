@@ -199,6 +199,22 @@ func (r *RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
 }
 
+// KeySpan returns the keys covered by this range. Local keys are not included.
+func (r *RangeDescriptor) KeySpan() RSpan {
+	start := r.StartKey
+	if r.StartKey.Equal(RKeyMin) {
+		// The first range in the keyspace is declared to start at KeyMin (the
+		// lowest possible key). That is a lie, however, since the local key space
+		// ([LocalMin,LocalMax)) doesn't belong to this range; it doesn't belong to
+		// any range in particular.
+		start = RKey(LocalMax)
+	}
+	return RSpan{
+		Key:    start,
+		EndKey: r.EndKey,
+	}
+}
+
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
 func (r *RangeDescriptor) ContainsKey(key RKey) bool {
 	return r.RSpan().ContainsKey(key)
