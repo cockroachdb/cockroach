@@ -320,6 +320,10 @@ type ExecutionStats struct {
 
 	// Nodes on which this operator was executed.
 	Nodes []string
+
+	// Regions on which this operator was executed.
+	// Only being generated on EXPLAIN ANALYZE.
+	Regions []string
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given

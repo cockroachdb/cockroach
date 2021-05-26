@@ -13,6 +13,7 @@ package explain
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -408,4 +409,13 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 		ob.AddTopLevelField("max sql temp disk usage",
 			humanizeutil.IBytes(bytes))
 	}
+}
+
+// AddRegionsStats adds a top-level field for regions executed on statistics.
+func (ob *OutputBuilder) AddRegionsStats(regions []string) {
+	ob.AddRedactableTopLevelField(
+		RedactNodes,
+		"cluster regions",
+		strings.Join(regions, ", "),
+	)
 }
