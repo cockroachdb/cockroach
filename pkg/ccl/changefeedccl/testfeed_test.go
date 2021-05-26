@@ -1072,7 +1072,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 			if format == string(changefeedbase.OptFormatAvro) {
 				// Must use confluent schema registry so that we register our schema
 				// in order to be able to decode kafka messages.
-				registry = cdctest.MakeTestSchemaRegistry()
+				registry = cdctest.StartTestSchemaRegistry()
 				registryOption := tree.KVOption{
 					Key:   changefeedbase.OptConfluentSchemaRegistry,
 					Value: tree.NewStrVal(registry.URL()),
