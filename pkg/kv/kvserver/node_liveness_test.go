@@ -1015,7 +1015,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 		if val := injectError.Load(); val != nil && val.(bool) {
 			atomic.AddInt32(&injectedErrorCount, 1)
 			injectError.Store(false)
-			return roachpb.NewError(roachpb.NewAmbiguousResultError("test"))
+			return roachpb.NewError(roachpb.NewAmbiguousResultErrorf("test"))
 		}
 		return nil
 	}
