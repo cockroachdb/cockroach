@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -1056,9 +1055,9 @@ func (r *Replica) refreshProposalsLocked(
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
 			p.finishApplication(ctx, proposalResult{Err: roachpb.NewError(
-				roachpb.NewAmbiguousResultError(
-					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
-						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
+				roachpb.NewAmbiguousResultErrorf(
+					"unknown status for command without MaxLeaseIndex "+
+						"at refreshProposalsLocked time (refresh reason: %s)", reason))})
 			continue
 		}
 		switch reason {
@@ -1073,7 +1072,7 @@ func (r *Replica) refreshProposalsLocked(
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 				p.finishApplication(ctx, proposalResult{
 					Err: roachpb.NewError(
-						roachpb.NewAmbiguousResultError(
+						roachpb.NewAmbiguousResultErrorf(
 							"unable to determine whether command was applied via snapshot",
 						),
 					),
@@ -1113,7 +1112,7 @@ func (r *Replica) refreshProposalsLocked(
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(ctx, proposalResult{
-				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
+				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err)),
 			})
 		}
 	}

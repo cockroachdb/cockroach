@@ -119,7 +119,7 @@ func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	if c.IsLocal() {
 		c.response.Err = roachpb.NewError(
 			roachpb.NewAmbiguousResultError(
-				err.Error()))
+				err))
 	}
 	return c.AckOutcomeAndFinish(ctx)
 }

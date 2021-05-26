@@ -319,10 +319,11 @@ message LeaseRejectedError {
 // An AmbiguousResultError indicates that a request may have succeeded or
 // failed, but the response was not received and the final result is ambiguous.
 message AmbiguousResultError {
+  // Retained for compatibility with 21.2 nodes. Can be removed in the 22.1
+  // cycle.
   optional string message = 1 [(gogoproto.nullable) = false];
-  // This can be set to give extra information about which error was converted
-  // into an AmbiguousResultError. Useful for tests.
-  optional Error wrapped_err = 2;
+  // The error which caused the ambiguous result error.
+  optional errorspb.EncodedError encoded_err = 2 [(gogoproto.nullable) = false];
 }
 
 // A RaftGroupDeletedError indicates a raft group has been deleted for

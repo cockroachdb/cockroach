@@ -325,7 +325,7 @@ func (r *Replica) executeWriteBatch(
 			abandon()
 			log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error()))
+			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(errors.Wrap(ctx.Err(), "while waiting for proposal")))
 
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError, which indicates
@@ -333,7 +333,7 @@ func (r *Replica) executeWriteBatch(
 			abandon()
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
+			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultErrorf("server shutdown"))
 		}
 	}
 }

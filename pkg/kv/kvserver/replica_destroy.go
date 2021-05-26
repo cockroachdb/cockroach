@@ -203,7 +203,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		p.finishApplication(ctx, proposalResult{
 			Err: roachpb.NewError(
 				roachpb.NewAmbiguousResultError(
-					apply.ErrRemoved.Error())),
+					apply.ErrRemoved)),
 		})
 	}
 	r.mu.internalRaftGroup = nil
