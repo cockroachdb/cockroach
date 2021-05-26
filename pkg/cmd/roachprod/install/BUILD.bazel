@@ -3,8 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "install",
     srcs = [
-        "cassandra.go",
-        "cassandra_yaml.go",
         "cluster_synced.go",
         "cockroach.go",
         "expander.go",

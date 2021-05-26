@@ -68,9 +68,11 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # - The vendor directory. We're using external targets for go dependencies,
 #   generated without actually looking at vendor. See #58229.
 #
+# gazelle:exclude _bazel
 # gazelle:exclude c-deps/krb5
 # gazelle:exclude c-deps/protobuf
 # gazelle:exclude artifacts
+# gazelle:exclude vendor
 # gazelle:exclude **/zcgo_flags.go
 # gazelle:exclude **/zcgo_flags_*.go
 # gazelle:exclude **/*.og.go
@@ -87,7 +89,6 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/lexbase/reserved_keywords.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude pkg/testutils/**/testdata/**
-# gazelle:exclude vendor
 # gazelle:exclude pkg/security/securitytest/embedded.go
 # gazelle:exclude pkg/cmd/roachprod/vm/aws/embedded.go
 # gazelle:exclude pkg/**/*_string.go
