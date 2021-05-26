@@ -69,7 +69,7 @@
 //   the admission order within a WorkKind based on tenant fairness,
 //   importance of work etc.
 // - granter: the counterpart to requester which grants admission tokens or
-//   slots. The implementations are slotGranter and tokenGranter. The
+//   slots. The implementations are slotGranter, tokenGranter, kvGranter. The
 //   implementation of requester interacts with the granter interface.
 // - granterWithLockedCalls: this is an extension of granter that is used
 //   as part of the implementation of GrantCoordinator. This arrangement
