@@ -199,7 +199,7 @@ func TestEncoders(t *testing.T) {
 				rowStringFn = func(k, v []byte) string { return fmt.Sprintf(`%s->%s`, k, v) }
 				resolvedStringFn = func(r []byte) string { return string(r) }
 			case string(changefeedbase.OptFormatAvro):
-				reg := cdctest.MakeTestSchemaRegistry()
+				reg := cdctest.StartTestSchemaRegistry()
 				defer reg.Close()
 				o[changefeedbase.OptConfluentSchemaRegistry] = reg.URL()
 				rowStringFn = func(k, v []byte) string {
@@ -268,7 +268,7 @@ func TestAvroEncoder(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -384,7 +384,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 
 		var rowStringFn func([]byte, []byte) string
 		var resolvedStringFn func([]byte) string
-		reg, err := cdctest.MakeTestSchemaRegistryWithTLS(cert)
+		reg, err := cdctest.StartTestSchemaRegistryWithTLS(cert)
 		require.NoError(t, err)
 		defer reg.Close()
 
@@ -445,7 +445,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expected.resolved, resolvedStringFn(resolved))
 
-		noCertReg, err := cdctest.MakeTestSchemaRegistryWithTLS(nil)
+		noCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(nil)
 		require.NoError(t, err)
 		defer noCertReg.Close()
 		opts[changefeedbase.OptConfluentSchemaRegistry] = noCertReg.URL()
@@ -461,7 +461,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		wrongCert, _, err := newCACertBase64Encoded()
 		require.NoError(t, err)
 
-		wrongCertReg, err := cdctest.MakeTestSchemaRegistryWithTLS(wrongCert)
+		wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert)
 		require.NoError(t, err)
 		defer wrongCertReg.Close()
 		opts[changefeedbase.OptConfluentSchemaRegistry] = wrongCertReg.URL()
@@ -481,15 +481,15 @@ func TestAvroArray(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
 		sqlDB.Exec(t,
-			`INSERT INTO foo VALUES 
-			(1, ARRAY[10,20,30]), 
-			(2, NULL), 
+			`INSERT INTO foo VALUES
+			(1, ARRAY[10,20,30]),
+			(2, NULL),
 			(3, ARRAY[42, NULL, 42, 43]),
 			(4, ARRAY[])`,
 		)
@@ -515,7 +515,7 @@ func TestAvroCollatedString(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -540,7 +540,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -631,7 +631,7 @@ func TestAvroSchemaNamespace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -673,7 +673,7 @@ func TestTableNameCollision(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -729,7 +729,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -760,7 +760,7 @@ func TestAvroLedger(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		ctx := context.Background()
