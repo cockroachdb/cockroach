@@ -65,6 +65,12 @@ func Node(g geo.Geometry) (geo.Geometry, error) {
 	switch t := glines.(type) {
 	case *geom.MultiLineString:
 		mllines = t
+	case *geom.GeometryCollection:
+		if t.Empty() {
+			t.SetSRID(int(g.SRID()))
+			return geo.MakeGeometryFromGeomT(t)
+		}
+		return geo.Geometry{}, errors.AssertionFailedf("unknown GEOMETRYCOLLECTION: %T", t)
 	default:
 		return geo.Geometry{}, errors.AssertionFailedf("unknown LineMerge result type: %T", t)
 	}
