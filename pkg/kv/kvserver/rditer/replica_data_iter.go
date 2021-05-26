@@ -189,16 +189,10 @@ func makeRangeLockTableKeyRanges(d *roachpb.RangeDescriptor) [2]KeyRange {
 
 // MakeUserKeyRange returns the user key range.
 func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
-	// The first range in the keyspace starts at KeyMin, which includes the
-	// node-local space. We need the original StartKey to find the range
-	// metadata, but the actual data starts at LocalMax.
-	dataStartKey := d.StartKey.AsRawKey()
-	if d.StartKey.Equal(roachpb.RKeyMin) {
-		dataStartKey = keys.LocalMax
-	}
+	userKeys := d.KeySpan()
 	return KeyRange{
-		Start: storage.MakeMVCCMetadataKey(dataStartKey),
-		End:   storage.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
+		Start: storage.MakeMVCCMetadataKey(userKeys.Key.AsRawKey()),
+		End:   storage.MakeMVCCMetadataKey(userKeys.EndKey.AsRawKey()),
 	}
 }
 
