@@ -426,7 +426,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 
 	// The EndTxn checks whether the txn record can be created, but we're
 	// eliding the EndTxn. So, we'll do the check instead.
-	ok, minCommitTS, reason := r.CanCreateTxnRecord(ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
+	ok, minCommitTS, reason := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
 	if !ok {
 		newTxn := ba.Txn.Clone()
 		newTxn.Status = roachpb.ABORTED
