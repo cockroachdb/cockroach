@@ -46,7 +46,7 @@ func (s *FakeStorage) IsAlive(
 
 // Insert implements the sqlliveness.Storage interface.
 func (s *FakeStorage) Insert(
-	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp, httpAddr string,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

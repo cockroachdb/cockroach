@@ -156,6 +156,7 @@ func StartTenant(
 		pgL,
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
+		httpLAddr,
 	); err != nil {
 		return nil, "", "", err
 	}

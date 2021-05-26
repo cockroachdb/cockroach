@@ -1839,6 +1839,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		pgL,
 		s.cfg.SocketFile,
 		orphanedLeasesTimeThresholdNanos,
+		s.cfg.HTTPAdvertiseAddr,
 	); err != nil {
 		return err
 	}

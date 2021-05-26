@@ -45,11 +45,11 @@ func TestSQLInstance(t *testing.T) {
 
 	fakeStorage := slstorage.NewFakeStorage()
 	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
-	sqlInstance.Start(ctx)
+	sqlInstance.Start(ctx, "")
 
 	// Add one more instance to introduce concurrent access to storage.
 	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
-	dummy.Start(ctx)
+	dummy.Start(ctx, "")
 
 	s1, err := sqlInstance.Session(ctx)
 	require.NoError(t, err)

@@ -35,7 +35,7 @@ type SessionID string
 // Provider is a wrapper around the sqllivness subsystem for external
 // consumption.
 type Provider interface {
-	Start(ctx context.Context)
+	Start(ctx context.Context, httpAddr string)
 	Metrics() metric.Struct
 	Reader
 	Instance

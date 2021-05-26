@@ -344,7 +344,8 @@ CREATE TABLE system.scheduled_jobs (
 CREATE TABLE system.sqlliveness (
     session_id       BYTES PRIMARY KEY NOT NULL,
     expiration       DECIMAL NOT NULL,
-  	FAMILY fam0_session_id_expiration (session_id, expiration)
+    http_addr        STRING,
+  	FAMILY fam0_session_id_expiration_http_addr (session_id, expiration, http_addr)
 )`
 
 	MigrationsTableSchema = `
@@ -1697,14 +1698,15 @@ var (
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
 			{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
+			{Name: "http_addr", ID: 3, Type: types.String, Nullable: false},
 		},
-		NextColumnID: 3,
+		NextColumnID: 4,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
-				Name:            "fam0_session_id_expiration",
+				Name:            "fam0_session_id_expiration_http_addr",
 				ID:              0,
-				ColumnNames:     []string{"session_id", "expiration"},
-				ColumnIDs:       []descpb.ColumnID{1, 2},
+				ColumnNames:     []string{"session_id", "expiration", "http_addr"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
 				DefaultColumnID: 2,
 			},
 		},

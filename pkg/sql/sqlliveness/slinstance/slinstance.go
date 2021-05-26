@@ -50,7 +50,7 @@ var (
 // Writer provides interactions with the storage of session records.
 type Writer interface {
 	// Insert stores the input Session.
-	Insert(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) error
+	Insert(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp, httpAddr string) error
 	// Update looks for a Session with the same SessionID as the input Session in
 	// the storage and if found replaces it with the input returning true.
 	// Otherwise it returns false to indicate that the session does not exist.
@@ -85,6 +85,7 @@ type Instance struct {
 		blockCh chan struct{}
 		s       *session
 	}
+	httpAddr string
 }
 
 func (l *Instance) getSessionOrBlockCh() (*session, chan struct{}) {
@@ -127,7 +128,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	var err error
 	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
 		i++
-		if err = l.storage.Insert(ctx, s.id, s.exp); err != nil {
+		if err = l.storage.Insert(ctx, s.id, s.exp, l.httpAddr); err != nil {
 			if ctx.Err() != nil {
 				break
 			}
@@ -242,13 +243,17 @@ func NewSQLInstance(
 	return l
 }
 
-// Start runs the hearbeat loop.
-func (l *Instance) Start(ctx context.Context) {
+// Start runs the heartbeat loop.
+func (l *Instance) Start(ctx context.Context, httpAddr string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.mu.started {
 		return
 	}
+	// TODO(davidh): The setting of this struct field feels arbitrary
+	// is there a better place to put it? Or maybe just thread into the
+	// heartbeatLoop call below?
+	l.httpAddr = httpAddr
 	log.Infof(ctx, "starting SQL liveness instance")
 	_ = l.stopper.RunAsyncTask(ctx, "slinstance", l.heartbeatLoop)
 	l.mu.started = true

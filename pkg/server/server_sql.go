@@ -753,6 +753,7 @@ func (s *SQLServer) preStart(
 	pgL net.Listener,
 	socketFile string,
 	orphanedLeasesTimeThresholdNanos int64,
+	httpAddr string,
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
@@ -790,7 +791,7 @@ func (s *SQLServer) preStart(
 	// version which relies on it.
 	sqllivenessActive := sqlliveness.IsActive(ctx, s.execCfg.Settings)
 	if sqllivenessActive {
-		s.sqlLivenessProvider.Start(ctx)
+		s.sqlLivenessProvider.Start(ctx, httpAddr)
 	}
 
 	migrationsExecutor := sql.MakeInternalExecutor(
@@ -878,7 +879,7 @@ func (s *SQLServer) preStart(
 		// migration. In this case we won't start the sqlliveness subsystem.
 		(!s.execCfg.Settings.Version.BinaryVersion().Less(clusterversion.ByKey(
 			clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable))) {
-		s.sqlLivenessProvider.Start(ctx)
+		s.sqlLivenessProvider.Start(ctx, httpAddr)
 	}
 
 	// Delete all orphaned table leases created by a prior instance of this

@@ -336,13 +336,13 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 // used! The contract of IsAlive is that once a session becomes not alive, it
 // must never become alive again.
 func (s *Storage) Insert(
-	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp, httpAddr string,
 ) (err error) {
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := s.ex.QueryRowEx(
 			ctx, "insert-session", txn, s.sd,
-			`INSERT INTO sqlliveness VALUES ($1, $2)`,
-			sid.UnsafeBytes(), tree.TimestampToDecimalDatum(expiration),
+			`INSERT INTO sqlliveness VALUES ($1, $2, $3)`,
+			sid.UnsafeBytes(), tree.TimestampToDecimalDatum(expiration), httpAddr,
 		)
 		return err
 	}); err != nil {

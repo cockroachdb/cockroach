@@ -328,6 +328,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name: "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
 	},
+	{
+		name:   "alter sqlliveness to include httpAddr",
+		workFn: alterSqllivenessColumnsAddHttpAddr,
+	},
 }
 
 func staticIDs(
@@ -1098,5 +1102,16 @@ ALTER COLUMN owner SET NOT NULL,
 DROP COLUMN IF EXISTS schedule_changes
 `
 	_, err := r.sqlExecutor.ExecEx(ctx, "alter-scheduled-jobs", nil, asNode, alterSchedules)
+	return err
+}
+
+func alterSqllivenessColumnsAddHttpAddr(ctx context.Context, r runner) error {
+	asNode := sessiondata.InternalExecutorOverride{User: security.NodeUserName()}
+
+	addSqlLivenessHttpAddr := `
+ALTER TABLE system.sqlliveness
+ADD COLUMN IF NOT EXISTS http_addr STRING FAMILY fam0_session_id_expiration,
+`
+	_, err := r.sqlExecutor.ExecEx(ctx, "add-sql-liveness-httpaddr", nil, asNode, addSqlLivenessHttpAddr)
 	return err
 }
