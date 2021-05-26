@@ -45,6 +45,11 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+const (
+	localPrefixByte = '\x01'
+	localMaxByte    = '\x02'
+)
+
 var (
 	// RKeyMin is a minimum key value which sorts before all other keys.
 	RKeyMin = RKey("")
@@ -54,6 +59,11 @@ var (
 	RKeyMax = RKey{0xff, 0xff}
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = Key(RKeyMax)
+
+	// LocalPrefix is the prefix for all local keys.
+	LocalPrefix = Key{localPrefixByte}
+	// LocalMax is the end of the local key range. It is itself a global key.
+	LocalMax = Key{localMaxByte}
 
 	// PrettyPrintKey prints a key in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid

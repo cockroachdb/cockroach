@@ -600,15 +600,16 @@ func collectReadSummaryFromTimestampCache(
 func applyReadSummaryToTimestampCache(
 	tc tscache.Cache, desc *roachpb.RangeDescriptor, s rspb.ReadSummary,
 ) {
+	userKeys := desc.KeySpan()
 	tc.Add(
-		keys.MakeRangeKeyPrefix(desc.StartKey),
-		keys.MakeRangeKeyPrefix(desc.EndKey),
+		keys.MakeRangeKeyPrefix(userKeys.Key),
+		keys.MakeRangeKeyPrefix(userKeys.EndKey),
 		s.Local.LowWater,
 		uuid.Nil, /* txnID */
 	)
 	tc.Add(
-		desc.StartKey.AsRawKey(),
-		desc.EndKey.AsRawKey(),
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
 		s.Global.LowWater,
 		uuid.Nil, /* txnID */
 	)
