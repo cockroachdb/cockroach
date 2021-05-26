@@ -1318,6 +1318,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"requests.slow.raft"},
 			},
 			{
+				Title:   "Heartbeat Timeouts",
+				Metrics: []string{"raft.timeoutcampaign"},
+			},
+			{
 				Title:   "Ticks Queued",
 				Metrics: []string{"raft.ticks"},
 			},
