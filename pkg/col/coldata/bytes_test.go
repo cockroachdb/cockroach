@@ -471,7 +471,7 @@ func TestToArrowSerializationFormat(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nullChance := 0.2
 	maxStringLength := 10
-	numElements := rng.Intn(BatchSize())
+	numElements := 1 + rng.Intn(BatchSize())
 
 	b := NewBytes(numElements)
 	for i := 0; i < numElements; i++ {
@@ -485,7 +485,10 @@ func TestToArrowSerializationFormat(t *testing.T) {
 	b.UpdateOffsetsToBeNonDecreasing(numElements)
 
 	startIdx := rng.Intn(numElements)
-	endIdx := 1 + startIdx + rng.Intn(numElements-startIdx-1)
+	endIdx := startIdx + rng.Intn(numElements-startIdx)
+	if endIdx == startIdx {
+		endIdx++
+	}
 	wind := b.Window(startIdx, endIdx)
 
 	data, offsets := wind.ToArrowSerializationFormat(wind.Len())
