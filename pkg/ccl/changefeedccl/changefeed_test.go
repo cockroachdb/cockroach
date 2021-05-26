@@ -2009,7 +2009,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			switch atomic.LoadInt64(&failEmit) {
 			case 1:
-				return MarkRetryableError(fmt.Errorf("synthetic retryable error"))
+				return changefeedbase.MarkRetryableError(fmt.Errorf("synthetic retryable error"))
 			case 2:
 				return fmt.Errorf("synthetic terminal error")
 			default:
@@ -3295,7 +3295,7 @@ func TestChangefeedMemBufferCapacityErrorRetryable(t *testing.T) {
 				// This function is invoked form a different go routine -- and calling
 				// t.Fatal will likely deadlock the test.
 				distErrCh <- err
-				return MaybeStripRetryableErrorMarker(err)
+				return changefeedbase.MaybeStripRetryableErrorMarker(err)
 			}
 
 			sqlDB := sqlutils.MakeSQLRunner(db)
@@ -3343,7 +3343,7 @@ func TestChangefeedMemBufferCapacityErrorRetryable(t *testing.T) {
 
 			err := <-distErrCh
 			require.Regexp(t, `memory budget exceeded`, err)
-			require.True(t, IsRetryableError(err))
+			require.True(t, changefeedbase.IsRetryableError(err))
 		}
 	}
 
@@ -3436,7 +3436,7 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 		require.NoError(t, feedJob.Pause())
 
 		// Make extra sure that the zombie changefeed can't write any more data.
-		beforeEmitRowCh <- MarkRetryableError(errors.New(`nope don't write it`))
+		beforeEmitRowCh <- changefeedbase.MarkRetryableError(errors.New(`nope don't write it`))
 
 		// Insert some data that we should only see out of the changefeed after it
 		// re-runs the backfill.

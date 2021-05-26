@@ -154,7 +154,7 @@ func (s errorWrapperSink) EmitRow(
 	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitRow(ctx, topicDescr, key, value, updated); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
@@ -164,7 +164,7 @@ func (s errorWrapperSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
@@ -172,7 +172,7 @@ func (s errorWrapperSink) EmitResolvedTimestamp(
 // Flush implements Sink interface.
 func (s errorWrapperSink) Flush(ctx context.Context) error {
 	if err := s.wrapped.Flush(ctx); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
@@ -180,7 +180,7 @@ func (s errorWrapperSink) Flush(ctx context.Context) error {
 // Close implements Sink interface.
 func (s errorWrapperSink) Close() error {
 	if err := s.wrapped.Close(); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
