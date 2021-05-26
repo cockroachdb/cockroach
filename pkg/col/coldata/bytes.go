@@ -448,9 +448,20 @@ func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
 	if n == 0 {
 		return []byte{}, []int32{0}
 	}
+	serializeStart := b.offsets[0]
 	serializeLength := b.offsets[n]
-	data := b.data[:serializeLength]
+	data := b.data[serializeStart:serializeLength]
 	offsets := b.offsets[:n+1]
+	if serializeStart > 0 {
+		// This can happen when the receiver is a window. We will have to ensure
+		// that offsets starts at index zero into the truncated version of b.data.
+		offsets = make([]int32, len(offsets))
+		for i := range offsets {
+			// This works because of the non-decreasing invariant imposed on the
+			// offsets.
+			offsets[i] = b.offsets[i] - serializeStart
+		}
+	}
 	return data, offsets
 }
 
