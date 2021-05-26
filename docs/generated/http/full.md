@@ -1454,15 +1454,15 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | events | [cockroach.sql.contentionpb.SerializedRegistry](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.SerializedRegistry) |  | All available contention information on this node or cluster. | [reserved](#support-status) |
-| errors | [ListContentionEventsError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+| errors | [ListActivityError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
 
 
 
 
 
 
-<a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError"></a>
-#### ListContentionEventsError
+<a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError"></a>
+#### ListActivityError
 
 An error wrapper object for ListContentionEventsResponse.
 
@@ -1526,15 +1526,15 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | events | [cockroach.sql.contentionpb.SerializedRegistry](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.SerializedRegistry) |  | All available contention information on this node or cluster. | [reserved](#support-status) |
-| errors | [ListContentionEventsError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+| errors | [ListActivityError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
 
 
 
 
 
 
-<a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError"></a>
-#### ListContentionEventsError
+<a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError"></a>
+#### ListActivityError
 
 An error wrapper object for ListContentionEventsResponse.
 
