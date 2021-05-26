@@ -89,6 +89,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalBuildInfoTableID:                 crdbInternalBuildInfoTable,
 		catconstants.CrdbInternalBuiltinFunctionsTableID:          crdbInternalBuiltinFunctionsTable,
 		catconstants.CrdbInternalClusterContentionEventsTableID:   crdbInternalClusterContentionEventsTable,
+		catconstants.CrdbInternalClusterDistSQLFlowsTableID:       crdbInternalClusterDistSQLFlowsTable,
 		catconstants.CrdbInternalClusterQueriesTableID:            crdbInternalClusterQueriesTable,
 		catconstants.CrdbInternalClusterTransactionsTableID:       crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:           crdbInternalClusterSessionsTable,
@@ -110,6 +111,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVStoreStatusTableID:             crdbInternalKVStoreStatusTable,
 		catconstants.CrdbInternalLeasesTableID:                    crdbInternalLeasesTable,
 		catconstants.CrdbInternalLocalContentionEventsTableID:     crdbInternalLocalContentionEventsTable,
+		catconstants.CrdbInternalLocalDistSQLFlowsTableID:         crdbInternalLocalDistSQLFlowsTable,
 		catconstants.CrdbInternalLocalQueriesTableID:              crdbInternalLocalQueriesTable,
 		catconstants.CrdbInternalLocalTransactionsTableID:         crdbInternalLocalTxnsTable,
 		catconstants.CrdbInternalLocalSessionsTableID:             crdbInternalLocalSessionsTable,
@@ -1878,6 +1880,94 @@ func populateContentionEventsTable(
 			); err != nil {
 				return err
 			}
+		}
+	}
+	for _, rpcErr := range response.Errors {
+		log.Warningf(ctx, "%v", rpcErr.Message)
+	}
+	return nil
+}
+
+const distSQLFlowsSchemaPattern = `
+CREATE TABLE crdb_internal.%s (
+  flow_id          UUID NOT NULL,
+  running_on_nodes INT8[] NOT NULL,
+  running_since    TIMESTAMPTZ[] NOT NULL,
+  queued_on_nodes  INT8[] NOT NULL,
+  queued_since     TIMESTAMPTZ[] NOT NULL
+)
+`
+
+const distSQLFlowsCommentPattern = `DistSQL remote flows information %s
+
+This virtual table contains all of the remote flows of the DistSQL execution
+that are currently running or queued on %s. The local
+flows (those that are running on the same node as the query originated on)
+are not included.
+`
+
+var crdbInternalLocalDistSQLFlowsTable = virtualSchemaTable{
+	schema:  fmt.Sprintf(distSQLFlowsSchemaPattern, "node_distsql_flows"),
+	comment: fmt.Sprintf(distSQLFlowsCommentPattern, "(RAM; local node only)", "this node"),
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListLocalDistSQLFlows(ctx, &serverpb.ListDistSQLFlowsRequest{})
+		if err != nil {
+			return err
+		}
+		return populateDistSQLFlowsTable(ctx, addRow, response)
+	},
+}
+
+var crdbInternalClusterDistSQLFlowsTable = virtualSchemaTable{
+	schema:  fmt.Sprintf(distSQLFlowsSchemaPattern, "cluster_distsql_flows"),
+	comment: fmt.Sprintf(distSQLFlowsCommentPattern, "(cluster RPC; expensive!)", "any node in the cluster"),
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListDistSQLFlows(ctx, &serverpb.ListDistSQLFlowsRequest{})
+		if err != nil {
+			return err
+		}
+		return populateDistSQLFlowsTable(ctx, addRow, response)
+	},
+}
+
+func getArraysOfNodesAndTimestamps(
+	infos []roachpb.NodeIDWithTimestamp,
+) (tree.Datum, tree.Datum, error) {
+	nodes, timestamps := tree.NewDArray(types.Int), tree.NewDArray(types.TimestampTZ)
+	for _, info := range infos {
+		if err := nodes.Append(tree.NewDInt(tree.DInt(info.NodeID))); err != nil {
+			return nil, nil, err
+		}
+		ts, err := tree.MakeDTimestampTZ(info.Timestamp, time.Millisecond)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := timestamps.Append(ts); err != nil {
+			return nil, nil, err
+		}
+	}
+	return nodes, timestamps, nil
+}
+
+func populateDistSQLFlowsTable(
+	ctx context.Context,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListDistSQLFlowsResponse,
+) error {
+	for _, f := range response.Flows {
+		flowID := tree.NewDUuid(tree.DUuid{UUID: f.FlowID.UUID})
+		runningOn, runningSince, err := getArraysOfNodesAndTimestamps(f.RunningOn)
+		if err != nil {
+			return err
+		}
+		queuedOn, queuedSince, err := getArraysOfNodesAndTimestamps(f.QueuedOn)
+		if err != nil {
+			return err
+		}
+		if err := addRow(
+			flowID, runningOn, runningSince, queuedOn, queuedSince,
+		); err != nil {
+			return err
 		}
 	}
 	for _, rpcErr := range response.Errors {

@@ -1466,7 +1466,8 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 <a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError"></a>
 #### ListActivityError
 
-An error wrapper object for ListContentionEventsResponse.
+An error wrapper object for ListContentionEventsResponse and
+ListDistSQLFlowsResponse.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -1538,12 +1539,168 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 <a name="cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListActivityError"></a>
 #### ListActivityError
 
-An error wrapper object for ListContentionEventsResponse.
+An error wrapper object for ListContentionEventsResponse and
+ListDistSQLFlowsResponse.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [int32](#cockroach.server.serverpb.ListContentionEventsResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
 | message | [string](#cockroach.server.serverpb.ListContentionEventsResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
+## ListDistSQLFlows
+
+`GET /_status/distsql_flows`
+
+ListDistSQLFlows retrieves all of the remote flows of the DistSQL execution
+that are currently running or queued on any node in the cluster. The local
+flows (those that are running on the same node as the query originated on)
+are not included.
+
+Flows are ordered lexicographically by the flow ID.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for ListDistSQLFlows and ListLocalDistSQLFlows.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for ListDistSQLFlows and ListLocalDistSQLFlows.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| flows | [DistSQLRemoteFlow](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.DistSQLRemoteFlow) | repeated | Flows are ordered by FlowID lexicographically and do not contain duplicates. | [reserved](#support-status) |
+| errors | [ListActivityError](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.ListActivityError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.DistSQLRemoteFlow"></a>
+#### DistSQLRemoteFlow
+
+DistSQLRemoteFlow describes a DistSQL flow scheduled to run on remote nodes.
+The gateway node that initiated the setup of this flow isn't included in
+either slice.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| flow_id | [bytes](#cockroach.server.serverpb.ListDistSQLFlowsResponse-bytes) |  |  | [reserved](#support-status) |
+| running_on | [cockroach.roachpb.NodeIDWithTimestamp](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.roachpb.NodeIDWithTimestamp) | repeated | RunningOn contains the nodes on which the flow is running, in a sorted order without duplicates. The intersection with QueuedOn is an empty set. | [reserved](#support-status) |
+| queued_on | [cockroach.roachpb.NodeIDWithTimestamp](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.roachpb.NodeIDWithTimestamp) | repeated | QueuedOn contains the nodes on which the flow is waiting in the queue to be scheduled, in a sorted order without duplicates. The intersection with RunningOn is an empty set. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.ListActivityError"></a>
+#### ListActivityError
+
+An error wrapper object for ListContentionEventsResponse and
+ListDistSQLFlowsResponse.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListDistSQLFlowsResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListDistSQLFlowsResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
+## ListLocalDistSQLFlows
+
+`GET /_status/local_distsql_flows`
+
+ListLocalDistSQLFlows retrieves all of the remote flows of the DistSQL
+execution that are currently running or queued on this node in the cluster.
+Queries that originated on this node are not be included.
+
+Flows are ordered lexicographically by the flow ID.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for ListDistSQLFlows and ListLocalDistSQLFlows.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for ListDistSQLFlows and ListLocalDistSQLFlows.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| flows | [DistSQLRemoteFlow](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.DistSQLRemoteFlow) | repeated | Flows are ordered by FlowID lexicographically and do not contain duplicates. | [reserved](#support-status) |
+| errors | [ListActivityError](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.ListActivityError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.DistSQLRemoteFlow"></a>
+#### DistSQLRemoteFlow
+
+DistSQLRemoteFlow describes a DistSQL flow scheduled to run on remote nodes.
+The gateway node that initiated the setup of this flow isn't included in
+either slice.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| flow_id | [bytes](#cockroach.server.serverpb.ListDistSQLFlowsResponse-bytes) |  |  | [reserved](#support-status) |
+| running_on | [cockroach.roachpb.NodeIDWithTimestamp](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.roachpb.NodeIDWithTimestamp) | repeated | RunningOn contains the nodes on which the flow is running, in a sorted order without duplicates. The intersection with QueuedOn is an empty set. | [reserved](#support-status) |
+| queued_on | [cockroach.roachpb.NodeIDWithTimestamp](#cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.roachpb.NodeIDWithTimestamp) | repeated | QueuedOn contains the nodes on which the flow is waiting in the queue to be scheduled, in a sorted order without duplicates. The intersection with RunningOn is an empty set. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListDistSQLFlowsResponse-cockroach.server.serverpb.ListActivityError"></a>
+#### ListActivityError
+
+An error wrapper object for ListContentionEventsResponse and
+ListDistSQLFlowsResponse.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListDistSQLFlowsResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListDistSQLFlowsResponse-string) |  | Error message. | [reserved](#support-status) |
 
 
 
