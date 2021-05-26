@@ -199,3 +199,12 @@ UPDATE a SET b = 3 -- normalized!
 UPDATE a SET b = (3) -- fully parenthesized
 UPDATE a SET b = _ -- literals removed
 UPDATE _ SET _ = 3 -- identifiers removed
+
+error
+UPDATE kv SET k[0] = 9
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+UPDATE kv SET k[0] = 9
+               ^
+HINT: try \h UPDATE

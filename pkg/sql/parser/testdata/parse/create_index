@@ -63,6 +63,15 @@ CREATE INDEX ON a (b) STORING (c) -- fully parenthesized
 CREATE INDEX ON a (b) STORING (c) -- literals removed
 CREATE INDEX ON _ (_) STORING (_) -- identifiers removed
 
+error
+CREATE INDEX ON a (b) STORING ()
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+CREATE INDEX ON a (b) STORING ()
+                               ^
+HINT: try \h CREATE INDEX
+
 parse
 CREATE INDEX ON a (b) WHERE c > 3
 ----

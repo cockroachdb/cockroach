@@ -70,6 +70,23 @@ ALTER TABLE a RENAME CONSTRAINT c TO d, RENAME COLUMN e TO f -- fully parenthesi
 ALTER TABLE a RENAME CONSTRAINT c TO d, RENAME COLUMN e TO f -- literals removed
 ALTER TABLE _ RENAME CONSTRAINT _ TO _, RENAME COLUMN _ TO _ -- identifiers removed
 
+error
+ALTER TABLE t RENAME COLUMN x TO family
+----
+at or near "family": syntax error
+DETAIL: source SQL:
+ALTER TABLE t RENAME COLUMN x TO family
+                                 ^
+HINT: try \h ALTER TABLE
+
+error
+ALTER TABLE t RENAME TO t[TRUE]
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+ALTER TABLE t RENAME TO t[TRUE]
+                         ^
+
 parse
 ALTER TABLE a SET LOCALITY GLOBAL
 ----
@@ -1042,3 +1059,21 @@ ALTER TABLE t EXPERIMENTAL_AUDIT SET OFF
 ALTER TABLE t EXPERIMENTAL_AUDIT SET OFF -- fully parenthesized
 ALTER TABLE t EXPERIMENTAL_AUDIT SET OFF -- literals removed
 ALTER TABLE _ EXPERIMENTAL_AUDIT SET OFF -- identifiers removed
+
+error
+ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
+----
+at or near "idx": syntax error: index name should not be specified in ALTER PARTITION ... OF TABLE
+DETAIL: source SQL:
+ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
+                               ^
+HINT: try ALTER PARTITION ... OF INDEX
+
+error
+ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
+----
+at or near "configure": syntax error: index wildcard unsupported in ALTER PARTITION ... OF TABLE
+DETAIL: source SQL:
+ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
+                                 ^
+HINT: try ALTER PARTITION <partition> OF INDEX <tablename>@*
