@@ -12,15 +12,28 @@ package kvserver
 
 import (
 	"context"
+	"encoding/binary"
+	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func beginTransaction(
@@ -163,4 +176,220 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	if err := <-readCh2; err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Tests that intents and transaction records are cleaned up within a reasonable
+// timeframe in various scenarios.
+func TestReliableIntentCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 65447, "fixing the flake uncovered additional bugs in #65458")
+	skip.UnderRace(t, "timing-sensitive test")
+	skip.UnderStress(t, "multi-node test")
+
+	testutils.RunTrueAndFalse(t, "ForceSyncIntentResolution", func(t *testing.T, sync bool) {
+		ctx := context.Background()
+		clusterArgs := base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &StoreTestingKnobs{
+						IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+							ForceSyncIntentResolution: sync,
+						},
+					},
+				},
+			},
+		}
+		tc := serverutils.StartNewTestCluster(t, 3, clusterArgs)
+		defer tc.Stopper().Stop(ctx)
+
+		srv := tc.Server(0)
+		db := srv.DB()
+		store, err := srv.GetStores().(*Stores).GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
+		engine := store.Engine()
+		clock := srv.Clock()
+
+		// Set up a key prefix, and split off 16 ranges by the first hex digit (4
+		// bits) following the prefix: key\x00\x00 key\x00\x10 key\x00\x20 ...
+		prefix := roachpb.Key([]byte("key\x00"))
+		for i := 0; i < 16; i++ {
+			require.NoError(t, db.AdminSplit(ctx, append(prefix, byte(i<<4)), hlc.MaxTimestamp))
+		}
+
+		// Set up random key generator which only generates unique keys.
+		genKeySeen := map[string]bool{}
+		genKey := func(singleRange bool) roachpb.Key {
+			key := make([]byte, len(prefix)+4)
+			copy(key, prefix)
+			for {
+				r := rand.Uint32()
+				if singleRange {
+					r = r >> 4 // zero out four first bits, puts key in first range
+				}
+				binary.BigEndian.PutUint32(key[len(prefix):], r)
+				if !genKeySeen[string(key)] {
+					genKeySeen[string(key)] = true
+					return key
+				}
+			}
+		}
+
+		// assertIntentCleanup checks that intents get cleaned up within a
+		// reasonable time.
+		assertIntentCleanup := func(t *testing.T) {
+			t.Helper()
+			var result storage.MVCCScanResult
+			if !assert.Eventually(t, func() bool {
+				result, err = storage.MVCCScan(ctx, engine, prefix, prefix.PrefixEnd(),
+					hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
+				require.NoError(t, err)
+				return len(result.Intents) == 0
+			}, 30*time.Second, 200*time.Millisecond, "intent cleanup timed out") {
+				require.Fail(t, "found stale intents", "%v intents", len(result.Intents))
+			}
+		}
+
+		// assertTxnCleanup checks that the txn record is cleaned up within a
+		// reasonable time.
+		assertTxnCleanup := func(t *testing.T, txnKey roachpb.Key, txnID uuid.UUID) {
+			t.Helper()
+			var txnEntry roachpb.Transaction
+			if !assert.Eventually(t, func() bool {
+				key := keys.TransactionKey(txnKey, txnID)
+				ok, err := storage.MVCCGetProto(ctx, engine, key, hlc.MaxTimestamp, &txnEntry,
+					storage.MVCCGetOptions{})
+				require.NoError(t, err)
+				return !ok
+			}, 10*time.Second, 100*time.Millisecond, "txn entry cleanup timed out") {
+				require.Fail(t, "found stale txn entry", "%v", txnEntry)
+			}
+		}
+
+		// removeKeys cleans up all entries in the key range.
+		removeKeys := func(t *testing.T) {
+			t.Helper()
+			batch := &kv.Batch{}
+			batch.AddRawRequest(&roachpb.ClearRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    prefix,
+					EndKey: prefix.PrefixEnd(),
+				},
+			})
+			require.NoError(t, db.Run(ctx, batch))
+			genKeySeen = map[string]bool{} // reset random key generator
+		}
+
+		// testTxn runs an intent cleanup test using a transaction.
+		type testTxnSpec struct {
+			numKeys     int    // number of keys per transaction
+			singleRange bool   // if true, put intents in a single range at key\x00\x00
+			finalize    string // commit, rollback, cancel, abort (via push)
+		}
+		testTxn := func(t *testing.T, spec testTxnSpec) {
+			t.Helper()
+			defer removeKeys(t)
+			const batchSize = 10000
+
+			// Write numKeys KV pairs in batches of batchSize as a single txn.
+			var txnKey roachpb.Key
+			txn := db.NewTxn(ctx, "test")
+			batch := txn.NewBatch()
+			for i := 0; i < spec.numKeys; i++ {
+				key := genKey(spec.singleRange)
+				batch.Put(key, []byte("value"))
+				if (i > 0 && i%batchSize == 0) || i == spec.numKeys-1 {
+					require.NoError(t, txn.Run(ctx, batch))
+					batch = txn.NewBatch()
+				}
+				if i == 0 {
+					txnKey = make([]byte, len(key))
+					copy(txnKey, key)
+				}
+			}
+
+			// Finalize the txn according to the spec.
+			switch spec.finalize {
+			case "commit":
+				require.NoError(t, txn.Commit(ctx))
+
+			case "rollback":
+				require.NoError(t, txn.Rollback(ctx))
+
+			case "cancel":
+				rollbackCtx, cancel := context.WithCancel(ctx)
+				cancel()
+				if err := txn.Rollback(rollbackCtx); !errors.Is(err, context.Canceled) {
+					require.NoError(t, err)
+				}
+
+			case "abort":
+				now := clock.Now()
+				pusherProto := roachpb.MakeTransaction(
+					"pusher",
+					nil, // baseKey
+					roachpb.MaxUserPriority,
+					now,
+					clock.MaxOffset().Nanoseconds(),
+				)
+				pusher := kv.NewTxnFromProto(ctx, db, srv.NodeID(), now, kv.RootTxn, &pusherProto)
+				require.NoError(t, pusher.Put(ctx, txnKey, []byte("pushit")))
+
+				err := txn.Commit(ctx)
+				require.Error(t, err)
+				require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+				// if is required by linter, even though we know it will always succeed.
+				if retryErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &retryErr) {
+					require.True(t, retryErr.PrevTxnAborted())
+				}
+				require.NoError(t, pusher.Rollback(ctx))
+
+			default:
+				require.Fail(t, "invalid finalize value %q", spec.finalize)
+			}
+
+			assertIntentCleanup(t)
+			assertTxnCleanup(t, txnKey, txn.ID())
+		}
+
+		// testNonTxn runs an intent cleanup test without an explicit transaction.
+		type testNonTxnSpec struct {
+			numKeys     int  // number of keys per transaction
+			singleRange bool // if true, put intents in a single range at key\x00\x00
+		}
+		testNonTxn := func(t *testing.T, spec testNonTxnSpec) {
+			t.Helper()
+			defer removeKeys(t)
+
+			batch := &kv.Batch{}
+			for i := 0; i < spec.numKeys; i++ {
+				batch.Put(genKey(spec.singleRange), []byte("value"))
+			}
+			require.NoError(t, db.Run(ctx, batch))
+
+			assertIntentCleanup(t)
+		}
+
+		testutils.RunValues(t, "numKeys", []interface{}{1, 100, 100000}, func(t *testing.T, numKeys interface{}) {
+			testutils.RunTrueAndFalse(t, "singleRange", func(t *testing.T, singleRange bool) {
+				testutils.RunTrueAndFalse(t, "txn", func(t *testing.T, txn bool) {
+					if txn {
+						finalize := []interface{}{"commit", "rollback", "cancel", "abort"}
+						testutils.RunValues(t, "finalize", finalize, func(t *testing.T, finalize interface{}) {
+							testTxn(t, testTxnSpec{
+								numKeys:     numKeys.(int),
+								singleRange: singleRange,
+								finalize:    finalize.(string),
+							})
+						})
+					} else {
+						testNonTxn(t, testNonTxnSpec{
+							numKeys:     numKeys.(int),
+							singleRange: singleRange,
+						})
+					}
+				})
+			})
+		})
+	})
 }
