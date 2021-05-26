@@ -10,7 +10,6 @@ go_library(
         "changefeed_stmt.go",
         "doc.go",
         "encoder.go",
-        "errors.go",
         "metrics.go",
         "name.go",
         "rowfetcher_cache.go",

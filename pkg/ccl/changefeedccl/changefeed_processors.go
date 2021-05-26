@@ -244,7 +244,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.spec.User(), kvFeedMemMon.MakeBoundAccount(), ca.spec.JobID)
 
 	if err != nil {
-		err = MarkRetryableError(err)
+		err = changefeedbase.MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -355,33 +355,6 @@ func (f doNothingSchemaFeed) Pop(
 	return nil, nil
 }
 
-type errorWrapperEventBuffer struct {
-	kvfeed.EventBuffer
-}
-
-func (e errorWrapperEventBuffer) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
-) error {
-	if err := e.EventBuffer.AddKV(ctx, kv, prevVal, backfillTimestamp); err != nil {
-		return MarkRetryableError(err)
-	}
-	return nil
-}
-
-func (e errorWrapperEventBuffer) AddResolved(
-	ctx context.Context,
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	boundaryType jobspb.ResolvedSpan_BoundaryType,
-) error {
-	if err := e.EventBuffer.AddResolved(ctx, span, ts, boundaryType); err != nil {
-		return MarkRetryableError(err)
-	}
-	return nil
-}
-
-var _ kvfeed.EventBuffer = (*errorWrapperEventBuffer)(nil)
-
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
 	mm *mon.BytesMonitor,
@@ -397,11 +370,7 @@ func makeKVFeedCfg(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
 	_, withDiff := spec.Feed.Opts[changefeedbase.OptDiff]
 	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
-	bf := func() kvfeed.EventBuffer {
-		return &errorWrapperEventBuffer{
-			EventBuffer: kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics),
-		}
-	}
+
 	kvfeedCfg := kvfeed.Config{
 		Sink:               buf,
 		Settings:           cfg.Settings,
@@ -411,7 +380,8 @@ func makeKVFeedCfg(
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
 		Targets:            spec.Feed.Targets,
-		EventBufferFactory: bf,
+		Metrics:            &metrics.KVFeedMetrics,
+		MM:                 mm,
 		InitialHighWater:   initialHighWater,
 		WithDiff:           withDiff,
 		NeedsInitialScan:   needsInitialScan,
@@ -1052,7 +1022,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.spec.User(), mm.MakeBoundAccount(), cf.spec.JobID)
 
 	if err != nil {
-		err = MarkRetryableError(err)
+		err = changefeedbase.MarkRetryableError(err)
 		cf.MoveToDraining(err)
 		return
 	}
@@ -1170,7 +1140,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 				if cf.EvalCtx.Settings.Version.IsActive(
 					cf.Ctx, clusterversion.ChangefeedsSupportPrimaryIndexChanges,
 				) {
-					err = MarkRetryableError(err)
+					err = changefeedbase.MarkRetryableError(err)
 				} else {
 					err = errors.Wrap(err, "primary key change occurred")
 				}
