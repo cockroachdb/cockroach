@@ -1577,6 +1577,14 @@ alter_database_add_region_stmt:
       Region: tree.Name($6),
     }
   }
+| ALTER DATABASE database_name ADD REGION IF NOT EXISTS region_name
+  {
+    $$.val = &tree.AlterDatabaseAddRegion{
+      Name: tree.Name($3),
+      Region: tree.Name($9),
+      IfNotExists: true,
+    }
+  }
 
 alter_database_drop_region_stmt:
   ALTER DATABASE database_name DROP REGION region_name
@@ -1584,6 +1592,14 @@ alter_database_drop_region_stmt:
     $$.val = &tree.AlterDatabaseDropRegion{
       Name: tree.Name($3),
       Region: tree.Name($6),
+    }
+  }
+| ALTER DATABASE database_name DROP REGION IF EXISTS region_name
+  {
+    $$.val = &tree.AlterDatabaseDropRegion{
+      Name: tree.Name($3),
+      Region: tree.Name($8),
+      IfExists: true,
     }
   }
 
