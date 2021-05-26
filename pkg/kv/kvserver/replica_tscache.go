@@ -606,9 +606,10 @@ func applyReadSummaryToTimestampCache(
 		s.Local.LowWater,
 		uuid.Nil, /* txnID */
 	)
+	userKeys := desc.KeySpan()
 	tc.Add(
-		desc.StartKey.AsRawKey(),
-		desc.EndKey.AsRawKey(),
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
 		s.Global.LowWater,
 		uuid.Nil, /* txnID */
 	)
