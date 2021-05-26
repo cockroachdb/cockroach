@@ -48,7 +48,7 @@ type Config struct {
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
 	SchemaChangePolicy changefeedbase.SchemaChangePolicy
-	SchemaFeed         SchemaFeed
+	SchemaFeed         schemafeed.SchemaFeed
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -129,19 +129,6 @@ func (e unsupportedSchemaChangeDetected) Error() string {
 	return fmt.Sprintf("unsupported schema change %s detected at %s", e.desc, e.ts.AsOfSystemTime())
 }
 
-// SchemaFeed is a stream of events corresponding the relevant set of
-// descriptors.
-type SchemaFeed interface {
-	// Run synchronously runs the SchemaFeed. It should be invoked before any
-	// calls to Peek or Pop.
-	Run(ctx context.Context) error
-
-	// Peek returns events occurring up to atOrBefore.
-	Peek(ctx context.Context, atOrBefore hlc.Timestamp) (events []schemafeed.TableEvent, err error)
-	// Pop returns events occurring up to atOrBefore and removes them from the feed.
-	Pop(ctx context.Context, atOrBefore hlc.Timestamp) (events []schemafeed.TableEvent, err error)
-}
-
 type kvFeed struct {
 	spans               []roachpb.Span
 	withDiff            bool
@@ -155,7 +142,7 @@ type kvFeed struct {
 
 	// These dependencies are made available for test injection.
 	bufferFactory func() EventBuffer
-	tableFeed     SchemaFeed
+	tableFeed     schemafeed.SchemaFeed
 	scanner       kvScanner
 	physicalFeed  physicalFeedFactory
 }
@@ -168,7 +155,7 @@ func newKVFeed(
 	withInitialBackfill, withDiff bool,
 	initialHighWater hlc.Timestamp,
 	codec keys.SQLCodec,
-	tf SchemaFeed,
+	tf schemafeed.SchemaFeed,
 	sc kvScanner,
 	pff physicalFeedFactory,
 	bf func() EventBuffer,
@@ -385,7 +372,7 @@ func copyFromSourceToSinkUntilTableEvent(
 	sink EventBufferWriter,
 	source EventBufferReader,
 	cfg physicalConfig,
-	tables SchemaFeed,
+	tables schemafeed.SchemaFeed,
 ) error {
 	// Maintain a local spanfrontier to tell when all the component rangefeeds
 	// being watched have reached the Scan boundary.

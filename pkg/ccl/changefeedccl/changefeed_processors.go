@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -309,50 +308,17 @@ func newSchemaFeed(
 	cfg *execinfra.ServerConfig,
 	spec execinfrapb.ChangeAggregatorSpec,
 	metrics *Metrics,
-) kvfeed.SchemaFeed {
+) schemafeed.SchemaFeed {
 	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
 	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
-		return doNothingSchemaFeed{}
+		return schemafeed.DoNothingSchemaFeed
 	}
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
 	initialHighWater, _ := getKVFeedInitialParameters(spec)
-	return schemafeed.New(schemafeed.Config{
-		DB:                 cfg.DB,
-		Clock:              cfg.DB.Clock(),
-		Settings:           cfg.Settings,
-		Targets:            spec.Feed.Targets,
-		LeaseManager:       cfg.LeaseManager.(*lease.Manager),
-		InternalExecutor:   cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
-		SchemaChangeEvents: schemaChangeEvents,
-		InitialHighWater:   initialHighWater,
-		Metrics:            &metrics.SchemaFeedMetrics,
-	})
-}
-
-type doNothingSchemaFeed struct{}
-
-var _ kvfeed.SchemaFeed = doNothingSchemaFeed{}
-
-// Run does nothing until the context is canceled.
-func (f doNothingSchemaFeed) Run(ctx context.Context) error {
-	<-ctx.Done()
-	return ctx.Err()
-}
-
-// Peek implements SchemaFeed
-func (f doNothingSchemaFeed) Peek(
-	ctx context.Context, atOrBefore hlc.Timestamp,
-) (events []schemafeed.TableEvent, err error) {
-	return nil, nil
-}
-
-// Pop implements SchemaFeed
-func (f doNothingSchemaFeed) Pop(
-	ctx context.Context, atOrBefore hlc.Timestamp,
-) (events []schemafeed.TableEvent, err error) {
-	return nil, nil
+	return schemafeed.New(ctx, cfg, schemaChangeEvents,
+		spec.Feed.Targets, initialHighWater, &metrics.SchemaFeedMetrics)
 }
 
 func makeKVFeedCfg(
@@ -362,7 +328,7 @@ func makeKVFeedCfg(
 	spans []roachpb.Span,
 	buf kvfeed.EventBuffer,
 	metrics *Metrics,
-	sf kvfeed.SchemaFeed,
+	sf schemafeed.SchemaFeed,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
