@@ -209,6 +209,14 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			n.changePrivilege(privileges, grantee)
 		}
 
+		// Ensure superusers have exactly the allowed privilege set.
+		// Postgres does not actually enforce this, instead of checking that
+		// superusers have all the privileges, Postgres allows superusers to
+		// bypass privilege checks.
+		if err := privileges.ValidateSuperuserPrivileges(descriptor.GetID(), n.grantOn); err != nil {
+			return err
+		}
+
 		// Validate privilege descriptors directly as the db/table level Validate
 		// may fix up the descriptor.
 		if err := privileges.Validate(descriptor.GetID(), n.grantOn); err != nil {
