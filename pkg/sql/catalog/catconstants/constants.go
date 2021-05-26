@@ -37,6 +37,7 @@ const (
 	CrdbInternalBuildInfoTableID
 	CrdbInternalBuiltinFunctionsTableID
 	CrdbInternalClusterContentionEventsTableID
+	CrdbInternalClusterDistSQLFlowsTableID
 	CrdbInternalClusterQueriesTableID
 	CrdbInternalClusterTransactionsTableID
 	CrdbInternalClusterSessionsTableID
@@ -58,6 +59,7 @@ const (
 	CrdbInternalKVStoreStatusTableID
 	CrdbInternalLeasesTableID
 	CrdbInternalLocalContentionEventsTableID
+	CrdbInternalLocalDistSQLFlowsTableID
 	CrdbInternalLocalQueriesTableID
 	CrdbInternalLocalTransactionsTableID
 	CrdbInternalLocalSessionsTableID

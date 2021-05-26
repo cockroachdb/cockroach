@@ -282,6 +282,7 @@ crdb_internal       backward_dependencies
 crdb_internal       builtin_functions
 crdb_internal       cluster_contention_events
 crdb_internal       cluster_database_privileges
+crdb_internal       cluster_distsql_flows
 crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
@@ -305,6 +306,7 @@ crdb_internal       leases
 crdb_internal       lost_descriptors_with_data
 crdb_internal       node_build_info
 crdb_internal       node_contention_events
+crdb_internal       node_distsql_flows
 crdb_internal       node_inflight_trace_spans
 crdb_internal       node_metrics
 crdb_internal       node_queries
@@ -477,6 +479,7 @@ backward_dependencies
 builtin_functions
 cluster_contention_events
 cluster_database_privileges
+cluster_distsql_flows
 cluster_queries
 cluster_sessions
 cluster_settings
@@ -500,6 +503,7 @@ leases
 lost_descriptors_with_data
 node_build_info
 node_contention_events
+node_distsql_flows
 node_inflight_trace_spans
 node_metrics
 node_queries
@@ -691,6 +695,7 @@ system         crdb_internal       backward_dependencies                  SYSTEM
 system         crdb_internal       builtin_functions                      SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contention_events              SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_database_privileges            SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_distsql_flows                  SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_queries                        SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_sessions                       SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_settings                       SYSTEM VIEW  NO                  1
@@ -714,6 +719,7 @@ system         crdb_internal       leases                                 SYSTEM
 system         crdb_internal       lost_descriptors_with_data             SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                        SYSTEM VIEW  NO                  1
 system         crdb_internal       node_contention_events                 SYSTEM VIEW  NO                  1
+system         crdb_internal       node_distsql_flows                     SYSTEM VIEW  NO                  1
 system         crdb_internal       node_inflight_trace_spans              SYSTEM VIEW  NO                  1
 system         crdb_internal       node_metrics                           SYSTEM VIEW  NO                  1
 system         crdb_internal       node_queries                           SYSTEM VIEW  NO                  1
@@ -1987,6 +1993,7 @@ NULL     public   system         crdb_internal       backward_dependencies      
 NULL     public   system         crdb_internal       builtin_functions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_contention_events              SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_database_privileges            SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_distsql_flows                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_queries                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES
@@ -2010,6 +2017,7 @@ NULL     public   system         crdb_internal       leases                     
 NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NULL          YES
@@ -2417,6 +2425,7 @@ NULL     public   system         crdb_internal       backward_dependencies      
 NULL     public   system         crdb_internal       builtin_functions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_contention_events              SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_database_privileges            SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_distsql_flows                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_queries                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES
@@ -2440,6 +2449,7 @@ NULL     public   system         crdb_internal       leases                     
 NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       node_distsql_flows                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_metrics                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_queries                           SELECT          NULL          YES
