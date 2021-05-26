@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -649,6 +650,7 @@ func (s *Server) newConnExecutor(
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder:                 ctxHolder{connCtx: ctx},
+		phaseTimes:                sessionphase.NewTimes(),
 		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
@@ -674,7 +676,7 @@ func (s *Server) newConnExecutor(
 		ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 	})
 
-	ex.phaseTimes[sessionInit] = timeutil.Now()
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
 		portals:   make(map[string]PreparedPortal),
@@ -1196,7 +1198,7 @@ type connExecutor struct {
 	// phaseTimes tracks session- and transaction-level phase times. It is
 	// copied-by-value when resetting statsCollector before executing each
 	// statement.
-	phaseTimes phaseTimes
+	phaseTimes *sessionphase.Times
 
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
@@ -1547,9 +1549,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	var res ResultBase
 	switch tcmd := cmd.(type) {
 	case ExecStmt:
-		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
-		ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
-		ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, tcmd.ParseStart)
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
 
 		// We use a closure for the body of the execution so as to
 		// guarantee that the full service time is captured below.
@@ -1582,7 +1584,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   reset() method).
-		ex.statsCollector.phaseTimes[sessionQueryServiced] = timeutil.Now()
+		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
 		}
@@ -1590,13 +1592,13 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	case ExecPortal:
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
-		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
 		// When parsing has been done earlier, via a separate parse
 		// message, it is not any more part of the statistics collected
 		// for this execution. In that case, we simply report that
 		// parsing took no time.
-		ex.phaseTimes[sessionStartParse] = time.Time{}
-		ex.phaseTimes[sessionEndParse] = time.Time{}
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, time.Time{})
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, time.Time{})
 		// We use a closure for the body of the execution so as to
 		// guarantee that the full service time is captured below.
 		err := func() error {
@@ -1650,7 +1652,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   reset() method).
-		ex.statsCollector.phaseTimes[sessionQueryServiced] = timeutil.Now()
+		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
 		}
@@ -2008,7 +2010,7 @@ func (ex *connExecutor) execCopyIn(
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
 		ex.statsCollector = ex.newStatsCollector()
-		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}
@@ -2462,14 +2464,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
 
-		ex.statsCollector.phaseTimes[sessionStartPostCommitJob] = timeutil.Now()
+		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
 			ex.extraTxnState.jobs); err != nil {
 			handleErr(err)
 		}
-		ex.statsCollector.phaseTimes[sessionEndPostCommitJob] = timeutil.Now()
+		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
 
 		fallthrough
 	case txnRestart, txnRollback:
@@ -2521,7 +2523,7 @@ func (ex *connExecutor) initStatementResult(
 // newStatsCollector returns a sqlStatsCollector that will record stats in the
 // session's stats containers.
 func (ex *connExecutor) newStatsCollector() *sqlStatsCollector {
-	return newSQLStatsCollector(ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	return newSQLStatsCollector(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 }
 
 // cancelQuery is part of the registrySession interface.
@@ -2630,7 +2632,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		Username:        ex.sessionData.User().Normalized(),
 		ClientAddress:   remoteStr,
 		ApplicationName: ex.applicationName.Load().(string),
-		Start:           ex.phaseTimes[sessionInit].UTC(),
+		Start:           ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
 		ActiveQueries:   activeQueries,
 		ActiveTxn:       activeTxnInfo,
 		LastActiveQuery: lastActiveQuery,

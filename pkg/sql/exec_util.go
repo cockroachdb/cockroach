@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -2460,21 +2461,21 @@ type sqlStatsCollector struct {
 	// into sqlStats set as the session's current app.
 	appStats *appStats
 	// phaseTimes tracks session-level phase times.
-	phaseTimes phaseTimes
+	phaseTimes *sessionphase.Times
 	// previousPhaseTimes tracks the session-level phase times for the previous
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
-	previousPhaseTimes phaseTimes
+	previousPhaseTimes *sessionphase.Times
 }
 
 // newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
-// phaseTimes is an array, not a slice, so this performs a copy-by-value.
+// phaseTimes is copied by value.
 func newSQLStatsCollector(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *sessionphase.Times,
 ) *sqlStatsCollector {
 	return &sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		phaseTimes: phaseTimes.Clone(),
 	}
 }
 
@@ -2528,12 +2529,14 @@ func (s *sqlStatsCollector) recordTransaction(
 	)
 }
 
-func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
-	previousPhaseTimes := &s.phaseTimes
+func (s *sqlStatsCollector) reset(
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *sessionphase.Times,
+) {
+	previousPhaseTimes := s.phaseTimes
 	*s = sqlStatsCollector{
 		sqlStats:           sqlStats,
 		appStats:           appStats,
-		previousPhaseTimes: *previousPhaseTimes,
-		phaseTimes:         *phaseTimes,
+		previousPhaseTimes: previousPhaseTimes,
+		phaseTimes:         phaseTimes.Clone(),
 	}
 }
