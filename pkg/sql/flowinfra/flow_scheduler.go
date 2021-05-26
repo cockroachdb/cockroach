@@ -46,7 +46,16 @@ type FlowScheduler struct {
 
 	mu struct {
 		syncutil.Mutex
+		// queue keeps track of all scheduled flows that cannot be run at the
+		// moment because the maximum number of running flows has been reached.
 		queue *list.List
+		// runningFlows keeps track of all flows that are currently running via
+		// this FlowScheduler. The mapping is from flow ID to the timestamp when
+		// the flow started running, in the UTC timezone.
+		//
+		// The memory usage of this map is not accounted for because it is
+		// limited by maxRunningFlows in size.
+		runningFlows map[execinfrapb.FlowID]time.Time
 	}
 
 	atomics struct {
@@ -72,25 +81,29 @@ type flowWithCtx struct {
 	enqueueTime time.Time
 }
 
-// NewFlowScheduler creates a new FlowScheduler.
+// NewFlowScheduler creates a new FlowScheduler which must be initialized before
+// use.
 func NewFlowScheduler(
-	ambient log.AmbientContext,
-	stopper *stop.Stopper,
-	settings *cluster.Settings,
-	metrics *execinfra.DistSQLMetrics,
+	ambient log.AmbientContext, stopper *stop.Stopper, settings *cluster.Settings,
 ) *FlowScheduler {
 	fs := &FlowScheduler{
 		AmbientContext: ambient,
 		stopper:        stopper,
 		flowDoneCh:     make(chan Flow, flowDoneChanSize),
-		metrics:        metrics,
 	}
 	fs.mu.queue = list.New()
-	fs.atomics.maxRunningFlows = int32(settingMaxRunningFlows.Get(&settings.SV))
+	maxRunningFlows := settingMaxRunningFlows.Get(&settings.SV)
+	fs.mu.runningFlows = make(map[execinfrapb.FlowID]time.Time, maxRunningFlows)
+	fs.atomics.maxRunningFlows = int32(maxRunningFlows)
 	settingMaxRunningFlows.SetOnChange(&settings.SV, func() {
 		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(settingMaxRunningFlows.Get(&settings.SV)))
 	})
 	return fs
+}
+
+// Init initializes the FlowScheduler.
+func (fs *FlowScheduler) Init(metrics *execinfra.DistSQLMetrics) {
+	fs.metrics = metrics
 }
 
 // canRunFlow returns whether the FlowScheduler can run the flow. If true is
@@ -110,12 +123,20 @@ func (fs *FlowScheduler) canRunFlow(_ Flow) bool {
 }
 
 // runFlowNow starts the given flow; does not wait for the flow to complete. The
-// caller is responsible for incrementing numRunning.
-func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow) error {
+// caller is responsible for incrementing numRunning. locked indicates whether
+// fs.mu is currently being held.
+func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) error {
 	log.VEventf(
 		ctx, 1, "flow scheduler running flow %s, currently running %d", f.GetID(), atomic.LoadInt32(&fs.atomics.numRunning)-1,
 	)
 	fs.metrics.FlowStart()
+	if !locked {
+		fs.mu.Lock()
+	}
+	fs.mu.runningFlows[f.GetID()] = timeutil.Now()
+	if !locked {
+		fs.mu.Unlock()
+	}
 	if err := f.Start(ctx, func() { fs.flowDoneCh <- f }); err != nil {
 		return err
 	}
@@ -123,6 +144,9 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow) error {
 	// refcount and automatically runs Cleanup() when the count reaches 0.
 	go func() {
 		f.Wait()
+		fs.mu.Lock()
+		delete(fs.mu.runningFlows, f.GetID())
+		fs.mu.Unlock()
 		f.Cleanup(ctx)
 	}()
 	return nil
@@ -137,7 +161,7 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 	return fs.stopper.RunTaskWithErr(
 		ctx, "flowinfra.FlowScheduler: scheduling flow", func(ctx context.Context) error {
 			if fs.canRunFlow(f) {
-				return fs.runFlowNow(ctx, f)
+				return fs.runFlowNow(ctx, f, false /* locked */)
 			}
 			fs.mu.Lock()
 			defer fs.mu.Unlock()
@@ -208,6 +232,18 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 	}
 }
 
+// NumRunningFlows returns the number of flows scheduled via fs that are
+// currently running.
+func (fs *FlowScheduler) NumRunningFlows() int {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	// Note that we choose not to use fs.atomics.numRunning here because that
+	// could be imprecise in an edge (when we optimistically increase that value
+	// by 1 in canRunFlow only to decrement it later and NumRunningFlows is
+	// called in between those two events).
+	return len(fs.mu.runningFlows)
+}
+
 // Start launches the main loop of the scheduler.
 func (fs *FlowScheduler) Start() {
 	ctx := fs.AnnotateCtx(context.Background())
@@ -244,7 +280,7 @@ func (fs *FlowScheduler) Start() {
 						// Note: we use the flow's context instead of the worker
 						// context, to ensure that logging etc is relative to the
 						// specific flow.
-						if err := fs.runFlowNow(n.ctx, n.flow); err != nil {
+						if err := fs.runFlowNow(n.ctx, n.flow, true /* locked */); err != nil {
 							log.Errorf(n.ctx, "error starting queued flow: %s", err)
 						}
 					} else {
@@ -261,4 +297,34 @@ func (fs *FlowScheduler) Start() {
 			}
 		}
 	})
+}
+
+// Serialize returns all currently running and queued flows that were scheduled
+// on behalf of other nodes. Notably the returned slices don't contain the
+// "local" flows from the perspective of the gateway node of the query because
+// such flows don't go through the flow scheduler.
+func (fs *FlowScheduler) Serialize() (
+	running []execinfrapb.FlowID,
+	runningSince []time.Time,
+	queued []execinfrapb.FlowID,
+	queuedSince []time.Time,
+) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	running = make([]execinfrapb.FlowID, 0, len(fs.mu.runningFlows))
+	runningSince = make([]time.Time, 0, len(fs.mu.runningFlows))
+	for f, ts := range fs.mu.runningFlows {
+		running = append(running, f)
+		runningSince = append(runningSince, ts)
+	}
+	if fs.mu.queue.Len() > 0 {
+		queued = make([]execinfrapb.FlowID, 0, fs.mu.queue.Len())
+		queuedSince = make([]time.Time, 0, fs.mu.queue.Len())
+		for e := fs.mu.queue.Front(); e != nil; e = e.Next() {
+			f := e.Value.(*flowWithCtx)
+			queued = append(queued, f.flow.GetID())
+			queuedSince = append(queuedSince, f.enqueueTime)
+		}
+	}
+	return running, runningSince, queued, queuedSince
 }
