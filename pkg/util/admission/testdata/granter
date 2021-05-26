@@ -292,3 +292,57 @@ sql-root-start: granted in chain 0, and returning true
 GrantCoordinator:
 (chain: id: 6 active: false index: 5) kv: used: 2, total: 3 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+
+# Start restricting IO tokens for KV.
+set-io-tokens tokens=1
+----
+GrantCoordinator:
+(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 io-avail: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+
+# Return both slots currently used by KV, so that 3 slots are free, but there
+# is only 1 token.
+return-grant work=kv
+----
+kv: returnGrant
+GrantCoordinator:
+(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+
+return-grant work=kv
+----
+kv: returnGrant
+GrantCoordinator:
+(chain: id: 6 active: false index: 5) kv: used: 0, total: 3 io-avail: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+
+# Takes 1 slot and 1 token.
+try-get work=kv
+----
+kv: tryGet returned true
+GrantCoordinator:
+(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 0 sql-kv-response: avail: 0
+sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+
+# There are 2 slots available, but no tokens, so fails.
+try-get work=kv
+----
+kv: tryGet returned false
+GrantCoordinator:
+(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 0 sql-kv-response: avail: 0
+sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+
+# Tokens become negative.
+took-without-permission work=kv
+----
+kv: tookWithoutPermission
+GrantCoordinator:
+(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 io-avail: -1 sql-kv-response: avail: 0
+sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+
+# Tokens are refilled, but since was at -1, the result is 0 tokens.
+set-io-tokens tokens=1
+----
+GrantCoordinator:
+(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 io-avail: 0 sql-kv-response: avail: 0
+sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
