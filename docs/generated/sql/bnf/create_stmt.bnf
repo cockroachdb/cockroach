@@ -1,0 +1,8 @@
+create_stmt ::=
+	create_role_stmt
+	| create_ddl_stmt
+	| create_stats_stmt
+	| create_schedule_for_backup_stmt
+	| create_changefeed_stmt
+	| create_replication_stream_stmt
+	| create_extension_stmt

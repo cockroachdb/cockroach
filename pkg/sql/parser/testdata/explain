@@ -1,0 +1,160 @@
+parse
+EXPLAIN SELECT 1
+----
+EXPLAIN SELECT 1
+EXPLAIN SELECT (1) -- fully parenthesized
+EXPLAIN SELECT _ -- literals removed
+EXPLAIN SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN EXPLAIN SELECT 1
+----
+EXPLAIN EXPLAIN SELECT 1
+EXPLAIN EXPLAIN SELECT (1) -- fully parenthesized
+EXPLAIN EXPLAIN SELECT _ -- literals removed
+EXPLAIN EXPLAIN SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN (DISTSQL) SELECT 1
+----
+EXPLAIN (DISTSQL) SELECT 1
+EXPLAIN (DISTSQL) SELECT (1) -- fully parenthesized
+EXPLAIN (DISTSQL) SELECT _ -- literals removed
+EXPLAIN (DISTSQL) SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN (DISTSQL, JSON) SELECT 1
+----
+EXPLAIN (DISTSQL, JSON) SELECT 1
+EXPLAIN (DISTSQL, JSON) SELECT (1) -- fully parenthesized
+EXPLAIN (DISTSQL, JSON) SELECT _ -- literals removed
+EXPLAIN (DISTSQL, JSON) SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN (OPT, VERBOSE) SELECT 1
+----
+EXPLAIN (OPT, VERBOSE) SELECT 1
+EXPLAIN (OPT, VERBOSE) SELECT (1) -- fully parenthesized
+EXPLAIN (OPT, VERBOSE) SELECT _ -- literals removed
+EXPLAIN (OPT, VERBOSE) SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN ANALYZE (DISTSQL) SELECT 1
+----
+EXPLAIN ANALYZE (DISTSQL) SELECT 1
+EXPLAIN ANALYZE (DISTSQL) SELECT (1) -- fully parenthesized
+EXPLAIN ANALYZE (DISTSQL) SELECT _ -- literals removed
+EXPLAIN ANALYZE (DISTSQL) SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN ANALYZE (DEBUG) SELECT 1
+----
+EXPLAIN ANALYZE (DEBUG) SELECT 1
+EXPLAIN ANALYZE (DEBUG) SELECT (1) -- fully parenthesized
+EXPLAIN ANALYZE (DEBUG) SELECT _ -- literals removed
+EXPLAIN ANALYZE (DEBUG) SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN ANALYZE SELECT 1
+----
+EXPLAIN ANALYZE SELECT 1
+EXPLAIN ANALYZE SELECT (1) -- fully parenthesized
+EXPLAIN ANALYZE SELECT _ -- literals removed
+EXPLAIN ANALYZE SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN ANALYZE (PLAN) SELECT 1
+----
+EXPLAIN ANALYZE SELECT 1 -- normalized!
+EXPLAIN ANALYZE SELECT (1) -- fully parenthesized
+EXPLAIN ANALYZE SELECT _ -- literals removed
+EXPLAIN ANALYZE SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN ANALYSE SELECT 1
+----
+EXPLAIN ANALYZE SELECT 1 -- normalized!
+EXPLAIN ANALYZE SELECT (1) -- fully parenthesized
+EXPLAIN ANALYZE SELECT _ -- literals removed
+EXPLAIN ANALYZE SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN ANALYSE (PLAN) SELECT 1
+----
+EXPLAIN ANALYZE SELECT 1 -- normalized!
+EXPLAIN ANALYZE SELECT (1) -- fully parenthesized
+EXPLAIN ANALYZE SELECT _ -- literals removed
+EXPLAIN ANALYZE SELECT 1 -- identifiers removed
+
+parse
+EXPLAIN (VERBOSE, OPT) SELECT 1
+----
+EXPLAIN (OPT, VERBOSE) SELECT 1 -- normalized!
+EXPLAIN (OPT, VERBOSE) SELECT (1) -- fully parenthesized
+EXPLAIN (OPT, VERBOSE) SELECT _ -- literals removed
+EXPLAIN (OPT, VERBOSE) SELECT 1 -- identifiers removed
+
+error
+EXPLAIN (ANALYZE, PLAN) SELECT 1
+----
+at or near "analyze": syntax error
+DETAIL: source SQL:
+EXPLAIN (ANALYZE, PLAN) SELECT 1
+         ^
+HINT: try \h <SELECTCLAUSE>
+
+error
+EXPLAIN ANALYZE (OPT) SELECT 1
+----
+at or near "EOF": syntax error: EXPLAIN ANALYZE cannot be used with OPT
+DETAIL: source SQL:
+EXPLAIN ANALYZE (OPT) SELECT 1
+                              ^
+
+error
+EXPLAIN ANALYZE (VEC) SELECT 1
+----
+at or near "EOF": syntax error: EXPLAIN ANALYZE cannot be used with VEC
+DETAIL: source SQL:
+EXPLAIN ANALYZE (VEC) SELECT 1
+                              ^
+
+error
+EXPLAIN (DEBUG) SELECT 1
+----
+at or near "EOF": syntax error: DEBUG flag can only be used with EXPLAIN ANALYZE
+DETAIL: source SQL:
+EXPLAIN (DEBUG) SELECT 1
+                        ^
+
+error
+EXPLAIN (PLAN, DEBUG) SELECT 1
+----
+at or near "EOF": syntax error: cannot set EXPLAIN mode more than once: DEBUG
+DETAIL: source SQL:
+EXPLAIN (PLAN, DEBUG) SELECT 1
+                              ^
+
+error
+EXPLAIN (JSON) SELECT 1
+----
+at or near "EOF": syntax error: the JSON flag can only be used with DISTSQL
+DETAIL: source SQL:
+EXPLAIN (JSON) SELECT 1
+                       ^
+
+error
+EXPLAIN (PLAN, JSON) SELECT 1
+----
+at or near "EOF": syntax error: the JSON flag can only be used with DISTSQL
+DETAIL: source SQL:
+EXPLAIN (PLAN, JSON) SELECT 1
+                             ^
+
+error
+EXPLAIN ANALYZE (DISTSQL, JSON) SELECT 1
+----
+at or near "EOF": syntax error: the JSON flag cannot be used with ANALYZE
+DETAIL: source SQL:
+EXPLAIN ANALYZE (DISTSQL, JSON) SELECT 1
+                                        ^

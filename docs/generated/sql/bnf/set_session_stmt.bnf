@@ -1,0 +1,4 @@
+set_session_stmt ::=
+	'SET' 'SESSION' set_rest_more
+	| 'SET' set_rest_more
+	| 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' 'TRANSACTION' transaction_mode_list
