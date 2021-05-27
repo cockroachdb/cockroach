@@ -500,7 +500,7 @@ var builtins = map[string]builtinDefinition{
 				// To extract a bit at the given index, we have to determine the
 				// position within byte array, i.e. index/8 after that checked
 				// the bit at residual index.
-				if byteString[index/8]&(byte(1)<<(8-1-byte(index)%8)) != 0 {
+				if byteString[index/8]&(byte(1)<<(byte(index)%8)) != 0 {
 					return tree.NewDInt(tree.DInt(1)), nil
 				}
 				return tree.NewDInt(tree.DInt(0)), nil
@@ -562,9 +562,9 @@ var builtins = map[string]builtinDefinition{
 				// position within byte array, i.e. index/8 after that checked
 				// the bit at residual index.
 				// Forcefully making bit at the index to 0.
-				byteString[index/8] &= ^(byte(1) << (8 - 1 - byte(index)%8))
+				byteString[index/8] &= ^(byte(1) << (byte(index) % 8))
 				// Updating value at the index to toSet.
-				byteString[index/8] |= byte(toSet) << (8 - 1 - byte(index)%8)
+				byteString[index/8] |= byte(toSet) << (byte(index) % 8)
 				return tree.NewDBytes(tree.DBytes(byteString)), nil
 			},
 			Info:       "Updates a bit at given index in the byte array.",
