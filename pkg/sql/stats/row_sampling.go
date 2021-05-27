@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 const sizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
@@ -219,8 +220,10 @@ func (sr *SampleReservoir) GetNonNullDatums(
 ) (values tree.Datums, err error) {
 	err = sr.retryMaybeResize(ctx, func() error {
 		// Account for the memory we'll use copying the samples into values.
-		if err := memAcc.Grow(ctx, sizeOfDatum*int64(len(sr.samples))); err != nil {
-			return err
+		if memAcc != nil {
+			if err := memAcc.Grow(ctx, sizeOfDatum*int64(len(sr.samples))); err != nil {
+				return err
+			}
 		}
 		values = make(tree.Datums, 0, len(sr.samples))
 		for _, sample := range sr.samples {
