@@ -15,7 +15,7 @@ import (
 	gojson "encoding/json"
 	"io/ioutil"
 	"net/url"
-	"path/filepath"
+	"path"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -553,7 +553,7 @@ func (e *confluentAvroEncoder) register(
 	if err != nil {
 		return 0, err
 	}
-	url.Path = filepath.Join(url.EscapedPath(), `subjects`, subject, `versions`)
+	url.Path = path.Join(url.EscapedPath(), `subjects`, subject, `versions`)
 
 	schemaStr := schema.codec.Schema()
 	if log.V(1) {
