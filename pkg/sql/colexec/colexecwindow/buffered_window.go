@@ -343,7 +343,9 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 }
 
 func (b *bufferedWindowOp) Close() error {
-	if !b.CloserHelper.Close() {
+	if !b.CloserHelper.Close() || b.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var err error
