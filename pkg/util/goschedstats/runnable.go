@@ -14,7 +14,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // CumulativeNormalizedRunnableGoroutines returns the sum, over all seconds
@@ -75,6 +77,67 @@ var total uint64
 // The EWMA coefficient is 0.5.
 var ewma uint64
 
+// RunnableCountCallback is provided the current value of runnable goroutines,
+// and GOMAXPROCS.
+type RunnableCountCallback func(numRunnable int, numProcs int)
+
+type callbackWithID struct {
+	RunnableCountCallback
+	id int64
+}
+
+var callbackInfo struct {
+	mu syncutil.Mutex
+	id int64
+	// Multiple cbs are used only for tests which can run multiple CockroachDB
+	// nodes in a process.
+	cbs []callbackWithID
+}
+
+// RegisterRunnableCountCallback registers a callback to be run with the
+// runnable and procs info every 1ms. This is exclusively for use by admission
+// control that wants to react extremely quickly to cpu changes. Past
+// experience in other systems (not CockroachDB) motivated not consuming a
+// smoothed signal for admission control. The CockroachDB setting may possibly
+// be different enough for that experience to not apply, but changing this to
+// a smoothed value (say over 1s) should be done only after thorough load
+// testing under adversarial load conditions (specifically, we need to react
+// quickly to large drops in runnable due to blocking on IO, so that we don't
+// waste cpu -- a workload that fluctuates rapidly between being IO bound and
+// cpu bound could stress the usage of a smoothed signal).
+func RegisterRunnableCountCallback(cb RunnableCountCallback) (id int64) {
+	callbackInfo.mu.Lock()
+	defer callbackInfo.mu.Unlock()
+	id = callbackInfo.id
+	callbackInfo.id++
+	callbackInfo.cbs = append(callbackInfo.cbs, callbackWithID{
+		RunnableCountCallback: cb,
+		id:                    id,
+	})
+	return id
+}
+
+// UnregisterRunnableCountCallback unregisters the callback to be run with the
+// runnable and procs info.
+func UnregisterRunnableCountCallback(id int64) {
+	callbackInfo.mu.Lock()
+	defer callbackInfo.mu.Unlock()
+	// Unregistration only happens in test settings, so simply copy to a new
+	// slice so that the existing slice is only appended to.
+	newCBs := []callbackWithID(nil)
+	for i := range callbackInfo.cbs {
+		if callbackInfo.cbs[i].id == id {
+			continue
+		}
+		newCBs = append(newCBs, callbackInfo.cbs[i])
+	}
+	if len(newCBs)+1 != len(callbackInfo.cbs) {
+		panic(errors.AssertionFailedf("unexpected unregister: new count %d, old count %d",
+			len(newCBs), len(callbackInfo.cbs)))
+	}
+	callbackInfo.cbs = newCBs
+}
+
 func init() {
 	go func() {
 		lastTime := timeutil.Now()
@@ -107,6 +170,12 @@ func init() {
 				numSamples = 0
 			}
 			runnable, numProcs := numRunnableGoroutines()
+			callbackInfo.mu.Lock()
+			cbs := callbackInfo.cbs
+			callbackInfo.mu.Unlock()
+			for i := range cbs {
+				cbs[i].RunnableCountCallback(runnable, numProcs)
+			}
 			// The value of the sample is the ratio of runnable to numProcs (scaled
 			// for fixed-point arithmetic).
 			sum += uint64(runnable) * toFixedPoint / uint64(numProcs)

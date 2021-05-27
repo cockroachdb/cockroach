@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -100,6 +101,10 @@ type txnKVFetcher struct {
 
 	// If set, we will use the production value for kvBatchSize.
 	forceProductionKVBatchSize bool
+
+	// For request and response admission control.
+	requestAdmissionHeader roachpb.AdmissionHeader
+	responseAdmissionQ     *admission.WorkQueue
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -225,7 +230,8 @@ func makeKVBatchFetcher(
 	}
 	return makeKVBatchFetcherWithSendFunc(
 		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, mon, forceProductionKVBatchSize,
+		lockWaitPolicy, mon, forceProductionKVBatchSize, txn.AdmissionHeader(),
+		txn.DB().SQLKVResponseAdmissionQ,
 	)
 }
 
@@ -241,6 +247,8 @@ func makeKVBatchFetcherWithSendFunc(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
 	forceProductionKVBatchSize bool,
+	requestAdmissionHeader roachpb.AdmissionHeader,
+	responseAdmissionQ *admission.WorkQueue,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -309,6 +317,8 @@ func makeKVBatchFetcherWithSendFunc(
 		mon:                        mon,
 		acc:                        mon.MakeBoundAccount(),
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
+		requestAdmissionHeader:     requestAdmissionHeader,
+		responseAdmissionQ:         responseAdmissionQ,
 	}, nil
 }
 
@@ -331,6 +341,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// TargetBytes would interfere with.
 		ba.Header.TargetBytes = maxScanResponseBytes
 	}
+	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()
 
@@ -433,6 +444,16 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	br, err := f.sendFn(ctx, ba)
 	if err != nil {
 		return err
+	}
+	if f.responseAdmissionQ != nil {
+		responseAdmission := admission.WorkInfo{
+			TenantID:   roachpb.SystemTenantID,
+			Priority:   admission.WorkPriority(f.requestAdmissionHeader.Priority),
+			CreateTime: f.requestAdmissionHeader.CreateTime,
+		}
+		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			return err
+		}
 	}
 	if br != nil {
 		f.responses = br.Responses
