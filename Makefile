@@ -1541,6 +1541,7 @@ pkg/sql/parser/help_messages.go: pkg/sql/parser/sql.y pkg/sql/parser/help.awk | 
 	gofmt -s -w $@
 
 bin/.docgen_bnfs: bin/docgen
+	rm -f docs/generated/sql/bnf/*.bnf
 	docgen grammar bnf docs/generated/sql/bnf --quiet
 	touch $@
 
