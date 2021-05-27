@@ -600,7 +600,7 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 	// regular messages since it doesn't have Key set.
 	// We bypass majority of EmitResolvedTimestamp logic since we don't have
 	// a real kafka client instantiated.  Instead, we call emitMessage directly.
-	reg := cdctest.MakeTestSchemaRegistry()
+	reg := cdctest.StartTestSchemaRegistry()
 	defer reg.Close()
 	opts := map[string]string{
 		changefeedbase.OptEnvelope:                string(changefeedbase.OptEnvelopeWrapped),
