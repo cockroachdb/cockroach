@@ -47,7 +47,7 @@ func (desc *wrapper) ValidateTxnCommit(
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
@@ -69,7 +69,11 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
-		for id := range typedesc.GetTypeDescriptorClosure(col.GetType()) {
+		children, err := typedesc.GetTypeDescriptorClosure(col.GetType())
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		for id := range children {
 			ids.Add(id)
 		}
 		for i := 0; i < col.NumUsesSequences(); i++ {
@@ -89,7 +93,11 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	})
 	// Add collected Oids to return set.
 	for oid := range visitor.OIDs {
-		ids.Add(typedesc.UserDefinedTypeOIDToID(oid))
+		id, err := typedesc.UserDefinedTypeOIDToID(oid)
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		ids.Add(id)
 	}
 	// Add view dependencies.
 	for _, id := range desc.GetDependsOn() {
@@ -102,7 +110,7 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 		ids.Add(ref.ID)
 	}
 	// Add sequence dependencies
-	return ids
+	return ids, nil
 }
 
 // ValidateCrossReferences validates that each reference to another table is
