@@ -395,6 +395,12 @@ func (p *planner) ResolvePrivilegeForSpecifier(
 				return nil, err
 			}
 		}
+		if err := validateColumnForHasPrivilegeSpecifier(
+			table,
+			specifier,
+		); err != nil {
+			return nil, err
+		}
 		return table.GetPrivileges(), nil
 	}
 	if specifier.TableOID == nil {
@@ -422,8 +428,37 @@ func (p *planner) ResolvePrivilegeForSpecifier(
 			return nil, err
 		}
 	}
+	if err := validateColumnForHasPrivilegeSpecifier(
+		table,
+		specifier,
+	); err != nil {
+		return nil, err
+	}
 	return table.GetPrivileges(), nil
+}
 
+func validateColumnForHasPrivilegeSpecifier(
+	table catalog.TableDescriptor, specifier tree.HasPrivilegeSpecifier,
+) error {
+	if specifier.ColumnName != nil {
+		_, err := table.FindColumnWithName(*specifier.ColumnName)
+		return err
+	}
+	if specifier.ColumnAttNum != nil {
+		for _, col := range table.PublicColumns() {
+			if col.GetPGAttributeNum() == *specifier.ColumnAttNum {
+				return nil
+			}
+		}
+		return pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %d of relation %s does not exist",
+			*specifier.ColumnAttNum,
+			tree.Name(table.GetName()),
+		)
+
+	}
+	return nil
 }
 
 // GetTypeDescriptor implements the descpb.TypeDescriptorResolver interface.
