@@ -267,7 +267,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
+		if _, err := getEncoder(ctx, details.Opts, details.Targets); err != nil {
 			return err
 		}
 		if isCloudStorageSink(parsedSink) {
