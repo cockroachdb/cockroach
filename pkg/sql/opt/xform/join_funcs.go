@@ -301,14 +301,24 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				break
 			}
 
-			if len(foundVals) > 1 && (joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp) {
-				// We cannot use the method constructJoinWithConstants to create a cross
-				// join for left or anti joins, because constructing a cross join with
-				// foundVals will increase the size of the input. As a result,
-				// non-matching input rows will show up more than once in the output,
-				// which is incorrect (see #59615).
-				shouldBuildMultiSpanLookupJoin = true
-				break
+			if len(foundVals) > 1 {
+				if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
+					// We cannot use the method constructJoinWithConstants to create a cross
+					// join for left or anti joins, because constructing a cross join with
+					// foundVals will increase the size of the input. As a result,
+					// non-matching input rows will show up more than once in the output,
+					// which is incorrect (see #59615).
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
+				if j == 0 && index.PartitionCount() > 1 {
+					// If this is the first index column and there is more than one
+					// partition, we may be able to build a locality optimized lookup
+					// join. This requires a multi-span lookup join as a starting point.
+					// See GenerateLocalityOptimizedLookupJoin for details.
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
 			}
 
 			// We will join these constant values with the input to make
@@ -334,9 +344,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		if shouldBuildMultiSpanLookupJoin {
 			// Some of the index columns were constrained to multiple constant values,
-			// and this is a left or anti join. As described above, we cannot use the
-			// method constructJoinWithConstants to create a cross join as the input
-			// for left or anti joins, since it would produce incorrect results.
+			// and we did not use the method constructJoinWithConstants to create a
+			// cross join as the input (either because it would have been incorrect or
+			// because it would have eliminated the opportunity to apply other
+			// optimizations such as locality optimized search; see above).
 			//
 			// As an alternative, we store all the filters needed for the lookup in
 			// LookupExpr, which will be used to construct spans at execution time.
@@ -394,11 +405,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// Case 1 (see function comment).
 			lookupJoin.Cols.UnionWith(scanPrivate.Cols)
 
-			// If some optional filters were used to build the lookup expression, we may
-			// need to wrap the final expression with a project. We only need to do this
-			// for left joins, since anti joins have an implicit projection that removes
-			// all right-side columns.
-			needsProject := joinType == opt.LeftJoinOp &&
+			// If some optional filters were used to build the lookup expression, we
+			// may need to wrap the final expression with a project. We don't need to
+			// do this for semi or anti joins, since they have an implicit projection
+			// that removes all right-side columns.
+			needsProject := joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp &&
 				!lookupJoin.Cols.SubsetOf(grp.Relational().OutputCols)
 			if !needsProject {
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
@@ -1203,7 +1214,7 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 
 	// The local region must be set, or we won't be able to determine which
 	// partitions are local.
-	localRegion, found := c.e.evalCtx.Locality.Find(regionKey)
+	_, found := c.e.evalCtx.Locality.Find(regionKey)
 	if !found {
 		return nil, nil, false
 	}
@@ -1215,6 +1226,24 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	if index.PartitionCount() < 2 {
 		return nil, nil, false
 	}
+
+	// Split the filters into local and remote sets. They will be used to
+	// construct two nested anti joins.
+	return c.splitFilters(private)
+}
+
+// splitFilters splits the filters in private.LookupExpr into two sets: one
+// targeting local partitions and the other targeting remote partitions. If such
+// a split is possible, returns the local and remote FiltersExprs and ok=true.
+// Otherwise, returns ok=false.
+func (c *CustomFuncs) splitFilters(
+	private *memo.LookupJoinPrivate,
+) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
+	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	index := tabMeta.Table.Index(private.Index)
+
+	// If we're calling this function, we already know that a local region exists.
+	localRegion, _ := c.e.evalCtx.Locality.Find(regionKey)
 
 	// Determine whether the index has both local and remote partitions.
 	var localPartitions util.FastIntSet
@@ -1265,8 +1294,6 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	copy(remoteExpr, private.LookupExpr)
 	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
 
-	// Return the two sets of lookup expressions. They will be used to construct
-	// two nested anti joins.
 	return localExpr, remoteExpr, true
 }
 
@@ -1344,4 +1371,86 @@ func (c *CustomFuncs) splitValues(
 		}
 	}
 	return localVals, remoteVals
+}
+
+// CanMaybeGenerateLocalityOptimizedLookupJoin returns true if it may be
+// possible to generate a locality optimized lookup join from the given lookup
+// join private. CanMaybeGenerateLocalityOptimizedLookupJoin performs simple
+// checks that are inexpensive to execute and can filter out cases where the
+// optimization definitely cannot apply. See the comment above the
+// GenerateLocalityOptimizedLookupJoin rule for details.
+func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedLookupJoin(
+	private *memo.LookupJoinPrivate,
+) bool {
+	// Respect the session setting LocalityOptimizedSearch.
+	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+		return false
+	}
+
+	if private.LocalityOptimized {
+		// This lookup join has already been locality optimized.
+		return false
+	}
+
+	// We cannot apply this optimization to anti-joins.
+	// (GenerateLocalityOptimizedAntiJoin handles that case.)
+	if private.JoinType == opt.AntiJoinOp {
+		return false
+	}
+
+	// We can only generate a locality optimized lookup join if we know there is at
+	// most one row produced for each lookup. This is always true for semi joins,
+	// but only true for inner and left joins if private.LookupColsAreTableKey is
+	// true.
+	if private.JoinType != opt.SemiJoinOp && !private.LookupColsAreTableKey {
+		return false
+	}
+
+	// This lookup join should have the LookupExpr filled in, indicating that one
+	// or more of the join filters constrain an index column to multiple constant
+	// values.
+	if private.LookupExpr == nil {
+		return false
+	}
+
+	// There should be at least two partitions, or we won't be able to
+	// differentiate between local and remote partitions.
+	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	index := tabMeta.Table.Index(private.Index)
+	if index.PartitionCount() < 2 {
+		return false
+	}
+
+	// The local region must be set, or we won't be able to determine which
+	// partitions are local.
+	_, found := c.e.evalCtx.Locality.Find(regionKey)
+	return found
+}
+
+// GenerateLocalityOptimizedLookupJoin generates a locality optimized lookup
+// join if possible from the given lookup join private. This function should
+// only be called if CanMaybeGenerateLocalityOptimizedLookupJoin returns true.
+// See the comment above the GenerateLocalityOptimizedLookupJoin rule for more
+// details.
+func (c *CustomFuncs) GenerateLocalityOptimizedLookupJoin(
+	grp memo.RelExpr, input memo.RelExpr, on memo.FiltersExpr, private *memo.LookupJoinPrivate,
+) {
+	// Split the filters into local and remote sets.
+	localExpr, remoteExpr, ok := c.splitFilters(private)
+	if !ok {
+		return
+	}
+
+	// Create the new lookup join.
+	newPrivate := *private
+	newPrivate.LocalityOptimized = true
+	newPrivate.LookupExpr = localExpr
+	newPrivate.RemoteLookupExpr = remoteExpr
+
+	newLookupJoin := memo.LookupJoinExpr{
+		Input:             input,
+		On:                on,
+		LookupJoinPrivate: newPrivate,
+	}
+	c.e.mem.AddLookupJoinToGroup(&newLookupJoin, grp)
 }

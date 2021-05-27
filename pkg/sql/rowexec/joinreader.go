@@ -88,9 +88,9 @@ type joinReader struct {
 
 	input execinfra.RowSource
 
-	// lookupCols and lookupExpr represent the part of the join condition used
-	// to perform the lookup into the index. Exactly one of lookupCols or
-	// lookupExpr must be non-empty.
+	// lookupCols and lookupExpr (and optionally remoteLookupExpr) represent the
+	// part of the join condition used to perform the lookup into the index.
+	// Exactly one of lookupCols or lookupExpr must be non-empty.
 	//
 	// lookupCols is used when the lookup condition is just a simple equality
 	// between input columns and index columns. In this case, lookupCols contains
@@ -102,8 +102,15 @@ type joinReader struct {
 	// lookupExpr specifies the expression that will be used to construct the
 	// spans for each lookup. See comments in the spec for details about the
 	// supported expressions.
-	lookupCols []uint32
-	lookupExpr execinfrapb.ExprHelper
+	//
+	// If remoteLookupExpr is set, this is a locality optimized lookup join. In
+	// this case, lookupExpr contains the lookup join conditions targeting ranges
+	// located on local nodes (relative to the gateway region), and
+	// remoteLookupExpr contains the lookup join conditions targeting remote
+	// nodes. See comments in the spec for more details.
+	lookupCols       []uint32
+	lookupExpr       execinfrapb.ExprHelper
+	remoteLookupExpr execinfrapb.ExprHelper
 
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSizeBytes    int64
@@ -180,6 +187,9 @@ func newJoinReader(
 		}
 		if !spec.LookupExpr.Empty() {
 			return nil, errors.AssertionFailedf("non-empty lookup expressions are not supported for index joins")
+		}
+		if !spec.RemoteLookupExpr.Empty() {
+			return nil, errors.AssertionFailedf("non-empty remote lookup expressions are not supported for index joins")
 		}
 		if !spec.OnExpr.Empty() {
 			return nil, errors.AssertionFailedf("non-empty ON expressions are not supported for index joins")
@@ -325,6 +335,13 @@ func newJoinReader(
 		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
 			return nil, err
 		}
+		if !spec.RemoteLookupExpr.Empty() {
+			if err := jr.remoteLookupExpr.Init(
+				spec.RemoteLookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx,
+			); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType); err != nil {
@@ -362,8 +379,9 @@ func (jr *joinReader) initJoinReaderStrategy(
 			lookupCols:           jr.lookupCols,
 		}
 	} else {
-		// Since jr.lookupExpr is set, we need to use multiSpanGenerator, which
-		// supports looking up multiple spans per input row.
+		// Since jr.lookupExpr is set, we need to use either multiSpanGenerator or
+		// localityOptimizedSpanGenerator, which support looking up multiple spans
+		// per input row.
 		tableOrdToIndexOrd := util.FastIntMap{}
 		columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
 		for i, colID := range columnIDs {
@@ -371,18 +389,36 @@ func (jr *joinReader) initJoinReaderStrategy(
 			tableOrdToIndexOrd.Set(tabOrd, i)
 		}
 
-		multiSpanGen := &multiSpanGenerator{}
-		if err := multiSpanGen.init(
-			spanBuilder,
-			numKeyCols,
-			len(jr.input.OutputTypes()),
-			keyToInputRowIndices,
-			&jr.lookupExpr,
-			tableOrdToIndexOrd,
-		); err != nil {
-			return err
+		// If jr.remoteLookupExpr is set, this is a locality optimized lookup join
+		// and we need to use localityOptimizedSpanGenerator.
+		if jr.remoteLookupExpr.Expr == nil {
+			multiSpanGen := &multiSpanGenerator{}
+			if err := multiSpanGen.init(
+				spanBuilder,
+				numKeyCols,
+				len(jr.input.OutputTypes()),
+				keyToInputRowIndices,
+				&jr.lookupExpr,
+				tableOrdToIndexOrd,
+			); err != nil {
+				return err
+			}
+			generator = multiSpanGen
+		} else {
+			localityOptSpanGen := &localityOptimizedSpanGenerator{}
+			if err := localityOptSpanGen.init(
+				spanBuilder,
+				numKeyCols,
+				len(jr.input.OutputTypes()),
+				keyToInputRowIndices,
+				&jr.lookupExpr,
+				&jr.remoteLookupExpr,
+				tableOrdToIndexOrd,
+			); err != nil {
+				return err
+			}
+			generator = localityOptSpanGen
 		}
-		generator = multiSpanGen
 	}
 
 	if readerType == indexJoinReaderType {
@@ -675,6 +711,38 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			return nextState, nil
 		}
 	}
+
+	// If this is a locality optimized lookup join and we haven't yet generated
+	// remote spans, check whether all input rows in the batch had local matches.
+	// If not all rows matched, generate remote spans and start a scan to search
+	// the remote nodes for the current batch.
+	if jr.remoteLookupExpr.Expr != nil && !jr.strategy.generatedRemoteSpans() &&
+		jr.rowsRead != int64(len(jr.strategy.getInputRows())) {
+		spans, err := jr.strategy.generateRemoteSpans()
+		if err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, jr.DrainHelper()
+		}
+
+		if len(spans) != 0 {
+			// Sort the spans so that we can rely upon the fetcher to limit the number
+			// of results per batch. It's safe to reorder the spans here because we
+			// already restore the original order of the output during the output
+			// collection phase.
+			sort.Sort(spans)
+
+			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
+			if err := jr.fetcher.StartScan(
+				jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
+				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			); err != nil {
+				jr.MoveToDraining(err)
+				return jrStateUnknown, jr.DrainHelper()
+			}
+			return jrPerformingLookup, nil
+		}
+	}
+
 	log.VEvent(jr.Ctx, 1, "done joining rows")
 	jr.strategy.prepareToEmit(jr.Ctx)
 

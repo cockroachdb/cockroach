@@ -182,6 +182,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if !jr.LookupExpr.Empty() {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", jr.LookupExpr))
 	}
+	if !jr.RemoteLookupExpr.Empty() {
+		details = append(details, fmt.Sprintf("Remote lookup join on: %s", jr.RemoteLookupExpr))
+	}
 	if !jr.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr))
 	}

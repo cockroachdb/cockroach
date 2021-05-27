@@ -440,6 +440,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.lookupExpr); err != nil {
 			return cannotDistribute, err
 		}
+		if err := checkExpr(n.remoteLookupExpr); err != nil {
+			return cannotDistribute, err
+		}
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
@@ -2141,6 +2144,18 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		var err error
 		joinReaderSpec.LookupExpr, err = physicalplan.MakeExpression(
 			n.lookupExpr, planCtx, indexVarMap,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if n.remoteLookupExpr != nil {
+		if n.lookupExpr == nil {
+			return nil, errors.AssertionFailedf("remoteLookupExpr is set but lookupExpr is not")
+		}
+		var err error
+		joinReaderSpec.RemoteLookupExpr, err = physicalplan.MakeExpression(
+			n.remoteLookupExpr, planCtx, indexVarMap,
 		)
 		if err != nil {
 			return nil, err
