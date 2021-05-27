@@ -1,0 +1,10 @@
+alter_ddl_stmt ::=
+	alter_table_stmt
+	| alter_index_stmt
+	| alter_view_stmt
+	| alter_sequence_stmt
+	| alter_database_stmt
+	| alter_range_stmt
+	| alter_partition_stmt
+	| alter_schema_stmt
+	| alter_type_stmt

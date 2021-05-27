@@ -1,0 +1,2 @@
+execute_stmt ::=
+	'EXECUTE' table_alias_name execute_param_clause

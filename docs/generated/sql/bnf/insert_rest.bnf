@@ -1,0 +1,4 @@
+insert_rest ::=
+	select_stmt
+	| '(' insert_column_list ')' select_stmt
+	| 'DEFAULT' 'VALUES'

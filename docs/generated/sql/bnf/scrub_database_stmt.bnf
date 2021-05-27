@@ -1,0 +1,2 @@
+scrub_database_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'DATABASE' database_name opt_as_of_clause

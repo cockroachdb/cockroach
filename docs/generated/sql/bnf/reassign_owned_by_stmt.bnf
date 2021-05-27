@@ -1,0 +1,2 @@
+reassign_owned_by_stmt ::=
+	'REASSIGN' 'OWNED' 'BY' role_spec_list 'TO' role_spec

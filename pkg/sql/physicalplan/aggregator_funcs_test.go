@@ -210,7 +210,7 @@ func checkDistAggregationInfo(
 		makeTableReader(1, numRows+1, 0),
 		execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_UNORDERED,
+				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 0},
@@ -251,7 +251,7 @@ func checkDistAggregationInfo(
 	}
 	finalProc := execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_UNORDERED,
+			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 			ColumnTypes: intermediaryTypes,
 		}},
 		Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
@@ -271,7 +271,7 @@ func checkDistAggregationInfo(
 		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
 		agg := execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_UNORDERED,
+				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2 * i)},

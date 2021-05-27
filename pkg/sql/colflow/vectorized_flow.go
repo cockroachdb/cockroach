@@ -896,23 +896,24 @@ func (s *vectorizedFlowCreator) setupInput(
 				MetadataSources: colexecop.MetadataSources{os},
 				ToClose:         colexecop.Closers{os},
 			}
-		} else {
-			if opt == flowinfra.FuseAggressively {
-				sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
-				opWithMetaInfo = colexecargs.OpWithMetaInfo{
-					Root:            sync,
-					MetadataSources: colexecop.MetadataSources{sync},
-					ToClose:         colexecop.Closers{sync},
-				}
-			} else {
-				sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
-				opWithMetaInfo = colexecargs.OpWithMetaInfo{
-					Root:            sync,
-					MetadataSources: colexecop.MetadataSources{sync},
-					ToClose:         colexecop.Closers{sync},
-				}
-				s.operatorConcurrency = true
+		} else if input.Type == execinfrapb.InputSyncSpec_SERIAL_UNORDERED || opt == flowinfra.FuseAggressively {
+			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
+			opWithMetaInfo = colexecargs.OpWithMetaInfo{
+				Root:            sync,
+				MetadataSources: colexecop.MetadataSources{sync},
+				ToClose:         colexecop.Closers{sync},
 			}
+		} else {
+			// Note that if we have opt == flowinfra.FuseAggressively, then we
+			// must use the serial unordered sync above in order to remove any
+			// concurrency.
+			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+			opWithMetaInfo = colexecargs.OpWithMetaInfo{
+				Root:            sync,
+				MetadataSources: colexecop.MetadataSources{sync},
+				ToClose:         colexecop.Closers{sync},
+			}
+			s.operatorConcurrency = true
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.

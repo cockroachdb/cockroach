@@ -1,0 +1,312 @@
+parse
+SELECT CURRENT_SCHEMA
+----
+SELECT current_schema() -- normalized!
+SELECT (current_schema()) -- fully parenthesized
+SELECT current_schema() -- literals removed
+SELECT current_schema() -- identifiers removed
+
+parse
+SELECT CURRENT_CATALOG
+----
+SELECT current_database() -- normalized!
+SELECT (current_database()) -- fully parenthesized
+SELECT current_database() -- literals removed
+SELECT current_database() -- identifiers removed
+
+parse
+SELECT CURRENT_TIMESTAMP
+----
+SELECT current_timestamp() -- normalized!
+SELECT (current_timestamp()) -- fully parenthesized
+SELECT current_timestamp() -- literals removed
+SELECT current_timestamp() -- identifiers removed
+
+parse
+SELECT current_timestamp(6)
+----
+SELECT current_timestamp(6)
+SELECT (current_timestamp((6))) -- fully parenthesized
+SELECT current_timestamp(_) -- literals removed
+SELECT current_timestamp(6) -- identifiers removed
+
+parse
+SELECT CURRENT_TIME
+----
+SELECT current_time() -- normalized!
+SELECT (current_time()) -- fully parenthesized
+SELECT current_time() -- literals removed
+SELECT current_time() -- identifiers removed
+
+parse
+SELECT current_time(6)
+----
+SELECT current_time(6)
+SELECT (current_time((6))) -- fully parenthesized
+SELECT current_time(_) -- literals removed
+SELECT current_time(6) -- identifiers removed
+
+parse
+SELECT CURRENT_DATE
+----
+SELECT current_date() -- normalized!
+SELECT (current_date()) -- fully parenthesized
+SELECT current_date() -- literals removed
+SELECT current_date() -- identifiers removed
+
+parse
+SELECT POSITION(a IN b)
+----
+SELECT strpos(b, a) -- normalized!
+SELECT (strpos((b), (a))) -- fully parenthesized
+SELECT strpos(b, a) -- literals removed
+SELECT strpos(_, _) -- identifiers removed
+
+parse
+SELECT TRIM(BOTH a FROM b)
+----
+SELECT btrim(b, a) -- normalized!
+SELECT (btrim((b), (a))) -- fully parenthesized
+SELECT btrim(b, a) -- literals removed
+SELECT btrim(_, _) -- identifiers removed
+
+parse
+SELECT TRIM(LEADING a FROM b)
+----
+SELECT ltrim(b, a) -- normalized!
+SELECT (ltrim((b), (a))) -- fully parenthesized
+SELECT ltrim(b, a) -- literals removed
+SELECT ltrim(_, _) -- identifiers removed
+
+parse
+SELECT TRIM(TRAILING a FROM b)
+----
+SELECT rtrim(b, a) -- normalized!
+SELECT (rtrim((b), (a))) -- fully parenthesized
+SELECT rtrim(b, a) -- literals removed
+SELECT rtrim(_, _) -- identifiers removed
+
+parse
+SELECT TRIM(a, b)
+----
+SELECT btrim(a, b) -- normalized!
+SELECT (btrim((a), (b))) -- fully parenthesized
+SELECT btrim(a, b) -- literals removed
+SELECT btrim(_, _) -- identifiers removed
+
+parse
+SELECT CURRENT_USER
+----
+SELECT current_user() -- normalized!
+SELECT (current_user()) -- fully parenthesized
+SELECT current_user() -- literals removed
+SELECT current_user() -- identifiers removed
+
+parse
+SELECT CURRENT_ROLE
+----
+SELECT current_user() -- normalized!
+SELECT (current_user()) -- fully parenthesized
+SELECT current_user() -- literals removed
+SELECT current_user() -- identifiers removed
+
+parse
+SELECT SESSION_USER
+----
+SELECT current_user() -- normalized!
+SELECT (current_user()) -- fully parenthesized
+SELECT current_user() -- literals removed
+SELECT current_user() -- identifiers removed
+
+parse
+SELECT USER
+----
+SELECT current_user() -- normalized!
+SELECT (current_user()) -- fully parenthesized
+SELECT current_user() -- literals removed
+SELECT current_user() -- identifiers removed
+
+parse
+SELECT SUBSTRING('RoacH' from 2 for 3)
+----
+SELECT substring('RoacH', 2, 3) -- normalized!
+SELECT (substring(('RoacH'), (2), (3))) -- fully parenthesized
+SELECT substring(_, _, _) -- literals removed
+SELECT substring('RoacH', 2, 3) -- identifiers removed
+
+parse
+SELECT SUBSTRING('RoacH' for 2 from 3)
+----
+SELECT substring('RoacH', 3, 2) -- normalized!
+SELECT (substring(('RoacH'), (3), (2))) -- fully parenthesized
+SELECT substring(_, _, _) -- literals removed
+SELECT substring('RoacH', 3, 2) -- identifiers removed
+
+parse
+SELECT SUBSTRING('RoacH' from 2)
+----
+SELECT substring('RoacH', 2) -- normalized!
+SELECT (substring(('RoacH'), (2))) -- fully parenthesized
+SELECT substring(_, _) -- literals removed
+SELECT substring('RoacH', 2) -- identifiers removed
+
+parse
+SELECT SUBSTRING('RoacH' for 3)
+----
+SELECT substring('RoacH', 1, 3) -- normalized!
+SELECT (substring(('RoacH'), (1), (3))) -- fully parenthesized
+SELECT substring(_, _, _) -- literals removed
+SELECT substring('RoacH', 1, 3) -- identifiers removed
+
+parse
+SELECT SUBSTRING('f(oabaroob' from '\(o(.)b')
+----
+SELECT substring('f(oabaroob', e'\\(o(.)b') -- normalized!
+SELECT (substring(('f(oabaroob'), (e'\\(o(.)b'))) -- fully parenthesized
+SELECT substring(_, _) -- literals removed
+SELECT substring('f(oabaroob', e'\\(o(.)b') -- identifiers removed
+
+parse
+SELECT SUBSTRING('f(oabaroob' from '+(o(.)b' for '+')
+----
+SELECT substring('f(oabaroob', '+(o(.)b', '+') -- normalized!
+SELECT (substring(('f(oabaroob'), ('+(o(.)b'), ('+'))) -- fully parenthesized
+SELECT substring(_, _, _) -- literals removed
+SELECT substring('f(oabaroob', '+(o(.)b', '+') -- identifiers removed
+
+parse
+SELECT POSITION('ig' in 'high')
+----
+SELECT strpos('high', 'ig') -- normalized!
+SELECT (strpos(('high'), ('ig'))) -- fully parenthesized
+SELECT strpos(_, _) -- literals removed
+SELECT strpos('high', 'ig') -- identifiers removed
+
+error
+SELECT POSITION('high', 'a')
+----
+at or near ",": syntax error
+DETAIL: source SQL:
+SELECT POSITION('high', 'a')
+                      ^
+HINT: try \h SELECT
+
+parse
+SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3)
+----
+SELECT overlay('w33333rce', 'resou', 3) -- normalized!
+SELECT (overlay(('w33333rce'), ('resou'), (3))) -- fully parenthesized
+SELECT overlay(_, _, _) -- literals removed
+SELECT overlay('w33333rce', 'resou', 3) -- identifiers removed
+
+parse
+SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3 FOR 5)
+----
+SELECT overlay('w33333rce', 'resou', 3, 5) -- normalized!
+SELECT (overlay(('w33333rce'), ('resou'), (3), (5))) -- fully parenthesized
+SELECT overlay(_, _, _, _) -- literals removed
+SELECT overlay('w33333rce', 'resou', 3, 5) -- identifiers removed
+
+parse
+SELECT EXTRACT(second from now())
+----
+SELECT extract('second', now()) -- normalized!
+SELECT (extract(('second'), ((now)()))) -- fully parenthesized
+SELECT extract(_, now()) -- literals removed
+SELECT extract('second', now()) -- identifiers removed
+
+parse
+SELECT EXTRACT('second' from now())
+----
+SELECT extract('second', now()) -- normalized!
+SELECT (extract(('second'), ((now)()))) -- fully parenthesized
+SELECT extract(_, now()) -- literals removed
+SELECT extract('second', now()) -- identifiers removed
+
+parse
+SELECT TRIM('xy' from 'xyxtrimyyx')
+----
+SELECT btrim('xyxtrimyyx', 'xy') -- normalized!
+SELECT (btrim(('xyxtrimyyx'), ('xy'))) -- fully parenthesized
+SELECT btrim(_, _) -- literals removed
+SELECT btrim('xyxtrimyyx', 'xy') -- identifiers removed
+
+parse
+SELECT TRIM(both 'xy' from 'xyxtrimyyx')
+----
+SELECT btrim('xyxtrimyyx', 'xy') -- normalized!
+SELECT (btrim(('xyxtrimyyx'), ('xy'))) -- fully parenthesized
+SELECT btrim(_, _) -- literals removed
+SELECT btrim('xyxtrimyyx', 'xy') -- identifiers removed
+
+parse
+SELECT TRIM(from 'xyxtrimyyx')
+----
+SELECT btrim('xyxtrimyyx') -- normalized!
+SELECT (btrim(('xyxtrimyyx'))) -- fully parenthesized
+SELECT btrim(_) -- literals removed
+SELECT btrim('xyxtrimyyx') -- identifiers removed
+
+parse
+SELECT TRIM(both 'xyxtrimyyx')
+----
+SELECT btrim('xyxtrimyyx') -- normalized!
+SELECT (btrim(('xyxtrimyyx'))) -- fully parenthesized
+SELECT btrim(_) -- literals removed
+SELECT btrim('xyxtrimyyx') -- identifiers removed
+
+parse
+SELECT TRIM(both from 'xyxtrimyyx')
+----
+SELECT btrim('xyxtrimyyx') -- normalized!
+SELECT (btrim(('xyxtrimyyx'))) -- fully parenthesized
+SELECT btrim(_) -- literals removed
+SELECT btrim('xyxtrimyyx') -- identifiers removed
+
+parse
+SELECT TRIM(leading 'xy' from 'xyxtrimyyx')
+----
+SELECT ltrim('xyxtrimyyx', 'xy') -- normalized!
+SELECT (ltrim(('xyxtrimyyx'), ('xy'))) -- fully parenthesized
+SELECT ltrim(_, _) -- literals removed
+SELECT ltrim('xyxtrimyyx', 'xy') -- identifiers removed
+
+parse
+SELECT TRIM(leading from 'xyxtrimyyx')
+----
+SELECT ltrim('xyxtrimyyx') -- normalized!
+SELECT (ltrim(('xyxtrimyyx'))) -- fully parenthesized
+SELECT ltrim(_) -- literals removed
+SELECT ltrim('xyxtrimyyx') -- identifiers removed
+
+parse
+SELECT TRIM(leading 'xyxtrimyyx')
+----
+SELECT ltrim('xyxtrimyyx') -- normalized!
+SELECT (ltrim(('xyxtrimyyx'))) -- fully parenthesized
+SELECT ltrim(_) -- literals removed
+SELECT ltrim('xyxtrimyyx') -- identifiers removed
+
+parse
+SELECT TRIM(trailing 'xy' from 'xyxtrimyyx')
+----
+SELECT rtrim('xyxtrimyyx', 'xy') -- normalized!
+SELECT (rtrim(('xyxtrimyyx'), ('xy'))) -- fully parenthesized
+SELECT rtrim(_, _) -- literals removed
+SELECT rtrim('xyxtrimyyx', 'xy') -- identifiers removed
+
+parse
+SELECT TRIM(trailing from 'xyxtrimyyx')
+----
+SELECT rtrim('xyxtrimyyx') -- normalized!
+SELECT (rtrim(('xyxtrimyyx'))) -- fully parenthesized
+SELECT rtrim(_) -- literals removed
+SELECT rtrim('xyxtrimyyx') -- identifiers removed
+
+parse
+SELECT TRIM(trailing 'xyxtrimyyx')
+----
+SELECT rtrim('xyxtrimyyx') -- normalized!
+SELECT (rtrim(('xyxtrimyyx'))) -- fully parenthesized
+SELECT rtrim(_) -- literals removed
+SELECT rtrim('xyxtrimyyx') -- identifiers removed

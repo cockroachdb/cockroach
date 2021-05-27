@@ -1,0 +1,2 @@
+close_cursor_stmt ::=
+	'CLOSE' 'ALL'

@@ -1,0 +1,3 @@
+show_session_stmt ::=
+	'SHOW' session_var
+	| 'SHOW' 'SESSION' session_var

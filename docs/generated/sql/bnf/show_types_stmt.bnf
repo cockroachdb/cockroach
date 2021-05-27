@@ -1,0 +1,2 @@
+show_types_stmt ::=
+	'SHOW' 'TYPES'

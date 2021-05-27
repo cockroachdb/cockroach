@@ -1,0 +1,2 @@
+prepare_stmt ::=
+	'PREPARE' table_alias_name prep_type_clause 'AS' preparable_stmt

@@ -399,12 +399,12 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 				{
 					Input: []execinfrapb.InputSyncSpec{
 						{
-							Type:        execinfrapb.InputSyncSpec_UNORDERED,
+							Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 							Streams:     []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 1}},
 							ColumnTypes: typs,
 						},
 						{
-							Type:        execinfrapb.InputSyncSpec_UNORDERED,
+							Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 							Streams:     []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2}},
 							ColumnTypes: typs,
 						},
@@ -694,7 +694,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						ResultTypes: types.ThreeIntCols,
 					}
 					if numNodes == 1 {
-						lastProc.Input[0].Type = execinfrapb.InputSyncSpec_UNORDERED
+						lastProc.Input[0].Type = execinfrapb.InputSyncSpec_PARALLEL_UNORDERED
 						lastProc.Input[0].Ordering = execinfrapb.Ordering{}
 					}
 					reqs[0].Flow.Processors = append(reqs[0].Flow.Processors, lastProc)
