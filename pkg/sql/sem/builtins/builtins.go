@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"crypto/md5"
+	cryptorand "crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -662,7 +663,7 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Uuid),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				entropy := ulid.Monotonic(rand.New(rand.NewSource(timeutil.Now().UnixNano())), 0)
+				entropy := ulid.Monotonic(cryptorand.Reader, 0)
 				uv := ulid.MustNew(ulid.Now(), entropy)
 				return tree.NewDUuid(tree.DUuid{UUID: uuid.UUID(uv)}), nil
 			},
