@@ -1300,50 +1300,23 @@ SELECT description
 		argTypeOpts{{"table", strOrOidTypes}},
 		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
-			tn, err := getTableNameForArg(ctx, tableArg)
+			specifier, err := tableHasPrivilegeSpecifier(tableArg)
 			if err != nil {
 				return nil, err
-			}
-			pred := ""
-			retNull := false
-			if tn == nil {
-				// Postgres returns NULL if no matching table is found
-				// when given an OID.
-				retNull = true
-			} else {
-				pred = fmt.Sprintf(
-					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.ObjectName)
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.SELECT, withGrantOpt)
 				},
 				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.INSERT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.INSERT, withGrantOpt)
 				},
 				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.UPDATE, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.UPDATE, withGrantOpt)
 				},
 				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.SELECT, withGrantOpt)
 				},
 			})
 		},
