@@ -1396,7 +1396,7 @@ func (g *Gossip) manage() {
 							if log.V(1) {
 								log.Health.Infof(ctx, "closing least useful client %+v to tighten network graph", c)
 							}
-							log.Eventf(ctx, "culling %s", c.addr)
+							log.VEventf(ctx, 1, "culling n%d %s", c.peerID, c.addr)
 							c.close()
 
 							// After releasing the lock, block until the client disconnects.
@@ -1548,7 +1548,7 @@ func (g *Gossip) startClientLocked(addr net.Addr) {
 		g.clientsMu.breakers[addr.String()] = breaker
 	}
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Eventf(ctx, "starting new client to %s", addr)
+	log.VEventf(ctx, 1, "starting new client to %s", addr)
 	c := newClient(g.server.AmbientContext, addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	c.startLocked(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
@@ -1562,7 +1562,7 @@ func (g *Gossip) removeClientLocked(target *client) {
 	for i, candidate := range g.clientsMu.clients {
 		if candidate == target {
 			ctx := g.AnnotateCtx(context.TODO())
-			log.Eventf(ctx, "client %s disconnected", candidate.addr)
+			log.VEventf(ctx, 1, "client %s disconnected", candidate.addr)
 			g.clientsMu.clients = append(g.clientsMu.clients[:i], g.clientsMu.clients[i+1:]...)
 			delete(g.bootstrapping, candidate.addr.String())
 			g.outgoing.removeNode(candidate.peerID)
