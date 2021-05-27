@@ -159,6 +159,26 @@ WHERE
 			setup: `CREATE TABLE t1(a int primary key, b int);`,
 			stmt:  `SELECT * FROM pg_attribute`,
 		},
+		{
+			name:  "has_table_privilege real table",
+			setup: `CREATE TABLE t(a int primary key, b int)`,
+			stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
+		},
+		{
+			name:  "has_table_privilege virtual table",
+			setup: `CREATE TABLE t(a int primary key, b int)`,
+			stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
+		},
+		{
+			name:  "has_column_privilege using attnum",
+			setup: `CREATE TABLE t(a int primary key, b int)`,
+			stmt:  `SELECT has_column_privilege('t', 1, 'INSERT')`,
+		},
+		{
+			name:  "has_column_privilege using column name",
+			setup: `CREATE TABLE t(a int primary key, b int)`,
+			stmt:  `SELECT has_column_privilege('t', 'a', 'INSERT')`,
+		},
 	}
 
 	RunRoundTripBenchmark(b, tests)
