@@ -274,7 +274,8 @@ func (r *Replica) executeWriteBatch(
 				// NB: waitForApplication already has a timeout.
 				applicationErr := waitForApplication(
 					ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().Descriptors(),
-					uint64(maxLeaseIndex))
+					// We wait for an index >= that of the migration command.
+					r.GetLeaseAppliedIndex())
 				propResult.Err = roachpb.NewError(applicationErr)
 			}
 			return propResult.Reply, nil, propResult.Err
