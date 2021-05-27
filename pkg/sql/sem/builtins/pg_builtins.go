@@ -1742,78 +1742,32 @@ SELECT description
 		argTypeOpts{{"table", strOrOidTypes}},
 		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
-			tn, err := getTableNameForArg(ctx, tableArg)
+			specifier, err := tableHasPrivilegeSpecifier(tableArg)
 			if err != nil {
 				return nil, err
-			}
-			pred := ""
-			retNull := false
-			if tn == nil {
-				// Postgres returns NULL if no matching table is found
-				// when given an OID.
-				retNull = true
-			} else {
-				pred = fmt.Sprintf(
-					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.ObjectName)
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred,
-						privilege.SELECT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.SELECT, withGrantOpt)
 				},
 				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred,
-						privilege.INSERT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.INSERT, withGrantOpt)
 				},
 				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred,
-						privilege.UPDATE, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.UPDATE, withGrantOpt)
 				},
 				"DELETE": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred,
-						privilege.DELETE, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.DELETE, withGrantOpt)
 				},
 				"TRUNCATE": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred,
-						privilege.DELETE, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.DELETE, withGrantOpt)
 				},
 				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred,
-						privilege.SELECT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.SELECT, withGrantOpt)
 				},
 				"TRIGGER": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred,
-						privilege.CREATE, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.CREATE, withGrantOpt)
 				},
 			})
 		},
@@ -2097,4 +2051,46 @@ SELECT description
 		return tree.DNull, nil
 	}
 	return r[0], nil
+}
+
+// hasPrivilege returns whether the given specifier has the given privilege.
+func hasPrivilege(
+	ctx *tree.EvalContext,
+	specifier tree.HasPrivilegeSpecifier,
+	user security.SQLUsername,
+	kind privilege.Kind,
+	withGrantOpt bool,
+) (tree.Datum, error) {
+	ret, err := ctx.Planner.HasPrivilege(
+		ctx.Context,
+		specifier,
+		user,
+		kind,
+		withGrantOpt,
+	)
+	if err != nil {
+		// When an OID is specified and the relation is not found, we return NULL.
+		if specifier.TableOID != nil && sqlerrors.IsUndefinedRelationError(err) {
+			return tree.DNull, nil
+		}
+		return nil, err
+	}
+	return tree.MakeDBool(tree.DBool(ret)), nil
+}
+
+// tableHasPrivilegeSpecifier returns the HasPrivilegeSpecifier for
+// the given table.
+func tableHasPrivilegeSpecifier(tableArg tree.Datum) (tree.HasPrivilegeSpecifier, error) {
+	var specifier tree.HasPrivilegeSpecifier
+	switch t := tableArg.(type) {
+	case *tree.DString:
+		s := string(*t)
+		specifier.TableName = &s
+	case *tree.DOid:
+		oid := oid.Oid(t.DInt)
+		specifier.TableOID = &oid
+	default:
+		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", tableArg)
+	}
+	return specifier, nil
 }

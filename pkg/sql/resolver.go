@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -299,6 +301,129 @@ func (p *planner) IsTypeVisible(
 		}
 	}
 	return false, true, nil
+}
+
+// HasPrivilege is part of the tree.EvalDatabase interface.
+func (p *planner) HasPrivilege(
+	ctx context.Context,
+	specifier tree.HasPrivilegeSpecifier,
+	user security.SQLUsername,
+	kind privilege.Kind,
+	withGrantOpt bool,
+) (bool, error) {
+	privilegeDesc, err := p.ResolvePrivilegeForSpecifier(
+		ctx,
+		specifier,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	allRoleMemberships, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+
+	allRoles := make([]string, 0, 3)
+	allRoles = append(allRoles, security.PublicRole, user.Normalized())
+	for role := range allRoleMemberships {
+		allRoles = append(allRoles, role.Normalized())
+	}
+
+	// hasPrivilege checks whether any role has the given privilege.
+	hasPrivilege := func(priv privilege.Kind) bool {
+		for _, role := range allRoles {
+			for _, pu := range privilegeDesc.Users {
+				if pu.User().Normalized() == role {
+					if privilege.ListFromBitField(pu.Privileges, privilege.Table).Contains(priv) {
+						return true
+					}
+					break
+				}
+			}
+		}
+		return false
+	}
+
+	if hasPrivilege(privilege.ALL) {
+		return true, nil
+	}
+	// For WITH GRANT OPTION, check the roles also has the GRANT privilege.
+	if withGrantOpt && !hasPrivilege(privilege.GRANT) {
+		return false, nil
+	}
+	return hasPrivilege(kind), nil
+}
+
+// ResolvePrivilegeForSpecifier resolves a tree.HasPrivilegeSpecifier and returns
+// the privilege descriptor for the given object.
+func (p *planner) ResolvePrivilegeForSpecifier(
+	ctx context.Context, specifier tree.HasPrivilegeSpecifier,
+) (*descpb.PrivilegeDescriptor, error) {
+	if specifier.TableName != nil {
+		tn, err := parser.ParseQualifiedTableName(*specifier.TableName)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.ResolveTableName(ctx, tn); err != nil {
+			return nil, err
+		}
+
+		if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
+			// Postgres does not allow cross-database references in these
+			// functions, so we don't either.
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"cross-database references are not implemented: %s", tn)
+		}
+
+		table, err := p.getVirtualTabler().getVirtualTableDesc(tn)
+		if err != nil {
+			return nil, err
+		}
+		if table == nil {
+			_, table, err = p.Descriptors().GetImmutableTableByName(
+				ctx,
+				p.txn,
+				tn,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return table.GetPrivileges(), nil
+	}
+	if specifier.TableOID == nil {
+		return nil, errors.AssertionFailedf("no table name or oid found")
+	}
+	virtualDesc, err := p.getVirtualTabler().getVirtualTableEntryByID(descpb.ID(*specifier.TableOID))
+	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
+		return nil, err
+	}
+	var table catalog.TableDescriptor
+	if virtualDesc != nil {
+		table = virtualDesc.desc
+	} else {
+		table, err = p.Descriptors().GetImmutableTableByID(
+			ctx,
+			p.txn,
+			descpb.ID(*specifier.TableOID),
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required: true,
+				},
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return table.GetPrivileges(), nil
+
 }
 
 // GetTypeDescriptor implements the descpb.TypeDescriptorResolver interface.
