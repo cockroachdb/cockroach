@@ -67,10 +67,14 @@ type testProposer struct {
 
 var _ proposer = &testProposer{}
 
+// testProposerRaft is a testing implementation of proposerRaft. It is meant to
+// be used as the Raft group used by a testProposer, and it records the commands
+// being proposed.
 type testProposerRaft struct {
 	status raft.BasicStatus
-	// lastProps are the command that the propBuf flushed last.
-	lastProps []kvserverpb.RaftCommand
+	// proposals are the commands that the propBuf flushed (i.e. passed to the
+	// Raft group) and have not yet been consumed with consumeProposals().
+	proposals []kvserverpb.RaftCommand
 }
 
 var _ proposerRaft = &testProposerRaft{}
@@ -80,14 +84,21 @@ func (t *testProposerRaft) Step(msg raftpb.Message) error {
 		return nil
 	}
 	// Decode and save all the commands.
-	t.lastProps = make([]kvserverpb.RaftCommand, len(msg.Entries))
-	for i, e := range msg.Entries {
+	for _, e := range msg.Entries {
 		_ /* idKey */, encodedCommand := DecodeRaftCommand(e.Data)
-		if err := protoutil.Unmarshal(encodedCommand, &t.lastProps[i]); err != nil {
+		t.proposals = append(t.proposals, kvserverpb.RaftCommand{})
+		if err := protoutil.Unmarshal(encodedCommand, &t.proposals[len(t.proposals)-1]); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// consumeProposals returns and resets the accumulated proposals.
+func (t *testProposerRaft) consumeProposals() []kvserverpb.RaftCommand {
+	res := t.proposals
+	t.proposals = nil
+	return res
 }
 
 func (t testProposerRaft) BasicStatus() raft.BasicStatus {
@@ -708,12 +719,14 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 
 	type reqType int
 	checkClosedTS := func(t *testing.T, r *testProposerRaft, exp hlc.Timestamp) {
-		require.Len(t, r.lastProps, 1)
+		props := r.consumeProposals()
+		require.Len(t, props, 1)
+		proposal := props[0]
 		if exp.IsEmpty() {
-			require.Nil(t, r.lastProps[0].ClosedTimestamp)
+			require.Nil(t, proposal.ClosedTimestamp)
 		} else {
-			require.NotNil(t, r.lastProps[0].ClosedTimestamp)
-			closedTS := *r.lastProps[0].ClosedTimestamp
+			require.NotNil(t, proposal.ClosedTimestamp)
+			closedTS := *proposal.ClosedTimestamp
 			closedTS.Logical = 0 // ignore logical ticks from clock
 			require.Equal(t, exp, closedTS)
 		}
