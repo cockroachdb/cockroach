@@ -284,12 +284,10 @@ func RangeStatsLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeStatsLegacyKey()
 }
 
-// RangeLastGCKey returns a system-local key for last used GC threshold on the
+// RangeGCThresholdKey returns a system-local key for last used GC threshold on the
 // user keyspace. Reads and writes <= this timestamp will not be served.
-//
-// TODO(tschottdorf): should be renamed to RangeGCThresholdKey.
-func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RangeLastGCKey()
+func RangeGCThresholdKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeGCThresholdKey()
 }
 
 // RangeVersionKey returns a system-local for the range version.
@@ -971,9 +969,9 @@ func (b RangeIDPrefixBuf) RangeStatsLegacyKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeStatsLegacySuffix...)
 }
 
-// RangeLastGCKey returns a system-local key for the last GC.
-func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeLastGCSuffix...)
+// RangeGCThresholdKey returns a system-local key for the GC threshold.
+func (b RangeIDPrefixBuf) RangeGCThresholdKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeGCThresholdSuffix...)
 }
 
 // RangeVersionKey returns a system-local key for the range version.
