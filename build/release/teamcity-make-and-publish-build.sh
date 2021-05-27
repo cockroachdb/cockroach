@@ -78,7 +78,7 @@ tc_end_block "Make and push docker image"
 tc_start_block "Push release tag to github.com/cockroachdb/cockroach"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
 configure_git_ssh_key
-push_to_git ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
+git_wrapped push ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
 tc_end_block "Push release tag to github.com/cockroachdb/cockroach"
 
 
@@ -104,6 +104,6 @@ EOF
 
 if [[ -n "${is_custom_build}" ]] ; then
   tc_start_block "Delete custombuild tag"
-  push_to_git ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
+  git_wrapped push ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
   tc_end_block "Delete custombuild tag"
 fi

@@ -47,5 +47,5 @@ git commit -m "Snapshot $cockroach_ref"
 github_ssh_key="${PRIVATE_DEPLOY_KEY_FOR_GENERATED_DIAGRAMS}"
 configure_git_ssh_key
 
-push_to_git -f ssh://git@github.com/cockroachdb/generated-diagrams.git
+git_wrapped push -f ssh://git@github.com/cockroachdb/generated-diagrams.git
 tc_end_block "Push Diagrams to Git"
