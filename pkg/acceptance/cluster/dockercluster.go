@@ -50,7 +50,7 @@ import (
 )
 
 const (
-	defaultImage  = "docker.io/library/ubuntu:xenial-20170214"
+	defaultImage  = "docker.io/library/ubuntu:focal-20210119"
 	networkPrefix = "cockroachdb_acceptance"
 )
 
