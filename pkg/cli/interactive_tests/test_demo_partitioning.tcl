@@ -8,6 +8,24 @@ set timeout 300
 # The following tests want to access the licensing server.
 set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "false"
 
+proc wait_for_partitioning_or_exit {} {
+  # Sometimes validating the license for demo can fail.
+  # In that case, we exit the test.
+  expect {
+    # We can't test a particular error string, because a license acquisition
+    # can fail in various ways (i.e. not just a timeout).
+    # So instead we use the specific error message shouted by `cockroach demo` when license
+    # acquisition fails.
+    "unable to acquire a license for this demo" {
+        # The license server is unreachable. There's not much we can test here.
+        # Simply ignore the test.
+        report "License server could not be reached - skipping with no error"
+        exit 0
+    }
+    "Partitioning the demo database, please wait..." {}
+  }
+}
+
 spawn /bin/bash
 send "PS1=':''/# '\r"
 
@@ -19,20 +37,7 @@ start_test "Expect partitioning succeeds"
 send "$argv demo --geo-partitioned-replicas\r"
 
 # wait for the shell to start up
-expect {
-  # We can't test a particular error string, because a license acquisition
-  # can fail in various ways (i.e. not just a timeout).
-  # So instead we use the specific error message shouted by `cockroach demo` when license
-  # acquisition fails.
-  "unable to acquire a license for this demo" {
-      # The license server is unreachable. There's not much we can test here.
-      # Simply ignore the test.
-      report "License server could not be reached - skipping with no error"
-      exit 0
-  }
-  "Partitioning the demo database, please wait..." {}
-}
-
+wait_for_partitioning_or_exit
 eexpect "movr>"
 
 send "SELECT count(*) AS NRPARTS FROM \[SHOW PARTITIONS FROM DATABASE movr\];\r"
@@ -92,6 +97,43 @@ interrupt
 eexpect $prompt
 end_test
 
+start_test "test multi-region setup"
+send "$argv demo movr --geo-partitioned-replicas --multi-region\r"
+wait_for_partitioning_or_exit
+eexpect "movr>"
+
+send "select table_name, locality from \[show tables\] order by 1;\r"
+eexpect "          table_name         |    locality"
+eexpect "  promo_codes                | GLOBAL"
+eexpect "  rides                      | REGIONAL BY ROW"
+eexpect "  user_promo_codes           | REGIONAL BY ROW"
+eexpect "  users                      | REGIONAL BY ROW"
+eexpect "  vehicle_location_histories | REGIONAL BY ROW"
+eexpect "  vehicles                   | REGIONAL BY ROW"
+eexpect "movr>"
+
+send "select survival_goal from \[show databases\] where database_name = 'movr';\r"
+eexpect "  survival_goal"
+eexpect "zone"
+eexpect "movr>"
+
+interrupt
+eexpect $prompt
+
+send "$argv demo movr --geo-partitioned-replicas --multi-region --survive=region\r"
+wait_for_partitioning_or_exit
+eexpect "movr>"
+
+send "select survival_goal from \[show databases\] where database_name = 'movr';\r"
+eexpect "  survival_goal"
+eexpect "region"
+eexpect "movr>"
+
+interrupt
+eexpect $prompt
+
+end_test
+
 # Test interaction of -e and license acquisition.
 start_test "Ensure we can run licensed commands with -e"
 send "$argv demo -e \"ALTER TABLE users PARTITION BY LIST (city) (PARTITION p1 VALUES IN ('new york'))\"\r"
@@ -122,6 +164,9 @@ send "$argv demo --geo-partitioned-replicas\r"
 # expect a failure
 eexpect ERROR:
 eexpect "enterprise features are needed for this demo"
+# clean up after the test
+eexpect $prompt"
+
 # clean up after the test
 eexpect $prompt
 
