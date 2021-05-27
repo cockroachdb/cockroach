@@ -513,8 +513,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 	for _, priv := range privs {
 		d, err := availOpts[priv](false /* withGrantOpt */)
 		if err != nil {
-			return nil, errors.Wrapf(err,
-				"error checking privilege %q", errors.Safe(priv))
+			return nil, err
 		}
 		switch d {
 		case tree.DNull, tree.DBoolFalse:
@@ -1327,78 +1326,36 @@ SELECT description
 		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
 		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
-			tn, err := getTableNameForArg(ctx, tableArg)
+			specifier, err := tableHasPrivilegeSpecifier(tableArg)
 			if err != nil {
 				return nil, err
 			}
-			pred := ""
-			retNull := false
-			if tn == nil {
-				// Postgres returns NULL if no matching table is found
-				// when given an OID.
-				retNull = true
-			} else {
-				pred = fmt.Sprintf(
-					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.ObjectName)
-
-				// Verify that the column exists in the table.
-				var colPred string
-				colArg := tree.UnwrapDatum(ctx, args[1])
-				switch t := colArg.(type) {
-				case *tree.DString:
-					// When colArg is a string, it specifies the attribute name.
-					colPred = "attname = $1"
-				case *tree.DInt:
-					// When colArg is an integer, it specifies the attribute number.
-					colPred = "attnum = $1"
-				default:
-					return nil, errors.AssertionFailedf("unexpected arg type %T", t)
-				}
-
-				if r, err := ctx.InternalExecutor.QueryRow(
-					ctx.Ctx(), "has-column-privilege",
-					ctx.Txn,
-					fmt.Sprintf(`
-					SELECT attname FROM pg_attribute
-					 WHERE attrelid = '%s.%s.%s'::REGCLASS AND %s`,
-						tn.CatalogName, tn.SchemaName, tn.ObjectName, colPred), colArg,
-				); err != nil {
-					return nil, err
-				} else if r == nil {
-					return nil, pgerror.Newf(pgcode.UndefinedColumn,
-						"column %s of relation %s does not exist", colArg, tableArg)
-				}
+			colArg := tree.UnwrapDatum(ctx, args[1])
+			switch t := colArg.(type) {
+			case *tree.DString:
+				// When colArg is a string, it specifies the attribute name.
+				n := tree.Name(*t)
+				specifier.ColumnName = &n
+			case *tree.DInt:
+				// When colArg is an integer, it specifies the attribute number.
+				attNum := uint32(*t)
+				specifier.ColumnAttNum = &attNum
+			default:
+				return nil, errors.AssertionFailedf("unexpected arg type %T", t)
 			}
 
 			return parsePrivilegeStr(args[2], pgPrivList{
 				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.SELECT, withGrantOpt)
 				},
 				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.INSERT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.INSERT, withGrantOpt)
 				},
 				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.UPDATE, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.UPDATE, withGrantOpt)
 				},
 				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
-					if retNull {
-						return tree.DNull, nil
-					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"table_privileges", user, pred, privilege.SELECT, withGrantOpt)
+					return hasPrivilege(ctx, specifier, user, privilege.SELECT, withGrantOpt)
 				},
 			})
 		},
