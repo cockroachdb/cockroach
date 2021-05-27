@@ -602,8 +602,10 @@ func (r *nTileBase) setNTile(batch coldata.Batch, endIdx int) {
 }
 
 func (r *nTileBase) Close() error {
-	if !r.CloserHelper.Close() {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
-	return r.bufferQueue.Close(r.nTileInitFields.EnsureCtx())
+	return r.bufferQueue.Close(r.Ctx)
 }
