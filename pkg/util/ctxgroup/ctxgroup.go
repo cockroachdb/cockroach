@@ -176,3 +176,16 @@ func GroupWorkers(ctx context.Context, num int, f func(context.Context, int) err
 	}
 	return group.Wait()
 }
+
+// GoAndWait calls the given functions each in a new goroutine. It then Waits
+// for them to finish. This is intended to help prevent bugs caused by returning
+// early after running some goroutines but before Waiting for them to complete.
+func GoAndWait(ctx context.Context, fs ...func(ctx context.Context) error) error {
+	group := WithContext(ctx)
+	for _, f := range fs {
+		if f != nil {
+			group.GoCtx(f)
+		}
+	}
+	return group.Wait()
+}

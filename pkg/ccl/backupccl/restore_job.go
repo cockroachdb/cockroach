@@ -678,8 +678,6 @@ func restore(
 			}
 		})
 
-	g := ctxgroup.WithContext(restoreCtx)
-
 	// TODO(pbardea): This not super principled. I just wanted something that
 	// wasn't a constant and grew slower than linear with the length of
 	// importSpans. It seems to be working well for BenchmarkRestore2TB but
@@ -703,15 +701,15 @@ func restore(
 	}
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
-	g.GoCtx(func(ctx context.Context) error {
+	jobProgressLoop := func(ctx context.Context) error {
 		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
 		defer progressSpan.Finish()
 		return progressLogger.Loop(ctx, requestFinishedCh)
-	})
+	}
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
-	g.GoCtx(func(ctx context.Context) error {
+	jobCheckpointLoop := func(ctx context.Context) error {
 		// When a processor is done importing a span, it will send a progress update
 		// to progCh.
 		for progress := range progCh {
@@ -742,23 +740,22 @@ func restore(
 			requestFinishedCh <- struct{}{}
 		}
 		return nil
-	})
-
-	// TODO(pbardea): Improve logging in processors.
-	if err := distRestore(
-		restoreCtx,
-		execCtx,
-		importSpanChunks,
-		dataToRestore.getPKIDs(),
-		encryption,
-		dataToRestore.getRekeys(),
-		endTime,
-		progCh,
-	); err != nil {
-		return emptyRowCount, err
 	}
 
-	if err := g.Wait(); err != nil {
+	runRestore := func(ctx context.Context) error {
+		return distRestore(
+			ctx,
+			execCtx,
+			importSpanChunks,
+			dataToRestore.getPKIDs(),
+			encryption,
+			dataToRestore.getRekeys(),
+			endTime,
+			progCh,
+		)
+	}
+
+	if err := ctxgroup.GoAndWait(restoreCtx, jobProgressLoop, jobCheckpointLoop, runRestore); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
