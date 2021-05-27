@@ -2343,6 +2343,10 @@ def go_deps():
         name = "com_github_knz_go_libedit",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/go-libedit",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_knz_go_libedit.patch",
+        ],
         replace = "github.com/otan-cockroach/go-libedit",
         sum = "h1:+sIdymRXD4aKCvmVMBLL7/bO95KZFYrbz0EzQ1Jlj4A=",
         version = "v1.10.2-0.20201030151939-7cced08450e7",

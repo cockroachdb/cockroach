@@ -156,3 +156,32 @@ configure_make(
     out_static_libs = ["libgssapi_krb5.a"],
     visibility = ["//visibility:public"],
 )
+
+# This is extremely stupid and unnecessary, but in certain cases to depend on
+# the output of a `cmake` target, we need to launder through a filegroup:
+# https://github.com/bazelbuild/rules_foreign_cc/issues/619#issuecomment-844473637
+# This is apparently a bug. In the meantime, people can depend on the :*_files
+# targets rather than :libgeos where it matters.
+filegroup(
+    name = "libgeos_files",
+    srcs = [":libgeos"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libroach_files",
+    srcs = [":libroach"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libproj_files",
+    srcs = [":libproj"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "libedit_files",
+    srcs = ["@com_github_knz_go_libedit//unix:edit"],
+    visibility = ["//visibility:public"],
+)

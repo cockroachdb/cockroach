@@ -37,7 +37,7 @@ func Runfile(path string) (string, error) {
 	return inner.Runfile(path)
 }
 
-// RunfilePath is a convenience wrapper around the rules_go variant.
+// RunfilesPath is a convenience wrapper around the rules_go variant.
 func RunfilesPath() (string, error) {
 	return inner.RunfilesPath()
 }

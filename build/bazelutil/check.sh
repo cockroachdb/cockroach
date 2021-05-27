@@ -42,7 +42,6 @@ pkg/cmd/prereqs/BUILD.bazel
 pkg/cmd/publish-artifacts/BUILD.bazel
 pkg/cmd/roachtest/BUILD.bazel
 pkg/cmd/teamcity-trigger/BUILD.bazel
-pkg/server/debug/pprofui/BUILD.bazel
 pkg/util/caller/BUILD.bazel
 pkg/util/log/BUILD.bazel
 "

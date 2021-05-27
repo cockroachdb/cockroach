@@ -36,6 +36,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve proto prometheus/client_model/metrics.proto @com_github_prometheus_client_model//:client_proto
 # gazelle:resolve proto go prometheus/client_model/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test @cockroach//pkg/cli:cli_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @cockroach//pkg/sql/colflow:colflow_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @cockroach//pkg/util/caller:caller_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @cockroach//pkg/util/json:json_test
 
