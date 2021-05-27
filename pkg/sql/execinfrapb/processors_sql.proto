@@ -297,6 +297,22 @@ message JoinReaderSpec {
   //   @3 IN (10, 20) AND @2 = @4.
   optional Expression lookup_expr = 16 [(gogoproto.nullable) = false];
 
+  // If RemoteLookupExpr is set, this is a locality optimized lookup join. In
+  // this case, LookupExpr contains the lookup join conditions targeting ranges
+  // located on local nodes (relative to the gateway region), and
+  // RemoteLookupExpr contains the lookup join conditions targeting remote
+  // nodes. The optimizer will only plan a locality optimized lookup join if it
+  // is known that each lookup returns at most one row. This fact allows the
+  // joinReader to use the local conditions in LookupExpr first, and if a match
+  // is found locally for each input row, there is no need to search remote
+  // nodes. If a local match is not found for all input rows, the joinReader
+  // uses RemoteLookupExpr to search remote nodes.
+  //
+  // The same restrictions on supported expressions that apply to LookupExpr
+  // also apply to RemoteLookupExpr. See the comment above LookupExpr for more
+  // details.
+  optional Expression remote_lookup_expr = 17 [(gogoproto.nullable) = false];
+
   // LookupColumns, like LookupExpr, represents the part of the join condition
   // used to perform the lookup into the index. It is used as an optimization
   // for the common case where the join conditions are all simple equalities
