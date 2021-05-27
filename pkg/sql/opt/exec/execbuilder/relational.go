@@ -1618,10 +1618,17 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
 		ivarMap: allCols,
 	}
-	var lookupExpr tree.TypedExpr
+	var lookupExpr, remoteLookupExpr tree.TypedExpr
 	if len(join.LookupExpr) > 0 {
 		var err error
 		lookupExpr, err = b.buildScalar(&ctx, &join.LookupExpr)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+	if len(join.RemoteLookupExpr) > 0 {
+		var err error
+		remoteLookupExpr, err = b.buildScalar(&ctx, &join.RemoteLookupExpr)
 		if err != nil {
 			return execPlan{}, err
 		}
@@ -1651,6 +1658,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		keyCols,
 		join.LookupColsAreTableKey,
 		lookupExpr,
+		remoteLookupExpr,
 		lookupOrdinals,
 		onExpr,
 		join.IsSecondJoinInPairedJoiner,

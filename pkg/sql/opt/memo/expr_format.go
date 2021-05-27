@@ -465,6 +465,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				n := tp.Childf("lookup expression")
 				f.formatExpr(&t.LookupExpr, n)
 			}
+			if len(t.RemoteLookupExpr) > 0 {
+				n := tp.Childf("remote lookup expression")
+				f.formatExpr(&t.RemoteLookupExpr, n)
+			}
 		}
 		if t.LookupColsAreTableKey {
 			tp.Childf("lookup columns are key")

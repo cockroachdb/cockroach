@@ -113,13 +113,14 @@ func TestJoinReader(t *testing.T) {
 		// The OutputColumns in post are the ones without continuation. For tests
 		// that include the continuation column, the test adds the column position
 		// using outputColumnForContinuation.
-		post       execinfrapb.PostProcessSpec
-		onExpr     string
-		lookupExpr string
-		input      [][]tree.Datum
-		lookupCols []uint32
-		joinType   descpb.JoinType
-		inputTypes []*types.T
+		post             execinfrapb.PostProcessSpec
+		onExpr           string
+		lookupExpr       string
+		remoteLookupExpr string
+		input            [][]tree.Datum
+		lookupCols       []uint32
+		joinType         descpb.JoinType
+		inputTypes       []*types.T
 		// The output types for the case without continuation. The test adds the
 		// bool type for the case with continuation.
 		outputTypes            []*types.T
@@ -726,6 +727,104 @@ func TestJoinReader(t *testing.T) {
 			outputTypes: types.TwoIntCols,
 			expected:    "[[2 0] [NULL 1]]",
 		},
+		{
+			description: "Test locality optimized left semi lookup join on primary index",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{1},
+			},
+			input: [][]tree.Datum{
+				{aFn(100), bFn(100)},
+				// No match for this row.
+				{tree.NewDInt(tree.DInt(11)), tree.NewDInt(tree.DInt(11))},
+				{aFn(2), bFn(2)},
+				{aFn(2), bFn(2)},
+			},
+			lookupExpr:       "@3 = 1 AND @2 = @4",
+			remoteLookupExpr: "@3 = 2 AND @2 = @4",
+			joinType:         descpb.LeftSemiJoin,
+			inputTypes:       types.TwoIntCols,
+			outputTypes:      types.OneIntCol,
+			expected:         "[[0] [2] [2]]",
+		},
+		{
+			description: "Test locality optimized inner lookup join on secondary index",
+			indexIdx:    1,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+				// No match for this row since it's null.
+				{aFn(10), tree.DNull, tree.DNull},
+				// No match for this row.
+				{aFn(20), bFn(20), sqlutils.RowEnglishFn(20)},
+			},
+			lookupExpr:       "@5 = 1 AND @3 = @7",
+			remoteLookupExpr: "@5 IN (2, 5) AND @3 = @7",
+			joinType:         descpb.InnerJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[0 1 'one'] [1 1 'one-one'] [0 2 'two'] [2 2 'two-two']]",
+			expectedWithContinuation: "[[0 1 'one' false] [1 1 'one-one' false] [0 2 'two' false] " +
+				"[2 2 'two-two' false]]",
+			outputColumnForContinuation: 7,
+		},
+		{
+			description: "Test locality optimized left outer lookup join on secondary index",
+			indexIdx:    1,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+				// No match for this row since it's null.
+				{aFn(10), tree.DNull, tree.DNull},
+				// No match for this row.
+				{aFn(20), bFn(20), sqlutils.RowEnglishFn(20)},
+			},
+			lookupExpr:       "@5 = 1 AND @3 = @7",
+			remoteLookupExpr: "@5 IN (2, 5) AND @3 = @7",
+			joinType:         descpb.LeftOuterJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[0 1 'one'] [1 1 'one-one'] [0 2 'two'] [2 2 'two-two'] [1 NULL NULL] [2 0 NULL]]",
+			expectedWithContinuation: "[[0 1 'one' false] [1 1 'one-one' false] [0 2 'two' false] " +
+				"[2 2 'two-two' false] [1 NULL NULL false] [2 0 NULL false]]",
+			outputColumnForContinuation: 7,
+		},
+		{
+			description: "Test locality optimized left semi lookup join on secondary index",
+			indexIdx:    1,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+				// No match for this row since it's null.
+				{aFn(10), tree.DNull, tree.DNull},
+				// No match for this row.
+				{aFn(20), bFn(20), sqlutils.RowEnglishFn(20)},
+			},
+			lookupExpr:       "@5 = 1 AND @3 = @7",
+			remoteLookupExpr: "@5 IN (2, 5) AND @3 = @7",
+			joinType:         descpb.LeftSemiJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      types.TwoIntCols,
+			expected:         "[[0 1] [1 1] [0 2] [2 2]]",
+		},
 	}
 	st := cluster.MakeTestingClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
@@ -800,6 +899,7 @@ func TestJoinReader(t *testing.T) {
 									IndexIdx:                          c.indexIdx,
 									LookupColumns:                     c.lookupCols,
 									LookupExpr:                        execinfrapb.Expression{Expr: c.lookupExpr},
+									RemoteLookupExpr:                  execinfrapb.Expression{Expr: c.remoteLookupExpr},
 									OnExpr:                            execinfrapb.Expression{Expr: c.onExpr},
 									Type:                              c.joinType,
 									MaintainOrdering:                  reqOrdering,
