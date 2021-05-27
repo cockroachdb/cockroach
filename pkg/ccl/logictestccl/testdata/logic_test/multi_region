@@ -1556,7 +1556,6 @@ statement ok
 DROP TYPE db_enum_name_clash.crdb_internal_region;
 ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 
-
 # Verify that we can use CREATE TABLE AS from a REGIONAL BY ROW table, and
 # end up with something that resembles a REGIONAL BY ROW table.  Note that
 # this is not simple, as we need to explicitly select the crdb_region

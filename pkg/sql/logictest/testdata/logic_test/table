@@ -555,6 +555,7 @@ gossip_nodes                           NULL
 index_columns                          NULL
 invalid_objects                        NULL
 jobs                                   NULL
+kv_node_liveness                       NULL
 kv_node_status                         NULL
 kv_store_status                        NULL
 leases                                 NULL

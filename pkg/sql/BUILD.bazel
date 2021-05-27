@@ -314,6 +314,7 @@ go_library(
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/xform",
+        "//pkg/sql/optionalnodeliveness",
         "//pkg/sql/paramparse",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",

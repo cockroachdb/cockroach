@@ -298,6 +298,7 @@ crdb_internal       gossip_nodes
 crdb_internal       index_columns
 crdb_internal       invalid_objects
 crdb_internal       jobs
+crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
 crdb_internal       leases
@@ -492,6 +493,7 @@ gossip_nodes
 index_columns
 invalid_objects
 jobs
+kv_node_liveness
 kv_node_status
 kv_store_status
 leases
@@ -705,6 +707,7 @@ system         crdb_internal       gossip_nodes                           SYSTEM
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_node_liveness                       SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                 SYSTEM VIEW  NO                  1
@@ -2000,6 +2003,7 @@ NULL     public   system         crdb_internal       gossip_nodes               
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
@@ -2429,6 +2433,7 @@ NULL     public   system         crdb_internal       gossip_nodes               
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
