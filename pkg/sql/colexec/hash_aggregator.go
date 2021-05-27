@@ -530,9 +530,7 @@ func (op *hashAggregator) Reset(ctx context.Context) {
 	op.buckets = op.buckets[:0]
 	op.ht.Reset(ctx)
 	if op.inputTrackingState.tuples != nil {
-		if err := op.inputTrackingState.tuples.Close(ctx); err != nil {
-			colexecerror.InternalError(err)
-		}
+		op.inputTrackingState.tuples.Reset(ctx)
 		op.inputTrackingState.zeroBatchEnqueued = false
 	}
 	op.curOutputBucketIdx = 0
