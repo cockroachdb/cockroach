@@ -116,6 +116,8 @@ func (r *SchemaRegistry) requestHandler(hw http.ResponseWriter, hr *http.Request
 	switch {
 	case method == http.MethodPost && subjectVersionsRegexp.MatchString(path):
 		err = r.register(hw, hr)
+	case method == http.MethodGet && path == "/mode":
+		err = r.mode(hw, hr)
 	default:
 		hw.WriteHeader(http.StatusNotFound)
 		return
@@ -125,7 +127,7 @@ func (r *SchemaRegistry) requestHandler(hw http.ResponseWriter, hr *http.Request
 	}
 }
 
-// register is an http hander for the underlying server which registers schemas.
+// register is an http handler for the underlying server which registers schemas.
 func (r *SchemaRegistry) register(hw http.ResponseWriter, hr *http.Request) (err error) {
 	type confluentSchemaVersionRequest struct {
 		Schema string `json:"schema"`
@@ -152,6 +154,14 @@ func (r *SchemaRegistry) register(hw http.ResponseWriter, hr *http.Request) (err
 
 	hw.Header().Set(`Content-type`, `application/json`)
 	_, err = hw.Write(res)
+	return err
+}
+
+// mode is an http handler for the /mode endpoint. Our implementation
+// returns an empty response as we currently don't care about the
+// response.
+func (r *SchemaRegistry) mode(hw http.ResponseWriter, _ *http.Request) error {
+	_, err := hw.Write([]byte("{}"))
 	return err
 }
 
