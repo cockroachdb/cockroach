@@ -48,6 +48,7 @@ test           crdb_internal       index_columns                          public
 test           crdb_internal       interleaved                            public   SELECT
 test           crdb_internal       invalid_objects                        public   SELECT
 test           crdb_internal       jobs                                   public   SELECT
+test           crdb_internal       kv_node_liveness                       public   SELECT
 test           crdb_internal       kv_node_status                         public   SELECT
 test           crdb_internal       kv_store_status                        public   SELECT
 test           crdb_internal       leases                                 public   SELECT

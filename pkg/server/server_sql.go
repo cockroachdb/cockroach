@@ -502,6 +502,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AmbientCtx:              cfg.AmbientCtx,
 		DB:                      cfg.db,
 		Gossip:                  cfg.gossip,
+		NodeLiveness:            cfg.nodeLiveness,
 		SystemConfig:            cfg.systemConfigProvider,
 		MetricsRecorder:         cfg.recorder,
 		DistSender:              cfg.distSender,
