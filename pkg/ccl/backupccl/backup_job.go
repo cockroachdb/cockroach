@@ -184,7 +184,6 @@ func backup(
 	spans := filterSpans(backupManifest.Spans, completedSpans)
 	introducedSpans := filterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
 
-	g := ctxgroup.WithContext(ctx)
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
 		if t, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
@@ -228,17 +227,18 @@ func backup(
 	progressLogger := jobs.NewChunkProgressLogger(job, numTotalSpans, job.FractionCompleted(), jobs.ProgressUpdateOnly)
 
 	requestFinishedCh := make(chan struct{}, numTotalSpans) // enough buffer to never block
+	var jobProgressLoop func(ctx context.Context) error
 	if numTotalSpans > 0 {
-		g.GoCtx(func(ctx context.Context) error {
+		jobProgressLoop = func(ctx context.Context) error {
 			// Currently the granularity of backup progress is the % of spans
 			// exported. Would improve accuracy if we tracked the actual size of each
 			// file.
 			return progressLogger.Loop(ctx, requestFinishedCh)
-		})
+		}
 	}
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-	g.GoCtx(func(ctx context.Context) error {
+	checkpointLoop := func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
 		for progress := range progCh {
@@ -268,20 +268,20 @@ func backup(
 			}
 		}
 		return nil
-	})
-
-	if err := distBackup(
-		ctx,
-		execCtx,
-		planCtx,
-		dsp,
-		progCh,
-		backupSpecs,
-	); err != nil {
-		return RowCount{}, err
 	}
 
-	if err := g.Wait(); err != nil {
+	runBackup := func(ctx context.Context) error {
+		return distBackup(
+			ctx,
+			execCtx,
+			planCtx,
+			dsp,
+			progCh,
+			backupSpecs,
+		)
+	}
+
+	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, runBackup); err != nil {
 		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
