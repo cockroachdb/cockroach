@@ -46,6 +46,7 @@ const (
 	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID
 	CrdbInternalForwardDependenciesTableID
+	CrdbInternalKVNodeLivenessTableID
 	CrdbInternalGossipNodesTableID
 	CrdbInternalGossipAlertsTableID
 	CrdbInternalGossipLivenessTableID
