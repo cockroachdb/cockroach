@@ -659,20 +659,6 @@ func restore(
 	}
 	mu.requestsCompleted = make([]bool, len(importSpans))
 
-	progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
-		func(progressedCtx context.Context, details jobspb.ProgressDetails) {
-			switch d := details.(type) {
-			case *jobspb.Progress_Restore:
-				mu.Lock()
-				if mu.highWaterMark >= 0 {
-					d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
-				}
-				mu.Unlock()
-			default:
-				log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
-			}
-		})
-
 	g := ctxgroup.WithContext(restoreCtx)
 
 	// TODO(pbardea): This not super principled. I just wanted something that
@@ -706,6 +692,20 @@ func restore(
 			// can only be one).
 			return nil
 		}
+
+		progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
+			func(progressedCtx context.Context, details jobspb.ProgressDetails) {
+				switch d := details.(type) {
+				case *jobspb.Progress_Restore:
+					mu.Lock()
+					if mu.highWaterMark >= 0 {
+						d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
+					}
+					mu.Unlock()
+				default:
+					log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
+				}
+			})
 
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
