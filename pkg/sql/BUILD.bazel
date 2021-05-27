@@ -351,6 +351,7 @@ go_library(
         "//pkg/sql/vtable",
         "//pkg/storage/cloud",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/bitarray",
         "//pkg/util/cancelchecker",
         "//pkg/util/contextutil",

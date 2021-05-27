@@ -38,14 +38,15 @@ func registerKV(r *testRegistry) {
 		// If true, the reads are limited reads over the full span of the table.
 		// Currently this also enables SFU writes on the workload since this is
 		// geared towards testing optimistic locking and latching.
-		spanReads  bool
-		batchSize  int
-		blockSize  int
-		splits     int // 0 implies default, negative implies 0
-		encryption bool
-		sequential bool
-		duration   time.Duration
-		tags       []string
+		spanReads      bool
+		batchSize      int
+		blockSize      int
+		splits         int // 0 implies default, negative implies 0
+		encryption     bool
+		sequential     bool
+		concMultiplier int
+		duration       time.Duration
+		tags           []string
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -79,7 +80,11 @@ func registerKV(r *testRegistry) {
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+			concurrencyMultiplier := 64
+			if opts.concMultiplier != 0 {
+				concurrencyMultiplier = opts.concMultiplier
+			}
+			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*concurrencyMultiplier))
 
 			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
@@ -126,6 +131,8 @@ func registerKV(r *testRegistry) {
 	for _, opts := range []kvOptions{
 		// Standard configs.
 		{nodes: 1, cpus: 8, readPercent: 0},
+		// CPU overload test, to stress admission control.
+		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192, duration: 20 * time.Minute},
 		{nodes: 1, cpus: 8, readPercent: 95},
 		{nodes: 1, cpus: 32, readPercent: 0},
 		{nodes: 1, cpus: 32, readPercent: 95},
@@ -202,6 +209,9 @@ func registerKV(r *testRegistry) {
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, "seq")
+		}
+		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
+			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
 		}
 
 		minVersion := "v2.0.0"
