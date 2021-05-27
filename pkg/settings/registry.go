@@ -60,8 +60,9 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.optimizer":                               {},
 	"kv.bulk_io_write.addsstable_max_rate":                 {},
 	// removed as of 20.1.
-	"schemachanger.lease.duration":       {},
-	"schemachanger.lease.renew_fraction": {},
+	"schemachanger.lease.duration":           {},
+	"schemachanger.lease.renew_fraction":     {},
+	"diagnostics.forced_stat_reset.interval": {},
 	// removed as of 20.2.
 	"rocksdb.ingest_backpressure.pending_compaction_threshold":         {},
 	"sql.distsql.temp_storage.joins":                                   {},
