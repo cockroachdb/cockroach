@@ -888,7 +888,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   contention_time_avg FLOAT,
   contention_time_var FLOAT,
   implicit_txn        BOOL NOT NULL,
-  full_scan           BOOL NOT NULL
+  full_scan           BOOL NOT NULL,
+  sample_plan         JSONB,
+  database_name       STRING NOT NULL,
+  exec_node_ids       INT[] NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
@@ -961,6 +964,42 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if stmtKey.failed {
 					flags = "!" + flags
 				}
+
+				// createSamplePlan builds a formatted  JSON object from the explain tree nodes.
+				var createSamplePlan func(node *roachpb.ExplainTreePlanNode) *json.ObjectBuilder
+				createSamplePlan = func(node *roachpb.ExplainTreePlanNode) *json.ObjectBuilder {
+
+					nodePlan := json.NewObjectBuilder(3)
+					nodeAttrs := json.NewArrayBuilder(len(node.Attrs))
+					nodeChildren := json.NewArrayBuilder(len(node.Children))
+
+					nodePlan.Add("name", json.FromString(node.Name))
+
+					for _, attr := range node.Attrs {
+						attrBuilder := json.NewObjectBuilder(1)
+						attrBuilder.Add(attr.Key, json.FromString(attr.Value))
+						nodeAttrs.Add(attrBuilder.Build())
+					}
+
+					nodePlan.Add("attrs", nodeAttrs.Build())
+
+					for _, childNode := range node.Children {
+						nodeChildren.Add(createSamplePlan(childNode).Build())
+					}
+
+					nodePlan.Add("children", nodeChildren.Build())
+					return nodePlan
+				}
+
+				samplePlan := createSamplePlan(&s.mu.data.SensitiveInfo.MostRecentPlanDescription)
+
+				execNodeIds := tree.NewDArray(types.Int)
+				for _, nodeId := range s.mu.data.Nodes {
+					if err := execNodeIds.Append(tree.NewDInt(tree.DInt(nodeId))); err != nil {
+						return err
+					}
+				}
+
 				err := addRow(
 					tree.NewDInt(tree.DInt(nodeID)),                         // node_id
 					tree.NewDString(appName),                                // application_name
@@ -1000,6 +1039,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_var
 					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),                                 // implicit_txn
 					tree.MakeDBool(tree.DBool(s.mu.fullScan)),                                       // full_scan
+					tree.NewDJSON(samplePlan.Build()),                                               // sample_plan
+					tree.NewDString(stmtKey.database),                                               // database_name
+					execNodeIds,                                                                     // exec_node_ids
 				)
 				s.mu.Unlock()
 				if err != nil {
