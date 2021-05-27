@@ -67,27 +67,23 @@ func (p *scanRequestScanner) Scan(
 		// can't count nodes in tenants
 		approxNodeCount = 1
 	}
+
 	maxConcurrentExports := approxNodeCount *
 		int(kvserver.ExportRequestsLimit.Get(&p.settings.SV))
-	exportsSem := make(chan struct{}, maxConcurrentExports)
+	exportSem := newSem(maxConcurrentExports)
 	g := ctxgroup.WithContext(ctx)
-
 	// atomicFinished is used only to enhance debugging messages.
 	var atomicFinished int64
-
+	var semErr error
 	for _, span := range spans {
 		span := span
-
-		// Wait for our semaphore.
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case exportsSem <- struct{}{}:
+		semErr = exportSem.acquireCtx(ctx)
+		if semErr != nil {
+			break
 		}
 
 		g.GoCtx(func(ctx context.Context) error {
-			defer func() { <-exportsSem }()
-
+			defer exportSem.done()
 			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if log.V(2) {
@@ -99,7 +95,7 @@ func (p *scanRequestScanner) Scan(
 			return nil
 		})
 	}
-	return g.Wait()
+	return errors.CombineErrors(semErr, g.Wait())
 }
 
 func (p *scanRequestScanner) exportSpan(
@@ -270,3 +266,30 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 	})
 	return nodes, nil
 }
+
+// sem is a small channel-based semaphore.
+type sem struct {
+	c chan struct{}
+}
+
+// newSem returns a sem that will allow up to max concurrent
+// acquisition.
+func newSem(max int) *sem {
+	return &sem{c: make(chan struct{}, max)}
+}
+
+// acquireCtx returns a nil error if the semaphore can be acquired. A
+// non-nil error is returned if the context is canceled before it can
+// be acquired.
+func (s *sem) acquireCtx(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.c <- struct{}{}:
+		return nil
+	}
+}
+
+// done release the semaphore. Should only be called if acquireCtx has
+// returned a nil error.
+func (s *sem) done() { <-s.c }
