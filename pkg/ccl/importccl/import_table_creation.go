@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -266,6 +267,17 @@ func (so *importSequenceOperators) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errSequenceOperators)
+}
+
+// HasTablePrivilege is part of the tree.EvalDatabase interface.
+func (so *importSequenceOperators) HasPrivilege(
+	ctx context.Context,
+	specifier tree.HasPrivilegeSpecifier,
+	user security.SQLUsername,
+	kind privilege.Kind,
+	withGrantOpt bool,
+) (bool, error) {
+	return false, errors.WithStack(errSequenceOperators)
 }
 
 // Implements the tree.SequenceOperators interface.

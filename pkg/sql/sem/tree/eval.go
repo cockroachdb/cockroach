@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -3063,6 +3064,23 @@ type EvalDatabase interface {
 	IsTypeVisible(
 		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 	) (isVisible bool, exists bool, err error)
+
+	// HasPrivilege returns whether the current user has privilege to access
+	// the given object.
+	HasPrivilege(
+		ctx context.Context,
+		specifier HasPrivilegeSpecifier,
+		user security.SQLUsername,
+		kind privilege.Kind,
+		withGrantOpt bool,
+	) (bool, error)
+}
+
+// HasPrivilegeSpecifier specifies an object to lookup privilege for.
+type HasPrivilegeSpecifier struct {
+	// Only one of these is filled.
+	TableName *string
+	TableOID  *oid.Oid
 }
 
 // EvalPlanner is a limited planner that can be used from EvalContext.
