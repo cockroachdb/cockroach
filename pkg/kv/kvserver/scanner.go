@@ -104,7 +104,7 @@ func newReplicaScanner(
 		minIdleTime:    minIdleTime,
 		maxIdleTime:    maxIdleTime,
 		replicas:       replicas,
-		removed:        make(chan *Replica, 10),
+		removed:        make(chan *Replica),
 		setDisabledCh:  make(chan struct{}, 1),
 	}
 	if targetInterval == 0 {
