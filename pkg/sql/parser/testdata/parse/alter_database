@@ -15,12 +15,28 @@ ALTER DATABASE a ADD REGION "us-west-1" -- literals removed
 ALTER DATABASE _ ADD REGION _ -- identifiers removed
 
 parse
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1"
+----
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1"
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1" -- fully parenthetized
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1" -- literals removed
+ALTER DATABASE _ ADD REGION IF NOT EXISTS _ -- identifiers removed
+
+parse
 ALTER DATABASE a DROP REGION "us-west-1"
 ----
 ALTER DATABASE a DROP REGION "us-west-1"
 ALTER DATABASE a DROP REGION "us-west-1" -- fully parenthetized
 ALTER DATABASE a DROP REGION "us-west-1" -- literals removed
 ALTER DATABASE _ DROP REGION _ -- identifiers removed
+
+parse
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1"
+----
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1"
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1" -- fully parenthetized
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1" -- literals removed
+ALTER DATABASE _ DROP REGION IF EXISTS _ -- identifiers removed
 
 parse
 ALTER DATABASE a SURVIVE REGION FAILURE
