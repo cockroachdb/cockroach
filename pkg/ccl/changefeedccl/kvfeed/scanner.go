@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -67,36 +68,27 @@ func (p *scanRequestScanner) Scan(
 		// can't count nodes in tenants
 		approxNodeCount = 1
 	}
+
 	maxConcurrentExports := approxNodeCount *
 		int(kvserver.ExportRequestsLimit.Get(&p.settings.SV))
-	exportsSem := make(chan struct{}, maxConcurrentExports)
+	exportSem := limit.MakeConcurrentRequestLimiter("changefeedExportRequestLimiter", maxConcurrentExports)
 	g := ctxgroup.WithContext(ctx)
-
 	// atomicFinished is used only to enhance debugging messages.
 	var atomicFinished int64
-
 	for _, span := range spans {
 		span := span
-
-		// Wait for our semaphore.
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case exportsSem <- struct{}{}:
+		if err := exportSem.Begin(ctx); err != nil {
+			return errors.CombineErrors(err, g.Wait())
 		}
 
 		g.GoCtx(func(ctx context.Context) error {
-			defer func() { <-exportsSem }()
-
+			defer exportSem.Finish()
 			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if log.V(2) {
 				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
-			if err != nil {
-				return err
-			}
-			return nil
+			return err
 		})
 	}
 	return g.Wait()
