@@ -487,3 +487,148 @@ UPDATE system.namespace SET id = 12345 WHERE id = 53;
 
 	require.False(t, rows.Next())
 }
+
+// TestNodeStatementStatisticsDatabaseName tests whether the correct database is
+// returned from the crdb_internal.node_statement_statistics table.
+func TestNodeStatementStatisticsDatabaseName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	var dbName string
+
+	sqlDB.Exec(`SET database = defaultdb`)
+	rows, err := sqlDB.Query(`SELECT database_name FROM "".crdb_internal.node_statement_statistics`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&dbName))
+	require.Equal(t, "defaultdb", dbName)
+}
+
+// TestExplainTreePlanNodeToJSON tests whether the ExplainTreePlanNode function
+// correctly builds a JSON object from an ExplainTreePlanNode.
+func TestExplainTreePlanNodeToJSON(t *testing.T) {
+
+	testDataArr := []struct {
+		explainTree roachpb.ExplainTreePlanNode
+		expected    string
+	}{
+		// Test data using a node with multiple inner children.
+		{
+			roachpb.ExplainTreePlanNode{
+				Name: "root",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "rootKey",
+						Value: "rootValue",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "child",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "childKey",
+								Value: "childValue",
+							},
+						},
+						Children: []*roachpb.ExplainTreePlanNode{
+							{
+								Name: "innerChild",
+								Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+									{
+										Key:   "innerChildKey",
+										Value: "innerChildValue",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			`{"attrs": [{"rootKey": "rootValue"}], "children": [{"attrs": [{"childKey": "childValue"}], "children": [{"attrs": [{"innerChildKey": "innerChildValue"}], "children": [], "name": "innerChild"}], "name": "child"}], "name": "root"}`,
+		},
+		// Test using a node with multiple attributes.
+		{
+			roachpb.ExplainTreePlanNode{
+				Name: "root",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "rootFirstKey",
+						Value: "rootFirstValue",
+					},
+					{
+						Key:   "rootSecondKey",
+						Value: "rootSecondValue",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "child",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "childKey",
+								Value: "childValue",
+							},
+						},
+					},
+				},
+			},
+			`{"attrs": [{"rootFirstKey": "rootFirstValue"}, {"rootSecondKey": "rootSecondValue"}], "children": [{"attrs": [{"childKey": "childValue"}], "children": [], "name": "child"}], "name": "root"}`,
+		},
+		// Test using a node with multiple children and multiple inner children.
+		{
+			roachpb.ExplainTreePlanNode{
+				Name: "root",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "rootKey",
+						Value: "rootValue",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "firstChild",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "firstChildKey",
+								Value: "firstChildValue",
+							},
+						},
+						Children: []*roachpb.ExplainTreePlanNode{
+							{
+								Name: "innerChild",
+								Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+									{
+										Key:   "innerChildKey",
+										Value: "innerChildValue",
+									},
+								},
+							},
+						},
+					},
+					{
+						Name: "secondChild",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "secondChildKey",
+								Value: "secondChildValue",
+							},
+						},
+					},
+				},
+			},
+			`{"attrs": [{"rootKey": "rootValue"}], "children": [{"attrs": [{"firstChildKey": "firstChildValue"}], "children": [{"attrs": [{"innerChildKey": "innerChildValue"}], "children": [], "name": "innerChild"}], "name": "firstChild"}, {"attrs": [{"secondChildKey": "secondChildValue"}], "children": [], "name": "secondChild"}], "name": "root"}`,
+		},
+	}
+
+	for _, testData := range testDataArr {
+		explainTreeJSON := sql.ExplainTreePlanNodeToJSON(&testData.explainTree)
+		expected := testData.expected
+		require.Equal(t, expected, explainTreeJSON.String())
+	}
+
+}
