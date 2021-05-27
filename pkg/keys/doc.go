@@ -186,7 +186,7 @@ var _ = [...]interface{}{
 	//   Typical examples are MVCC stats and the abort span. They all share
 	//   `LocalRangeIDPrefix` and `LocalRangeIDReplicatedInfix`.
 	AbortSpanKey,                // "abc-"
-	RangeLastGCKey,              // "lgc-"
+	RangeGCThresholdKey,         // "lgc-"
 	RangeAppliedStateKey,        // "rask"
 	RaftAppliedIndexLegacyKey,   // "rfta"
 	RaftTruncatedStateLegacyKey, // "rftt"

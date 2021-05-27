@@ -29,11 +29,11 @@ func TestSpanSetGetSpansScope(t *testing.T) {
 
 	var ss SpanSet
 	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("a")})
-	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(1)})
+	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(1)})
 	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")})
 
 	exp := []Span{
-		{Span: roachpb.Span{Key: keys.RangeLastGCKey(1)}},
+		{Span: roachpb.Span{Key: keys.RangeGCThresholdKey(1)}},
 	}
 	if act := ss.GetSpans(SpanReadOnly, SpanLocal); !reflect.DeepEqual(act, exp) {
 		t.Errorf("get local spans: got %v, expected %v", act, exp)
@@ -70,7 +70,7 @@ func TestSpanSetIterate(t *testing.T) {
 	spA := roachpb.Span{Key: roachpb.Key("a")}
 	spRO := roachpb.Span{Key: roachpb.Key("r"), EndKey: roachpb.Key("o")}
 	spRW := roachpb.Span{Key: roachpb.Key("r"), EndKey: roachpb.Key("w")}
-	spLocal := roachpb.Span{Key: keys.RangeLastGCKey(1)}
+	spLocal := roachpb.Span{Key: keys.RangeGCThresholdKey(1)}
 
 	ss := new(SpanSet)
 	ss.AddNonMVCC(SpanReadOnly, spLocal)
@@ -104,7 +104,7 @@ func TestSpanSetMerge(t *testing.T) {
 	spBC := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}
 	spCE := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}
 	spBE := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("e")}
-	spLocal := roachpb.Span{Key: keys.RangeLastGCKey(1)}
+	spLocal := roachpb.Span{Key: keys.RangeGCThresholdKey(1)}
 
 	var ss SpanSet
 	ss.AddNonMVCC(SpanReadOnly, spLocal)
@@ -205,7 +205,7 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 	ss.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 2})
 	ss.AddMVCC(SpanReadWrite, roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2})
 	ss.AddMVCC(SpanReadWrite, roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2})
-	ss.AddNonMVCC(SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(1)})
+	ss.AddNonMVCC(SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(1)})
 
 	var allowedRO = []struct {
 		span roachpb.Span
@@ -225,8 +225,8 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
 
 		// Local keys.
-		{roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{}},
-		{roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{}},
+		{roachpb.Span{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{WallTime: 1}},
 	}
 	for _, tc := range allowedRO {
 		if err := ss.CheckAllowedAt(SpanReadOnly, tc.span, tc.ts); err != nil {
@@ -257,7 +257,7 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
 
 		// Local keys.
-		{roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{}},
+		{roachpb.Span{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{}},
 	}
 	for _, tc := range allowedRW {
 		if err := ss.CheckAllowedAt(SpanReadWrite, tc.span, tc.ts); err != nil {

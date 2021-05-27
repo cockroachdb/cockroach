@@ -45,7 +45,7 @@ func declareKeysGC(
 	// request first to bump the thresholds, and then another one that actually does work
 	// but can avoid declaring these keys below.
 	if !gcr.Threshold.IsEmpty() {
-		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(rs.GetRangeID())})
+		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
 	}
 	// Needed for Range bounds checks in calls to EvalContext.ContainsKey.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})

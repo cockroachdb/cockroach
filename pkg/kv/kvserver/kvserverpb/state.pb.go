@@ -60,7 +60,7 @@ type ReplicaState struct {
 	Lease *roachpb.Lease `protobuf:"bytes,4,opt,name=lease,proto3" json:"lease,omitempty"`
 	// The truncation state of the Raft log.
 	TruncatedState *roachpb.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState,proto3" json:"truncated_state,omitempty"`
-	// gcThreshold is the GC threshold of the Range, typically updated when keys
+	// GCThreshold is the GC threshold of the Range, typically updated when keys
 	// are garbage collected. Reads and writes at timestamps <= this time will
 	// not be served.
 	GCThreshold *hlc.Timestamp      `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold,proto3" json:"gc_threshold,omitempty"`
