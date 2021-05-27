@@ -58,11 +58,6 @@ func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID
 	}
 }
 
-// SetLowWater implements the Cache interface.
-func (tc *sklImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.Add(start, end, ts, noTxnID)
-}
-
 // getLowWater implements the Cache interface.
 func (tc *sklImpl) getLowWater() hlc.Timestamp {
 	return tc.cache.FloorTS()
