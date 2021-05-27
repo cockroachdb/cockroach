@@ -301,14 +301,24 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				break
 			}
 
-			if len(foundVals) > 1 && (joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp) {
-				// We cannot use the method constructJoinWithConstants to create a cross
-				// join for left or anti joins, because constructing a cross join with
-				// foundVals will increase the size of the input. As a result,
-				// non-matching input rows will show up more than once in the output,
-				// which is incorrect (see #59615).
-				shouldBuildMultiSpanLookupJoin = true
-				break
+			if len(foundVals) > 1 {
+				if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
+					// We cannot use the method constructJoinWithConstants to create a cross
+					// join for left or anti joins, because constructing a cross join with
+					// foundVals will increase the size of the input. As a result,
+					// non-matching input rows will show up more than once in the output,
+					// which is incorrect (see #59615).
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
+				if j == 0 && index.PartitionCount() > 1 {
+					// If this is the first index column and there is more than one
+					// partition, we may be able to build a locality optimized lookup
+					// join. This requires a multi-span lookup join as a starting point.
+					// See GenerateLocalityOptimizedLookupJoin for details.
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
 			}
 
 			// We will join these constant values with the input to make
@@ -334,9 +344,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		if shouldBuildMultiSpanLookupJoin {
 			// Some of the index columns were constrained to multiple constant values,
-			// and this is a left or anti join. As described above, we cannot use the
-			// method constructJoinWithConstants to create a cross join as the input
-			// for left or anti joins, since it would produce incorrect results.
+			// and we did not use the method constructJoinWithConstants to create a
+			// cross join as the input (either because it would have been incorrect or
+			// because it would have eliminated the opportunity to apply other
+			// optimizations such as locality optimized search; see above).
 			//
 			// As an alternative, we store all the filters needed for the lookup in
 			// LookupExpr, which will be used to construct spans at execution time.
@@ -394,11 +405,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// Case 1 (see function comment).
 			lookupJoin.Cols.UnionWith(scanPrivate.Cols)
 
-			// If some optional filters were used to build the lookup expression, we may
-			// need to wrap the final expression with a project. We only need to do this
-			// for left joins, since anti joins have an implicit projection that removes
-			// all right-side columns.
-			needsProject := joinType == opt.LeftJoinOp &&
+			// If some optional filters were used to build the lookup expression, we
+			// may need to wrap the final expression with a project. We don't need to
+			// do this for semi or anti joins, since they have an implicit projection
+			// that removes all right-side columns.
+			needsProject := joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp &&
 				!lookupJoin.Cols.SubsetOf(grp.Relational().OutputCols)
 			if !needsProject {
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
@@ -1155,23 +1166,35 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 	return result
 }
 
-// CreateLocalityOptimizedAntiLookupJoinPrivate creates a new lookup join
-// private from the given private and replaces the LookupExpr with the given
-// filters. It also marks the private as locality optimized.
-func (c *CustomFuncs) CreateLocalityOptimizedAntiLookupJoinPrivate(
-	lookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate,
+// IsAntiJoin returns true if the given lookup join is an anti join.
+func (c *CustomFuncs) IsAntiJoin(private *memo.LookupJoinPrivate) bool {
+	return private.JoinType == opt.AntiJoinOp
+}
+
+// EmptyFiltersExpr returns an empty FiltersExpr.
+func (c *CustomFuncs) EmptyFiltersExpr() memo.FiltersExpr {
+	return memo.EmptyFiltersExpr
+}
+
+// CreateLocalityOptimizedLookupJoinPrivate creates a new lookup join private
+// from the given private and replaces the LookupExpr and RemoteLookupExpr with
+// the given filters. It also marks the private as locality optimized.
+func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivate(
+	lookupExpr, remoteLookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate,
 ) *memo.LookupJoinPrivate {
 	newPrivate := *private
 	newPrivate.LookupExpr = lookupExpr
+	newPrivate.RemoteLookupExpr = remoteLookupExpr
 	newPrivate.LocalityOptimized = true
 	return &newPrivate
 }
 
-// GetLocalityOptimizedAntiJoinLookupExprs returns the local and remote lookup
-// expressions needed to build a locality optimized anti join from the given
+// GetLocalityOptimizedLookupJoinExprs returns the local and remote lookup
+// expressions needed to build a locality optimized lookup join from the given
 // lookup join private, if possible. Otherwise, it returns ok=false. See the
-// comment above the GenerateLocalityOptimizedAntiJoin rule for more details.
-func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
+// comments above the GenerateLocalityOptimizedAntiJoin and
+// GenerateLocalityOptimizedLookupJoin rules for more details.
+func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	input memo.RelExpr, private *memo.LookupJoinPrivate,
 ) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
 	// Respect the session setting LocalityOptimizedSearch.
@@ -1181,11 +1204,6 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 
 	// Check whether this lookup join has already been locality optimized.
 	if private.LocalityOptimized {
-		return nil, nil, false
-	}
-
-	// We can only apply this optimization to anti-joins.
-	if private.JoinType != opt.AntiJoinOp {
 		return nil, nil, false
 	}
 
@@ -1199,6 +1217,15 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	// values.
 	if private.LookupExpr == nil {
 		return nil, nil, false
+	}
+
+	// We can only generate a locality optimized lookup join if we know there is
+	// at most one row produced for each lookup. This is always true for semi and
+	// anti joins, but only true for inner and left joins if
+	// private.LookupColsAreTableKey is true.
+	if private.JoinType != opt.SemiJoinOp && private.JoinType != opt.AntiJoinOp &&
+		!private.LookupColsAreTableKey {
+		return
 	}
 
 	// The local region must be set, or we won't be able to determine which
@@ -1265,8 +1292,6 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	copy(remoteExpr, private.LookupExpr)
 	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
 
-	// Return the two sets of lookup expressions. They will be used to construct
-	// two nested anti joins.
 	return localExpr, remoteExpr, true
 }
 
