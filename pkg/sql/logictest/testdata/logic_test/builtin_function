@@ -2736,27 +2736,37 @@ SELECT get_bit(B'10110', 10)
 query error get_bit\(\): GetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(B'', 0);
 
-# Binary representation of 'l' is 01101100
-# Binary representation of \o145 is 01100101
-# Binary representation of \x61\x62\x6C are 01100001 01100010 01101100
-
-query I rowsort
-SELECT get_bit(b'\145\x6C\l', 0) UNION SELECT get_bit(b'\145\x6C\l', 13)
+query II
+SELECT i, get_bit('\x11'::BYTEA, i) FROM generate_series(0, 7) i ORDER BY i;
 ----
-0
-1
+0  1
+1  0
+2  0
+3  0
+4  1
+5  0
+6  0
+7  0
 
-query I rowsort
-SELECT get_bit(b'\145', 7) UNION SELECT get_bit(b'\145', 0)
+query II rowsort
+SELECT i, get_bit('\x11ef'::BYTEA, i) FROM generate_series(0, 15) i ORDER BY i;
 ----
-1
-0
-
-query I rowsort
-SELECT get_bit('\x6162'::bytea, 7) UNION SELECT get_bit('\x6162'::bytea, 12)
-----
-1
-0
+0   1
+1   0
+2   0
+3   0
+4   1
+5   0
+6   0
+7   0
+8   1
+9   1
+10  1
+11  1
+12  0
+13  1
+14  1
+15  1
 
 query error get_bit\(\): bit index 8 out of valid range \(0..7\)
 SELECT get_bit(b'\x61', 8)
@@ -2787,21 +2797,37 @@ SELECT set_bit(B'1001010', 0, 2)
 query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
 
-# Binary representation of 'a' 'b' 'c' 'f' 'l'  are 01100001 01100010 01100011 01100110 01101100
-# Binary representation of \o145 is 1100101
-# Binary representation of \x61\x62\x66\x6C are 01100001 01100010 01100110 01101100
-
-query T rowsort
-SELECT set_bit(b'ab', 6, 1) UNION SELECT set_bit(b'\x61\x66', 15, 0)
+query IT
+SELECT i, encode(set_bit('\x00'::BYTEA, i, 1), 'hex') FROM generate_series(0, 7) i ORDER BY i
 ----
-cb
-af
+0  01
+1  02
+2  04
+3  08
+4  10
+5  20
+6  40
+7  80
 
-query T rowsort
-SELECT set_bit('a'::bytea, 5, 0) UNION SELECT set_bit('\x6162'::bytea, 13, 1)
+query IT
+SELECT i, encode(set_bit('\x0000'::bytea, i, 1), 'hex') FROM generate_series(0, 15) i ORDER BY i
 ----
-a
-af
+0   0100
+1   0200
+2   0400
+3   0800
+4   1000
+5   2000
+6   4000
+7   8000
+8   0001
+9   0002
+10  0004
+11  0008
+12  0010
+13  0020
+14  0040
+15  0080
 
 query error set_bit\(\): bit index 16 out of valid range \(0..15\)
 SELECT set_bit(b'ac', 16, 0)
