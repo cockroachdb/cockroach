@@ -659,25 +659,6 @@ func restore(
 	}
 	mu.requestsCompleted = make([]bool, len(importSpans))
 
-	progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
-		func(progressedCtx context.Context, details jobspb.ProgressDetails) {
-			switch d := details.(type) {
-			case *jobspb.Progress_Restore:
-				if !dataToRestore.isMainBundle() {
-					// We only update the progress for the primary data bundle (of which there
-					// can only be one).
-					return
-				}
-				mu.Lock()
-				if mu.highWaterMark >= 0 {
-					d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
-				}
-				mu.Unlock()
-			default:
-				log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
-			}
-		})
-
 	// TODO(pbardea): This not super principled. I just wanted something that
 	// wasn't a constant and grew slower than linear with the length of
 	// importSpans. It seems to be working well for BenchmarkRestore2TB but
@@ -701,45 +682,68 @@ func restore(
 	}
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
-	jobProgressLoop := func(ctx context.Context) error {
-		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
-		defer progressSpan.Finish()
-		return progressLogger.Loop(ctx, requestFinishedCh)
-	}
-
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
-	jobCheckpointLoop := func(ctx context.Context) error {
-		// When a processor is done importing a span, it will send a progress update
-		// to progCh.
-		for progress := range progCh {
-			mu.Lock()
-			var progDetails RestoreProgress
-			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
-				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
-			}
+	var jobProgressLoop, jobCheckpointLoop func(ctx context.Context) error
+	if dataToRestore.isMainBundle() {
+		// Only update the job progress on the main data bundle. This should account
+		// for the bulk of the data to restore. Other data (e.g. zone configs in
+		// cluster restores) may be restored first. When restoring that data, we
+		// don't want to update the high-water mark key, so instead progress is just
+		// defined on the main data bundle (of which there should only be one).
+		jobProgressLoop = func(ctx context.Context) error {
+			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
+			defer progressSpan.Finish()
 
-			mu.res.add(progDetails.Summary)
-			idx := progDetails.ProgressIdx
+			progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
+				func(progressedCtx context.Context, details jobspb.ProgressDetails) {
+					switch d := details.(type) {
+					case *jobspb.Progress_Restore:
+						mu.Lock()
+						if mu.highWaterMark >= 0 {
+							d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
+						}
+						mu.Unlock()
+					default:
+						log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
+					}
+				})
 
-			// Assert that we're actually marking the correct span done. See #23977.
-			if !importSpans[progDetails.ProgressIdx].Span.Key.Equal(progDetails.DataSpan.Key) {
-				mu.Unlock()
-				return errors.Newf("request %d for span %v does not match import span for same idx: %v",
-					idx, progDetails.DataSpan, importSpans[idx],
-				)
-			}
-			mu.requestsCompleted[idx] = true
-			for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
-				mu.highWaterMark = j
-			}
-			mu.Unlock()
-
-			// Signal that the processor has finished importing a span, to update job
-			// progress.
-			requestFinishedCh <- struct{}{}
+			return progressLogger.Loop(ctx, requestFinishedCh)
 		}
-		return nil
+
+		jobCheckpointLoop = func(ctx context.Context) error {
+			// When a processor is done importing a span, it will send a progress update
+			// to progCh.
+			for progress := range progCh {
+				mu.Lock()
+				var progDetails RestoreProgress
+				if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+					log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
+				}
+
+				mu.res.add(progDetails.Summary)
+				idx := progDetails.ProgressIdx
+
+				// Assert that we're actually marking the correct span done. See #23977.
+				if !importSpans[progDetails.ProgressIdx].Span.Key.Equal(progDetails.DataSpan.Key) {
+					mu.Unlock()
+					return errors.Newf("request %d for span %v does not match import span for same idx: %v",
+						idx, progDetails.DataSpan, importSpans[idx],
+					)
+				}
+				mu.requestsCompleted[idx] = true
+				for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+					mu.highWaterMark = j
+				}
+				mu.Unlock()
+
+				// Signal that the processor has finished importing a span, to update job
+				// progress.
+				requestFinishedCh <- struct{}{}
+			}
+			return nil
+		}
 	}
 
 	runRestore := func(ctx context.Context) error {
