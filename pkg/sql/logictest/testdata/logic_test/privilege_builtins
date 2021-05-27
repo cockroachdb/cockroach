@@ -182,8 +182,11 @@ true  true  true  true
 query error pgcode 42P01 relation "does_not_exist" does not exist
 SELECT has_column_privilege('does_not_exist', 1, 'SELECT')
 
-query error pgcode 42703 column 100 of relation 'pg_type' does not exist
+query error pgcode 42703 column 100 of relation pg_type does not exist
 SELECT has_column_privilege('pg_type', 100, 'SELECT')
+
+query error pgcode 42703 column 100 of relation pg_type does not exist
+SELECT has_column_privilege('pg_type'::regclass, 100, 'SELECT')
 
 query BBBBB
 SELECT has_column_privilege('pg_type', 1, 'SELECT'),
@@ -263,8 +266,11 @@ true  true  true  true
 query error pgcode 42P01 relation "does_not_exist" does not exist
 SELECT has_column_privilege('does_not_exist', 'col', 'SELECT')
 
-query error pgcode 42703 column 'does not exist' of relation 'pg_type' does not exist
+query error pgcode 42703 column "does not exist" does not exist
 SELECT has_column_privilege('pg_type', 'does not exist', 'SELECT')
+
+query error pgcode 42703 column "does not exist" does not exist
+SELECT has_column_privilege('pg_type'::regclass, 'does not exist', 'SELECT')
 
 query BBBBB
 SELECT has_column_privilege('pg_type', 'typname', 'SELECT'),

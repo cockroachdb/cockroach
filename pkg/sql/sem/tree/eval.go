@@ -3081,6 +3081,11 @@ type HasPrivilegeSpecifier struct {
 	// Only one of these is filled.
 	TableName *string
 	TableOID  *oid.Oid
+
+	// Only one of these is filled.
+	// Only used if TableName or TableOID is specified.
+	ColumnName   *Name
+	ColumnAttNum *uint32
 }
 
 // EvalPlanner is a limited planner that can be used from EvalContext.
