@@ -663,11 +663,6 @@ func restore(
 		func(progressedCtx context.Context, details jobspb.ProgressDetails) {
 			switch d := details.(type) {
 			case *jobspb.Progress_Restore:
-				if !dataToRestore.isMainBundle() {
-					// We only update the progress for the primary data bundle (of which there
-					// can only be one).
-					return
-				}
 				mu.Lock()
 				if mu.highWaterMark >= 0 {
 					d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
@@ -706,6 +701,12 @@ func restore(
 	g.GoCtx(func(ctx context.Context) error {
 		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
 		defer progressSpan.Finish()
+		if !dataToRestore.isMainBundle() {
+			// We only update the progress for the primary data bundle (of which there
+			// can only be one).
+			return nil
+		}
+
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
 
