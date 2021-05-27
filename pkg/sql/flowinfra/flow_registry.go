@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -132,10 +131,7 @@ type FlowRegistry struct {
 }
 
 // NewFlowRegistry creates a new FlowRegistry.
-//
-// instID is the ID of the current node. Used for debugging; pass 0 if you don't
-// care.
-func NewFlowRegistry(instID base.SQLInstanceID) *FlowRegistry {
+func NewFlowRegistry() *FlowRegistry {
 	fr := &FlowRegistry{flows: make(map[execinfrapb.FlowID]*flowEntry)}
 	fr.flowDone = sync.NewCond(fr)
 	return fr
