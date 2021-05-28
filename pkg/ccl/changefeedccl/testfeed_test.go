@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -197,13 +196,33 @@ func (c *sinklessFeed) Close() error {
 type reportErrorResumer struct {
 	wrapped   jobs.Resumer
 	jobFailed func()
+	exit      chan struct{}
+	exited    chan struct{}
 }
 
 var _ jobs.Resumer = (*reportErrorResumer)(nil)
 
 // Resume implements jobs.Resumer
 func (r *reportErrorResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	return r.wrapped.Resume(ctx, execCtx)
+	defer close(r.exited)
+
+	resumeCtx, cancel := context.WithCancel(ctx)
+	shutdownRequested := false
+	go func() {
+		select {
+		case <-ctx.Done():
+			cancel()
+		case <-r.exit:
+			shutdownRequested = true
+			cancel()
+		}
+	}()
+
+	err := r.wrapped.Resume(resumeCtx, execCtx)
+	if shutdownRequested {
+		return nil
+	}
+	return err
 }
 
 // OnFailOrCancel implements jobs.Resumer
@@ -234,6 +253,8 @@ type jobFeed struct {
 		syncutil.Mutex
 		terminalErr error
 	}
+
+	requestExit, exited chan struct{}
 }
 
 var _ cdctest.EnterpriseTestFeed = (*jobFeed)(nil)
@@ -243,6 +264,19 @@ func newJobFeed(db *gosql.DB, wrapper wrapSinkFn) *jobFeed {
 		db:       db,
 		shutdown: make(chan struct{}),
 		makeSink: wrapper,
+	}
+}
+
+// makeResumer creates resumer object used by this job.
+func (f *jobFeed) newResumer(raw jobs.Resumer) jobs.Resumer {
+	f.requestExit = make(chan struct{})
+	f.exited = make(chan struct{})
+
+	return &reportErrorResumer{
+		wrapped:   raw,
+		jobFailed: f.jobFailed,
+		exit:      f.requestExit,
+		exited:    f.exited,
 	}
 }
 
@@ -346,10 +380,8 @@ func (f *jobFeed) Close() error {
 	case <-f.shutdown:
 	// Already failed/or failing.
 	default:
-		// TODO(yevgeniy): Cancel job w/out producing spurious error messages in the logs.
-		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
-			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
-		}
+		close(f.requestExit)
+		<-f.exited
 	}
 
 	return nil
@@ -438,7 +470,7 @@ func newDepInjector(s serverutils.TestServerInterface) *depInjector {
 		map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
 				f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
-				return &reportErrorResumer{wrapped: raw, jobFailed: f.jobFailed}
+				return f.newResumer(raw)
 			},
 		}
 
@@ -621,8 +653,6 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 
 		var toSend []*cdctest.TestFeedMessage
 		if err := crdb.ExecuteTx(context.Background(), c.sinkDB, nil, func(tx *gosql.Tx) error {
-
-			// Avoid anything that might somehow look like deadlock under stressrace.
 			_, err := tx.Exec("SET TRANSACTION PRIORITY LOW")
 			if err != nil {
 				return err
@@ -643,7 +673,6 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 				return err
 			}
 			for rows.Next() {
-
 				m := &cdctest.TestFeedMessage{}
 				var msgID int64
 				if err := rows.Scan(
@@ -656,10 +685,6 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 				// array, which is pretty unexpected. Nil them out before returning.
 				// Either key+value or payload will be set, but not both.
 				if len(m.Key) > 0 || len(m.Value) > 0 {
-					if isNew := c.markSeen(m); !isNew {
-						continue
-					}
-
 					m.Resolved = nil
 				} else {
 					m.Key, m.Value = nil, nil
@@ -670,7 +695,17 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}); err != nil {
 			return nil, err
 		}
-		c.toSend = toSend
+
+		for _, m := range toSend {
+			// NB: We should not filter seen keys in the query above -- doing so will
+			// result in flaky tests if txn gets restarted.
+			if len(m.Key) > 0 {
+				if isNew := c.markSeen(m); !isNew {
+					continue
+				}
+			}
+			c.toSend = append(c.toSend, m)
+		}
 	}
 }
 
