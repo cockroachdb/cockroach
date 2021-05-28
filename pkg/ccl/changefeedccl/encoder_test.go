@@ -415,7 +415,9 @@ func TestAvroArray(t *testing.T) {
 			(1, ARRAY[10,20,30]), 
 			(2, NULL), 
 			(3, ARRAY[42, NULL, 42, 43]),
-			(4, ARRAY[])`,
+			(4, ARRAY[]),
+			(5, ARRAY[1,2,3,4,NULL,6]),
+			(6, ARRAY[1,2,3,4,NULL,6,7,NULL,9])`,
 		)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
@@ -427,7 +429,64 @@ func TestAvroArray(t *testing.T) {
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
 			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"array":[{"long":42},null,{"long":42},{"long":43}]}}},"before":null}`,
 			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[]}}},"before":null}`,
+			`foo: {"a":{"long":5}}->{"after":{"foo":{"a":{"long":5},"b":{"array":[{"long":1},{"long":2},{"long":3},{"long":4},null,{"long":6}]}}},"before":null}`,
+			`foo: {"a":{"long":6}}->{"after":{"foo":{"a":{"long":6},"b":{"array":[{"long":1},{"long":2},{"long":3},{"long":4},null,{"long":6},{"long":7},null,{"long":9}]}}},"before":null}`,
 		})
+
+		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0] where a=1`)
+		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0,0] where a=2`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"array":[{"long":0},{"long":0},{"long":0}]}}},` +
+				`"before":{"foo_before":{"a":{"long":1},"b":{"array":[{"long":10},{"long":20},{"long":30}]}}}}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":{"array":[{"long":0},{"long":0},{"long":0},{"long":0}]}}},` +
+				`"before":{"foo_before":{"a":{"long":2},"b":null}}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroArrayCap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, ARRAY[])`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":0}}->{"after":{"foo":{"a":{"long":0},"b":{"array":[]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (8, ARRAY[null,null,null,null,null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":8}}->{"after":{"foo":{"a":{"long":8},"b":{"array":[null,null,null,null,null,null,null,null]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4, ARRAY[null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[null,null,null,null]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (5, ARRAY[null,null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":5}}->{"after":{"foo":{"a":{"long":5},"b":{"array":[null,null,null,null,null]}}}}`,
+		})
+
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))

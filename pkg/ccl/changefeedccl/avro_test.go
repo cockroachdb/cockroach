@@ -240,7 +240,7 @@ func TestAvroSchema(t *testing.T) {
 		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
 			return true
-		case types.IntervalFamily, types.BitFamily:
+		case types.IntervalFamily:
 			// Implement these as customer demand dictates.
 			return true
 		case types.ArrayFamily:
@@ -374,12 +374,15 @@ func TestAvroSchema(t *testing.T) {
 			`TIMESTAMP`:         `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`TIMESTAMPTZ`:       `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`UUID`:              `["null","string"]`,
-			`DECIMAL(3,2)`:      `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+			`VARBIT`:            `["null",{"type":"array","items":"long"}]`,
+
+			`BIT(3)`:       `["null",{"type":"array","items":"long"}]`,
+			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`)) {
+		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`), types.MakeBit(3)) {
 			switch typ.Family() {
-			case types.IntervalFamily, types.OidFamily, types.BitFamily:
+			case types.IntervalFamily, types.OidFamily:
 				continue
 			case types.DecimalFamily:
 				typ = types.MakeDecimal(3, 2)
@@ -502,6 +505,9 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `JSONB`,
 				sql:  `'{"b": 1}'`,
 				avro: `{"string":"{\"b\": 1}"}`},
+
+			{sqlType: `VARBIT`, sql: `B'010'`, avro: `{"array":[3,4611686018427387904]}`}, // Take the 3 most significant bits of 1<<62
+
 			{sqlType: `BOOL[]`,
 				sql:  `'{true, true, false, null}'`,
 				avro: `{"array":[{"boolean":true},{"boolean":true},{"boolean":false},null]}`},
