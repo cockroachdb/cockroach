@@ -587,6 +587,28 @@ func showConstraintClause(
 			continue
 		}
 	}
+	for _, idx := range desc.ActiveIndexes() {
+		if !idx.IsUnique() || idx.IsCreatedExplicitly() || idx.Primary() {
+			continue
+		}
+		f.WriteString(",\n\t")
+		if len(idx.GetName()) > 0 {
+			f.WriteString("CONSTRAINT ")
+			formatQuoteNames(&f.Buffer, idx.GetName())
+			f.WriteString(" ")
+		}
+		f.WriteString("UNIQUE ")
+		f.WriteString("(")
+		startIdx := idx.ExplicitColumnStartIdx()
+		for i := idx.ExplicitColumnStartIdx(); i < idx.NumKeyColumns(); i++ {
+			if i > startIdx {
+				f.WriteString(", ")
+			}
+			n := idx.GetKeyColumnName(i)
+			f.FormatNameP(&n)
+		}
+		f.WriteString(")")
+	}
 	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
 		// Do not display constraints currently being added but not
 		// yet validated.

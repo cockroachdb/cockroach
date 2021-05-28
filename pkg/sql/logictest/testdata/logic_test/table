@@ -273,16 +273,16 @@ test.public.named_constraints  CREATE TABLE public.named_constraints (
                                username STRING(10) NULL,
                                email VARCHAR(100) NULL,
                                CONSTRAINT pk PRIMARY KEY (id ASC),
-                               UNIQUE INDEX uq (email ASC),
                                INDEX foo (name ASC),
-                               UNIQUE INDEX uq2 (username ASC),
                                UNIQUE INDEX bar (id ASC, name ASC),
                                FAMILY "primary" (id, name),
                                FAMILY fam_1_title (title),
                                FAMILY fam_2_nickname (nickname),
                                FAMILY fam_3_username_email (username, email),
                                CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
-                               CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8)
+                               CONSTRAINT ck1 CHECK (length(nickname) < 10:::INT8),
+                               CONSTRAINT uq UNIQUE (email),
+                               CONSTRAINT uq2 UNIQUE (username)
 )
 
 query TTTTB colnames

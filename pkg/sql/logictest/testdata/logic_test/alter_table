@@ -1151,8 +1151,8 @@ t3  CREATE TABLE public.t3 (
     x INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
     CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t3_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    FAMILY "primary" (y, rowid, x),
+    CONSTRAINT t3_x_key UNIQUE (x)
 )
 
 # We allowed the foreign key validation code to look into the mutations
@@ -1345,8 +1345,8 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL DEFAULT 1:::INT8,
     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
     CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t2_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    FAMILY "primary" (y, rowid, x),
+    CONSTRAINT t2_x_key UNIQUE (x)
 )
 
 # Regression 50069, computed exprs must only refer to columns inside the
@@ -1901,10 +1901,10 @@ CREATE TABLE public.t (
    CONSTRAINT "primary" PRIMARY KEY (i ASC),
    CONSTRAINT fk_adding FOREIGN KEY (j) REFERENCES public.t(i),
    CONSTRAINT fk_not_valid FOREIGN KEY (i) REFERENCES public.t(i) NOT VALID,
-   UNIQUE INDEX u_adding (j ASC),
    FAMILY fam_0_i_j (i, j),
    CONSTRAINT check_adding CHECK (j > 0:::INT8),
    CONSTRAINT check_not_valid CHECK (j > 1:::INT8) NOT VALID,
+   CONSTRAINT u_adding UNIQUE (j),
    CONSTRAINT uwo_adding UNIQUE WITHOUT INDEX (j),
    CONSTRAINT uwo_not_valid UNIQUE WITHOUT INDEX (i, j) NOT VALID
 )

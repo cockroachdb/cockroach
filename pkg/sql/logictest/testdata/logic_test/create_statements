@@ -3708,15 +3708,15 @@ CREATE TABLE public.v (
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES public.t(rowid),
    CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s),
-   UNIQUE INDEX v_s_key (s ASC),
-   FAMILY "primary" ("'", s, rowid)
+   FAMILY "primary" ("'", s, rowid),
+   CONSTRAINT v_s_key UNIQUE (s)
 )  CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX v_s_key (s ASC),
-   FAMILY "primary" ("'", s, rowid)
+   FAMILY "primary" ("'", s, rowid),
+   CONSTRAINT v_s_key UNIQUE (s)
 )  {"ALTER TABLE public.v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE public.v VALIDATE CONSTRAINT fk_s_ref_v"}
 CREATE TABLE public.c (
   a INT8 NOT NULL,

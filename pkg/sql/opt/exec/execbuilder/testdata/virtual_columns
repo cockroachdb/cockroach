@@ -46,10 +46,10 @@ t_idx  CREATE TABLE public.t_idx (
        w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
        CONSTRAINT "primary" PRIMARY KEY (a ASC),
        INDEX t_idx_v_idx (v ASC),
-       UNIQUE INDEX t_idx_w_key (w ASC),
        FAMILY fam_0_a (a),
        FAMILY fam_1_b (b),
-       FAMILY fam_2_c (c)
+       FAMILY fam_2_c (c),
+       CONSTRAINT t_idx_w_key UNIQUE (w)
 )
 
 subtest Select

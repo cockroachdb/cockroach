@@ -130,10 +130,12 @@ CREATE TABLE like_table (
   k INT UNIQUE WITHOUT INDEX,
   PRIMARY KEY (a, b),
   UNIQUE INDEX foo (b DESC, c),
+  UNIQUE INDEX (b, c DESC NULLS LAST),
   INDEX (c) STORING (j),
   INVERTED INDEX (j),
   UNIQUE WITHOUT INDEX (h),
-  UNIQUE WITHOUT INDEX (h) WHERE h > 0
+  UNIQUE WITHOUT INDEX (h) WHERE h > 0,
+  UNIQUE (h, b)
 )
 
 statement ok
@@ -191,9 +193,11 @@ like_indexes  CREATE TABLE public.like_indexes (
               k INT8 NULL,
               CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
+              UNIQUE INDEX like_table_b_c_key (b ASC, c DESC),
               INDEX like_table_c_idx (c ASC) STORING (j),
               INVERTED INDEX like_table_j_idx (j),
-              FAMILY "primary" (a, b, c, h, j, k)
+              FAMILY "primary" (a, b, c, h, j, k),
+              CONSTRAINT like_table_h_b_key UNIQUE (h, b)
 )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -248,10 +252,12 @@ like_all  CREATE TABLE public.like_all (
           k INT8 NULL,
           CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
           UNIQUE INDEX foo (b DESC, c ASC),
+          UNIQUE INDEX like_table_b_c_key (b ASC, c DESC),
           INDEX like_table_c_idx (c ASC) STORING (j),
           INVERTED INDEX like_table_j_idx (j),
           FAMILY "primary" (a, b, c, h, j, k),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
+          CONSTRAINT like_table_h_b_key UNIQUE (h, b),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
           CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
           CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8
@@ -274,9 +280,11 @@ like_mixed  CREATE TABLE public.like_mixed (
             k INT8 NULL,
             CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
+            UNIQUE INDEX like_table_b_c_key (b ASC, c DESC),
             INDEX like_table_c_idx (c ASC) STORING (j),
             INVERTED INDEX like_table_j_idx (j),
-            FAMILY "primary" (a, b, c, h, j, k)
+            FAMILY "primary" (a, b, c, h, j, k),
+            CONSTRAINT like_table_h_b_key UNIQUE (h, b)
 )
 
 statement ok
