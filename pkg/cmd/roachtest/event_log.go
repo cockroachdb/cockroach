@@ -127,4 +127,5 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Fatal("boomer")
 }
