@@ -1828,3 +1828,75 @@ INSERT INTO t VALUES (1, 0)
 
 statement ok
 DROP TABLE t;
+
+# Tests the behavior of SHOW CREATE on constraints added
+# in the current transaction.
+subtest show_create_while_adding
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (i INT PRIMARY KEY, j INT, FAMILY (i,j))
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+   i INT8 NOT NULL,
+   j INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (i ASC),
+   FAMILY fam_0_i_j (i, j)
+)
+
+statement ok
+BEGIN;
+
+statement ok;
+ALTER TABLE t ADD CONSTRAINT check_adding CHECK (j > 0),
+              ADD CONSTRAINT check_not_valid CHECK (j > 1) NOT VALID;
+ALTER TABLE t ADD CONSTRAINT uwo_adding UNIQUE WITHOUT INDEX (j),
+              ADD CONSTRAINT uwo_not_valid UNIQUE WITHOUT INDEX (i, j) NOT VALID;
+ALTER TABLE t ADD CONSTRAINT u_adding UNIQUE (j),
+              ADD CONSTRAINT u_not_valid UNIQUE (i, j) NOT VALID;
+ALTER TABLE t ADD CONSTRAINT fk_adding FOREIGN KEY (j) REFERENCES t(i),
+              ADD CONSTRAINT fk_not_valid FOREIGN KEY (i) REFERENCES t(i) NOT VALID;
+
+# Note that the constraint in the process of being added does not appear.
+# Note also the a NOT VALID foreign key is not added immediately because
+# it might reference a different table and thus we, sort of, need to wait
+# for a lease to propagate.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+   i INT8 NOT NULL,
+   j INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (i ASC),
+   FAMILY fam_0_i_j (i, j),
+   CONSTRAINT check_not_valid CHECK (j > 1:::INT8) NOT VALID,
+   CONSTRAINT uwo_not_valid UNIQUE WITHOUT INDEX (i, j) NOT VALID
+)
+
+statement ok
+COMMIT
+
+# Note that the constraints have been added.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+   i INT8 NOT NULL,
+   j INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (i ASC),
+   CONSTRAINT fk_adding FOREIGN KEY (j) REFERENCES public.t(i),
+   CONSTRAINT fk_not_valid FOREIGN KEY (i) REFERENCES public.t(i) NOT VALID,
+   UNIQUE INDEX u_adding (j ASC),
+   UNIQUE INDEX u_not_valid (i ASC, j ASC),
+   FAMILY fam_0_i_j (i, j),
+   CONSTRAINT check_adding CHECK (j > 0:::INT8),
+   CONSTRAINT check_not_valid CHECK (j > 1:::INT8) NOT VALID,
+   CONSTRAINT uwo_adding UNIQUE WITHOUT INDEX (j),
+   CONSTRAINT uwo_not_valid UNIQUE WITHOUT INDEX (i, j) NOT VALID
+)
+
+statement ok
+DROP TABLE t CASCADE
