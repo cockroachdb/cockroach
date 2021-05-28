@@ -164,24 +164,27 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.unlinkReplicaByRangeIDLocked(ctx, rep.RangeID)
-	// There can't be a placeholder, as the replica is still in replicasByKey
-	// and it is initialized. (A placeholder would also be in replicasByKey
-	// and overlap the replica, which is impossible).
-	if ph, ok := s.mu.replicaPlaceholders[rep.RangeID]; ok {
-		log.Fatalf(ctx, "initialized replica %s unexpectedly had a placeholder: %+v", rep, ph)
-	}
-	if it := s.mu.replicasByKey.DeleteReplica(ctx, rep); it.repl != rep {
-		// We already checked that our replica was present in replicasByKey
-		// above. Nothing should have been able to change that.
-		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item)
-	}
-	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
-		log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, it.item)
-	}
-	// TODO(peter): Could release s.mu.Lock() here.
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock() // must unlock before s.scanner.RemoveReplica(), to avoid deadlock
+
+		s.unlinkReplicaByRangeIDLocked(ctx, rep.RangeID)
+		// There can't be a placeholder, as the replica is still in replicasByKey
+		// and it is initialized. (A placeholder would also be in replicasByKey
+		// and overlap the replica, which is impossible).
+		if ph, ok := s.mu.replicaPlaceholders[rep.RangeID]; ok {
+			log.Fatalf(ctx, "initialized replica %s unexpectedly had a placeholder: %+v", rep, ph)
+		}
+		if it := s.mu.replicasByKey.DeleteReplica(ctx, rep); it.repl != rep {
+			// We already checked that our replica was present in replicasByKey
+			// above. Nothing should have been able to change that.
+			log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item)
+		}
+		if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+			log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, it.item)
+		}
+	}()
+
 	s.maybeGossipOnCapacityChange(ctx, rangeRemoveEvent)
 	s.scanner.RemoveReplica(rep)
 	return nil
