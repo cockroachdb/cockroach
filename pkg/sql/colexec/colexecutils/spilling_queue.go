@@ -513,7 +513,7 @@ func (q *SpillingQueue) MemoryUsage() int64 {
 
 // Close closes the spilling queue.
 func (q *SpillingQueue) Close(ctx context.Context) error {
-	if q.closed {
+	if q == nil || q.closed {
 		return nil
 	}
 	if q.diskQueue != nil {
