@@ -2,9 +2,9 @@
   "pgVersion": "8.0.23",
   "diffSummary": {
     "TotalTables": 79,
-    "TotalColumns": 224,
-    "MissingTables": 57,
-    "MissingColumns": 71,
+    "TotalColumns": 280,
+    "MissingTables": 0,
+    "MissingColumns": 9,
     "DatatypeMismatches": 0
   },
   "pgMetadata": {
@@ -98,8 +98,14 @@
     "processlist": {},
     "profiling": {},
     "resource_groups": {},
-    "role_column_grants": {},
-    "role_routine_grants": {},
+    "role_column_grants": {
+      "grantee_host": null,
+      "grantor_host": null
+    },
+    "role_routine_grants": {
+      "grantee_host": null,
+      "grantor_host": null
+    },
     "role_table_grants": {
       "grantee_host": null,
       "grantor_host": null
@@ -156,7 +162,13 @@
     "tables_extensions": {},
     "tablespaces": {},
     "tablespaces_extensions": {},
-    "triggers": {},
+    "triggers": {
+      "character_set_client": null,
+      "collation_connection": null,
+      "database_collation": null,
+      "definer": null,
+      "sql_mode": null
+    },
     "user_attributes": {},
     "view_routine_usage": {},
     "view_table_usage": {},

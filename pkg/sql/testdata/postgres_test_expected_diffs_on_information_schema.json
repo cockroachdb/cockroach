@@ -2,10 +2,10 @@
   "pgVersion": "13.2",
   "diffSummary": {
     "TotalTables": 65,
-    "TotalColumns": 294,
-    "MissingTables": 43,
-    "MissingColumns": 12,
-    "DatatypeMismatches": 3
+    "TotalColumns": 628,
+    "MissingTables": 5,
+    "MissingColumns": 0,
+    "DatatypeMismatches": 0
   },
   "pgMetadata": {
     "_pg_foreign_data_wrappers": {},
@@ -13,29 +13,6 @@
     "_pg_foreign_table_columns": {},
     "_pg_foreign_tables": {},
     "_pg_user_mappings": {},
-    "attributes": {},
-    "check_constraint_routine_usage": {},
-    "column_column_usage": {},
-    "column_domain_usage": {},
-    "column_options": {},
-    "constraint_table_usage": {},
-    "data_type_privileges": {},
-    "domain_constraints": {},
-    "domain_udt_usage": {},
-    "domains": {},
-    "element_types": {},
-    "foreign_data_wrapper_options": {},
-    "foreign_data_wrappers": {},
-    "foreign_server_options": {},
-    "foreign_servers": {},
-    "foreign_table_options": {},
-    "foreign_tables": {},
-    "information_schema_catalog_name": {},
-    "role_column_grants": {},
-    "role_routine_grants": {},
-    "role_udt_grants": {},
-    "role_usage_grants": {},
-    "routine_privileges": {},
     "routines": {
       "interval_precision": {
         "oid": 25,
@@ -62,10 +39,6 @@
       "default_character_set_schema": null,
       "schema_owner": null
     },
-    "sql_features": {},
-    "sql_implementation_info": {},
-    "sql_parts": {},
-    "sql_sizing": {},
     "table_constraints": {
       "enforced": null
     },
@@ -77,18 +50,7 @@
       "user_defined_type_catalog": null,
       "user_defined_type_name": null,
       "user_defined_type_schema": null
-    },
-    "transforms": {},
-    "triggered_update_columns": {},
-    "triggers": {},
-    "udt_privileges": {},
-    "usage_privileges": {},
-    "user_defined_types": {},
-    "user_mapping_options": {},
-    "user_mappings": {},
-    "view_column_usage": {},
-    "view_routine_usage": {},
-    "view_table_usage": {}
+    }
   },
   "unimplementedTypes": null
 }

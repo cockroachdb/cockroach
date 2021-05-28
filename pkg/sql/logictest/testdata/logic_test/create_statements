@@ -1088,6 +1088,71 @@ CREATE TABLE information_schema.applicable_roles (
    role_name STRING NOT NULL,
    is_grantable STRING NOT NULL
 )  {}  {}
+CREATE TABLE information_schema.attributes (
+   dtd_identifier STRING NULL,
+   interval_precision INT8 NULL,
+   maximum_cardinality INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_name STRING NULL,
+   data_type STRING NULL,
+   scope_schema STRING NULL,
+   udt_catalog STRING NULL,
+   attribute_udt_schema STRING NULL,
+   character_set_schema STRING NULL,
+   scope_catalog STRING NULL,
+   attribute_udt_catalog STRING NULL,
+   character_maximum_length INT8 NULL,
+   is_derived_reference_attribute STRING NULL,
+   udt_schema STRING NULL,
+   ordinal_position INT8 NULL,
+   scope_name STRING NULL,
+   character_octet_length INT8 NULL,
+   datetime_precision INT8 NULL,
+   numeric_precision INT8 NULL,
+   interval_type STRING NULL,
+   attribute_default STRING NULL,
+   attribute_name STRING NULL,
+   attribute_udt_name STRING NULL,
+   is_nullable STRING NULL,
+   numeric_scale INT8 NULL,
+   udt_name STRING NULL,
+   collation_catalog STRING NULL,
+   collation_name STRING NULL,
+   collation_schema STRING NULL
+)  CREATE TABLE information_schema.attributes (
+   dtd_identifier STRING NULL,
+   interval_precision INT8 NULL,
+   maximum_cardinality INT8 NULL,
+   numeric_precision_radix INT8 NULL,
+   character_set_catalog STRING NULL,
+   character_set_name STRING NULL,
+   data_type STRING NULL,
+   scope_schema STRING NULL,
+   udt_catalog STRING NULL,
+   attribute_udt_schema STRING NULL,
+   character_set_schema STRING NULL,
+   scope_catalog STRING NULL,
+   attribute_udt_catalog STRING NULL,
+   character_maximum_length INT8 NULL,
+   is_derived_reference_attribute STRING NULL,
+   udt_schema STRING NULL,
+   ordinal_position INT8 NULL,
+   scope_name STRING NULL,
+   character_octet_length INT8 NULL,
+   datetime_precision INT8 NULL,
+   numeric_precision INT8 NULL,
+   interval_type STRING NULL,
+   attribute_default STRING NULL,
+   attribute_name STRING NULL,
+   attribute_udt_name STRING NULL,
+   is_nullable STRING NULL,
+   numeric_scale INT8 NULL,
+   udt_name STRING NULL,
+   collation_catalog STRING NULL,
+   collation_name STRING NULL,
+   collation_schema STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.character_sets (
    character_set_catalog STRING NULL,
    character_set_schema STRING NULL,
@@ -1106,6 +1171,21 @@ CREATE TABLE information_schema.character_sets (
    default_collate_catalog STRING NULL,
    default_collate_schema STRING NULL,
    default_collate_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.check_constraint_routine_usage (
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL
+)  CREATE TABLE information_schema.check_constraint_routine_usage (
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.check_constraints (
    constraint_catalog STRING NOT NULL,
@@ -1143,6 +1223,51 @@ CREATE TABLE information_schema.collations (
    collation_schema STRING NOT NULL,
    collation_name STRING NOT NULL,
    pad_attribute STRING NOT NULL
+)  {}  {}
+CREATE TABLE information_schema.column_column_usage (
+   column_name STRING NULL,
+   dependent_column STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  CREATE TABLE information_schema.column_column_usage (
+   column_name STRING NULL,
+   dependent_column STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.column_domain_usage (
+   domain_name STRING NULL,
+   domain_schema STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   column_name STRING NULL,
+   domain_catalog STRING NULL
+)  CREATE TABLE information_schema.column_domain_usage (
+   domain_name STRING NULL,
+   domain_schema STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   column_name STRING NULL,
+   domain_catalog STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.column_options (
+   column_name STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  CREATE TABLE information_schema.column_options (
+   column_name STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.column_privileges (
    grantor STRING NULL,
@@ -1294,10 +1419,273 @@ CREATE TABLE information_schema.constraint_column_usage (
    constraint_schema STRING NOT NULL,
    constraint_name STRING NOT NULL
 )  {}  {}
+CREATE TABLE information_schema.constraint_table_usage (
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   table_catalog STRING NULL
+)  CREATE TABLE information_schema.constraint_table_usage (
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   table_catalog STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.data_type_privileges (
+   object_schema STRING NULL,
+   object_type STRING NULL,
+   dtd_identifier STRING NULL,
+   object_catalog STRING NULL,
+   object_name STRING NULL
+)  CREATE TABLE information_schema.data_type_privileges (
+   object_schema STRING NULL,
+   object_type STRING NULL,
+   dtd_identifier STRING NULL,
+   object_catalog STRING NULL,
+   object_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.domain_constraints (
+   initially_deferred STRING NULL,
+   is_deferrable STRING NULL,
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   domain_catalog STRING NULL,
+   domain_name STRING NULL,
+   domain_schema STRING NULL
+)  CREATE TABLE information_schema.domain_constraints (
+   initially_deferred STRING NULL,
+   is_deferrable STRING NULL,
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   domain_catalog STRING NULL,
+   domain_name STRING NULL,
+   domain_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.domain_udt_usage (
+   udt_catalog STRING NULL,
+   udt_name STRING NULL,
+   udt_schema STRING NULL,
+   domain_catalog STRING NULL,
+   domain_name STRING NULL,
+   domain_schema STRING NULL
+)  CREATE TABLE information_schema.domain_udt_usage (
+   udt_catalog STRING NULL,
+   udt_name STRING NULL,
+   udt_schema STRING NULL,
+   domain_catalog STRING NULL,
+   domain_name STRING NULL,
+   domain_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.domains (
+   scope_catalog STRING NULL,
+   data_type STRING NULL,
+   numeric_precision_radix INT8 NULL,
+   udt_catalog STRING NULL,
+   character_set_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   numeric_precision INT8 NULL,
+   scope_schema STRING NULL,
+   domain_name STRING NULL,
+   dtd_identifier STRING NULL,
+   interval_precision INT8 NULL,
+   udt_schema STRING NULL,
+   character_octet_length INT8 NULL,
+   domain_schema STRING NULL,
+   numeric_scale INT8 NULL,
+   collation_schema STRING NULL,
+   collation_name STRING NULL,
+   domain_default STRING NULL,
+   interval_type STRING NULL,
+   scope_name STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_set_schema STRING NULL,
+   domain_catalog STRING NULL,
+   udt_name STRING NULL,
+   character_set_catalog STRING NULL,
+   datetime_precision INT8 NULL,
+   collation_catalog STRING NULL
+)  CREATE TABLE information_schema.domains (
+   scope_catalog STRING NULL,
+   data_type STRING NULL,
+   numeric_precision_radix INT8 NULL,
+   udt_catalog STRING NULL,
+   character_set_name STRING NULL,
+   maximum_cardinality INT8 NULL,
+   numeric_precision INT8 NULL,
+   scope_schema STRING NULL,
+   domain_name STRING NULL,
+   dtd_identifier STRING NULL,
+   interval_precision INT8 NULL,
+   udt_schema STRING NULL,
+   character_octet_length INT8 NULL,
+   domain_schema STRING NULL,
+   numeric_scale INT8 NULL,
+   collation_schema STRING NULL,
+   collation_name STRING NULL,
+   domain_default STRING NULL,
+   interval_type STRING NULL,
+   scope_name STRING NULL,
+   character_maximum_length INT8 NULL,
+   character_set_schema STRING NULL,
+   domain_catalog STRING NULL,
+   udt_name STRING NULL,
+   character_set_catalog STRING NULL,
+   datetime_precision INT8 NULL,
+   collation_catalog STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.element_types (
+   udt_name STRING NULL,
+   character_maximum_length INT8 NULL,
+   collation_schema STRING NULL,
+   numeric_precision_radix INT8 NULL,
+   scope_name STRING NULL,
+   scope_schema STRING NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   collation_name STRING NULL,
+   object_schema STRING NULL,
+   character_set_name STRING NULL,
+   dtd_identifier STRING NULL,
+   interval_type STRING NULL,
+   udt_catalog STRING NULL,
+   collation_catalog STRING NULL,
+   maximum_cardinality INT8 NULL,
+   character_set_schema STRING NULL,
+   interval_precision INT8 NULL,
+   udt_schema STRING NULL,
+   datetime_precision INT8 NULL,
+   numeric_scale INT8 NULL,
+   object_type STRING NULL,
+   collection_type_identifier STRING NULL,
+   data_type STRING NULL,
+   numeric_precision INT8 NULL,
+   domain_default STRING NULL,
+   object_catalog STRING NULL,
+   object_name STRING NULL,
+   scope_catalog STRING NULL
+)  CREATE TABLE information_schema.element_types (
+   udt_name STRING NULL,
+   character_maximum_length INT8 NULL,
+   collation_schema STRING NULL,
+   numeric_precision_radix INT8 NULL,
+   scope_name STRING NULL,
+   scope_schema STRING NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   collation_name STRING NULL,
+   object_schema STRING NULL,
+   character_set_name STRING NULL,
+   dtd_identifier STRING NULL,
+   interval_type STRING NULL,
+   udt_catalog STRING NULL,
+   collation_catalog STRING NULL,
+   maximum_cardinality INT8 NULL,
+   character_set_schema STRING NULL,
+   interval_precision INT8 NULL,
+   udt_schema STRING NULL,
+   datetime_precision INT8 NULL,
+   numeric_scale INT8 NULL,
+   object_type STRING NULL,
+   collection_type_identifier STRING NULL,
+   data_type STRING NULL,
+   numeric_precision INT8 NULL,
+   domain_default STRING NULL,
+   object_catalog STRING NULL,
+   object_name STRING NULL,
+   scope_catalog STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.enabled_roles (
    role_name STRING NOT NULL
 )  CREATE TABLE information_schema.enabled_roles (
    role_name STRING NOT NULL
+)  {}  {}
+CREATE TABLE information_schema.foreign_data_wrapper_options (
+   option_name STRING NULL,
+   option_value STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_name STRING NULL
+)  CREATE TABLE information_schema.foreign_data_wrapper_options (
+   option_name STRING NULL,
+   option_value STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.foreign_data_wrappers (
+   authorization_identifier STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_language STRING NULL,
+   foreign_data_wrapper_name STRING NULL,
+   library_name STRING NULL
+)  CREATE TABLE information_schema.foreign_data_wrappers (
+   authorization_identifier STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_language STRING NULL,
+   foreign_data_wrapper_name STRING NULL,
+   library_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.foreign_server_options (
+   option_value STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   option_name STRING NULL
+)  CREATE TABLE information_schema.foreign_server_options (
+   option_value STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   option_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.foreign_servers (
+   authorization_identifier STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_name STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   foreign_server_type STRING NULL,
+   foreign_server_version STRING NULL
+)  CREATE TABLE information_schema.foreign_servers (
+   authorization_identifier STRING NULL,
+   foreign_data_wrapper_catalog STRING NULL,
+   foreign_data_wrapper_name STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   foreign_server_type STRING NULL,
+   foreign_server_version STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.foreign_table_options (
+   foreign_table_catalog STRING NULL,
+   foreign_table_name STRING NULL,
+   foreign_table_schema STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL
+)  CREATE TABLE information_schema.foreign_table_options (
+   foreign_table_catalog STRING NULL,
+   foreign_table_name STRING NULL,
+   foreign_table_schema STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.foreign_tables (
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   foreign_table_catalog STRING NULL,
+   foreign_table_name STRING NULL,
+   foreign_table_schema STRING NULL
+)  CREATE TABLE information_schema.foreign_tables (
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   foreign_table_catalog STRING NULL,
+   foreign_table_name STRING NULL,
+   foreign_table_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.information_schema_catalog_name (
+   catalog_name STRING NULL
+)  CREATE TABLE information_schema.information_schema_catalog_name (
+   catalog_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.key_column_usage (
    constraint_catalog STRING NOT NULL,
@@ -1412,6 +1800,48 @@ CREATE TABLE information_schema.referential_constraints (
    table_name STRING NOT NULL,
    referenced_table_name STRING NOT NULL
 )  {}  {}
+CREATE TABLE information_schema.role_column_grants (
+   table_schema STRING NULL,
+   column_name STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL
+)  CREATE TABLE information_schema.role_column_grants (
+   table_schema STRING NULL,
+   column_name STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.role_routine_grants (
+   privilege_type STRING NULL,
+   routine_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   routine_schema STRING NULL,
+   specific_catalog STRING NULL,
+   is_grantable STRING NULL,
+   routine_name STRING NULL
+)  CREATE TABLE information_schema.role_routine_grants (
+   privilege_type STRING NULL,
+   routine_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   routine_schema STRING NULL,
+   specific_catalog STRING NULL,
+   is_grantable STRING NULL,
+   routine_name STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.role_table_grants (
    grantor STRING NULL,
    grantee STRING NOT NULL,
@@ -1430,6 +1860,65 @@ CREATE TABLE information_schema.role_table_grants (
    privilege_type STRING NOT NULL,
    is_grantable STRING NULL,
    with_hierarchy STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.role_udt_grants (
+   udt_schema STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   udt_catalog STRING NULL,
+   udt_name STRING NULL
+)  CREATE TABLE information_schema.role_udt_grants (
+   udt_schema STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   udt_catalog STRING NULL,
+   udt_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.role_usage_grants (
+   object_name STRING NULL,
+   object_schema STRING NULL,
+   object_type STRING NULL,
+   privilege_type STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   object_catalog STRING NULL
+)  CREATE TABLE information_schema.role_usage_grants (
+   object_name STRING NULL,
+   object_schema STRING NULL,
+   object_type STRING NULL,
+   privilege_type STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   object_catalog STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.routine_privileges (
+   grantor STRING NULL,
+   routine_name STRING NULL,
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   grantee STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   routine_catalog STRING NULL,
+   routine_schema STRING NULL
+)  CREATE TABLE information_schema.routine_privileges (
+   grantor STRING NULL,
+   routine_name STRING NULL,
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   grantee STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   routine_catalog STRING NULL,
+   routine_schema STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.routines (
    specific_catalog STRING NULL,
@@ -1656,6 +2145,60 @@ CREATE TABLE information_schema.session_variables (
    variable STRING NOT NULL,
    value STRING NOT NULL
 )  {}  {}
+CREATE TABLE information_schema.sql_features (
+   is_verified_by STRING NULL,
+   sub_feature_id STRING NULL,
+   sub_feature_name STRING NULL,
+   comments STRING NULL,
+   feature_id STRING NULL,
+   feature_name STRING NULL,
+   is_supported STRING NULL
+)  CREATE TABLE information_schema.sql_features (
+   is_verified_by STRING NULL,
+   sub_feature_id STRING NULL,
+   sub_feature_name STRING NULL,
+   comments STRING NULL,
+   feature_id STRING NULL,
+   feature_name STRING NULL,
+   is_supported STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.sql_implementation_info (
+   character_value STRING NULL,
+   comments STRING NULL,
+   implementation_info_id STRING NULL,
+   implementation_info_name STRING NULL,
+   integer_value INT8 NULL
+)  CREATE TABLE information_schema.sql_implementation_info (
+   character_value STRING NULL,
+   comments STRING NULL,
+   implementation_info_id STRING NULL,
+   implementation_info_name STRING NULL,
+   integer_value INT8 NULL
+)  {}  {}
+CREATE TABLE information_schema.sql_parts (
+   comments STRING NULL,
+   feature_id STRING NULL,
+   feature_name STRING NULL,
+   is_supported STRING NULL,
+   is_verified_by STRING NULL
+)  CREATE TABLE information_schema.sql_parts (
+   comments STRING NULL,
+   feature_id STRING NULL,
+   feature_name STRING NULL,
+   is_supported STRING NULL,
+   is_verified_by STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.sql_sizing (
+   comments STRING NULL,
+   sizing_id INT8 NULL,
+   sizing_name STRING NULL,
+   supported_value INT8 NULL
+)  CREATE TABLE information_schema.sql_sizing (
+   comments STRING NULL,
+   sizing_id INT8 NULL,
+   sizing_name STRING NULL,
+   supported_value INT8 NULL
+)  {}  {}
 CREATE TABLE information_schema.statistics (
    table_catalog STRING NOT NULL,
    table_schema STRING NOT NULL,
@@ -1740,6 +2283,79 @@ CREATE TABLE information_schema.tables (
    is_insertable_into STRING NOT NULL,
    version INT8 NULL
 )  {}  {}
+CREATE TABLE information_schema.transforms (
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   transform_type STRING NULL,
+   udt_catalog STRING NULL,
+   udt_name STRING NULL,
+   udt_schema STRING NULL,
+   group_name STRING NULL
+)  CREATE TABLE information_schema.transforms (
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   transform_type STRING NULL,
+   udt_catalog STRING NULL,
+   udt_name STRING NULL,
+   udt_schema STRING NULL,
+   group_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.triggered_update_columns (
+   event_object_catalog STRING NULL,
+   event_object_column STRING NULL,
+   event_object_schema STRING NULL,
+   event_object_table STRING NULL,
+   trigger_catalog STRING NULL,
+   trigger_name STRING NULL,
+   trigger_schema STRING NULL
+)  CREATE TABLE information_schema.triggered_update_columns (
+   event_object_catalog STRING NULL,
+   event_object_column STRING NULL,
+   event_object_schema STRING NULL,
+   event_object_table STRING NULL,
+   trigger_catalog STRING NULL,
+   trigger_name STRING NULL,
+   trigger_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.triggers (
+   action_timing STRING NULL,
+   event_manipulation STRING NULL,
+   trigger_catalog STRING NULL,
+   trigger_schema STRING NULL,
+   event_object_table STRING NULL,
+   trigger_name STRING NULL,
+   action_condition STRING NULL,
+   action_reference_old_row STRING NULL,
+   action_statement STRING NULL,
+   created TIMESTAMPTZ NULL,
+   event_object_catalog STRING NULL,
+   event_object_schema STRING NULL,
+   action_order INT8 NULL,
+   action_orientation STRING NULL,
+   action_reference_new_row STRING NULL,
+   action_reference_new_table STRING NULL,
+   action_reference_old_table STRING NULL
+)  CREATE TABLE information_schema.triggers (
+   action_timing STRING NULL,
+   event_manipulation STRING NULL,
+   trigger_catalog STRING NULL,
+   trigger_schema STRING NULL,
+   event_object_table STRING NULL,
+   trigger_name STRING NULL,
+   action_condition STRING NULL,
+   action_reference_old_row STRING NULL,
+   action_statement STRING NULL,
+   created TIMESTAMPTZ NULL,
+   event_object_catalog STRING NULL,
+   event_object_schema STRING NULL,
+   action_order INT8 NULL,
+   action_orientation STRING NULL,
+   action_reference_new_row STRING NULL,
+   action_reference_new_table STRING NULL,
+   action_reference_old_table STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.type_privileges (
    grantee STRING NOT NULL,
    type_catalog STRING NOT NULL,
@@ -1753,6 +2369,125 @@ CREATE TABLE information_schema.type_privileges (
    type_name STRING NOT NULL,
    privilege_type STRING NOT NULL
 )  {}  {}
+CREATE TABLE information_schema.udt_privileges (
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   udt_catalog STRING NULL,
+   udt_name STRING NULL,
+   udt_schema STRING NULL,
+   grantee STRING NULL
+)  CREATE TABLE information_schema.udt_privileges (
+   grantor STRING NULL,
+   is_grantable STRING NULL,
+   privilege_type STRING NULL,
+   udt_catalog STRING NULL,
+   udt_name STRING NULL,
+   udt_schema STRING NULL,
+   grantee STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.usage_privileges (
+   is_grantable STRING NULL,
+   object_catalog STRING NULL,
+   object_name STRING NULL,
+   object_schema STRING NULL,
+   object_type STRING NULL,
+   privilege_type STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL
+)  CREATE TABLE information_schema.usage_privileges (
+   is_grantable STRING NULL,
+   object_catalog STRING NULL,
+   object_name STRING NULL,
+   object_schema STRING NULL,
+   object_type STRING NULL,
+   privilege_type STRING NULL,
+   grantee STRING NULL,
+   grantor STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.user_defined_types (
+   character_maximum_length INT8 NULL,
+   character_set_name STRING NULL,
+   interval_type STRING NULL,
+   ordering_routine_catalog STRING NULL,
+   reference_type STRING NULL,
+   source_dtd_identifier STRING NULL,
+   data_type STRING NULL,
+   numeric_precision_radix INT8 NULL,
+   ordering_routine_name STRING NULL,
+   user_defined_type_catalog STRING NULL,
+   collation_catalog STRING NULL,
+   user_defined_type_schema STRING NULL,
+   character_set_schema STRING NULL,
+   collation_name STRING NULL,
+   datetime_precision INT8 NULL,
+   is_instantiable STRING NULL,
+   ordering_category STRING NULL,
+   ordering_routine_schema STRING NULL,
+   ref_dtd_identifier STRING NULL,
+   numeric_precision INT8 NULL,
+   numeric_scale INT8 NULL,
+   ordering_form STRING NULL,
+   user_defined_type_category STRING NULL,
+   collation_schema STRING NULL,
+   is_final STRING NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   interval_precision INT8 NULL,
+   user_defined_type_name STRING NULL
+)  CREATE TABLE information_schema.user_defined_types (
+   character_maximum_length INT8 NULL,
+   character_set_name STRING NULL,
+   interval_type STRING NULL,
+   ordering_routine_catalog STRING NULL,
+   reference_type STRING NULL,
+   source_dtd_identifier STRING NULL,
+   data_type STRING NULL,
+   numeric_precision_radix INT8 NULL,
+   ordering_routine_name STRING NULL,
+   user_defined_type_catalog STRING NULL,
+   collation_catalog STRING NULL,
+   user_defined_type_schema STRING NULL,
+   character_set_schema STRING NULL,
+   collation_name STRING NULL,
+   datetime_precision INT8 NULL,
+   is_instantiable STRING NULL,
+   ordering_category STRING NULL,
+   ordering_routine_schema STRING NULL,
+   ref_dtd_identifier STRING NULL,
+   numeric_precision INT8 NULL,
+   numeric_scale INT8 NULL,
+   ordering_form STRING NULL,
+   user_defined_type_category STRING NULL,
+   collation_schema STRING NULL,
+   is_final STRING NULL,
+   character_octet_length INT8 NULL,
+   character_set_catalog STRING NULL,
+   interval_precision INT8 NULL,
+   user_defined_type_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.user_mapping_options (
+   authorization_identifier STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL
+)  CREATE TABLE information_schema.user_mapping_options (
+   authorization_identifier STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL,
+   option_name STRING NULL,
+   option_value STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.user_mappings (
+   authorization_identifier STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL
+)  CREATE TABLE information_schema.user_mappings (
+   authorization_identifier STRING NULL,
+   foreign_server_catalog STRING NULL,
+   foreign_server_name STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.user_privileges (
    grantee STRING NOT NULL,
    table_catalog STRING NOT NULL,
@@ -1763,6 +2498,53 @@ CREATE TABLE information_schema.user_privileges (
    table_catalog STRING NOT NULL,
    privilege_type STRING NOT NULL,
    is_grantable STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.view_column_usage (
+   column_name STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   view_catalog STRING NULL,
+   view_name STRING NULL,
+   view_schema STRING NULL
+)  CREATE TABLE information_schema.view_column_usage (
+   column_name STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   view_catalog STRING NULL,
+   view_name STRING NULL,
+   view_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.view_routine_usage (
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  CREATE TABLE information_schema.view_routine_usage (
+   specific_catalog STRING NULL,
+   specific_name STRING NULL,
+   specific_schema STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.view_table_usage (
+   view_catalog STRING NULL,
+   view_name STRING NULL,
+   view_schema STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  CREATE TABLE information_schema.view_table_usage (
+   view_catalog STRING NULL,
+   view_name STRING NULL,
+   view_schema STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.views (
    table_catalog STRING NOT NULL,
