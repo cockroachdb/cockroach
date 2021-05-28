@@ -20,7 +20,7 @@ import (
 
 func TestHandleHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	proxyServer := NewServer(Options{})
+	proxyServer := NewServer(testProxyHandler(&testHandlerOptions{}))
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/_status/healthz/", nil)
@@ -36,7 +36,7 @@ func TestHandleHealth(t *testing.T) {
 
 func TestHandleVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	proxyServer := NewServer(Options{})
+	proxyServer := NewServer(testProxyHandler(&testHandlerOptions{}))
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/_status/vars/", nil)

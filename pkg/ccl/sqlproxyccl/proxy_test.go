@@ -34,8 +34,170 @@ import (
 const FrontendError = "Frontend error!"
 const BackendError = "Backend error!"
 
+// This options are used to simplify the construction of test proxy handlers for
+// the test cases below.
+type testHandlerOptions struct {
+	IncomingTLSConfig *tls.Config // config used for client -> proxy connection
+
+	// TLS settings to use when connecting to OutgoingAddress.
+	BackendTLSConfig *tls.Config
+
+	// The address of the backend to connect to.
+	OutgoingAddress string
+
+	// If set, will be called immediately after a new incoming connection
+	// is accepted. It can optionally negotiate SSL, provide admittance control or
+	// other types of frontend connection filtering.
+	FrontendAdmitter func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error)
+
+	// If set, will be used to establish and return connection to the backend.
+	// If not set, the old logic will be used.
+	// The argument is the startup message received from the frontend. It
+	// contains the protocol version and params sent by the client.
+	BackendDialer func(msg *pgproto3.StartupMessage) (net.Conn, error)
+
+	// If set, consulted to decorate an error message to be sent to the client.
+	// The error passed to this method will contain no internal information.
+	OnSendErrToClient func(err error)
+
+	// If set, it will be called with the startup message received.
+	InspectStartupMessage func(msg *pgproto3.StartupMessage, conn *Conn)
+
+	// If set, consulted to modify the parameters set by the frontend before
+	// forwarding them to the backend during startup.
+	ModifyRequestParams func(map[string]string)
+
+	// Called after successfully connecting to OutgoingAddr.
+	OnConnectionSuccess func()
+
+	// KeepAliveLoop if provided controls the lifetime of the proxy connection.
+	// It will be run in its own goroutine when the connection is successfully
+	// opened. Returning from `KeepAliveLoop` will close the proxy connection.
+	// Note that non-nil error return values will be forwarded to the user and
+	// hence should explain the reason for terminating the connection.
+	// Most common use of KeepAliveLoop will be as an infinite loop that
+	// periodically checks if the connection should still be kept alive. Hence it
+	// may block indefinitely so it's prudent to use the provided context and
+	// return on context cancellation.
+	// See `TestProxyKeepAlive` for example usage.
+	KeepAliveLoop func(context.Context) error
+}
+
+func testProxyHandler(opts *testHandlerOptions) func(
+	metrics *Metrics, proxyConn *Conn,
+) error {
+	return func(metrics *Metrics, proxyConn *Conn) error {
+		frontendAdmitter := opts.FrontendAdmitter
+		if frontendAdmitter == nil {
+			// Keep this until all clients are switched to provide FrontendAdmitter
+			// at what point we can also drop IncomingTLSConfig
+			frontendAdmitter = func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+				return FrontendAdmit(incoming, opts.IncomingTLSConfig)
+			}
+		}
+		conn, msg, err := frontendAdmitter(proxyConn)
+		if err != nil {
+			if opts.OnSendErrToClient != nil {
+				opts.OnSendErrToClient(err)
+			}
+			SendErrToClient(conn, err)
+			return err
+		}
+		// This currently only happens for CancelRequest type of startup messages
+		// that we don't support
+		if conn == nil {
+			return nil
+		}
+
+		defer func() { _ = conn.Close() }()
+
+		if opts.InspectStartupMessage != nil {
+			opts.InspectStartupMessage(msg, proxyConn)
+		}
+
+		backendDialer := opts.BackendDialer
+		if backendDialer == nil {
+			// This we need to keep until all the clients are switched to provide BackendDialer.
+			// It constructs a backend dialer from the information provided via
+			// BackendConfigFromParams function.
+			backendDialer = func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+				// We should be able to remove this when the all clients switch to
+				// backend dialer.
+				if opts.ModifyRequestParams != nil {
+					opts.ModifyRequestParams(msg.Parameters)
+				}
+
+				crdbConn, err := BackendDial(msg, opts.OutgoingAddress, opts.BackendTLSConfig)
+				if err != nil {
+					return nil, err
+				}
+
+				return crdbConn, nil
+			}
+		}
+
+		crdbConn, err := backendDialer(msg)
+		if err != nil {
+			UpdateMetricsForError(metrics, err)
+			if opts.OnSendErrToClient != nil {
+				opts.OnSendErrToClient(err)
+			}
+			SendErrToClient(conn, err)
+			return err
+		}
+
+		defer func() { _ = crdbConn.Close() }()
+
+		if err := Authenticate(conn, crdbConn); err != nil {
+			UpdateMetricsForError(metrics, err)
+			SendErrToClient(conn, err)
+			return errors.AssertionFailedf("unrecognized auth failure")
+		}
+
+		metrics.SuccessfulConnCount.Inc(1)
+
+		if opts.OnConnectionSuccess != nil {
+			opts.OnConnectionSuccess()
+		}
+
+		errConnectionCopy := make(chan error, 1)
+		errExpired := make(chan error, 1)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if opts.KeepAliveLoop != nil {
+			go func() {
+				errExpired <- opts.KeepAliveLoop(ctx)
+			}()
+		}
+
+		go func() {
+			err := ConnectionCopy(crdbConn, conn)
+			errConnectionCopy <- err
+		}()
+
+		select {
+		case err := <-errConnectionCopy:
+			UpdateMetricsForError(metrics, err)
+			SendErrToClient(conn, err)
+			return err
+		case err := <-errExpired:
+			if err != nil {
+				// The client connection expired.
+				codeErr := NewErrorf(
+					CodeExpiredClientConnection, "expired client conn: %v", err,
+				)
+				UpdateMetricsForError(metrics, codeErr)
+				SendErrToClient(conn, codeErr)
+				return codeErr
+			}
+			return nil
+		}
+	}
+}
+
 func setupTestProxyWithCerts(
-	t *testing.T, opts *Options,
+	t *testing.T, opts *testHandlerOptions,
 ) (server *Server, addr string, done func()) {
 	// Created via:
 	const _ = `
@@ -68,7 +230,7 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt \
 		wg.Wait()
 	}
 
-	server = NewServer(*opts)
+	server = NewServer(testProxyHandler(opts))
 
 	go func() {
 		defer wg.Done()
@@ -132,9 +294,11 @@ func makeAssertCtx() assertCtx {
 	}
 }
 
-func (ac *assertCtx) onSendErrToClient(code ErrorCode, msg string) string {
-	*ac.emittedCode = code
-	return msg
+func (ac *assertCtx) onSendErrToClient(err error) {
+	codeErr := (*CodeError)(nil)
+	if errors.As(err, &codeErr) {
+		*ac.emittedCode = codeErr.Code
+	}
 }
 
 func (ac *assertCtx) assertConnectErr(
@@ -159,7 +323,7 @@ func TestLongDBName(t *testing.T) {
 
 	ac := makeAssertCtx()
 
-	opts := Options{
+	opts := testHandlerOptions{
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			return nil, NewErrorf(CodeParamsRoutingFailed, "boom")
 		},
@@ -171,7 +335,7 @@ func TestLongDBName(t *testing.T) {
 	longDB := strings.Repeat("x", 70) // 63 is limit
 	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s", addr, longDB)
 	ac.assertConnectErr(t, pgurl, "" /* suffix */, CodeParamsRoutingFailed, "boom")
-	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
+	require.Equal(t, int64(1), s.Metrics.RoutingErrCount.Count())
 }
 
 func TestFailedConnection(t *testing.T) {
@@ -181,7 +345,7 @@ func TestFailedConnection(t *testing.T) {
 	// proxy becomes more complex.
 
 	ac := makeAssertCtx()
-	opts := Options{
+	opts := testHandlerOptions{
 		BackendDialer: testingTenantIDFromDatabaseForAddr(
 			"undialable%$!@$", "29",
 		),
@@ -208,7 +372,7 @@ func TestFailedConnection(t *testing.T) {
 		t, u, "defaultdb_29?sslmode=verify-full&sslrootcert=testserver.crt",
 		CodeBackendDown, "unable to reach backend SQL server",
 	)
-	require.Equal(t, int64(4), s.metrics.BackendDownCount.Count())
+	require.Equal(t, int64(4), s.Metrics.BackendDownCount.Count())
 
 	// Unencrypted connections bounce.
 	for _, sslmode := range []string{"disable", "allow"} {
@@ -229,19 +393,17 @@ func TestFailedConnection(t *testing.T) {
 		t, u, "defaultdb?sslmode=require",
 		CodeParamsRoutingFailed, "malformed database name",
 	)
-	require.Equal(t, int64(2), s.metrics.RoutingErrCount.Count())
+	require.Equal(t, int64(2), s.Metrics.RoutingErrCount.Count())
 }
 
 func TestUnexpectedError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Set up a Server whose FrontendAdmitter function always errors with a
+	// Set up a Server whose proxy handler function always errors with a
 	// non-CodeError error.
 	ctx := context.Background()
-	s := NewServer(Options{
-		FrontendAdmitter: func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
-			return nil, nil, errors.New("unexpected error")
-		},
+	s := NewServer(func(metrics *Metrics, proxyConn *Conn) error {
+		return errors.New("unexpected error")
 	})
 	const listenAddress = "127.0.0.1:0"
 	ln, err := net.Listen("tcp", listenAddress)
@@ -284,10 +446,8 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	var connSuccess bool
-	opts := Options{
-		BackendConfigFromParams: func(params map[string]string, _ *Conn) (*BackendConfig, error) {
-			return &BackendConfig{OnConnectionSuccess: func() { connSuccess = true }}, nil
-		},
+	opts := testHandlerOptions{
+		OnConnectionSuccess: func() { connSuccess = true },
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			return BackendDial(msg, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true})
 		},
@@ -309,11 +469,11 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
 		require.True(t, connSuccess)
-		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-		require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
+		require.Equal(t, int64(1), s.Metrics.SuccessfulConnCount.Count())
+		require.Equal(t, int64(2), s.Metrics.AuthFailedCount.Count())
 	}()
 
-	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+	require.Equal(t, int64(1), s.Metrics.CurConnCount.Value())
 	require.NoError(t, runTestQuery(conn))
 }
 
@@ -332,13 +492,11 @@ func TestProxyTLSClose(t *testing.T) {
 
 	var proxyIncomingConn atomic.Value // *Conn
 	var connSuccess bool
-	opts := Options{
-		BackendConfigFromParams: func(params map[string]string, conn *Conn) (*BackendConfig, error) {
+	opts := testHandlerOptions{
+		InspectStartupMessage: func(msg *pgproto3.StartupMessage, conn *Conn) {
 			proxyIncomingConn.Store(conn)
-			return &BackendConfig{
-				OnConnectionSuccess: func() { connSuccess = true },
-			}, nil
 		},
+		OnConnectionSuccess: func() { connSuccess = true },
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			return BackendDial(msg, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true})
 		},
@@ -349,15 +507,15 @@ func TestProxyTLSClose(t *testing.T) {
 	url := fmt.Sprintf("postgres://bob:builder@%s/defaultdb_29?sslmode=require", addr)
 	conn, err := pgx.Connect(context.Background(), url)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+	require.Equal(t, int64(1), s.Metrics.CurConnCount.Value())
 	defer func() {
 		incomingConn := proxyIncomingConn.Load().(*Conn)
 		require.NoError(t, incomingConn.Close())
 		<-incomingConn.Done() // should immediately proceed
 
 		require.True(t, connSuccess)
-		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-		require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
+		require.Equal(t, int64(1), s.Metrics.SuccessfulConnCount.Count())
+		require.Equal(t, int64(0), s.Metrics.AuthFailedCount.Count())
 	}()
 
 	require.NoError(t, runTestQuery(conn))
@@ -374,7 +532,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	require.NoError(t, err)
 	outgoingTLSConfig.InsecureSkipVerify = true
 
-	opts := Options{
+	opts := testHandlerOptions{
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			params := msg.Parameters
 			require.EqualValues(t, map[string]string{
@@ -396,7 +554,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	u := fmt.Sprintf("postgres://bogususer@%s/?sslmode=require&authToken=abc123", proxyAddr)
 	conn, err := pgx.Connect(ctx, u)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+	require.Equal(t, int64(1), s.Metrics.CurConnCount.Value())
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
 	}()
@@ -405,16 +563,19 @@ func TestProxyModifyRequestParams(t *testing.T) {
 }
 
 func newInsecureProxyServer(
-	t *testing.T, outgoingAddr string, outgoingTLSConfig *tls.Config, customOptions ...func(*Options),
+	t *testing.T,
+	outgoingAddr string,
+	outgoingTLSConfig *tls.Config,
+	customOptions ...func(*testHandlerOptions),
 ) (server *Server, addr string, cleanup func()) {
-	op := Options{
+	op := testHandlerOptions{
 		BackendDialer: func(message *pgproto3.StartupMessage) (net.Conn, error) {
 			return BackendDial(message, outgoingAddr, outgoingTLSConfig)
 		}}
 	for _, opt := range customOptions {
 		opt(&op)
 	}
-	s := NewServer(op)
+	s := NewServer(testProxyHandler(&op))
 	const listenAddress = "127.0.0.1:0"
 	ln, err := net.Listen("tcp", listenAddress)
 	require.NoError(t, err)
@@ -441,7 +602,7 @@ func TestInsecureProxy(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	s, addr, cleanup := newInsecureProxyServer(
-		t, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true}, func(op *Options) {} /* custom options */)
+		t, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true}, func(op *testHandlerOptions) {} /* custom options */)
 	defer cleanup()
 
 	u := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable", addr)
@@ -455,8 +616,8 @@ func TestInsecureProxy(t *testing.T) {
 
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
-		require.Equal(t, int64(1), s.metrics.AuthFailedCount.Count())
-		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+		require.Equal(t, int64(1), s.Metrics.AuthFailedCount.Count())
+		require.Equal(t, int64(1), s.Metrics.SuccessfulConnCount.Count())
 	}()
 
 	require.NoError(t, runTestQuery(conn))
@@ -473,9 +634,9 @@ func TestInsecureDoubleProxy(t *testing.T) {
 
 	// Test multiple proxies:  proxyB -> proxyA -> tc
 	_, proxyA, cleanupA := newInsecureProxyServer(t, tc.Server(0).ServingSQLAddr(),
-		nil /* tls config */, func(op *Options) {} /* custom server options */)
+		nil /* tls config */, func(op *testHandlerOptions) {} /* custom server options */)
 	defer cleanupA()
-	_, proxyB, cleanupB := newInsecureProxyServer(t, proxyA, nil /* tls config */, func(op *Options) {} /* custom server options */)
+	_, proxyB, cleanupB := newInsecureProxyServer(t, proxyA, nil /* tls config */, func(op *testHandlerOptions) {} /* custom server options */)
 	defer cleanupB()
 
 	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable", proxyB)
@@ -497,9 +658,9 @@ func TestErroneousFrontend(t *testing.T) {
 
 	_, addr, cleanup := newInsecureProxyServer(
 		t, tc.Server(0).ServingSQLAddr(), nil, /* tls config */
-		func(op *Options) {
+		func(op *testHandlerOptions) {
 			op.FrontendAdmitter = func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
-				return nil, nil, errors.New(FrontendError)
+				return incoming, nil, NewErrorf(CodeClientDisconnected, FrontendError)
 			}
 		})
 	defer cleanup()
@@ -508,7 +669,7 @@ func TestErroneousFrontend(t *testing.T) {
 
 	_, err := pgx.Connect(ctx, u)
 	require.Error(t, err)
-	require.True(t, testutils.IsError(err, FrontendError))
+	require.Regexp(t, FrontendError, err)
 }
 
 func TestErroneousBackend(t *testing.T) {
@@ -521,9 +682,9 @@ func TestErroneousBackend(t *testing.T) {
 
 	_, addr, cleanup := newInsecureProxyServer(
 		t, tc.Server(0).ServingSQLAddr(), nil, /* tls config */
-		func(op *Options) {
+		func(op *testHandlerOptions) {
 			op.BackendDialer = func(message *pgproto3.StartupMessage) (net.Conn, error) {
-				return nil, errors.New(BackendError)
+				return nil, NewErrorf(CodeBackendDisconnected, BackendError)
 			}
 		})
 	defer cleanup()
@@ -532,7 +693,7 @@ func TestErroneousBackend(t *testing.T) {
 
 	_, err := pgx.Connect(ctx, u)
 	require.Error(t, err)
-	require.True(t, testutils.IsError(err, BackendError))
+	require.Regexp(t, BackendError, err)
 }
 
 func TestProxyRefuseConn(t *testing.T) {
@@ -547,7 +708,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	outgoingTLSConfig.InsecureSkipVerify = true
 
 	ac := makeAssertCtx()
-	opts := Options{
+	opts := testHandlerOptions{
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			return nil, NewErrorf(CodeProxyRefusedConnection, "too many attempts")
 		},
@@ -560,9 +721,9 @@ func TestProxyRefuseConn(t *testing.T) {
 		t, fmt.Sprintf("postgres://root:admin@%s/", addr), "defaultdb_29?sslmode=require",
 		CodeProxyRefusedConnection, "too many attempts",
 	)
-	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
-	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
+	require.Equal(t, int64(1), s.Metrics.RefusedConnCount.Count())
+	require.Equal(t, int64(0), s.Metrics.SuccessfulConnCount.Count())
+	require.Equal(t, int64(0), s.Metrics.AuthFailedCount.Count())
 }
 
 func TestProxyKeepAlive(t *testing.T) {
@@ -576,24 +737,19 @@ func TestProxyKeepAlive(t *testing.T) {
 	require.NoError(t, err)
 	outgoingTLSConfig.InsecureSkipVerify = true
 
-	opts := Options{
-		BackendConfigFromParams: func(params map[string]string, _ *Conn) (*BackendConfig, error) {
-			return &BackendConfig{
-				// Don't let connections last more than 100ms.
-				KeepAliveLoop: func(ctx context.Context) error {
-					t := timeutil.NewTimer()
-					t.Reset(100 * time.Millisecond)
-					for {
-						select {
-						case <-ctx.Done():
-							return ctx.Err()
-						case <-t.C:
-							t.Read = true
-							return errors.New("expired")
-						}
-					}
-				},
-			}, nil
+	opts := testHandlerOptions{
+		KeepAliveLoop: func(ctx context.Context) error {
+			t := timeutil.NewTimer()
+			t.Reset(100 * time.Millisecond)
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-t.C:
+					t.Read = true
+					return errors.New("expired")
+				}
+			}
 		},
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			return BackendDial(msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
@@ -607,7 +763,7 @@ func TestProxyKeepAlive(t *testing.T) {
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
-		require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
+		require.Equal(t, int64(1), s.Metrics.ExpiredClientConnCount.Count())
 	}()
 
 	require.Eventuallyf(
@@ -634,12 +790,8 @@ func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
 
 	idleTimeout, _ := time.ParseDuration("0.5s")
 	var connSuccess bool
-	opts := Options{
-		BackendConfigFromParams: func(params map[string]string, _ *Conn) (*BackendConfig, error) {
-			return &BackendConfig{
-				OnConnectionSuccess: func() { connSuccess = true },
-			}, nil
-		},
+	opts := testHandlerOptions{
+		OnConnectionSuccess: func() { connSuccess = true },
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			conn, err := BackendDial(msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
 			if err != nil {
@@ -654,11 +806,11 @@ func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
 	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require", addr)
 	conn, err := pgx.Connect(context.Background(), url)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+	require.Equal(t, int64(1), s.Metrics.CurConnCount.Value())
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
 		require.True(t, connSuccess)
-		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+		require.Equal(t, int64(1), s.Metrics.SuccessfulConnCount.Count())
 	}()
 
 	var n int

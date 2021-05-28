@@ -36,12 +36,12 @@ func FrontendAdmit(
 		case *pgproto3.SSLRequest:
 		case *pgproto3.CancelRequest:
 			// Ignore CancelRequest explicitly. We don't need to do this but it makes
-			// testing easier by avoiding a call to sendErrToClient on this path
+			// testing easier by avoiding a call to SendErrToClient on this path
 			// (which would confuse assertCtx).
 			return nil, nil, nil
 		default:
 			code := CodeUnexpectedInsecureStartupMessage
-			return nil, nil, NewErrorf(code, "unsupported startup message: %T", m)
+			return conn, nil, NewErrorf(code, "unsupported startup message: %T", m)
 		}
 
 		_, err = conn.Write([]byte{pgAcceptSSLRequest})
