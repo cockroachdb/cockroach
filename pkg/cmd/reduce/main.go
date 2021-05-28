@@ -49,12 +49,13 @@ var (
 		}
 		return n
 	}()
-	flags    = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	path     = flags.String("path", "./cockroach", "path to cockroach binary")
-	verbose  = flags.Bool("v", false, "print progress to standard output")
-	contains = flags.String("contains", "", "error regex to search for")
-	unknown  = flags.Bool("unknown", false, "print unknown types during walk")
-	workers  = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
+	flags     = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	path      = flags.String("path", "./cockroach", "path to cockroach binary")
+	queryFile = flags.String("query-file", "", "the path to a file containing a SQL query to reduce")
+	verbose   = flags.Bool("v", false, "print progress to standard output")
+	contains  = flags.String("contains", "", "error regex to search for")
+	unknown   = flags.Bool("unknown", false, "print unknown types during walk")
+	workers   = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 )
 
 const description = `
@@ -84,32 +85,41 @@ func main() {
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*path, *contains, *workers, *verbose)
+	out, err := reduceSQL(*path, *contains, queryFile, *workers, *verbose)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(out)
 }
 
-func reduceSQL(path, contains string, workers int, verbose bool) (string, error) {
+func reduceSQL(
+	path, contains string, queryFile *string, workers int, verbose bool,
+) (string, error) {
 	containsRE, err := regexp.Compile(contains)
 	if err != nil {
 		return "", err
 	}
 	var input []byte
 	{
-		done := make(chan struct{}, 1)
-		go func() {
-			select {
-			case <-done:
-			case <-time.After(5 * time.Second):
-				log.Fatal("timeout waiting for input on stdin")
+		if queryFile == nil {
+			done := make(chan struct{}, 1)
+			go func() {
+				select {
+				case <-done:
+				case <-time.After(5 * time.Second):
+					log.Fatal("timeout waiting for input on stdin")
+				}
+			}()
+			input, err = ioutil.ReadAll(os.Stdin)
+			done <- struct{}{}
+			if err != nil {
+				return "", err
 			}
-		}()
-		input, err = ioutil.ReadAll(os.Stdin)
-		done <- struct{}{}
-		if err != nil {
-			return "", err
+		} else {
+			input, err = ioutil.ReadFile(*queryFile)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 
