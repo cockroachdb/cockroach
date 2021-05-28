@@ -71,6 +71,7 @@ go_library(
         "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl",
         "//pkg/util",
+        "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
