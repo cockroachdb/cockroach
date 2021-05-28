@@ -621,8 +621,6 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 
 		var toSend []*cdctest.TestFeedMessage
 		if err := crdb.ExecuteTx(context.Background(), c.sinkDB, nil, func(tx *gosql.Tx) error {
-
-			// Avoid anything that might somehow look like deadlock under stressrace.
 			_, err := tx.Exec("SET TRANSACTION PRIORITY LOW")
 			if err != nil {
 				return err
@@ -643,7 +641,6 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 				return err
 			}
 			for rows.Next() {
-
 				m := &cdctest.TestFeedMessage{}
 				var msgID int64
 				if err := rows.Scan(
@@ -656,10 +653,6 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 				// array, which is pretty unexpected. Nil them out before returning.
 				// Either key+value or payload will be set, but not both.
 				if len(m.Key) > 0 || len(m.Value) > 0 {
-					if isNew := c.markSeen(m); !isNew {
-						continue
-					}
-
 					m.Resolved = nil
 				} else {
 					m.Key, m.Value = nil, nil
@@ -670,7 +663,17 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}); err != nil {
 			return nil, err
 		}
-		c.toSend = toSend
+
+		for _, m := range toSend {
+			// NB: We should not filter seen keys in the query above -- doing so will
+			// result in flaky tests if txn gets restarted.
+			if len(m.Key) > 0 {
+				if isNew := c.markSeen(m); !isNew {
+					continue
+				}
+			}
+			c.toSend = append(c.toSend, m)
+		}
 	}
 }
 

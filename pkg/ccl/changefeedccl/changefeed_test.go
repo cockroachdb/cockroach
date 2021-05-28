@@ -513,19 +513,16 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 // operation.
 func TestChangefeedInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 57754, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
-
 		t.Run(`no cursor - no initial scan`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE no_initial_scan (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (1)`)
 
 			noInitialScan := feed(t, f, `CREATE CHANGEFEED FOR no_initial_scan `+
-				`WITH no_initial_scan, resolved='10ms'`)
+				`WITH no_initial_scan, resolved='1s'`)
 			defer closeFeed(t, noInitialScan)
 			expectResolvedTimestamp(t, noInitialScan)
 			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (2)`)
@@ -541,7 +538,7 @@ func TestChangefeedInitialScan(t *testing.T) {
 			var i int
 			sqlDB.QueryRow(t, `SELECT count(*), cluster_logical_timestamp() from initial_scan`).Scan(&i, &tsStr)
 			initialScan := feed(t, f, `CREATE CHANGEFEED FOR initial_scan `+
-				`WITH initial_scan, resolved='10ms', cursor='`+tsStr+`'`)
+				`WITH initial_scan, resolved='1s', cursor='`+tsStr+`'`)
 			defer closeFeed(t, initialScan)
 			assertPayloads(t, initialScan, []string{
 				`initial_scan: [1]->{"after": {"a": 1}}`,
