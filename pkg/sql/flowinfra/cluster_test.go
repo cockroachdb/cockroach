@@ -106,21 +106,24 @@ func TestClusterFlow(t *testing.T) {
 		leafInputState := txn.GetLeafTxnInputState(ctx)
 
 		tr1 := execinfrapb.TableReaderSpec{
-			Table:    *desc.TableDesc(),
-			IndexIdx: 1,
-			Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(0, 8)},
+			Table:         *desc.TableDesc(),
+			IndexIdx:      1,
+			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(0, 8)},
+			NeededColumns: []uint32{0, 1},
 		}
 
 		tr2 := execinfrapb.TableReaderSpec{
-			Table:    *desc.TableDesc(),
-			IndexIdx: 1,
-			Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(8, 12)},
+			Table:         *desc.TableDesc(),
+			IndexIdx:      1,
+			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(8, 12)},
+			NeededColumns: []uint32{0, 1},
 		}
 
 		tr3 := execinfrapb.TableReaderSpec{
-			Table:    *desc.TableDesc(),
-			IndexIdx: 1,
-			Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(12, 100)},
+			Table:         *desc.TableDesc(),
+			IndexIdx:      1,
+			Spans:         []execinfrapb.TableReaderSpan{makeIndexSpan(12, 100)},
+			NeededColumns: []uint32{0, 1},
 		}
 
 		fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
