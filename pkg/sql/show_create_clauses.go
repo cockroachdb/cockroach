@@ -601,6 +601,28 @@ func showConstraintClause(
 			f.WriteString(" NOT VALID")
 		}
 	}
+	for _, idx := range desc.AllIndexes() {
+		if !idx.IsUnique() || idx.IsCreatedExplicitly() || idx.Primary() {
+			continue
+		}
+		f.WriteString(",\n\t")
+		if len(idx.GetName()) > 0 {
+			f.WriteString("CONSTRAINT ")
+			formatQuoteNames(&f.Buffer, idx.GetName())
+			f.WriteString(" ")
+		}
+		f.WriteString("UNIQUE ")
+		f.WriteString("(")
+		startIdx := idx.ExplicitColumnStartIdx()
+		for i := startIdx; i < idx.NumColumns(); i++ {
+			if i > startIdx {
+				f.WriteString(", ")
+			}
+			n := idx.GetColumnName(i)
+			f.FormatNameP(&n)
+		}
+		f.WriteString(")")
+	}
 	f.WriteString("\n)")
 	return nil
 }

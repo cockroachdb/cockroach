@@ -149,6 +149,10 @@ func ShowCreateTable(
 			// clauses as well.
 			includeInterleaveClause = true
 		}
+		// Don't show indexes which represent unique constraints.
+		if idx.IsUnique() && !idx.IsCreatedExplicitly() {
+			continue
+		}
 		if !idx.Primary() && includeInterleaveClause {
 			// Showing the primary index is handled above.
 
