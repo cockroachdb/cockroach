@@ -283,8 +283,8 @@ b  CREATE TABLE public.b (
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(id),
    INDEX foo (parent_id ASC),
-   UNIQUE INDEX bar (parent_id ASC),
-   FAMILY "primary" (parent_id, rowid, d)
+   FAMILY "primary" (parent_id, rowid, d),
+   CONSTRAINT bar UNIQUE (parent_id)
 )
 
 # table b is not visible to the transaction #17949

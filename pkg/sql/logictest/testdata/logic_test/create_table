@@ -190,10 +190,10 @@ like_indexes  CREATE TABLE public.like_indexes (
               j JSONB NULL,
               k INT8 NULL,
               CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
-              UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
               INVERTED INDEX like_table_j_idx (j),
-              FAMILY "primary" (a, b, c, h, j, k)
+              FAMILY "primary" (a, b, c, h, j, k),
+              CONSTRAINT foo UNIQUE (b, c)
 )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -247,14 +247,14 @@ like_all  CREATE TABLE public.like_all (
           j JSONB NULL,
           k INT8 NULL,
           CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
-          UNIQUE INDEX foo (b DESC, c ASC),
           INDEX like_table_c_idx (c ASC) STORING (j),
           INVERTED INDEX like_table_j_idx (j),
           FAMILY "primary" (a, b, c, h, j, k),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
           CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
-          CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8
+          CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8,
+          CONSTRAINT foo UNIQUE (b, c)
 )
 
 statement ok
@@ -273,10 +273,10 @@ like_mixed  CREATE TABLE public.like_mixed (
             j JSONB NULL,
             k INT8 NULL,
             CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
-            UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
             INVERTED INDEX like_table_j_idx (j),
-            FAMILY "primary" (a, b, c, h, j, k)
+            FAMILY "primary" (a, b, c, h, j, k),
+            CONSTRAINT foo UNIQUE (b, c)
 )
 
 statement ok

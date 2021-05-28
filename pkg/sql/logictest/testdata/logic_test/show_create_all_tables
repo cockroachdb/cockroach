@@ -51,18 +51,18 @@ CREATE TABLE public.parent (
     z INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
-    UNIQUE INDEX parent_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+    FAMILY f1 (x, y, z, rowid),
+    CONSTRAINT parent_x_y_z_key UNIQUE (x, y, z),
+    CONSTRAINT parent_x_key UNIQUE (x)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+                                                                                                                                                                     x INT8 NULL,
+                                                                                                                                                                     y INT8 NULL,
+                                                                                                                                                                     z INT8 NULL,
+                                                                                                                                                                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                                                                                                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                                                                                                                                     FAMILY f1 (x, y, z, rowid),
+                                                                                                                                                                     CONSTRAINT full_test_x_key UNIQUE (x)
 );
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
@@ -99,18 +99,18 @@ CREATE TABLE public.parent (
     z INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
-    UNIQUE INDEX parent_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+    FAMILY f1 (x, y, z, rowid),
+    CONSTRAINT parent_x_y_z_key UNIQUE (x, y, z),
+    CONSTRAINT parent_x_key UNIQUE (x)
 );
 CREATE TABLE public.full_test (
-    x INT8 NULL,
-    y INT8 NULL,
-    z INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    UNIQUE INDEX full_test_x_key (x ASC),
-    FAMILY f1 (x, y, z, rowid)
+                                                                                                                                                                     x INT8 NULL,
+                                                                                                                                                                     y INT8 NULL,
+                                                                                                                                                                     z INT8 NULL,
+                                                                                                                                                                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                                                                                                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                                                                                                                                     FAMILY f1 (x, y, z, rowid),
+                                                                                                                                                                     CONSTRAINT full_test_x_key UNIQUE (x)
 );
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;

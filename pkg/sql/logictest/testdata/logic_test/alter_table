@@ -1151,8 +1151,8 @@ t3  CREATE TABLE public.t3 (
     x INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
     CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t3_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    FAMILY "primary" (y, rowid, x),
+    CONSTRAINT t3_x_key UNIQUE (x)
 )
 
 # We allowed the foreign key validation code to look into the mutations
@@ -1345,8 +1345,8 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL DEFAULT 1:::INT8,
     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
     CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t2_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    FAMILY "primary" (y, rowid, x),
+    CONSTRAINT t2_x_key UNIQUE (x)
 )
 
 # Regression 50069, computed exprs must only refer to columns inside the

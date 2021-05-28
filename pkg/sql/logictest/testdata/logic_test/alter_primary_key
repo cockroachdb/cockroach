@@ -106,8 +106,8 @@ child                                        CREATE TABLE public.child (
                                              y INT8 NOT NULL,
                                              z INT8 NOT NULL,
                                              CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
-                                             UNIQUE INDEX child_x_key (x ASC),
-                                             FAMILY fam_0_x_y_z (x, y, z)
+                                             FAMILY fam_0_x_y_z (x, y, z),
+                                             CONSTRAINT child_x_key UNIQUE (x)
 ) INTERLEAVE IN PARENT public.parent (x, y)
 
 
@@ -170,8 +170,8 @@ child  CREATE TABLE public.child (
        y INT8 NOT NULL,
        z INT8 NOT NULL,
        CONSTRAINT "primary" PRIMARY KEY (y ASC, z ASC),
-       UNIQUE INDEX child_x_y_z_key (x ASC, y ASC, z ASC),
-       FAMILY fam_0_x_y_z (x, y, z)
+       FAMILY fam_0_x_y_z (x, y, z),
+       CONSTRAINT child_x_y_z_key UNIQUE (x, y, z)
 )
 
 # Check zone configs behave as appropriate.
@@ -223,9 +223,9 @@ child                                     CREATE TABLE public.child (
                                           z INT8 NOT NULL,
                                           w INT8 NULL,
                                           CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
-                                          UNIQUE INDEX child_x_y_key (x ASC, y ASC),
                                           INDEX i (x ASC, w ASC) INTERLEAVE IN PARENT public.parent (x),
-                                          FAMILY fam_0_x_y_z_w (x, y, z, w)
+                                          FAMILY fam_0_x_y_z_w (x, y, z, w),
+                                          CONSTRAINT child_x_y_key UNIQUE (x, y)
 ) INTERLEAVE IN PARENT public.parent (x)
 
 # If child@i was not properly rewritten, we wouldn't be able to select
@@ -327,8 +327,8 @@ t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    y INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
-   UNIQUE INDEX t_rowid_key (rowid ASC),
-   FAMILY fam_0_rowid_y (rowid, y)
+   FAMILY fam_0_rowid_y (rowid, y),
+   CONSTRAINT t_rowid_key UNIQUE (rowid)
 )
 
 subtest index_rewrites
@@ -365,14 +365,14 @@ t  CREATE TABLE public.t (
    crdb_internal_z_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(z AS STRING), '':::STRING)), 4:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
    UNIQUE INDEX i3 (z ASC) STORING (y),
-   UNIQUE INDEX t_x_key (x ASC),
    INDEX i1 (w ASC),
    INDEX i2 (y ASC),
    UNIQUE INDEX i4 (z ASC),
    UNIQUE INDEX i5 (w ASC) STORING (y),
    INVERTED INDEX i6 (v),
    INDEX i7 (z ASC) USING HASH WITH BUCKET_COUNT = 4,
-   FAMILY fam_0_x_y_z_w_v_crdb_internal_z_shard_4 (x, y, z, w, v, crdb_internal_z_shard_4)
+   FAMILY fam_0_x_y_z_w_v_crdb_internal_z_shard_4 (x, y, z, w, v, crdb_internal_z_shard_4),
+   CONSTRAINT t_x_key UNIQUE (x)
 )
 
 # Test that the indexes we expect got rewritten. All but i3 should have been rewritten,
@@ -519,9 +519,9 @@ t  CREATE TABLE public.t (
    crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(z AS STRING), '':::STRING)), 5:::INT8)) STORED,
    crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(y AS STRING), '':::STRING)), 10:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
-   UNIQUE INDEX t_x_key (x ASC),
    INDEX i1 (z ASC) USING HASH WITH BUCKET_COUNT = 5,
-   FAMILY fam_0_x_y_z_crdb_internal_z_shard_5 (x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
+   FAMILY fam_0_x_y_z_crdb_internal_z_shard_5 (x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10),
+   CONSTRAINT t_x_key UNIQUE (x)
 )
 
 query T
@@ -583,9 +583,9 @@ t  CREATE TABLE public.t (
    y INT8 NOT NULL,
    z INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
-   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
    INDEX i (z ASC),
-   FAMILY fam_0_x_y_z_crdb_internal_x_shard_5 (x, y, z, crdb_internal_x_shard_5)
+   FAMILY fam_0_x_y_z_crdb_internal_x_shard_5 (x, y, z, crdb_internal_x_shard_5),
+   CONSTRAINT t_x_key UNIQUE (x)
 )
 
 query III
@@ -1214,8 +1214,8 @@ t  CREATE TABLE public.t (
    y INT8 NOT NULL,
    crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(y AS STRING), '':::STRING)), 2:::INT8)) STORED,
    CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
-   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
-   FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2)
+   FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2),
+   CONSTRAINT t_x_key UNIQUE (x)
 )
 
 # Regression for #49079.
@@ -1422,6 +1422,6 @@ table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
                          new_pk INT8 NOT NULL,
                          virtual_col INT8 NULL AS (1:::INT8) VIRTUAL,
                          CONSTRAINT "primary" PRIMARY KEY (new_pk ASC),
-                         UNIQUE INDEX table_with_virtual_cols_id_key (id ASC),
-                         FAMILY fam_0_id_new_pk (id, new_pk)
+                         FAMILY fam_0_id_new_pk (id, new_pk),
+                         CONSTRAINT table_with_virtual_cols_id_key UNIQUE (id)
 )

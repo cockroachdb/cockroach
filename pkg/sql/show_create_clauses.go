@@ -602,7 +602,10 @@ func showConstraintClause(
 		}
 	}
 	for _, idx := range desc.AllIndexes() {
-		if !idx.IsUnique() || idx.IsCreatedExplicitly() || idx.Primary() {
+		if !idx.IsUnique() || idx.IsCreatedExplicitly() || idx.Primary() ||
+			// When performing an ALTER PRIMARY KEY we have a unique constraint
+			// that we should not print.
+			(!idx.Public() && idx.GetEncodingType() == descpb.PrimaryIndexEncoding) {
 			continue
 		}
 		f.WriteString(",\n\t")
@@ -614,11 +617,11 @@ func showConstraintClause(
 		f.WriteString("UNIQUE ")
 		f.WriteString("(")
 		startIdx := idx.ExplicitColumnStartIdx()
-		for i := startIdx; i < idx.NumColumns(); i++ {
+		for i := startIdx; i < idx.NumKeyColumns(); i++ {
 			if i > startIdx {
 				f.WriteString(", ")
 			}
-			n := idx.GetColumnName(i)
+			n := idx.GetKeyColumnName(i)
 			f.FormatNameP(&n)
 		}
 		f.WriteString(")")
