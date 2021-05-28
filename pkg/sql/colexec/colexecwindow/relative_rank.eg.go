@@ -352,12 +352,13 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 }
 
 func (r *percentRankNoPartitionOp) Close() error {
-	if !r.CloserHelper.Close() {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
-	ctx := r.EnsureCtx()
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -647,15 +648,16 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 }
 
 func (r *percentRankWithPartitionOp) Close() error {
-	if !r.CloserHelper.Close() {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
-	ctx := r.EnsureCtx()
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(ctx); err != nil {
+	if err := r.partitionsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -930,15 +932,16 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 }
 
 func (r *cumeDistNoPartitionOp) Close() error {
-	if !r.CloserHelper.Close() {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
-	ctx := r.EnsureCtx()
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
+	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -1307,18 +1310,19 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 }
 
 func (r *cumeDistWithPartitionOp) Close() error {
-	if !r.CloserHelper.Close() {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
-	ctx := r.EnsureCtx()
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(ctx); err != nil {
+	if err := r.partitionsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
+	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
