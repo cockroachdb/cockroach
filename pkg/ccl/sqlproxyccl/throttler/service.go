@@ -6,14 +6,14 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-// Package admitter provides admission checks functionality. Rate limiting currently.
-package admitter
+// Package throttler provides admission checks functionality. Rate limiting currently.
+package throttler
 
 import "time"
 
-//go:generate mockgen -package=admitter -destination=mocks_generated.go -source=service.go . Service
+//go:generate mockgen -package=throttler -destination=mocks_generated.go -source=service.go . Service
 
-// Service provides the interface for performing admission checks before
+// Service provides the interface for performing throttle checks before
 // allowing requests into the managed service system.
 type Service interface {
 	// LoginCheck determines whether a login request should be allowed to

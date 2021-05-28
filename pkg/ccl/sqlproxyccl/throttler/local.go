@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package admitter
+package throttler
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type limiter struct {
 	index int
 }
 
-// localService is an admitter Service that manages state purely in local
+// localService is an throttler service that manages state purely in local
 // memory. Internally, it maintains a map from IP address to rate limiting info
 // for that address. In order to put a cap on memory usage, the map is capped
 // at a maximum size, at which point a random IP address will be evicted.
@@ -81,7 +81,7 @@ func WithBaseDelay(d time.Duration) LocalOption {
 	}
 }
 
-// NewLocalService returns an admitter Service that manages state purely in
+// NewLocalService returns an throttler service that manages state purely in
 // local memory.
 func NewLocalService(opts ...LocalOption) Service {
 	s := &localService{

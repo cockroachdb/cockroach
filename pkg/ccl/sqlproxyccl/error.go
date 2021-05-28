@@ -14,88 +14,88 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ErrorCode classifies errors emitted by Proxy().
-//go:generate stringer -type=ErrorCode
-type ErrorCode int
+// errorCode classifies errors emitted by Proxy().
+//go:generate stringer -type=errorCode
+type errorCode int
 
 const (
-	_ ErrorCode = iota
+	_ errorCode = iota
 
-	// CodeAuthFailed indicates that client authentication attempt has failed and
+	// codeAuthFailed indicates that client authentication attempt has failed and
 	// backend has closed the connection.
-	CodeAuthFailed
+	codeAuthFailed
 
-	// CodeBackendReadFailed indicates an error reading from backend connection.
-	CodeBackendReadFailed
-	// CodeBackendWriteFailed indicates an error writing to backend connection.
-	CodeBackendWriteFailed
+	// codeBackendReadFailed indicates an error reading from backend connection.
+	codeBackendReadFailed
+	// codeBackendWriteFailed indicates an error writing to backend connection.
+	codeBackendWriteFailed
 
-	// CodeClientReadFailed indicates an error reading from the client connection
-	CodeClientReadFailed
-	// CodeClientWriteFailed indicates an error writing to the client connection.
-	CodeClientWriteFailed
+	// codeClientReadFailed indicates an error reading from the client connection
+	codeClientReadFailed
+	// codeClientWriteFailed indicates an error writing to the client connection.
+	codeClientWriteFailed
 
-	// CodeUnexpectedInsecureStartupMessage indicates that the client sent a
+	// codeUnexpectedInsecureStartupMessage indicates that the client sent a
 	// StartupMessage which was unexpected. Typically this means that an
 	// SSLRequest was expected but the client attempted to go ahead without TLS,
 	// or vice versa.
-	CodeUnexpectedInsecureStartupMessage
+	codeUnexpectedInsecureStartupMessage
 
-	// CodeSNIRoutingFailed indicates an error choosing a backend address based on
+	// codeSNIRoutingFailed indicates an error choosing a backend address based on
 	// the client's SNI header.
-	CodeSNIRoutingFailed
+	codeSNIRoutingFailed
 
-	// CodeUnexpectedStartupMessage indicates an unexpected startup message
+	// codeUnexpectedStartupMessage indicates an unexpected startup message
 	// received from the client after TLS negotiation.
-	CodeUnexpectedStartupMessage
+	codeUnexpectedStartupMessage
 
-	// CodeParamsRoutingFailed indicates an error choosing a backend address based
+	// codeParamsRoutingFailed indicates an error choosing a backend address based
 	// on the client's session parameters.
-	CodeParamsRoutingFailed
+	codeParamsRoutingFailed
 
-	// CodeBackendDown indicates an error establishing or maintaining a connection
+	// codeBackendDown indicates an error establishing or maintaining a connection
 	// to the backend SQL server.
-	CodeBackendDown
+	codeBackendDown
 
-	// CodeBackendRefusedTLS indicates that the backend SQL server refused a TLS-
+	// codeBackendRefusedTLS indicates that the backend SQL server refused a TLS-
 	// enabled SQL connection.
-	CodeBackendRefusedTLS
+	codeBackendRefusedTLS
 
-	// CodeBackendDisconnected indicates that the backend disconnected (with a
+	// codeBackendDisconnected indicates that the backend disconnected (with a
 	// connection error) while serving client traffic.
-	CodeBackendDisconnected
+	codeBackendDisconnected
 
-	// CodeClientDisconnected indicates that the client disconnected unexpectedly
+	// codeClientDisconnected indicates that the client disconnected unexpectedly
 	// (with a connection error) while in a session with backend SQL server.
-	CodeClientDisconnected
+	codeClientDisconnected
 
-	// CodeProxyRefusedConnection indicates that the proxy refused the connection
+	// codeProxyRefusedConnection indicates that the proxy refused the connection
 	// request due to high load or too many connection attempts.
-	CodeProxyRefusedConnection
+	codeProxyRefusedConnection
 
-	// CodeExpiredClientConnection indicates that proxy connection to the client
+	// codeExpiredClientConnection indicates that proxy connection to the client
 	// has expired and should be closed.
-	CodeExpiredClientConnection
+	codeExpiredClientConnection
 
-	// CodeIdleDisconnect indicates that the connection was disconnected for
+	// codeIdleDisconnect indicates that the connection was disconnected for
 	// being idle for longer than the specified timeout.
-	CodeIdleDisconnect
+	codeIdleDisconnect
 )
 
-// CodeError is combines an error with one of the above codes to ease
+// codeError is combines an error with one of the above codes to ease
 // the processing of the errors.
-type CodeError struct {
-	code ErrorCode
+type codeError struct {
+	code errorCode
 	err  error
 }
 
-func (e *CodeError) Error() string {
+func (e *codeError) Error() string {
 	return fmt.Sprintf("%s: %s", e.code, e.err)
 }
 
-// NewErrorf returns a new CodeError out of the supplied args.
-func NewErrorf(code ErrorCode, format string, args ...interface{}) error {
-	return &CodeError{
+// newErrorf returns a new codeError out of the supplied args.
+func newErrorf(code errorCode, format string, args ...interface{}) error {
+	return &codeError{
 		code: code,
 		err:  errors.Errorf(format, args...),
 	}
