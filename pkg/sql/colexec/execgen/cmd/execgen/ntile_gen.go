@@ -26,14 +26,6 @@ const nTileTmpl = "pkg/sql/colexec/colexecwindow/ntile_tmpl.go"
 func genNTileOp(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_NTILE_STRING", "{{.String}}")
 
-	seekNTileRe := makeFunctionRegex("_SEEK_NTILE", 1)
-	s = seekNTileRe.ReplaceAllString(s,
-		`{{template "seekNTile" buildDict "HasPartition" .HasPartition "HasSel" $1}}`)
-
-	computeNTileRe := makeFunctionRegex("_COMPUTE_NTILE", 1)
-	s = computeNTileRe.ReplaceAllString(s,
-		`{{template "computeNTile" buildDict "HasSel" $1}}`)
-
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("ntile_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {

@@ -1077,17 +1077,33 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	const manyRowsProbability = 0.1
+
 	rng, seed := randutil.NewPseudoRand()
-	nRows := 2 * coldata.BatchSize()
+	nRows := 100
+	if rng.Float64() < manyRowsProbability {
+		nRows = 2 * coldata.BatchSize()
+	}
 	maxCols := 4
 	maxNum := 10
-	typs := make([]*types.T, maxCols)
+	maxArgs := 3
+	typs := make([]*types.T, maxCols, maxCols+maxArgs)
 	for i := range typs {
-		// TODO(yuzefovich): randomize the types of the columns once we support
-		// window functions that take in arguments.
 		typs[i] = types.Int
 	}
 	for windowFn := range colexecwindow.SupportedWindowFns {
+		useRandomTypes := rand.Float64() < randTypesProbability
+		var argTypes []*types.T
+		switch windowFn {
+		case execinfrapb.WindowerSpec_NTILE:
+			argTypes = []*types.T{types.Int}
+		case execinfrapb.WindowerSpec_LAG, execinfrapb.WindowerSpec_LEAD:
+			argType := types.Int
+			if useRandomTypes {
+				argType = generateRandomSupportedTypes(rng, 1 /* nCols */)[0]
+			}
+			argTypes = []*types.T{argType, types.Int, argType}
+		}
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
 			{0},    // Partitioning on the first input column.
@@ -1102,14 +1118,36 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					if len(partitionBy) > nCols || nOrderingCols > nCols {
 						continue
 					}
-					inputTypes := typs[:nCols:nCols]
-					rows := randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 
+					var rows rowenc.EncDatumRows
 					var argsIdxs []uint32
-					if windowFn == execinfrapb.WindowerSpec_NTILE {
-						// Currently only ntile takes an input argument, which must be an
-						// int. Choose a random column other than the output column.
-						argsIdxs = append(argsIdxs, rand.Uint32()%uint32(nCols))
+					inputTypes := make([]*types.T, nCols, nCols+len(argTypes))
+					copy(inputTypes, typs[:nCols])
+					inputTypes = append(inputTypes, argTypes...)
+					for i := range argTypes {
+						// The arg columns will be appended to the end of the other columns.
+						argsIdxs = append(argsIdxs, uint32(nCols+i))
+					}
+
+					if useRandomTypes &&
+						(windowFn == execinfrapb.WindowerSpec_LAG ||
+							windowFn == execinfrapb.WindowerSpec_LEAD) {
+						// Only lag and lead take non-integer arguments. In addition, ntile
+						// will error if given a non-positive argument.
+						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+					} else {
+						rows = randgen.MakeRandIntRowsInRange(rng, nRows, len(inputTypes), maxNum, nullProbability)
+					}
+
+					if windowFn == execinfrapb.WindowerSpec_ROW_NUMBER ||
+						windowFn == execinfrapb.WindowerSpec_NTILE ||
+						windowFn == execinfrapb.WindowerSpec_LAG ||
+						windowFn == execinfrapb.WindowerSpec_LEAD {
+						// The outputs of these window functions are not deterministic if
+						// there are columns that are not present in either PARTITION BY or
+						// ORDER BY clauses, so we require that all non-partitioning columns
+						// are ordering columns.
+						nOrderingCols = len(inputTypes)
 					}
 
 					windowerSpec := &execinfrapb.WindowerSpec{
@@ -1118,24 +1156,11 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 							{
 								Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
 								ArgsIdxs:     argsIdxs,
-								Ordering:     generateOrderingGivenPartitionBy(rng, nCols, nOrderingCols, partitionBy),
-								OutputColIdx: uint32(nCols),
+								Ordering:     generateOrderingGivenPartitionBy(rng, len(inputTypes), nOrderingCols, partitionBy),
+								OutputColIdx: uint32(len(inputTypes)),
 								FilterColIdx: tree.NoColumnIdx,
 							},
 						},
-					}
-					if (windowFn == execinfrapb.WindowerSpec_ROW_NUMBER ||
-						windowFn == execinfrapb.WindowerSpec_NTILE) &&
-						len(partitionBy)+len(windowerSpec.WindowFns[0].Ordering.Columns) < nCols {
-						// The outputs of row_number and ntile are not deterministic if
-						// there are columns that are not present in either PARTITION BY or
-						// ORDER BY clauses, so we skip such a configuration.
-						continue
-					}
-
-					argTypes := make([]*types.T, len(argsIdxs))
-					for i, idx := range argsIdxs {
-						argTypes[i] = typs[idx]
 					}
 
 					_, outputType, err := execinfrapb.GetWindowFunctionInfo(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn}, argTypes...)
@@ -1152,6 +1177,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						pspec:      pspec,
 					}
 					if err := verifyColOperator(t, args); err != nil {
+						fmt.Printf("window function: %s\n", windowFn.String())
 						fmt.Printf("seed = %d\n", seed)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
