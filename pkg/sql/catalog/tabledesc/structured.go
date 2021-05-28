@@ -275,8 +275,8 @@ func (desc *wrapper) ForeachDependedOnBy(
 	return nil
 }
 
-// ForeachOutboundFK calls f for every outbound foreign key in desc until an
-// error is returned.
+// ForeachOutboundFK calls f for every public outbound foreign key in desc
+// until an error is returned.
 func (desc *wrapper) ForeachOutboundFK(
 	f func(constraint *descpb.ForeignKeyConstraint) error,
 ) error {
