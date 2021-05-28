@@ -75,6 +75,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage/cloud",
         "//pkg/util",
+        "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
