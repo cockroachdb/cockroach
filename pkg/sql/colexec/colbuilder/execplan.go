@@ -1412,9 +1412,9 @@ func NewColOperator(
 				post := &execinfrapb.PostProcessSpec{}
 				post.RenderExprs = make([]execinfrapb.Expression, castedIdx+1)
 				for j := 0; j < castedIdx; j++ {
-					post.RenderExprs[j].Expr = fmt.Sprintf("@%d", j+1)
+					post.RenderExprs[j].LocalExpr = tree.NewTypedOrdinalReference(j, r.ColumnTypes[j])
 				}
-				post.RenderExprs[castedIdx].Expr = fmt.Sprintf("@%d::%s", i+1, expected.SQLStandardName())
+				post.RenderExprs[castedIdx].LocalExpr = tree.NewTypedCastExpr(tree.NewTypedOrdinalReference(i, r.ColumnTypes[i]), expected)
 				result.Root = input
 				if err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, resultTypes, factory, err); err != nil {
 					return r, err
