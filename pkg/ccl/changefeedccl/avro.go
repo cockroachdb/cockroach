@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
@@ -232,6 +233,32 @@ func typeToAvroSchema(typ *types.T, reuseMap bool) (*avroSchemaField, error) {
 			},
 			func(x interface{}) (tree.Datum, error) {
 				return tree.MakeDBool(tree.DBool(x.(bool))), nil
+			},
+		)
+	case types.BitFamily:
+		setNullable(
+			avroArrayType{
+				SchemaType: avroSchemaArray,
+				Items:      avroSchemaLong,
+			},
+			func(d tree.Datum) (interface{}, error) {
+				uints, lastBitsUsed := d.(*tree.DBitArray).EncodingParts()
+				ints := make([]int64, len(uints)+1)
+				ints[0] = int64(lastBitsUsed)
+				for idx, word := range uints {
+					ints[idx+1] = int64(word)
+				}
+				return ints, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				arr := x.([]interface{})
+				lastBitsUsed, ints := arr[0], arr[1:]
+				uints := make([]uint64, len(ints))
+				for idx, word := range ints {
+					uints[idx] = uint64(word.(int64))
+				}
+				ba, err := bitarray.FromEncodingParts(uints, uint64(lastBitsUsed.(int64)))
+				return &tree.DBitArray{BitArray: ba}, err
 			},
 		)
 	case types.FloatFamily:
