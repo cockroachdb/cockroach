@@ -882,6 +882,12 @@ type UniqueConstraintTableDef struct {
 	IndexTableDef
 	PrimaryKey   bool
 	WithoutIndex bool
+
+	// ExplicitIndex is used to distinguish cases where the unique index was
+	// created using a UNIQUE INDEX clause in either CREATE TABLE or CREATE
+	// INDEX as opposed to a CONSTRAINT ... UNIQUE clause in CREATE TABLE or
+	// ALTER TABLE.
+	ExplicitIndex bool
 }
 
 // SetName implements the TableDef interface.
@@ -891,18 +897,26 @@ func (node *UniqueConstraintTableDef) SetName(name Name) {
 
 // Format implements the NodeFormatter interface.
 func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
-	if node.Name != "" {
-		ctx.WriteString("CONSTRAINT ")
-		ctx.FormatNode(&node.Name)
-		ctx.WriteByte(' ')
-	}
-	if node.PrimaryKey {
-		ctx.WriteString("PRIMARY KEY ")
+	if node.ExplicitIndex {
+		ctx.WriteString("UNIQUE INDEX ")
+		if node.Name != "" {
+			ctx.FormatNode(&node.Name)
+			ctx.WriteByte(' ')
+		}
 	} else {
-		ctx.WriteString("UNIQUE ")
-	}
-	if node.WithoutIndex {
-		ctx.WriteString("WITHOUT INDEX ")
+		if node.Name != "" {
+			ctx.WriteString("CONSTRAINT ")
+			ctx.FormatNode(&node.Name)
+			ctx.WriteByte(' ')
+		}
+		if node.PrimaryKey {
+			ctx.WriteString("PRIMARY KEY ")
+		} else {
+			ctx.WriteString("UNIQUE ")
+		}
+		if node.WithoutIndex {
+			ctx.WriteString("WITHOUT INDEX ")
+		}
 	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)

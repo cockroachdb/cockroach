@@ -5,7 +5,8 @@ CREATE TABLE users (
   title VARCHAR,
   INDEX foo (name),
   UNIQUE INDEX bar (id, name),
-  INDEX baw (name, title)
+  INDEX baw (name, title),
+  CONSTRAINT bax UNIQUE (id, name)
 )
 
 statement ok
@@ -58,6 +59,8 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       bax         false       1             id           ASC        false    false
+users       bax         false       2             name         ASC        false    false
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
@@ -74,6 +77,8 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       bax         false       1             id           ASC        false    false
+users       bax         false       2             name         ASC        false    false
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
@@ -89,6 +94,8 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       bax         false       1             id           ASC        false    false
+users       bax         false       2             name         ASC        false    false
 users       primary     false       1             id           ASC        false    false
 
 user testuser
@@ -104,13 +111,16 @@ GRANT CREATE ON TABLE users TO testuser
 user testuser
 
 statement error in use as unique constraint
-DROP INDEX users@bar
+DROP INDEX users@bax
 
 statement error in use as unique constraint
-DROP INDEX users@bar RESTRICT
+DROP INDEX users@bax RESTRICT
 
 statement ok
-DROP INDEX users@bar CASCADE
+DROP INDEX users@bax CASCADE
+
+statement ok
+DROP INDEX users@bar
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users

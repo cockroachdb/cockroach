@@ -488,7 +488,11 @@ func mysqlTableToCockroach(
 		idxName := safeName(raw.Info.Name)
 		idx := tree.IndexTableDef{Name: idxName, Columns: elems}
 		if raw.Info.Primary || raw.Info.Unique {
-			stmt.Defs = append(stmt.Defs, &tree.UniqueConstraintTableDef{IndexTableDef: idx, PrimaryKey: raw.Info.Primary})
+			stmt.Defs = append(stmt.Defs, &tree.UniqueConstraintTableDef{
+				IndexTableDef: idx,
+				PrimaryKey:    raw.Info.Primary,
+				ExplicitIndex: !raw.Info.Primary,
+			})
 		} else {
 			stmt.Defs = append(stmt.Defs, &idx)
 		}
