@@ -206,7 +206,6 @@ func ListFromStrings(strs []string) (List, error) {
 
 // ValidatePrivileges returns an error if any privilege in
 // privileges cannot be granted on the given objectType.
-// Currently db/schema/table can all be granted the same privileges.
 func ValidatePrivileges(privileges List, objectType ObjectType) error {
 	validPrivs := GetValidPrivilegesForObject(objectType)
 	for _, priv := range privileges {
