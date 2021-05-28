@@ -277,7 +277,7 @@ func (e *tenantEntry) fetchEndpointsLocked(
 	e.endpoints.ips = ips
 
 	if len(ips) != 0 {
-		log.Infof(ctx, "fetched IP addresses for tenant %d: %v", e.TenantID, ips)
+		log.Infof(ctx, "fetched IP addresses: %v", ips)
 	}
 
 	return ips, nil

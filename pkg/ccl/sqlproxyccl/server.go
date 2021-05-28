@@ -15,21 +15,28 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
+
+// proxyConnHandler defines the signature of the function that handles each
+// individual new incoming connection.
+type proxyConnHandler func(ctx context.Context, proxyConn *conn) error
 
 // Server is a TCP server that proxies SQL connections to a
 // configurable backend. It may also run an HTTP server to expose a
 // health check and prometheus metrics.
 type Server struct {
-	opts            *Options
+	Stopper         *stop.Stopper
+	connHandler     proxyConnHandler
 	mux             *http.ServeMux
-	metrics         *Metrics
+	metrics         *metrics
 	metricsRegistry *metric.Registry
 
 	promMu             syncutil.Mutex
@@ -38,17 +45,22 @@ type Server struct {
 
 // NewServer constructs a new proxy server and provisions metrics and health
 // checks as well.
-func NewServer(opts Options) *Server {
+func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions) (*Server, error) {
+	proxyMetrics := makeProxyMetrics()
+	handler, err := newProxyHandler(ctx, stopper, &proxyMetrics, options)
+	if err != nil {
+		return nil, err
+	}
+
 	mux := http.NewServeMux()
 
 	registry := metric.NewRegistry()
 
-	proxyMetrics := MakeProxyMetrics()
-
-	registry.AddMetricStruct(proxyMetrics)
+	registry.AddMetricStruct(&proxyMetrics)
 
 	s := &Server{
-		opts:               &opts,
+		Stopper:            stopper,
+		connHandler:        handler.handle,
 		mux:                mux,
 		metrics:            &proxyMetrics,
 		metricsRegistry:    registry,
@@ -60,7 +72,7 @@ func NewServer(opts Options) *Server {
 	mux.HandleFunc("/_status/vars/", s.handleVars)
 	mux.HandleFunc("/_status/healthz/", s.handleHealth)
 
-	return s
+	return s, nil
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -134,32 +146,44 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 // Serve serves a listener according to the Options given in NewServer().
 // Incoming client connections are taken through the Postgres handshake and
 // relayed to the configured backend server.
-func (s *Server) Serve(ln net.Listener) error {
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	err := s.Stopper.RunAsyncTask(ctx, "listen-quiesce", func(ctx context.Context) {
+		<-s.Stopper.ShouldQuiesce()
+		if err := ln.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
+			log.Fatalf(ctx, "closing proxy listener: %s", err)
+		}
+	})
+	if err != nil {
+		return err
+	}
+
 	for {
 		origConn, err := ln.Accept()
 		if err != nil {
 			return err
 		}
-		conn := &Conn{
+		conn := &conn{
 			Conn: origConn,
 		}
 
-		go func() {
+		err = s.Stopper.RunAsyncTask(ctx, "proxy-con-serve", func(ctx context.Context) {
 			defer func() { _ = conn.Close() }()
 			s.metrics.CurConnCount.Inc(1)
 			defer s.metrics.CurConnCount.Dec(1)
-			tBegin := timeutil.Now()
 			remoteAddr := conn.RemoteAddr()
-			log.Infof(context.Background(), "handling client %s", remoteAddr)
-			err := s.Proxy(conn)
-			log.Infof(context.Background(), "client %s disconnected after %.2fs: %v",
-				remoteAddr, timeutil.Since(tBegin).Seconds(), err)
-		}()
+			ctxWithTag := logtags.AddTag(ctx, "client", remoteAddr)
+			if err := s.connHandler(ctxWithTag, conn); err != nil {
+				log.Infof(ctxWithTag, "connection error: %v", err)
+			}
+		})
+		if err != nil {
+			return err
+		}
 	}
 }
 
-// Conn is a SQL connection into the proxy.
-type Conn struct {
+// conn is a SQL connection into the proxy.
+type conn struct {
 	net.Conn
 
 	mu struct {
@@ -170,7 +194,7 @@ type Conn struct {
 }
 
 // Done returns a channel that's closed when the connection is closed.
-func (c *Conn) Done() <-chan struct{} {
+func (c *conn) done() <-chan struct{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.closedCh == nil {
@@ -184,8 +208,8 @@ func (c *Conn) Done() <-chan struct{} {
 
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
-// The connection's Done channel will be closed.
-func (c *Conn) Close() error {
+// The connection's Done channel will be closed. This overrides net.Conn.Close.
+func (c *conn) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.closed {
