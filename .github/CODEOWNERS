@@ -21,6 +21,8 @@
 
 /docs/RFCS/                  @cockroachdb/rfc-prs
 
+/Makefile                    @cockroachdb/dev-inf
+
 /pkg/sql/opt/                @cockroachdb/sql-opt-prs
 /pkg/sql/stats/              @cockroachdb/sql-opt-prs
 
