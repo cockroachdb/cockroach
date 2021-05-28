@@ -1,0 +1,13 @@
+genrule(
+    name = "settings",
+    outs = ["settings.html"],
+    cmd = "$(location //pkg/cmd/cockroach-short) gen settings-list --format=html > $@",
+    exec_tools = ["//pkg/cmd/cockroach-short"],
+)
+
+genrule(
+    name = "settings_for_tenants",
+    outs = ["settings-for-tenants.txt"],
+    cmd = "$(location //pkg/cmd/cockroach-short) gen settings-list --without-system-only > $@",
+    exec_tools = ["//pkg/cmd/cockroach-short"],
+)
