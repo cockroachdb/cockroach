@@ -52,8 +52,7 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	t.Status("stopping the server ahead of checking for the tenant server")
 
 	// Stop the server, which also ensures that log files get flushed.
-	cancel()
-	<-tenant.errCh
+	tenant.stop(ctx, t, c)
 
 	t.Status("checking log file contents")
 
