@@ -127,8 +127,9 @@ func checkDistAggregationInfo(
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
-			Table: *tableDesc.TableDesc(),
-			Spans: make([]execinfrapb.TableReaderSpan, 1),
+			Table:         *tableDesc.TableDesc(),
+			Spans:         make([]execinfrapb.TableReaderSpan, 1),
+			NeededColumns: []uint32{uint32(colIdx)},
 		}
 
 		var err error
