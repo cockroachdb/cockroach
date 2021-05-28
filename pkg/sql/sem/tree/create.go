@@ -880,8 +880,9 @@ func (*CheckConstraintTableDef) constraintTableDef()      {}
 // TABLE statement.
 type UniqueConstraintTableDef struct {
 	IndexTableDef
-	PrimaryKey   bool
-	WithoutIndex bool
+	PrimaryKey    bool
+	WithoutIndex  bool
+	ExplicitIndex bool
 }
 
 // SetName implements the TableDef interface.
@@ -891,18 +892,26 @@ func (node *UniqueConstraintTableDef) SetName(name Name) {
 
 // Format implements the NodeFormatter interface.
 func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
-	if node.Name != "" {
-		ctx.WriteString("CONSTRAINT ")
-		ctx.FormatNode(&node.Name)
-		ctx.WriteByte(' ')
-	}
-	if node.PrimaryKey {
-		ctx.WriteString("PRIMARY KEY ")
+	if node.ExplicitIndex {
+		ctx.WriteString("UNIQUE INDEX ")
+		if node.Name != "" {
+			ctx.FormatNode(&node.Name)
+			ctx.WriteByte(' ')
+		}
 	} else {
-		ctx.WriteString("UNIQUE ")
-	}
-	if node.WithoutIndex {
-		ctx.WriteString("WITHOUT INDEX ")
+		if node.Name != "" {
+			ctx.WriteString("CONSTRAINT ")
+			ctx.FormatNode(&node.Name)
+			ctx.WriteByte(' ')
+		}
+		if node.PrimaryKey {
+			ctx.WriteString("PRIMARY KEY ")
+		} else {
+			ctx.WriteString("UNIQUE ")
+		}
+		if node.WithoutIndex {
+			ctx.WriteString("WITHOUT INDEX ")
+		}
 	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)

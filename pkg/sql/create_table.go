@@ -2003,10 +2003,11 @@ func NewTableDesc(
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 			}
 			idx := descpb.IndexDescriptor{
-				Name:             string(d.Name),
-				Unique:           true,
-				StoreColumnNames: d.Storing.ToStrings(),
-				Version:          indexEncodingVersion,
+				Name:              string(d.Name),
+				Unique:            true,
+				StoreColumnNames:  d.Storing.ToStrings(),
+				Version:           indexEncodingVersion,
+				CreatedExplicitly: d.ExplicitIndex,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {

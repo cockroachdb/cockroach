@@ -1204,7 +1204,7 @@ CREATE TABLE public.partition_by_nothing (
    a INT8 NULL,
    b INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-   UNIQUE INDEX partition_by_nothing_b_key (b ASC),
    INDEX partition_by_nothing_b_idx (b ASC),
-   FAMILY fam_0_pk_a_b (pk, a, b)
+   FAMILY fam_0_pk_a_b (pk, a, b),
+   CONSTRAINT partition_by_nothing_b_key UNIQUE (b)
 )

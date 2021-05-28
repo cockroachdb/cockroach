@@ -537,34 +537,34 @@ CREATE TABLE _ (_ INT8 UNIQUE) -- identifiers removed
 parse
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b))
 ----
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- normalized!
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- literals removed
-CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_)) -- identifiers removed
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b)) -- normalized!
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b)) -- fully parenthesized
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b)) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE INDEX _ (_)) -- identifiers removed
 
 parse
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3)
 ----
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > 3) -- normalized!
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE ((c) > (3))) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > _) -- literals removed
-CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) WHERE _ > 3) -- identifiers removed
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) WHERE c > 3) -- normalized!
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) WHERE ((c) > (3))) -- fully parenthesized
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) WHERE c > _) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE INDEX _ (_) WHERE _ > 3) -- identifiers removed
 
 parse
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d))
 ----
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- normalized!
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- literals removed
-CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) INTERLEAVE IN PARENT _ (_)) -- identifiers removed
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d)) -- normalized!
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d)) -- fully parenthesized
+CREATE TABLE a (b INT8, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d)) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE INDEX _ (_) INTERLEAVE IN PARENT _ (_)) -- identifiers removed
 
 parse
 CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 ----
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) -- normalized!
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
-CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE _ (UNIQUE INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
 CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX)
