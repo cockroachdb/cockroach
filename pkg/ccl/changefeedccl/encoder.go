@@ -13,12 +13,8 @@ import (
 	"context"
 	"encoding/binary"
 	gojson "encoding/json"
-	"io/ioutil"
-	"net/url"
-	"path"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -26,16 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
 const (
-	confluentSchemaContentType  = `application/vnd.schemaregistry.v1+json`
 	confluentSubjectSuffixKey   = `-key`
 	confluentSubjectSuffixValue = `-value`
 )
@@ -83,12 +75,14 @@ type Encoder interface {
 	EncodeResolvedTimestamp(context.Context, string, hlc.Timestamp) ([]byte, error)
 }
 
-func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encoder, error) {
+func getEncoder(
+	ctx context.Context, opts map[string]string, targets jobspb.ChangefeedTargets,
+) (Encoder, error) {
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case ``, changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts)
 	case changefeedbase.OptFormatAvro:
-		return newConfluentAvroEncoder(opts, targets)
+		return newConfluentAvroEncoder(ctx, opts, targets)
 	case changefeedbase.OptFormatNative:
 		return &nativeEncoder{}, nil
 	default:
@@ -274,7 +268,7 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
 type confluentAvroEncoder struct {
-	registryURL                        string
+	schemaRegistry                     schemaRegistry
 	schemaPrefix                       string
 	updatedField, beforeField, keyOnly bool
 	targets                            jobspb.ChangefeedTargets
@@ -282,8 +276,6 @@ type confluentAvroEncoder struct {
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
 	resolvedCache map[string]confluentRegisteredEnvelopeSchema
-
-	httpClient *httputil.Client
 }
 
 type tableIDAndVersion uint64
@@ -306,27 +298,12 @@ type confluentRegisteredEnvelopeSchema struct {
 var _ Encoder = &confluentAvroEncoder{}
 
 func newConfluentAvroEncoder(
-	opts map[string]string, targets jobspb.ChangefeedTargets,
+	ctx context.Context, opts map[string]string, targets jobspb.ChangefeedTargets,
 ) (*confluentAvroEncoder, error) {
-	e := &confluentAvroEncoder{registryURL: opts[changefeedbase.OptConfluentSchemaRegistry]}
-
-	err := e.setupHTTPClient()
-	if err != nil {
-		return nil, err
+	e := &confluentAvroEncoder{
+		schemaPrefix: opts[changefeedbase.OptAvroSchemaPrefix],
+		targets:      targets,
 	}
-
-	regURL, err := url.Parse(e.registryURL)
-	if err != nil {
-		return nil, err
-	}
-	// remove query param to ensure compatibility with schema registry implementation
-	query := regURL.Query()
-	query.Del(changefeedbase.RegistryParamCACert)
-	regURL.RawQuery = query.Encode()
-	e.registryURL = regURL.String()
-
-	e.schemaPrefix = opts[changefeedbase.OptAvroSchemaPrefix]
-	e.targets = targets
 
 	switch opts[changefeedbase.OptEnvelope] {
 	case string(changefeedbase.OptEnvelopeKeyOnly):
@@ -351,49 +328,25 @@ func newConfluentAvroEncoder(
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-
-	if len(e.registryURL) == 0 {
+	if len(opts[changefeedbase.OptConfluentSchemaRegistry]) == 0 {
 		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
 			changefeedbase.OptConfluentSchemaRegistry, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
+
+	reg, err := newConfluentSchemaRegistry(opts[changefeedbase.OptConfluentSchemaRegistry])
+	if err != nil {
+		return nil, err
+	}
+	e.schemaRegistry = reg
+
+	if err := reg.Ping(ctx); err != nil {
+		return nil, errors.Wrap(err, "schema registry unavailable")
+	}
+
 	e.keyCache = make(map[tableIDAndVersion]confluentRegisteredKeySchema)
 	e.valueCache = make(map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema)
 	e.resolvedCache = make(map[string]confluentRegisteredEnvelopeSchema)
 	return e, nil
-}
-
-// Setup the httputil.Client to use when dialing Confluent schema registry. If `ca_cert`
-// is set as a query param in the registry URL, client should trust the corresponding
-// cert while dialing. Otherwise, use the DefaultClient.
-func (e *confluentAvroEncoder) setupHTTPClient() error {
-	regURL, err := url.Parse(e.registryURL)
-	if err != nil {
-		return errors.Wrapf(err, "failed parsing registry url:% s", e.registryURL)
-	}
-	params := regURL.Query()
-
-	var caCert []byte
-
-	if caCertString := params.Get(changefeedbase.RegistryParamCACert); caCertString != "" {
-		err := decodeBase64FromString(caCertString, &caCert)
-		if err != nil {
-			return errors.Wrapf(err, "param %s must be base 64 encoded", changefeedbase.RegistryParamCACert)
-		}
-	}
-
-	if caCert != nil {
-		var err error
-		e.httpClient, err = newClientFromTLSKeyPair(caCert)
-		if regURL.Scheme == "http" {
-			log.Warningf(context.Background(), "CA certificate provided but schema registry %s uses HTTP", e.registryURL)
-		}
-		if err != nil {
-			return err
-		}
-	} else {
-		e.httpClient = httputil.DefaultClient
-	}
-	return nil
 }
 
 // Get the raw SQL-formatted string for a table name
@@ -542,65 +495,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 func (e *confluentAvroEncoder) register(
 	ctx context.Context, schema *avroRecord, subject string,
 ) (int32, error) {
-	type confluentSchemaVersionRequest struct {
-		Schema string `json:"schema"`
-	}
-	type confluentSchemaVersionResponse struct {
-		ID int32 `json:"id"`
-	}
-
-	url, err := url.Parse(e.registryURL)
-	if err != nil {
-		return 0, err
-	}
-	url.Path = path.Join(url.EscapedPath(), `subjects`, subject, `versions`)
-
-	schemaStr := schema.codec.Schema()
-	if log.V(1) {
-		log.Infof(ctx, "registering avro schema %s %s", url, schemaStr)
-	}
-
-	req := confluentSchemaVersionRequest{Schema: schemaStr}
-	var buf bytes.Buffer
-	if err := gojson.NewEncoder(&buf).Encode(req); err != nil {
-		return 0, err
-	}
-
-	var id int32
-
-	// Since network services are often a source of flakes, add a few retries here
-	// before we give up and return an error that will bubble up and tear down the
-	// entire changefeed, though that error is marked as retryable so that the job
-	// itself can attempt to start the changefeed again. TODO(dt): If the registry
-	// is down or constantly returning errors, we can't make progress. Continuing
-	// to indicate that we're "running" in this case can be misleading, as we
-	// really aren't anymore. Right now the MO in CDC is try and try again
-	// forever, so doing so here is consistent with the behavior elsewhere, but we
-	// should revisit this more broadly as this pattern can easily mask real,
-	// actionable issues in the operator's environment that which they might be
-	// able to resolve if we made them visible in a failure instead.
-	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), 3, func() error {
-		resp, err := e.httpClient.Post(ctx, url.String(), confluentSchemaContentType, &buf)
-		if err != nil {
-			return errors.Wrap(err, "contacting confluent schema registry")
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			body, _ := ioutil.ReadAll(resp.Body)
-			return errors.Errorf(`registering schema to %s %s: %s`, url.String(), resp.Status, body)
-		}
-		var res confluentSchemaVersionResponse
-		if err := gojson.NewDecoder(resp.Body).Decode(&res); err != nil {
-			return errors.Wrap(err, "decoding confluent schema registry reply")
-		}
-		id = res.ID
-		return nil
-	}); err != nil {
-		log.Warningf(ctx, "%+v", err)
-		return 0, MarkRetryableError(err)
-	}
-
-	return id, nil
+	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.codec.Schema())
 }
 
 // nativeEncoder only implements EncodeResolvedTimestamp.
