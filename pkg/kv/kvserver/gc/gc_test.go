@@ -132,15 +132,86 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	fakeGCer := makeFakeGCer()
 
 	// Test GC desired behavior.
-	info, err := Run(ctx, &desc, snap, nowTs, nowTs, intentLongThreshold, policy, &fakeGCer, fakeGCer.resolveIntents,
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, policy, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
 
-	info, err = Run(ctx, &desc, snap, nowTs, nowTs, intentShortThreshold, policy, &fakeGCer, fakeGCer.resolveIntents,
+	info, err = Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentShortThreshold}, policy, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,
 		"Expected 1 intents considered by GC with short threshold")
+}
+
+func TestIntentCleanupBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	intentThreshold := 2 * time.Hour
+	now := 3 * intentThreshold
+	intentTs := now - intentThreshold*2
+
+	// Prepare test intents in MVCC.
+	txnPrefixes := []byte{'a', 'b', 'c'}
+	objectKeys := []byte{'a', 'b', 'c', 'd', 'e'}
+	value := roachpb.Value{RawBytes: []byte("0123456789")}
+	intentHlc := hlc.Timestamp{
+		WallTime: intentTs.Nanoseconds(),
+	}
+	for _, prefix := range txnPrefixes {
+		key := []byte{prefix, objectKeys[0]}
+		txn := roachpb.MakeTransaction("txn", key, roachpb.NormalUserPriority, intentHlc, 1000)
+		for _, suffix := range objectKeys {
+			key := []byte{prefix, suffix}
+			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, intentHlc, value, &txn))
+		}
+		require.NoError(t, eng.Flush())
+	}
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey([]byte{txnPrefixes[0], objectKeys[0]}),
+		EndKey:   roachpb.RKey("z"),
+	}
+	policy := zonepb.GCPolicy{TTLSeconds: 1}
+	snap := eng.NewSnapshot()
+	nowTs := hlc.Timestamp{
+		WallTime: now.Nanoseconds(),
+	}
+
+	// Base GCr will cleanup all intents in one go and its result is used as a baseline
+	// to compare batched runs for checking completeness.
+	baseGCer := makeFakeGCer()
+	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, policy, &baseGCer, baseGCer.resolveIntents,
+		baseGCer.resolveIntentsAsync)
+	if err != nil {
+		t.Fatal("Can't prepare test fixture. Non batched GC run fails.")
+	}
+	baseGCer.normalize()
+
+	for _, spec := range []struct {
+		name      string
+		batchSize int64
+	}{
+		{"transaction split", 7},
+		{"exactly fits in batch", 15},
+		{"exactly on txn boundary", 10},
+		{"exactly on txn boundary", 5},
+	} {
+		t.Run(spec.name, func(t *testing.T) {
+			fakeGCer := makeFakeGCer()
+			info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentCleanupBatch: spec.batchSize}, policy, &fakeGCer, fakeGCer.resolveIntents,
+				fakeGCer.resolveIntentsAsync)
+			require.NoError(t, err, "GC Run shouldn't fail")
+			for _, size := range fakeGCer.batchSizes {
+				require.LessOrEqual(t, int64(size), spec.batchSize, "Batch size")
+			}
+			require.Equal(t, 15, info.ResolveTotal)
+			fakeGCer.normalize()
+			require.EqualValues(t, baseGCer, fakeGCer, "GC result with batching")
+		})
+	}
 }

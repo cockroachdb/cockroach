@@ -12,10 +12,6 @@ package gc
 
 import (
 	"context"
-	"sort"
-	"testing"
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -28,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"sort"
+	"testing"
 )
 
 // runGCOld is an older implementation of Run. It is used for benchmarking and
@@ -45,7 +43,7 @@ func runGCOld(
 	snap storage.Reader,
 	now hlc.Timestamp,
 	_ hlc.Timestamp, // exists to make signature match RunGC
-	intentAgeThreshold time.Duration,
+	options RunOptions,
 	policy zonepb.GCPolicy,
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
@@ -56,7 +54,7 @@ func runGCOld(
 	defer iter.Close()
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
+	intentExp := now.Add(-options.IntentAgeThreshold.Nanoseconds(), 0)
 	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
 
 	gc := MakeGarbageCollector(now, policy)

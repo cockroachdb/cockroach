@@ -463,8 +463,10 @@ func (gcq *gcQueue) process(
 	defer snap.Close()
 
 	intentAgeThreshold := gc.IntentAgeThreshold.Get(&repl.store.ClusterSettings().SV)
+	intentBatchSize := gc.IntentCleanupBatchSize.Get(&repl.store.ClusterSettings().SV)
 
-	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold, intentAgeThreshold, *zone.GC,
+	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold,
+		gc.RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentCleanupBatch: intentBatchSize}, *zone.GC,
 		&replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.
