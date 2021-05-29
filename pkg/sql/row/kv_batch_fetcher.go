@@ -525,13 +525,16 @@ func (f *txnKVFetcher) nextBatch(
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, origSpan roachpb.Span, err error) {
 	if len(f.remainingBatches) > 0 {
 		batch := f.remainingBatches[0]
+		f.remainingBatches[0] = nil
 		f.remainingBatches = f.remainingBatches[1:]
 		return true, nil, batch, f.origSpan, nil
 	}
 	for len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
+		f.responses[0] = roachpb.ResponseUnion{}
 		f.responses = f.responses[1:]
 		origSpan := f.requestSpans[0]
+		f.requestSpans[0] = roachpb.Span{}
 		f.requestSpans = f.requestSpans[1:]
 		var batchResp []byte
 		switch t := reply.(type) {
@@ -539,12 +542,16 @@ func (f *txnKVFetcher) nextBatch(
 			if len(t.BatchResponses) > 0 {
 				batchResp = t.BatchResponses[0]
 				f.remainingBatches = t.BatchResponses[1:]
+				t.BatchResponses[0] = nil
+				t.BatchResponses = nil
 			}
 			return true, t.Rows, batchResp, origSpan, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				batchResp = t.BatchResponses[0]
 				f.remainingBatches = t.BatchResponses[1:]
+				t.BatchResponses[0] = nil
+				t.BatchResponses = nil
 			}
 			return true, t.Rows, batchResp, origSpan, nil
 		case *roachpb.GetResponse:
@@ -571,5 +578,7 @@ func (f *txnKVFetcher) nextBatch(
 
 // close releases the resources of this txnKVFetcher.
 func (f *txnKVFetcher) close(ctx context.Context) {
+	f.responses = nil
+	f.remainingBatches = nil
 	f.acc.Close(ctx)
 }
