@@ -1331,8 +1331,25 @@ func (ot *OptTester) OptSteps() (string, error) {
 //
 // TODO(radu): currently, we only show normalization steps on this page.
 func (ot *OptTester) OptStepsWeb() (string, error) {
-	ot.builder.Reset()
+	normDiffStr, err := ot.optStepsNormDiff()
+	if err != nil {
+		return "", err
+	}
 
+	exploreDiffStr, err := ot.optStepsExploreDiff()
+	if err != nil {
+		return "", err
+	}
+	url, err := ot.encodeOptstepsURL(normDiffStr, exploreDiffStr)
+	if err != nil {
+		return "", err
+	}
+	return url.String(), nil
+}
+
+// optStepsNormDiff produces the normalization steps as a diff where each step
+// is a pair of "files" (showing the before and after plans).
+func (ot *OptTester) optStepsNormDiff() (string, error) {
 	// Store all the normalization steps.
 	type step struct {
 		Name string
@@ -1357,9 +1374,7 @@ func (ot *OptTester) OptStepsWeb() (string, error) {
 		normSteps = append(normSteps, step{Name: name, Expr: expr})
 	}
 
-	// Produce a diff for each step, as if there was a pair of files for each step
-	// (showing the before and after plans).
-	var normDiff bytes.Buffer
+	var buf bytes.Buffer
 	for i, s := range normSteps {
 		before := ""
 		if i > 0 {
@@ -1378,23 +1393,78 @@ func (ot *OptTester) OptStepsWeb() (string, error) {
 			return "", err
 		}
 		diffStr = strings.TrimRight(diffStr, " \r\t\n")
-		normDiff.WriteString(diffStr)
-		normDiff.WriteString("\n")
+		buf.WriteString(diffStr)
+		buf.WriteString("\n")
 	}
-	url, err := ot.encodeOptstepsURL(normDiff.String())
-	if err != nil {
-		return "", err
-	}
-	return url.String(), nil
+	return buf.String(), nil
 }
 
-func (ot *OptTester) encodeOptstepsURL(normDiff string) (url.URL, error) {
+// optStepsExploreDiff produces the exploration steps as a diff where each new
+// expression is shown as a pair of "files" (showing the before and after
+// expression). Note that normalization rules that are applied as part of
+// creating the new expression are not shown separately.
+func (ot *OptTester) optStepsExploreDiff() (string, error) {
+	et := newExploreTracer(ot)
+
+	var buf bytes.Buffer
+
+	for step := 0; ; step++ {
+		if step > 2000 {
+			ot.output("step limit reached\n")
+			break
+		}
+		err := et.Next()
+		if err != nil {
+			return "", err
+		}
+		if et.Done() {
+			break
+		}
+
+		if ot.Flags.ExploreTraceRule != opt.InvalidRuleName &&
+			et.LastRuleName() != ot.Flags.ExploreTraceRule {
+			continue
+		}
+		newNodes := et.NewExprs()
+		before := et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat)
+
+		for i := range newNodes {
+			name := et.LastRuleName().String()
+			after := memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog)
+
+			diff := difflib.UnifiedDiff{
+				A:        difflib.SplitLines(before),
+				FromFile: fmt.Sprintf("a/%s", name),
+				B:        difflib.SplitLines(after),
+				ToFile:   fmt.Sprintf("b/%s", name),
+				Context:  10000,
+			}
+			diffStr, err := difflib.GetUnifiedDiffString(diff)
+			if err != nil {
+				return "", err
+			}
+			diffStr = strings.TrimRight(diffStr, " \r\t\n")
+			if diffStr == "" {
+				// It's possible that the "new" expression is identical to the original
+				// one; ignore it in that case.
+				continue
+			}
+			buf.WriteString(diffStr)
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String(), nil
+}
+
+func (ot *OptTester) encodeOptstepsURL(normDiff, exploreDiff string) (url.URL, error) {
 	output := struct {
-		SQL      string
-		Normdiff string
+		SQL         string
+		NormDiff    string
+		ExploreDiff string
 	}{
-		SQL:      ot.sql,
-		Normdiff: normDiff,
+		SQL:         ot.sql,
+		NormDiff:    normDiff,
+		ExploreDiff: exploreDiff,
 	}
 
 	var buf bytes.Buffer
