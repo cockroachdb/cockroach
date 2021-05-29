@@ -2067,9 +2067,19 @@ alter_table_cmd:
   // ALTER TABLE <name> ADD CONSTRAINT ...
 | ADD table_constraint opt_validate_behavior
   {
+    def := $2.constraintDef()
+    valBehavior := $3.validationBehavior()
+    if u, ok := def.(*tree.UniqueConstraintTableDef); ok &&
+        valBehavior == tree.ValidationSkip && !u.WithoutIndex {
+      typ := "PRIMARY KEY"
+      if !u.PrimaryKey {
+        typ = "UNIQUE"
+      }
+      return purposelyUnimplemented(sqllex, "table constraint", typ + " constraints cannot be marked NOT VALID")
+    }
     $$.val = &tree.AlterTableAddConstraint{
-      ConstraintDef: $2.constraintDef(),
-      ValidationBehavior: $3.validationBehavior(),
+      ConstraintDef: def,
+      ValidationBehavior: valBehavior,
     }
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
@@ -6196,17 +6206,18 @@ table_elem:
 | family_def
 | table_constraint opt_validate_behavior
   {
-    def := $1.constraintDef()
-    valBehavior := $2.validationBehavior()
-    if u, ok := def.(*tree.UniqueConstraintTableDef); ok && valBehavior == tree.ValidationSkip {
-      typ := "PRIMARY KEY"
-      if !u.PrimaryKey {
-        typ = "UNIQUE"
+      def := $1.constraintDef()
+      valBehavior := $2.validationBehavior()
+      if u, ok := def.(*tree.UniqueConstraintTableDef); ok &&
+        valBehavior == tree.ValidationSkip && !u.WithoutIndex {
+        typ := "PRIMARY KEY"
+        if !u.PrimaryKey {
+          typ = "UNIQUE"
+        }
+        return purposelyUnimplemented(sqllex, "table constraint", typ + " constraints cannot be marked NOT VALID")
       }
-      return purposelyUnimplemented(sqllex, "table constraint", typ + " constraints cannot be marked NOT VALID")
+      $$.val = def
     }
-    $$.val = def
-  }
 | LIKE table_name like_table_option_list
   {
     $$.val = &tree.LikeTableDef{

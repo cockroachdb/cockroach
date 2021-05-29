@@ -442,3 +442,26 @@ CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_transaction_statistics);
 
 query error crdb_internal.node_txn_stats cannot be used in this context
 CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);
+
+
+# Test that it is illegal to mark a PRIMARY KEY or UNIQUE clause as NOT VALID,
+# but is legal to mark a UNIQUE WITHOUT INDEX clause as NOT VALID.
+subtest unique_not_valid
+
+statement ok
+DROP TABLE IF EXISTS t CASCADE;
+
+statement error pgcode 42601 UNIQUE constraints cannot be marked NOT VALID
+CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE (j) NOT VALID)
+
+statement error pgcode 42601 PRIMARY KEY constraints cannot be marked NOT VALID
+CREATE TABLE t (i INT, j INT, PRIMARY KEY (i, j) NOT VALID)
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE WITHOUT INDEX (j) NOT VALID);
+
+statement error pgcode 23505 duplicate key value violates unique constraint "unique_j"
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement ok
+DROP TABLE t;
