@@ -582,7 +582,7 @@ SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=
 statement ok
 CREATE TABLE tab4 (
   pk INT8 PRIMARY KEY, col0 INT8, col1 FLOAT8, col2 STRING, col3 INT8, col4 FLOAT8, col5 STRING,
-  UNIQUE (col3 DESC, col4 DESC)
+  UNIQUE INDEX (col3 DESC, col4 DESC)
 )
 
 query I

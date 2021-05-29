@@ -1297,13 +1297,98 @@ CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- f
 CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE WITHOUT INDEX (_, _)) -- identifiers removed
 
-parse
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
+error
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) INTERLEAVE IN PARENT foo (b))
 ----
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- fully parenthesized
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- literals removed
-CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE (_, _) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
+at or near ")": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) INTERLEAVE IN PARENT foo (b))
+                                                                                       ^
+HINT: UNIQUE constraint cannot contain a INTERLEAVE clause, consider using UNIQUE INDEX
+
+error
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) STORING (b))
+----
+at or near ")": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) STORING (b))
+                                                                     ^
+HINT: UNIQUE constraint cannot contain a STORING clause, consider using UNIQUE INDEX
+
+error
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) PARTITION BY LIST (b) (
+  PARTITION p1 VALUES IN (1)
+))
+----
+at or near ")": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) PARTITION BY LIST (b) (
+  PARTITION p1 VALUES IN (1)
+))
+^
+HINT: UNIQUE constraint cannot contain a PARTITION BY clause, consider using UNIQUE INDEX
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b DESC, c))
+----
+at or near ",": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b DESC, c))
+                                                                           ^
+HINT: UNIQUE constraint column b DESC contains illegal direction specification, consider using UNIQUE INDEX
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b NULLS FIRST, c))
+----
+at or near "first": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b NULLS FIRST, c))
+                                                                             ^
+HINT: UNIQUE constraint column b NULLS FIRST contains illegal nulls order specification, consider using UNIQUE INDEX
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b DESC, c))
+----
+at or near ",": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b DESC, c))
+                                                             ^
+HINT: UNIQUE constraint column b DESC contains illegal direction specification, consider using UNIQUE INDEX
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b NULLS FIRST, c))
+----
+at or near "first": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b NULLS FIRST, c))
+                                                               ^
+HINT: UNIQUE constraint column b NULLS FIRST contains illegal nulls order specification, consider using UNIQUE INDEX
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) WHERE b > 1)
+----
+at or near ")": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) WHERE b > 1)
+                                                                        ^
+HINT: UNIQUE constraints with predicates are not support, use UNIQUE INDEX instead
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) WHERE v > 1)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) WHERE v > 1)
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) WHERE ((v) > (1))) -- fully parenthesized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) WHERE v > _) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE WITHOUT INDEX (_, _) WHERE _ > 1) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b INT8, c STRING, UNIQUE INDEX d (b, c) INTERLEAVE IN PARENT d (e, f))
+----
+CREATE TABLE a (b INT8, c STRING, UNIQUE INDEX d (b, c) INTERLEAVE IN PARENT d (e, f))
+CREATE TABLE a (b INT8, c STRING, UNIQUE INDEX d (b, c) INTERLEAVE IN PARENT d (e, f)) -- fully parenthesized
+CREATE TABLE a (b INT8, c STRING, UNIQUE INDEX d (b, c) INTERLEAVE IN PARENT d (e, f)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, UNIQUE INDEX _ (_, _) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
 
 error
 CREATE TABLE test (
@@ -1326,12 +1411,12 @@ CREATE TABLE a (b INT8, UNIQUE (b)) -- literals removed
 CREATE TABLE _ (_ INT8, UNIQUE (_)) -- identifiers removed
 
 parse
-CREATE TABLE a (b INT8, UNIQUE (b) STORING (c))
+CREATE TABLE a (b INT8, UNIQUE INDEX (b) STORING (c))
 ----
-CREATE TABLE a (b INT8, UNIQUE (b) STORING (c))
-CREATE TABLE a (b INT8, UNIQUE (b) STORING (c)) -- fully parenthesized
-CREATE TABLE a (b INT8, UNIQUE (b) STORING (c)) -- literals removed
-CREATE TABLE _ (_ INT8, UNIQUE (_) STORING (_)) -- identifiers removed
+CREATE TABLE a (b INT8, UNIQUE INDEX (b) STORING (c))
+CREATE TABLE a (b INT8, UNIQUE INDEX (b) STORING (c)) -- fully parenthesized
+CREATE TABLE a (b INT8, UNIQUE INDEX (b) STORING (c)) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE INDEX (_) STORING (_)) -- identifiers removed
 
 parse
 CREATE TABLE a (b INT8, INDEX (b))
@@ -1845,12 +1930,12 @@ CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN 
 CREATE TABLE _ (INVERTED INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 ----
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
-CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
-CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthesized
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE _ (UNIQUE INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
 parse
 CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))

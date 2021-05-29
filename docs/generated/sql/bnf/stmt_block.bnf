@@ -2425,7 +2425,7 @@ constraint_name ::=
 
 constraint_elem ::=
 	'CHECK' '(' a_expr ')'
-	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_where_clause
+	| 'UNIQUE' '(' unique_constraint_params ')' opt_unique_constraint_storing opt_unique_constraint_interleave opt_unique_constraint_partition_by_index opt_where_clause
 	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded opt_interleave
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 
@@ -2718,6 +2718,18 @@ col_qualification ::=
 	| 'CREATE' 'FAMILY'
 	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
 
+unique_constraint_params ::=
+	( unique_constraint_elem ) ( ( ',' unique_constraint_elem ) )*
+
+opt_unique_constraint_storing ::=
+	opt_storing
+
+opt_unique_constraint_interleave ::=
+	opt_interleave
+
+opt_unique_constraint_partition_by_index ::=
+	opt_partition_by_index
+
 key_match ::=
 	'MATCH' 'SIMPLE'
 	| 'MATCH' 'FULL'
@@ -2977,6 +2989,9 @@ col_qualification_elem ::=
 
 family_name ::=
 	name
+
+unique_constraint_elem ::=
+	index_elem
 
 reference_on_update ::=
 	'ON' 'UPDATE' reference_action

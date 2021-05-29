@@ -1528,7 +1528,7 @@ upsert uniq_fk_child
 exec-ddl
 CREATE TABLE t (
   i INT,
-  CONSTRAINT i1 UNIQUE (i) WHERE i > 0,
+  UNIQUE INDEX i1 (i) WHERE i > 0,
   CONSTRAINT i2 UNIQUE WITHOUT INDEX(i)
 )
 ----

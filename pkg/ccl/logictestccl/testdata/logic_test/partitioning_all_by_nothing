@@ -7,7 +7,7 @@ statement error cannot define PARTITION BY on an unique constraint if the table 
 CREATE TABLE partition_all_by_nothing_with_partition (
   pk INT PRIMARY KEY,
   a INT,
-  UNIQUE(b) PARTITION BY NOTHING,
+  UNIQUE INDEX(b) PARTITION BY NOTHING,
   b INT,
   INDEX(b) PARTITION BY LIST(b) (PARTITION one VALUES IN (1)),
   FAMILY (pk, a, b)
@@ -17,7 +17,7 @@ statement ok
 CREATE TABLE partition_all_by_nothing (
   pk INT PRIMARY KEY,
   a INT,
-  UNIQUE(b),
+  UNIQUE INDEX(b),
   b INT,
   INDEX(b),
   c INT UNIQUE,

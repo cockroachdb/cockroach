@@ -25,9 +25,9 @@ CREATE TABLE Cards
   ),
   CONSTRAINT CardsNameSetNumber UNIQUE
   (
-    name ASC,
-    setname ASC,
-    number ASC
+    name,
+    setname,
+    number
   )
 )
 ----

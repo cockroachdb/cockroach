@@ -12,7 +12,7 @@ CREATE TABLE tab (
   b int,
   v int AS (a+b) VIRTUAL,
   INDEX (v),
-  UNIQUE (a,b) WHERE (v > 0)
+  UNIQUE INDEX (a,b) WHERE (v > 0)
 );
 INSERT INTO tab VALUES (1,1,1), (2,2,2), (3,3,3)
 ----

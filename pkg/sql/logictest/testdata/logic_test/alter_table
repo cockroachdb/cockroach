@@ -1847,6 +1847,16 @@ CREATE TABLE public.t (
    FAMILY fam_0_i_j (i, j)
 )
 
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+   i INT8 NOT NULL,
+   j INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (i ASC),
+   FAMILY fam_0_i_j (i, j)
+)
+
 statement error pgcode 42601 UNIQUE constraints cannot be marked NOT VALID
 ALTER TABLE t ADD CONSTRAINT u_not_valid UNIQUE (i, j) NOT VALID;
 

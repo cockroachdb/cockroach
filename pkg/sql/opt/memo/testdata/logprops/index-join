@@ -4,7 +4,7 @@ CREATE TABLE a (
   y INT,
   s STRING,
   d DECIMAL NOT NULL,
-  UNIQUE (s DESC, d),
+  UNIQUE INDEX (s DESC, d),
   UNIQUE (y, s)
 )
 ----

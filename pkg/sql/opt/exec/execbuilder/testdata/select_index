@@ -767,7 +767,7 @@ vectorized: true
 # and this information is subsequently used during index selection
 # and span generation. #13882
 query TTBITTBB
-CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
+CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE INDEX(c DESC, b ASC)); SHOW INDEX FROM abz
 ----
 abz  abz_c_b_key  false  1  c  DESC  false  false
 abz  abz_c_b_key  false  2  b  ASC   false  false

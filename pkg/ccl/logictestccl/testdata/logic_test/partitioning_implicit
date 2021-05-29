@@ -410,7 +410,7 @@ CREATE TABLE public.t (
   pk int PRIMARY KEY,
   partition_by int,
   a int,
-  UNIQUE(a) PARTITION BY LIST (partition_by) (
+  UNIQUE INDEX (a) PARTITION BY LIST (partition_by) (
     PARTITION one VALUES IN (1)
   )
 ) PARTITION ALL BY LIST (partition_by) (
@@ -625,7 +625,7 @@ CREATE TABLE public.t (
   d int,
   INDEX (a),
   UNIQUE (b),
-  UNIQUE (c) WHERE d > 100,
+  UNIQUE INDEX (c) WHERE d > 100,
   INDEX (partition_by, c),
   FAMILY (pk, pk2, partition_by, a, b, c, d)
 ) PARTITION ALL BY RANGE (partition_by) (

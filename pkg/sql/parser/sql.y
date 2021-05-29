@@ -51,8 +51,8 @@ func unimplemented(sqllex sqlLexer, feature string) int {
     return 1
 }
 
-func purposelyUnimplemented(sqllex sqlLexer, feature string, reason string) int {
-    sqllex.(*lexer).PurposelyUnimplemented(feature, reason)
+func purposelyUnimplemented(sqllex sqlLexer, feature string, reasonFormat string, args ...interface{}) int {
+    sqllex.(*lexer).PurposelyUnimplemented(feature, reasonFormat, args...)
     return 1
 }
 
@@ -1095,7 +1095,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns
 %type <tree.OrderBy> sort_clause single_sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
-%type <tree.IndexElemList> index_params create_as_params
+%type <tree.IndexElemList> index_params create_as_params unique_constraint_params
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <tree.From> from_clause
@@ -1179,7 +1179,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.AliasClause> alias_clause opt_alias_clause
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
-%type <tree.IndexElem> index_elem index_elem_options create_as_param
+%type <tree.IndexElem> index_elem index_elem_options create_as_param unique_constraint_elem
 %type <tree.TableExpr> table_ref numeric_table_ref func_table
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
@@ -6632,17 +6632,24 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE opt_without_index '(' index_params ')'
-    opt_storing opt_interleave opt_partition_by_index opt_deferrable opt_where_clause
+| UNIQUE opt_without_index '(' unique_constraint_params ')'
+    opt_unique_constraint_storing
+    opt_unique_constraint_interleave
+    opt_unique_constraint_partition_by_index
+    opt_deferrable
+    opt_where_clause
   {
+    withoutIndex := $2.bool()
+    predicate := $10.expr()
+    if !withoutIndex && predicate != nil {
+      return purposelyUnimplemented(sqllex, "partial unique constraint",
+        "UNIQUE constraints with predicates are not support, use UNIQUE INDEX instead")
+    }
     $$.val = &tree.UniqueConstraintTableDef{
-      WithoutIndex: $2.bool(),
+      WithoutIndex: withoutIndex,
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
-        Storing: $6.nameList(),
-        Interleave: $7.interleave(),
-        PartitionByIndex: $8.partitionByIndex(),
-        Predicate: $10.expr(),
+        Predicate: predicate,
       },
     }
   }
@@ -7427,6 +7434,60 @@ opt_unique:
 | /* EMPTY */
   {
     $$.val = false
+  }
+
+opt_unique_constraint_storing:
+  opt_storing
+  {
+    if $1.nameList() != nil {
+      return purposelyUnimplemented(sqllex, "unique constraint storing",
+        "UNIQUE constraint cannot contain a STORING clause, consider using UNIQUE INDEX")
+    }
+  }
+
+opt_unique_constraint_interleave:
+  opt_interleave
+  {
+    if $1.interleave() != nil {
+      return purposelyUnimplemented(sqllex, "unique constraint interleave",
+        "UNIQUE constraint cannot contain a INTERLEAVE clause, consider using UNIQUE INDEX")
+    }
+  }
+
+opt_unique_constraint_partition_by_index:
+  opt_partition_by_index
+  {
+    if $1.partitionByIndex() != nil {
+      return purposelyUnimplemented(sqllex, "unique constraint partitioning",
+        "UNIQUE constraint cannot contain a PARTITION BY clause, consider using UNIQUE INDEX")
+    }
+  }
+
+unique_constraint_params:
+  unique_constraint_elem
+  {
+    $$.val = tree.IndexElemList{$1.idxElem()}
+  }
+  | unique_constraint_params ',' unique_constraint_elem
+  {
+    $$.val = append($1.idxElems(), $3.idxElem())
+  }
+
+unique_constraint_elem:
+  index_elem
+  {
+    c := $1.idxElem()
+    if c.Direction != tree.DefaultDirection {
+      return purposelyUnimplemented(sqllex, "unique constraint element index options",
+        "UNIQUE constraint column %s contains illegal direction specification, "+
+        "consider using UNIQUE INDEX", tree.AsString(&c))
+    }
+    if c.NullsOrder != tree.DefaultNullsOrder {
+      return purposelyUnimplemented(sqllex, "unique constraint element index options",
+        "UNIQUE constraint column %s contains illegal nulls order specification, "+
+        "consider using UNIQUE INDEX", tree.AsString(&c))
+    }
+    $$ = $1
   }
 
 index_params:

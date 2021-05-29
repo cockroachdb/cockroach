@@ -92,7 +92,7 @@ statement error multi-region tables with an UNIQUE constraint containing PARTITI
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
-  UNIQUE (a) PARTITION BY LIST (a) (PARTITION one VALUES IN ((1)))
+  UNIQUE INDEX (a) PARTITION BY LIST (a) (PARTITION one VALUES IN ((1)))
 )
 LOCALITY REGIONAL BY ROW
 
@@ -100,7 +100,7 @@ statement error multi-region tables with an UNIQUE constraint containing PARTITI
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
-  UNIQUE (a) PARTITION BY NOTHING
+  UNIQUE INDEX (a) PARTITION BY NOTHING
 )
 LOCALITY REGIONAL BY ROW
 

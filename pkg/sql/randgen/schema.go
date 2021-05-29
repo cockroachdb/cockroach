@@ -255,8 +255,15 @@ func RandCreateTableWithInterleave(
 		// be unique.
 		unique := !indexDef.Inverted && rng.Intn(2) == 0
 		if unique {
+			// If it uses any features not supported by a unique constraint, make
+			// it an explicitly created index. Otherwise, flip a coin to decide
+			// whether it's a constraint or an index explicitly.
+			createdExplicitly :=
+				uniqueIndexUsesFeatureNotAvailableToUniqueConstraint(indexDef) ||
+					rng.Intn(2) == 0
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,
+				ExplicitIndex: createdExplicitly,
 			})
 		} else {
 			defs = append(defs, &indexDef)
@@ -277,6 +284,26 @@ func RandCreateTableWithInterleave(
 	// Maybe add some storing columns.
 	res, _ := IndexStoringMutator(rng, []tree.Statement{ret})
 	return res[0].(*tree.CreateTable)
+}
+
+// Unique constraints are not allowed to use a variety of index-only features.
+// It returns true if the index specified any of interleaving, partitioning,
+// sharding, storage params, where predicates, or if any columns specifies
+// a direction or a nulls ordering.
+func uniqueIndexUsesFeatureNotAvailableToUniqueConstraint(indexDef tree.IndexTableDef) bool {
+	if indexDef.Interleave != nil ||
+		indexDef.PartitionByIndex != nil ||
+		indexDef.Predicate != nil ||
+		indexDef.Sharded != nil ||
+		indexDef.StorageParams != nil {
+		return true
+	}
+	for _, c := range indexDef.Columns {
+		if c.Direction != tree.DefaultDirection || c.NullsOrder != tree.DefaultNullsOrder {
+			return true
+		}
+	}
+	return false
 }
 
 // GenerateRandInterestingTable takes a gosql.DB connection and creates

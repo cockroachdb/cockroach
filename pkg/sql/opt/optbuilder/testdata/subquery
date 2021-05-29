@@ -2214,7 +2214,7 @@ group-by
                                     └── count:13 >= 100 [as="?column?":14]
 
 exec-ddl
-CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z));
+CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE INDEX (s DESC, z));
 ----
 
 exec-ddl
