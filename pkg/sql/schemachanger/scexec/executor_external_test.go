@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -220,7 +219,6 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var id descpb.ID
 		var ts []*scpb.Node
 		var targetSlice []*scpb.Target
 		require.NoError(t, ti.txn(ctx, func(
@@ -229,7 +227,6 @@ func TestSchemaChanger(t *testing.T) {
 			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
-			id = fooTable.GetID()
 
 			// Corresponds to:
 			//
@@ -349,8 +346,6 @@ func TestSchemaChanger(t *testing.T) {
 				State:  scpb.State_ABSENT,
 			},
 		}, after)
-		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
-		require.NoError(t, err)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 	t.Run("with builder", func(t *testing.T) {
@@ -359,16 +354,10 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var id descpb.ID
 		var ts []*scpb.Node
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
-			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
-			require.NoError(t, err)
-			id = fooTable.GetID()
-
 			execCfg := ti.tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 			ip, cleanup := sql.NewInternalPlanner(
 				"foo",
@@ -425,8 +414,6 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
-		require.NoError(t, err)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 }

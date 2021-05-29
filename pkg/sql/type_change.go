@@ -593,14 +593,6 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		return err
 	}
 
-	// Finally, make sure all of the leases are updated.
-	if err := WaitToUpdateLeases(ctx, t.execCfg.LeaseManager, t.typeID); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
-		}
-		return err
-	}
-
 	if regionChangeFinalizer != nil {
 		if err := regionChangeFinalizer.waitToUpdateLeases(ctx, t.execCfg.LeaseManager); err != nil {
 			return err

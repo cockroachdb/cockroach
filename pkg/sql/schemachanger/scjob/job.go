@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -109,7 +108,6 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	}
 
 	for i, s := range sc.Stages {
-		var descriptorsWithUpdatedVersions []lease.IDVersion
 		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			jt := badJobTracker{
 				txn:         txn,
@@ -132,7 +130,6 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 					return err
 				}
 			}
-			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				pg := md.Progress.GetNewSchemaChange()
 				pg.States = makeStates(s.After)
@@ -140,15 +137,6 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 				return nil
 			})
 		}); err != nil {
-			return err
-		}
-
-		// Wait for new versions.
-		if err := sql.WaitToUpdateLeasesMultiple(
-			ctx,
-			lm,
-			descriptorsWithUpdatedVersions,
-		); err != nil {
 			return err
 		}
 		err := execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
@@ -160,24 +148,14 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	// If no stages exist, then execute a singe transaction
 	// within this job to allow schema changes again.
 	if len(sc.Stages) == 0 {
-		var descriptorsWithUpdatedVersions []lease.IDVersion
 		err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			err := restoreTableIDs(txn, descriptors)
 			if err != nil {
 				return err
 			}
-			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
 			return nil
 		})
 		if err != nil {
-			return err
-		}
-		// Wait for new versions.
-		if err := sql.WaitToUpdateLeasesMultiple(
-			ctx,
-			lm,
-			descriptorsWithUpdatedVersions,
-		); err != nil {
 			return err
 		}
 		err = execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
