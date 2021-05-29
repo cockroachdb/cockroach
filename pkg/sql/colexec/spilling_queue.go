@@ -261,7 +261,7 @@ func (q *spillingQueue) spilled() bool {
 }
 
 func (q *spillingQueue) close(ctx context.Context) error {
-	if q.closed {
+	if q == nil || q.closed {
 		return nil
 	}
 	if q.diskQueue != nil {
