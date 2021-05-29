@@ -38,9 +38,9 @@ echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 
 # Upgrade cmake.
 trap 'rm -f /tmp/cmake.tgz' EXIT
-curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-3.17.0-Linux-x86_64.tar.gz > /tmp/cmake.tgz
+curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20.3-Linux-x86_64.tar.gz > /tmp/cmake.tgz
 sha256sum -c - <<EOF
-b44685227b9f9be103e305efa2075a8ccf2415807fbcf1fc192da4d36aacc9f5  /tmp/cmake.tgz
+97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6  /tmp/cmake.tgz
 EOF
 sudo tar -C /usr -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 
