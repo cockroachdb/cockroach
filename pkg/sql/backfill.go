@@ -476,15 +476,6 @@ func (sc *SchemaChanger) dropConstraints(
 		return nil, err
 	}
 
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-		return nil, err
-	}
-	for id := range fksByBackrefTable {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
-			return nil, err
-		}
-	}
-
 	log.Info(ctx, "finished dropping constraints")
 	tableDescs := make(map[descpb.ID]catalog.TableDescriptor, len(fksByBackrefTable)+1)
 	if err := sc.txn(ctx, func(
@@ -637,15 +628,6 @@ func (sc *SchemaChanger) addConstraints(
 		return txn.Run(ctx, b)
 	}); err != nil {
 		return err
-	}
-
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-		return err
-	}
-	for id := range fksByBackrefTable {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
-			return err
-		}
 	}
 	log.Info(ctx, "finished adding constraints")
 	return nil
