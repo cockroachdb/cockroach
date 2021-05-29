@@ -153,8 +153,6 @@ func (d *drainHelper) Release() {
 	drainHelperPool.Put(d)
 }
 
-const materializerProcName = "materializer"
-
 var materializerPool = sync.Pool{
 	New: func() interface{} {
 		return &Materializer{}
@@ -232,7 +230,7 @@ func (m *Materializer) OutputTypes() []*types.T {
 
 // Start is part of the execinfra.RowSource interface.
 func (m *Materializer) Start(ctx context.Context) {
-	ctx = m.StartInternal(ctx, materializerProcName)
+	ctx = m.StartInternalNoSpan(ctx)
 	// We can encounter an expected error during Init (e.g. an operator
 	// attempts to allocate a batch, but the memory budget limit has been
 	// reached), so we need to wrap it with a catcher.
