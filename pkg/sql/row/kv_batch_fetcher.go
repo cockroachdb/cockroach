@@ -415,35 +415,42 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
+// popBatch returns the 0th byte slice in a slice of byte slices, as well as
+// the rest of the slice of the byte slices. It nils the pointer to the 0th
+// element before reslicing the outer slice.
+func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
+	batch, remainingBatches = batches[0], batches[1:]
+	batches[0] = nil
+	return batch, remainingBatches
+}
+
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, ok is false.
 // origSpan returns the span that batch was fetched from, and bounds all of the
 // keys returned.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, origSpan roachpb.Span, err error) {
+) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, origSpan roachpb.Span, err error) {
 	if len(f.remainingBatches) > 0 {
-		batch := f.remainingBatches[0]
-		f.remainingBatches = f.remainingBatches[1:]
-		return true, nil, batch, f.origSpan, nil
+		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
+		return true, nil, batchResp, f.origSpan, nil
 	}
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
+		f.responses[0] = roachpb.ResponseUnion{}
 		f.responses = f.responses[1:]
 		origSpan := f.requestSpans[0]
+		f.requestSpans[0] = roachpb.Span{}
 		f.requestSpans = f.requestSpans[1:]
-		var batchResp []byte
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
 			if len(t.BatchResponses) > 0 {
-				batchResp = t.BatchResponses[0]
-				f.remainingBatches = t.BatchResponses[1:]
+				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
 			return true, t.Rows, batchResp, origSpan, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
-				batchResp = t.BatchResponses[0]
-				f.remainingBatches = t.BatchResponses[1:]
+				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
 			return true, t.Rows, batchResp, origSpan, nil
 		}
@@ -459,5 +466,7 @@ func (f *txnKVFetcher) nextBatch(
 
 // close releases the resources of this txnKVFetcher.
 func (f *txnKVFetcher) close(ctx context.Context) {
+	f.responses = nil
+	f.remainingBatches = nil
 	f.acc.Close(ctx)
 }
