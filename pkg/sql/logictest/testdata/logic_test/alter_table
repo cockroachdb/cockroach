@@ -1812,3 +1812,19 @@ CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
 
 statement error pgcode 42P07 duplicate index name: \"idx\"
 ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
+
+# Regression test for a bug which occurred when adding a foreign key
+# constraint which is marked NOT VALID and is self-referencing.
+subtest self_reference_fk_not_valid
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES t(i) NOT VALID;
+
+# Demonstrate that the constraint is enforced.
+statement error pgcode 23503 insert on table "t" violates foreign key constraint "fk"
+INSERT INTO t VALUES (1, 0)
+
+statement ok
+DROP TABLE t;
