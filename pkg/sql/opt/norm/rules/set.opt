@@ -32,3 +32,32 @@
     (ProjectColMapRight $colmap)
     (ProjectPassthroughRight $colmap)
 )
+
+# EliminateUnionLeft replaces a union with a right side having a cardinality of
+# zero, with a Distinct on just the left side operand.
+[EliminateUnionLeft, Normalize]
+(Union $left:* $right:* & (HasZeroRows $right) $colMap:*)
+=>
+(DistinctOn
+    $project:(Project
+        $left
+        (ProjectColMapLeft $colMap)
+        (ProjectPassthroughLeft $colMap)
+    )
+    []
+    (MakeGrouping (OutputCols $project) (EmptyOrdering))
+)
+
+# EliminateUnionRight mirrors EliminateUnionLeft.
+[EliminateUnionRight, Normalize]
+(Union $left:* & (HasZeroRows $left) $right:* $colMap:*)
+=>
+(DistinctOn
+    $project:(Project
+        $right
+        (ProjectColMapRight $colMap)
+        (ProjectPassthroughRight $colMap)
+    )
+    []
+    (MakeGrouping (OutputCols $project) (EmptyOrdering))
+)
