@@ -484,6 +484,24 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	ctx, _, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, 3 /* nodes */, numAccounts, InitManualReplication, args)
 	defer cleanupFn()
 
+	scatterData := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+		// Ensure that each node has at least one leaseholder. (These splits were
+		// made in BackupRestoreTestSetup.) These are wrapped with SucceedsSoon()
+		// because EXPERIMENTAL_RELOCATE can fail if there are other replication
+		// changes happening.
+		for _, stmt := range []string{
+			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
+			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`,
+			`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`,
+		} {
+			testutils.SucceedsSoon(t, func() error {
+				_, err := sqlDB.DB.ExecContext(ctx, stmt)
+				return err
+			})
+		}
+	}
+	scatterData(t, sqlDB)
+
 	// locationToDir converts backup URIs based on LocalFoo to the temporary
 	// file it represents on disk.
 	locationToDir := func(location string) string {
@@ -509,13 +527,17 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	requireHasSSTs := func(t *testing.T, locations ...string) {
 		for _, location := range locations {
-			require.True(t, hasSSTs(location))
+			if !hasSSTs(location) {
+				ranges := sqlDB.QueryStr(t, `SELECT start_pretty, end_pretty, lease_holder FROM crdb_internal.ranges`)
+				t.Fatalf("expected %s to have SST files; ranges:\n%+v", location, ranges)
+			}
 		}
 	}
 
 	requireHasNoSSTs := func(t *testing.T, locations ...string) {
 		for _, location := range locations {
-			require.False(t, hasSSTs(location))
+			require.False(t, hasSSTs(location),
+				fmt.Sprintf("expected %s to not have any SST files", location))
 		}
 	}
 
@@ -549,21 +571,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		sqlDB.Exec(t, `DROP DATABASE data;`)
 		restoreQuery := fmt.Sprintf("RESTORE DATABASE data FROM %s", locationFmtString)
 		sqlDB.Exec(t, restoreQuery, locationURIArgs...)
-	}
-
-	// Ensure that each node has at least one leaseholder. (These splits were
-	// made in BackupRestoreTestSetup.) These are wrapped with SucceedsSoon()
-	// because EXPERIMENTAL_RELOCATE can fail if there are other replication
-	// changes happening.
-	for _, stmt := range []string{
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)`,
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 100)`,
-		`ALTER TABLE data.bank EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 200)`,
-	} {
-		testutils.SucceedsSoon(t, func() error {
-			_, err := sqlDB.DB.ExecContext(ctx, stmt)
-			return err
-		})
+		scatterData(t, sqlDB)
 	}
 
 	t.Run("partition-by-unique-key", func(t *testing.T) {
@@ -591,8 +599,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	// Test that we're selecting the most specific locality tier for a location.
 	t.Run("partition-by-different-tiers", func(t *testing.T) {
-		skip.WithIssue(t, 64974, "flaky test")
-
 		testSubDir := t.Name()
 		locations := []string{
 			LocalFoo + "/" + testSubDir + "/1",
