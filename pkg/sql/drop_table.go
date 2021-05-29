@@ -395,7 +395,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 	// allowed to scan the meta ranges directly.
 	if p.ExecCfg().Codec.ForSystemTenant() {
 		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
+		ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "unsplit-ranges-for-table"), span)
 		if err != nil {
 			return err
 		}
