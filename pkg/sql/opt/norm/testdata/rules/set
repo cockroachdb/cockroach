@@ -55,3 +55,53 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(13)
+
+# --------------------------------------------------
+# EliminateUnionLeft
+# --------------------------------------------------
+
+norm expect=EliminateUnionLeft
+SELECT k FROM
+  (SELECT k FROM b)
+  UNION
+  (SELECT k FROM b WHERE k IN ())
+----
+project
+ ├── columns: k:13!null
+ ├── key: (13)
+ ├── scan b
+ │    ├── columns: b.k:1!null
+ │    └── key: (1)
+ └── projections
+      └── b.k:1 [as=k:13, outer=(1)]
+
+# --------------------------------------------------
+# EliminateUnionRight
+# --------------------------------------------------
+
+norm expect=EliminateUnionRight
+SELECT k FROM
+  (SELECT k FROM b WHERE Null)
+  UNION
+  (SELECT k FROM b)
+----
+project
+ ├── columns: k:13!null
+ ├── key: (13)
+ ├── scan b
+ │    ├── columns: b.k:7!null
+ │    └── key: (7)
+ └── projections
+      └── b.k:7 [as=k:13, outer=(7)]
+
+norm
+SELECT k FROM
+  (SELECT k FROM b WHERE False)
+  UNION
+  (SELECT k FROM b WHERE i IN ())
+----
+values
+ ├── columns: k:13!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(13)
