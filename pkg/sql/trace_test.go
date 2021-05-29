@@ -241,7 +241,6 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"exec stmt",
 				"flow",
-				"materializer",
 				"colbatchscan",
 				"consuming rows",
 				"txn coordinator send",
