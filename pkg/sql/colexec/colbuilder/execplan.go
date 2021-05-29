@@ -493,8 +493,8 @@ func (r opResult) createDiskBackedSort(
 	), nil
 }
 
-// makeDistBackedSorterConstructors creates a DiskBackedSorterConstructor that
-// can be used by the hash-based partitioner.
+// makeDiskBackedSorterConstructor creates a colexec.DiskBackedSorterConstructor
+// that can be used by the hash-based partitioner.
 // NOTE: unless DelegateFDAcquisitions testing knob is set to true, it is up to
 // the caller to acquire the necessary file descriptors up front.
 func (r opResult) makeDiskBackedSorterConstructor(
@@ -555,7 +555,11 @@ func (r opResult) createAndWrapRowSource(
 	if args.ProcessorConstructor == nil {
 		return errors.New("processorConstructor is nil")
 	}
+	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow because %v", causeToWrap)
 	if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
+		log.VEventf(ctx, 1, "planning a wrapped processor failed because %v", err)
+		// Return the original error for why we don't support this spec
+		// natively since it is more interesting.
 		return causeToWrap
 	}
 	// Note that the materializers aren't safe to release in all cases since in
@@ -658,6 +662,9 @@ func NewColOperator(
 				mon.Stop(ctx)
 			}
 			result.OpMonitors = result.OpMonitors[:0]
+			if returnedErr != nil {
+				log.VEventf(ctx, 1, "vectorized planning failed with %v", returnedErr)
+			}
 		}
 		if panicErr != nil {
 			colexecerror.InternalError(logcrash.PanicAsError(0, panicErr))
@@ -677,10 +684,6 @@ func NewColOperator(
 		args.ExprHelper = colexecargs.NewExprHelper()
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "planning col operator for spec %q", spec)
-	}
-
 	core := &spec.Core
 	post := &spec.Post
 
@@ -689,19 +692,11 @@ func NewColOperator(
 	resultPreSpecPlanningStateShallowCopy := *r
 
 	if err = supportedNatively(spec); err != nil {
-		if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
-			return r, err
-		}
-		if log.V(1) {
-			log.Infof(ctx, "planning a wrapped processor because %s", err.Error())
-		}
-
 		inputTypes := make([][]*types.T, len(spec.Input))
 		for inputIdx, input := range spec.Input {
 			inputTypes[inputIdx] = make([]*types.T, len(input.ColumnTypes))
 			copy(inputTypes[inputIdx], input.ColumnTypes)
 		}
-
 		err = result.createAndWrapRowSource(ctx, flowCtx, args, inputs, inputTypes, spec, factory, err)
 		// The wrapped processors need to be passed the post-process specs,
 		// since they inspect them to figure out information about needed
@@ -745,11 +740,6 @@ func NewColOperator(
 			)
 			if err != nil {
 				return r, err
-			}
-			// colBatchScan is wrapped with a cancel checker below, so we need
-			// to log its creation separately.
-			if log.V(1) {
-				log.Infof(ctx, "made op %T\n", scanOp)
 			}
 			result.Op = scanOp
 			if args.TestingKnobs.PlanInvariantsCheckers {
@@ -1277,10 +1267,6 @@ func NewColOperator(
 		return r, err
 	}
 
-	if log.V(1) {
-		log.Infof(ctx, "made op %T\n", result.Op)
-	}
-
 	// Note: at this point, it is legal for ColumnTypes to be empty (it is
 	// legal for empty rows to be passed between processors).
 
@@ -1290,13 +1276,6 @@ func NewColOperator(
 	}
 	err = ppr.planPostProcessSpec(ctx, flowCtx, evalCtx, args, post, factory)
 	if err != nil {
-		if log.V(2) {
-			log.Infof(
-				ctx,
-				"vectorized post process planning failed with error %v post spec is %s, attempting to wrap as a row source",
-				err, post,
-			)
-		}
 		if core.TableReader != nil {
 			// We cannot naively wrap a TableReader's post-processing spec since
 			// it might project out unneeded columns with unset values. These
@@ -1396,14 +1375,6 @@ func (r opResult) planAndMaybeWrapFilter(
 	if err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
-		if log.V(2) {
-			log.Infof(
-				ctx,
-				"vectorized join ON expr planning failed with error %v ON expr is %s, attempting to wrap as a row source",
-				err, filter.String(),
-			)
-		}
-
 		filtererSpec := &execinfrapb.ProcessorSpec{
 			Core: execinfrapb.ProcessorCoreUnion{
 				Filterer: &execinfrapb.FiltererSpec{
@@ -1462,9 +1433,6 @@ func (r *postProcessResult) planPostProcessSpec(
 	if post.Projection {
 		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, post.OutputColumns)
 	} else if post.RenderExprs != nil {
-		if log.V(2) {
-			log.Infof(ctx, "planning render expressions %+v", post.RenderExprs)
-		}
 		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 		var renderedCols []uint32
 		for _, renderExpr := range post.RenderExprs {
