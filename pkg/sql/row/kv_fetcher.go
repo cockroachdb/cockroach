@@ -119,6 +119,9 @@ func (f *KVFetcher) NextKV(
 			if err != nil {
 				return false, kv, false, err
 			}
+			if len(f.batchResponse) == 0 {
+				f.batchResponse = nil
+			}
 			return true, roachpb.KeyValue{
 				Key: key,
 				Value: roachpb.Value{
