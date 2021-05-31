@@ -474,7 +474,7 @@ func (gcq *gcQueue) process(
 		&replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.
-				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
+				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_TOUCH)
 			if err == nil {
 				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
 			}
