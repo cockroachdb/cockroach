@@ -2434,8 +2434,9 @@ def go_deps():
         name = "com_github_lib_pq",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lib/pq",
-        sum = "h1:9xohqzkUwzR4Ga4ivdTcawVS89YSDVxXMa3xJX3cGzg=",
-        version = "v1.8.0",
+        replace = "github.com/cockroachdb/pq",
+        sum = "h1:xTc0ViFhuelzQZAYQOxMR2J5QDO9/C+0L0fkPXIcoMI=",
+        version = "v0.0.0-20210517091544-990dd3347596",
     )
     go_repository(
         name = "com_github_lib_pq_auth_kerberos",

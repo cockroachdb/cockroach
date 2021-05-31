@@ -196,6 +196,7 @@ func Example_sql() {
 	// and with the query below the division by zero error will occur after the
 	// first batch consisting of 1 row has been returned to the client.
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-2) from generate_series(1,3)`})
+	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
 
 	// Output:
 	// sql -e show application_name
@@ -259,6 +260,9 @@ func Example_sql() {
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
 	// SQLSTATE: 22012
+	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
+	// regression_65066
+	// 20:01:02+03:04:05
 }
 
 func Example_sql_watch() {
