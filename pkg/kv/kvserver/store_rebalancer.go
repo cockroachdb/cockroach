@@ -209,7 +209,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // Instead, we use our own implementation of `scorerOptions` that promotes QPS
 // balance.
 func (sr *StoreRebalancer) scorerOptions() scorerOptions {
-	return scorerOptions{
+	return qpsScorerOptions{
 		deterministic:         sr.rq.allocator.storePool.deterministic,
 		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
 	}
@@ -229,8 +229,9 @@ func (sr *StoreRebalancer) rebalanceStore(
 	ctx context.Context, mode LBRebalancingMode, allStoresList StoreList,
 ) {
 	// First check if we should transfer leases away to better balance QPS.
-	options := scorerOptions{
-		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
+	options, ok := sr.scorerOptions().(qpsScorerOptions)
+	if !ok {
+		log.Fatalf(ctx, "expected the `StoreRebalancer` to be using a `qpsScorerOptions`")
 	}
 	qpsMinThreshold := underfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
 	qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
@@ -318,6 +319,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 			&replicasToMaybeRebalance,
 			localDesc,
 			allStoresList,
+			sr.scorerOptions(),
 		)
 		if replWithStats.repl == nil {
 			log.Infof(ctx,
@@ -521,6 +523,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
 	allStoresList StoreList,
+	options scorerOptions,
 ) (replWithStats replicaWithStats, voterTargets, nonVoterTargets []roachpb.ReplicationTarget) {
 	now := sr.rq.store.Clock().NowAsClockTimestamp()
 	for {
@@ -592,7 +595,11 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		log.VEventf(ctx, 3, "considering replica rebalance for r%d with %.2f qps",
 			replWithStats.repl.GetRangeID(), replWithStats.qps)
 
-		targetVoterRepls, targetNonVoterRepls := sr.getRebalanceTargetsBasedOnQPS(ctx, rebalanceCtx)
+		targetVoterRepls, targetNonVoterRepls := sr.getRebalanceTargetsBasedOnQPS(
+			ctx,
+			rebalanceCtx,
+			options,
+		)
 		storeDescMap := storeListToMap(allStoresList)
 
 		// Pick the voter with the least QPS to be leaseholder;
@@ -630,9 +637,8 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 // constraints on the range and would further the goal of balancing the QPS on
 // the stores in this cluster.
 func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
-	ctx context.Context, rbCtx rangeRebalanceContext,
+	ctx context.Context, rbCtx rangeRebalanceContext, options scorerOptions,
 ) (finalVoterTargets, finalNonVoterTargets []roachpb.ReplicaDescriptor) {
-	options := sr.scorerOptions()
 	finalVoterTargets = rbCtx.rangeDesc.Replicas().VoterDescriptors()
 	finalNonVoterTargets = rbCtx.rangeDesc.Replicas().NonVoterDescriptors()
 
