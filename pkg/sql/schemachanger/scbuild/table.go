@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -147,6 +148,21 @@ func (b *buildContext) alterTableAddColumn(
 			panic(err)
 		}
 		col.ComputeExpr = &serializedExpr
+	}
+
+	if toType.UserDefined() {
+		typeID, err := typedesc.UserDefinedTypeOIDToID(toType.Oid())
+		if err != nil {
+			panic(err)
+		}
+		typeDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, typeID, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			panic(err)
+		}
+		b.addNode(scpb.Target_ADD, &scpb.TypeReference{
+			TypeID: typeDesc.GetID(),
+			DescID: table.GetID(),
+		})
 	}
 
 	b.addNode(scpb.Target_ADD, &scpb.Column{
@@ -289,6 +305,34 @@ func (b *buildContext) alterTableDropColumn(
 	// drop check constraints
 	// remove comments
 	// drop foreign keys
+
+	// Clean up type backreferences if no other column
+	// refers to the same type.
+	if colToDrop.HasType() && colToDrop.GetType().UserDefined() {
+		colType := colToDrop.GetType()
+		needsDrop := true
+		for _, column := range table.AllColumns() {
+			if column.HasType() && column.GetID() != colToDrop.GetID() &&
+				column.GetType().Oid() == colType.Oid() {
+				needsDrop = false
+				break
+			}
+		}
+		if needsDrop {
+			typeID, err := typedesc.UserDefinedTypeOIDToID(colType.Oid())
+			if err != nil {
+				panic(err)
+			}
+			typeDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, typeID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				panic(err)
+			}
+			b.addNode(scpb.Target_DROP, &scpb.TypeReference{
+				TypeID: typeDesc.GetID(),
+				DescID: table.GetID(),
+			})
+		}
+	}
 
 	// TODO(ajwerner): Add family information to the column.
 	b.addNode(scpb.Target_DROP, &scpb.Column{

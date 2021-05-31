@@ -256,3 +256,15 @@ func (e *SequenceOwnedBy) getAttribute(attr Attribute) attributeValue {
 		return nil
 	}
 }
+
+// GetAttributes implements the Element interface
+func (e *Type) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TypeID)
+	default:
+		return nil
+	}
+}

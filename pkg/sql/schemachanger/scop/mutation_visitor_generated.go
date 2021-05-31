@@ -31,6 +31,7 @@ type MutationVisitor interface {
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
 	UpdateRelationDeps(context.Context, UpdateRelationDeps) error
 	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
+	AddTypeBackRef(context.Context, AddTypeBackRef) error
 	RemoveRelationDependedOnBy(context.Context, RemoveRelationDependedOnBy) error
 	RemoveTypeBackRef(context.Context, RemoveTypeBackRef) error
 	MakeAddedColumnDeleteAndWriteOnly(context.Context, MakeAddedColumnDeleteAndWriteOnly) error
@@ -91,6 +92,11 @@ func (op UpdateRelationDeps) Visit(ctx context.Context, v MutationVisitor) error
 // Visit is part of the MutationOp interface.
 func (op RemoveColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveColumnDefaultExpression(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddTypeBackRef) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddTypeBackRef(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

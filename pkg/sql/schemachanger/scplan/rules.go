@@ -99,6 +99,10 @@ func defaultExprReferencesColumn(this *scpb.Sequence, that *scpb.DefaultExpressi
 	return false
 }
 
+func typeHasReference(this *scpb.Type, that *scpb.TypeReference) bool {
+	return this.TypeID == that.TypeID
+}
+
 func sameDirection(a, b scpb.Target_Direction) bool {
 	return a == b
 }
@@ -196,7 +200,26 @@ var rules = map[scpb.Element]targetRules{
 				},
 			},
 		},
-		forward: nil,
+		forward: targetOpRules{
+			scpb.State_ABSENT: {
+				{
+					predicate: func(this *scpb.TypeReference, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID) &&
+							!flags.CreatedDescriptorIDs.Contains(this.DescID)
+					},
+				},
+				{
+					nextState: scpb.State_PUBLIC,
+					op: func(this *scpb.TypeReference) scop.Op {
+						return &scop.AddTypeBackRef{
+							TypeID: this.TypeID,
+							DescID: this.DescID,
+						}
+					},
+				},
+			},
+		},
 	},
 	(*scpb.DefaultExpression)(nil): {
 		deps: targetDepRules{},
@@ -220,6 +243,59 @@ var rules = map[scpb.Element]targetRules{
 								TableID: this.TableID,
 							},
 						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Type)(nil): {
+		deps: targetDepRules{
+			scpb.State_PUBLIC: {
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_DELETE_ONLY,
+					predicate:    typeHasReference,
+				},
+			},
+		},
+		backwards: targetOpRules{
+			scpb.State_PUBLIC: {
+				{
+					predicate: func(this *scpb.Type, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
+					},
+				},
+				{
+					nextState: scpb.State_DELETE_ONLY,
+					op: func(this *scpb.Type) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.TypeID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+			scpb.State_DELETE_ONLY: {
+				{
+					predicate: func(this *scpb.Type, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TypeID)
+					},
+				},
+				{
+					nextState: scpb.State_ABSENT,
+					op: func(this *scpb.Type) []scop.Op {
+						ops := []scop.Op{
+							&scop.CreateGcJobForDescriptor{
+								DescID: this.TypeID,
+							},
+							&scop.DrainDescriptorName{TableID: this.TypeID},
+						}
+						return ops
 					},
 				},
 			},
@@ -251,9 +327,6 @@ var rules = map[scpb.Element]targetRules{
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
 								TableID: this.SequenceID,
-							},
-							&scop.CreateGcJobForDescriptor{
-								DescID: this.SequenceID,
 							},
 						}
 						return ops

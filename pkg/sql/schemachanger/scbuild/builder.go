@@ -31,6 +31,11 @@ type AuthorizationAccessor interface {
 	CheckPrivilege(
 		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
 	) error
+	// HasAdminRole verifies if a user has an admin role
+	HasAdminRole(ctx context.Context) (bool, error)
+	// HasOwnership returns if the role or any role the role is a member of
+	// has ownership privilege of the desc.
+	HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error)
 }
 
 // Dependencies are non-stateful objects needed for planning schema
@@ -143,6 +148,8 @@ func (b *buildContext) build(
 		b.dropView(ctx, n)
 	case *tree.DropSequence:
 		b.dropSequence(ctx, n)
+	case *tree.DropType:
+		b.dropType(ctx, n)
 	case *tree.AlterTable:
 		b.alterTable(ctx, n)
 	default:

@@ -50,7 +50,7 @@ func newMutationDescGetter(
 func (m *mutationDescGetter) GetMutableTypeByID(
 	ctx context.Context, id descpb.ID,
 ) (*typedesc.Mutable, error) {
-	typeDesc, err := m.descs.GetMutableTypeByID(ctx, m.txn, id, tree.ObjectLookupFlagsWithRequired())
+	typeDesc, err := m.descs.GetMutableTypeVersionByID(ctx, m.txn, id)
 	if err != nil {
 		return nil, err
 	}

@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -153,6 +155,15 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	return nil
 }
 
+func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) error {
+	mutDesc, err := m.catalog.GetMutableTypeByID(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	mutDesc.AddReferencingDescriptorID(op.DescID)
+	return nil
+}
+
 func (m *visitor) RemoveRelationDependedOnBy(
 	ctx context.Context, op scop.RemoveRelationDependedOnBy,
 ) error {
@@ -208,27 +219,48 @@ func (m *visitor) CreateGcJobForDescriptor(
 func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
-	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+
+	var descriptor catalog.MutableDescriptor
+	descriptor, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+	if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+		descriptor, err = m.catalog.GetMutableTypeByID(ctx, op.TableID)
+	}
 	if err != nil {
 		return err
 	}
 	// Mark table as dropped
-	tableDesc.SetDropped()
+	descriptor.SetDropped()
 	return nil
 }
 
 func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
+	var descriptor catalog.MutableDescriptor
+	var name string
+	var parentID descpb.ID
 	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
-	if err != nil {
+	if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+		err = nil
+		typeDesc, err := m.catalog.GetMutableTypeByID(ctx, op.TableID)
+		if err != nil {
+			return err
+		}
+		descriptor = typeDesc
+		name = typeDesc.GetName()
+		parentID = typeDesc.GetParentID()
+	} else if err != nil {
 		return err
+	} else {
+		descriptor = tableDesc
+		name = tableDesc.GetName()
+		parentID = tableDesc.GetParentID()
 	}
 	// Queue up names for draining.
-	parentSchemaID := tableDesc.GetParentSchemaID()
+	parentSchemaID := descriptor.GetParentSchemaID()
 	nameDetails := descpb.NameInfo{
-		ParentID:       tableDesc.ParentID,
+		ParentID:       parentID,
 		ParentSchemaID: parentSchemaID,
-		Name:           tableDesc.Name}
-	m.catalog.AddDrainedName(tableDesc.GetID(), nameDetails)
+		Name:           name}
+	m.catalog.AddDrainedName(descriptor.GetID(), nameDetails)
 	return nil
 }
 
