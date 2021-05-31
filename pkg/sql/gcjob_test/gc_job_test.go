@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -34,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -414,4 +418,46 @@ func TestGCResumer(t *testing.T) {
 		require.NoError(t, err)
 		require.Error(t, sj.AwaitCompletion(ctx))
 	})
+}
+
+func TestGCJobRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	var failed atomic.Value
+	failed.Store(false)
+	params := base.TestServerArgs{}
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+			_, ok := request.GetArg(roachpb.ClearRange)
+			if !ok {
+				return nil
+			}
+			if failed.Load().(bool) {
+				return nil
+			}
+			failed.Store(true)
+			return roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+				Timestamp: hlc.Timestamp{},
+				Threshold: hlc.Timestamp{},
+			})
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+	tdb.Exec(t, "DROP TABLE foo CASCADE;")
+	var jobID int64
+	tdb.QueryRow(t, `
+SELECT job_id
+  FROM [SHOW JOBS]
+ WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
+	).Scan(&jobID)
+	var status jobs.Status
+	tdb.QueryRow(t,
+		"SELECT status FROM [SHOW JOB WHEN COMPLETE $1]", jobID,
+	).Scan(&status)
+	require.Equal(t, jobs.StatusSucceeded, status)
 }
