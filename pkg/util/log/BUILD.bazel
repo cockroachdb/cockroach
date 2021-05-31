@@ -138,7 +138,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":log"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/settings/cluster",
