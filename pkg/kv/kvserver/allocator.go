@@ -795,7 +795,7 @@ func (a *Allocator) allocateTargetFromList(
 	candidateStores StoreList,
 	zone *zonepb.ZoneConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-	options scorerOptions,
+	options rangeCountScorerOptions,
 	allowMultipleReplsPerNode bool,
 	targetType targetReplicaType,
 ) (*roachpb.StoreDescriptor, string) {
@@ -1245,8 +1245,8 @@ func (a Allocator) RebalanceNonVoter(
 	)
 }
 
-func (a *Allocator) scorerOptions() scorerOptions {
-	return scorerOptions{
+func (a *Allocator) scorerOptions() rangeCountScorerOptions {
+	return rangeCountScorerOptions{
 		deterministic:           a.storePool.deterministic,
 		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
