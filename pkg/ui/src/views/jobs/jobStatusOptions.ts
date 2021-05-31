@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "src/js/protos";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import { BadgeStatus } from "src/components";
 
 export enum JobStatusVisual {

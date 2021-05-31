@@ -9,8 +9,8 @@
     "protos.d.ts",
     "protos.js"
   ],
-  "peerDependencies": {
-    "protobufjs": "^6.8.8",
-    "typescript": "^3.7.5"
+  "devDependencies": {
+    "@babel/runtime": "7.12.13",
+    "protobufjs": "6.8.6"
   }
 }

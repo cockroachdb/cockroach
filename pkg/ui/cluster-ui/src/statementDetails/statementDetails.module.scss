@@ -1,0 +1,160 @@
+@import "src/core/index.module";
+
+.app-name {
+  white-space: nowrap;
+  line-height: $line-height--medium;
+  font-weight: $font-weight--bold;
+
+  &__unset {
+    color: $tooltip-color;
+    font-style: italic;
+  }
+}
+
+.section {
+  flex: 0 0 auto;
+  padding: 12px 24px;
+
+  &--heading {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  &--container {
+    padding: 0 24px 0 0;
+  }
+}
+
+.page--header {
+  padding: 0;
+
+  &__title {
+    font-family: $font-family--base;
+    font-size: 20px;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    color: $colors--neutral-8;
+    margin-bottom: 25px;
+  }
+}
+
+h1.base-heading {
+  font-size: 24px;
+  font-family: $font-family--base;
+}
+
+h2.base-heading {
+  padding: 12px 0;
+  font-size: 24px;
+  font-family: $font-family--base
+}
+
+.back-link {
+  text-decoration: none;
+  color: $link-color;
+}
+
+.cockroach--tabs {
+  overflow: visible !important;
+  :global(.ant-tabs-bar) {
+    border-bottom: 1px solid $grey2;
+  }
+
+  :global(.ant-tabs-tab) {
+    font-family: $font-family--base;
+    font-size: 16px;
+    line-height: 1.5;
+    letter-spacing: normal;
+    color: $colors--neutral-7;
+  }
+
+  :global(.ant-tabs-nav .ant-tabs-tab-active) {
+    color: $colors--link;
+  }
+
+  :global(.ant-tabs-nav .ant-tabs-tab:hover) {
+    color: $colors--link;
+  }
+
+  :global(.ant-tabs-ink-bar) {
+    height: 3px;
+    border-radius: 40px;
+    background-color: $blue;
+  }
+}
+
+.fit-content-width {
+  width: fit-content;
+}
+
+.table-details {
+  .summary--card__counting {
+    margin-bottom: 15px;
+
+    &--value {
+      margin: 0;
+      color: $colors--neutral-8;
+      line-height: 32px;
+    }
+
+    &--label {
+      font-size: 14px;
+      line-height: 22px;
+      letter-spacing: 0.1px;
+    }
+  }
+}
+
+.last-cleared-tooltip, .numeric-stats-table, .plan-view-table {
+  &__tooltip {
+    width: 36px;
+    height: 16px;
+    display: inline-block;
+    text-transform: none;
+    font-weight: normal;
+    white-space: normal;
+    letter-spacing: normal;
+    font-size: 14px;
+    vertical-align: middle;
+  }
+
+  &__tooltip-hover-area {
+    width: 100%;
+    padding: 0px 10px;
+  }
+
+  &__info-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid $tooltip-color;
+    font-size: 12px;
+    line-height: 14px;
+    text-align: center;
+    color: $tooltip-color;
+  }
+
+  .hover-tooltip--hovered &__info-icon {
+    border-color: $body-color;
+    color: $body-color;
+  }
+}
+
+.statements-table {
+  &__col-query-text {
+    font-family: $font-family--monospace;
+    white-space: pre-wrap;
+  }
+}
+
+.summary-card {
+  color: $colors--neutral-7;
+  h5 {
+    color: $colors--neutral-7;
+  }
+}
+
+.root {
+  flex-grow: 0;
+  width: 100%;
+}

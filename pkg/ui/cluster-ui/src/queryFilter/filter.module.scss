@@ -1,0 +1,126 @@
+@import "../core/index.module";
+
+$dropdown-hover-color: darken($colors--background, 2.5%);
+
+.dropdown-btn {
+  font-family: $font-family--semi-bold;
+  padding: 8px 0 8px 17px;
+  vertical-align: middle;
+  border: 1px solid $colors--neutral-5;
+  border-radius: 3px;
+  white-space: nowrap;
+  color: $colors--neutral-7;
+  cursor: pointer;
+  position: relative;
+  background: $colors--neutral-1;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  width: 102px;
+  &:hover {
+    border-color: $colors--neutral-4;
+    :global(.Select-arrow-zone) {
+      path {
+        fill: $colors--neutral-4;
+      }
+    }
+  }
+}
+
+.dropdown-area {
+  position: absolute;
+  width: 284px;
+  height: max-content;
+  background-color: $colors--neutral-0;
+  margin-top: 6px;
+  border: 0.5px solid #E5E5E5;
+  box-shadow: 0px 0px 4px rgba(154, 161, 171, 0.33);
+  border-radius: 4px;
+  z-index: 2;
+
+  .dropdown-content-wrapper {
+    padding: 18px 20px 22px 16px;
+
+    .filter-label {
+      height: 16px;
+      font-family: $font-family--base;
+      font-weight: $font-weight--bold;
+      font-size: $font-size--small;
+      line-height: $line-height--small;
+      letter-spacing: 0.3px;
+      font-style: normal;
+      margin-bottom: 8px;
+
+      &__transaction-type {
+        margin-top: 25px;
+      }
+
+      &__margin-top {
+        margin-top: 15px;
+      }
+    }
+
+    .time-pair-wrapper {
+      display: flex;
+      justify-content: space-evenly;
+      gap: 11px;
+      
+      .time-number {
+        width: 96px;
+        height: 40px;
+      }
+
+      .time-unit {
+        width: 141px;
+        height: 40px;
+      }
+    }
+
+    .checkbox {
+      &__wrapper {
+        display: flex;
+        gap: 14px;
+      }
+
+      &__full-scans {
+        margin-top: 34px;
+      }
+
+      &__distributed {
+        margin-top: 30px;
+      }
+
+      &__input {
+        float: left;
+        margin-top: 4px;
+      }
+
+      &__label {
+        float: left;
+        margin-left: 5px;
+        width: calc(100% - 20px);
+      }
+    }
+
+    .apply-btn {
+      &__wrapper {
+      text-align: end;
+      margin-top: 30px;
+      }
+
+      &__btn {
+        height: 32px;
+        width: 67px;
+        font-size: 12px;
+      }
+    }
+  }
+}
+
+.caret-down {
+  width: 12px;
+}
+
+.hide {
+  display: none;
+}

@@ -1,0 +1,14 @@
+{
+  "root": true,
+  "extends": "@cockroachlabs/eslint-config",
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "rules": {
+    "@typescript-eslint/interface-name-prefix": "off",
+    "@typescript-eslint/camelcase": "warn",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-namespace": "off"
+  }
+}
