@@ -1,0 +1,72 @@
+@import '../../core/index.module.scss';
+@import '../table.module.scss';
+
+@mixin table-header-text {
+  @include text--body-strong;
+  color: $colors--neutral-7;
+}
+
+.head-wrapper {
+  @include table-base;
+
+  .cell-header {
+    border-right: 1px solid $colors--neutral-2;
+    width: 250px;
+  }
+  &__row--header {
+    border-bottom: 1px solid $colors--neutral-3;
+    height: $line-height--x-large;
+    // Display the sort direction arrow in header cells.
+    .sorted__cell {
+      padding: $spacing-base $spacing-base $spacing-base $spacing-small;
+      position: relative;
+      @include table-header-text;
+      cursor: pointer;
+      .inner-content-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        > span {
+          @include table-header-text;
+        }
+        .sortable__actions {
+          position: relative;
+          margin: 0 14px 0 30px;
+          &:after, &:before {
+            content: "";
+            position: absolute;
+            border-style: solid;
+          }
+          &:before {
+            top: 1.6px;
+            border-width: 6.4px 4px 0 4px;
+            border-color: $colors--neutral-4 transparent transparent transparent;
+          }
+          &:after {
+            bottom: 1.6px;
+            border-width: 0 4px 6.4px 4px;
+            border-color: transparent transparent $colors--neutral-4 transparent;
+          }
+        }
+      }
+
+      &--descending {
+        color: $colors--neutral-6;
+        .inner-content-wrapper {
+          .sortable__actions:before {
+          border-color: $colors--primary-blue-3 transparent transparent transparent;
+          }
+        }
+      }
+
+      &--ascending {
+        color: $colors--neutral-6;
+        .inner-content-wrapper {
+          .sortable__actions:after {
+          border-color: transparent transparent $colors--primary-blue-3 transparent;
+          }
+        }
+      }
+    }
+  }
+}

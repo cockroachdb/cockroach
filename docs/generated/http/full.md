@@ -3882,17 +3882,17 @@ JobsResponse contains the job record for each matching job.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| jobs | [JobsResponse.Job](#cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobsResponse.Job) | repeated |  | [reserved](#support-status) |
+| jobs | [JobResponse](#cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobResponse) | repeated |  | [reserved](#support-status) |
 
 
 
 
 
 
-<a name="cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobsResponse.Job"></a>
-#### JobsResponse.Job
+<a name="cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobResponse"></a>
+#### JobResponse
 
-
+JobResponse contains the job record for a job.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -3912,6 +3912,65 @@ JobsResponse contains the job record for each matching job.
 | highwater_timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  | highwater_timestamp is the highwater timestamp returned as normal timestamp. This is appropriate for display to humans. | [reserved](#support-status) |
 | highwater_decimal | [string](#cockroach.server.serverpb.JobsResponse-string) |  | highwater_decimal is the highwater timestamp in the proprietary decimal form used by logical timestamps internally. This is appropriate to pass to a "AS OF SYSTEM TIME" SQL statement. | [reserved](#support-status) |
 | running_status | [string](#cockroach.server.serverpb.JobsResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## Job
+
+`GET /_admin/v1/jobs/{job_id}`
+
+Job returns the job record for the job of the given job_id.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+JobRequest requests system job information for the given job_id.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.JobRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+JobResponse contains the job record for a job.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.JobResponse-int64) |  |  | [reserved](#support-status) |
+| type | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| description | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| statement | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| username | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| descriptor_ids | [uint32](#cockroach.server.serverpb.JobResponse-uint32) | repeated |  | [reserved](#support-status) |
+| status | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| created | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| started | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| finished | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| modified | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| fraction_completed | [float](#cockroach.server.serverpb.JobResponse-float) |  |  | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+| highwater_timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  | highwater_timestamp is the highwater timestamp returned as normal timestamp. This is appropriate for display to humans. | [reserved](#support-status) |
+| highwater_decimal | [string](#cockroach.server.serverpb.JobResponse-string) |  | highwater_decimal is the highwater timestamp in the proprietary decimal form used by logical timestamps internally. This is appropriate to pass to a "AS OF SYSTEM TIME" SQL statement. | [reserved](#support-status) |
+| running_status | [string](#cockroach.server.serverpb.JobResponse-string) |  |  | [reserved](#support-status) |
+
 
 
 

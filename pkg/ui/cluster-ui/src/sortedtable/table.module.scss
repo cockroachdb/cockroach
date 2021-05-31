@@ -1,0 +1,96 @@
+@import "../core/index.module.scss";
+
+$table-cell-border: 1px solid $colors--neutral-2;
+$stats-table-td--fg: $colors--neutral-6;
+$stats-table-th--bg: $colors--neutral-0;
+$stats-table-tr--bg: $colors--neutral-0;
+
+@mixin table-base {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: $font-family--base;
+  font-weight: 300;
+  line-height: 22px;
+  font-size: $font-size--medium;
+  vertical-align: top;
+  color: $colors--neutral-7;
+
+  .cell-header {
+    border-right: 1px solid $colors--neutral-2;
+    width: 250px;
+  }
+
+  &__row {
+    &--body {
+      letter-spacing: 0.33px;
+      background-color: $colors--neutral-0;
+      height: $line-height--xxx-large;
+      &:hover {
+        background-color: $colors--background;
+      }
+    }
+
+    &--header {
+      text-align: left;
+      white-space: nowrap;
+      @include text--body-strong;
+      color: $colors--neutral-7;
+      background-color: $colors--neutral-0;
+
+      tr, th {
+        padding: $spacing-base $spacing-base $spacing-base $spacing-small;
+        height: $line-height--large;
+        background-color: $colors--neutral-0;
+      }
+    }
+
+    &--summary {
+      background-color: $colors--background;
+      font-family: $font-family--semi-bold;
+      font-size: $font-size--medium;
+      font-weight: bold;
+      line-height: 1.71;
+      letter-spacing: 0.1px;
+      color: $colors--neutral-7;
+      .bar-chart .label {
+        font-family: $font-family--semi-bold;
+        font-size: $font-size--medium;
+        font-weight: bold;
+        line-height: 1.71;
+        letter-spacing: 0.1px;
+        color: $colors--neutral-7;
+      }
+    }
+  }
+
+  &__cell {
+    padding: $spacing-small;
+    border: none;
+    font-family: $font-family--base;
+    font-style: normal;
+    font-weight: $font-weight--light;
+    font-size: $font-size--medium;
+    line-height: $line-height--small;
+    letter-spacing: 0.3px;
+
+    a {
+      color: $adminui-grey-1;
+      text-decoration: none;
+      cursor: pointer;
+      line-height: $line-height--small;
+
+      &:hover {
+        color: $colors--link;
+        text-decoration: underline;
+      }
+    }
+
+    &--filler {
+      width: 100%;
+    }
+
+    &--right-aligned-stat {
+      text-align: right;
+    }
+  }
+}

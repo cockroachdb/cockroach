@@ -357,9 +357,8 @@ $(GITHOOKSDIR)/%: githooks/%
 	@ln -s ../../$(basename $<) $(dir $@)
 endif
 
-.SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
-	$(NODE_RUN) -C pkg/ui yarn install --offline
+.SECONDARY: protobufjs-cli-fix-deps
+protobufjs-cli-fix-deps:
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
 	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
@@ -368,6 +367,23 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 	$(NODE_RUN) pkg/ui/bin/gen-protobuf-cli-deps.js > pkg/ui/node_modules/protobufjs/cli/package.json
 	ln -sf ../../../yarn.protobufjs-cli.lock pkg/ui/node_modules/protobufjs/cli/yarn.lock
 	$(NODE_RUN) -C pkg/ui/node_modules/protobufjs/cli yarn install --offline
+
+.SECONDARY: pkg/ui/yarn.cluster-ui.installed
+pkg/ui/yarn.cluster-ui.installed: pkg/ui/cluster-ui/package.json pkg/ui/cluster-ui/yarn.lock pkg/ui/src/js/protos.js pkg/ui/src/js/protos.d.ts | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn install --offline
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
+	touch $@
+
+.SECONDARY: pkg/ui/yarn.protobuf.installed
+pkg/ui/yarn.protobuf.installed: pkg/ui/src/js/package.json pkg/ui/src/js/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/src/js yarn install --offline
+	$(MAKE) protobufjs-cli-fix-deps
+	touch $@
+
+.SECONDARY: pkg/ui/yarn.installed
+pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.cluster-ui.installed | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui yarn install --offline
+	$(MAKE) protobufjs-cli-fix-deps
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf pkg/ui/node_modules/@types/node
@@ -1328,21 +1344,23 @@ bin/.gw_protobuf_sources: $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PRO
 # typescript definitions for the proto files afterwards.
 
 .SECONDARY: $(UI_JS_CCL)
-$(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.installed | bin/.submodules-initialized
+$(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.protobuf.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS) $(JS_PROTOS_CCL)) >> $@
 
 .SECONDARY: $(UI_JS_OSS)
-$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
+$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.protobuf.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS)) >> $@
 
 # End of PBJS-generated files.
 
-.SECONDARY: $(UI_TS_OSS) $(UI_TS_CCL)
-protos%.d.ts: protos%.js pkg/ui/yarn.installed
+.SECONDARY: $(UI_TS_CCL) $(UI_TS_OSS)
+$(UI_TS_CCL): $(UI_JS_CCL) pkg/ui/yarn.protobuf.installed
+$(UI_TS_OSS): $(UI_JS_OSS) pkg/ui/yarn.protobuf.installed
+$(UI_TS_CCL) $(UI_TS_OSS):
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBTS) $< >> $@
@@ -1371,6 +1389,7 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(TSC)
 	$(NODE_RUN) -C pkg/ui yarn lint
 	@if $(NODE_RUN) -C pkg/ui yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn --cwd pkg/ui/cluster-ui lint
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
@@ -1404,10 +1423,12 @@ pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/
 .PHONY: ui-test
 ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
-	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch
+	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch & \
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn test
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
@@ -1420,6 +1441,7 @@ pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/st
 	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
 	  ln -s ../dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
 	done
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
 	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
@@ -1438,18 +1460,25 @@ ui-watch-secure: export TARGET ?= https://localhost:8080/
 ui-watch: export TARGET ?= http://localhost:8080
 ui-watch ui-watch-secure: PORT := 3000
 ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
-	cd pkg/ui && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --env.dist=ccl --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
+  # TODO (koorosh): running two webpack dev servers doesn't provide best performance and polling changes.
+  # it has to be considered to use something like `parallel-webpack` lib.
+  #
+  # `node-run.sh` wrapper is removed because this command is supposed to be run in dev environment (not in docker of CI)
+  # so it is safe to run yarn commands directly to preserve formatting and colors for outputs
+	yarn --cwd pkg/ui/cluster-ui build:watch & \
+	yarn --cwd pkg/ui webpack-dev-server --config webpack.app.js --env.dist=ccl --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
 	find pkg/ui/dist* -mindepth 1 -not -name dist*.go -delete
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
 	rm -f pkg/ui/*manifest.json
+	rm -rf pkg/ui/cluster-ui/dist
 
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
-	rm -rf pkg/ui/node_modules pkg/ui/yarn.installed
+	rm -rf pkg/ui/node_modules pkg/ui/yarn.installed pkg/ui/cluster-ui/node_modules pkg/ui/yarn.cluster-ui.installed pkg/ui/src/js/node_modules pkg/ui/yarn.protobuf.installed
 
 .SECONDARY: pkg/sql/parser/gen/sql.go.tmp
 pkg/sql/parser/gen/sql.go.tmp: pkg/sql/parser/gen/sql-gen.y bin/.bootstrap

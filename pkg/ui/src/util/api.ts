@@ -69,6 +69,9 @@ export type LivenessResponseMessage = protos.cockroach.server.serverpb.LivenessR
 export type JobsRequestMessage = protos.cockroach.server.serverpb.JobsRequest;
 export type JobsResponseMessage = protos.cockroach.server.serverpb.JobsResponse;
 
+export type JobRequestMessage = protos.cockroach.server.serverpb.JobRequest;
+export type JobResponseMessage = protos.cockroach.server.serverpb.JobResponse;
+
 export type QueryPlanRequestMessage = protos.cockroach.server.serverpb.QueryPlanRequest;
 export type QueryPlanResponseMessage = protos.cockroach.server.serverpb.QueryPlanResponse;
 
@@ -417,6 +420,18 @@ export function getJobs(
   return timeoutFetch(
     serverpb.JobsResponse,
     `${API_PREFIX}/jobs?status=${req.status}&type=${req.type}&limit=${req.limit}`,
+    null,
+    timeout,
+  );
+}
+
+export function getJob(
+  req: JobRequestMessage,
+  timeout?: moment.Duration,
+): Promise<JobResponseMessage> {
+  return timeoutFetch(
+    serverpb.JobResponse,
+    `${API_PREFIX}/jobs/${req.job_id}`,
     null,
     timeout,
   );

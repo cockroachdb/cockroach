@@ -1,0 +1,15 @@
+@import "../../core/index.module.scss";
+
+.hover-area {
+  white-space: pre-line;
+  cursor: pointer;
+  font-family: $font-family--monospace;
+  font-size: $font-size--small;
+  color: $colors--neutral-6;
+  @include line-clamp(2);
+}
+
+.hover-area:hover {
+  text-decoration: underline;
+  color: #0788ff;
+}

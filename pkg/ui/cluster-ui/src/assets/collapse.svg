@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="16px" height="16px" viewBox="0 0 16 16" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 48.2 (47327) - http://www.bohemiancoding.com/sketch -->
+    <title>jobs_collapse_normal</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Symbols" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="jobs_collapse_normal">
+            <g id="Expand-icon">
+                <rect id="Rectangle-14" fill="#C8CBD4" x="0" y="0" width="16" height="16" rx="8"></rect>
+                <g id="select-83" transform="translate(5.714286, 3.428571)" fill="#FFFFFF" fill-rule="nonzero">
+                    <polygon id="Shape" transform="translate(2.285714, 2.250729) scale(1, -1) translate(-2.285714, -2.250729) " points="0 3.93002915 4.57142857 3.93002915 2.28571429 0.571428571"></polygon>
+                    <polygon id="Shape" transform="translate(2.285714, 7.250729) scale(1, -1) translate(-2.285714, -7.250729) " points="2.28571429 8.93002915 4.57142857 5.57142857 0 5.57142857"></polygon>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

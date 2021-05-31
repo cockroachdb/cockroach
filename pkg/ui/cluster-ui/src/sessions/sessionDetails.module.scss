@@ -1,0 +1,52 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "../core/index.module.scss";
+
+.sessions-details{
+  all: initial;
+  font-family: $font-family--base;
+}
+
+.heading-with-controls {
+  display: flex;
+  flex-direction: row;
+  padding-right: $spacing-medium;
+}
+
+.page--header__title {
+  flex-grow: 1;
+  margin-bottom: $spacing-small;
+}
+
+.heading-controls-group {
+  margin-bottom: $spacing-small;
+  > * {
+    margin-left: $spacing-xx-small;
+  }
+}
+
+.details-section {
+  padding: $spacing-small $spacing-medium;
+  margin-bottom: $spacing-large;
+}
+
+.details-header {
+  margin-bottom: 12px;
+}
+
+.details-item {
+  height: $line-height--x-large;
+  margin-bottom: unset;
+  align-items: center;
+  &:not(:last-child) {
+    box-shadow: 0 1px 0 #dbe1ea;
+  }
+}

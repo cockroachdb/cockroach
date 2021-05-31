@@ -1782,45 +1782,12 @@ func (s *adminServer) Jobs(
 	scanner := makeResultScanner(it.Types())
 	for ; ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
-		var job serverpb.JobsResponse_Job
-		var fractionCompletedOrNil *float32
-		var highwaterOrNil *apd.Decimal
-		var runningStatusOrNil *string
-		if err := scanner.ScanAll(
-			row,
-			&job.ID,
-			&job.Type,
-			&job.Description,
-			&job.Statement,
-			&job.Username,
-			&job.DescriptorIDs,
-			&job.Status,
-			&runningStatusOrNil,
-			&job.Created,
-			&job.Started,
-			&job.Finished,
-			&job.Modified,
-			&fractionCompletedOrNil,
-			&highwaterOrNil,
-			&job.Error,
-		); err != nil {
+		var job serverpb.JobResponse
+		err := scanRowIntoJob(scanner, row, &job)
+		if err != nil {
 			return nil, err
 		}
-		if highwaterOrNil != nil {
-			highwaterTimestamp, err := tree.DecimalToHLC(highwaterOrNil)
-			if err != nil {
-				return nil, errors.Wrap(err, "highwater timestamp had unexpected format")
-			}
-			goTime := highwaterTimestamp.GoTime()
-			job.HighwaterTimestamp = &goTime
-			job.HighwaterDecimal = highwaterOrNil.String()
-		}
-		if fractionCompletedOrNil != nil {
-			job.FractionCompleted = *fractionCompletedOrNil
-		}
-		if runningStatusOrNil != nil {
-			job.RunningStatus = *runningStatusOrNil
-		}
+
 		resp.Jobs = append(resp.Jobs, job)
 	}
 
@@ -1828,6 +1795,102 @@ func (s *adminServer) Jobs(
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobResponse) error {
+	var fractionCompletedOrNil *float32
+	var highwaterOrNil *apd.Decimal
+	var runningStatusOrNil *string
+	if err := scanner.ScanAll(
+		row,
+		&job.ID,
+		&job.Type,
+		&job.Description,
+		&job.Statement,
+		&job.Username,
+		&job.DescriptorIDs,
+		&job.Status,
+		&runningStatusOrNil,
+		&job.Created,
+		&job.Started,
+		&job.Finished,
+		&job.Modified,
+		&fractionCompletedOrNil,
+		&highwaterOrNil,
+		&job.Error,
+	); err != nil {
+		return err
+	}
+	if highwaterOrNil != nil {
+		highwaterTimestamp, err := tree.DecimalToHLC(highwaterOrNil)
+		if err != nil {
+			return errors.Wrap(err, "highwater timestamp had unexpected format")
+		}
+		goTime := highwaterTimestamp.GoTime()
+		job.HighwaterTimestamp = &goTime
+		job.HighwaterDecimal = highwaterOrNil.String()
+	}
+	if fractionCompletedOrNil != nil {
+		job.FractionCompleted = *fractionCompletedOrNil
+	}
+	if runningStatusOrNil != nil {
+		job.RunningStatus = *runningStatusOrNil
+	}
+	return nil
+}
+
+func (s *adminServer) Job(
+	ctx context.Context, request *serverpb.JobRequest,
+) (_ *serverpb.JobResponse, retErr error) {
+	// All errors returned by this method must be serverErrors. We are careful
+	// to not use serverError* methods in the body of the function, so we can
+	// just do it here.
+	defer func() {
+		if retErr != nil {
+			retErr = s.serverError(retErr)
+		}
+	}()
+
+	ctx = s.server.AnnotateCtx(ctx)
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	const query = `
+      SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
+						 running_status, created, started, finished, modified,
+						 fraction_completed, high_water_timestamp, error
+        FROM crdb_internal.jobs
+       WHERE job_id = $1`
+
+	row, cols, err := s.server.sqlServer.internalExecutor.QueryRowExWithCols(
+		ctx, "admin-job", nil,
+		sessiondata.InternalExecutorOverride{User: userName},
+		query,
+		request.JobId,
+	)
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "expected to find 1 job with job_id=%d", request.JobId)
+	}
+
+	if row == nil {
+		return nil, errors.Errorf(
+			"could not get job for job_id %d; 0 rows returned", request.JobId,
+		)
+	}
+
+	scanner := makeResultScanner(cols)
+
+	var job serverpb.JobResponse
+	err = scanRowIntoJob(scanner, row, &job)
+	if err != nil {
+		return nil, err
+	}
+
+	return &job, nil
 }
 
 func (s *adminServer) Locations(

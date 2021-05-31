@@ -16,7 +16,7 @@ import {
 } from "src/views/jobs/jobStatusOptions";
 import { formatDuration } from "src/views/jobs/index";
 import moment from "moment";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 
 export class Duration extends React.PureComponent<{ job: Job }> {
