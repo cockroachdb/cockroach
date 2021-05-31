@@ -1237,7 +1237,7 @@ func (a Allocator) RebalanceNonVoter(
 }
 
 func (a *Allocator) scorerOptions() scorerOptions {
-	return scorerOptions{
+	return rangeCountScorerOptions{
 		deterministic:           a.storePool.deterministic,
 		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
