@@ -232,27 +232,27 @@ var logicalPlanCollectionPeriod = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 ).WithPublic()
 
-var maxMemSQLStatsStmtFingerprintsPerApp = settings.RegisterIntSetting(
-	"sql.metrics.max_mem_app_stmt_fingerprints",
-	"the maximum number of statement fingerprints per app stored in memory",
+var maxMemSQLStatsStmtFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_stmt_fingerprints",
+	"the maximum number of statement fingerprints stored in memory",
 	100000,
 ).WithPublic()
 
-var maxMemSQLStatsTxnFingerprintsPerApp = settings.RegisterIntSetting(
-	"sql.metrics.max_mem_app_txn_fingerprints",
-	"the maximum number of transaction fingerprints per app stored in memory",
+var maxMemSQLStatsTxnFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_txn_fingerprints",
+	"the maximum number of transaction fingerprints stored in memory",
 	100000,
 ).WithPublic()
 
-var maxMemReportedSQLStatsStmtFingerprintsPerApp = settings.RegisterIntSetting(
-	"sql.metrics.max_mem_app_reported_stmt_fingerprints",
-	"the maximum number of reported statement fingerprints per app stored in memory",
+var maxMemReportedSQLStatsStmtFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_reported_stmt_fingerprints",
+	"the maximum number of reported statement fingerprints stored in memory",
 	100000,
 ).WithPublic()
 
-var maxMemReportedSQLStatsTxnFingerprintsPerApp = settings.RegisterIntSetting(
-	"sql.metrics.max_mem_app_reported_txn_fingerprints",
-	"the maximum number of reported transaction fingerprints per app stored in memory",
+var maxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
+	"sql.metrics.max_mem_reported_txn_fingerprints",
+	"the maximum number of reported transaction fingerprints stored in memory",
 	100000,
 ).WithPublic()
 
