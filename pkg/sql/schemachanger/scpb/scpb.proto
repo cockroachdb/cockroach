@@ -32,6 +32,7 @@ message ElementProto {
   InboundForeignKey inForeignKey = 13;
   RelationDependedOnBy relationDependedOnBy = 14;
   SequenceOwnedBy sequenceOwner = 15;
+  Type type = 16;
 }
 
 message Target {
@@ -174,4 +175,8 @@ message RelationDependedOnBy {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   uint32 dependedOn = 2  [(gogoproto.customname) = "DependedOnBy", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+}
+
+message Type {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }

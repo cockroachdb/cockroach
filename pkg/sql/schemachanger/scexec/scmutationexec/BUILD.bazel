@@ -15,6 +15,8 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/schemachanger/scexec/descriptorutils",
         "//pkg/sql/schemachanger/scop",
         "//pkg/util/protoutil",

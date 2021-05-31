@@ -42,6 +42,11 @@ type Element interface {
 	GetAttributes() Attributes
 }
 
+// ElementDescriptorSet represents all the descriptors touched by an element
+type ElementDescriptorSet interface {
+	DescriptorSet() []descpb.ID
+}
+
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
 	return e.GetValue().(Element)
@@ -273,3 +278,14 @@ func (e *SequenceOwnedBy) GetAttributes() Attributes {
 
 // DescriptorID implements the Element interface.
 func (e *SequenceOwnedBy) DescriptorID() descpb.ID { return e.SequenceID }
+
+// DescriptorID implements the Element interface.
+func (e *Type) DescriptorID() descpb.ID { return descpb.InvalidID }
+
+// GetAttributes implements the Element interface
+func (e *Type) GetAttributes() Attributes {
+	return makeAttributes([]attributeValue{
+		{key: AttributeDescID, value: DescID(e.TypeID)},
+		{key: AttributeType, value: ElementType(e)},
+	})
+}
