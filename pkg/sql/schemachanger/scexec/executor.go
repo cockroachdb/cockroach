@@ -264,6 +264,19 @@ func UpdateDescriptorJobIDs(
 ) error {
 	b := txn.NewBatch()
 	for _, id := range descIDs {
+		// Confirm the descriptor is a table, view or sequence
+		// since we can only lock those types.
+		desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, id,
+			tree.CommonLookupFlags{
+				Required:       true,
+				IncludeDropped: true},
+		)
+		if desc.DescriptorType() != catalog.Table {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 		// Currently all "locking" schema changes are on tables. This will probably
 		// need to be expanded at least to types.
 		table, err := descriptors.GetMutableTableByID(ctx, txn, id,

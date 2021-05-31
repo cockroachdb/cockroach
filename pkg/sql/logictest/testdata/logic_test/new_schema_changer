@@ -312,6 +312,7 @@ ALTER TABLE t4 ADD COLUMN j typ4
 statement ok
 CREATE VIEW v4_dep AS (SELECT j FROM t4)
 
+# Since v4_dep depends on t4.j which is of type typ4, v4_dep has a dependency to typ4.
 statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep\]\) still depend on it
 DROP type typ4
 
@@ -338,6 +339,7 @@ DROP TYPE typ5
 statement ok
 CREATE VIEW v6 AS (SELECT j FROM v4_dep)
 
+# v6 depends on v4_dep.j, which depends on t4.j, which depends on typ4, so v6 also depends on typ4.
 statement error cannot drop type "typ4" because other objects \(\[test.public.t4 test.public.v4_dep test.public.v6\]\) still depend on it
 DROP TYPE typ4
 
@@ -482,3 +484,72 @@ DROP TABLE p1_0
 statement ok
 SET experimental_use_new_schema_changer = 'on'
 
+# Basic test -- create and drop a type.
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+DROP TYPE typ8
+
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+
+# Now check all of the fun cases around object dependencies.
+# Test a simple column dependency.
+statement ok
+CREATE TABLE t8 (x typ8)
+
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# Now add a column with the using the type.
+statement ok
+ALTER TABLE t8 ADD COLUMN y typ8
+
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# If we drop the original column x, t8 should still depend on t.
+statement ok
+ALTER TABLE t8 DROP COLUMN x
+
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+# Now remove the other column.
+statement ok
+ALTER TABLE t8 DROP COLUMN y
+
+statement ok
+DROP TYPE typ8
+
+# Ensure that references to the array type are tracked.
+statement ok
+CREATE TYPE typ8 AS ENUM ('hello');
+ALTER TABLE t8 ADD COLUMN x typ8[]
+
+statement error pq: cannot drop type "_typ8" because other objects \(\[test.public.t8\]\) still depend on it
+DROP TYPE typ8
+
+statement ok
+ALTER TABLE t8 DROP COLUMN x;
+
+statement ok
+DROP TYPE typ8
+
+# DROP TYPE in a singe transaction
+statement ok
+CREATE TYPE defaultdb.typ AS ENUM('a');
+
+statement ok
+CREATE TABLE defaultdb.ttyp (id INT PRIMARY KEY, name varchar(256), x defaultdb.typ);
+
+statement ok
+BEGIN;
+
+statement ok;
+DROP TABLE defaultdb.ttyp;
+
+statement ok
+DROP TYPE defaultdb.typ;
+
+statement ok
+COMMIT;
