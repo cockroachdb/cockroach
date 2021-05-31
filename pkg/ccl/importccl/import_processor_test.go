@@ -89,6 +89,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(nil)
+	semaCtx := tree.MakeSemaContext()
 
 	tests := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
@@ -115,7 +116,8 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh, nil /* seqChunkProvider */)
+				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, &semaCtx, kvCh,
+					nil /* seqChunkProvider */)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}

@@ -910,6 +910,7 @@ func newPgDumpReader(
 	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 ) (*pgDumpReader, error) {
 	tableDescs := make(map[string]catalog.TableDescriptor, len(descs))
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
@@ -925,7 +926,7 @@ func newPgDumpReader(
 			for i, col := range tableDesc.VisibleColumns() {
 				colSubMap[col.GetName()] = i
 			}
-			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh,
+			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, semaCtx, kvCh,
 				nil /* seqChunkProvider */)
 			if err != nil {
 				return nil, err

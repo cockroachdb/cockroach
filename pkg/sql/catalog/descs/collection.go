@@ -363,6 +363,9 @@ func (tc *Collection) getLeasedDescriptorByID(
 		return desc, nil
 	}
 
+	if txn == nil {
+		panic("txn nil in collection.go at getLeasedDescriptorByID")
+	}
 	readTimestamp := txn.ReadTimestamp()
 	desc, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
 	if err != nil {
@@ -2200,6 +2203,9 @@ func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid)
 	if err != nil {
 		return nil, err
 	}
+	if dt.txn == nil {
+		panic("dt.txn is nil in collection.go at ResolveTypeByOID")
+	}
 	name, desc, err := dt.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
@@ -2213,6 +2219,9 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
 	flags := tree.CommonLookupFlags{
 		Required: true,
+	}
+	if dt.txn == nil {
+		panic("dt.txn is nil in collection.go at GetTypeDescriptor")
 	}
 	desc, err := dt.descriptors.getDescriptorByIDMaybeSetTxnDeadline(
 		ctx, dt.txn, id, flags, false, /* setTxnDeadline */

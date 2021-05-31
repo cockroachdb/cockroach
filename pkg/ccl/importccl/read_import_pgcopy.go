@@ -47,12 +47,14 @@ func newPgCopyReader(
 	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 ) (*pgCopyReader, error) {
 	return &pgCopyReader{
 		importCtx: &parallelImportContext{
 			walltime:   walltime,
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,
+			semaCtx:    semaCtx,
 			tableDesc:  tableDesc,
 			targetCols: targetCols,
 			kvCh:       kvCh,

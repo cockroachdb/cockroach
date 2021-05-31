@@ -46,13 +46,15 @@ func TestMysqldumpDataReader(t *testing.T) {
 	ctx := context.Background()
 	table := descForTable(ctx, t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 100, 200, NoFKs)
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table.TableDesc()}}
+	semaCtx := tree.MakeSemaContext()
 	opts := roachpb.MysqldumpOptions{}
 
 	kvCh := make(chan row.KVBatch, 50)
 	// When creating a new dump reader, we need to pass in the walltime that will be used as
 	// a parameter used for generating unique rowid, random, and gen_random_uuid as default
 	// expressions. Here, the parameter doesn't matter so we pass in 0.
-	converter, err := newMysqldumpReader(ctx, kvCh, 0 /*walltime*/, tables, testEvalCtx, opts)
+	converter, err := newMysqldumpReader(ctx, kvCh, 0 /*walltime*/, tables, testEvalCtx,
+		&semaCtx, opts)
 
 	if err != nil {
 		t.Fatal(err)

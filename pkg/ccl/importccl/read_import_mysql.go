@@ -63,6 +63,7 @@ func newMysqldumpReader(
 	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	opts roachpb.MysqldumpOptions,
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime, opts: opts}
@@ -73,8 +74,10 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewBuilder(table.Desc).BuildImmutableTable(),
-			nil /* targetColNames */, evalCtx, kvCh, nil /* seqChunkProvider */)
+		conv, err := row.NewDatumRowConverter(
+			ctx, tabledesc.NewBuilder(table.Desc).BuildImmutableTable(),
+			nil /* targetColNames */, evalCtx, semaCtx, kvCh,
+			nil /* seqChunkProvider */)
 		if err != nil {
 			return nil, err
 		}

@@ -459,6 +459,7 @@ func newAvroInputReader(
 	walltime int64,
 	parallelism int,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 ) (*avroInputReader, error) {
 
 	return &avroInputReader{
@@ -466,6 +467,7 @@ func newAvroInputReader(
 			walltime:   walltime,
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,
+			semaCtx:    semaCtx,
 			tableDesc:  tableDesc,
 			kvCh:       kvCh,
 		},
