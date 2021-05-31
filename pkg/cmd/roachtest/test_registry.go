@@ -34,6 +34,7 @@ const (
 	OwnerBulkIO        Owner = `bulk-io`
 	OwnerCDC           Owner = `cdc`
 	OwnerKV            Owner = `kv`
+	OwnerMultiRegion   Owner = `multiregion`
 	OwnerServer        Owner = `server`
 	OwnerSQLQueries    Owner = `sql-queries`
 	OwnerSQLSchema     Owner = `sql-schema`
