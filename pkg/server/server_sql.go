@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -398,6 +399,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		compactEngineSpanFunc = cli.CompactEngineSpan
 	}
 
+	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating virtual schema holder")
+	}
+
+	descsFactory := descs.NewFactory(
+		cfg.Settings,
+		leaseMgr,
+		hydratedTablesCache,
+		virtualSchemas,
+	)
+
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext: cfg.AmbientCtx,
@@ -448,9 +461,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
 
-		RangeCache:     cfg.distSender.RangeDescriptorCache(),
-		HydratedTables: hydratedTablesCache,
+		RangeCache:   cfg.distSender.RangeDescriptorCache(),
+		DescsFactory: descsFactory,
 	}
+
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
@@ -460,11 +474,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	distSQLServer := distsql.NewServer(ctx, distSQLCfg)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
-
-	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating virtual schema holder")
-	}
 
 	// Set up Executor
 
@@ -546,7 +555,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.db,
 			cfg.circularInternalExecutor,
 			codec,
-			leaseMgr,
+			descsFactory,
 			cfg.Settings,
 			cfg.rangeFeedFactory,
 		),
@@ -554,9 +563,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
-		HydratedTables:             hydratedTablesCache,
 		GCJobNotifier:              gcJobNotifier,
 		RangeFeedFactory:           cfg.rangeFeedFactory,
+		DescsFactory:               descsFactory,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -695,7 +704,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.sqlStatusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
-		leaseMgr,
+		descsFactory,
 	)
 
 	reporter := &diagnostics.Reporter{

@@ -164,14 +164,16 @@ func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
 func cleanupSessionTempObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
-	leaseMgr *lease.Manager,
 	db *kv.DB,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
+	df *descs.Factory,
 	sessionID ClusterWideID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return descs.Txn(ctx, settings, leaseMgr, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+	return df.Txn(ctx, db, ie, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		dbIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, codec)
@@ -396,6 +398,7 @@ type TemporaryObjectCleaner struct {
 	testingKnobs           ExecutorTestingKnobs
 	metrics                *temporaryObjectCleanerMetrics
 	leaseMgr               *lease.Manager
+	descsFactory           *descs.Factory
 }
 
 // temporaryObjectCleanerMetrics are the metrics for TemporaryObjectCleaner
@@ -422,7 +425,7 @@ func NewTemporaryObjectCleaner(
 	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
-	leaseMgr *lease.Manager,
+	descsFactory *descs.Factory,
 ) *TemporaryObjectCleaner {
 	metrics := makeTemporaryObjectCleanerMetrics()
 	registry.AddMetricStruct(metrics)
@@ -435,7 +438,7 @@ func NewTemporaryObjectCleaner(
 		isMeta1LeaseholderFunc:           isMeta1LeaseholderFunc,
 		testingKnobs:                     testingKnobs,
 		metrics:                          metrics,
-		leaseMgr:                         leaseMgr,
+		descsFactory:                     descsFactory,
 	}
 }
 
@@ -561,13 +564,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 			// the given schema correctly.
 			if err := retryFunc(ctx, func() error {
 				return cleanupSessionTempObjects(
-					ctx,
-					c.settings,
-					c.leaseMgr,
-					c.db,
-					c.codec,
-					ie,
-					sessionID,
+					ctx, c.settings, c.db, c.codec, ie, c.descsFactory, sessionID,
 				)
 			}); err != nil {
 				// Log error but continue trying to delete the rest.

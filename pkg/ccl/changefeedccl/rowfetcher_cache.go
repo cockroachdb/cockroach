@@ -15,11 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -51,17 +49,12 @@ type idVersion struct {
 }
 
 func newRowFetcherCache(
-	ctx context.Context,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	leaseMgr *lease.Manager,
-	hydratedTables *hydratedtables.Cache,
-	db *kv.DB,
+	ctx context.Context, codec keys.SQLCodec, leaseMgr *lease.Manager, df *descs.Factory, db *kv.DB,
 ) *rowFetcherCache {
 	return &rowFetcherCache{
 		codec:      codec,
 		leaseMgr:   leaseMgr,
-		collection: descs.NewCollection(settings, leaseMgr, hydratedTables, nil /* virtualSchemas */),
+		collection: df.NewCollection(nil /* sessionData */),
 		db:         db,
 		fetchers:   make(map[idVersion]*row.Fetcher),
 	}

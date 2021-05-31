@@ -81,23 +81,23 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 			log.Infof(ctx, "schema change waiting for concurrent schema changes on descriptor %d", descID)
 		}
 		blocked := false
-		if err := descs.Txn(
-			ctx, p.ExecCfg().Settings, p.LeaseMgr(), p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
-			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-				txn.SetFixedTimestamp(ctx, now)
-				table, err := descriptors.GetImmutableTableByID(ctx, txn, descID,
-					tree.ObjectLookupFlags{
-						CommonLookupFlags: tree.CommonLookupFlags{
-							Required:    true,
-							AvoidCached: true,
-						},
-					})
-				if err != nil {
-					return err
-				}
-				blocked = scbuild.HasConcurrentSchemaChanges(table)
-				return nil
-			}); err != nil {
+		if err := p.ExecCfg().DescsFactory.Txn(ctx, p.ExecCfg().DB, p.ExecCfg().InternalExecutor, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			txn.SetFixedTimestamp(ctx, now)
+			table, err := descriptors.GetImmutableTableByID(ctx, txn, descID,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required:    true,
+						AvoidCached: true,
+					},
+				})
+			if err != nil {
+				return err
+			}
+			blocked = scbuild.HasConcurrentSchemaChanges(table)
+			return nil
+		}); err != nil {
 			return err
 		}
 		if !blocked {

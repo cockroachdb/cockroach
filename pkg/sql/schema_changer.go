@@ -86,6 +86,7 @@ type SchemaChanger struct {
 	sqlInstanceID     base.SQLInstanceID
 	db                *kv.DB
 	leaseMgr          *lease.Manager
+	descsFactory      *descs.Factory
 
 	metrics *SchemaChangerMetrics
 
@@ -121,6 +122,7 @@ func NewSchemaChangerForTesting(
 		sqlInstanceID: sqlInstanceID,
 		db:            db,
 		leaseMgr:      leaseMgr,
+		descsFactory:  execCfg.DescsFactory,
 		jobRegistry:   jobRegistry,
 		settings:      settings,
 		execCfg:       execCfg,
@@ -406,11 +408,10 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 // If there are no draining names, this call will not update any descriptors.
 func drainNamesForDescriptor(
 	ctx context.Context,
-	settings *cluster.Settings,
 	descID descpb.ID,
 	db *kv.DB,
 	ie sqlutil.InternalExecutor,
-	leaseMgr *lease.Manager,
+	df *descs.Factory,
 	codec keys.SQLCodec,
 	beforeDrainNames func(),
 ) error {
@@ -466,7 +467,7 @@ func drainNamesForDescriptor(
 		}
 		return txn.Run(ctx, b)
 	}
-	return descs.Txn(ctx, settings, leaseMgr, ie, db, run)
+	return df.Txn(ctx, db, ie, run)
 }
 
 func startGCJob(
@@ -580,7 +581,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// If there are any names to drain, then drain them.
 	if len(desc.GetDrainingNames()) > 0 {
 		if err := drainNamesForDescriptor(
-			ctx, sc.settings, desc.GetID(), sc.db, sc.execCfg.InternalExecutor, sc.leaseMgr,
+			ctx, desc.GetID(), sc.db, sc.execCfg.InternalExecutor, sc.descsFactory,
 			sc.execCfg.Codec, sc.testingKnobs.OldNamesDrainedNotification,
 		); err != nil {
 			return err
@@ -1032,7 +1033,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// descriptor updates are published.
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
-	err := descs.Txn(ctx, sc.settings, sc.leaseMgr, sc.execCfg.InternalExecutor, sc.db, func(
+	err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
@@ -1958,12 +1959,11 @@ type SchemaChangerTestingKnobs struct {
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
-// txn is a convenient wrapper around descs.Txn().
+// txn is a convenient wrapper around descs.Factory.Txn().
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
-	err := descs.Txn(ctx, sc.settings, sc.leaseMgr, sc.execCfg.InternalExecutor, sc.db, f)
-	return err
+	return sc.descsFactory.Txn(ctx, sc.db, sc.execCfg.InternalExecutor, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
@@ -2078,6 +2078,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
 			db:                   p.ExecCfg().DB,
 			leaseMgr:             p.ExecCfg().LeaseManager,
+			descsFactory:         p.ExecCfg().DescsFactory,
 			testingKnobs:         p.ExecCfg().SchemaChangerTestingKnobs,
 			distSQLPlanner:       p.DistSQLPlanner(),
 			jobRegistry:          p.ExecCfg().JobRegistry,
@@ -2244,6 +2245,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
 		db:                   p.ExecCfg().DB,
 		leaseMgr:             p.ExecCfg().LeaseManager,
+		descsFactory:         p.ExecCfg().DescsFactory,
 		testingKnobs:         p.ExecCfg().SchemaChangerTestingKnobs,
 		distSQLPlanner:       p.DistSQLPlanner(),
 		jobRegistry:          p.ExecCfg().JobRegistry,

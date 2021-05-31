@@ -261,9 +261,10 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 	// If there are any names to drain, then do so.
 	if len(typeDesc.GetDrainingNames()) > 0 {
+		var beforeDrainNames func()
 		if err := drainNamesForDescriptor(
-			ctx, t.execCfg.Settings, typeDesc.GetID(), t.execCfg.DB, t.execCfg.InternalExecutor,
-			leaseMgr, codec, nil,
+			ctx, typeDesc.GetID(), t.execCfg.DB, t.execCfg.InternalExecutor,
+			t.execCfg.DescsFactory, codec, beforeDrainNames,
 		); err != nil {
 			return err
 		}
@@ -308,9 +309,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			}
 			return nil
 		}
-		if err := descs.Txn(
-			ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
-			t.execCfg.InternalExecutor, t.execCfg.DB, validateDrops,
+		if err := t.execCfg.DescsFactory.Txn(
+			ctx, t.execCfg.DB, t.execCfg.InternalExecutor, validateDrops,
 		); err != nil {
 			return err
 		}
@@ -367,9 +367,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				}
 				return nil
 			}
-			if err := descs.Txn(
-				ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
-				t.execCfg.InternalExecutor, t.execCfg.DB, preDrop,
+			if err := t.execCfg.DescsFactory.Txn(
+				ctx, t.execCfg.DB, t.execCfg.InternalExecutor, preDrop,
 			); err != nil {
 				return err
 			}
@@ -462,9 +461,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 			return nil
 		}
-		if err := descs.Txn(
-			ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
-			t.execCfg.InternalExecutor, t.execCfg.DB, run,
+		if err := t.execCfg.DescsFactory.Txn(
+			ctx, t.execCfg.DB, t.execCfg.InternalExecutor, run,
 		); err != nil {
 			return err
 		}
@@ -588,8 +586,9 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 
 		return nil
 	}
-	if err := descs.Txn(ctx, t.execCfg.Settings, t.execCfg.LeaseManager, t.execCfg.InternalExecutor,
-		t.execCfg.DB, cleanup); err != nil {
+	if err := t.execCfg.DescsFactory.Txn(
+		ctx, t.execCfg.DB, t.execCfg.InternalExecutor, cleanup,
+	); err != nil {
 		return err
 	}
 
@@ -1109,9 +1108,10 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 			return err
 		}
 
+		var beforeDrainNames func()
 		if err := drainNamesForDescriptor(
-			ctx, tc.execCfg.Settings, tc.typeID, tc.execCfg.DB,
-			tc.execCfg.InternalExecutor, tc.execCfg.LeaseManager, tc.execCfg.Codec, nil,
+			ctx, tc.typeID, tc.execCfg.DB, tc.execCfg.InternalExecutor,
+			tc.execCfg.DescsFactory, tc.execCfg.Codec, beforeDrainNames,
 		); err != nil {
 			return err
 		}

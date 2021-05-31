@@ -90,6 +90,7 @@ func New(
 		targets:  targets,
 		leaseMgr: cfg.LeaseManager.(*lease.Manager),
 		ie:       cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
+		df:       cfg.DescsFactory,
 		metrics:  metrics,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
@@ -115,6 +116,7 @@ type schemaFeed struct {
 	settings *cluster.Settings
 	targets  jobspb.ChangefeedTargets
 	ie       sqlutil.InternalExecutor
+	df       *descs.Factory
 	metrics  *Metrics
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
@@ -285,9 +287,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := descs.Txn(
-		ctx, tf.settings, tf.leaseMgr, tf.ie, tf.db, initialTableDescsFn,
-	); err != nil {
+	if err := tf.df.Txn(ctx, tf.db, tf.ie, initialTableDescsFn); err != nil {
 		return err
 	}
 

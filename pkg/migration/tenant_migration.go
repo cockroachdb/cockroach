@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/logtags"
@@ -31,6 +32,7 @@ type TenantDeps struct {
 	Settings         *cluster.Settings
 	LeaseManager     *lease.Manager
 	InternalExecutor sqlutil.InternalExecutor
+	DescsFactory     *descs.Factory
 }
 
 // TenantMigrationFunc is used to perform sql-level migrations. It may be run from

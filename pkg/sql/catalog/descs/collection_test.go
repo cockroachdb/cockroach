@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -59,12 +60,12 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 
 	db := s0.DB()
 
-	descriptors := descs.NewCollection(
+	descriptors := descs.NewFactory(
 		s0.ClusterSettings(),
 		s0.LeaseManager().(*lease.Manager),
 		nil, // hydratedTables
 		nil, // virtualSchemas
-	)
+	).NewCollection(nil /* sessionData */)
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -170,26 +171,23 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
 	tn := tree.MakeTableNameWithSchema("db", "schema", "table")
 
-	err := descs.Txn(
-		ctx,
-		s.ClusterSettings(),
-		s.LeaseManager().(*lease.Manager),
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			txn.SetDebugName(txnName)
+	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	err := cfg.DescsFactory.Txn(ctx, s.DB(), cfg.InternalExecutor, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		txn.SetDebugName(txnName)
 
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.RequireMutable = true
-			_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
-			require.NoError(t, err)
-			// Verify that the descriptor version is always 1 prior to the write and 2
-			// after the write even after a retry.
-			require.Equal(t, descpb.DescriptorVersion(1), mut.Version)
-			require.NoError(t, descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn))
-			require.Equal(t, descpb.DescriptorVersion(2), mut.Version)
-			return nil
-		},
+		flags := tree.ObjectLookupFlagsWithRequired()
+		flags.RequireMutable = true
+		_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+		require.NoError(t, err)
+		// Verify that the descriptor version is always 1 prior to the write and 2
+		// after the write even after a retry.
+		require.Equal(t, descpb.DescriptorVersion(1), mut.Version)
+		require.NoError(t, descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn))
+		require.Equal(t, descpb.DescriptorVersion(2), mut.Version)
+		return nil
+	},
 	)
 	require.NoError(t, err)
 }
@@ -214,11 +212,11 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	tdb.Exec(t, "CREATE SCHEMA db.sc")
 	tdb.Exec(t, "CREATE TABLE db.sc.tab (i INT PRIMARY KEY)")
 	tdb.Exec(t, "CREATE TYPE db.sc.typ AS ENUM ('foo')")
-	lm := s0.LeaseManager().(*lease.Manager)
+	cfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
 	var dbID descpb.ID
 	t.Run("database descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cfg.DescsFactory.Txn(ctx, s0.DB(), ie, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.DatabaseLookupFlags{}
@@ -258,7 +256,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			}})
 
 			b := &kv.Batch{}
-			b.CPut(catalogkeys.NewDatabaseKey(mut.Name).Key(lm.Codec()), mut.GetID(), nil)
+			b.CPut(catalogkeys.NewDatabaseKey(mut.Name).Key(cfg.Codec), mut.GetID(), nil)
 			err = txn.Run(ctx, b)
 			require.NoError(t, err)
 
@@ -289,7 +287,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		}))
 	})
 	t.Run("schema descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cfg.DescsFactory.Txn(ctx, s0.DB(), ie, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.SchemaLookupFlags{}
@@ -314,7 +312,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		}))
 	})
 	t.Run("table descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cfg.DescsFactory.Txn(ctx, s0.DB(), ie, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.ObjectLookupFlags{}
@@ -338,7 +336,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		}))
 	})
 	t.Run("type descriptors", func(t *testing.T) {
-		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+		require.NoError(t, cfg.DescsFactory.Txn(ctx, s0.DB(), ie, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			flags := tree.ObjectLookupFlags{}
@@ -383,9 +381,9 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 	var tableID descpb.ID
 	row.Scan(&tableID)
 
-	lm := s0.LeaseManager().(*lease.Manager)
+	cfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
-	require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
+	require.NoError(t, cfg.DescsFactory.Txn(ctx, s0.DB(), ie, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		// Resolve the descriptor so we can mutate it.
@@ -440,17 +438,14 @@ func TestDistSQLTypeResolver_GetTypeDescriptor_WrongType(t *testing.T) {
 	var id descpb.ID
 	tdb.QueryRow(t, "SELECT $1::regclass::int", "t").Scan(&id)
 
-	err := descs.Txn(
-		ctx,
-		s.ClusterSettings(),
-		s.LeaseManager().(*lease.Manager),
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			tr := descs.NewDistSQLTypeResolver(descriptors, txn)
-			_, _, err := tr.GetTypeDescriptor(ctx, id)
-			return err
-		})
+	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	err := cfg.DescsFactory.Txn(ctx, s.DB(), cfg.InternalExecutor, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		tr := descs.NewDistSQLTypeResolver(descriptors, txn)
+		_, _, err := tr.GetTypeDescriptor(ctx, id)
+		return err
+	})
 	require.Regexp(t, `descriptor \d+ is a relation not a type`, err)
 	require.Equal(t, pgcode.WrongObjectType, pgerror.GetPGCode(err))
 }
@@ -479,39 +474,36 @@ CREATE TABLE test.schema.t(x INT);
 `)
 	require.NoError(t, err)
 
+	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(
 		t,
-		descs.Txn(
-			ctx,
-			s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				dbDesc, err := descsCol.GetImmutableDatabaseByName(ctx, txn, "test", tree.DatabaseLookupFlags{Required: true})
-				if err != nil {
-					return err
-				}
-				schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
-				if err != nil {
-					return err
-				}
-				// Write garbage privileges into the schema desc.
-				privs := schemaDesc.GetPrivileges()
-				for i := range privs.Users {
-					// SELECT is valid on a database but not a schema, however
-					// due to issue #65697, after running ALTER DATABASE ...
-					// CONVERT TO SCHEMA, schemas could end up with
-					// SELECT on it's privilege descriptor. This test
-					// mimics a schema that was originally a database.
-					// We want to ensure the schema's privileges are fixed
-					// on read.
-					privs.Users[i].Privileges |= privilege.SELECT.Mask()
-				}
+		cfg.DescsFactory.Txn(ctx, kvDB, cfg.InternalExecutor, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			dbDesc, err := descsCol.GetImmutableDatabaseByName(ctx, txn, "test", tree.DatabaseLookupFlags{Required: true})
+			if err != nil {
+				return err
+			}
+			schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
+			if err != nil {
+				return err
+			}
+			// Write garbage privileges into the schema desc.
+			privs := schemaDesc.GetPrivileges()
+			for i := range privs.Users {
+				// SELECT is valid on a database but not a schema, however
+				// due to issue #65697, after running ALTER DATABASE ...
+				// CONVERT TO SCHEMA, schemas could end up with
+				// SELECT on it's privilege descriptor. This test
+				// mimics a schema that was originally a database.
+				// We want to ensure the schema's privileges are fixed
+				// on read.
+				privs.Users[i].Privileges |= privilege.SELECT.Mask()
+			}
 
-				descsCol.SkipValidationOnWrite()
-				return descsCol.WriteDesc(ctx, false, schemaDesc.(catalog.MutableDescriptor), txn)
-			}),
+			descsCol.SkipValidationOnWrite()
+			return descsCol.WriteDesc(ctx, false, schemaDesc.(catalog.MutableDescriptor), txn)
+		}),
 	)
 
 	// Make sure using the schema is fine and we don't encounter a

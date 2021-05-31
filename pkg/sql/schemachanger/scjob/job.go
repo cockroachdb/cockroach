@@ -95,6 +95,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	lm := execCtx.LeaseMgr()
 	db := lm.DB()
 	ie := execCtx.ExtendedEvalContext().InternalExecutor.(sqlutil.InternalExecutor)
+	df := execCtx.ExecCfg().DescsFactory
 	sc, err := scplan.MakePlan(makeTargetStates(ctx, settings, n.targets, states), scplan.Params{
 		ExecutionPhase: scplan.PostCommitPhase,
 	})
@@ -108,7 +109,9 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	}
 
 	for i, s := range sc.Stages {
-		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		if err := df.Txn(ctx, db, ie, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			jt := badJobTracker{
 				txn:         txn,
 				descriptors: descriptors,
@@ -148,18 +151,14 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	// If no stages exist, then execute a singe transaction
 	// within this job to allow schema changes again.
 	if len(sc.Stages) == 0 {
-		err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			err := restoreTableIDs(txn, descriptors)
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
+		if err := df.Txn(ctx, db, ie, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			return restoreTableIDs(txn, descriptors)
+		}); err != nil {
 			return err
 		}
-		err = execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
-		if err != nil {
+		if err := execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx); err != nil {
 			return err
 		}
 	}

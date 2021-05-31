@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -55,44 +53,13 @@ type uncommittedDescriptor struct {
 	immutable catalog.Descriptor
 }
 
-// MakeCollection constructs a Collection.
-func MakeCollection(
-	leaseMgr *lease.Manager,
-	settings *cluster.Settings,
-	sessionData *sessiondata.SessionData,
-	hydratedTables *hydratedtables.Cache,
-	virtualSchemas catalog.VirtualSchemas,
-) Collection {
-	return Collection{
-		leaseMgr:       leaseMgr,
-		settings:       settings,
-		sessionData:    sessionData,
-		hydratedTables: hydratedTables,
-		virtualSchemas: virtualSchemas,
-	}
-}
-
-// NewCollection constructs a new *Collection.
-func NewCollection(
-	settings *cluster.Settings,
-	leaseMgr *lease.Manager,
-	hydratedTables *hydratedtables.Cache,
-	virtualSchemas catalog.VirtualSchemas,
-) *Collection {
-	tc := MakeCollection(leaseMgr, settings, nil, hydratedTables, virtualSchemas)
-	return &tc
-}
-
 // Collection is a collection of descriptors held by a single session that
 // serves SQL requests, or a background job using descriptors. The
 // collection is cleared using ReleaseAll() which is called at the
 // end of each transaction on the session, or on hitting conditions such
 // as errors, or retries that result in transaction timestamp changes.
 type Collection struct {
-	// leaseMgr manages acquiring and releasing per-descriptor leases.
-	leaseMgr *lease.Manager
-	// virtualSchemas optionally holds the virtual schemas.
-	virtualSchemas catalog.VirtualSchemas
+	collectionDeps
 
 	// A collection of descriptors valid for the timestamp. They are released once
 	// the transaction using them is complete. If the transaction gets pushed and
@@ -132,19 +99,10 @@ type Collection struct {
 	// These are purged at the same time as allDescriptors.
 	allSchemasForDatabase map[descpb.ID]map[descpb.ID]string
 
-	// settings are required to correctly resolve system.namespace accesses in
-	// mixed version (19.2/20.1) clusters.
-	// TODO(solon): This field could maybe be removed in 20.2.
-	settings *cluster.Settings
-
 	// sessionData is the SessionData of the current session, if this Collection
 	// is being used in the context of a session. It is stored so that the Collection
 	// knows about state of temporary schemas (name and ID) for resolution.
 	sessionData *sessiondata.SessionData
-
-	// hydratedTables is node-level cache of table descriptors which utlize
-	// user-defined types.
-	hydratedTables *hydratedtables.Cache
 
 	// syntheticDescriptors contains in-memory descriptors which override all
 	// other matching descriptors during immutable descriptor resolution (by name

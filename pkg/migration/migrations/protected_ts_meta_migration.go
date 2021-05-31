@@ -26,22 +26,23 @@ func protectedTsMetaPrivilegesMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	id := systemschema.ProtectedTimestampsMetaTable.GetID()
-	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			log.Infof(ctx, "%s", "updating privileges in system.protected_ts_meta descriptor")
-			mut, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				return err
-			}
-			if mut.GetVersion() > 1 {
-				// Descriptor has already been upgraded, skip.
-				return nil
-			}
-			// Privileges have already been fixed at this point by the descriptor
-			// unwrapping logic in catalogkv which runs post-deserialization changes,
-			// but we still need to bump the version number.
-			mut.Version = 2
-			return descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn)
-		},
+	return d.DescsFactory.Txn(ctx, d.DB, d.InternalExecutor, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		log.Infof(ctx, "%s", "updating privileges in system.protected_ts_meta descriptor")
+		mut, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		if mut.GetVersion() > 1 {
+			// Descriptor has already been upgraded, skip.
+			return nil
+		}
+		// Privileges have already been fixed at this point by the descriptor
+		// unwrapping logic in catalogkv which runs post-deserialization changes,
+		// but we still need to bump the version number.
+		mut.Version = 2
+		return descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn)
+	},
 	)
 }

@@ -614,9 +614,9 @@ func newKVEventToRowConsumer(
 	details jobspb.ChangefeedDetails,
 	knobs TestingKnobs,
 ) kvEventConsumer {
-	rfCache := newRowFetcherCache(ctx, cfg.Codec, cfg.Settings,
-		cfg.LeaseManager.(*lease.Manager), cfg.HydratedTables, cfg.DB)
-
+	rfCache := newRowFetcherCache(
+		ctx, cfg.Codec, cfg.LeaseManager.(*lease.Manager), cfg.DescsFactory, cfg.DB,
+	)
 	return &kvEventToRowConsumer{
 		frontier: frontier,
 		encoder:  encoder,

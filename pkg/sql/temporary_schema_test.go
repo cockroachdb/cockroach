@@ -88,29 +88,19 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		require.NoError(t, err)
 	}
 
+	cfg := s.ExecutorConfig().(ExecutorConfig)
+	ie := s.InternalExecutor().(*InternalExecutor)
 	require.NoError(
 		t,
-		descs.Txn(
-			ctx,
-			s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
-			s.InternalExecutor().(*InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				execCfg := s.ExecutorConfig().(ExecutorConfig)
-				err = cleanupSchemaObjects(
-					ctx,
-					execCfg.Settings,
-					txn,
-					descsCol,
-					execCfg.Codec,
-					s.InternalExecutor().(*InternalExecutor),
-					namesToID["defaultdb"],
-					tempSchemaName,
-				)
-				require.NoError(t, err)
-				return nil
-			}),
+		cfg.DescsFactory.Txn(ctx, kvDB, ie, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			require.NoError(t, cleanupSchemaObjects(
+				ctx, cfg.Settings, txn, descsCol, cfg.Codec, ie,
+				namesToID["defaultdb"], tempSchemaName,
+			))
+			return nil
+		}),
 	)
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
@@ -182,29 +172,19 @@ INSERT INTO perm_table VALUES (3, 4);
 		require.NoError(t, err)
 	}
 
+	cfg := s.ExecutorConfig().(ExecutorConfig)
+	ie := s.InternalExecutor().(*InternalExecutor)
 	require.NoError(
 		t,
-		descs.Txn(
-			ctx,
-			s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
-			s.InternalExecutor().(*InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				execCfg := s.ExecutorConfig().(ExecutorConfig)
-				err = cleanupSchemaObjects(
-					ctx,
-					execCfg.Settings,
-					txn,
-					descsCol,
-					execCfg.Codec,
-					s.InternalExecutor().(*InternalExecutor),
-					namesToID["defaultdb"],
-					tempSchemaName,
-				)
-				require.NoError(t, err)
-				return nil
-			}),
+		cfg.DescsFactory.Txn(ctx, kvDB, ie, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			require.NoError(t, cleanupSchemaObjects(
+				ctx, cfg.Settings, txn, descsCol, cfg.Codec, ie,
+				namesToID["defaultdb"], tempSchemaName,
+			))
+			return nil
+		}),
 	)
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)

@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -883,10 +883,6 @@ type ExecutorConfig struct {
 
 	ExternalIODirConfig base.ExternalIODirConfig
 
-	// HydratedTables is a node-level cache of table descriptors which utilize
-	// user-defined types.
-	HydratedTables *hydratedtables.Cache
-
 	GCJobNotifier *gcjobnotifier.Notifier
 
 	RangeFeedFactory *rangefeed.Factory
@@ -915,6 +911,10 @@ type ExecutorConfig struct {
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
 	// perform compaction over a key span.
 	CompactEngineSpanFunc tree.CompactEngineSpanFunc
+
+	// DescsFactory is used to construct descs.Collection and store the
+	// necessary dependencies.
+	DescsFactory *descs.Factory
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.

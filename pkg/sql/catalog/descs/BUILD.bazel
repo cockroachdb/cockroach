@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "collection.go",
         "dist_sql_type_resolver.go",
+        "factory.go",
         "leased_descriptors.go",
         "txn.go",
     ],
@@ -63,6 +64,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",

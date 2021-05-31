@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -42,23 +41,23 @@ import (
 )
 
 type testInfra struct {
-	tc       *testcluster.TestCluster
-	settings *cluster.Settings
-	ie       sqlutil.InternalExecutor
-	db       *kv.DB
-	lm       *lease.Manager
-	tsql     *sqlutils.SQLRunner
+	tc   *testcluster.TestCluster
+	ie   sqlutil.InternalExecutor
+	db   *kv.DB
+	lm   *lease.Manager
+	df   *descs.Factory
+	tsql *sqlutils.SQLRunner
 }
 
 func setupTestInfra(t testing.TB) *testInfra {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	return &testInfra{
-		tc:       tc,
-		settings: tc.Server(0).ClusterSettings(),
-		ie:       tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
-		db:       tc.Server(0).DB(),
-		lm:       tc.Server(0).LeaseManager().(*lease.Manager),
-		tsql:     sqlutils.MakeSQLRunner(tc.ServerConn(0)),
+		tc:   tc,
+		ie:   tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		db:   tc.Server(0).DB(),
+		lm:   tc.Server(0).LeaseManager().(*lease.Manager),
+		df:   tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DescsFactory,
+		tsql: sqlutils.MakeSQLRunner(tc.ServerConn(0)),
 	}
 }
 
@@ -66,7 +65,7 @@ func (ti *testInfra) txn(
 	ctx context.Context,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
-	return descs.Txn(ctx, ti.settings, ti.lm, ti.ie, ti.db, f)
+	return ti.df.Txn(ctx, ti.db, ti.ie, f)
 }
 
 func TestExecutorDescriptorMutationOps(t *testing.T) {

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -63,12 +62,10 @@ type TableStatisticsCache struct {
 		// from the system table.
 		numInternalQueries int64
 	}
-	ClientDB    *kv.DB
-	SQLExecutor sqlutil.InternalExecutor
-	Codec       keys.SQLCodec
-
-	LeaseMgr *lease.Manager
-	Settings *cluster.Settings
+	ClientDB     *kv.DB
+	SQLExecutor  sqlutil.InternalExecutor
+	Codec        keys.SQLCodec
+	descsFactory *descs.Factory
 
 	// Used when decoding KV from the range feed.
 	datumAlloc rowenc.DatumAlloc
@@ -114,16 +111,14 @@ func NewTableStatisticsCache(
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
 	codec keys.SQLCodec,
-	leaseManager *lease.Manager,
+	descsFactory *descs.Factory,
 	settings *cluster.Settings,
 	rangeFeedFactory *rangefeed.Factory,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
-		ClientDB:    db,
-		SQLExecutor: sqlExecutor,
-		Codec:       codec,
-		LeaseMgr:    leaseManager,
-		Settings:    settings,
+		ClientDB:     db,
+		SQLExecutor:  sqlExecutor,
+		descsFactory: descsFactory,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -503,12 +498,7 @@ func (sc *TableStatisticsCache) parseStats(
 			// will need to start writing a timestamp on the stats objects and request
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				collection := descs.NewCollection(
-					sc.Settings,
-					sc.LeaseMgr,
-					nil, // hydratedTables
-					nil, // virtualSchemas
-				)
+				collection := sc.descsFactory.NewCollection(nil /* sessionData */)
 				defer collection.ReleaseAll(ctx)
 				resolver := descs.NewDistSQLTypeResolver(collection, txn)
 				var err error

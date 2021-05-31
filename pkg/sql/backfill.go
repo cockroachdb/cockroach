@@ -738,12 +738,7 @@ func (sc *SchemaChanger) validateConstraints(
 }
 
 func (sc *SchemaChanger) newCollection() *descs.Collection {
-	return descs.NewCollection(
-		sc.settings,
-		sc.leaseMgr,
-		nil, // leaseManager
-		nil, // virtualSchemas
-	)
+	return sc.descsFactory.NewCollection(nil /* sessionData */)
 }
 
 // getTableVersion retrieves the descriptor for the table being

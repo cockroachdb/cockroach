@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -37,20 +36,23 @@ var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violat
 //
 // The passed transaction is pre-emptively anchored to the system config key on
 // the system tenant.
-func Txn(
+func (f *Factory) Txn(
 	ctx context.Context,
-	settings *cluster.Settings,
-	leaseMgr *lease.Manager,
-	ie sqlutil.InternalExecutor,
 	db *kv.DB,
+	ie sqlutil.InternalExecutor,
+	workFunc func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
+) error {
+	return txn(ctx, db, ie, f, workFunc)
+}
+
+func txn(
+	ctx context.Context,
+	db *kv.DB,
+	ie sqlutil.InternalExecutor,
+	df *Factory,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
 ) error {
-	descsCol := NewCollection(
-		settings,
-		leaseMgr,
-		nil, // hydratedTables
-		nil, // virtualSchemas
-	)
+	descsCol := df.NewCollection(nil)
 	// Waits for descriptors that were modified, skipping
 	// over ones that had their descriptor wiped.
 	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs []catalog.Descriptor) error {
@@ -65,12 +67,12 @@ func Txn(
 				}
 			}
 			if waitForNoVersion {
-				err := leaseMgr.WaitForNoVersion(ctx, ld.ID, retry.Options{})
+				err := df.leaseMgr.WaitForNoVersion(ctx, ld.ID, retry.Options{})
 				if err != nil {
 					return err
 				}
 			} else {
-				_, err := leaseMgr.WaitForOneVersion(ctx, ld.ID, retry.Options{})
+				_, err := df.leaseMgr.WaitForOneVersion(ctx, ld.ID, retry.Options{})
 				if err != nil {
 					return err
 				}
@@ -85,7 +87,9 @@ func Txn(
 			modifiedDescriptors = nil
 			deletedDescs = nil
 			defer descsCol.ReleaseAll(ctx)
-			if err := txn.SetSystemConfigTrigger(leaseMgr.Codec().ForSystemTenant()); err != nil {
+			if err := txn.SetSystemConfigTrigger(
+				descsCol.leaseMgr.Codec().ForSystemTenant(),
+			); err != nil {
 				return err
 			}
 			if err := f(ctx, txn, descsCol); err != nil {

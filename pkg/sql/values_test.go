@@ -22,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -37,7 +39,7 @@ import (
 )
 
 func makeTestPlanner() *planner {
-	// Initialize an Executorconfig sufficiently for the purposes of creating a
+	// Initialize an ExecutorConfig sufficiently for the purposes of creating a
 	// planner.
 	execCfg := ExecutorConfig{
 		NodeInfo: NodeInfo{
@@ -46,6 +48,7 @@ func makeTestPlanner() *planner {
 				return uuid.MakeV4()
 			},
 		},
+		DescsFactory:      descs.NewFactory(clustersettings.MakeTestingClusterSettings(), nil, nil, nil),
 		RootMemoryMonitor: mon.NewUnlimitedMonitor(context.Background(), "test", mon.MemoryResource, nil, nil, 0, nil),
 	}
 
