@@ -15,7 +15,8 @@
     "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'"
   },
   "dependencies": {
-    "@cockroachlabs/cluster-ui": "^0.2.15",
+    "@cockroachlabs/cluster-ui": "link:./cluster-ui",
+    "@cockroachlabs/icons": "0.3.0",
     "analytics-node": "^3.5.0",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
@@ -24,7 +25,7 @@
     "connected-react-router": "^6.6.1",
     "create-react-context": "^0.3.0",
     "highlight.js": "^10.6.0",
-    "lodash": "^4.17.20",
+    "lodash": "^4.17.21",
     "long": "^4.0.0",
     "mini-create-react-context": "^0.3.2",
     "moment": "^2.19.3",
@@ -122,7 +123,7 @@
     "nib": "^1.1.2",
     "prettier": "^2.2.1",
     "prop-types": "^15.5.10",
-    "protobufjs": "^6.7.3",
+    "protobufjs": "6.8.6",
     "redux-saga-test-plan": "^4.0.0-beta.2",
     "rimraf": "^2.6.1",
     "sinon": "^7.5.0",
@@ -143,6 +144,7 @@
     "webpack-cli": "^3.3.10",
     "webpack-dev-server": "^3.10.1",
     "webpack-visualizer-plugin": "^0.1.11",
+    "webpackbar": "^5.0.0-3",
     "world-atlas": "^1.1.4"
   },
   "resolutions": {
@@ -150,7 +152,7 @@
     "**/deep-extend": "^0.5.1",
     "**/extend": "^3.0.2",
     "**/react-dom": "^16.12.0",
-    "**/ua-parser-js": "0.7.23",
+    "**/ua-parser-js": "0.7.24",
     "**/url-parse": "^1.4.3",
     "elliptic": "~6.5.3",
     "http-proxy": "~1.18.1",
