@@ -648,13 +648,19 @@ func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResu
 	return NewAmbiguousResultError(errors.Errorf(format, args...))
 }
 
-func (e *AmbiguousResultError) SafeFormat(s redact.SafePrinter, _ rune) {
-	s.SafeString("result is ambiguous: ")
+// SafeFormatError implements errors.SafeFormatter.
+func (e *AmbiguousResultError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("result is ambiguous")
 	cause := errors.DecodeError(context.Background(), e.EncodedErr)
-	s.Print(cause)
 	if f, l, _, ok := errors.GetOneLineSource(cause); ok {
-		s.Printf("; originated at %s:%d", redact.SafeString(f), redact.Safe(l))
+		p.Printf(" (originated at %s:%d)", redact.SafeString(f), redact.Safe(l))
 	}
+	return cause
+}
+
+// Format implements fmt.Formatter.
+func (e *AmbiguousResultError) Format(s fmt.State, v rune) {
+	errors.FormatError(e, s, v)
 }
 
 func (e *AmbiguousResultError) Error() string {

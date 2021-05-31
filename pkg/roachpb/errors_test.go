@@ -166,7 +166,7 @@ func TestErrorRedaction(t *testing.T) {
 		act := string(s.RedactableString())
 		f, l, _, _ := errors.GetOneLineSource(cause)
 		exp := fmt.Sprintf(
-			`result is ambiguous: bar: foo 127 ‹secret›; originated at %s:%d`, f, l,
+			`result is ambiguous (originated at %s:%d)`, f, l,
 		)
 		require.Equal(t, exp, act)
 	})
