@@ -210,7 +210,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // Instead, we use our own implementation of `scorerOptions` that promotes QPS
 // balance.
 func (sr *StoreRebalancer) scorerOptions() scorerOptions {
-	return scorerOptions{
+	return qpsScorerOptions{
 		deterministic:         sr.rq.allocator.storePool.deterministic,
 		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
 	}
@@ -224,8 +224,9 @@ func (sr *StoreRebalancer) rebalanceStore(
 	ctx context.Context, mode LBRebalancingMode, allStoresList StoreList,
 ) {
 	// First check if we should transfer leases away to better balance QPS.
-	options := scorerOptions{
-		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
+	options, ok := sr.scorerOptions().(qpsScorerOptions)
+	if !ok {
+		log.Fatalf(ctx, "expected the `StoreRebalancer` to be using a `qpsScorerOptions`")
 	}
 	qpsMinThreshold := underfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
 	qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)

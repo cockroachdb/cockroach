@@ -902,7 +902,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
-		result := shouldRebalanceBasedOnThresholds(ctx, desc, sl, a.scorerOptions())
+		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -1297,8 +1297,12 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				if !ok {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
-				if a, e := shouldRebalanceBasedOnThresholds(context.Background(), desc, sl, a.scorerOptions()), cluster[j].shouldRebalanceFrom; a != e {
-					t.Errorf("[store %d]: shouldRebalanceBasedOnThresholds %t != expected %t", store.StoreID, a, e)
+				if a, e := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+					context.Background(), desc, sl,
+				), cluster[j].shouldRebalanceFrom; a != e {
+					t.Errorf(
+						"[store %d]: shouldRebalanceBasedOnThresholds %t != expected %t", store.StoreID, a, e,
+					)
 				}
 			}
 		})
@@ -1385,7 +1389,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		ctx := context.Background()
 		var rangeUsageInfo RangeUsageInfo
-		options := scorerOptions{
+		options := qpsScorerOptions{
 			qpsRebalanceThreshold: 0.1,
 		}
 		add, remove, _, ok := a.RebalanceVoter(
@@ -1408,7 +1412,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 				t.Fatalf("unable to get store %d descriptor", remove.StoreID)
 			}
 			sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
-			result := shouldRebalanceBasedOnThresholds(ctx, desc, sl, options)
+			result := options.shouldRebalanceBasedOnThresholds(ctx, desc, sl)
 			require.True(t, result)
 		} else {
 			require.False(t, ok)
@@ -1502,7 +1506,7 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		defer stopper.Stop(context.Background())
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		ctx := context.Background()
-		options := scorerOptions{
+		options := qpsScorerOptions{
 			qpsRebalanceThreshold: 0.1,
 		}
 		remove, _, err := a.RemoveVoter(
@@ -1580,7 +1584,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(storeFilterThrottled)
-		result := shouldRebalanceBasedOnThresholds(ctx, desc, sl, a.scorerOptions())
+		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
