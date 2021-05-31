@@ -120,9 +120,9 @@ t6  CREATE TABLE public.t6 (
     INDEX t6_a_idx (a ASC) WHERE a > 0:::INT8,
     INDEX t6_a_idx1 (a ASC) WHERE a > 1:::INT8,
     INDEX t6_a_idx2 (a DESC) WHERE a > 2:::INT8,
-    UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3:::INT8,
-    UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4:::INT8,
-    UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
+    UNIQUE INDEX t6_a_idx3 (a ASC) WHERE a > 3:::INT8,
+    UNIQUE INDEX t6_a_idx4 (a ASC) WHERE a > 4:::INT8,
+    UNIQUE INDEX t6_a_idx5 (a DESC) WHERE a > 5:::INT8,
     INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
     INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
     INDEX t6i3 (a DESC) WHERE a > 8:::INT8,
@@ -144,9 +144,9 @@ t6  CREATE TABLE public.t6 (
     INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
     INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
     INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
-    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
-    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
-    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+    UNIQUE INDEX t6_a_idx3 (b ASC) WHERE b > 3:::INT8,
+    UNIQUE INDEX t6_a_idx4 (b ASC) WHERE b > 4:::INT8,
+    UNIQUE INDEX t6_a_idx5 (b DESC) WHERE b > 5:::INT8,
     INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
     INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
     INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
@@ -168,9 +168,9 @@ t7  CREATE TABLE public.t7 (
     INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
     INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
     INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
-    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
-    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
-    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+    UNIQUE INDEX t6_a_idx3 (b ASC) WHERE b > 3:::INT8,
+    UNIQUE INDEX t6_a_idx4 (b ASC) WHERE b > 4:::INT8,
+    UNIQUE INDEX t6_a_idx5 (b DESC) WHERE b > 5:::INT8,
     INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
     INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
     INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
@@ -237,7 +237,7 @@ query TTTTB colnames
 SHOW CONSTRAINTS FROM t11
 ----
 table_name  constraint_name  constraint_type  details                       validated
-t11         t11_a_key        UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
+t11         t11_a_idx        UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
 t11         t11_b_key        UNIQUE           UNIQUE (b ASC) WHERE (a > 0)  true
 
 # Update a non-indexed column referenced by the predicate.
@@ -617,7 +617,7 @@ CREATE TABLE k (a INT, b INT)
 statement ok
 INSERT INTO k VALUES (1, 1), (1, 2)
 
-statement error pgcode 23505 violates unique constraint \"k_a_key\"
+statement error pgcode 23505 violates unique constraint \"k_a_idx\"
 CREATE UNIQUE INDEX ON k (a) WHERE b > 0
 
 statement ok
@@ -627,7 +627,7 @@ statement ok
 CREATE UNIQUE INDEX ON k (a) WHERE b > 0
 
 query II rowsort
-SELECT * FROM k@k_a_key WHERE b > 0
+SELECT * FROM k@k_a_idx WHERE b > 0
 ----
 1  1
 

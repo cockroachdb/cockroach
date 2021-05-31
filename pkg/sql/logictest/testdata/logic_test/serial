@@ -17,7 +17,7 @@ serial  CREATE TABLE public.serial (
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
-        UNIQUE INDEX serial_c_key (c ASC),
+        UNIQUE INDEX serial_c_idx (c ASC),
         FAMILY "primary" (a, b, c)
 )
 
@@ -121,7 +121,7 @@ serial  CREATE TABLE public.serial (
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
-        UNIQUE INDEX serial_c_key (c ASC),
+        UNIQUE INDEX serial_c_idx (c ASC),
         FAMILY "primary" (a, b, c)
 )
 
@@ -226,7 +226,7 @@ serial  CREATE TABLE public.serial (
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq3'::REGCLASS),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
-        UNIQUE INDEX serial_c_key (c ASC),
+        UNIQUE INDEX serial_c_idx (c ASC),
         FAMILY "primary" (a, b, c)
 )
 
@@ -282,7 +282,7 @@ SHOW CREATE TABLE "serial_MixedCase"
                     b INT8 NULL DEFAULT 7:::INT8,
                     c INT8 NOT NULL DEFAULT nextval('public."serial_MixedCase_c_seq"'::REGCLASS),
                     CONSTRAINT "primary" PRIMARY KEY (a ASC),
-                    UNIQUE INDEX "serial_MixedCase_c_key" (c ASC),
+                    UNIQUE INDEX "serial_MixedCase_c_idx" (c ASC),
                     FAMILY "primary" (a, b, c)
 )
 

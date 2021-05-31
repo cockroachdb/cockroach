@@ -1547,7 +1547,7 @@ CREATE TABLE public.regional_by_row_table (
   j JSONB NULL,
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
-  UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
+  UNIQUE INDEX regional_by_row_table_pk_idx (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   INVERTED INDEX regional_by_row_table_j_idx (j),
   UNIQUE INDEX uniq_idx (a ASC) WHERE b > 0:::INT8,

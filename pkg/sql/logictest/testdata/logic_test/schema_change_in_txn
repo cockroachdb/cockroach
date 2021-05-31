@@ -1534,7 +1534,7 @@ BEGIN
 
 # Drop the index that the FK reference depends on
 statement ok
-DROP INDEX x_b_key CASCADE;
+DROP INDEX x_b_idx CASCADE;
 
 # This will fail, causing the previous DROP INDEX to also be rolled back
 statement ok
@@ -1549,7 +1549,7 @@ query TTTTB
 SHOW CONSTRAINTS FROM x
 ----
 x  primary  PRIMARY KEY  PRIMARY KEY (a ASC)  true
-x  x_b_key  UNIQUE       UNIQUE (b ASC)       true
+x  x_b_idx  UNIQUE       UNIQUE (b ASC)       true
 
 statement ok
 DROP TABLE x, y

@@ -1795,7 +1795,7 @@ vectorized: true
     │
     └── • lookup join (semi)
         │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
-        │ table: tab4@tab4_col3_col4_key
+        │ table: tab4@tab4_col3_col4_idx
         │ equality: (col0, lookup_join_const_col_@15) = (col3,col4)
         │ equality cols are key
         │
@@ -1816,7 +1816,7 @@ vectorized: true
                 └── • scan
                       columns: (pk, col3)
                       estimated row count: 10 (missing stats)
-                      table: tab4@tab4_col3_col4_key
+                      table: tab4@tab4_col3_col4_idx
                       spans: /NULL-
 
 ###########################################################
