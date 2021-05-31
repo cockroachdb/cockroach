@@ -889,7 +889,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			//
 			// NB: this must be called after Advance() above since campaigning is
 			// a no-op in the presence of unapplied conf changes.
-			if maybeCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup) {
+			if shouldCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup) {
 				r.campaignLocked(ctx)
 			}
 		}
@@ -1919,7 +1919,7 @@ func ComputeRaftLogSize(
 	return ms.SysBytes + totalSideloaded, nil
 }
 
-func maybeCampaignAfterConfChange(
+func shouldCampaignAfterConfChange(
 	ctx context.Context,
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
