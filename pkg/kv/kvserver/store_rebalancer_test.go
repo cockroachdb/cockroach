@@ -501,6 +501,10 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 				&hottestRanges,
 				&localDesc,
 				storeList,
+				qpsScorerOptions{
+					deterministic:         false,
+					qpsRebalanceThreshold: qpsRebalanceThreshold,
+				},
 			)
 			var rebalancedVoterStores, rebalancedNonVoterStores []roachpb.StoreID
 			for _, target := range voterTargets {
@@ -733,6 +737,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 				&hottestRanges,
 				&localDesc,
 				storeList,
+				qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.05},
 			)
 
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
@@ -833,7 +838,13 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	hottestRanges = rr.topQPS()
 	repl = hottestRanges[0].repl
 
-	_, targets, _ := sr.chooseRangeToRebalance(ctx, &hottestRanges, &localDesc, storeList)
+	_, targets, _ := sr.chooseRangeToRebalance(
+		ctx,
+		&hottestRanges,
+		&localDesc,
+		storeList,
+		qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.25},
+	)
 	expectTargets := []roachpb.ReplicationTarget{
 		{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 	}
