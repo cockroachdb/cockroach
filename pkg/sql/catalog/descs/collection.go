@@ -16,7 +16,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,13 +41,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq/oid"
 )
 
 // uncommittedDescriptor is a descriptor that has been modified in the current
@@ -56,77 +53,6 @@ import (
 type uncommittedDescriptor struct {
 	mutable   catalog.MutableDescriptor
 	immutable catalog.Descriptor
-}
-
-// leasedDescriptors holds references to all the descriptors leased in the
-// transaction, and supports access by name and by ID.
-type leasedDescriptors struct {
-	descs []lease.LeasedDescriptor
-}
-
-func (ld *leasedDescriptors) add(desc lease.LeasedDescriptor) {
-	ld.descs = append(ld.descs, desc)
-}
-
-func (ld *leasedDescriptors) releaseAll() (toRelease []lease.LeasedDescriptor) {
-	toRelease = append(toRelease, ld.descs...)
-	ld.descs = ld.descs[:0]
-	return toRelease
-}
-
-func (ld *leasedDescriptors) release(ids []descpb.ID) (toRelease []lease.LeasedDescriptor) {
-	// Sort the descriptors and leases to make it easy to find the leases to release.
-	leasedDescs := ld.descs
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i] < ids[j]
-	})
-	sort.Slice(leasedDescs, func(i, j int) bool {
-		return leasedDescs[i].Desc().GetID() < leasedDescs[j].Desc().GetID()
-	})
-
-	filteredLeases := leasedDescs[:0] // will store the remaining leases
-	idsToConsider := ids
-	shouldRelease := func(id descpb.ID) (found bool) {
-		for len(idsToConsider) > 0 && idsToConsider[0] < id {
-			idsToConsider = idsToConsider[1:]
-		}
-		return len(idsToConsider) > 0 && idsToConsider[0] == id
-	}
-	for _, l := range leasedDescs {
-		if !shouldRelease(l.Desc().GetID()) {
-			filteredLeases = append(filteredLeases, l)
-		} else {
-			toRelease = append(toRelease, l)
-		}
-	}
-	ld.descs = filteredLeases
-	return toRelease
-}
-
-func (ld *leasedDescriptors) getByID(id descpb.ID) catalog.Descriptor {
-	for i := range ld.descs {
-		desc := ld.descs[i]
-		if desc.Desc().GetID() == id {
-			return desc.Desc()
-		}
-	}
-	return nil
-}
-
-func (ld *leasedDescriptors) getByName(
-	dbID descpb.ID, schemaID descpb.ID, name string,
-) catalog.Descriptor {
-	for i := range ld.descs {
-		desc := ld.descs[i]
-		if lease.NameMatchesDescriptor(desc.Desc(), dbID, schemaID, name) {
-			return desc.Desc()
-		}
-	}
-	return nil
-}
-
-func (ld *leasedDescriptors) numDescriptors() int {
-	return len(ld.descs)
 }
 
 // MakeCollection constructs a Collection.
@@ -2105,110 +2031,4 @@ func (tc *Collection) maybeGetVirtualDescriptorByID(
 		}
 	}
 	return nil, nil
-}
-
-// DistSQLTypeResolverFactory is an object that constructs TypeResolver objects
-// that are bound under a transaction. These TypeResolvers access descriptors
-// through the descs.Collection and eventually the lease.Manager. It cannot be
-// used concurrently, and neither can the constructed TypeResolvers. After the
-// DistSQLTypeResolverFactory is finished being used, all descriptors need to
-// be released from Descriptors. It is intended to be used to resolve type
-// references during the initialization of DistSQL flows.
-type DistSQLTypeResolverFactory struct {
-	Descriptors *Collection
-	CleanupFunc func(ctx context.Context)
-}
-
-// NewTypeResolver creates a new TypeResolver that is bound under the input
-// transaction. It returns a nil resolver if the factory itself is nil.
-func (df *DistSQLTypeResolverFactory) NewTypeResolver(txn *kv.Txn) DistSQLTypeResolver {
-	if df == nil {
-		return DistSQLTypeResolver{}
-	}
-	return NewDistSQLTypeResolver(df.Descriptors, txn)
-}
-
-// NewSemaContext creates a new SemaContext with a TypeResolver bound to the
-// input transaction.
-func (df *DistSQLTypeResolverFactory) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
-	semaCtx := tree.MakeSemaContext()
-	semaCtx.TypeResolver = df.NewTypeResolver(txn)
-	return &semaCtx
-}
-
-// DistSQLTypeResolver is a TypeResolver that accesses TypeDescriptors through
-// a given descs.Collection and transaction.
-type DistSQLTypeResolver struct {
-	descriptors *Collection
-	txn         *kv.Txn
-}
-
-// NewDistSQLTypeResolver creates a new DistSQLTypeResolver.
-func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) DistSQLTypeResolver {
-	return DistSQLTypeResolver{
-		descriptors: descs,
-		txn:         txn,
-	}
-}
-
-// ResolveType implements the tree.TypeReferenceResolver interface.
-func (dt DistSQLTypeResolver) ResolveType(
-	context.Context, *tree.UnresolvedObjectName,
-) (*types.T, error) {
-	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
-}
-
-// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
-func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	id, err := typedesc.UserDefinedTypeOIDToID(oid)
-	if err != nil {
-		return nil, err
-	}
-	name, desc, err := dt.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return desc.MakeTypesT(ctx, &name, dt)
-}
-
-// GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
-func (dt DistSQLTypeResolver) GetTypeDescriptor(
-	ctx context.Context, id descpb.ID,
-) (tree.TypeName, catalog.TypeDescriptor, error) {
-	flags := tree.CommonLookupFlags{
-		Required: true,
-	}
-	desc, err := dt.descriptors.getDescriptorByIDMaybeSetTxnDeadline(
-		ctx, dt.txn, id, flags, false, /* setTxnDeadline */
-	)
-	if err != nil {
-		return tree.TypeName{}, nil, err
-	}
-	typeDesc, isType := desc.(catalog.TypeDescriptor)
-	if !isType {
-		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
-			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
-	}
-	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, typeDesc, nil
-}
-
-// HydrateTypeSlice installs metadata into a slice of types.T's.
-func (dt DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
-	for _, t := range typs {
-		if t.UserDefined() {
-			id, err := typedesc.GetUserDefinedTypeDescID(t)
-			if err != nil {
-				return err
-			}
-			name, desc, err := dt.GetTypeDescriptor(ctx, id)
-			if err != nil {
-				return err
-			}
-			if err := desc.HydrateTypeInfoWithName(ctx, t, &name, dt); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
