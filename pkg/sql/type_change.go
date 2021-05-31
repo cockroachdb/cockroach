@@ -1054,7 +1054,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 				t.typeID,
 			)
 			return nil
-		case !isPermanentSchemaChangeError(tcErr):
+		case !IsPermanentSchemaChangeError(tcErr):
 			// If this isn't a permanent error, then retry.
 			log.Infof(ctx, "retrying type schema change due to retriable error %v", tcErr)
 		default:
@@ -1128,7 +1128,7 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
 				tc.typeID,
 			)
-		case !isPermanentSchemaChangeError(rollbackErr):
+		case !IsPermanentSchemaChangeError(rollbackErr):
 			return jobs.NewRetryJobError(rollbackErr.Error())
 		default:
 			return rollbackErr
