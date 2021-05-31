@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -65,6 +66,27 @@ func relocateAndCheck(
 	return retries
 }
 
+func requireRelocationFailure(
+	ctx context.Context,
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	startKey roachpb.RKey,
+	voterTargets []roachpb.ReplicationTarget,
+	nonVoterTargets []roachpb.ReplicationTarget,
+	errRegExp string,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		err := tc.Servers[0].DB().AdminRelocateRange(
+			ctx, startKey.AsRawKey(), voterTargets, nonVoterTargets,
+		)
+		if kv.IsExpectedRelocateError(err) {
+			return err
+		}
+		require.Regexp(t, errRegExp, err)
+		return nil
+	})
+}
+
 func requireDescMembers(
 	t *testing.T, desc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) {
@@ -94,7 +116,9 @@ func requireLeaseAt(
 	// it's returned here, so don't use FindRangeLeaseHolder which fails when
 	// that happens.
 	testutils.SucceedsSoon(t, func() error {
-		lease, _, err := tc.FindRangeLease(desc, &target)
+		// NB: Specifying a `hint` here does not play well with multi-store
+		// TestServers. See TODO inside `TestServer.GetRangeLease()`.
+		lease, _, err := tc.FindRangeLease(desc, nil /* hint */)
 		if err != nil {
 			return err
 		}
@@ -521,4 +545,101 @@ func setupReplicaRemovalTest(
 	}
 
 	return tc, key, evalDuringReplicaRemoval
+}
+
+// TestAdminRelocateRangeLaterallyAmongStores tests that `AdminRelocateRange` is
+// able to relocate ranges laterally (i.e. between stores on the same node).
+func TestAdminRelocateRangeLaterallyAmongStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// Set up a test cluster with each node having 2 stores.
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{InMemory: true},
+				{InMemory: true},
+			},
+		},
+		ReplicationMode: base.ReplicationManual,
+	}
+	tc := testcluster.StartTestCluster(t, 5, args)
+	defer tc.Stopper().Stop(ctx)
+
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.WaitForNStores(t, tc.NumServers()*2, tc.Server(i).GossipI().(*gossip.Gossip))
+	}
+
+	scratchKey := keys.MustAddr(tc.ScratchRange(t))
+	// Place replicas for the scratch range on stores 1, 3, 5 (i.e. the first
+	// store on each of the nodes). Note that the test cluster will start off with
+	// (n1,s1) already having a replica.
+	scratchDesc := tc.LookupRangeOrFatal(t, scratchKey.AsRawKey())
+	_, found := scratchDesc.GetReplicaDescriptor(1)
+	require.True(t, found)
+	tc.AddVotersOrFatal(t, scratchKey.AsRawKey(), []roachpb.ReplicationTarget{
+		{NodeID: 2, StoreID: 3},
+		{NodeID: 3, StoreID: 5},
+	}...)
+	// Now, ask `AdminRelocateRange()` to move all of these replicas laterally.
+	relocateAndCheck(
+		t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 2},
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, nil, /* nonVoterTargets */
+	)
+	// Ensure that this sort of lateral relocation works even across non-voters
+	// and voters.
+	relocateAndCheck(
+		t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 1},
+		},
+	)
+	relocateAndCheck(
+		t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 2},
+		},
+	)
+
+	// Ensure that, in case a caller of `AdminRelocateRange` tries to place 2
+	// replicas on the same node, a safeguard inside `AdminChangeReplicas()`
+	// rejects the operation.
+	requireRelocationFailure(
+		ctx, t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 1, StoreID: 2},
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, nil, /* nonVoterTargets */
+		"node 1 already has a replica", /* errRegExp */
+	)
+	// Same as above, but for non-voting replicas.
+	requireRelocationFailure(
+		ctx, t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 1, StoreID: 2},
+		}, "node 1 already has a replica", /* errRegExp */
+	)
+	// Ensure that we can't place 2 replicas on the same node even if one is a
+	// voter and the other is a non-voter.
+	requireRelocationFailure(
+		ctx, t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 2},
+		}, "node 1 already has a replica", /* errRegExp */
+	)
 }
