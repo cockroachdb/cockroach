@@ -138,11 +138,11 @@ func NewSchemaChangerForTesting(
 	}
 }
 
-// isPermanentSchemaChangeError returns true if the error results in
+// IsPermanentSchemaChangeError returns true if the error results in
 // a permanent failure of a schema change. This function is a allowlist
 // instead of a blocklist: only known safe errors are confirmed to not be
 // permanent errors. Anything unknown is assumed to be permanent.
-func isPermanentSchemaChangeError(err error) bool {
+func IsPermanentSchemaChangeError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -2118,7 +2118,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 					descID, mutationID,
 				)
 				return nil
-			case !isPermanentSchemaChangeError(scErr):
+			case !IsPermanentSchemaChangeError(scErr):
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
 				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
@@ -2283,7 +2283,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 			// We check for this case so that we can just return the error without
 			// wrapping it in a retry error.
 			return rollbackErr
-		case !isPermanentSchemaChangeError(rollbackErr):
+		case !IsPermanentSchemaChangeError(rollbackErr):
 			// Check if the error is on a allowlist of errors we should retry on, and
 			// have the job registry retry.
 			return jobs.NewRetryJobError(rollbackErr.Error())
