@@ -183,10 +183,10 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_app_txn_fingerprints = 0;")
+	_, err := db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 0;")
 	require.NoError(t, err)
 
-	_, err = db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_app_stmt_fingerprints = 0;")
+	_, err = db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0;")
 	require.NoError(t, err)
 
 	ie := sql.MakeInternalExecutor(
