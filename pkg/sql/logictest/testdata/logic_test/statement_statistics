@@ -261,10 +261,10 @@ COMMIT
 
 # Change the limit for unique fingerprint.
 statement ok
-SET CLUSTER SETTING sql.metrics.max_mem_app_stmt_fingerprints = 0
+SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0
 
 statement ok
-SET CLUSTER SETTING sql.metrics.max_mem_app_txn_fingerprints = 0
+SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = 0
 
 # We now have two additional statement fingerprints because of the two queries we ran against the crdb_internal view
 # prior to setting the fingerprint limit to 0.
@@ -311,10 +311,10 @@ COMMIT
 
 # Reset cluster setting for fingerprint limit.
 statement ok
-RESET CLUSTER SETTING sql.metrics.max_mem_app_stmt_fingerprints
+RESET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints
 
 statement ok
-RESET CLUSTER SETTING sql.metrics.max_mem_app_txn_fingerprints
+RESET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints
 
 statement ok
 BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3, 4; COMMIT
@@ -325,14 +325,14 @@ BEGIN
 query TTI
 SELECT * FROM app_stmts_view
 ----
-7450916591118342552   SELECT * FROM app_stmts_view                                               2
-738932590625820206    SELECT * FROM txn_fingerprint_view                                         2
-11619138756491374338  SELECT _                                                                   3
-12989550133819508941  SELECT _, _                                                                3
-10964754960692259604  SELECT _, _, _                                                             1
-13598297958913191023  SELECT _, _, _, _                                                          1
-16987737544287788047  SET CLUSTER SETTING "sql.metrics.max_mem_app_stmt_fingerprints" = DEFAULT  1
-16390761147218991017  SET CLUSTER SETTING "sql.metrics.max_mem_app_txn_fingerprints" = DEFAULT   1
+7450916591118342552   SELECT * FROM app_stmts_view                                           2
+738932590625820206    SELECT * FROM txn_fingerprint_view                                     2
+11619138756491374338  SELECT _                                                               3
+12989550133819508941  SELECT _, _                                                            3
+10964754960692259604  SELECT _, _, _                                                         1
+13598297958913191023  SELECT _, _, _, _                                                      1
+8880410704856970575   SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
+6650120188975168745   SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
 
 query TTI
 SELECT * FROM txn_fingerprint_view
