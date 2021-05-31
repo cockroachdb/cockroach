@@ -4,6 +4,8 @@ go_library(
     name = "descs",
     srcs = [
         "collection.go",
+        "dist_sql_type_resolver.go",
+        "leased_descriptors.go",
         "txn.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descs",
