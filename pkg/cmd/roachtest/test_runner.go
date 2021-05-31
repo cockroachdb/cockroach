@@ -11,6 +11,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
 	"html"
@@ -710,6 +711,14 @@ caffeinate ./roachstress.sh %s
 		if teamCity {
 			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), t.Name())
 
+			// Zip the artifacts. This improves the TeamCity UX where we can navigate
+			// through zip files just fine, but we can't download subtrees of the
+			// artifacts storage. By zipping we get this capability as we can just
+			// download the zip file for the failing test instead.
+			if err := zipArtifacts(t.artifactsDir); err != nil {
+				l.Printf("unable to zip artifacts: %s", err)
+			}
+
 			if t.artifactsSpec != "" {
 				// Tell TeamCity to collect this test's artifacts now. The TC job
 				// also collects the artifacts directory wholesale at the end, but
@@ -1253,4 +1262,78 @@ func (we *workerErrors) Err() error {
 	// TODO(andrei): Maybe we should do something other than return the first
 	// error...
 	return we.mu.errs[0]
+}
+
+func zipArtifacts(path string) error {
+	f, err := os.Create(filepath.Join(path, "artifacts.zip"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	z := zip.NewWriter(f)
+	rel := func(targetpath string) string {
+		relpath, err := filepath.Rel(path, targetpath)
+		if err != nil {
+			return targetpath
+		}
+		return relpath
+	}
+
+	walk := func(visitor func(string, os.FileInfo) error) error {
+		return filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && strings.HasSuffix(path, ".zip") {
+				// Skip any top-level zip files, which notably includes itself
+				// and, if present, the debug.zip.
+				return nil
+			}
+			return visitor(path, info)
+		})
+	}
+
+	// Zip all of the files.
+	if err := walk(func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			return nil
+		}
+		w, err := z.Create(rel(path))
+		if err != nil {
+			return err
+		}
+		r, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		if _, err := io.Copy(w, r); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := z.Close(); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+
+	// Now that the zip file is there, remove all of the files that went into it.
+	// Note that 'walk' skips the debug.zip and our newly written zip file.
+	root := path
+	return walk(func(path string, info os.FileInfo) error {
+		if path == root {
+			return nil
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
 }

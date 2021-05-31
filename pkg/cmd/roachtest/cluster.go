@@ -1698,9 +1698,12 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 		// waste our time.
 		for i := 1; i <= c.spec.NodeCount; i++ {
 			// `./cockroach debug zip` is noisy. Suppress the output unless it fails.
+			//
+			// Ignore the files in the the log directory; we pull the logs separately anyway
+			// so this would only cause duplication.
 			si := strconv.Itoa(i)
 			output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":"+si, "--",
-				"./cockroach", "debug", "zip", "--url", "{pgurl:"+si+"}", zipName)
+				"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:"+si+"}", zipName)
 			if err != nil {
 				c.l.Printf("./cockroach debug zip failed: %s", output)
 				if i < c.spec.NodeCount {
