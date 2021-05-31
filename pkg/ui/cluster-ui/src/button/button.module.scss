@@ -1,0 +1,160 @@
+@import '../core/index.module.scss';
+
+@mixin icon-color($color: $colors--neutral-7) {
+  svg {
+    fill: $color;
+  }
+}
+
+.crl-button {
+  border-radius: 3px;
+  cursor: pointer;
+  width: max-content;
+  @include icon-color();
+  font-family: $font-family--semi-bold;
+}
+
+.crl-button--type-flat {
+  border: solid 1px transparent;
+  background-color: transparent;
+  color: $colors--primary-blue-3;
+  @include icon-color($colors--primary-blue-3);
+
+  &:hover {
+    color: $colors--primary-blue-4;
+    @include icon-color($colors--primary-blue-4);
+  }
+
+  &:active {
+    border: solid 2px $colors--primary-blue-1;
+  }
+
+  &:focus {
+    outline: none;
+    border: solid 1px $colors--primary-blue-3;
+  }
+
+  &.crl-button--disabled {
+    color: $colors--neutral-4;
+    @include icon-color($colors--neutral-4);
+    pointer-events: none;
+    cursor: default;
+  }
+}
+
+.crl-button--type-unstyled-link {
+  @extend .crl-button--type-flat;
+
+  margin-bottom: 17px;
+  font-family: $font-family--base;
+  font-size: $font-size--medium;
+  line-height: 22px;
+  letter-spacing: 0.1px;
+  color: $colors--neutral-7;
+  @include icon-color($colors--neutral-7);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.crl-button--type-primary {
+  background-color: $colors--primary-purple-3;
+  color: $colors--white;
+  @include icon-color($colors--white);
+  border: solid 1px $colors--primary-purple-3;
+
+  &:hover {
+    color: $colors--white;
+    @include icon-color($colors--white);
+  }
+
+  &:active {
+    border: solid 1px $colors--primary-green-4;
+  }
+
+  &:focus {
+    outline: none;
+    border: solid 1px $colors--primary-green-4;
+  }
+
+  &.crl-button--disabled {
+    border: solid 1px $colors--primary-purple-2;
+    background: $colors--primary-purple-2;
+    color: $colors--white;
+    @include icon-color($colors--white);
+    pointer-events: none;
+    cursor: default;
+  }
+}
+
+.crl-button--type-secondary {
+  background-color: $colors--white;
+  color: $colors--primary-text;
+  @include icon-color($colors--primary-text);
+  border: solid 1px $colors--neutral-4;
+
+  &:hover, &:active, &:focus {
+    color: $colors--primary-text;
+    @include icon-color($colors--primary-text);
+    background: $colors--neutral-1;
+  }
+
+  &:active {
+    border: solid 1px $colors--neutral-5;
+  }
+
+  &:focus {
+    outline: none;
+    border: solid 1px $colors--neutral-5;
+  }
+
+  &.crl-button--disabled {
+    border: solid 1px $colors--neutral-4;
+    background: $colors--neutral-1;
+    color: $colors--neutral-5;
+    @include icon-color($colors--neutral-5);
+    pointer-events: none;
+    cursor: default;
+  }
+}
+
+.crl-button--size-default {
+  height: $line-height--larger;
+  min-width: $line-height--larger;
+  padding-left: $spacing-small;
+  padding-right: $spacing-small;
+}
+
+.crl-button--size-small {
+  height: $line-height--large;
+  min-width: $line-height--large;
+  padding: 0 $spacing-base;
+}
+
+.crl-button__container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.crl-button__content {
+  display: flex;
+  flex: 1;
+}
+
+
+.crl-button__icon {
+  display: flex;
+  align-items: center;
+}
+
+.crl-button__icon--push-left {
+  order: -1;
+  margin-right: $spacing-base;
+}
+
+.crl-button__icon--push-right {
+  order: 1;
+  margin-left: $spacing-base;
+}
