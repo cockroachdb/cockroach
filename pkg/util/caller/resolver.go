@@ -39,40 +39,71 @@ type CallResolver struct {
 
 var reStripNothing = regexp.MustCompile(`^$`)
 
-// defaultRE strips src/github.com/org/project/(pkg/)module/submodule/file.go
-// down to module/submodule/file.go. It falls back to stripping nothing when
-// it's unable to look up its own location via runtime.Caller().
+// findFileAndPackageRoot identifies separately the
+// package path to the crdb source tree relative to
+// the package build root, and the package build root.
+// This information is needed to construct defaultRE below.
+//
+// The first return value is false if the paths could not be
+// determined.
+func findFileAndPackageRoot() (ok bool, crdbPath string, srcRoot string) {
+	pcs := make([]uintptr, 1)
+	if runtime.Callers(1, pcs[:]) < 1 {
+		return false, "", ""
+	}
+	frame, _ := runtime.CallersFrames(pcs).Next()
+	funcName := frame.Function
+
+	crdbPath = strings.TrimSuffix(funcName, ".findFileAndPackageRoot")
+	root := path.Dir(frame.File)
+
+	// Coverage tests report back as `[...]/util/caller/_test/_obj_test`;
+	// strip back to this package's directory.
+	if !strings.HasSuffix(root, "caller") {
+		root = path.Dir(root)
+		crdbPath = path.Dir(crdbPath)
+	}
+
+	if !strings.HasSuffix(root, "caller") {
+		panic("cannot find self package")
+	}
+
+	// Rewind 3 levels up: pkg/util/callers
+	for i := 0; i < 3; i++ {
+		crdbPath = path.Dir(crdbPath)
+		root = path.Dir(root)
+	}
+
+	if !strings.HasSuffix(root, crdbPath) {
+		panic("cannot find crdb path inside file path")
+	}
+
+	srcRoot = strings.TrimSuffix(root, crdbPath)
+
+	return true, crdbPath, srcRoot
+}
+
+// defaultRE strips as follows:
+//
+// - <fileroot><crdbroot>/(pkg/)module/submodule/file.go
+//   -> module/submodule/file.go
+//
+// - <fileroot><crdbroot>/vendor/<otherpkg>/path/to/file
+//   -> vendor/<otherpkg>/path/to/file
+//
+// - <fileroot><otherpkg>/path/to/file
+//   -> <otherpkg>/path/to/file
+//
+// It falls back to stripping nothing when it's unable to look up its
+// own location via runtime.Caller().
 var defaultRE = func() *regexp.Regexp {
-	_, file, _, ok := runtime.Caller(0)
+	ok, crdbRoot, fileRoot := findFileAndPackageRoot()
 	if !ok {
 		return reStripNothing
 	}
-	const sep = "/"
-	root := path.Dir(file)
-	// Coverage tests report back as `[...]/util/caller/_test/_obj_test`;
-	// strip back to this package's directory.
-	for strings.Contains(root, sep) && !strings.HasSuffix(root, "caller") {
-		root = path.Dir(root)
-	}
-	// Strip to $GOPATH/src.
-	for i := 0; i < 6; i++ {
-		root = path.Dir(root)
-	}
-	qSep := regexp.QuoteMeta(sep)
-	// Part of the regexp that matches `/github.com/username/reponame/(pkg/)`.
-	pkgStrip := qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(?:pkg/)?(.*)"
-	if !strings.Contains(root, sep) {
-		// This is again the unusual case above. The actual callsites will have
-		// a "real" caller, so now we don't exactly know what to strip; going
-		// up to the rightmost "src" directory will be correct unless someone
-		// creates packages inside of a "src" directory within their GOPATH.
-		return regexp.MustCompile(".*" + qSep + "src" + pkgStrip)
-	}
-	if !strings.HasSuffix(root, sep+"src") && !strings.HasSuffix(root, sep+"vendor") &&
-		!strings.HasSuffix(root, sep+"pkg/mod") {
-		panic("unable to find base path for default call resolver, got " + root)
-	}
-	return regexp.MustCompile(regexp.QuoteMeta(root) + pkgStrip)
+
+	pkgStrip := regexp.QuoteMeta(fileRoot) + "(?:" + regexp.QuoteMeta(crdbRoot) + "/)?(?:pkg/)?(.*)"
+	return regexp.MustCompile(pkgStrip)
 }()
 
 var defaultCallResolver = NewCallResolver(defaultRE)
