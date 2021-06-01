@@ -689,7 +689,7 @@ func TestConstraintsCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, s := range testStores {
-				valid := constraintsCheck(s, tc.constraints)
+				valid := isStoreValid(s, tc.constraints)
 				ok := tc.expected[s.StoreID]
 				if valid != ok {
 					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
