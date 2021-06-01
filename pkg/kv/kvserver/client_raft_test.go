@@ -5444,3 +5444,172 @@ func (n noopRaftMessageResponseSteam) Send(*kvserver.RaftMessageResponse) error 
 }
 
 var _ kvserver.RaftMessageResponseStream = noopRaftMessageResponseSteam{}
+
+// TestElectionAfterRestart is an end-to-end test for shouldCampaignOnWakeLocked
+// (see TestReplicaShouldCampaignOnWake for the corresponding unit test). It sets
+// up a cluster, makes 100 ranges, restarts the cluster, and verifies that the
+// cluster serves a full table scan over these ranges without incurring any raft
+// elections that are triggered by a timeout.
+//
+// For technical reasons, this uses a single-node cluster. The test can also be
+// run on multi-node clusters, though it is very difficult to deflake it there
+// as there can be rare but hard to avoid election stalemates if requests arrive
+// on multiple nodes at once.
+func TestElectionAfterRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// We use a single node to avoid rare flakes due to dueling elections.
+	// The code is set up to support multiple nodes, though the test will
+	// be flaky as we have no way to control that each range receives only
+	// one request at a single replica.
+	const numNodes = 1
+
+	// Hard-code the election timeouts here for a 6s timeout. We want to make sure
+	// that election timeouts never happen spuriously in this test as a result of
+	// running it with very little headroom (such as stress). We avoid an infinite
+	// timeout because that will make for a poor experience (hanging requests)
+	// when something does flake.
+	const electionTimeoutTicks = 30
+	const raftTickInterval = 200 * time.Millisecond
+
+	r := server.NewStickyInMemEnginesRegistry()
+	defer r.CloseAllStickyInMemEngines()
+
+	newTCArgs := func(parallel bool, replMode base.TestClusterReplicationMode, onTimeoutCampaign func(roachpb.RangeID)) base.TestClusterArgs {
+		return base.TestClusterArgs{
+			ReplicationMode: replMode,
+			ParallelStart:   parallel,
+			ServerArgs: base.TestServerArgs{
+				RaftConfig: base.RaftConfig{
+					RaftElectionTimeoutTicks: electionTimeoutTicks,
+					RaftTickInterval:         raftTickInterval,
+				},
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry: r,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						OnRaftTimeoutCampaign: onTimeoutCampaign,
+					},
+				},
+			},
+		}
+	}
+
+	const numRanges = 100
+
+	rangeIDs := map[roachpb.RangeID]int{} // ranges in our table -> election timeouts seen
+	func() {
+		tc := testcluster.NewTestCluster(
+			t, numNodes, newTCArgs(false /* parallel */, base.ReplicationAuto, nil /* onTimeoutCampaign */))
+		tc.Start(t)
+		defer t.Log("stopped cluster")
+		defer tc.Stopper().Stop(ctx)
+		_, err := tc.Conns[0].Exec(`CREATE TABLE t(x, PRIMARY KEY(x)) AS TABLE generate_series(1, $1)`, numRanges-1)
+		require.NoError(t, err)
+		// Splitting in reverse order is faster (splitDelayHelper doesn't have to add any delays).
+		_, err = tc.Conns[0].Exec(`ALTER TABLE t SPLIT AT TABLE generate_series($1, 1, -1)`, numRanges-1)
+		require.NoError(t, err)
+		require.NoError(t, tc.WaitForFullReplication())
+
+		for _, row := range sqlutils.MakeSQLRunner(tc.Conns[0]).QueryStr(
+			t, `SELECT range_id FROM crdb_internal.ranges_no_leases WHERE table_name = 't';`,
+		) {
+			n, err := strconv.Atoi(row[0])
+			require.NoError(t, err)
+			rangeIDs[roachpb.RangeID(n)] = 0
+		}
+		require.Len(t, rangeIDs, numRanges)
+		t.Logf("created %d ranges", numRanges)
+
+		// Make sure that the ranges have all followers fully caught up. Otherwise,
+		// as we stop the server and restart it later, the follower that
+		// auto-campaigns may not be fully caught up and so will fail to win the
+		// election, so the raft group will have for someone else to campaign after
+		// a timeout and this is what we want to make sure doesn't happen in this
+		// test.
+		//
+		// Note that none of this is needed for numNodes=1, but we want to make sure
+		// that the test is not more flaky than it needs to be when run with
+		// numNodes>1.
+		testutils.SucceedsSoon(t, func() error {
+			for rangeID := range rangeIDs {
+				var err error
+				var lastIndex uint64
+				for _, srv := range tc.Servers {
+					_ = srv.Stores().VisitStores(func(s *kvserver.Store) error {
+						s.VisitReplicas(func(replica *kvserver.Replica) (more bool) {
+							if replica.RangeID != rangeID {
+								return
+							}
+
+							cur := replica.State(ctx).LastIndex
+							if lastIndex == 0 {
+								lastIndex = cur
+							}
+							if lastIndex > cur {
+								err = errors.Errorf("last indexes not equal: %d != %d", lastIndex, cur)
+							}
+							return err == nil // more
+						})
+						return nil
+					})
+				}
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		for _, srv := range tc.Servers {
+			require.NoError(t, srv.Stores().VisitStores(func(s *kvserver.Store) error {
+				return s.Engine().Flush()
+			}))
+		}
+		t.Log("waited for all followers to be caught up")
+	}()
+
+	// Annoyingly, with the increased tick interval in this test, this cluster takes
+	// a long time to re-start. The reason is that the "campaign" heuristic on the
+	// node liveness range (and maybe some other system ranges) typically fires before
+	// all nodes are available, meaning that the vote request messages are silently
+	// dropped. The group will then be in StatePreCandidate and will have to sit out
+	// an election timeout. One way to fix this could be to start n2 and n3
+	// before n1. Or we could selectively change the tick interval only for the
+	// ranges we care about, or allow changing it on a running cluster (but that
+	// last option is going to be flaky, since we only approximately control when
+	// the raft instances we care about are initialized after the restart).
+	tc := testcluster.NewTestCluster(
+		t,
+		numNodes,
+		newTCArgs(true /* parallel */, base.ReplicationManual, func(rangeID roachpb.RangeID) {
+			if _, ok := rangeIDs[rangeID]; ok {
+				rangeIDs[rangeID]++
+			} else {
+				if numNodes == 1 {
+					t.Errorf("saw election from untracked range r%d", rangeID)
+				} else {
+					// We don't want this to happen, but it can and it shouldn't fail
+					// the test. The duel is much more frequent on some of the system
+					// ranges.
+					t.Logf("ignoring election from untracked range r%d", rangeID)
+				}
+			}
+		}),
+	)
+	tc.Start(t)
+	t.Log("started cluster")
+	defer tc.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
+	tBegin := timeutil.Now()
+	require.Equal(t, fmt.Sprint(numRanges-1), runner.QueryStr(t, `SELECT count(1) FROM t`)[0][0])
+	dur := timeutil.Since(tBegin)
+	t.Logf("scanned full table in %.2fs (%s/range)", dur.Seconds(), dur/time.Duration(numRanges))
+
+	for rangeID, n := range rangeIDs {
+		assert.Zero(t, n, "unexpected election after timeout on r%d", rangeID)
+	}
+}

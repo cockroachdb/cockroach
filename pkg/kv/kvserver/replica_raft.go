@@ -889,7 +889,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			//
 			// NB: this must be called after Advance() above since campaigning is
 			// a no-op in the presence of unapplied conf changes.
-			maybeCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup)
+			if shouldCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup) {
+				r.campaignLocked(ctx)
+			}
 		}
 
 		// If the Raft group still has more to process then we immediately
@@ -989,7 +991,17 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	}
 
 	r.mu.ticks++
+	preTickState := r.mu.internalRaftGroup.BasicStatus().RaftState
 	r.mu.internalRaftGroup.Tick()
+	postTickState := r.mu.internalRaftGroup.BasicStatus().RaftState
+	if preTickState != postTickState {
+		if postTickState == raft.StatePreCandidate {
+			r.store.Metrics().RaftTimeoutCampaign.Inc(1)
+			if k := r.store.TestingKnobs(); k != nil && k.OnRaftTimeoutCampaign != nil {
+				k.OnRaftTimeoutCampaign(r.RangeID)
+			}
+		}
+	}
 
 	refreshAtDelta := r.store.cfg.RaftElectionTimeoutTicks
 	if knob := r.store.TestingKnobs().RefreshReasonTicksPeriod; knob > 0 {
@@ -1605,12 +1617,16 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	livenessMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
 	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpiringLeaseRLocked()) {
-		log.VEventf(ctx, 3, "campaigning")
-		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
-			log.VEventf(ctx, 1, "failed to campaign: %s", err)
-		}
-		r.store.enqueueRaftUpdateCheck(r.RangeID)
+		r.campaignLocked(ctx)
 	}
+}
+
+func (r *Replica) campaignLocked(ctx context.Context) {
+	log.VEventf(ctx, 3, "campaigning")
+	if err := r.mu.internalRaftGroup.Campaign(); err != nil {
+		log.VEventf(ctx, 1, "failed to campaign: %s", err)
+	}
+	r.store.enqueueRaftUpdateCheck(r.RangeID)
 }
 
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
@@ -1903,12 +1919,12 @@ func ComputeRaftLogSize(
 	return ms.SysBytes + totalSideloaded, nil
 }
 
-func maybeCampaignAfterConfChange(
+func shouldCampaignAfterConfChange(
 	ctx context.Context,
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	raftGroup *raft.RawNode,
-) {
+) bool {
 	// If a config change was carried out, it's possible that the Raft
 	// leader was removed. Verify that, and if so, campaign if we are
 	// the first remaining voter replica. Without this, the range will
@@ -1921,21 +1937,22 @@ func maybeCampaignAfterConfChange(
 	if st.Lead == 0 {
 		// Leader unknown. This isn't what we expect in steady state, so we
 		// don't do anything.
-		return
+		return false
 	}
 	if !desc.IsInitialized() {
 		// We don't have an initialized, so we can't figure out who is supposed
 		// to campaign. It's possible that it's us and we're waiting for the
 		// initial snapshot, but it's hard to tell. Don't do anything.
-		return
+		return false
 	}
 	// If the leader is no longer in the descriptor but we are the first voter,
 	// campaign.
 	_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
 	if !leaderStillThere && storeID == desc.Replicas().VoterDescriptors()[0].StoreID {
-		log.VEventf(ctx, 3, "leader got removed by conf change; campaigning")
-		_ = raftGroup.Campaign()
+		log.VEventf(ctx, 3, "leader got removed by conf change")
+		return true
 	}
+	return false
 }
 
 func getNonDeterministicFailureExplanation(err error) string {
