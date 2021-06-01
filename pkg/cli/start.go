@@ -178,14 +178,6 @@ func initTempStorageConfig(
 	}
 
 	var err error
-	// Need to first clean up any abandoned temporary directories from
-	// the temporary directory record file before creating any new
-	// temporary directories in case the disk is completely full.
-	if recordPath != "" {
-		if err = storage.CleanupTempDirs(recordPath); err != nil {
-			return base.TempStorageConfig{}, errors.Wrap(err, "could not cleanup temporary directories from record file")
-		}
-	}
 
 	// The temp store size can depend on the location of the first regular store
 	// (if it's expressed as a percentage), so we resolve that flag here.
@@ -409,10 +401,24 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// storage to be encrypted too. To achieve this, we use
 	// the first encrypted store as temp dir target, if any.
 	// If we can't find one, we use the first StoreSpec in the list.
+	//
+	// While we look, we also clean up any abandoned temporary directories. We
+	// don't know which store spec was used previously—and it may change if
+	// encryption gets enabled after the fact—so we check each store.
 	var specIdx = 0
 	for i, spec := range serverCfg.Stores.Specs {
 		if spec.IsEncrypted() {
+			// TODO(jackson): One store's EncryptedOptions may say to encrypt
+			// with a real key, while another store's say to use key=plain.
+			// This provides no guarantee that we'll use the encrypted one's.
 			specIdx = i
+		}
+		if spec.InMemory {
+			continue
+		}
+		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
+		if err := storage.CleanupTempDirs(recordPath); err != nil {
+			return errors.Wrap(err, "could not cleanup temporary directories from record file")
 		}
 	}
 
