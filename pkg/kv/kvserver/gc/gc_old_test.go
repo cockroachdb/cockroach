@@ -12,6 +12,9 @@ package gc
 
 import (
 	"context"
+	"sort"
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -24,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"sort"
-	"testing"
 )
 
 // runGCOld is an older implementation of Run. It is used for benchmarking and
