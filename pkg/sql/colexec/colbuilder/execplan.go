@@ -271,6 +271,12 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		}
 		return nil
 
+	case spec.Core.LocalPlanNode != nil:
+		// LocalPlanNode core is special (we don't have any plans on vectorizing
+		// it at the moment), so we want to return a custom error for it to
+		// distinguish from other unsupported cores.
+		return errLocalPlanNodeWrap
+
 	default:
 		return errCoreUnsupportedNatively
 	}
@@ -278,6 +284,7 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 
 var (
 	errCoreUnsupportedNatively        = errors.New("unsupported processor core")
+	errLocalPlanNodeWrap              = errors.New("LocalPlanNode core needs to be wrapped")
 	errMetadataTestSenderWrap         = errors.New("core.MetadataTestSender is not supported")
 	errMetadataTestReceiverWrap       = errors.New("core.MetadataTestReceiver is not supported")
 	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
