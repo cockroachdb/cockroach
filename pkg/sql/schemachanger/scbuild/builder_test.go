@@ -54,7 +54,7 @@ func TestBuilderAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-table", "create-view", "create-type", "create-sequence":
+			case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
@@ -68,8 +68,12 @@ func TestBuilderAlterTable(t *testing.T) {
 					tableName = node.Name.String()
 				case *tree.CreateType:
 					tableName = ""
+				case *tree.CreateSchema:
+					tableName = ""
+				case *tree.CreateDatabase:
+					tableName = ""
 				default:
-					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
+					t.Fatal("not a supported CREATE statement")
 				}
 				tdb.Exec(t, d.Input)
 

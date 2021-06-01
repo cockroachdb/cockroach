@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -37,6 +35,8 @@ type DescriptorReader interface {
 	GetMutableTypeByID(ctx context.Context, id descpb.ID) (*typedesc.Mutable, error)
 	GetImmutableDatabaseByID(ctx context.Context, id descpb.ID) (catalog.DatabaseDescriptor, error)
 	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
+	GetAnyDescriptorByID(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
+	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
 }
 
 // NamespaceWriter encapsulates operations used to manipulate
@@ -219,12 +219,7 @@ func (m *visitor) CreateGcJobForDescriptor(
 func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
-
-	var descriptor catalog.MutableDescriptor
-	descriptor, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
-	if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
-		descriptor, err = m.catalog.GetMutableTypeByID(ctx, op.TableID)
-	}
+	descriptor, err := m.catalog.GetAnyDescriptorByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -234,32 +229,15 @@ func (m *visitor) MarkDescriptorAsDropped(
 }
 
 func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
-	var descriptor catalog.MutableDescriptor
-	var name string
-	var parentID descpb.ID
-	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
-	if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
-		err = nil
-		typeDesc, err := m.catalog.GetMutableTypeByID(ctx, op.TableID)
-		if err != nil {
-			return err
-		}
-		descriptor = typeDesc
-		name = typeDesc.GetName()
-		parentID = typeDesc.GetParentID()
-	} else if err != nil {
+	descriptor, err := m.catalog.GetAnyDescriptorByID(ctx, op.TableID)
+	if err != nil {
 		return err
-	} else {
-		descriptor = tableDesc
-		name = tableDesc.GetName()
-		parentID = tableDesc.GetParentID()
 	}
 	// Queue up names for draining.
-	parentSchemaID := descriptor.GetParentSchemaID()
 	nameDetails := descpb.NameInfo{
-		ParentID:       parentID,
-		ParentSchemaID: parentSchemaID,
-		Name:           name}
+		ParentID:       descriptor.GetParentID(),
+		ParentSchemaID: descriptor.GetParentSchemaID(),
+		Name:           descriptor.GetName()}
 	m.catalog.AddDrainedName(descriptor.GetID(), nameDetails)
 	return nil
 }
