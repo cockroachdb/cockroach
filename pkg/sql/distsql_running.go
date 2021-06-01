@@ -461,6 +461,12 @@ func (dsp *DistSQLPlanner) Run(
 		// intended to distribute or not.
 		localState.IsLocal = true
 	} else {
+		var alreadyCanceled int32
+		recv.deadFlowsCleanup = func() {
+			if atomic.CompareAndSwapInt32(&alreadyCanceled, 0, 1) {
+				dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
+			}
+		}
 		defer func() {
 			if recv.resultWriter.Err() != nil {
 				// The execution of this query encountered some error, so we
@@ -476,7 +482,9 @@ func (dsp *DistSQLPlanner) Run(
 				// should be canceled. However, this improves the unhappy case,
 				// but it'll slowdown the happy case - by introducing additional
 				// tracking.
-				dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
+				if atomic.CompareAndSwapInt32(&alreadyCanceled, 0, 1) {
+					dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
+				}
 			}
 		}()
 	}
@@ -578,6 +586,8 @@ type DistSQLReceiver struct {
 	status execinfra.ConsumerStatus
 	alloc  rowenc.DatumAlloc
 	closed bool
+
+	deadFlowsCleanup func()
 
 	rangeCache *rangecache.RangeCache
 	tracing    *SessionTracing

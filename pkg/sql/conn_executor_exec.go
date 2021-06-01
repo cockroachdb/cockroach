@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -284,7 +285,17 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(ast, stmt.SQL, queryID, ex.state.cancel)
+	var cancelDeadFlowsLock syncutil.Mutex
+	var cancelDeadFlows func()
+	cancelQueryFn := func() {
+		ex.state.cancel()
+		cancelDeadFlowsLock.Lock()
+		if cancelDeadFlows != nil {
+			cancelDeadFlows()
+		}
+		cancelDeadFlowsLock.Unlock()
+	}
+	unregisterFn := ex.addActiveQuery(ast, stmt.SQL, queryID, cancelQueryFn)
 
 	// queryDone is a cleanup function dealing with unregistering a query.
 	// It also deals with overwriting res.Error to a more user-friendly message in
@@ -666,7 +677,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmtThresholdSpan.SetVerbose(true)
 	}
 
-	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
+	if err := ex.dispatchToExecutionEngine(ctx, p, res, func(fn func()) {
+		cancelDeadFlowsLock.Lock()
+		cancelDeadFlows = fn
+		cancelDeadFlowsLock.Unlock()
+	}); err != nil {
 		stmtThresholdSpan.Finish()
 		return nil, nil, err
 	}
@@ -804,7 +819,10 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 // expected that the caller will inspect res and react to query errors by
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
-	ctx context.Context, planner *planner, res RestrictedCommandResult,
+	ctx context.Context,
+	planner *planner,
+	res RestrictedCommandResult,
+	setCancelDeadFlowsFn func(fn func()),
 ) error {
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
@@ -923,7 +941,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic, setCancelDeadFlowsFn,
 	)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
@@ -997,6 +1015,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	res RestrictedCommandResult,
 	distribute bool,
 	progressAtomic *uint64,
+	setCancelDeadFlowsFn func(fn func()),
 ) (topLevelQueryStats, error) {
 	var testingPushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
@@ -1013,6 +1032,11 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	)
 	recv.progressAtomic = progressAtomic
 	defer recv.Release()
+	defer func() {
+		if setCancelDeadFlowsFn != nil && recv.deadFlowsCleanup != nil {
+			setCancelDeadFlowsFn(recv.deadFlowsCleanup)
+		}
+	}()
 
 	evalCtx := planner.ExtendedEvalContext()
 	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
