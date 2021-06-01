@@ -215,7 +215,7 @@ select
  ├── scan c
  │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── filters
-      ├── a:1 AND (a:1 = true) [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      ├── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
       ├── b:2 [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── b:2 = c:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
 
