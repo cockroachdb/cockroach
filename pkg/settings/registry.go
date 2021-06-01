@@ -82,6 +82,7 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 21.2.
 	"sql.defaults.vectorize_row_count_threshold": {},
 	"cloudstorage.gs.default.key":                {},
+	"storage.sst_export.max_intents_per_error":   {},
 }
 
 // register adds a setting to the registry.
