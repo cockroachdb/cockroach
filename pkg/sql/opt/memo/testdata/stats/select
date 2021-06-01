@@ -1730,7 +1730,7 @@ select
  │        histogram(2)=  0   900   0  100
  │                     <--- false --- true
  └── filters
-      └── b:2 = false [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+      └── NOT b:2 [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
 
 exec-ddl
 CREATE TABLE t0(c0 INT)
