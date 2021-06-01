@@ -245,6 +245,7 @@ func (p *pebbleIterator) Close() {
 	p.inuse = false
 
 	if p.reusable {
+		p.iter.ResetStats()
 		return
 	}
 
@@ -761,10 +762,11 @@ func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
 	}
 }
 
-// Stats implements the MVCCIterator interface.
+// Stats implements the {MVCCIterator,EngineIterator} interfaces.
 func (p *pebbleIterator) Stats() IteratorStats {
 	return IteratorStats{
 		TimeBoundNumSSTs: p.timeBoundNumSSTables,
+		Stats:            p.iter.Stats(),
 	}
 }
 

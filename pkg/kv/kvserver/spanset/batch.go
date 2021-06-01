@@ -379,6 +379,11 @@ func (i *EngineIterator) GetRawIter() *pebble.Iterator {
 	return i.i.GetRawIter()
 }
 
+// Stats is part of the storage.EngineIterator interface.
+func (i *EngineIterator) Stats() storage.IteratorStats {
+	return i.i.Stats()
+}
+
 type spanSetReader struct {
 	r     storage.Reader
 	spans *SpanSet
