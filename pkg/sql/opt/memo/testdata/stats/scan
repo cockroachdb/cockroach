@@ -1128,7 +1128,7 @@ select
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
       ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       ├── d:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
@@ -1194,7 +1194,7 @@ select
  │              └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
  └── filters
       ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── c:3 = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
 
 # A different combination of predicates.
@@ -1225,7 +1225,7 @@ select
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
 # Force the alternate index.
@@ -1514,7 +1514,7 @@ select
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
 # Force the alternate index.
@@ -1855,7 +1855,7 @@ select
  │         ├── key: (7)
  │         └── fd: ()-->(3), (7)-->(5)
  └── filters
-      ├── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── f:6 > 0.0 [type=bool, outer=(6), constraints=(/6: [/5e-324 - ]; tight)]
 
 # Force the alternate index.
@@ -1959,7 +1959,7 @@ select
  │         └── fd: ()-->(4-6)
  └── filters
       ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
-      └── b:2 = true [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      └── b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
 opt
 SELECT * FROM multi_col
