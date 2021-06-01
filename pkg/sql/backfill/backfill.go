@@ -108,9 +108,13 @@ func (cb *ColumnBackfiller) init(
 		cb.updateExprs[j+len(cb.added)] = tree.DNull
 	}
 
-	// We need all the columns.
+	// We need all the non-virtual columns.
 	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(desc.PublicColumns())-1)
+	for i, c := range desc.PublicColumns() {
+		if !c.IsVirtual() {
+			valNeededForCol.Add(i)
+		}
+	}
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,

@@ -1175,3 +1175,21 @@ CREATE TABLE public.t63167_b (
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (a, rowid)
 )
+
+# Test that columns backfills to tables with virtual columns work.
+subtest column_backfill
+
+statement ok
+CREATE TABLE t_65915 (i INT PRIMARY KEY, j INT AS (i + 1) VIRTUAL NOT NULL);
+INSERT INTO t_65915 VALUES (1)
+
+statement ok
+ALTER TABLE t_65915 ADD COLUMN k INT DEFAULT 42;
+
+query III
+SELECT * FROM t_65915;
+----
+1  2  42
+
+statement ok
+DROP TABLE t_65915
