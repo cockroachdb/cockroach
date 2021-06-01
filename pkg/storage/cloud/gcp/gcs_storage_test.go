@@ -85,8 +85,8 @@ func TestPutGoogleCloud(t *testing.T) {
 
 func requireImplicitGoogleCredentials(t *testing.T) {
 	t.Helper()
-	// TODO(yevgeniy): Fix default credentials check.
-	skip.IgnoreLint(t, "implicit credentials not configured")
+	//// TODO(yevgeniy): Fix default credentials check.
+	//skip.IgnoreLint(t, "implicit credentials not configured")
 }
 
 func TestAntagonisticGCSRead(t *testing.T) {

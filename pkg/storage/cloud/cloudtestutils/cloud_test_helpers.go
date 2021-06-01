@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
 )
 
 // EConnRefused is the conn refused err used by the antagonisticDialer.
@@ -50,6 +51,12 @@ var econnreset = &net.OpError{Err: &os.SyscallError{
 	Syscall: "test",
 	Err:     sysutil.ECONNRESET,
 }}
+
+var goawayErr = http2.GoAwayError{
+	LastStreamID: 1,
+	ErrCode:      http2.ErrCodeNo,
+	DebugData:    "test",
+}
 
 type antagonisticDialer struct {
 	net.Dialer
@@ -536,9 +543,9 @@ func uploadData(
 		ctx, dest, base.ExternalIODirConfig{}, testSettings,
 		nil, nil, nil)
 	require.NoError(t, err)
-	defer s.Close()
 	require.NoError(t, cloud.WriteFile(ctx, s, basename, bytes.NewReader(data)))
 	return data, func() {
+		defer s.Close()
 		_ = s.Delete(ctx, basename)
 	}
 }

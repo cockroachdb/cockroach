@@ -371,9 +371,10 @@ func (s *s3Storage) ReadFileAt(
 			}
 			return s.Body, nil
 		},
-		Reader: stream.Body,
-		Pos:    offset,
-		ErrFn:  s3ErrDelay,
+		Reader:       stream.Body,
+		Pos:          offset,
+		RetryOnErrFn: cloud.IsResumableHTTPError,
+		ErrFn:        s3ErrDelay,
 	}, size, nil
 }
 

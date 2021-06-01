@@ -168,8 +168,9 @@ func (h *httpStorage) ReadFileAt(
 				}
 				return s.Body, err
 			},
-			Reader: stream.Body,
-			Pos:    offset,
+			Reader:       stream.Body,
+			Pos:          offset,
+			RetryOnErrFn: cloud.IsResumableHTTPError,
 		}, size, nil
 	}
 	return stream.Body, size, nil
