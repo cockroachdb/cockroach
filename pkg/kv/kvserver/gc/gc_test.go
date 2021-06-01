@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -206,12 +207,92 @@ func TestIntentCleanupBatching(t *testing.T) {
 			info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentCleanupBatch: spec.batchSize}, policy, &fakeGCer, fakeGCer.resolveIntents,
 				fakeGCer.resolveIntentsAsync)
 			require.NoError(t, err, "GC Run shouldn't fail")
-			for _, size := range fakeGCer.batchSizes {
-				require.LessOrEqual(t, int64(size), spec.batchSize, "Batch size")
+			maxIntents := 0
+			for _, batch := range fakeGCer.batches {
+				if intents := len(batch); intents > maxIntents {
+					maxIntents = intents
+				}
 			}
+			require.Equal(t, int64(maxIntents), spec.batchSize, "Batch size")
 			require.Equal(t, 15, info.ResolveTotal)
 			fakeGCer.normalize()
 			require.EqualValues(t, baseGCer, fakeGCer, "GC result with batching")
 		})
 	}
+}
+
+func TestIntentCleanupTxnLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	intentThreshold := 2 * time.Hour
+	now := 3 * intentThreshold
+	intentTs := now - intentThreshold*2
+
+	// Prepare test intents in MVCC.
+	// We want to interleave transactions to test if transaction limit
+	// is respected when sending to intentResolver
+	txnPrefixes := []byte{'a', 'b', 'c'}
+	objectKeys := []byte{'a', 'b', 'c', 'd', 'e'}
+	value := roachpb.Value{RawBytes: []byte("0123456789")}
+	intentHlc := hlc.Timestamp{
+		WallTime: intentTs.Nanoseconds(),
+	}
+	for _, suffix := range txnPrefixes {
+		key := []byte{objectKeys[0], suffix}
+		txn := roachpb.MakeTransaction("txn", key, roachpb.NormalUserPriority, intentHlc, 1000)
+		for _, prefix := range objectKeys {
+			key := []byte{prefix, suffix}
+			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, intentHlc, value, &txn))
+		}
+		require.NoError(t, eng.Flush())
+	}
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey([]byte{txnPrefixes[0], objectKeys[0]}),
+		EndKey:   roachpb.RKey("z"),
+	}
+	policy := zonepb.GCPolicy{TTLSeconds: 1}
+	snap := eng.NewSnapshot()
+	nowTs := hlc.Timestamp{
+		WallTime: now.Nanoseconds(),
+	}
+
+	// Base GCr will cleanup all intents in one go and its result is used as a baseline
+	// to compare batched runs for checking completeness.
+	baseGCer := makeFakeGCer()
+	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, policy, &baseGCer, baseGCer.resolveIntents,
+		baseGCer.resolveIntentsAsync)
+	if err != nil {
+		t.Fatal("Can't prepare test fixture. Non batched GC run fails.")
+	}
+	baseGCer.normalize()
+
+	const transactionLimit = 2
+	fakeGCer := makeFakeGCer()
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
+		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxTxnsPerCleanupBatch: transactionLimit},
+		policy, &fakeGCer, fakeGCer.resolveIntents,
+		fakeGCer.resolveIntentsAsync)
+	require.NoError(t, err, "GC Run shouldn't fail")
+	maxTxns := 0
+	for _, batch := range fakeGCer.batches {
+		if txns := uniqueTransactions(batch); txns > maxTxns {
+			maxTxns = txns
+		}
+	}
+	require.Equal(t, maxTxns, transactionLimit, "Transactions in batch")
+	require.Equal(t, 15, info.ResolveTotal)
+	fakeGCer.normalize()
+	require.EqualValues(t, baseGCer, fakeGCer, "GC result with batching")
+}
+
+func uniqueTransactions(batch []roachpb.Intent) int {
+	txns := make(map[uuid.UUID]bool)
+	for _, intent := range batch {
+		txns[intent.Txn.ID] = true
+	}
+	return len(txns)
 }

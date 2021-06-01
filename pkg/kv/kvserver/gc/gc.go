@@ -60,6 +60,8 @@ var IntentAgeThreshold = settings.RegisterDurationSetting(
 	},
 )
 
+// IntentCleanupBatchSize is a maximum number of intents that GC will send
+// for intent resolution as a single batch.
 var IntentCleanupBatchSize = settings.RegisterIntSetting(
 	"kv.gc.intent_cleanup_batch_size",
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
@@ -162,6 +164,10 @@ type RunOptions struct {
 	// MaxIntentCleanupBatch is a size of a batch that would be passed to intent resolver
 	// to process in one go. Helps reducing memory impact of cleanup operations.
 	MaxIntentCleanupBatch int64
+	// MaxTxnsPerCleanupBatch is a maximum number of txns passed to intent resolver to
+	// process in one go. This number should be lower than intent resolver default to
+	// prevent further splitting in resolver.
+	MaxTxnsPerCleanupBatch int64
 }
 
 // CleanupIntentsFunc synchronously resolves the supplied intents
@@ -201,6 +207,15 @@ func Run(
 		return Info{}, errors.Wrap(err, "failed to set GC thresholds")
 	}
 
+	var intentResolutionBatchSize = int(options.MaxIntentCleanupBatch)
+	if intentResolutionBatchSize == 0 {
+		intentResolutionBatchSize = math.MaxInt32
+	}
+	var intentResolutionTxnsPerBatch = int(options.MaxTxnsPerCleanupBatch)
+	if intentResolutionTxnsPerBatch == 0 {
+		intentResolutionTxnsPerBatch = math.MaxInt32
+	}
+
 	info := Info{
 		Policy:    policy,
 		Now:       now,
@@ -208,10 +223,8 @@ func Run(
 	}
 
 	// Maps from txn ID to txn and intent key slice.
-	txnMap := map[uuid.UUID]*roachpb.Transaction{}
-	intentKeyMap := map[uuid.UUID][]roachpb.Key{}
-	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold, gcer, txnMap, intentKeyMap,
-		&info)
+	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold, gcer,
+		intentResolutionBatchSize, intentResolutionTxnsPerBatch, cleanupIntentsFn, &info)
 	if err != nil {
 		return Info{}, err
 	}
@@ -237,71 +250,7 @@ func Run(
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
-	// Push transactions (if pending) and resolve intents.
-	var batchSize = int(options.MaxIntentCleanupBatch)
-	// Enforce max batch size if it was not provided to disable batching.
-	if batchSize == 0 {
-		batchSize = math.MaxInt32
-	}
-	resolved, err := batchResolveTransactions(ctx, txnMap, intentKeyMap, cleanupIntentsFn, batchSize)
-	if err != nil {
-		return Info{}, err
-	}
-
-	info.ResolveTotal += resolved
 	return info, nil
-}
-
-// batchResolveTransactions will split found intent according to desired
-// batch size and pass them to cleanup function in a loop. The reason for
-// doing this is to reduce transient memory usage as we keep multiple
-// representations of intents while performing cleanup.
-func batchResolveTransactions(
-	ctx context.Context,
-	txnMap map[uuid.UUID]*roachpb.Transaction,
-	intentKeyMap map[uuid.UUID][]roachpb.Key,
-	cleanupIntentsFn CleanupIntentsFunc,
-	maxBatchSize int,
-) (int, error) {
-	var resolveTotal = 0
-	cleanupBatch := func(intents []roachpb.Intent) error {
-		resolveTotal += len(intents)
-		log.Eventf(ctx, "cleanup of %d intents", len(intents))
-		if err := cleanupIntentsFn(ctx, intents); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	var remainder = maxBatchSize
-	var intents []roachpb.Intent
-	for txnID, txn := range txnMap {
-		nextIntents := intentKeyMap[txnID]
-		for len(nextIntents) > 0 {
-			if len(nextIntents) > remainder {
-				intents = append(intents, roachpb.AsIntents(&txn.TxnMeta, nextIntents[:remainder])...)
-				nextIntents = nextIntents[remainder:]
-				remainder = 0
-			} else {
-				intents = append(intents, roachpb.AsIntents(&txn.TxnMeta, nextIntents)...)
-				remainder -= len(nextIntents)
-				nextIntents = nil
-			}
-			if remainder == 0 {
-				if err := cleanupBatch(intents); err != nil {
-					return resolveTotal, err
-				}
-				intents = intents[:0]
-				remainder = maxBatchSize
-			}
-		}
-	}
-	if len(intents) > 0 {
-		if err := cleanupBatch(intents); err != nil {
-			return resolveTotal, err
-		}
-	}
-	return resolveTotal, nil
 }
 
 // processReplicatedKeyRange identifies garbage and sends GC requests to
@@ -317,28 +266,51 @@ func processReplicatedKeyRange(
 	threshold hlc.Timestamp,
 	intentAgeThreshold time.Duration,
 	gcer GCer,
-	txnMap map[uuid.UUID]*roachpb.Transaction,
-	intentKeyMap map[uuid.UUID][]roachpb.Key,
+	maxIntentsCleanupPerBatch int,
+	maxTxnsPushPerBatch int,
+	cleanupIntentsFn CleanupIntentsFunc,
 	info *Info,
 ) error {
 	var alloc bufalloc.ByteAllocator
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
-	handleIntent := func(md *storage.MVCCKeyValue) {
+
+	// Batched intent resolution. Collect intents for a batch resolution
+	// as soon as transaction limit or intent limit is reached, send batch out.
+	var pendingTxns = make(map[uuid.UUID]bool)
+	var pendingIntents []roachpb.Intent
+
+	cleanupIntentBatch := func() error {
+		if len(pendingIntents) > 0 {
+			err := cleanupIntentsFn(ctx, pendingIntents)
+			// Get rid of current transactions and intents regardless of
+			// status as we need to go on cleaning up without retries.
+			for k := range pendingTxns {
+				delete(pendingTxns, k)
+			}
+			info.ResolveTotal += len(pendingIntents)
+			pendingIntents = pendingIntents[:0]
+			return err
+		}
+		return nil
+	}
+
+	// handleIntent would accumulate intents until one of sending
+	// thresholds is reached and send batch to intent resolver function.
+	// Any resolution intents are ignored except for context errors that
+	// are propagated out.
+	handleIntent := func(md *storage.MVCCKeyValue) error {
 		meta := &enginepb.MVCCMetadata{}
 		if err := protoutil.Unmarshal(md.Value, meta); err != nil {
 			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", md.Key, err)
-			return
+			return nil
 		}
 		if meta.Txn != nil {
 			// Keep track of intent to resolve if older than the intent
 			// expiration threshold.
 			if meta.Timestamp.ToTimestamp().Less(intentExp) {
 				txnID := meta.Txn.ID
-				if _, ok := txnMap[txnID]; !ok {
-					txnMap[txnID] = &roachpb.Transaction{
-						TxnMeta: *meta.Txn,
-					}
+				if _, ok := pendingTxns[txnID]; !ok {
 					// IntentTxns and PushTxn will be equal here, since
 					// pushes to transactions whose record lies in this
 					// range (but which are not associated to a remaining
@@ -349,12 +321,37 @@ func processReplicatedKeyRange(
 					// All transactions in txnMap may be PENDING and
 					// cleanupIntentsFn will push them to finalize them.
 					info.PushTxn++
+
+					// Check if we reached max txn batch size that intent
+					// resolver can accept without splitting and push if
+					// needed.
+					if len(pendingTxns) >= maxTxnsPushPerBatch {
+						if err := cleanupIntentBatch(); err != nil {
+							if errors.Is(err, ctx.Err()) {
+								return err
+							}
+							log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+						}
+					}
+					pendingTxns[txnID] = true
 				}
 				info.IntentsConsidered++
 				alloc, md.Key.Key = alloc.Copy(md.Key.Key, 0)
-				intentKeyMap[txnID] = append(intentKeyMap[txnID], md.Key.Key)
+				pendingIntents = append(pendingIntents, roachpb.MakeIntent(meta.Txn, md.Key.Key))
+
+				// Intents count limit reached, send request out to reduce
+				// transient memory usage.
+				if len(pendingIntents) >= maxIntentsCleanupPerBatch {
+					if err := cleanupIntentBatch(); err != nil {
+						if errors.Is(err, ctx.Err()) {
+							return err
+						}
+						log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+					}
+				}
 			}
 		}
+		return nil
 	}
 
 	// Iterate all versions of all keys from oldest to newest. If a version is an
@@ -387,7 +384,9 @@ func processReplicatedKeyRange(
 			continue
 		}
 		if s.curIsIntent() {
-			handleIntent(s.next)
+			if err := handleIntent(s.next); err != nil {
+				return err
+			}
 			continue
 		}
 		isNewest := s.curIsNewest()
@@ -433,6 +432,13 @@ func processReplicatedKeyRange(
 			batchGCKeysBytes = 0
 			alloc = nil
 		}
+	}
+	// We need to send out last intent cleanup batch.
+	if err := cleanupIntentBatch(); err != nil {
+		if errors.Is(err, ctx.Err()) {
+			return err
+		}
+		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
 	if len(batchGCKeys) > 0 {
 		if err := gcer.GC(ctx, batchGCKeys); err != nil {

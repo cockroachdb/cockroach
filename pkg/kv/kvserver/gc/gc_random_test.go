@@ -188,8 +188,8 @@ type fakeGCer struct {
 	gcKeys     map[string]roachpb.GCRequest_GCKey
 	threshold  Threshold
 	intents    []roachpb.Intent
+	batches    [][]roachpb.Intent
 	txnIntents []txnIntents
-	batchSizes []int
 }
 
 func makeFakeGCer() fakeGCer {
@@ -219,7 +219,7 @@ func (f *fakeGCer) resolveIntentsAsync(_ context.Context, txn *roachpb.Transacti
 
 func (f *fakeGCer) resolveIntents(_ context.Context, intents []roachpb.Intent) error {
 	f.intents = append(f.intents, intents...)
-	f.batchSizes = append(f.batchSizes, len(intents))
+	f.batches = append(f.batches, intents)
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (f *fakeGCer) normalize() {
 	sort.Slice(f.txnIntents, func(i, j int) bool {
 		return f.txnIntents[i].txn.ID.String() < f.txnIntents[j].txn.ID.String()
 	})
-	f.batchSizes = nil
+	f.batches = nil
 }
 
 func intentLess(a, b *roachpb.Intent) bool {
