@@ -1102,8 +1102,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						return err
 					}
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey())
-					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
-						return err
+					if backrefTable != scTable {
+						if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
+							return err
+						}
 					}
 				}
 			}

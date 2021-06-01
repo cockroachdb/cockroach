@@ -59,6 +59,8 @@ tc_end_block "Variable Setup"
 
 
 tc_start_block "Check remote tag"
+github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
+configure_git_ssh_key
 if git_wrapped ls-remote --exit-code --tags "ssh://git@github.com/${git_repo_for_tag}.git" "${build_name}"; then
   echo "Tag ${build_name} already exists"
   exit 1
@@ -110,8 +112,6 @@ tc_end_block "Make and push docker images"
 
 
 tc_start_block "Push release tag to GitHub"
-github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
-configure_git_ssh_key
 git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$build_name"
 tc_end_block "Push release tag to GitHub"
 
