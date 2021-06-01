@@ -474,11 +474,11 @@ statement ok
 SET experimental_use_new_schema_changer = 'unsafe_always'
 
 # No fallback code path
-statement error pq: \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
+statement error \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
 DROP TABLE p2
 
 # Fall back code path works
-statement error pq: \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
+statement error \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
 DROP TABLE p1_0
 
 statement ok
@@ -526,7 +526,7 @@ statement ok
 CREATE TYPE typ8 AS ENUM ('hello');
 ALTER TABLE t8 ADD COLUMN x typ8[]
 
-statement error pq: cannot drop type "_typ8" because other objects \(\[test.public.t8\]\) still depend on it
+statement error pq: cannot drop type "typ8" because other objects \(\[test.public.t8\]\) still depend on it
 DROP TYPE typ8
 
 statement ok
@@ -553,3 +553,47 @@ DROP TYPE defaultdb.typ;
 
 statement ok
 COMMIT;
+
+
+# Drop database testing
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SCHEMA db1.sc1
+
+statement ok
+CREATE SEQUENCE db1.public.SQ1
+
+statement ok
+CREATE SEQUENCE db1.sc1.SQ1
+
+statement ok
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
+
+statement ok
+CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'))
+
+statement ok
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
+
+statement ok
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+
+statement ok
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+
+statement ok
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM('a')
+
+statement ok
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement error cannot drop sequence sq1 because other objects depend on it
+DROP DATABASE db1
+
+statement ok
+DROP DATABASE db1 CASCADE

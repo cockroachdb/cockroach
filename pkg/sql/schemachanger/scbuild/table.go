@@ -647,12 +647,14 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 		// Setup logic to clean up the default expression,
 		// only if sequences are depending on it.
 		if col.NumUsesSequences() > 0 {
-			b.addNode(scpb.Target_DROP,
-				&scpb.DefaultExpression{
-					DefaultExpr:     col.GetDefaultExpr(),
-					TableID:         table.GetID(),
-					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-					ColumnID:        col.GetID()})
+			defaultExpr := &scpb.DefaultExpression{
+				DefaultExpr:     col.GetDefaultExpr(),
+				TableID:         table.GetID(),
+				UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
+				ColumnID:        col.GetID()}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
+				b.addNode(scpb.Target_DROP, defaultExpr)
+			}
 			// Drop the depends on within the sequence side.
 			for seqOrd := 0; seqOrd < col.NumUsesSequences(); seqOrd++ {
 				seqID := col.GetUsesSequenceID(seqOrd)
@@ -669,8 +671,7 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 
 func (b *buildContext) maybeCleanTableFKs(
 	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
-) {
-	// Loop through and update inbound and outbound
+) { // Loop through and update inbound and outbound
 	// foreign key references.
 	for _, fk := range table.GetInboundFKs() {
 		dependentTable, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, fk.OriginTableID, tree.ObjectLookupFlagsWithRequired())
@@ -784,7 +785,6 @@ func (b *buildContext) dropTableDesc(
 	b.addNode(scpb.Target_DROP,
 		&scpb.Table{TableID: table.GetID()})
 }
-
 func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 	// Find the table first.
 	for _, name := range n.Names {

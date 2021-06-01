@@ -66,10 +66,13 @@ func (b *buildContext) canDropTypeDesc(
 }
 
 func (b *buildContext) dropTypeDesc(
-	ctx context.Context, typeDesc *typedesc.Mutable, behavior tree.DropBehavior,
+	ctx context.Context, typeDesc *typedesc.Mutable, behavior tree.DropBehavior, ignoreAliases bool,
 ) {
 	switch typeDesc.Kind {
 	case descpb.TypeDescriptor_ALIAS:
+		if ignoreAliases {
+			return
+		}
 		// The implicit array types are not directly droppable.
 		panic(pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
@@ -120,6 +123,6 @@ func (b *buildContext) dropType(ctx context.Context, n *tree.DropType) {
 		if typeDesc == nil {
 			continue
 		}
-		b.dropTypeDesc(ctx, typeDesc, n.DropBehavior)
+		b.dropTypeDesc(ctx, typeDesc, n.DropBehavior, false)
 	}
 }

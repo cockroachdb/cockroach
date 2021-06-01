@@ -150,6 +150,10 @@ func (b *buildContext) build(
 		b.dropSequence(ctx, n)
 	case *tree.DropType:
 		b.dropType(ctx, n)
+	case *tree.DropSchema:
+		b.dropSchema(ctx, n)
+	case *tree.DropDatabase:
+		b.dropDatabase(ctx, n)
 	case *tree.AlterTable:
 		b.alterTable(ctx, n)
 	default:
