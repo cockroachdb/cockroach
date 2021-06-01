@@ -28,9 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -450,4 +453,69 @@ func TestDistSQLTypeResolver_GetTypeDescriptor_WrongType(t *testing.T) {
 		})
 	require.Regexp(t, `descriptor \d+ is a relation not a type`, err)
 	require.Equal(t, pgcode.WrongObjectType, pgerror.GetPGCode(err))
+}
+
+// TestMaybeFixSchemaPrivilegesIntegration ensures that schemas that have
+// invalid privileges have their privilege descriptors fixed on read-time when
+// grabbing the descriptor.
+func TestMaybeFixSchemaPrivilegesIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `
+CREATE DATABASE test;
+CREATE SCHEMA test.schema;
+CREATE USER testuser;
+GRANT CREATE ON SCHEMA test.schema TO testuser;
+CREATE TABLE test.schema.t(x INT);
+`)
+	require.NoError(t, err)
+
+	require.NoError(
+		t,
+		descs.Txn(
+			ctx,
+			s.ClusterSettings(),
+			s.LeaseManager().(*lease.Manager),
+			s.InternalExecutor().(sqlutil.InternalExecutor),
+			kvDB,
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				_, dbDesc, err := descsCol.GetImmutableDatabaseByName(ctx, txn, "test", tree.DatabaseLookupFlags{Required: true})
+				if err != nil {
+					return err
+				}
+				_, schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
+				if err != nil {
+					return err
+				}
+				// Write garbage privileges into the schema desc.
+				privs := schemaDesc.Desc.GetPrivileges()
+				for i := range privs.Users {
+					// SELECT is valid on a database but not a schema, however
+					// due to issue #65697, after running ALTER DATABASE ...
+					// CONVERT TO SCHEMA, schemas could end up with
+					// SELECT on it's privilege descriptor. This test
+					// mimics a schema that was originally a database.
+					// We want to ensure the schema's privileges are fixed
+					// on read.
+					privs.Users[i].Privileges |= privilege.SELECT.Mask()
+				}
+
+				descsCol.SkipValidationOnWrite()
+				return descsCol.WriteDesc(ctx, false, schemaDesc.Desc.(catalog.MutableDescriptor), txn)
+			}),
+	)
+
+	// Make sure using the schema is fine and we don't encounter a
+	// privilege validation error.
+	_, err = db.Query("GRANT USAGE ON SCHEMA test.schema TO testuser;")
+	require.NoError(t, err)
 }
