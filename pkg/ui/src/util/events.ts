@@ -82,7 +82,7 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.NODE_RECOMMISSIONED:
       return `Node Recommissioned: Node ${info.TargetNodeID} was recommissioned`;
     case eventTypes.NODE_RESTART:
-      return `Node Rejoined: Node ${info.TargetNodeID} rejoined the cluster`;
+      return `Node Rejoined: Node ${info.NodeID} rejoined the cluster`;
     case eventTypes.SET_CLUSTER_SETTING:
       if (info.Value && info.Value.length > 0) {
         return `Cluster Setting Changed: User ${info.User} set ${info.SettingName} to ${info.Value}`;
