@@ -140,6 +140,7 @@ type CreateOpts struct {
 		// mounting the SSD. Ignored if UseLocalSSD is not set.
 		NoExt4Barrier bool
 	}
+	OsVolumeSize int
 }
 
 // MultipleProjectsOption is used to specify whether a command accepts multiple

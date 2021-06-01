@@ -1857,6 +1857,10 @@ func main() {
 			`Ignored if --local-ssd=false is specified.`)
 	createCmd.Flags().IntVarP(&numNodes,
 		"nodes", "n", 4, "Total number of nodes, distributed across all clouds")
+
+	createCmd.Flags().IntVarP(&createVMOpts.OsVolumeSize,
+		"os-volume-size", "", 10, "OS disk volume size in GB")
+
 	createCmd.Flags().StringSliceVarP(&createVMOpts.VMProviders,
 		"clouds", "c", []string{gce.ProviderName},
 		fmt.Sprintf("The cloud provider(s) to use when creating new vm instances: %s", vm.AllProviderNames()))
