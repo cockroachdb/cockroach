@@ -45,15 +45,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	maxSyncDurationFatalOnExceededDefault = true
-
-	// Default value for maximum number of intents reported by ExportToSST
-	// in WriteIntentError is set to half of the maximum lock table size.
-	// This value is subject to tuning in real environment as we have more
-	// data available.
-	maxIntentsPerSstExportErrorDefault = 5000
-)
+const maxSyncDurationFatalOnExceededDefault = true
 
 // Default for MaxSyncDuration below.
 var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 60*time.Second)
@@ -74,11 +66,6 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	maxSyncDurationFatalOnExceededDefault,
 )
-
-var maxIntentsPerSstExportError = settings.RegisterIntSetting(
-	"storage.sst_export.max_intents_per_error",
-	"maximum number of intents returned in error when sst export fails",
-	maxIntentsPerSstExportErrorDefault)
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
@@ -668,7 +655,7 @@ func (p *Pebble) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := maxIntentsPerSstExportError.Get(&p.settings.SV)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
 	summary, k, err := pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
 		maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
@@ -1304,7 +1291,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := maxIntentsPerSstExportError.Get(&p.parent.settings.SV)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.parent.settings.SV)
 	summary, k, err := pebbleExportToSst(
 		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
@@ -1569,7 +1556,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := maxIntentsPerSstExportError.Get(&p.settings.SV)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
 	summary, k, err := pebbleExportToSst(
 		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
