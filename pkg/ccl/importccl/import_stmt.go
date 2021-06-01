@@ -908,6 +908,9 @@ func importPlanHook(
 				break
 			}
 		}
+		if importStmt.Into {
+			telemetry.Count("import.into")
+		}
 
 		// Here we create the job and protected timestamp records in a side
 		// transaction and then kick off the job. This is awful. Rather we should be
