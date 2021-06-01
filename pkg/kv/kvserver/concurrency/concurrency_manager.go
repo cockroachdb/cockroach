@@ -296,11 +296,27 @@ func shouldAcquireLatches(req Request) bool {
 
 // FinishReq implements the RequestSequencer interface.
 func (m *managerImpl) FinishReq(g *Guard) {
-	if ltg := g.moveLockTableGuard(); ltg != nil {
-		m.lt.Dequeue(ltg)
-	}
+	// NOTE: we release latches _before_ exiting lock wait-queues deliberately.
+	// Either order would be correct, but the order here avoids non-determinism in
+	// cases where a request holds both latches and lock wait-queue reservations
+	// and has a request waiting on its reservations. If we were to release the
+	// reservations before releasing latches, it would be possible for the waiting
+	// request to beat us to the latch manager and end up blocking on our latches
+	// briefly. Not only is this confusing in traces, but it is slightly less
+	// efficient than if we released latches before letting anyone waiting on us
+	// in the lock table proceed, ensuring that they do not hit our latches.
+	//
+	// Elsewhere, we relate the relationship of between the latch manager and the
+	// lock-table to that of a mutex and condition variable pair. Following that
+	// analogy, this release ordering is akin to signaling a condition variable
+	// after releasing its associated mutex. Doing so ensures that whoever the
+	// signaler wakes up (if anyone) will never bump into its mutex immediately
+	// upon resumption.
 	if lg := g.moveLatchGuard(); lg != nil {
 		m.lm.Release(lg)
+	}
+	if ltg := g.moveLockTableGuard(); ltg != nil {
+		m.lt.Dequeue(ltg)
 	}
 	releaseGuard(g)
 }
