@@ -462,8 +462,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				continue
 			}
 
-			filteredStoreList := storeList.filter(zone.Constraints)
-			filteredStoreList = storeList.filter(zone.VoterConstraints)
+			filteredStoreList := storeList.excludeInvalid(zone.Constraints)
+			filteredStoreList = storeList.excludeInvalid(zone.VoterConstraints)
 			if sr.rq.allocator.followTheWorkloadPrefersLocal(
 				ctx,
 				filteredStoreList,
