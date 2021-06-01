@@ -709,7 +709,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_Prometheus}",
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -805,7 +805,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_Prometheus}",
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -901,7 +901,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_Prometheus}",
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1211,9 +1211,19 @@
   "templating": {
     "list": [
       {
+        "hide": 0,
+        "label": "datasource",
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_Prometheus}",
+        "datasource": "${DS_PROMETHEUS}",
         "definition": "sys_uptime{job=\"crdb\"}",
         "error": null,
         "hide": 0,
@@ -1239,7 +1249,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "${DS_Prometheus}",
+        "datasource": "${DS_PROMETHEUS}",
         "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
         "error": null,
         "hide": 0,
