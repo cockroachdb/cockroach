@@ -54,6 +54,7 @@ go_test(
         "collection_test.go",
         "main_test.go",
     ],
+    data = glob(["testdata/**"]),
     deps = [
         ":descs",
         "//pkg/base",
