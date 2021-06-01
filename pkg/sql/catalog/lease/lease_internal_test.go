@@ -170,7 +170,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, table.Desc().(catalog.TableDescriptor))
+			tables = append(tables, table.Underlying().(catalog.TableDescriptor))
 			expiration = table.Expiration()
 			table.Release(context.Background())
 		}
@@ -286,7 +286,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		latestDesc := table.Desc().(catalog.TableDescriptor)
+		latestDesc := table.Underlying().(catalog.TableDescriptor)
 		table.Release(ctx)
 		return latestDesc
 	}
@@ -660,7 +660,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		table := desc.Desc().(catalog.TableDescriptor)
+		table := desc.Underlying().(catalog.TableDescriptor)
 		// This test will need to wait until leases are removed from the store
 		// before creating new leases because the jitter used in the leases'
 		// expiration causes duplicate key errors when trying to create new
@@ -968,7 +968,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			// Release the lease. This also causes it to get removed as the
 			// knob RemoveOnceDereferenced is set.
-			tracker := removalTracker.TrackRemoval(result1.table.Desc())
+			tracker := removalTracker.TrackRemoval(result1.table.Underlying())
 			result1.table.Release(ctx)
 			// Wait until the lease is removed.
 			if err := tracker.WaitForRemoval(); err != nil {
