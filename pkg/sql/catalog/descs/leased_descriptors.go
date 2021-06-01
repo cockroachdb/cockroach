@@ -11,64 +11,63 @@
 package descs
 
 import (
-	"sort"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptortree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+func makeLeasedDescriptors() leasedDescriptors {
+	return leasedDescriptors{
+		descs: descriptortree.Make(),
+	}
+}
 
 // leasedDescriptors holds references to all the descriptors leased in the
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
-	descs []lease.LeasedDescriptor
+	descs descriptortree.Tree
 }
 
 func (ld *leasedDescriptors) add(desc lease.LeasedDescriptor) {
-	ld.descs = append(ld.descs, desc)
+	ld.descs.Upsert(desc)
 }
 
-func (ld *leasedDescriptors) releaseAll() (toRelease []lease.LeasedDescriptor) {
-	toRelease = append(toRelease, ld.descs...)
-	ld.descs = ld.descs[:0]
-	return toRelease
+func (ld *leasedDescriptors) getDeadline() (deadline hlc.Timestamp, haveDeadline bool) {
+	_ = ld.descs.IterateByID(func(descriptor catalog.Descriptor) error {
+		expiration := descriptor.(lease.LeasedDescriptor).Expiration()
+		if !haveDeadline || expiration.Less(deadline) {
+			deadline, haveDeadline = expiration, true
+		}
+		return nil
+	})
+	return deadline, haveDeadline
 }
 
-func (ld *leasedDescriptors) release(ids []descpb.ID) (toRelease []lease.LeasedDescriptor) {
-	// Sort the descriptors and leases to make it easy to find the leases to release.
-	leasedDescs := ld.descs
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i] < ids[j]
+func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
+	log.VEventf(ctx, 2, "releasing %d descriptors", ld.numDescriptors())
+	_ = ld.descs.IterateByID(func(descriptor catalog.Descriptor) error {
+		descriptor.(lease.LeasedDescriptor).Release(ctx)
+		return nil
 	})
-	sort.Slice(leasedDescs, func(i, j int) bool {
-		return leasedDescs[i].Desc().GetID() < leasedDescs[j].Desc().GetID()
-	})
+	ld.descs.Clear()
+}
 
-	filteredLeases := leasedDescs[:0] // will store the remaining leases
-	idsToConsider := ids
-	shouldRelease := func(id descpb.ID) (found bool) {
-		for len(idsToConsider) > 0 && idsToConsider[0] < id {
-			idsToConsider = idsToConsider[1:]
-		}
-		return len(idsToConsider) > 0 && idsToConsider[0] == id
-	}
-	for _, l := range leasedDescs {
-		if !shouldRelease(l.Desc().GetID()) {
-			filteredLeases = append(filteredLeases, l)
-		} else {
-			toRelease = append(toRelease, l)
+func (ld *leasedDescriptors) release(ctx context.Context, descs []lease.IDVersion) {
+	for _, idv := range descs {
+		if removed, ok := ld.descs.Remove(idv.ID); ok {
+			removed.(lease.LeasedDescriptor).Release(ctx)
 		}
 	}
-	ld.descs = filteredLeases
-	return toRelease
 }
 
 func (ld *leasedDescriptors) getByID(id descpb.ID) catalog.Descriptor {
-	for i := range ld.descs {
-		desc := ld.descs[i]
-		if desc.Desc().GetID() == id {
-			return desc.Desc()
-		}
+	if got, ok := ld.descs.GetByID(id); ok {
+		return got.(lease.LeasedDescriptor).Underlying()
 	}
 	return nil
 }
@@ -76,15 +75,12 @@ func (ld *leasedDescriptors) getByID(id descpb.ID) catalog.Descriptor {
 func (ld *leasedDescriptors) getByName(
 	dbID descpb.ID, schemaID descpb.ID, name string,
 ) catalog.Descriptor {
-	for i := range ld.descs {
-		desc := ld.descs[i]
-		if lease.NameMatchesDescriptor(desc.Desc(), dbID, schemaID, name) {
-			return desc.Desc()
-		}
+	if got, ok := ld.descs.GetByName(dbID, schemaID, name); ok {
+		return got.(lease.LeasedDescriptor).Underlying()
 	}
 	return nil
 }
 
 func (ld *leasedDescriptors) numDescriptors() int {
-	return len(ld.descs)
+	return ld.descs.Len()
 }

@@ -69,6 +69,7 @@ func MakeCollection(
 		sessionData:    sessionData,
 		hydratedTables: hydratedTables,
 		virtualSchemas: virtualSchemas,
+		leased:         makeLeasedDescriptors(),
 	}
 }
 
@@ -95,10 +96,9 @@ type Collection struct {
 	virtualSchemas catalog.VirtualSchemas
 
 	// A collection of descriptors valid for the timestamp. They are released once
-	// the transaction using them is complete. If the transaction gets pushed and
-	// the timestamp changes, the descriptors are released.
-	// TODO (lucy): Use something other than an unsorted slice for faster lookups.
-	leasedDescriptors leasedDescriptors
+	// the transaction using them is complete.
+	leased leasedDescriptors
+
 	// Descriptors modified by the uncommitted transaction affiliated with this
 	// Collection. This allows a transaction to see its own modifications while
 	// bypassing the descriptor lease mechanism. The lease mechanism will have its
@@ -210,7 +210,7 @@ func (tc *Collection) getLeasedDescriptorByName(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	if desc = tc.leasedDescriptors.getByName(parentID, parentSchemaID, name); desc != nil {
+	if desc = tc.leased.getByName(parentID, parentSchemaID, name); desc != nil {
 		if log.V(2) {
 			log.Eventf(ctx, "found descriptor in collection for '%s'", name)
 		}
@@ -237,9 +237,9 @@ func (tc *Collection) getLeasedDescriptorByName(
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	tc.leasedDescriptors.add(ldesc)
+	tc.leased.add(ldesc)
 	if log.V(2) {
-		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", name, ldesc.Desc())
+		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", name, ldesc.Underlying())
 	}
 
 	// If the descriptor we just acquired expires before the txn's deadline,
@@ -250,20 +250,13 @@ func (tc *Collection) getLeasedDescriptorByName(
 	if err != nil {
 		return nil, false, err
 	}
-	return ldesc.Desc(), false, nil
+	return ldesc.Underlying(), false, nil
 }
 
 // Deadline returns the latest expiration from our leased
 // descriptors which should b e the transactions deadline.
 func (tc *Collection) Deadline() (deadline hlc.Timestamp, haveDeadline bool) {
-	for _, l := range tc.leasedDescriptors.descs {
-		expiration := l.Expiration()
-		if !haveDeadline || expiration.Less(deadline) {
-			haveDeadline = true
-			deadline = expiration
-		}
-	}
-	return deadline, haveDeadline
+	return tc.leased.getDeadline()
 }
 
 // MaybeUpdateDeadline updates the deadline in a given transaction
@@ -284,7 +277,7 @@ func (tc *Collection) getLeasedDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
 	// First, look to see if we already have the table in the shared cache.
-	if desc := tc.leasedDescriptors.getByID(id); desc != nil {
+	if desc := tc.leased.getByID(id); desc != nil {
 		log.VEventf(ctx, 2, "found descriptor %d in cache", id)
 		return desc, nil
 	}
@@ -299,8 +292,8 @@ func (tc *Collection) getLeasedDescriptorByID(
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.Desc().GetName())
+	tc.leased.add(desc)
+	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.Underlying().GetName())
 
 	if setTxnDeadline {
 		err := tc.MaybeUpdateDeadline(ctx, txn)
@@ -308,7 +301,7 @@ func (tc *Collection) getLeasedDescriptorByID(
 			return nil, err
 		}
 	}
-	return desc.Desc(), nil
+	return desc.Underlying(), nil
 }
 
 // getDescriptorFromStore gets a descriptor from its namespace entry. It does
@@ -666,7 +659,7 @@ func (tc *Collection) getTableByName(
 		// TODO (lucy): I'm not sure where this logic should live. We could add an
 		// IncludeAdding flag and pull the special case handling up into the
 		// callers. Figure that out after we clean up the name resolution layers
-		// and it becomes more clear what the callers should be.
+		// and it becomes more Clear what the callers should be.
 		return true, table, nil
 	}
 	if dropped, err := filterDescriptorState(
@@ -1363,22 +1356,12 @@ func (tc *Collection) hydrateTypesInTableDesc(
 // ReleaseSpecifiedLeases releases the leases for the descriptors with ids in
 // the passed slice. Errors are logged but ignored.
 func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.IDVersion) {
-	ids := make([]descpb.ID, len(descs))
-	for i := range descs {
-		ids[i] = descs[i].ID
-	}
-	toRelease := tc.leasedDescriptors.release(ids)
-	for _, desc := range toRelease {
-		desc.Release(ctx)
-	}
+	tc.leased.release(ctx, descs)
 }
 
 // ReleaseLeases releases all leases. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
-	log.VEventf(ctx, 2, "releasing %d descriptors", tc.leasedDescriptors.numDescriptors())
-	for _, desc := range tc.leasedDescriptors.releaseAll() {
-		desc.Release(ctx)
-	}
+	tc.leased.releaseAll(ctx)
 }
 
 // ReleaseAll releases all state currently held by the Collection.

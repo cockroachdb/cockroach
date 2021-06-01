@@ -89,7 +89,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			// its usage, none of them should ever be terminal.
 			return nil, changefeedbase.MarkRetryableError(err)
 		}
-		tableDesc = desc.Desc().(catalog.TableDescriptor)
+		tableDesc = desc.Underlying().(catalog.TableDescriptor)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
 		desc.Release(ctx)
