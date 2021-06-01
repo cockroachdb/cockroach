@@ -62,10 +62,9 @@ type Collection struct {
 	collectionDeps
 
 	// A collection of descriptors valid for the timestamp. They are released once
-	// the transaction using them is complete. If the transaction gets pushed and
-	// the timestamp changes, the descriptors are released.
-	// TODO (lucy): Use something other than an unsorted slice for faster lookups.
+	// the transaction using them is complete.
 	leasedDescriptors leasedDescriptors
+
 	// Descriptors modified by the uncommitted transaction affiliated with this
 	// Collection. This allows a transaction to see its own modifications while
 	// bypassing the descriptor lease mechanism. The lease mechanism will have its
@@ -216,14 +215,7 @@ func (tc *Collection) getLeasedDescriptorByName(
 // Deadline returns the latest expiration from our leased
 // descriptors which should b e the transactions deadline.
 func (tc *Collection) Deadline() (deadline hlc.Timestamp, haveDeadline bool) {
-	for _, l := range tc.leasedDescriptors.descs {
-		expiration := l.Expiration()
-		if !haveDeadline || expiration.Less(deadline) {
-			haveDeadline = true
-			deadline = expiration
-		}
-	}
-	return deadline, haveDeadline
+	return tc.leasedDescriptors.getDeadline()
 }
 
 // MaybeUpdateDeadline updates the deadline in a given transaction
@@ -1315,22 +1307,12 @@ func (tc *Collection) hydrateTypesInTableDesc(
 // ReleaseSpecifiedLeases releases the leases for the descriptors with ids in
 // the passed slice. Errors are logged but ignored.
 func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.IDVersion) {
-	ids := make([]descpb.ID, len(descs))
-	for i := range descs {
-		ids[i] = descs[i].ID
-	}
-	toRelease := tc.leasedDescriptors.release(ids)
-	for _, desc := range toRelease {
-		desc.Release(ctx)
-	}
+	tc.leasedDescriptors.release(ctx, descs)
 }
 
 // ReleaseLeases releases all leases. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
-	log.VEventf(ctx, 2, "releasing %d descriptors", tc.leasedDescriptors.numDescriptors())
-	for _, desc := range tc.leasedDescriptors.releaseAll() {
-		desc.Release(ctx)
-	}
+	tc.leasedDescriptors.releaseAll(ctx)
 }
 
 // ReleaseAll releases all state currently held by the Collection.

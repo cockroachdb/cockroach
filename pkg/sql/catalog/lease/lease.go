@@ -1645,8 +1645,19 @@ func (m *Manager) resolveName(
 // LeasedDescriptor tracks and manages leasing related
 // information for a descriptor.
 type LeasedDescriptor interface {
+	catalog.Descriptor
+
+	// Desc returns the underlying descriptor which has been leased.
+	// The implementation of the methods on this object delegate to
+	// that object.
 	Desc() catalog.Descriptor
+
+	// Expiration returns the current expiration. Subsequent calls may return a
+	// later timestamp but will never return an earlier one.
 	Expiration() hlc.Timestamp
+
+	// Release releases the reference to this leased descriptor. The descriptor
+	// should not be used after the lease has been released.
 	Release(ctx context.Context)
 }
 

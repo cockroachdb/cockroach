@@ -64,7 +64,8 @@ func (f *Factory) NewCollection(sd *sessiondata.SessionData) *Collection {
 // MakeCollection constructs a new Collection.
 func (f *Factory) MakeCollection(sd *sessiondata.SessionData) Collection {
 	return Collection{
-		collectionDeps: f.collectionDeps,
-		sessionData:    sd,
+		collectionDeps:    f.collectionDeps,
+		sessionData:       sd,
+		leasedDescriptors: makeLeasedDescriptors(),
 	}
 }
