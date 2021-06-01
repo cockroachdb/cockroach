@@ -80,6 +80,9 @@ type TestingKnobs struct {
 	OnDecommissionedCallback func(livenesspb.Liveness)
 	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
 	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
+	//
+	// When supplied to a TestCluster, StickyEngineIDs will be associated auto-
+	// matically to the StoreSpecs used.
 	StickyEngineRegistry StickyInMemEnginesRegistry
 	// Clock Source used to an inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.

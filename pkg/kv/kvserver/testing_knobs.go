@@ -334,6 +334,11 @@ type StoreTestingKnobs struct {
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
+
+	// Called whenever a range campaigns as a result of a tick. This
+	// is called under the replica lock and raftMu, so basically don't
+	// acquire any locks in this method.
+	OnRaftTimeoutCampaign func(roachpb.RangeID)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
