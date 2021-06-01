@@ -63,7 +63,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		}
 		scName := schema.Schema()
 
-		_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+		db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
 			tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return nil, err

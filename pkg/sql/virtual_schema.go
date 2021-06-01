@@ -482,7 +482,7 @@ func (e *virtualDefEntry) getPlanInfo(
 		var dbDesc catalog.DatabaseDescriptor
 		var err error
 		if dbName != "" {
-			_, dbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+			dbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
 				dbName, tree.DatabaseLookupFlags{
 					Required: true, AvoidCached: p.avoidCachedDescriptors,
 				})

@@ -443,20 +443,20 @@ func (tc *Collection) getDescriptorFromStore(
 // properties according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetMutableDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (found bool, _ *dbdesc.Mutable, _ error) {
+) (*dbdesc.Mutable, error) {
 	flags.RequireMutable = true
-	found, desc, err := tc.getDatabaseByName(ctx, txn, name, flags)
-	if err != nil || !found {
-		return false, nil, err
+	desc, err := tc.getDatabaseByName(ctx, txn, name, flags)
+	if err != nil || desc == nil {
+		return nil, err
 	}
-	return true, desc.(*dbdesc.Mutable), nil
+	return desc.(*dbdesc.Mutable), nil
 }
 
 // GetImmutableDatabaseByName returns an immutable database descriptor with
 // properties according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (found bool, _ catalog.DatabaseDescriptor, _ error) {
+) (catalog.DatabaseDescriptor, error) {
 	flags.RequireMutable = false
 	return tc.getDatabaseByName(ctx, txn, name, flags)
 }
@@ -468,24 +468,24 @@ func (tc *Collection) GetImmutableDatabaseByName(
 func (tc *Collection) GetDatabaseDesc(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (desc catalog.DatabaseDescriptor, err error) {
-	_, desc, err = tc.getDatabaseByName(ctx, txn, name, flags)
-	return desc, err
+	return tc.getDatabaseByName(ctx, txn, name, flags)
 }
 
 // getDatabaseByName returns a database descriptor with properties according to
 // the provided lookup flags.
 func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (bool, catalog.DatabaseDescriptor, error) {
+) (catalog.DatabaseDescriptor, error) {
 	if name == systemschema.SystemDatabaseName {
 		// The system database descriptor should never actually be mutated, which is
 		// why we return the same hard-coded descriptor every time. It's assumed
 		// that callers of this method will check the privileges on the descriptor
 		// (like any other database) and return an error.
 		if flags.RequireMutable {
-			return true, dbdesc.NewBuilder(systemschema.MakeSystemDatabaseDesc().DatabaseDesc()).BuildExistingMutableDatabase(), nil
+			proto := systemschema.MakeSystemDatabaseDesc().DatabaseDesc()
+			return dbdesc.NewBuilder(proto).BuildExistingMutableDatabase(), nil
 		}
-		return true, systemschema.MakeSystemDatabaseDesc(), nil
+		return systemschema.MakeSystemDatabaseDesc(), nil
 	}
 
 	getDatabaseByName := func() (found bool, _ catalog.Descriptor, err error) {
@@ -519,24 +519,24 @@ func (tc *Collection) getDatabaseByName(
 
 	found, desc, err := getDatabaseByName()
 	if err != nil {
-		return false, nil, err
+		return nil, err
 	} else if !found {
 		if flags.Required {
-			return false, nil, sqlerrors.NewUndefinedDatabaseError(name)
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
 		}
-		return false, nil, nil
+		return nil, nil
 	}
 	db, ok := desc.(catalog.DatabaseDescriptor)
 	if !ok {
 		if flags.Required {
-			return false, nil, sqlerrors.NewUndefinedDatabaseError(name)
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
 		}
-		return false, nil, nil
+		return nil, nil
 	}
 	if dropped, err := filterDescriptorState(db, flags.Required, flags); err != nil || dropped {
-		return false, nil, err
+		return nil, err
 	}
-	return true, db, nil
+	return db, nil
 }
 
 // GetObjectDesc looks up an object by name and returns both its
@@ -612,14 +612,14 @@ func (tc *Collection) getObjectByName(
 	// in the face of a concurrent rename.
 	avoidCachedForParent := flags.AvoidCached || flags.RequireMutable
 	// Resolve the database.
-	found, db, err := tc.GetImmutableDatabaseByName(ctx, txn, catalogName,
+	db, err := tc.GetImmutableDatabaseByName(ctx, txn, catalogName,
 		tree.DatabaseLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    avoidCachedForParent,
 			IncludeDropped: flags.IncludeDropped,
 			IncludeOffline: flags.IncludeOffline,
 		})
-	if err != nil || !found {
+	if err != nil || db == nil {
 		return false, nil, err
 	}
 	dbID := db.GetID()

@@ -44,7 +44,7 @@ var _ resolver.SchemaResolver = &planner{}
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
 ) (res catalog.DatabaseDescriptor, err error) {
-	_, res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+	res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{Required: required, AvoidCached: true})
 	return res, err
 }
@@ -170,9 +170,9 @@ func (p *planner) ResolveTargetObject(
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
-	found, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
-	if err != nil || !found {
+	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
 	sc := p.Accessor()
@@ -398,7 +398,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		descs := make([]catalog.Descriptor, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			_, descriptor, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
+			descriptor, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
 				string(database), tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err
@@ -448,7 +448,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			if sc.ExplicitCatalog {
 				dbName = sc.Catalog()
 			}
-			_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
 				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err

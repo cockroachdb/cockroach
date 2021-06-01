@@ -167,7 +167,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		dbName = n.Schema.Catalog()
 	}
 
-	_, db, err := p.Descriptors().GetMutableDatabaseByName(params.ctx, p.txn, dbName,
+	db, err := p.Descriptors().GetMutableDatabaseByName(params.ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err

@@ -225,7 +225,7 @@ var varGen = map[string]sessionVar{
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
-				if _, _, err := evalCtx.Descs.GetImmutableDatabaseByName(
+				if _, err := evalCtx.Descs.GetImmutableDatabaseByName(
 					ctx, evalCtx.Txn, dbName, tree.DatabaseLookupFlags{Required: true},
 				); err != nil {
 					return "", err
