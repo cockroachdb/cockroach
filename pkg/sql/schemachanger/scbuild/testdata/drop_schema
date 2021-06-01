@@ -1,0 +1,132 @@
+create-schema
+CREATE SCHEMA SC1
+----
+
+create-sequence
+CREATE SEQUENCE sc1.SQ1
+----
+
+create-table
+CREATE TABLE sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('sc1.sq1'))
+----
+
+create-view
+CREATE VIEW sc1.v1 AS (SELECT name FROM sc1.t1)
+----
+
+create-view
+CREATE VIEW sc1.v2 AS (SELECT name AS n1, name AS n2 FROM sc1.v1)
+----
+
+create-view
+CREATE VIEW sc1.v3 AS (SELECT name, n1 FROM sc1.v1, sc1.v2);
+----
+
+create-view
+CREATE VIEW sc1.v4 AS (SELECT n2, n1 FROM sc1.v2);
+----
+
+create-type
+CREATE TYPE sc1.typ AS ENUM('a')
+----
+
+create-view
+CREATE VIEW sc1.v5 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
+----
+
+build
+DROP SCHEMA defaultdb.SC1 CASCADE
+----
+- DROP DefaultExpression:{DescID: 54, ColumnID: 3}
+  state: PUBLIC
+  details:
+    columnId: 3
+    tableId: 54
+    usesSequenceIDs:
+    - 53
+- DROP Sequence:{DescID: 53}
+  state: PUBLIC
+  details:
+    sequenceId: 53
+- DROP View:{DescID: 55}
+  state: PUBLIC
+  details:
+    dependedOnBy:
+    - 56
+    - 57
+    dependsOn:
+    - 54
+    tableId: 55
+- DROP View:{DescID: 56}
+  state: PUBLIC
+  details:
+    dependedOnBy:
+    - 57
+    - 58
+    dependsOn:
+    - 55
+    tableId: 56
+- DROP View:{DescID: 57}
+  state: PUBLIC
+  details:
+    dependedOnBy: []
+    dependsOn:
+    - 55
+    - 56
+    tableId: 57
+- DROP View:{DescID: 58}
+  state: PUBLIC
+  details:
+    dependedOnBy:
+    - 61
+    dependsOn:
+    - 56
+    tableId: 58
+- DROP View:{DescID: 61}
+  state: PUBLIC
+  details:
+    dependedOnBy: []
+    dependsOn:
+    - 58
+    tableId: 61
+- DROP TypeReference:{DescID: 59, DepID: 61}
+  state: PUBLIC
+  details:
+    descriptorId: 61
+    typeId: 59
+- DROP TypeReference:{DescID: 60, DepID: 61}
+  state: PUBLIC
+  details:
+    descriptorId: 61
+    typeId: 60
+- DROP RelationDependedOnBy:{DescID: 53, DepID: 54}
+  state: PUBLIC
+  details:
+    dependedOn: 54
+    tableId: 53
+- DROP Table:{DescID: 54}
+  state: PUBLIC
+  details:
+    tableId: 54
+- DROP Type:{DescID: 59}
+  state: PUBLIC
+  details:
+    typeId: 59
+- DROP Type:{DescID: 60}
+  state: PUBLIC
+  details:
+    typeId: 60
+- DROP Schema:{DescID: 52}
+  state: PUBLIC
+  details:
+    dependentObjects:
+    - 60
+    - 53
+    - 54
+    - 59
+    - 55
+    - 56
+    - 57
+    - 58
+    - 61
+    schemaId: 52

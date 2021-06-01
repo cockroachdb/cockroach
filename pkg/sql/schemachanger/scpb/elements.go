@@ -285,7 +285,29 @@ func (e *Type) DescriptorID() descpb.ID { return descpb.InvalidID }
 // GetAttributes implements the Element interface
 func (e *Type) GetAttributes() Attributes {
 	return makeAttributes([]attributeValue{
-		{key: AttributeDescID, value: DescID(e.TypeID)},
 		{key: AttributeType, value: ElementType(e)},
+		{key: AttributeDescID, value: DescID(e.TypeID)},
+	})
+}
+
+// DescriptorID implements the Element interface.
+func (e *Schema) DescriptorID() descpb.ID { return descpb.InvalidID }
+
+// GetAttributes implements the Element interface
+func (e *Schema) GetAttributes() Attributes {
+	return makeAttributes([]attributeValue{
+		{key: AttributeType, value: ElementType(e)},
+		{key: AttributeDescID, value: DescID(e.SchemaID)},
+	})
+}
+
+// DescriptorID implements the Element interface.
+func (e *Database) DescriptorID() descpb.ID { return descpb.InvalidID }
+
+// GetAttributes implements the Element interface
+func (e *Database) GetAttributes() Attributes {
+	return makeAttributes([]attributeValue{
+		{key: AttributeType, value: ElementType(e)},
+		{key: AttributeDescID, value: DescID(e.DatabaseID)},
 	})
 }
