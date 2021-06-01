@@ -1141,7 +1141,7 @@ SELECT has_database_privilege('testuser', 'my_db', 'create'),
        has_schema_privilege('testuser', 'public', 'usage'),
        has_table_privilege('testuser', 's.t', 'select')
 ----
-true false false
+true  false  true
 
 user root
 
@@ -1170,4 +1170,4 @@ SELECT has_database_privilege('testuser2', 'my_db', 'create'),
        has_schema_privilege('testuser2', 'public', 'usage'),
        has_table_privilege('testuser2', 's.t', 'select')
 ----
-true false false
+true  false  true

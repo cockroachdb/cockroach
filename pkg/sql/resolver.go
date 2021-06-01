@@ -311,7 +311,7 @@ func (p *planner) HasPrivilege(
 	kind privilege.Kind,
 	withGrantOpt bool,
 ) (bool, error) {
-	privilegeDesc, err := p.ResolvePrivilegeForSpecifier(
+	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
 		ctx,
 		specifier,
 	)
@@ -319,47 +319,43 @@ func (p *planner) HasPrivilege(
 		return false, err
 	}
 
-	allRoleMemberships, err := p.MemberOfWithAdminOption(ctx, user)
+	// hasPrivilegeFunc checks whether any role has the given privilege.
+	hasPrivilegeFunc := func(priv privilege.Kind) (bool, error) {
+		err := p.CheckPrivilegeForUser(ctx, desc, priv, user)
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+				return false, nil
+			}
+			return false, err
+		}
+		return true, nil
+	}
+
+	hasPrivilege, err := hasPrivilegeFunc(privilege.ALL)
 	if err != nil {
 		return false, err
 	}
-
-	allRoles := make([]string, 0, 3)
-	allRoles = append(allRoles, security.PublicRole, user.Normalized())
-	for role := range allRoleMemberships {
-		allRoles = append(allRoles, role.Normalized())
-	}
-
-	// hasPrivilege checks whether any role has the given privilege.
-	hasPrivilege := func(priv privilege.Kind) bool {
-		for _, role := range allRoles {
-			for _, pu := range privilegeDesc.Users {
-				if pu.User().Normalized() == role {
-					if privilege.ListFromBitField(pu.Privileges, privilege.Table).Contains(priv) {
-						return true
-					}
-					break
-				}
-			}
-		}
-		return false
-	}
-
-	if hasPrivilege(privilege.ALL) {
+	if hasPrivilege {
 		return true, nil
 	}
 	// For WITH GRANT OPTION, check the roles also has the GRANT privilege.
-	if withGrantOpt && !hasPrivilege(privilege.GRANT) {
-		return false, nil
+	if withGrantOpt {
+		hasPrivilege, err := hasPrivilegeFunc(privilege.GRANT)
+		if err != nil {
+			return false, err
+		}
+		if !hasPrivilege {
+			return false, nil
+		}
 	}
-	return hasPrivilege(kind), nil
+	return hasPrivilegeFunc(kind)
 }
 
-// ResolvePrivilegeForSpecifier resolves a tree.HasPrivilegeSpecifier and returns
-// the privilege descriptor for the given object.
-func (p *planner) ResolvePrivilegeForSpecifier(
+// ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
+// and returns the descriptor for the given object.
+func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 	ctx context.Context, specifier tree.HasPrivilegeSpecifier,
-) (*descpb.PrivilegeDescriptor, error) {
+) (catalog.Descriptor, error) {
 	if specifier.TableName != nil {
 		tn, err := parser.ParseQualifiedTableName(*specifier.TableName)
 		if err != nil {
@@ -401,7 +397,7 @@ func (p *planner) ResolvePrivilegeForSpecifier(
 		); err != nil {
 			return nil, err
 		}
-		return table.GetPrivileges(), nil
+		return table, nil
 	}
 	if specifier.TableOID == nil {
 		return nil, errors.AssertionFailedf("no table name or oid found")
@@ -434,7 +430,7 @@ func (p *planner) ResolvePrivilegeForSpecifier(
 	); err != nil {
 		return nil, err
 	}
-	return table.GetPrivileges(), nil
+	return table, nil
 }
 
 func validateColumnForHasPrivilegeSpecifier(
