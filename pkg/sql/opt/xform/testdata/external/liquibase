@@ -217,7 +217,7 @@ project
  │    │    │         │    │    │    │    │    ├── key: (78)
  │    │    │         │    │    │    │    │    └── fd: (78)-->(79,85)
  │    │    │         │    │    │    │    └── filters
- │    │    │         │    │    │    │         └── indisclustered:85 = true [outer=(85), constraints=(/85: [/true - /true]; tight), fd=()-->(85)]
+ │    │    │         │    │    │    │         └── indisclustered:85 [outer=(85), constraints=(/85: [/true - /true]; tight), fd=()-->(85)]
  │    │    │         │    │    │    ├── left-join (lookup pg_tablespace [as=t])
  │    │    │         │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:29!null n.nspname:30!null t.oid:34 spcname:35 ftrelid:126 ftserver:127 ftoptions:128 fs.oid:130 srvname:131
  │    │    │         │    │    │    │    ├── key columns: [8] = [34]

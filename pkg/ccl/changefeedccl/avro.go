@@ -143,6 +143,7 @@ type avroDataRecord struct {
 
 	colIdxByFieldIdx map[int]int
 	fieldIdxByName   map[string]int
+	fieldIdxByColIdx map[int]int
 	// Allocate Go native representation once, to avoid repeated map allocation
 	// when encoding.
 	native map[string]interface{}
@@ -468,6 +469,16 @@ func typeToAvroSchema(typ *types.T, reuseMap bool) (*avroSchemaField, error) {
 				return tree.ParseDJSON(x.(string))
 			},
 		)
+	case types.EnumFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum) (interface{}, error) {
+				return d.(*tree.DEnum).LogicalRep, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.MakeDEnumFromLogicalRepresentation(typ, x.(string))
+			},
+		)
 	case types.ArrayFamily:
 		itemSchema, err := typeToAvroSchema(typ.ArrayContents(), false /*reuse map*/)
 		if err != nil {
@@ -545,6 +556,7 @@ func indexToAvroSchema(
 		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
+		fieldIdxByColIdx: make(map[int]int),
 	}
 	colIdxByID := catalog.ColumnIDToOrdinalMap(tableDesc.PublicColumns())
 	for i := 0; i < index.NumKeyColumns(); i++ {
@@ -559,6 +571,7 @@ func indexToAvroSchema(
 			return nil, err
 		}
 		schema.colIdxByFieldIdx[len(schema.Fields)] = colIdx
+		schema.fieldIdxByColIdx[colIdx] = len(schema.Fields)
 		schema.fieldIdxByName[field.Name] = len(schema.Fields)
 		schema.Fields = append(schema.Fields, field)
 	}
@@ -598,6 +611,7 @@ func tableToAvroSchema(
 		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
+		fieldIdxByColIdx: make(map[int]int),
 	}
 	for _, col := range tableDesc.PublicColumns() {
 		field, err := columnToAvroSchema(col)
@@ -606,6 +620,7 @@ func tableToAvroSchema(
 		}
 		schema.colIdxByFieldIdx[len(schema.Fields)] = col.Ordinal()
 		schema.fieldIdxByName[field.Name] = len(schema.Fields)
+		schema.fieldIdxByColIdx[col.Ordinal()] = len(schema.Fields)
 		schema.Fields = append(schema.Fields, field)
 	}
 	schemaJSON, err := json.Marshal(schema)
@@ -817,6 +832,16 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 		return nil, errors.AssertionFailedf(`unhandled meta key: %s`, k)
 	}
 	return r.codec.BinaryFromNative(buf, native)
+}
+
+// Refresh the metadata for user-defined types on a cached schema
+// The only user-defined type is enum, so this is usually a no-op
+func (r *avroDataRecord) refreshTypeMetadata(tbl catalog.TableDescriptor) {
+	for _, col := range tbl.UserDefinedTypeColumns() {
+		if fieldIdx, ok := r.fieldIdxByColIdx[col.Ordinal()]; ok {
+			r.Fields[fieldIdx].typ = col.GetType()
+		}
+	}
 }
 
 // decimalToRat converts one of our apd decimals to the format expected by the
