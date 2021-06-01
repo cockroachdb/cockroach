@@ -153,12 +153,12 @@ NOT @1
 index-constraints vars=(bool) index=(@1)
 @1 != true
 ----
-(/NULL - /false]
+[/false - /false]
 
 index-constraints vars=(bool) index=(@1)
 @1 != false
 ----
-[/true - ]
+[/true - /true]
 
 index-constraints vars=(bool) index=(@1)
 @1 IS TRUE
@@ -195,12 +195,12 @@ index-constraints vars=(int) index=(@1)
 index-constraints vars=(bool) index=(@1 desc)
 @1 != true
 ----
-[/false - /NULL)
+[/false - /false]
 
 index-constraints vars=(bool) index=(@1 desc)
 @1 != false
 ----
-[ - /true]
+[/true - /true]
 
 index-constraints vars=(bool) index=(@1 desc)
 @1 IS TRUE
