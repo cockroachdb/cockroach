@@ -4091,7 +4091,6 @@ func TestMergeQueue(t *testing.T) {
 	zoneConfig.RangeMinBytes = &rangeMinBytes
 	settings := cluster.MakeTestingClusterSettings()
 	sv := &settings.SV
-	kvserverbase.MergeQueueEnabled.Override(ctx, sv, true)
 	kvserver.MergeQueueInterval.Override(ctx, sv, 0) // process greedily
 
 	tc := testcluster.StartTestCluster(t, 2,
@@ -4114,7 +4113,8 @@ func TestMergeQueue(t *testing.T) {
 	store := tc.GetFirstStoreFromServer(t, 0)
 	// The cluster with manual replication disables the merge queue,
 	// so we need to re-enable.
-	kvserverbase.MergeQueueEnabled.Override(ctx, sv, true)
+	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+	require.NoError(t, err)
 	store.SetMergeQueueActive(true)
 
 	split := func(t *testing.T, key roachpb.Key, expirationTime hlc.Timestamp) {
@@ -4228,22 +4228,14 @@ func TestMergeQueue(t *testing.T) {
 	})
 
 	t.Run("non-collocated", func(t *testing.T) {
-		skip.WithIssue(t, 64056, "flaky test")
 		reset(t)
-		rangeID := rhs().RangeID
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 		tc.AddVotersOrFatal(t, rhs().Desc().StartKey.AsRawKey(), tc.Target(1))
 		tc.TransferRangeLeaseOrFatal(t, *rhs().Desc(), tc.Target(1))
+		// NB: We're running on a 2 node `TestCluster` so we can count on the
+		// replica being removed to learn about the removal synchronously.
+		require.Equal(t, tc.NumServers(), 2)
 		tc.RemoveVotersOrFatal(t, rhs().Desc().StartKey.AsRawKey(), tc.Target(0))
-		testutils.SucceedsSoon(t, func() error {
-			_, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rangeID)
-			if err == nil {
-				return fmt.Errorf("replica still exists on dest %d", tc.Target(0))
-			} else if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-				return nil
-			}
-			return err
-		})
 
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
