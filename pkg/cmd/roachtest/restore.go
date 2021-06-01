@@ -306,6 +306,45 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 	})
 }
 
+type testDataSet interface {
+	name() string
+	// runRestore does any setup that's required and restores the dataset into
+	// the given cluster. Any setup shouldn't take a long amount of time since
+	// perf artifacts are based on how long this takes.
+	runRestore(ctx context.Context, c *cluster)
+}
+
+type dataBank2TB struct{}
+
+func (dataBank2TB) name() string {
+	return "2TB"
+}
+
+func (dataBank2TB) runRestore(ctx context.Context, c *cluster) {
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				RESTORE csv.bank FROM
+				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
+				WITH into_db = 'restore2tb'"`)
+}
+
+type tpccIncData struct{}
+
+func (tpccIncData) name() string {
+	return "TPCCInc"
+}
+
+func (tpccIncData) runRestore(ctx context.Context, c *cluster) {
+	// This data set restores a 1.80TB (replicated) backup consisting of 50
+	// incremental backup layers taken every 15 minutes. 8000 warehouses
+	// were imported and then a workload of 1000 warehouses was run against
+	// the cluster while the incremental backups were being taken.
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				RESTORE FROM '2021/05/21-020411.00' IN
+				'gs://cockroach-fixtures/tpcc-incrementals?AUTH=implicit'
+				AS OF SYSTEM TIME '2021-05-21 14:40:22'"`)
+}
+
 func registerRestore(r *testRegistry) {
 	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
 
@@ -313,15 +352,18 @@ func registerRestore(r *testRegistry) {
 		nodes        int
 		cpus         int
 		largeVolumes bool
+		dataSet      testDataSet
 
 		timeout time.Duration
 	}{
-		{nodes: 10, timeout: 6 * time.Hour},
-		{nodes: 32, timeout: 3 * time.Hour},
-		{nodes: 6, timeout: 4 * time.Hour, cpus: 16, largeVolumes: true},
+		{dataSet: dataBank2TB{}, nodes: 10, timeout: 6 * time.Hour},
+		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
+		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 16, largeVolumes: true},
+		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
 	} {
+		item := item
 		clusterOpts := make([]createOption, 0)
-		testName := fmt.Sprintf("restore2TB/nodes=%d", item.nodes)
+		testName := fmt.Sprintf("restore%s/nodes=%d", item.dataSet.name(), item.nodes)
 		if item.cpus != 0 {
 			clusterOpts = append(clusterOpts, cpu(item.cpus))
 			testName += fmt.Sprintf("/cpus=%d", item.cpus)
@@ -366,15 +408,11 @@ func registerRestore(r *testRegistry) {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
-					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
 					// Tick once before starting the restore, and once after to capture the
 					// total elapsed time. This is used by roachperf to compute and display
 					// the average MB/sec per node.
 					tick()
-					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE csv.bank FROM
-				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
-				WITH into_db = 'restore2tb'"`)
+					item.dataSet.runRestore(ctx, c)
 					tick()
 
 					// Upload the perf artifacts to any one of the nodes so that the test
