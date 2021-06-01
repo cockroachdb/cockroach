@@ -1365,9 +1365,9 @@ func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
 	return false
 }
 
-// constraintsCheck returns true iff the provided store would be a valid in a
+// isStoreValid returns true iff the provided store would be a valid in a
 // range with the provided constraints.
-func constraintsCheck(
+func isStoreValid(
 	store roachpb.StoreDescriptor, constraints []roachpb.ConstraintsConjunction,
 ) bool {
 	if len(constraints) == 0 {
