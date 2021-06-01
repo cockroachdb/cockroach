@@ -1276,8 +1276,8 @@ func (a *Allocator) TransferLeaseTarget(
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
-	sl = sl.filter(conf.Constraints)
-	sl = sl.filter(conf.VoterConstraints)
+	sl = sl.excludeInvalid(conf.Constraints)
+	sl = sl.excludeInvalid(conf.VoterConstraints)
 	// The only thing we use the storeList for is for the lease mean across the
 	// eligible stores, make that explicit here.
 	candidateLeasesMean := sl.candidateLeases.mean
@@ -1445,8 +1445,8 @@ func (a *Allocator) ShouldTransferLease(
 	}
 
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
-	sl = sl.filter(conf.Constraints)
-	sl = sl.filter(conf.VoterConstraints)
+	sl = sl.excludeInvalid(conf.Constraints)
+	sl = sl.excludeInvalid(conf.VoterConstraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	// Only consider live, non-draining, non-suspect replicas.
