@@ -252,6 +252,11 @@ func (node *AlterTableAlterColumnType) GetColumn() Name {
 	return node.Column
 }
 
+// GetFullyQualifiedColumn
+func (node *AlterTableAlterColumnType) GetFullyQualifiedColumn() Name {
+	return node.Column
+}
+
 // AlterTableAlterPrimaryKey represents an ALTER TABLE ALTER PRIMARY KEY command.
 type AlterTableAlterPrimaryKey struct {
 	Columns    IndexElemList

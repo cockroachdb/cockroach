@@ -108,9 +108,14 @@ func AlterColumnType(
 		return err
 	}
 
+	useUsingClause, err := shouldUseUsingClause(t, tn)
+	if err != nil {
+		return err
+	}
+
 	var kind schemachange.ColumnConversionKind
-	if t.Using != nil {
-		// If an expression is provided, we always need to try a general conversion.
+	if useUsingClause {
+		// If the USING clause is used, we always need to try a general conversion.
 		// We have to follow the process to create a new column and backfill it
 		// using the expression.
 		kind = schemachange.ColumnConversionGeneral
@@ -147,6 +152,56 @@ func AlterColumnType(
 	}
 
 	return nil
+}
+
+func shouldUseUsingClause(t *tree.AlterTableAlterColumnType, tn *tree.TableName) (bool, error) {
+	if t.Using != nil {
+		// This catches the very simple case where the USING clause is exactly
+		// a cast from the Column being altered to the type being altered to.
+		// We ignore the Using clause if it is redundant allowing us to no-op
+		// if possible.
+		cast, ok := t.Using.(*tree.CastExpr)
+		if ok {
+			if cast.Type == t.ToType {
+				switch column := cast.Expr.(type) {
+				// We need to be smarter about resolving the column here.
+				// To check if the column actually matches.
+				case *tree.UnresolvedName:
+					v, err := column.NormalizeVarName()
+					if err != nil {
+						return false, err
+					}
+					c, ok := v.(*tree.ColumnItem)
+					if ok {
+						return !compareColumns(c, tn, t.Column), nil
+					}
+				case *tree.ColumnItem:
+					return !compareColumns(column, tn, t.Column), nil
+				}
+			}
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// compareColumns returns if the column represented by column (*tree.ColumnItem)
+// matches the column specified by tn and columnName.
+func compareColumns(column *tree.ColumnItem, tn *tree.TableName, columnName tree.Name) bool {
+	// If the TableName is not specified and the columns
+	// names match, then we can ignore the USING clause.
+	if column.TableName == nil {
+		return columnName == column.ColumnName
+	}
+	otherTableName := column.TableName.ToTableName()
+
+	if tn.EqualsIgnoreExplicit(&otherTableName) {
+		return columnName == column.ColumnName
+	}
+
+	return false
 }
 
 func alterColumnTypeGeneral(

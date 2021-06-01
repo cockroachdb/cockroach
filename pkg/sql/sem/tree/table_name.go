@@ -65,6 +65,22 @@ func (t *TableName) Equals(other *TableName) bool {
 	return *t == *other
 }
 
+// EqualsIgnoreExplicit returns true if the two table names matches,
+// the CatalogName and SchemaNames fields are only compared if
+// ExplicitSchema and ExplicitCatalog are set for both TableNames.
+func (t *TableName) EqualsIgnoreExplicit(other *TableName) bool {
+	if t.ExplicitCatalog && other.ExplicitCatalog &&
+		t.ExplicitSchema && other.ExplicitSchema {
+		return t.Equals(other)
+	} else if t.ExplicitCatalog && other.ExplicitCatalog {
+		return t.Catalog() == other.Catalog() && t.Table() == other.Table()
+	} else if t.ExplicitSchema && other.ExplicitSchema {
+		return t.Schema() == other.Schema() && t.Table() == other.Table()
+	}
+
+	return t.Table() == other.Table()
+}
+
 // tableExpr implements the TableExpr interface.
 func (*TableName) tableExpr() {}
 
