@@ -511,6 +511,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 // non-voting replicas on dead nodes are replaced or removed.
 func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 65932, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
