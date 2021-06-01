@@ -44,7 +44,7 @@ type Accessor interface {
 	// exists under the target database.
 	GetSchemaByName(
 		ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string, flags tree.SchemaLookupFlags,
-	) (bool, SchemaDescriptor, error)
+	) (SchemaDescriptor, error)
 
 	// GetObjectNamesAndIDs returns the list of all objects in the given
 	// database and schema.

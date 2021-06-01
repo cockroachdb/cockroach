@@ -96,7 +96,7 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getSchemaIDForCreate(
 	ctx context.Context, codec keys.SQLCodec, dbID descpb.ID, scName string,
 ) (descpb.ID, error) {
-	_, res, err := p.ResolveUncachedSchemaDescriptor(ctx, dbID, scName, true /* required */)
+	res, err := p.ResolveUncachedSchemaDescriptor(ctx, dbID, scName, true /* required */)
 	if err != nil {
 		return 0, err
 	}
