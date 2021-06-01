@@ -182,12 +182,12 @@ func newAllOperationsConfig() GeneratorConfig {
 			CommitBatchOps: clientOpConfig,
 		},
 		Split: SplitConfig{
-			SplitNew:   10,
+			SplitNew:   1,
 			SplitAgain: 1,
 		},
 		Merge: MergeConfig{
 			MergeNotSplit: 1,
-			MergeIsSplit:  10,
+			MergeIsSplit:  1,
 		},
 		ChangeReplicas: ChangeReplicasConfig{
 			AddReplica:        1,
