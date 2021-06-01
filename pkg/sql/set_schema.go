@@ -46,7 +46,7 @@ func (p *planner) prepareSetSchema(
 	schemaID := desc.GetParentSchemaID()
 
 	// Lookup the schema we want to set to.
-	_, res, err := p.ResolveUncachedSchemaDescriptor(ctx, databaseID, schema, true /* required */)
+	res, err := p.ResolveUncachedSchemaDescriptor(ctx, databaseID, schema, true /* required */)
 	if err != nil {
 		return 0, err
 	}

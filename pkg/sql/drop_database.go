@@ -84,13 +84,9 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		found, res, err := p.ResolveMutableSchemaDescriptor(ctx, dbDesc.ID, schema, true /* required */)
+		res, err := p.ResolveMutableSchemaDescriptor(ctx, dbDesc.ID, schema, true /* required */)
 		if err != nil {
 			return nil, err
-		}
-		if !found {
-			log.Warningf(ctx, "could not find schema %s under database %d", schema, dbDesc.ID)
-			continue
 		}
 		if err := d.collectObjectsInSchema(ctx, p, dbDesc, res); err != nil {
 			return nil, err

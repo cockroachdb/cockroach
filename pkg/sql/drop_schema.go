@@ -69,11 +69,11 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			return nil, err
 		}
 
-		found, sc, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, scName, false /* required */)
+		sc, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, scName, false /* required */)
 		if err != nil {
 			return nil, err
 		}
-		if !found {
+		if sc == nil {
 			if n.IfExists {
 				continue
 			}

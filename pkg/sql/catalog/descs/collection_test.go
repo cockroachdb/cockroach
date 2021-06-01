@@ -296,13 +296,13 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			ok, schema, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			schema, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
 			require.NoError(t, err)
-			require.True(t, ok)
+			require.NotNil(t, schema)
 
-			ok, resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
 			require.NoError(t, err)
-			require.True(t, ok)
+			require.NotNil(t, schema)
 
 			require.Same(t, schema, resolved)
 
@@ -492,7 +492,7 @@ CREATE TABLE test.schema.t(x INT);
 				if err != nil {
 					return err
 				}
-				_, schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
+				schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
 				if err != nil {
 					return err
 				}

@@ -52,28 +52,35 @@ func (p *planner) ResolveUncachedDatabaseByName(
 // ResolveUncachedSchemaDescriptor looks up a schema from the store.
 func (p *planner) ResolveUncachedSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
-) (found bool, schema catalog.SchemaDescriptor, err error) {
+) (schema catalog.SchemaDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		found, schema, err = p.Accessor().GetSchemaByName(
+		schema, err = p.Accessor().GetSchemaByName(
 			ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
 				Required: required, RequireMutable: true,
 			},
 		)
 	})
-	return found, schema, err
+	if err != nil || schema == nil {
+		return nil, err
+	}
+	return schema, err
 }
 
 // ResolveUncachedSchemaDescriptor looks up a mutable descriptor for a schema
 // from the store.
 func (p *planner) ResolveMutableSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
-) (found bool, schema catalog.SchemaDescriptor, err error) {
-	return p.Accessor().GetSchemaByName(
+) (schema catalog.SchemaDescriptor, err error) {
+	schema, err = p.Accessor().GetSchemaByName(
 		ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
 			Required:       required,
 			RequireMutable: true,
 		},
 	)
+	if err != nil || schema == nil {
+		return nil, err
+	}
+	return schema, nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -177,13 +184,13 @@ func (p *planner) LookupSchema(
 	}
 	sc := p.Accessor()
 	var resolvedSchema catalog.SchemaDescriptor
-	found, resolvedSchema, err = sc.GetSchemaByName(
+	resolvedSchema, err = sc.GetSchemaByName(
 		ctx, p.txn, dbDesc.GetID(), scName, p.CommonLookupFlags(false /* required */),
 	)
-	if err != nil {
+	if err != nil || resolvedSchema == nil {
 		return false, nil, err
 	}
-	return found, &catalog.ResolvedObjectPrefix{
+	return true, &catalog.ResolvedObjectPrefix{
 		Database: dbDesc,
 		Schema:   resolvedSchema,
 	}, nil
@@ -457,7 +464,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		for _, sc := range targetSchemas {
-			_, resSchema, err := p.ResolveMutableSchemaDescriptor(
+			resSchema, err := p.ResolveMutableSchemaDescriptor(
 				ctx, sc.dbDesc.ID, sc.schema, true /* required */)
 			if err != nil {
 				return nil, err
