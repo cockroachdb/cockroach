@@ -225,11 +225,11 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			_, db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 			dbID = db.GetID()
 
-			_, resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 
 			require.Same(t, db, resolved)
@@ -244,7 +244,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			flags.RequireMutable = false
 
-			_, immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
@@ -263,20 +263,20 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 
 			// Try to get the database descriptor by the old name and fail.
-			_, failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.Regexp(t, `database "db" does not exist`, err)
 			require.Nil(t, failedToResolve)
 
 			// Try to get the database descriptor by the new name and succeed but get
 			// the old version with the old name (this is bizarre but is the
 			// contract now).
-			_, immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
 			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
 
 			require.NoError(t, descriptors.AddUncommittedDescriptor(mut))
 
-			_, immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
 			require.Equal(t, db.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy(), immByNameAfter)
@@ -488,7 +488,7 @@ CREATE TABLE test.schema.t(x INT);
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				_, dbDesc, err := descsCol.GetImmutableDatabaseByName(ctx, txn, "test", tree.DatabaseLookupFlags{Required: true})
+				dbDesc, err := descsCol.GetImmutableDatabaseByName(ctx, txn, "test", tree.DatabaseLookupFlags{Required: true})
 				if err != nil {
 					return err
 				}

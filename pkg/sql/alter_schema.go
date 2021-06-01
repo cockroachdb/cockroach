@@ -53,7 +53,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if n.Schema.ExplicitCatalog {
 		dbName = n.Schema.Catalog()
 	}
-	_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err

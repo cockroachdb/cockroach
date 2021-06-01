@@ -69,13 +69,13 @@ func (p *planner) ReparentDatabase(
 
 	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaReparentDatabase)
 
-	_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
 
-	_, parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
+	parent, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Parent),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err

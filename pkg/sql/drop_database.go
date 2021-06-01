@@ -62,12 +62,12 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	found, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: !n.IfExists})
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	if dbDesc == nil {
 		// IfExists was specified and database was not found.
 		return newZeroNode(nil /* columns */), nil
 	}
