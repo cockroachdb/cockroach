@@ -599,6 +599,7 @@ func init() {
 	}
 
 	clientCmds := []*cobra.Command{
+		debugJobTraceFromClusterCmd,
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
@@ -644,6 +645,7 @@ func init() {
 	timeoutCmds := []*cobra.Command{
 		statusNodeCmd,
 		lsNodesCmd,
+		debugJobTraceFromClusterCmd,
 		debugZipCmd,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
@@ -715,6 +717,7 @@ func init() {
 	sqlCmds := []*cobra.Command{
 		sqlShellCmd,
 		demoCmd,
+		debugJobTraceFromClusterCmd,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
 		doctorRecreateClusterCmd,
@@ -778,6 +781,7 @@ func init() {
 			demoCmd,
 			debugListFilesCmd,
 			debugTimeSeriesDumpCmd,
+			debugJobTraceFromClusterCmd,
 		},
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
@@ -905,6 +909,7 @@ func init() {
 	}
 	{
 		for _, c := range []*cobra.Command{
+			debugJobTraceFromClusterCmd,
 			doctorExamineClusterCmd,
 			doctorExamineZipDirCmd,
 			doctorExamineFallbackClusterCmd,
