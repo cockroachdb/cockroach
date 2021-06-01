@@ -656,6 +656,7 @@ func getNonVoterNodeIDs(rangeDesc roachpb.RangeDescriptor) (result []roachpb.Nod
 // from voter to non-voter.
 func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 65932, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
