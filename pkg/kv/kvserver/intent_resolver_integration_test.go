@@ -219,6 +219,7 @@ func TestRollbackSyncRangedIntentResolution(t *testing.T) {
 func TestReliableIntentCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 65908, "flaky in CI")
 	skip.UnderShort(t) // takes 294s
 	skip.UnderRace(t, "timing-sensitive test")
 	skip.UnderStress(t, "memory-hungry test")
