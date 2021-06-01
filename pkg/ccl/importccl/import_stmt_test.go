@@ -6190,6 +6190,7 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 	})
 
 	t.Run("inject-error-ensure-cleanup", func(t *testing.T) {
+		skip.WithIssue(t, 65878, "flaky test")
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
