@@ -206,10 +206,6 @@ func ResolveExistingObject(
 			return nil, prefix, ErrNoPrimaryKey
 		}
 
-		if lookupFlags.RequireMutable {
-			return descI.(*tabledesc.Mutable), prefix, nil
-		}
-
 		return descI.(catalog.TableDescriptor), prefix, nil
 	default:
 		return nil, prefix, errors.AssertionFailedf(
