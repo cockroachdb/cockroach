@@ -1981,8 +1981,3 @@ func (tc *Collection) codec() keys.SQLCodec {
 func (tc *Collection) AddDeletedDescriptor(desc catalog.Descriptor) {
 	tc.deletedDescs = append(tc.deletedDescs, desc)
 }
-
-// LeaseManager returns the lease.Manager.
-func (tc *Collection) LeaseManager() *lease.Manager {
-	return tc.leaseMgr
-}
