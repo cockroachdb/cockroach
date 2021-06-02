@@ -46,11 +46,10 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 			range_id,
 			range_size / 1000000 as range_size_mb,
 			lease_holder,
-    	gossip_nodes.locality as lease_holder_locality,
+			replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
 			replicas,
 			replica_localities
 		FROM %[1]s.crdb_internal.ranges AS r
-	  LEFT JOIN crdb_internal.gossip_nodes ON lease_holder = node_id
 		WHERE database_name=%[2]s
 		ORDER BY table_name, r.start_key
 		`
@@ -81,7 +80,7 @@ SELECT
   range_id,
   range_size / 1000000 as range_size_mb,
   lease_holder,
-  gossip_nodes.locality as lease_holder_locality,
+  replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
   replicas,
   replica_localities
 FROM %[3]s.crdb_internal.ranges AS r
