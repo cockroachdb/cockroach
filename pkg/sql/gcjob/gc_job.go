@@ -83,7 +83,12 @@ func performGC(
 // Resume is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) Resume(
 	ctx context.Context, phs interface{}, _ chan<- tree.Datums,
-) error {
+) (err error) {
+	defer func() {
+		if err != nil && !r.isPermanentGCError(err) {
+			err = errors.Mark(err, jobs.NewRetryJobError("gc"))
+		}
+	}()
 	p := phs.(sql.PlanHookState)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
@@ -193,6 +198,15 @@ func (r schemaChangeGCResumer) Resume(
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}) error {
 	return nil
+}
+
+// isPermanentGCError returns true if the error is a permanent job failure,
+// which indicates that the failed GC job cannot be retried.
+func (r *schemaChangeGCResumer) isPermanentGCError(err error) bool {
+	// Currently we classify errors based on Schema Change function to backport
+	// to 20.2 and 21.1. This functionality should be changed once #44594 is
+	// implemented.
+	return sql.IsPermanentSchemaChangeError(err)
 }
 
 func init() {
