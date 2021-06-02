@@ -557,7 +557,7 @@ func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
 	table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID, p.ObjectLookupFlags(
-		false /* required */, false /* requireMutable */))
+		true /* required */, false /* requireMutable */))
 	if err != nil {
 		return nil, err
 	}
