@@ -250,6 +250,8 @@ var (
 	errMetadataTestReceiverWrap       = errors.New("core.MetadataTestReceiver is not supported")
 	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
 	errChangeFrontierWrap             = errors.New("core.ChangeFrontier is not supported")
+	errReadImportWrap                 = errors.New("core.ReadImport is not supported")
+	errBackupDataWrap                 = errors.New("core.BackupData is not supported")
 	errBackfillerWrap                 = errors.New("core.Backfiller is not supported (not an execinfra.RowSource)")
 	errCSVWriterWrap                  = errors.New("core.CSVWriter is not supported (not an execinfra.RowSource)")
 	errSamplerWrap                    = errors.New("core.Sampler is not supported (not an execinfra.RowSource)")
@@ -274,6 +276,7 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.Backfiller != nil:
 		return errBackfillerWrap
 	case spec.Core.ReadImport != nil:
+		return errReadImportWrap
 	case spec.Core.CSVWriter != nil:
 		return errCSVWriterWrap
 	case spec.Core.Sampler != nil:
@@ -307,6 +310,7 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.InvertedFilterer != nil:
 	case spec.Core.InvertedJoiner != nil:
 	case spec.Core.BackupData != nil:
+		return errBackupDataWrap
 	case spec.Core.SplitAndScatter != nil:
 	case spec.Core.RestoreData != nil:
 	case spec.Core.Filterer != nil:

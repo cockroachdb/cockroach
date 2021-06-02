@@ -76,12 +76,9 @@ func TestColBatchScanMeta(t *testing.T) {
 				Spans: []execinfrapb.TableReaderSpan{
 					{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 				},
-				Table: *td.TableDesc(),
+				NeededColumns: []uint32{0},
+				Table:         *td.TableDesc(),
 			}},
-		Post: execinfrapb.PostProcessSpec{
-			Projection:    true,
-			OutputColumns: []uint32{0},
-		},
 		ResultTypes: types.OneIntCol,
 	}
 
@@ -135,11 +132,8 @@ func BenchmarkColBatchScan(b *testing.B) {
 						Spans: []execinfrapb.TableReaderSpan{
 							{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
 						},
+						NeededColumns: []uint32{0, 1},
 					}},
-				Post: execinfrapb.PostProcessSpec{
-					Projection:    true,
-					OutputColumns: []uint32{0, 1},
-				},
 				ResultTypes: types.TwoIntCols,
 			}
 
