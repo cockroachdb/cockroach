@@ -1,0 +1,6 @@
+# This test ensures that a rule cycle does not cause a stack overflow. In test
+# builds, a deep constructor call stack is detected and the Factory panics.
+exprnorm
+(NormCycleTestRel (True))
+----
+error: optimizer factory constructor call stack exceeded max depth of 10000

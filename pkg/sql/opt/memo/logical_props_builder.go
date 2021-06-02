@@ -2428,6 +2428,11 @@ func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Re
 	*rel = *fake.Props
 }
 
+func (b *logicalPropsBuilder) buildNormCycleTestRelProps(
+	nc *NormCycleTestRelExpr, rel *props.Relational,
+) {
+}
+
 // WithUses returns the WithUsesMap for the given expression.
 func WithUses(r opt.Expr) props.WithUsesMap {
 	switch e := r.(type) {
