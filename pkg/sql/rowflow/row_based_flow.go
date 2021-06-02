@@ -384,7 +384,7 @@ func (f *rowBasedFlow) setupOutboundStream(
 	sid := spec.StreamID
 	switch spec.Type {
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
-		return f.GetSyncFlowConsumer(), nil
+		return f.GetRowSyncFlowConsumer(), nil
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		atomic.AddInt32(&f.numOutboxes, 1)
