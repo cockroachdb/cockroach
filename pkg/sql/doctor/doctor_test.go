@@ -162,17 +162,17 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 		{
 			descTable: doctor.DescriptorTable{
 				{
-					ID: 1,
+					ID: 51,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
-						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 1, ParentID: 2},
+						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 51, ParentID: 2},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 1},
+				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 51},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-  Schema   1: ParentID   2, ParentSchemaID  0, Name 'schema': invalid parent id 2
+  Schema  51: ParentID   2, ParentSchemaID  0, Name 'schema': invalid parent id 2
 `,
 		},
 		{
