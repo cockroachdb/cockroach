@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -76,6 +77,11 @@ const (
 type tableAndIndex struct {
 	tableID descpb.ID
 	indexID descpb.IndexID
+}
+
+type tableAndSpan struct {
+	table catalog.TableDescriptor
+	spans []roachpb.Span
 }
 
 type backupKMSEnv struct {
@@ -172,39 +178,24 @@ func (s sortedIndexIDs) Len() int {
 // - Contiguous index spans are merged.
 // - Two non-contiguous index spans are merged if a scan request for the index
 // IDs between them does not return any results.
+// getLogicallyMergedTableSpans also returns the first and last index of the given table
 //
 // Egs: {/Table/51/1 - /Table/51/2}, {/Table/51/3 - /Table/51/4} => {/Table/51/1 - /Table/51/4}
 // provided the dropped index represented by the span
 // {/Table/51/2 - /Table/51/3} has been gc'ed.
 func getLogicallyMergedTableSpans(
 	table catalog.TableDescriptor,
-	added map[tableAndIndex]bool,
 	codec keys.SQLCodec,
 	endTime hlc.Timestamp,
+	getIndexesInBounds func(table catalog.TableDescriptor) (map[descpb.IndexID]struct{}, []descpb.IndexID, error),
 	checkForKVInBounds func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error),
 ) ([]roachpb.Span, error) {
 	// Spans with adding indexes are not safe to include in the backup since
 	// they may see non-transactional AddSST traffic. Future incremental backups
 	// will not have a way of incrementally backing up the data until #62585 is
 	// resolved.
-	addingIndexIDs := make(map[descpb.IndexID]struct{})
-	var publicIndexIDs []descpb.IndexID
-
-	allPhysicalIndexOpts := catalog.IndexOpts{DropMutations: true, AddMutations: true}
-	if err := catalog.ForEachIndex(table, allPhysicalIndexOpts, func(idx catalog.Index) error {
-		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
-		if added[key] {
-			return nil
-		}
-		added[key] = true
-		if idx.Public() {
-			publicIndexIDs = append(publicIndexIDs, idx.GetID())
-		}
-		if idx.Adding() {
-			addingIndexIDs[idx.GetID()] = struct{}{}
-		}
-		return nil
-	}); err != nil {
+	addingIndexIDs, publicIndexIDs, err := getIndexesInBounds(table)
+	if err != nil {
 		return nil, err
 	}
 
@@ -232,6 +223,7 @@ func getLogicallyMergedTableSpans(
 	// After recording the new "merged" span, we update mergedSpan to be the
 	// rhsSpan, and start processing the next logically mergeable span set.
 	mergedSpan := table.IndexSpan(codec, publicIndexIDs[0])
+
 	for curIndex := 0; curIndex < len(publicIndexIDs)-1; curIndex++ {
 		lhsIndexID := publicIndexIDs[curIndex]
 		rhsIndexID := publicIndexIDs[curIndex+1]
@@ -298,6 +290,90 @@ func getLogicallyMergedTableSpans(
 	return mergedIndexSpans, nil
 }
 
+// getLogicallyMergedInterTableSpans merges and returns all non-drop index spans between distinct tables,
+// it does not make any changes to the output of getLogicallyMergedTableSpans except possibly the
+// first and last spans of each table
+func getLogicallyMergedInterTableSpans(
+	tableIDs []descpb.ID,
+	spans map[descpb.ID]*tableAndSpan,
+	endTime hlc.Timestamp,
+	checkForMVCCInvariants func(lhs, rhs tableAndSpan, endTime hlc.Timestamp) (bool, error),
+	checkForNonMVCCInvariants func(startTableID, endTableID descpb.ID) (bool, error),
+) ([]roachpb.Span, error) {
+
+	if len(tableIDs) == 1 {
+		return spans[tableIDs[0]].spans, nil
+	}
+
+	var mergedInterTableSpans []roachpb.Span
+	prevMergeState := false
+
+	// fn returns spans that should be merged based on prevMergeState and curMergeState
+	// 	prevMergeState: true iff lhs was merged with rhs in the previous iteration
+	// 	curMergeState: true iff lhs can be merged with rhs in the current iteration
+	fn := func(prevMergeState bool, curMergeState bool, spans []roachpb.Span, endKey roachpb.Key) []roachpb.Span {
+		if len(spans) == 1 && prevMergeState {
+			return nil
+		}
+
+		startIndex := 0
+		if prevMergeState {
+			startIndex++
+		}
+
+		if curMergeState {
+			spans[len(spans)-1].EndKey = endKey
+		}
+
+		return spans[startIndex:]
+	}
+
+	for curIndex := 0; curIndex < len(tableIDs)-1; curIndex++ {
+		lhsTableID := tableIDs[curIndex]
+		rhsTableID := tableIDs[curIndex+1]
+
+		lhs := spans[lhsTableID]
+		rhs := spans[rhsTableID]
+
+		curMergeState := true
+		numChecks := 3
+
+		// LHS and RHS are safe to merge iff the following MVCC and Non-MVCC invariants hold:
+		// 		1) MVCC: no dropping/adding indexes were found from the EndKey of the last span
+		// 				 on the lhs table to the StartKey of the first span on the rhs table
+		//		2) Non-MVCC: we can safely merge lhs and rhs if they're contiguous or there exists
+		// 				 dropped and gc'ed tables between them. We should not merge if we are able
+		//				 to fetch a table descriptor for any given table ID that is between lhs and rhs.
+		for i := 0; i < numChecks && curMergeState; i++ {
+			// do not merge if lhs and rhs are the same table
+			switch i {
+			case 0:
+				curMergeState = lhsTableID != rhsTableID
+			case 1:
+				mvccInvariantsHold, err := checkForNonMVCCInvariants(lhsTableID, rhsTableID)
+				if err != nil {
+					return nil, err
+				}
+				curMergeState = curMergeState && mvccInvariantsHold
+			case 2:
+				nonMvccInvariantsHold, err := checkForMVCCInvariants(*lhs, *rhs, endTime)
+				if err != nil {
+					return nil, err
+				}
+				curMergeState = curMergeState && nonMvccInvariantsHold
+			}
+		}
+
+		mergedInterTableSpans = append(mergedInterTableSpans, fn(prevMergeState, curMergeState, lhs.spans, rhs.spans[0].EndKey)...)
+		if curIndex == len(tableIDs)-2 {
+			mergedInterTableSpans = append(mergedInterTableSpans, fn(curMergeState, false, rhs.spans, nil)...)
+		}
+
+		prevMergeState = curMergeState
+	}
+	return mergedInterTableSpans, nil
+}
+
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 // The outputted spans are merged as described by the method
@@ -305,7 +381,7 @@ func getLogicallyMergedTableSpans(
 // we BACKUP and lay protected ts records for.
 func spansForAllTableIndexes(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
+	p sql.PlanHookState,
 	endTime hlc.Timestamp,
 	tables []catalog.TableDescriptor,
 	revs []BackupManifest_DescriptorRevision,
@@ -313,8 +389,8 @@ func spansForAllTableIndexes(
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
-	var mergedIndexSpans []roachpb.Span
-	var err error
+
+	execCfg := p.ExecCfg()
 
 	// checkForKVInBounds issues a scan request between start and end at endTime,
 	// and returns true if a non-nil result is returned.
@@ -332,19 +408,154 @@ func spansForAllTableIndexes(
 		return foundKV, err
 	}
 
+	// getIndexesInBounds returns all adding indexes and public indexes found in the given table
+	getIndexesInBounds := func(table catalog.TableDescriptor) (
+		map[descpb.IndexID]struct{}, []descpb.IndexID, error) {
+
+		addingIndexIDs := make(map[descpb.IndexID]struct{})
+		allPhysicalIndexOpts := catalog.IndexOpts{DropMutations: true, AddMutations: true}
+		var publicIndexIDs []descpb.IndexID
+
+		if err := catalog.ForEachIndex(table, allPhysicalIndexOpts, func(idx catalog.Index) error {
+			key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
+			if added[key] {
+				return nil
+			}
+			added[key] = true
+			if idx.Public() {
+				publicIndexIDs = append(publicIndexIDs, idx.GetID())
+			}
+			if idx.Adding() {
+				addingIndexIDs[idx.GetID()] = struct{}{}
+			}
+			return nil
+		}); err != nil {
+			return nil, nil, err
+		}
+
+		return addingIndexIDs, publicIndexIDs, nil
+	}
+
+	// checkForNonMVCCInvariants scans all tables between startTableID and endTableID and returns true iff for any table ID
+	// 		1) no table descriptor was found OR
+	// 		2) IsUndefinedRelationError was returned
+	checkForNonMVCCInvariants := func(startTableID, endTableID descpb.ID) (bool, error) {
+		for tableID := startTableID; tableID < endTableID; tableID++ {
+			_, err := p.LookupTableByID(ctx, tableID)
+			if !sqlerrors.IsUndefinedRelationError(err) {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+
+	// checkForMVCCInvariants returns true iff no dropped but not gc'ed, or adding indexes were found between the last span of lhs and first span of rhs
+	checkForMVCCInvariants := func(lhs, rhs tableAndSpan, endTime hlc.Timestamp) (bool, error) {
+		lhsEndKey := lhs.spans[len(lhs.spans)-1].EndKey
+		rhsStartKey := rhs.spans[0].Key
+
+		foundDroppedKV, err := checkForKVInBounds(lhsEndKey, rhsStartKey, endTime)
+		if foundDroppedKV || err != nil {
+			return false, err
+		}
+
+		lhsAddingIndexIDs, _, err := getIndexesInBounds(lhs.table)
+		if err != nil {
+			return false, err
+		}
+
+		lhsIndexID := lhs.table.GetNextIndexID()
+		for indexID := range lhsAddingIndexIDs {
+			_, foundAddingIndex := lhsAddingIndexIDs[indexID]
+			foundAddingIndexInBounds := indexID >= lhsIndexID && foundAddingIndex
+
+			if foundAddingIndexInBounds {
+				return false, nil
+			}
+		}
+
+		rhsAddingIndexIDs, rhsPublicIndexIDs, err := getIndexesInBounds(rhs.table)
+		if err != nil {
+			return false, err
+		}
+
+		sort.Sort(sortedIndexIDs(rhsPublicIndexIDs))
+
+		rhsIndexID := rhsPublicIndexIDs[0]
+		for indexID := range rhsAddingIndexIDs {
+			_, foundAddingIndex := rhsAddingIndexIDs[indexID]
+			foundAddingIndexInBounds := indexID < rhsIndexID && foundAddingIndex
+
+			if foundAddingIndexInBounds {
+				return false, nil
+			}
+		}
+
+		lhsIndex, err := lhs.table.FindIndexWithID(lhs.table.GetNextIndexID() - 1)
+		if err != nil {
+			return false, err
+		}
+
+		rhsIndex, err := rhs.table.FindIndexWithID(rhsIndexID)
+		if err != nil {
+			return false, err
+		}
+
+		return !lhsIndex.IsInterleaved() && !rhsIndex.IsInterleaved(), nil
+	}
+
+	var tableIDs descpb.IDs
+	tableSpans := make(map[descpb.ID]*tableAndSpan)
+
 	for _, table := range tables {
-		mergedIndexSpans, err = getLogicallyMergedTableSpans(table, added, execCfg.Codec, endTime,
-			checkForKVInBounds)
+		table = tabledesc.NewBuilder(table.TableDesc()).BuildImmutableTable()
+		mergedIndexSpans, err := getLogicallyMergedTableSpans(
+			table,
+			execCfg.Codec,
+			endTime,
+			getIndexesInBounds,
+			checkForKVInBounds,
+		)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, indexSpan := range mergedIndexSpans {
-			if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-			}
+		// Empty slice implies that the table is offline and we should not attempt to merge it
+		if mergedIndexSpans == nil {
+			continue
+		}
+		tableID := table.GetID()
+		if _, ok := tableSpans[tableID]; !ok {
+			tableIDs = append(tableIDs, tableID)
+		}
+		tableSpans[tableID] = &tableAndSpan{
+			table: table,
+			spans: mergedIndexSpans,
 		}
 	}
+
+	sort.Sort(tableIDs)
+	mergedInterTableSpans, err := getLogicallyMergedInterTableSpans(
+		tableIDs,
+		tableSpans,
+		endTime,
+		checkForMVCCInvariants,
+		checkForNonMVCCInvariants,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, indexSpan := range mergedInterTableSpans {
+		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+		}
+	}
+
+	var revIDs descpb.IDs
+	revTblSpans := make(map[descpb.ID]*tableAndSpan)
+
 	// If there are desc revisions, ensure that we also add any index spans
 	// in them that we didn't already get above e.g. indexes or tables that are
 	// not in latest because they were dropped during the time window in question.
@@ -356,18 +567,48 @@ func spansForAllTableIndexes(
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.Public() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
-			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
+			revSpans, err := getLogicallyMergedTableSpans(
+				tbl,
+				execCfg.Codec,
+				rev.Time,
+				getIndexesInBounds,
 				checkForKVInBounds)
 			if err != nil {
 				return nil, err
 			}
 
-			mergedIndexSpans = append(mergedIndexSpans, revSpans...)
-			for _, indexSpan := range mergedIndexSpans {
-				if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
-					panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-				}
+			if revSpans == nil {
+				continue
 			}
+			tableID := tbl.GetID()
+			if tableSpans, ok := revTblSpans[tableID]; ok {
+				tableSpans.spans = append(tableSpans.spans, revSpans...)
+				continue
+			}
+			revIDs = append(revIDs, tableID)
+			revTblSpans[tableID] = &tableAndSpan{
+				table: tbl,
+				spans: revSpans,
+			}
+		}
+	}
+
+	sort.Sort(revIDs)
+	mergedRevTableSpans, err := getLogicallyMergedInterTableSpans(
+		revIDs,
+		revTblSpans,
+		endTime,
+		checkForMVCCInvariants,
+		checkForNonMVCCInvariants,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, indexSpan := range mergedRevTableSpans {
+		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 		}
 	}
 
@@ -1012,7 +1253,7 @@ func backupPlanHook(
 
 			tenantRows = append(tenantRows, ds)
 		} else {
-			tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tables, revs)
+			tableSpans, err := spansForAllTableIndexes(ctx, p, endTime, tables, revs)
 			if err != nil {
 				return err
 			}
@@ -1433,7 +1674,7 @@ func getReintroducedSpans(
 		}
 	}
 
-	tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tablesToReinclude, allRevs)
+	tableSpans, err := spansForAllTableIndexes(ctx, p, endTime, tablesToReinclude, allRevs)
 	if err != nil {
 		return nil, err
 	}
