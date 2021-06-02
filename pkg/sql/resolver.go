@@ -387,25 +387,15 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"cross-database references are not implemented: %s", tn)
 		}
-
-		table, err := p.getVirtualTabler().getVirtualTableDesc(tn)
+		_, table, err := p.Descriptors().GetImmutableTableByName(
+			ctx, p.txn, tn, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required: true,
+				},
+			},
+		)
 		if err != nil {
 			return nil, err
-		}
-		if table == nil {
-			_, table, err = p.Descriptors().GetImmutableTableByName(
-				ctx,
-				p.txn,
-				tn,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required: true,
-					},
-				},
-			)
-			if err != nil {
-				return nil, err
-			}
 		}
 		if err := validateColumnForHasPrivilegeSpecifier(
 			table,
@@ -418,27 +408,16 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 	if specifier.TableOID == nil {
 		return nil, errors.AssertionFailedf("no table name or oid found")
 	}
-	virtualDesc, err := p.getVirtualTabler().getVirtualTableEntryByID(descpb.ID(*specifier.TableOID))
-	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
-		return nil, err
-	}
-	var table catalog.TableDescriptor
-	if virtualDesc != nil {
-		table = virtualDesc.desc
-	} else {
-		table, err = p.Descriptors().GetImmutableTableByID(
-			ctx,
-			p.txn,
-			descpb.ID(*specifier.TableOID),
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required: true,
-				},
+	table, err := p.Descriptors().GetImmutableTableByID(
+		ctx, p.txn, descpb.ID(*specifier.TableOID),
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required: true,
 			},
-		)
-		if err != nil {
-			return nil, err
-		}
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 	if err := validateColumnForHasPrivilegeSpecifier(
 		table,

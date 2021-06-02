@@ -50,6 +50,7 @@ type MutableDescriptor interface {
 type VirtualSchemas interface {
 	GetVirtualSchema(schemaName string) (VirtualSchema, bool)
 	GetVirtualSchemaByID(id descpb.ID) (VirtualSchema, bool)
+	GetVirtualObjectByID(id descpb.ID) (VirtualObject, bool)
 }
 
 // VirtualSchema represents a collection of VirtualObjects.

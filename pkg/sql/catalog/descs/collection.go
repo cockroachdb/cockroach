@@ -632,6 +632,12 @@ func (tc *Collection) getObjectByName(
 	}
 	schemaID := scDesc.GetID()
 
+	if isVirtual, desc, err := tc.maybeGetVirtualObjectDesc(
+		scDesc.GetName(), objectName, flags, db.GetName(),
+	); isVirtual || err != nil {
+		return isVirtual, desc, err
+	}
+
 	if found, refuseFurtherLookup, desc, err := tc.getSyntheticOrUncommittedDescriptor(
 		dbID, schemaID, objectName, flags.RequireMutable,
 	); err != nil || refuseFurtherLookup {
@@ -1139,6 +1145,11 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		return desc, nil
 	}
 	getDescriptorByID := func() (catalog.Descriptor, error) {
+		if vd, err := tc.maybeGetVirtualDescriptorByID(
+			ctx, id, flags,
+		); vd != nil || err != nil {
+			return vd, err
+		}
 		if found, sd := tc.getSyntheticDescriptorByID(id); found {
 			if flags.RequireMutable {
 				return nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
@@ -2067,6 +2078,33 @@ func (tc *Collection) AddDeletedDescriptor(desc catalog.Descriptor) {
 // LeaseManager returns the lease.Manager.
 func (tc *Collection) LeaseManager() *lease.Manager {
 	return tc.leaseMgr
+}
+
+func (tc *Collection) maybeGetVirtualDescriptorByID(
+	ctx context.Context, id descpb.ID, flags tree.CommonLookupFlags,
+) (catalog.Descriptor, error) {
+	if tc.virtualSchemas == nil {
+		return nil, nil
+	}
+	if vd, found := tc.virtualSchemas.GetVirtualObjectByID(id); found {
+		if flags.RequireMutable {
+			vs, found := tc.virtualSchemas.GetVirtualSchemaByID(vd.Desc().GetParentSchemaID())
+			if !found {
+				return nil, errors.AssertionFailedf(
+					"cannot resolve mutable virtual descriptor %d with unknown parent schema %d",
+					id, vd.Desc().GetParentSchemaID(),
+				)
+			}
+			return nil, catalog.NewMutableAccessToVirtualSchemaError(vs, vd.Desc().GetName())
+		}
+		return vd.Desc(), nil
+	}
+	if vs, found := tc.virtualSchemas.GetVirtualSchemaByID(id); found {
+		if flags.RequireMutable {
+			return nil, catalog.NewMutableAccessToVirtualSchemaError(vs, vs.Desc().GetName())
+		}
+	}
+	return nil, nil
 }
 
 // DistSQLTypeResolverFactory is an object that constructs TypeResolver objects
