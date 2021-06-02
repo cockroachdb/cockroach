@@ -556,8 +556,8 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
-	table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID, flags)
+	table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID, p.ObjectLookupFlags(
+		false /* required */, false /* requireMutable */))
 	if err != nil {
 		return nil, err
 	}

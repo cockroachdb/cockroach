@@ -120,7 +120,11 @@ func (n *renameTableNode) startExec(params runParams) error {
 			return err
 		}
 
-		targetSchemaDesc, err = p.ResolveUncachedSchemaDescriptor(ctx, targetDbDesc.GetID(), oldTn.Schema(), true)
+		targetSchemaDesc, err = p.Descriptors().GetMutableSchemaByName(
+			ctx, p.txn, targetDbDesc.GetID(), oldTn.Schema(), tree.SchemaLookupFlags{
+				Required:       true,
+				RequireMutable: true,
+			})
 		if err != nil {
 			return err
 		}
