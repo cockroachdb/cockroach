@@ -451,6 +451,215 @@ func GetCastOperator(
 	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
 }
 
+func IsCastSupported(fromType, toType *types.T) bool {
+	if fromType.Family() == types.UnknownFamily {
+		return true
+	}
+	leftType, rightType := fromType, toType
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+	case types.BoolFamily:
+		switch leftType.Width() {
+		case -1:
+		default:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.FloatFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.IntFamily:
+				switch rightType.Width() {
+				case 16:
+					return true
+				case 32:
+					return true
+				case -1:
+				default:
+					return true
+				}
+			}
+		}
+	case types.DecimalFamily:
+		switch leftType.Width() {
+		case -1:
+		default:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.DecimalFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			}
+		}
+	case types.IntFamily:
+		switch leftType.Width() {
+		case 16:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			case types.IntFamily:
+				switch rightType.Width() {
+				case 16:
+					return true
+				case 32:
+					return true
+				case -1:
+				default:
+					return true
+				}
+			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.DecimalFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.FloatFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			}
+		case 32:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			case types.IntFamily:
+				switch rightType.Width() {
+				case 16:
+					return true
+				case 32:
+					return true
+				case -1:
+				default:
+					return true
+				}
+			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.DecimalFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.FloatFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			}
+		case -1:
+		default:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			case types.IntFamily:
+				switch rightType.Width() {
+				case 16:
+					return true
+				case 32:
+					return true
+				case -1:
+				default:
+					return true
+				}
+			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.DecimalFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.FloatFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			}
+		}
+	case types.FloatFamily:
+		switch leftType.Width() {
+		case -1:
+		default:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			case types.FloatFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.DecimalFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.IntFamily:
+				switch rightType.Width() {
+				case 16:
+					return true
+				case 32:
+					return true
+				case -1:
+				default:
+					return true
+				}
+			}
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch leftType.Width() {
+		case -1:
+		default:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case typeconv.DatumVecCanonicalTypeFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 type castOpNullAny struct {
 	colexecop.OneInputInitCloserHelper
 
