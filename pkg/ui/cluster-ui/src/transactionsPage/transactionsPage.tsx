@@ -47,6 +47,7 @@ type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 
 const cx = classNames.bind(styles);
 
+import "src/core/antd.css"
 interface TState {
   sortSetting: SortSetting;
   pagination: ISortedTablePagination;

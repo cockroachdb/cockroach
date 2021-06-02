@@ -43,6 +43,8 @@ import {
   ICancelQueryRequest,
 } from "src/store/terminateQuery";
 
+import "src/core/antd.css"
+
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import sessionPageStyles from "./sessionPage.module.scss";

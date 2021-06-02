@@ -45,6 +45,7 @@ import { formatTwoPlaces } from "../barCharts";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { makeStatementsColumns } from "src/statementsTable/statementsTable";
 
+import "src/core/antd.css"
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 

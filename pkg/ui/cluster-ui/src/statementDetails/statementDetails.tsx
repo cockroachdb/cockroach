@@ -58,6 +58,8 @@ import styles from "./statementDetails.module.scss";
 import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store/uiConfig";
 
+import "src/core/antd.css"
+
 const { TabPane } = Tabs;
 
 export interface Fraction {

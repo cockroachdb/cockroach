@@ -46,6 +46,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 
+import "src/core/antd.css"
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 

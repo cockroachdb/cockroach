@@ -49,6 +49,7 @@ import statementsPageStyles from "src/statementsPage/statementsPage.module.scss"
 import styles from "./sessionDetails.module.scss";
 import classNames from "classnames/bind";
 
+import "src/core/antd.css"
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
 
