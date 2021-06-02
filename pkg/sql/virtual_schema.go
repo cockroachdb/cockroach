@@ -312,6 +312,15 @@ func (vs *VirtualSchemaHolder) GetVirtualSchemaByID(id descpb.ID) (catalog.Virtu
 	return sc, ok
 }
 
+// GetVirtualObjectByID makes VirtualSchemaHolder implement catalog.VirtualSchemas.
+func (vs *VirtualSchemaHolder) GetVirtualObjectByID(id descpb.ID) (catalog.VirtualObject, bool) {
+	entry, ok := vs.defsByID[id]
+	if !ok {
+		return nil, false
+	}
+	return entry, true
+}
+
 var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
 
 type virtualSchemaEntry struct {
@@ -765,20 +774,10 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtua
 	return nil, nil
 }
 
-func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (*virtualDefEntry, error) {
-	entry, ok := vs.defsByID[id]
-	if !ok {
-		return nil, catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
-	}
-	return entry, nil
-}
-
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
 	getVirtualTableDesc(tn *tree.TableName) (catalog.TableDescriptor, error)
-	getVirtualSchemaEntry(name string) (*virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error)
-	getVirtualTableEntryByID(id descpb.ID) (*virtualDefEntry, error)
 	getSchemas() map[string]*virtualSchemaEntry
 	getSchemaNames() []string
 }

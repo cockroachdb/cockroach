@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -147,6 +148,9 @@ type ServerConfig struct {
 	// SQLStatsResetter is an interface used to reset SQL stats without the need to
 	// introduce dependency on the sql package.
 	SQLStatsResetter tree.SQLStatsResetter
+
+	// VirtualSchemas hold the virtual table schemas.
+	VirtualSchemas catalog.VirtualSchemas
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

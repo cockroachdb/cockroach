@@ -437,7 +437,7 @@ func (ds *ServerImpl) newFlowContext(
 			ds.ServerConfig.Settings,
 			ds.ServerConfig.LeaseManager.(*lease.Manager),
 			ds.ServerConfig.HydratedTables,
-			nil, // virtualSchemas
+			ds.ServerConfig.VirtualSchemas,
 		)
 		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
 			Descriptors: collection,
