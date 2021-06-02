@@ -28,7 +28,7 @@ const plugins = [
   "@babel/proposal-class-properties",
   "@babel/proposal-object-rest-spread",
   "@babel/plugin-transform-runtime",
-  ["import", { "libraryName": "antd", "style": "css" }],
+  ["import", { "libraryName": "antd", "style": true }],
 ];
 
 const env = {
