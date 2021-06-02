@@ -172,9 +172,7 @@ func runLocalFlow(
 	if err != nil {
 		return nil, err
 	}
-	if err = flow.Run(flowCtx, func() {}); err != nil {
-		return nil, err
-	}
+	flow.Run(flowCtx, func() {})
 	flow.Cleanup(flowCtx)
 
 	if !rowBuf.ProducerClosed() {
