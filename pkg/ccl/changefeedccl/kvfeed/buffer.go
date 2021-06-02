@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -231,9 +232,7 @@ type memBuffer struct {
 	}
 }
 
-// MakeMemBuffer returns an EventBuffer backed by memory, limited
-// as specified by bound account.
-func MakeMemBuffer(acc mon.BoundAccount, metrics *Metrics) EventBuffer {
+func makeMemBuffer(acc mon.BoundAccount, metrics *Metrics) EventBuffer {
 	b := &memBuffer{
 		metrics:  metrics,
 		signalCh: make(chan struct{}, 1),
@@ -363,3 +362,30 @@ func (b *memBuffer) getRow(ctx context.Context) (tree.Datums, error) {
 		}
 	}
 }
+
+type errorWrapperEventBuffer struct {
+	EventBuffer
+}
+
+func (e errorWrapperEventBuffer) AddKV(
+	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
+) error {
+	if err := e.EventBuffer.AddKV(ctx, kv, prevVal, backfillTimestamp); err != nil {
+		return changefeedbase.MarkRetryableError(err)
+	}
+	return nil
+}
+
+func (e errorWrapperEventBuffer) AddResolved(
+	ctx context.Context,
+	span roachpb.Span,
+	ts hlc.Timestamp,
+	boundaryType jobspb.ResolvedSpan_BoundaryType,
+) error {
+	if err := e.EventBuffer.AddResolved(ctx, span, ts, boundaryType); err != nil {
+		return changefeedbase.MarkRetryableError(err)
+	}
+	return nil
+}
+
+var _ EventBuffer = (*errorWrapperEventBuffer)(nil)

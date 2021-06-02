@@ -293,7 +293,7 @@ func changefeedPlanHook(
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
 			}
-			return MaybeStripRetryableErrorMarker(err)
+			return changefeedbase.MaybeStripRetryableErrorMarker(err)
 		}
 
 		// Changefeeds are based on the Rangefeed abstraction, which requires the
@@ -322,7 +322,7 @@ func changefeedPlanHook(
 				jobspb.InvalidJobID,
 			)
 			if err != nil {
-				return MaybeStripRetryableErrorMarker(err)
+				return changefeedbase.MaybeStripRetryableErrorMarker(err)
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
@@ -607,7 +607,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 		}
 
-		if !IsRetryableError(err) {
+		if !changefeedbase.IsRetryableError(err) {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

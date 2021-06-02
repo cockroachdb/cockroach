@@ -513,19 +513,16 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 // operation.
 func TestChangefeedInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 57754, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
-
 		t.Run(`no cursor - no initial scan`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE no_initial_scan (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (1)`)
 
 			noInitialScan := feed(t, f, `CREATE CHANGEFEED FOR no_initial_scan `+
-				`WITH no_initial_scan, resolved='10ms'`)
+				`WITH no_initial_scan, resolved='1s'`)
 			defer closeFeed(t, noInitialScan)
 			expectResolvedTimestamp(t, noInitialScan)
 			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (2)`)
@@ -541,7 +538,7 @@ func TestChangefeedInitialScan(t *testing.T) {
 			var i int
 			sqlDB.QueryRow(t, `SELECT count(*), cluster_logical_timestamp() from initial_scan`).Scan(&i, &tsStr)
 			initialScan := feed(t, f, `CREATE CHANGEFEED FOR initial_scan `+
-				`WITH initial_scan, resolved='10ms', cursor='`+tsStr+`'`)
+				`WITH initial_scan, resolved='1s', cursor='`+tsStr+`'`)
 			defer closeFeed(t, initialScan)
 			assertPayloads(t, initialScan, []string{
 				`initial_scan: [1]->{"after": {"a": 1}}`,
@@ -603,6 +600,16 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 			`tt: [3]->{"after": {"x": 3, "y": "hiya", "z": "bye"}}`,
 			`tt: [4]->{"after": {"x": 4, "y": "hello", "z": "cya"}}`,
 		})
+
+		// If we rename a value in an existing type, it doesn't count as a change
+		// but the rename is reflected in future changes.
+		sqlDB.Exec(t, `ALTER TYPE t RENAME VALUE 'hi' TO 'yo'`)
+		sqlDB.Exec(t, `UPDATE tt SET z='cya' where x=2`)
+
+		assertPayloads(t, cf, []string{
+			`tt: [2]->{"after": {"x": 2, "y": "yo", "z": "cya"}}`,
+		})
+
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -2009,7 +2016,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			switch atomic.LoadInt64(&failEmit) {
 			case 1:
-				return MarkRetryableError(fmt.Errorf("synthetic retryable error"))
+				return changefeedbase.MarkRetryableError(fmt.Errorf("synthetic retryable error"))
 			case 2:
 				return fmt.Errorf("synthetic terminal error")
 			default:
@@ -3295,7 +3302,7 @@ func TestChangefeedMemBufferCapacityErrorRetryable(t *testing.T) {
 				// This function is invoked form a different go routine -- and calling
 				// t.Fatal will likely deadlock the test.
 				distErrCh <- err
-				return MaybeStripRetryableErrorMarker(err)
+				return changefeedbase.MaybeStripRetryableErrorMarker(err)
 			}
 
 			sqlDB := sqlutils.MakeSQLRunner(db)
@@ -3343,7 +3350,7 @@ func TestChangefeedMemBufferCapacityErrorRetryable(t *testing.T) {
 
 			err := <-distErrCh
 			require.Regexp(t, `memory budget exceeded`, err)
-			require.True(t, IsRetryableError(err))
+			require.True(t, changefeedbase.IsRetryableError(err))
 		}
 	}
 
@@ -3436,7 +3443,7 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 		require.NoError(t, feedJob.Pause())
 
 		// Make extra sure that the zombie changefeed can't write any more data.
-		beforeEmitRowCh <- MarkRetryableError(errors.New(`nope don't write it`))
+		beforeEmitRowCh <- changefeedbase.MarkRetryableError(errors.New(`nope don't write it`))
 
 		// Insert some data that we should only see out of the changefeed after it
 		// re-runs the backfill.

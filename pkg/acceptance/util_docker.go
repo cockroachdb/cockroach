@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 )
@@ -89,7 +90,8 @@ func testDocker(
 			Binds:       []string{filepath.Join(pwd, "testdata") + ":/mnt/data"},
 		}
 		err = l.OneShot(
-			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig,
+			platforms.DefaultSpec(), "docker-"+name,
 		)
 		preserveLogs := err != nil
 		l.Cleanup(ctx, preserveLogs)

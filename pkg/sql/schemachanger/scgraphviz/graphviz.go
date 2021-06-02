@@ -228,8 +228,12 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 		m, ok := v.(map[string]interface{})
 		return ok && len(m) == 0
 	},
+	"emptySlice": func(v interface{}) bool {
+		m, ok := v.([]interface{})
+		return ok && len(m) == 0
+	},
 	"isStruct": func(v interface{}) bool {
-		return reflect.ValueOf(v).Kind() == reflect.Struct
+		return reflect.Indirect(reflect.ValueOf(v)).Kind() == reflect.Struct
 	},
 	"toMap": toMap,
 }).Parse(`
@@ -245,6 +249,13 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- template "mapVal" . -}}
 {{- else if (isSlice .) -}}
 {{- template "sliceVal" . -}}
+{{- else if (isStruct .) -}}
+<td>
+{{- typeOf . -}}
+</td>
+<td>
+{{- template "mapVal" (toMap .) -}}
+</td>
 {{- else -}}
 {{- . -}}
 {{- end -}}
@@ -252,11 +263,13 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- end -}}
 
 {{- define "sliceVal" -}}
+{{- if not (emptySlice .) -}}
 <table class="val"><tr>
 {{- range . -}}
 {{- template "val" . -}}
 {{- end -}}
 </tr></table>
+{{- end -}}
 {{- end -}}
 
 {{- define "mapVal" -}}
@@ -265,7 +278,6 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- if not (emptyMap $v) -}}
 <tr>
 {{- template "key" $k -}}
-
 {{- if (isStruct $v) -}}
 <td>
 {{- typeOf . -}}
@@ -274,10 +286,10 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- template "mapVal" (toMap $v) -}}
 </td>
 {{- else -}}
--{{- template "val" $v -}}
+{{- template "val" $v -}}
+{{- end -}}
 {{- end -}}
 </tr>
-{{- end -}}
 {{- end -}}
 </table>
 {{- end -}}

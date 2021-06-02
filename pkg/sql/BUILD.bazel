@@ -237,6 +237,7 @@ go_library(
         "//pkg/base",
         "//pkg/build",
         "//pkg/clusterversion",
+        "//pkg/col/coldata",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/docs",
@@ -402,7 +403,7 @@ go_library(
 
 go_test(
     name = "sql_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "admin_audit_log_test.go",
         "alter_column_type_test.go",
