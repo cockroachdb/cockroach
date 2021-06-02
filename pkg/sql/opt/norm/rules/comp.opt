@@ -295,3 +295,27 @@
 )
 =>
 (MakeSTDFullyWithinRight (OpName) $args $left)
+
+# FoldEqTrue replaces x = True with x.
+[FoldEqTrue, Normalize]
+(Eq $left:* (True))
+=>
+$left
+
+# FoldEqFalse replaces x = False with NOT x.
+[FoldEqFalse, Normalize]
+(Eq $left:* (False))
+=>
+(Not $left)
+
+# FoldNeTrue replaces x != True with NOT x.
+[FoldNeTrue, Normalize]
+(Ne $left:* (True))
+=>
+(Not $left)
+
+# FoldNeFalse replaces x != False with x.
+[FoldNeFalse, Normalize]
+(Ne $left:* (False))
+=>
+$left
