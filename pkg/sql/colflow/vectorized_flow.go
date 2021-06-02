@@ -174,9 +174,7 @@ func (f *vectorizedFlow) Setup(
 	if err != nil {
 		return ctx, err
 	}
-	if log.V(1) {
-		log.Infof(ctx, "setting up vectorize flow %s", f.ID.Short())
-	}
+	log.VEvent(ctx, 2, "setting up vectorized flow")
 	recordingStats := false
 	if execinfra.ShouldCollectStats(ctx, &f.FlowCtx) {
 		recordingStats = true
@@ -212,9 +210,7 @@ func (f *vectorizedFlow) Setup(
 	if err == nil {
 		f.testingInfo.numClosers = f.creator.numClosers
 		f.testingInfo.numClosed = &f.creator.numClosed
-		if log.V(1) {
-			log.Info(ctx, "vectorized flow setup succeeded")
-		}
+		log.VEventf(ctx, 2, "vectorized flow setup succeeded")
 		return ctx, nil
 	}
 	// It is (theoretically) possible that some of the memory monitoring
@@ -222,9 +218,7 @@ func (f *vectorizedFlow) Setup(
 	// that up.
 	f.creator.cleanup(ctx)
 	f.creator.Release()
-	if log.V(1) {
-		log.Infof(ctx, "failed to vectorize: %s", err)
-	}
+	log.VEventf(ctx, 1, "failed to vectorize: %v", err)
 	return ctx, err
 }
 
@@ -844,9 +838,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE
 				// diagrams.
 				latency = 0
-				if log.V(1) {
-					log.Infof(ctx, "an error occurred during vectorized planning while getting latency: %v", err)
-				}
+				log.VEventf(ctx, 1, "an error occurred during vectorized planning while getting latency: %v", err)
 			}
 
 			inbox, err := s.remoteComponentCreator.newInbox(
