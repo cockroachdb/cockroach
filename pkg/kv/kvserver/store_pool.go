@@ -273,10 +273,19 @@ type StorePool struct {
 		nodeLocalities map[roachpb.NodeID]localityWithString
 	}
 
-	// isNodeReadyForRoutineReplicaTransferInternal returns true iff the
-	// node is live and thus a good candidate to receive a replica.
-	// This is defined as a closure reference here instead
+	// isNodeReadyForRoutineReplicaTransferInternal returns true iff the node is
+	// live (as indicated by its `NodeLivenessStatus`) and thus a legal candidate
+	// to receive a replica. This is defined as a closure reference here instead
 	// of a regular method so it can be overridden in tests.
+	//
+	// NB: What this method aims to capture is distinct from "dead" nodes. Nodes
+	// are classified as "dead" if they haven't successfully heartbeat their
+	// liveness record in the last `server.time_until_store_dead` seconds.
+	//
+	// Functionally, the distinction is that we simply avoid transferring replicas
+	// to "non-ready" nodes (i.e. nodes that _currently_ have a non-live
+	// `NodeLivenessStatus`), whereas we _actively move replicas off of "dead"
+	// nodes_.
 	isNodeReadyForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool
 }
 
