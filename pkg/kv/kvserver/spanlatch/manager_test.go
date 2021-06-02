@@ -536,6 +536,56 @@ func TestLatchManagerContextCancellation(t *testing.T) {
 	testLatchSucceeds(t, lg3C)
 }
 
+func TestLatchManagerOptimistic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var m Manager
+
+	// Acquire latches, no conflict.
+	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS))
+	require.True(t, m.CheckOptimisticNoConflicts(lg1, spans("d", "f", write, zeroTS)))
+	lg1, err := m.WaitUntilAcquired(context.Background(), lg1)
+	require.NoError(t, err)
+
+	// Optimistic acquire encounters conflict in some cases.
+	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS))
+	require.False(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "e", read, zeroTS)))
+	require.True(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "d", read, zeroTS)))
+	waitUntilAcquiredCh := func(g *Guard) <-chan *Guard {
+		ch := make(chan *Guard)
+		go func() {
+			g, err := m.WaitUntilAcquired(context.Background(), g)
+			require.NoError(t, err)
+			ch <- g
+		}()
+		return ch
+	}
+	ch2 := waitUntilAcquiredCh(lg2)
+	testLatchBlocks(t, ch2)
+	m.Release(lg1)
+	testLatchSucceeds(t, ch2)
+
+	// Optimistic acquire encounters conflict.
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS))
+	require.False(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
+	m.Release(lg2)
+	// There is still a conflict even though lg2 has been released.
+	require.False(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
+	lg3, err = m.WaitUntilAcquired(context.Background(), lg3)
+	require.NoError(t, err)
+	m.Release(lg3)
+
+	// Optimistic acquire for read below write encounters no conflict.
+	oneTS, twoTS := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}
+	lg4 := m.MustAcquire(spans("c", "e", write, twoTS))
+	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS))
+	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "e", read, oneTS)))
+	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "c", read, oneTS)))
+	lg5, err = m.WaitUntilAcquired(context.Background(), lg5)
+	require.NoError(t, err)
+	m.Release(lg5)
+	m.Release(lg4)
+}
+
 func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
 	for _, size := range []int{1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
