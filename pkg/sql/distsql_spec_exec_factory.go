@@ -640,6 +640,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	eqCols []exec.NodeColumnOrdinal,
 	eqColsAreKey bool,
 	lookupExpr tree.TypedExpr,
+	remoteLookupExpr tree.TypedExpr,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	isSecondJoinInPairedJoiner bool,
