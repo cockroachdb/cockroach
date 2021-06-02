@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -6300,8 +6301,8 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
 		tableID := getTableID(db, "test", "foo")
 		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{1-3}", tableID2)}, actualResolvedSpans)
+		require.Equal(t, []string{fmt.Sprintf("/Table/{%d/1-%d/4}", tableID, tableID2)},
+			actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6352,6 +6353,7 @@ func TestLogicallyMergedTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.TODOSQLCodec
 	unusedMap := make(map[tableAndIndex]bool)
+
 	testCases := []struct {
 		name                       string
 		checkForKVInBoundsOverride func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error)
@@ -6479,6 +6481,336 @@ func TestLogicallyMergedTableSpans(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, test.expectedSpans, mergedSpans)
+		})
+	}
+}
+
+type tableDef struct {
+	tableID         descpb.ID
+	pkIndex         descpb.IndexDescriptor
+	indexes         []descpb.IndexDescriptor
+	addingIndexes   []descpb.IndexDescriptor
+	droppingIndexes []descpb.IndexDescriptor
+}
+
+// Unit tests for the getLogicallyMergedSpansAcrossTables() method
+func TestLogicallyMergedSpansAcrossTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	codec := keys.SystemSQLCodec
+	unusedMap := make(map[tableAndIndex]bool)
+
+	testCases := []struct {
+		name                           string
+		checkForKVInBoundsOverride     func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error)
+		checkForTablesInBoundsOverride func(startTableID, endTableID descpb.ID) (bool, error)
+		tables                         []tableDef
+		expectedSpans                  []string
+	}{
+		{
+			name: "contiguous-tables-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 70 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID: 63,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 64,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+			},
+			expectedSpans: []string{"/Table/6{3/1-4/3}"},
+		},
+		{
+			name: "dropped-index-before-rhs",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				if start.String() == "/Table/65/4" && end.String() == "/Table/66/1" {
+					return true, nil
+				}
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 70 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID:         65,
+					pkIndex:         getMockIndexDesc(1),
+					indexes:         []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
+					droppingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(4)},
+				},
+				{
+					tableID: 66,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+						getMockIndexDesc(4)},
+				},
+			},
+			expectedSpans: []string{"/Table/65/{1-4}", "/Table/66/{1-5}"},
+		},
+		{
+			name: "adding-index-after-lhs",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 70 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID:       67,
+					pkIndex:       getMockIndexDesc(1),
+					indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+					addingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(4)},
+				},
+				{
+					tableID: 68,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+						getMockIndexDesc(4)},
+				},
+			},
+			expectedSpans: []string{"/Table/67/{1-3}", "/Table/68/{1-5}"},
+		},
+		{
+			name: "resolved-table-between-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 70 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID:       69,
+					pkIndex:       getMockIndexDesc(1),
+					indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+					addingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(4)},
+				},
+				{
+					tableID: 71,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+						getMockIndexDesc(4)},
+				},
+			},
+			expectedSpans: []string{"/Table/69/{1-3}", "/Table/71/{1-5}"},
+		},
+		{
+			name: "gced-tables-between-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 70 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID: 72,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 74,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+						getMockIndexDesc(4)},
+				},
+			},
+			expectedSpans: []string{"/Table/7{2/1-4/5}"},
+		},
+		{
+			name: "adding-index-before-rhs",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 70 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID: 75,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID:       76,
+					pkIndex:       getMockIndexDesc(1),
+					indexes:       []descpb.IndexDescriptor{getMockIndexDesc(3), getMockIndexDesc(4)},
+					addingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(2)},
+				},
+			},
+			expectedSpans: []string{"/Table/7{5/1-6/2}", "/Table/76/{3-5}"},
+		},
+		{
+			name: "multiple-contiguous-tables",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 70 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID: 77,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 78,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 79,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 81,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+			},
+			expectedSpans: []string{"/Table/{77/1-81/3}"},
+		},
+		{
+			name: "mergeable-and-unmergeable-tables-between-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				if start.String() == "/Table/87/3" && end.String() == "/Table/88/1" {
+					return true, nil
+				}
+				return false, nil
+			},
+			checkForTablesInBoundsOverride: func(startTableID, endTableID descpb.ID) (bool, error) {
+				for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+					if tableID == 83 || tableID == 89 {
+						return true, nil
+					}
+				}
+				return false, nil
+			},
+			tables: []tableDef{
+				{
+					tableID: 82,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 84,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 85,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID: 86,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID:         87,
+					pkIndex:         getMockIndexDesc(1),
+					indexes:         []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+					droppingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(4)},
+				},
+				{
+					tableID: 88,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+				{
+					tableID:       90,
+					pkIndex:       getMockIndexDesc(1),
+					indexes:       []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+					addingIndexes: []descpb.IndexDescriptor{getMockIndexDesc(4)},
+				},
+				{
+					tableID: 91,
+					pkIndex: getMockIndexDesc(1),
+					indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+				},
+			},
+			expectedSpans: []string{"/Table/82/{1-3}", "/Table/8{4/1-7/3}", "/Table/88/{1-3}", "/Table/90/{1-3}", "/Table/91/{1-3}"},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			allTables := make(map[descpb.ID]*tableAndMergedSpans)
+			endTime := hlc.Timestamp{}
+
+			var tableIDs descpb.IDs
+
+			var mergedTableSpans []string
+			for _, table := range test.tables {
+				tableDesc := getMockTableDesc(table.tableID, table.pkIndex, table.indexes, table.addingIndexes, table.droppingIndexes)
+				tableIDs = append(tableIDs, table.tableID)
+
+				spans, err := getLogicallyMergedTableSpans(tableDesc, unusedMap, codec,
+					endTime, test.checkForKVInBoundsOverride)
+				require.NoError(t, err)
+
+				allTables[table.tableID] = &tableAndMergedSpans{
+					table:       tableDesc,
+					mergedSpans: spans,
+				}
+			}
+
+			sort.Sort(tableIDs)
+			mergedInterTableSpans, err := getLogicallyMergedSpansAcrossTables(
+				tableIDs, allTables, endTime, unusedMap, test.checkForTablesInBoundsOverride, test.checkForKVInBoundsOverride)
+			require.NoError(t, err)
+
+			for _, span := range mergedInterTableSpans {
+				mergedTableSpans = append(mergedTableSpans, span.String())
+			}
+			require.Equal(t, test.expectedSpans, mergedTableSpans)
 		})
 	}
 }

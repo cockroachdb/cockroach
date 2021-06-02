@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -76,6 +77,11 @@ const (
 type tableAndIndex struct {
 	tableID descpb.ID
 	indexID descpb.IndexID
+}
+
+type tableAndMergedSpans struct {
+	table       catalog.TableDescriptor
+	mergedSpans []roachpb.Span
 }
 
 type backupKMSEnv struct {
@@ -173,8 +179,9 @@ func (s sortedIndexIDs) Len() int {
 // - Two non-contiguous index spans are merged if a scan request for the index
 // IDs between them does not return any results.
 //
-// Egs: {/Table/51/1 - /Table/51/2}, {/Table/51/3 - /Table/51/4} => {/Table/51/1 - /Table/51/4}
-// provided the dropped index represented by the span
+// Egs: {/Table/51/1 - /Table/51/2}, {/Table/51/3 - /Table/51/4} =>
+// {/Table/51/1 - /Table/51/4} provided the dropped index represented by the
+// span
 // {/Table/51/2 - /Table/51/3} has been gc'ed.
 func getLogicallyMergedTableSpans(
 	table catalog.TableDescriptor,
@@ -188,9 +195,9 @@ func getLogicallyMergedTableSpans(
 	// will not have a way of incrementally backing up the data until #62585 is
 	// resolved.
 	addingIndexIDs := make(map[descpb.IndexID]struct{})
+	allPhysicalIndexOpts := catalog.IndexOpts{DropMutations: true, AddMutations: true}
 	var publicIndexIDs []descpb.IndexID
 
-	allPhysicalIndexOpts := catalog.IndexOpts{DropMutations: true, AddMutations: true}
 	if err := catalog.ForEachIndex(table, allPhysicalIndexOpts, func(idx catalog.Index) error {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
 		if added[key] {
@@ -232,6 +239,7 @@ func getLogicallyMergedTableSpans(
 	// After recording the new "merged" span, we update mergedSpan to be the
 	// rhsSpan, and start processing the next logically mergeable span set.
 	mergedSpan := table.IndexSpan(codec, publicIndexIDs[0])
+
 	for curIndex := 0; curIndex < len(publicIndexIDs)-1; curIndex++ {
 		lhsIndexID := publicIndexIDs[curIndex]
 		rhsIndexID := publicIndexIDs[curIndex+1]
@@ -298,6 +306,140 @@ func getLogicallyMergedTableSpans(
 	return mergedIndexSpans, nil
 }
 
+// getLogicallyMergedSpansAcrossTables merges and returns all non-drop index
+// spans between distinct tables, it does not make any changes to the output of
+// getLogicallyMergedTableSpans except possibly the first and last spans of
+// each table.
+// The argument `tableIDs` stores sorted table IDs in `spans` to avoid
+// iterating through all table IDs more than once.
+func getLogicallyMergedSpansAcrossTables(
+	tableIDs []descpb.ID,
+	spans map[descpb.ID]*tableAndMergedSpans,
+	endTime hlc.Timestamp,
+	added map[tableAndIndex]bool,
+	checkForTablesInBounds func(startTableID, endTableID descpb.ID) (bool, error),
+	checkForKVInBounds func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error),
+) ([]roachpb.Span, error) {
+
+	if len(tableIDs) == 0 {
+		return nil, nil
+	}
+
+	if len(tableIDs) == 1 {
+		return spans[tableIDs[0]].mergedSpans, nil
+	}
+
+	var mergedInterTableSpans []roachpb.Span
+	for curIndex := 0; curIndex < len(tableIDs)-1; curIndex++ {
+		lhs := spans[tableIDs[curIndex]]
+		rhs := spans[tableIDs[curIndex+1]]
+
+		lastSpanInLHSMergedSpans := lhs.mergedSpans[len(lhs.mergedSpans)-1]
+		firstSpanInRHSMergedSpans := rhs.mergedSpans[0]
+
+		// Check for any tables between the table of the LHS and RHS span being
+		// considered for a merge. If found, we do not want to merge as the backup
+		// did not resolve the table as a target. Currently, this could either be
+		// because the table was not specified in the targets, or it was offline.
+		if foundTable, err := checkForTablesInBounds(tableIDs[curIndex], tableIDs[curIndex+1]); err != nil {
+				return nil, err
+		} else if foundTable {
+				mergedInterTableSpans = append(mergedInterTableSpans, lhs.mergedSpans...)
+				continue
+		}
+
+		// Check for any keys between the EndKey of the LHS span, and StartKey of
+		// the RHS span. If found, we do not want to merge as the backup will
+		// include unexpected data. These could be keys corresponding to tables
+		// that have been dropped, but not gc'ed.
+		if foundKVInBounds, err := checkForKVInBounds(lastSpanInLHSMergedSpans.EndKey, firstSpanInRHSMergedSpans.Key, endTime); err != nil {
+				return nil, err
+		} else if foundKVInBounds {
+				mergedInterTableSpans = append(mergedInterTableSpans, lhs.mergedSpans...)
+				continue
+		}
+
+		// Check for adding indexes as described in the comment above
+		// checkForAddingIndexes. The presence of such an index makes the LHS and
+		// RHS unmergeable as the BACKUP could unexpectedly pick up non-public
+		// index entries
+		if foundAddingIndexes, err := checkForAddingIndexes(*lhs, *rhs, added); err != nil {
+				return nil, err
+		} else if  foundAddingIndexes {
+				mergedInterTableSpans = append(mergedInterTableSpans, lhs.mergedSpans...)
+				continue
+		}
+
+		// If all three checks passed, a merge is possible and we add every span up
+		// until the last one on the LHS table, then we update the start key of the
+		// first span on the RHS table to be the start key of the last span
+		// on the LHS table. The merged span will be added to the result slice in
+		// future iterations.
+		mergedInterTableSpans = append(mergedInterTableSpans, lhs.mergedSpans[:len(lhs.mergedSpans)-1]...)
+		rhs.mergedSpans[0].Key = lastSpanInLHSMergedSpans.Key
+	}
+	mergedInterTableSpans = append(mergedInterTableSpans, spans[tableIDs[len(tableIDs)-1]].mergedSpans...)
+	return mergedInterTableSpans, nil
+}
+
+// checkForAddingIndexes returns true iff adding indexes were found after the
+// end key of the last span on lhsTable or before the start key of the first
+// span of the rhsTable
+func checkForAddingIndexes(
+	lhs, rhs tableAndMergedSpans, added map[tableAndIndex]bool,
+) (bool, error) {
+	lhsEndKey := lhs.mergedSpans[len(lhs.mergedSpans)-1].EndKey
+	rhsStartKey := rhs.mergedSpans[0].Key
+
+	_, _, decodedLHSIndexID, err := keys.DecodeTableIDIndexID(lhsEndKey)
+	if err != nil {
+		return false, err
+	}
+	lhsIndexID := descpb.IndexID(decodedLHSIndexID)
+
+	_, _, decodedRHSIndexID, err := keys.DecodeTableIDIndexID(rhsStartKey)
+	if err != nil {
+		return false, err
+	}
+	rhsIndexID := descpb.IndexID(decodedRHSIndexID)
+
+	foundAddingIndex := false
+	allPhysicalIndexOpts := catalog.IndexOpts{AddMutations: true}
+	if err := catalog.ForEachIndex(lhs.table, allPhysicalIndexOpts, func(idx catalog.Index) error {
+		key := tableAndIndex{tableID: lhs.table.GetID(), indexID: idx.GetID()}
+		isAdding := added[key] || idx.Adding()
+		if isAdding && idx.GetID() >= lhsIndexID {
+			foundAddingIndex = true
+			added[key] = true
+			return nil
+		}
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	if foundAddingIndex {
+		return true, nil
+	}
+
+	if err := catalog.ForEachIndex(rhs.table, allPhysicalIndexOpts, func(idx catalog.Index) error {
+		key := tableAndIndex{tableID: rhs.table.GetID(), indexID: idx.GetID()}
+		isAdding := added[key] || idx.Adding()
+		if isAdding && idx.GetID() < rhsIndexID {
+			foundAddingIndex = true
+			added[key] = true
+			return nil
+		}
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	if foundAddingIndex {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 // The outputted spans are merged as described by the method
@@ -305,7 +447,7 @@ func getLogicallyMergedTableSpans(
 // we BACKUP and lay protected ts records for.
 func spansForAllTableIndexes(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
+	p sql.PlanHookState,
 	endTime hlc.Timestamp,
 	tables []catalog.TableDescriptor,
 	revs []BackupManifest_DescriptorRevision,
@@ -313,8 +455,7 @@ func spansForAllTableIndexes(
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
-	var mergedIndexSpans []roachpb.Span
-	var err error
+	execCfg := p.ExecCfg()
 
 	// checkForKVInBounds issues a scan request between start and end at endTime,
 	// and returns true if a non-nil result is returned.
@@ -332,19 +473,74 @@ func spansForAllTableIndexes(
 		return foundKV, err
 	}
 
+	// checkForTablesInBounds returns true iff it successfully resolves a table
+	// between startTableID and endTableID (both exclusive)
+	checkForTablesInBounds := func(startTableID, endTableID descpb.ID) (bool, error) {
+		for tableID := startTableID + 1; tableID < endTableID; tableID++ {
+			_, err := p.LookupTableByID(ctx, tableID)
+			// A table was successfully resolved
+			if err == nil {
+				return true, nil
+			}
+			// An error other than "table not found error" was thrown
+			if !sqlerrors.IsUndefinedRelationError(err) {
+				return true, err
+			}
+		}
+		return false, nil
+	}
+
+	var tableIDs descpb.IDs
+	tableSpans := make(map[descpb.ID]*tableAndMergedSpans)
+
 	for _, table := range tables {
-		mergedIndexSpans, err = getLogicallyMergedTableSpans(table, added, execCfg.Codec, endTime,
+		table = tabledesc.NewBuilder(table.TableDesc()).BuildImmutableTable()
+		mergedIndexSpans, err := getLogicallyMergedTableSpans(table, added, execCfg.Codec, endTime,
 			checkForKVInBounds)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, indexSpan := range mergedIndexSpans {
-			if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-			}
+		// Empty slice implies that the table is offline and we should not attempt
+		// to merge it
+		if mergedIndexSpans == nil {
+			continue
+		}
+		tableID := table.GetID()
+		tableIDs = append(tableIDs, tableID)
+		tableSpans[tableID] = &tableAndMergedSpans{
+			table:       table,
+			mergedSpans: mergedIndexSpans,
 		}
 	}
+
+	sort.Sort(tableIDs)
+	mergedIndexSpans, err := getLogicallyMergedSpansAcrossTables(
+		tableIDs,
+		tableSpans,
+		endTime,
+		added,
+		checkForTablesInBounds,
+		checkForKVInBounds,
+	)
+
+	if err != nil {
+		log.Errorf(ctx, "failed to merge table spans across tables: %v", err)
+
+		for _, table := range tableSpans {
+			mergedIndexSpans = append(mergedIndexSpans, table.mergedSpans...)
+		}
+	}
+
+	for _, indexSpan := range mergedIndexSpans {
+		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+		}
+	}
+
+	var revIDs descpb.IDs
+	revTblSpans := make(map[descpb.ID]*tableAndMergedSpans)
+
 	// If there are desc revisions, ensure that we also add any index spans
 	// in them that we didn't already get above e.g. indexes or tables that are
 	// not in latest because they were dropped during the time window in question.
@@ -362,12 +558,43 @@ func spansForAllTableIndexes(
 				return nil, err
 			}
 
-			mergedIndexSpans = append(mergedIndexSpans, revSpans...)
-			for _, indexSpan := range mergedIndexSpans {
-				if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
-					panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-				}
+			if revSpans == nil {
+				continue
 			}
+			tableID := tbl.GetID()
+			if tableSpans, ok := revTblSpans[tableID]; ok {
+				tableSpans.mergedSpans = append(tableSpans.mergedSpans, revSpans...)
+				continue
+			}
+			revIDs = append(revIDs, tableID)
+			revTblSpans[tableID] = &tableAndMergedSpans{
+				table:       tbl,
+				mergedSpans: revSpans,
+			}
+		}
+	}
+
+	sort.Sort(revIDs)
+	mergedRevTableSpans, err := getLogicallyMergedSpansAcrossTables(
+		revIDs,
+		revTblSpans,
+		endTime,
+		added,
+		checkForTablesInBounds,
+		checkForKVInBounds,
+	)
+
+	if err != nil {
+		log.Errorf(ctx, "failed to merge table spans across tables: %v", err)
+
+		for _, table := range revTblSpans {
+			mergedRevTableSpans = append(mergedRevTableSpans, table.mergedSpans...)
+		}
+	}
+
+	for _, indexSpan := range mergedRevTableSpans {
+		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 		}
 	}
 
@@ -1012,7 +1239,7 @@ func backupPlanHook(
 
 			tenantRows = append(tenantRows, ds)
 		} else {
-			tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tables, revs)
+			tableSpans, err := spansForAllTableIndexes(ctx, p, endTime, tables, revs)
 			if err != nil {
 				return err
 			}
@@ -1433,7 +1660,7 @@ func getReintroducedSpans(
 		}
 	}
 
-	tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tablesToReinclude, allRevs)
+	tableSpans, err := spansForAllTableIndexes(ctx, p, endTime, tablesToReinclude, allRevs)
 	if err != nil {
 		return nil, err
 	}
