@@ -3134,7 +3134,10 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				database, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, descpb.ID(id))
+				_, database, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, descpb.ID(id), tree.DatabaseLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				})
 				if err != nil {
 					return err
 				}
