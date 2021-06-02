@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestKVFeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// We want to inject fake table events and data into the buffer
 	// and use that to assert that there are proper calls to the kvScanner and
 	// what not.
