@@ -40,10 +40,11 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	buildDeps := scbuild.Dependencies{
-		Res:     p,
-		SemaCtx: p.SemaCtx(),
-		EvalCtx: p.EvalContext(),
-		Descs:   p.Descriptors(),
+		Res:          p,
+		SemaCtx:      p.SemaCtx(),
+		EvalCtx:      p.EvalContext(),
+		Descs:        p.Descriptors(),
+		AuthAccessor: p,
 	}
 	outputNodes, err := scbuild.Build(ctx, stmt, buildDeps, p.extendedEvalCtx.SchemaChangerState.nodes)
 	if scbuild.HasNotImplemented(err) && mode == sessiondata.UseNewSchemaChangerOn {

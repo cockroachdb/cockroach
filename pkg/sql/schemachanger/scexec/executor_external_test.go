@@ -371,13 +371,15 @@ func TestSchemaChanger(t *testing.T) {
 				resolver.SchemaResolver
 				SemaCtx() *tree.SemaContext
 				EvalContext() *tree.EvalContext
+				sql.AuthorizationAccessor
 			})
 			defer cleanup()
 			buildDeps := scbuild.Dependencies{
-				Res:     planner,
-				SemaCtx: planner.SemaCtx(),
-				EvalCtx: planner.EvalContext(),
-				Descs:   descriptors,
+				Res:          planner,
+				SemaCtx:      planner.SemaCtx(),
+				EvalCtx:      planner.EvalContext(),
+				Descs:        descriptors,
+				AuthAccessor: planner,
 			}
 			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 			require.NoError(t, err)

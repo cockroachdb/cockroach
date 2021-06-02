@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type mutationDescGetter struct {
@@ -36,6 +38,25 @@ func newMutationDescGetter(descs *descs.Collection, txn *kv.Txn) *mutationDescGe
 		txn:          txn,
 		drainedNames: make(map[descpb.ID][]descpb.NameInfo),
 	}
+}
+
+func (m *mutationDescGetter) GetMutableTypeByID(
+	ctx context.Context, id descpb.ID,
+) (*typedesc.Mutable, error) {
+	typeDesc, err := m.descs.GetMutableTypeByID(ctx, m.txn, id, tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return nil, err
+	}
+	typeDesc.MaybeIncrementVersion()
+	m.retrieved.Add(typeDesc.GetID())
+	return typeDesc, nil
+}
+
+func (m *mutationDescGetter) GetImmutableDatabaseByID(
+	ctx context.Context, id descpb.ID,
+) (catalog.DatabaseDescriptor, error) {
+	_, dbDesc, err := m.descs.GetImmutableDatabaseByID(ctx, m.txn, id, tree.DatabaseLookupFlags{Required: true})
+	return dbDesc, err
 }
 
 func (m *mutationDescGetter) GetMutableTableByID(
