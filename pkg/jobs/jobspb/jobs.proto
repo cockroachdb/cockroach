@@ -136,6 +136,11 @@ message BackupProgress {
 
 }
 
+message BulkJobRetryTraceEvent {
+  int32 retries = 1;
+  string previous_retry_error = 2;
+}
+
 message RestoreDetails {
   message DescriptorRewrite {
     uint32 id = 1 [

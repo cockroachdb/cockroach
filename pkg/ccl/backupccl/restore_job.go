@@ -682,7 +682,6 @@ func restore(
 	}
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
-	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	// tasks are the concurrent tasks that are run during the restore.
 	var tasks []func(ctx context.Context) error
