@@ -3904,7 +3904,7 @@ func TestOptimisticEvalNoContention(t *testing.T) {
 	require.NoError(t, txn1.Commit(ctx))
 }
 
-func BenchmarkOptimisticEval(b *testing.B) {
+func BenchmarkOptimisticEvalForLocks(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	args := base.TestServerArgs{}
@@ -3978,5 +3978,83 @@ func BenchmarkOptimisticEval(b *testing.B) {
 				close(finishWrites)
 				writers.Wait()
 			})
+	}
+}
+
+func BenchmarkOptimisticEvalForLatches(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+	s, _, db := serverutils.StartServer(b, args)
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(b, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		defer func() {
+			b.Log(err)
+		}()
+		if err := txn.Put(ctx, "a", "a"); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, "b", "b"); err != nil {
+			return err
+		}
+		return txn.Commit(ctx)
+	}))
+	tup, err := db.Get(ctx, "a")
+	require.NoError(b, err)
+	require.NotNil(b, tup.Value)
+	tup, err = db.Get(ctx, "b")
+	require.NoError(b, err)
+	require.NotNil(b, tup.Value)
+
+	for _, realContention := range []bool{false, true} {
+		for _, numWriters := range []int{1, 4, 8} {
+			b.Run(fmt.Sprintf("real-contention=%t/num-writers=%d", realContention, numWriters),
+				func(b *testing.B) {
+					lockStart := "b"
+					if realContention {
+						lockStart = "a"
+					}
+					finishWrites := make(chan struct{})
+					var writers sync.WaitGroup
+					for i := 0; i < 1; i++ {
+						writers.Add(1)
+						go func() {
+							for {
+								txn := db.NewTxn(ctx, "locking txn")
+								_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0)
+								require.NoError(b, err)
+								// Normally, it would do a write here, but we don't bother.
+								require.NoError(b, txn.Commit(ctx))
+								select {
+								case _, recv := <-finishWrites:
+									if !recv {
+										writers.Done()
+										return
+									}
+								default:
+								}
+							}
+						}()
+					}
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						_ = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+							_, err = txn.Scan(ctx, "a", "c", 1)
+							if err != nil {
+								panic(err)
+							}
+							err = txn.Commit(ctx)
+							if err != nil {
+								panic(err)
+							}
+							return err
+						})
+					}
+					b.StopTimer()
+					close(finishWrites)
+					writers.Wait()
+				})
+		}
 	}
 }
