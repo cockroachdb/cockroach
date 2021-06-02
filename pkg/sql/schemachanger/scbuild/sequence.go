@@ -58,12 +58,15 @@ func (b *buildContext) dropSequence(ctx context.Context, n *tree.DropSequence) {
 					if col.GetID() != id {
 						continue
 					}
-					b.addNode(scpb.Target_DROP, &scpb.DefaultExpression{
+					defaultExpr := &scpb.DefaultExpression{
 						TableID:         dep.ID,
 						ColumnID:        col.GetID(),
 						UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
 						DefaultExpr:     "",
-					})
+					}
+					if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
+						b.addNode(scpb.Target_DROP, defaultExpr)
+					}
 				}
 			}
 			return nil

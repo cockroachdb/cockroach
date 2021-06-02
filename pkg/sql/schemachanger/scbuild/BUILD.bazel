@@ -4,8 +4,10 @@ go_library(
     name = "scbuild",
     srcs = [
         "builder.go",
+        "relation_common.go",
         "sequence.go",
         "table.go",
+        "view.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild",
     visibility = ["//visibility:public"],
@@ -21,6 +23,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",

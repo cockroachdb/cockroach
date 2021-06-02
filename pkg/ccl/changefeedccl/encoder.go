@@ -379,6 +379,10 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 		e.keyCache[cacheKey] = registered
 	}
 
+	if ok {
+		registered.schema.refreshTypeMetadata(row.tableDesc)
+	}
+
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
 		changefeedbase.ConfluentAvroWireFormatMagic,
@@ -432,6 +436,13 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 		// TODO(dan): Bound the size of this cache.
 		e.valueCache[cacheKey] = registered
 	}
+	if ok {
+		registered.schema.after.refreshTypeMetadata(row.tableDesc)
+		if row.prevTableDesc != nil && registered.schema.before != nil {
+			registered.schema.before.refreshTypeMetadata(row.prevTableDesc)
+		}
+	}
+
 	var meta avroMetadata
 	if registered.schema.opts.updatedField {
 		meta = map[string]interface{}{

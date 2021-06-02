@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package changefeedccl
+package changefeedbase
 
 import (
 	"fmt"

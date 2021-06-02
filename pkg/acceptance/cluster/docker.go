@@ -39,6 +39,7 @@ import (
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/go-connections/nat"
 	isatty "github.com/mattn/go-isatty"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // Retrieve the IP address of docker itself.
@@ -200,6 +201,7 @@ func createContainer(
 	l *DockerCluster,
 	containerConfig container.Config,
 	hostConfig container.HostConfig,
+	platformSpec specs.Platform,
 	containerName string,
 ) (*Container, error) {
 	hostConfig.NetworkMode = container.NetworkMode(l.networkID)
@@ -227,7 +229,7 @@ func createContainer(
 		}
 	}
 
-	resp, err := l.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, containerName)
+	resp, err := l.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, &platformSpec, containerName)
 	if err != nil {
 		return nil, err
 	}
@@ -403,9 +405,12 @@ func (cli resilientDockerClient) ContainerCreate(
 	config *container.Config,
 	hostConfig *container.HostConfig,
 	networkingConfig *network.NetworkingConfig,
+	platformSpec *specs.Platform,
 	containerName string,
 ) (container.ContainerCreateCreatedBody, error) {
-	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
+	response, err := cli.APIClient.ContainerCreate(
+		ctx, config, hostConfig, networkingConfig, platformSpec, containerName,
+	)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
 		log.Infof(ctx, "unable to create container %s: %v", containerName, err)
 		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
@@ -432,7 +437,7 @@ func (cli resilientDockerClient) ContainerCreate(
 					log.Infof(ctx, "unable to remove container: %v", rerr)
 					return container.ContainerCreateCreatedBody{}, err
 				}
-				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
+				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, platformSpec, containerName)
 			}
 		}
 		log.Warningf(ctx, "error indicated existing container %s, "+

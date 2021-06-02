@@ -88,6 +88,12 @@ func (b *buildContext) alterTableAddColumn(
 		))
 	}
 
+	// User defined columns are not supported, since we don't
+	// do type back references correctly.
+	if toType.UserDefined() {
+		panic(&notImplementedError{n: t, detail: "user defined type in column."})
+	}
+
 	if d.IsSerial {
 		panic(&notImplementedError{n: t.ColumnDef, detail: "contains serial data type"})
 	}

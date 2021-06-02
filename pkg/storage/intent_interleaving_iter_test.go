@@ -185,7 +185,7 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 // - iter: for iterating, is defined as
 //   iter [lower=<lower>] [upper=<upper>] [prefix=<true|false>]
 //   followed by newline separated sequence of operations:
-//     next, prev, seek-lt, seek-ge, set-upper, next-key
+//     next, prev, seek-lt, seek-ge, set-upper, next-key, stats
 //
 // Keys are interpreted as:
 // - starting with L is interpreted as a local-range key.
@@ -363,6 +363,9 @@ func TestIntentInterleavingIter(t *testing.T) {
 						k := scanRoachKey(t, d, "k")
 						iter.SetUpperBound(k)
 						fmt.Fprintf(&b, "set-upper %s\n", string(makePrintableKey(MVCCKey{Key: k}).Key))
+					case "stats":
+						stats := iter.Stats()
+						fmt.Fprintf(&b, "stats: %s\n", stats.Stats.String())
 					default:
 						fmt.Fprintf(&b, "unknown command: %s\n", d.Cmd)
 					}

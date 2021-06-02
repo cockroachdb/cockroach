@@ -75,13 +75,11 @@ func runTestFlow(
 
 	var rowBuf distsqlutils.RowBuffer
 
-	ctx, flow, _, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, distsql.LocalState{})
+	ctx, flow, _, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Run(ctx, func() {}); err != nil {
-		t.Fatal(err)
-	}
+	flow.Run(ctx, func() {})
 	flow.Cleanup(ctx)
 
 	if !rowBuf.ProducerClosed() {
