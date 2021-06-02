@@ -1333,6 +1333,15 @@ message ExternalStorage {
   FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
 }
 
+// ExternalStorageRetryTracingEvent is the trace recording used to track retries
+// related to external storage operations.
+message ExternalStorageRetryTracingEvent {
+  string operation = 1;
+  int32 retries = 2;
+  string previous_retry_error = 3;
+  ExternalStorageProvider provider = 4;
+}
+
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
 // operations encoded in a BatchRepr.
 message WriteBatchRequest {

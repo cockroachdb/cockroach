@@ -182,3 +182,21 @@ message BackupProgressTraceEvent {
   util.hlc.Timestamp revision_start_time = 3 [(gogoproto.nullable) = false];
 }
 
+message BackupExportTraceEvent {
+  message Request {
+    string span = 1;
+    int32 attempt = 2;
+    string priority = 3;
+    util.hlc.Timestamp req_sent_time = 4 [(gogoproto.nullable) = false];
+    string retryable_error = 5;
+  }
+  message Response {
+    util.hlc.Timestamp resp_received_time = 1 [(gogoproto.nullable) = false];
+    int32 num_files = 2;
+    repeated RowCount file_summaries = 3 [(gogoproto.nullable) = false];
+    bool has_returned_ssts = 4 [(gogoproto.customname) = "HasReturnedSSTs"];
+  }
+  Request export_request = 1;
+  Response export_response = 2;
+}
+

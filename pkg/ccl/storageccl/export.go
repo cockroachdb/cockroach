@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 )
 
 // ExportRequestTargetFileSize controls the target file size for SSTs created
@@ -74,8 +75,18 @@ func evalExport(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ExportResponse)
 
-	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("Export [%s,%s)", args.Key, args.EndKey))
-	defer span.Finish()
+	ctx, evalExportSpan := tracing.ChildSpan(ctx, fmt.Sprintf("Export [%s,%s)", args.Key, args.EndKey))
+	defer evalExportSpan.Finish()
+
+	var evalExportTrace types.StringValue
+	if cArgs.EvalCtx.NodeID() == h.GatewayNodeID {
+		evalExportTrace.Value = fmt.Sprintf("evaluating Export [%s, %s) on local node %d",
+			args.Key, args.EndKey, cArgs.EvalCtx.NodeID())
+	} else {
+		evalExportTrace.Value = fmt.Sprintf("evaluating Export [%s, %s) on remote node %d",
+			args.Key, args.EndKey, cArgs.EvalCtx.NodeID())
+	}
+	evalExportSpan.RecordStructured(&evalExportTrace)
 
 	// For MVCC_All backups with no start time, they'll only be capturing the
 	// *revisions* since the gc threshold, so noting that in the reply allows the
@@ -208,11 +219,18 @@ func evalExport(
 			// Create a unique int differently.
 			nodeID := cArgs.EvalCtx.NodeID()
 			exported.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(base.SQLInstanceID(nodeID)))
+			retryTracingEvent := roachpb.ExternalStorageRetryTracingEvent{
+				Operation: "ExportRequestWriteFile",
+				Provider:  exportStore.Conf().Provider,
+			}
 			if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxUploadRetries, func() error {
+				retryTracingEvent.Retries++
+				evalExportSpan.RecordStructured(&retryTracingEvent)
 				// We blindly retry any error here because we expect the caller to have
 				// verified the target is writable before sending ExportRequests for it.
 				if err := cloud.WriteFile(ctx, exportStore, exported.Path, bytes.NewReader(data)); err != nil {
 					log.VEventf(ctx, 1, "failed to put file: %+v", err)
+					retryTracingEvent.PreviousRetryError = err.Error()
 					return err
 				}
 				return nil
