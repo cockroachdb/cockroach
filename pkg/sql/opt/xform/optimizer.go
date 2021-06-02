@@ -239,6 +239,10 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 		)
 	}
 
+	// Validate that the factory's stack depth is zero after all optimizations
+	// have been applied.
+	o.f.CheckConstructorStackDepth()
+
 	return root, nil
 }
 
