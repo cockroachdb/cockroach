@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -193,6 +194,7 @@ func runBackupProcessor(
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
+	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
 
 	todo := make(chan spanAndTime, len(spec.Spans)+len(spec.IntroducedSpans))
@@ -326,23 +328,36 @@ func runBackupProcessor(
 						span.span, span.attempts+1, header.UserPriority.String())
 					var rawRes roachpb.Response
 					var pErr *roachpb.Error
+					var reqSentTime time.Time
+					var respReceivedTime time.Time
 					exportRequestErr := contextutil.RunWithTimeout(ctx,
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
+							reqSentTime = timeutil.Now()
+							backupProcessorSpan.RecordStructured(&BackupExportTraceRequestEvent{
+								Span:        span.span.String(),
+								Attempt:     int32(span.attempts + 1),
+								Priority:    header.UserPriority.String(),
+								ReqSentTime: reqSentTime.String(),
+							})
+
 							rawRes, pErr = kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(),
 								header, req)
+							respReceivedTime = timeutil.Now()
 							if pErr != nil {
 								return pErr.GoError()
 							}
 							return nil
 						})
 					if exportRequestErr != nil {
-						if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
+						if intentErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 							span.lastTried = timeutil.Now()
 							span.attempts++
 							todo <- span
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
+							backupProcessorSpan.RecordStructured(&BackupExportTraceResponseEvent{
+								RetryableError: tracing.RedactAndTruncateError(intentErr)})
 							continue
 						}
 						// TimeoutError improves the opaque `context deadline exceeded` error
@@ -382,14 +397,22 @@ func runBackupProcessor(
 						completedSpans = 1
 					}
 
+					duration := respReceivedTime.Sub(reqSentTime)
+					exportResponseTraceEvent := &BackupExportTraceResponseEvent{
+						Duration:      duration.String(),
+						FileSummaries: make([]RowCount, 0),
+					}
+					var numFiles int
 					files := make([]BackupManifest_File, 0)
 					for i, file := range res.Files {
+						numFiles++
 						f := BackupManifest_File{
 							Span:        file.Span,
 							Path:        file.Path,
 							EntryCounts: countRows(file.Exported, spec.PKIDs),
 							LocalityKV:  file.LocalityKV,
 						}
+						exportResponseTraceEvent.FileSummaries = append(exportResponseTraceEvent.FileSummaries, f.EntryCounts)
 						if span.start != spec.BackupStartTime {
 							f.StartTime = span.start
 							f.EndTime = span.end
@@ -398,6 +421,7 @@ func runBackupProcessor(
 						// ch for the writer goroutine to handle. Otherwise, go
 						// ahead and record the file for progress reporting.
 						if len(file.SST) > 0 {
+							exportResponseTraceEvent.HasReturnedSSTs = true
 							ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime}
 							// If multiple files were returned for this span, only one -- the
 							// last -- should count as completing the requested span.
@@ -413,6 +437,8 @@ func runBackupProcessor(
 							files = append(files, f)
 						}
 					}
+					exportResponseTraceEvent.NumFiles = int32(numFiles)
+					backupProcessorSpan.RecordStructured(exportResponseTraceEvent)
 
 					// If we have replies for exported files (as oppposed to the
 					// ones with inline SSTs we had to forward to the uploader
