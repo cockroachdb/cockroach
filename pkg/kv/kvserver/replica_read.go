@@ -73,11 +73,11 @@ func (r *Replica) executeReadOnlyBatch(
 	// release latches immediately after we acquire an engine iterator as long
 	// as we're performing a non-locking read. Note that this also requires that
 	// the request is not being optimistically evaluated (optimistic evaluation
-	// does not check locks). It would also be nice, but not required for
-	// correctness, that the read-only engine eagerly create an iterator (that
-	// is later cloned) while the latches are held, so that this request does
-	// not "see" the effect of any later requests that happen after the latches
-	// are released.
+	// does not wait for latches or check locks). It would also be nice, but not
+	// required for correctness, that the read-only engine eagerly create an
+	// iterator (that is later cloned) while the latches are held, so that this
+	// request does not "see" the effect of any later requests that happen after
+	// the latches are released.
 
 	var result result.Result
 	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(
@@ -87,26 +87,53 @@ func (r *Replica) executeReadOnlyBatch(
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
+		if g.EvalKind == concurrency.OptimisticEval {
+			// Since this request was not holding latches, it could have raced with
+			// intent resolution. So we can't trust it to add discovered locks, if
+			// there is a latch conflict. This means that a discovered lock plus a
+			// latch conflict will likely cause the request to evaluate at least 3
+			// times: optimistically; pessimistically and add the discovered lock;
+			// wait until resolution and evaluate pessimistically again.
+			//
+			// TODO(sumeer): scans and gets are correctly setting the resume span
+			// when returning a WriteIntentError. I am not sure about other
+			// concurrency errors. We could narrow the spans we check the latch
+			// conflicts for by using collectSpansRead as done below in the
+			// non-error path.
+			if !g.CheckOptimisticNoLatchConflicts() {
+				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+			}
+		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, g, pErr
 	}
 
-	if pErr == nil && g.EvalKind == concurrency.OptimisticEval {
-		// Gather the spans that were read -- we distinguish the spans in the
-		// request from the spans that were actually read, using resume spans in
-		// the response. For now we ignore the latch spans, but when we stop
-		// waiting for latches in optimistic evaluation we will use these to check
-		// latches first.
-		_, lockSpansRead, err := r.collectSpansRead(ba, br)
-		if err != nil {
-			return nil, g, roachpb.NewError(err)
-		}
-		if ok := g.CheckOptimisticNoConflicts(lockSpansRead); !ok {
+	if g.EvalKind == concurrency.OptimisticEval {
+		if pErr == nil {
+			// Gather the spans that were read -- we distinguish the spans in the
+			// request from the spans that were actually read, using resume spans in
+			// the response.
+			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
+			if err != nil {
+				return nil, g, roachpb.NewError(err)
+			}
+			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
+				return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+			}
+		} else {
+			// There was an error, that was not classified as a concurrency retry
+			// error, and this request was not holding latches. This should be rare,
+			// and in the interest of not having subtle correctness bugs, we retry
+			// pessimistically.
 			return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 		}
 	}
 
 	// Handle any local (leaseholder-only) side-effects of the request.
+	//
+	// Processing these is fine for optimistic evaluation since these were non
+	// conflicting intents so intent resolution could have been racing with this
+	// request even if latches were held.
 	intents := result.Local.DetachEncounteredIntents()
 	if pErr == nil {
 		pErr = r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local)

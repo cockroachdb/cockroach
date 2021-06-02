@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // A Manager maintains an interval tree of key and key range latches. Latch
@@ -113,6 +114,9 @@ type Guard struct {
 	// latches [spanset.NumSpanScope][spanset.NumSpanAccess][]latch, but half the size.
 	latchesPtrs [spanset.NumSpanScope][spanset.NumSpanAccess]unsafe.Pointer
 	latchesLens [spanset.NumSpanScope][spanset.NumSpanAccess]int32
+	// Non-nil only when AcquireOptimistic has retained the snapshot for later
+	// checking of conflicts, and waiting.
+	snap *snapshot
 }
 
 func (lg *Guard) latches(s spanset.SpanScope, a spanset.SpanAccess) []latch {
@@ -205,6 +209,106 @@ func (m *Manager) Acquire(ctx context.Context, spans *spanset.SpanSet) (*Guard, 
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
+	if err != nil {
+		m.Release(lg)
+		return nil, err
+	}
+	return lg, nil
+}
+
+// AcquireOptimistic is like Acquire, except it does not wait for latches over
+// overlapping spans to be released before returning. Instead, it
+// optimistically assumes that there are no currently held latches that need
+// to be waited on. This can be verified after the fact by passing the Guard
+// and the spans actually read to CheckOptimisticNoConflicts.
+//
+// Despite existing latches being ignored by this method, future calls to
+// Acquire will observe the latches inserted here and will wait for them to be
+// Released, as usual.
+//
+// The method returns a Guard which must be provided to the
+// CheckOptimisticNoConflicts, Release methods.
+func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet) *Guard {
+	lg, snap := m.sequence(spans)
+	lg.snap = &snap
+	return lg
+}
+
+// CheckOptimisticNoConflicts returns true iff the spans in the provided
+// spanset do not conflict with any existing latches (in the snapshot created
+// in AcquireOptimistic). It must only be called after AcquireOptimistic, and
+// if it returns true, the caller can skip calling WaitUntilAcquired and it is
+// sufficient to only call Release. If it returns false, the caller will
+// typically call WaitUntilAcquired to wait for latch acquisition. It is also
+// acceptable for the caller to skip WaitUntilAcquired and directly call
+// Release, in which case it never held the latches.
+func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) bool {
+	if lg.snap == nil {
+		panic(errors.AssertionFailedf("snap must not be nil"))
+	}
+	snap := lg.snap
+	var search latch
+	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
+		tr := &snap.trees[s]
+		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
+			ss := spans.GetSpans(a, s)
+			for _, sp := range ss {
+				search.span = sp.Span
+				search.ts = sp.Timestamp
+				switch a {
+				case spanset.SpanReadOnly:
+					// Search for writes at equal or lower timestamps.
+					it := tr[spanset.SpanReadWrite].MakeIter()
+					if overlaps(&it, &search, ignoreLater) {
+						return false
+					}
+				case spanset.SpanReadWrite:
+					// Search for all other writes.
+					it := tr[spanset.SpanReadWrite].MakeIter()
+					if overlaps(&it, &search, ignoreNothing) {
+						return false
+					}
+					// Search for reads at equal or higher timestamps.
+					it = tr[spanset.SpanReadOnly].MakeIter()
+					if overlaps(&it, &search, ignoreEarlier) {
+						return false
+					}
+				default:
+					panic("unknown access")
+				}
+			}
+		}
+	}
+	// Note that we don't call lg.snap.close() since even when this returns
+	// true, it is acceptable for the caller to call WaitUntilAcquired.
+	return true
+}
+
+func overlaps(it *iterator, search *latch, ignore ignoreFn) bool {
+	for it.FirstOverlap(search); it.Valid(); it.NextOverlap(search) {
+		// The held latch may have already been signaled, but that doesn't allow
+		// us to ignore it, since it could have been held while we were
+		// concurrently evaluating, and we may not have observed the result of
+		// evaluation of that conflicting latch holder.
+		held := it.Cur()
+		if !ignore(search.ts, held.ts) {
+			return true
+		}
+	}
+	return false
+}
+
+// WaitUntilAcquired is meant to be called when CheckOptimisticNoConflicts has
+// returned false, and so the caller needs to do pessimistic latching.
+func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, error) {
+	if lg.snap == nil {
+		panic(errors.AssertionFailedf("snap must not be nil"))
+	}
+	defer func() {
+		lg.snap.close()
+		lg.snap = nil
+	}()
+	err := m.wait(ctx, lg, *lg.snap)
 	if err != nil {
 		m.Release(lg)
 		return nil, err
@@ -427,6 +531,9 @@ func (m *Manager) waitForSignal(
 // owned latches.
 func (m *Manager) Release(lg *Guard) {
 	lg.done.signal()
+	if lg.snap != nil {
+		lg.snap.close()
+	}
 
 	m.mu.Lock()
 	m.removeLocked(lg)

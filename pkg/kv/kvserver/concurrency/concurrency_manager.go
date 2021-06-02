@@ -189,25 +189,43 @@ func (m *managerImpl) sequenceReqWithGuard(
 
 	// Only the first iteration can sometimes already be holding latches -- we
 	// use this to assert below.
-	first := true
+	firstIteration := true
 	for {
-		if !first {
-			g.AssertNoLatches()
-		}
-		first = false
 		if !g.HoldingLatches() {
-			// TODO(sumeer): optimistic requests could register their need for
-			// latches, but not actually wait until acquisition.
-			// https://github.com/cockroachdb/cockroach/issues/9521
-
-			// Acquire latches for the request. This synchronizes the request
-			// with all conflicting in-flight requests.
-			log.Event(ctx, "acquiring latches")
-			g.lg, err = m.lm.Acquire(ctx, req)
+			if g.EvalKind == OptimisticEval {
+				if !firstIteration {
+					// The only way we loop more than once is when conflicting locks are
+					// found -- see below where that happens and the comment there on
+					// why it will never happen with OptimisticEval.
+					panic("optimistic eval should not loop in sequenceReqWithGuard")
+				}
+				log.Event(ctx, "optimistically acquiring latches")
+				g.lg = m.lm.AcquireOptimistic(req)
+				g.lm = m.lm
+			} else {
+				// Acquire latches for the request. This synchronizes the request
+				// with all conflicting in-flight requests.
+				log.Event(ctx, "acquiring latches")
+				g.lg, err = m.lm.Acquire(ctx, req)
+				if err != nil {
+					return nil, err
+				}
+				g.lm = m.lm
+			}
+		} else {
+			if !firstIteration {
+				panic(errors.AssertionFailedf("second or later iteration cannot be holding latches"))
+			}
+			if g.EvalKind != PessimisticAfterFailedOptimisticEval {
+				panic("must not be holding latches")
+			}
+			log.Event(ctx, "optimistic failed, so waiting for latches")
+			g.lg, err = m.lm.WaitUntilAcquired(ctx, g.lg)
 			if err != nil {
 				return nil, err
 			}
 		}
+		firstIteration = false
 
 		// Some requests don't want the wait on locks.
 		if req.LockSpans.Empty() {
@@ -226,7 +244,9 @@ func (m *managerImpl) sequenceReqWithGuard(
 			g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
 		}
 
-		// Wait on conflicting locks, if necessary.
+		// Wait on conflicting locks, if necessary. Note that this will never be
+		// true if ScanOptimistic was called above. Therefore it will also never
+		// be true if latchManager.AcquireOptimistic was called.
 		if g.ltg.ShouldWait() {
 			m.lm.Release(g.moveLatchGuard())
 
@@ -547,21 +567,44 @@ func (g *Guard) AssertNoLatches() {
 	}
 }
 
-// CheckOptimisticNoConflicts checks that the lockSpansRead do not have a
-// conflicting lock.
-func (g *Guard) CheckOptimisticNoConflicts(lockSpansRead *spanset.SpanSet) (ok bool) {
+// CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
+// have a conflicting latch, lock.
+func (g *Guard) CheckOptimisticNoConflicts(
+	latchSpansRead *spanset.SpanSet, lockSpansRead *spanset.SpanSet,
+) (ok bool) {
 	if g.EvalKind != OptimisticEval {
 		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
 	}
-	if g.ltg == nil {
+	if g.lg == nil && g.ltg == nil {
 		return true
 	}
-	return g.ltg.CheckOptimisticNoConflicts(lockSpansRead)
+	if g.lg == nil {
+		panic("expected non-nil latchGuard")
+	}
+	// First check the latches, since a conflict there could mean that racing
+	// requests in the lock table caused a conflicting lock to not be noticed.
+	if g.lm.CheckOptimisticNoConflicts(g.lg, latchSpansRead) {
+		return g.ltg.CheckOptimisticNoConflicts(lockSpansRead)
+	}
+	return false
+}
+
+// CheckOptimisticNoLatchConflicts checks that the declared latch spans for
+// the request do not have a conflicting latch.
+func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
+	if g.EvalKind != OptimisticEval {
+		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
+	}
+	if g.lg == nil {
+		return true
+	}
+	return g.lm.CheckOptimisticNoConflicts(g.lg, g.Req.LatchSpans)
 }
 
 func (g *Guard) moveLatchGuard() latchGuard {
 	lg := g.lg
 	g.lg = nil
+	g.lm = nil
 	return lg
 }
 

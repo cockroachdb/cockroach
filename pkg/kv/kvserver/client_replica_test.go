@@ -3904,7 +3904,71 @@ func TestOptimisticEvalNoContention(t *testing.T) {
 	require.NoError(t, txn1.Commit(ctx))
 }
 
-func BenchmarkOptimisticEval(b *testing.B) {
+// TestOptimisticEvalWithConcurrentWriters tests concurrently running writes
+// and optimistic reads where the latter always conflict. This is just a
+// sanity check to confirm that nothing fails.
+func TestOptimisticEvalWithConcurrentWriters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	finish := make(chan struct{})
+	var workers sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		workers.Add(1)
+		go func() {
+			for {
+				require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+					if err := txn.Put(ctx, "a", "a"); err != nil {
+						return err
+					}
+					return txn.Commit(ctx)
+				}))
+				select {
+				case _, recv := <-finish:
+					if !recv {
+						workers.Done()
+						return
+					}
+				default:
+				}
+			}
+		}()
+	}
+	for i := 0; i < 4; i++ {
+		workers.Add(1)
+		go func() {
+			for {
+				require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+					_, err = txn.Scan(ctx, "a", "c", 1)
+					if err != nil {
+						return err
+					}
+					err = txn.Commit(ctx)
+					return err
+				}))
+				select {
+				case _, recv := <-finish:
+					if !recv {
+						workers.Done()
+						return
+					}
+				default:
+				}
+			}
+		}()
+	}
+	time.Sleep(10 * time.Second)
+	close(finish)
+	workers.Wait()
+}
+
+// BenchmarkOptimisticEvalForLocks benchmarks optimistic evaluation when the
+// potentially conflicting lock is explicitly held for a duration of time.
+func BenchmarkOptimisticEvalForLocks(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	args := base.TestServerArgs{}
@@ -3978,5 +4042,104 @@ func BenchmarkOptimisticEval(b *testing.B) {
 				close(finishWrites)
 				writers.Wait()
 			})
+	}
+}
+
+// BenchmarkOptimisticEval benchmarks optimistic evaluation with
+// - potentially conflicting latches held by 1PC transactions doing writes.
+// - potentially conflicting latches or locks held by transactions doing
+//   writes.
+func BenchmarkOptimisticEval(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+
+	for _, latches := range []bool{false, true} {
+		conflictWith := "latches-and-locks"
+		if latches {
+			conflictWith = "latches"
+		}
+		b.Run(conflictWith, func(b *testing.B) {
+			for _, realContention := range []bool{false, true} {
+				b.Run(fmt.Sprintf("real-contention=%t", realContention), func(b *testing.B) {
+					for _, numWriters := range []int{1, 4} {
+						b.Run(fmt.Sprintf("num-writers=%d", numWriters), func(b *testing.B) {
+							// Since we are doing writes in the benchmark, start with a
+							// fresh server each time so that we start with a fresh engine
+							// without many versions for a key.
+							s, _, db := serverutils.StartServer(b, args)
+							defer s.Stopper().Stop(ctx)
+
+							require.NoError(b, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+								if err := txn.Put(ctx, "a", "a"); err != nil {
+									return err
+								}
+								if err := txn.Put(ctx, "b", "b"); err != nil {
+									return err
+								}
+								return txn.Commit(ctx)
+							}))
+							tup, err := db.Get(ctx, "a")
+							require.NoError(b, err)
+							require.NotNil(b, tup.Value)
+							tup, err = db.Get(ctx, "b")
+							require.NoError(b, err)
+							require.NotNil(b, tup.Value)
+
+							writeKey := "b"
+							if realContention {
+								writeKey = "a"
+							}
+							finishWrites := make(chan struct{})
+							var writers sync.WaitGroup
+							for i := 0; i < numWriters; i++ {
+								writers.Add(1)
+								go func() {
+									for {
+										if latches {
+											require.NoError(b, db.Put(ctx, writeKey, "foo"))
+
+										} else {
+											require.NoError(b, db.Txn(ctx,
+												func(ctx context.Context, txn *kv.Txn) (err error) {
+													if err := txn.Put(ctx, writeKey, "foo"); err != nil {
+														return err
+													}
+													return txn.Commit(ctx)
+												}))
+										}
+										select {
+										case _, recv := <-finishWrites:
+											if !recv {
+												writers.Done()
+												return
+											}
+										default:
+										}
+									}
+								}()
+							}
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								_ = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+									_, err = txn.Scan(ctx, "a", "c", 1)
+									if err != nil {
+										panic(err)
+									}
+									err = txn.Commit(ctx)
+									if err != nil {
+										panic(err)
+									}
+									return err
+								})
+							}
+							b.StopTimer()
+							close(finishWrites)
+							writers.Wait()
+						})
+					}
+				})
+			}
+		})
 	}
 }
