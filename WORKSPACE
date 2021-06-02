@@ -42,16 +42,16 @@ go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:lCnv+lfrU9FRPGf8NeRuWAAPjNnema5WtBinMgs1fD8=",
-    version = "v0.0.0-20210521203332-0cec03c779c1",
+    sum = "h1:qh4f65QIVFjq9eBURLEYWqaEXmOyqdUyiBSgaXWccWk=",
+    version = "v0.0.0-20210601080250-7ecdf8ef093b",
 )
 
 go_repository(
     name = "org_golang_x_tools",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/tools",
-    sum = "h1:po9/4sTYwZU9lPhi1tOrb4hCv3qrhiQ77LZfGa2OjwY=",
-    version = "v0.1.0",
+    sum = "h1:kRBLX7v7Af8W7Gdbbc908OJcdgtK8bOz9Uaj8/F1ACA=",
+    version = "v0.1.2",
 )
 
 go_repository(
