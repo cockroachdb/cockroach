@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // Timeout is a cluster setting used for cloud storage interactions.
@@ -75,15 +74,6 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 	return &http.Client{Transport: t}, nil
 }
 
-func redactAndTruncateError(err error) string {
-	maxErrLength := 250
-	redactedErr := string(redact.Sprintf("%v", err))
-	if len(redactedErr) < maxErrLength {
-		maxErrLength = len(redactedErr)
-	}
-	return redactedErr[:maxErrLength]
-}
-
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
 // re-run the provided function.
 const MaxDelayedRetryAttempts = 3
@@ -104,7 +94,7 @@ func DelayedRetry(
 		retryEvent := &roachpb.RetryTracingEvent{
 			Operation:     opName,
 			AttemptNumber: attemptNumber,
-			RetryError:    redactAndTruncateError(err),
+			RetryError:    tracing.RedactAndTruncateErrorForTracing(err),
 		}
 		span.RecordStructured(retryEvent)
 		if customDelay != nil {
@@ -230,7 +220,7 @@ func (r *ResumingReader) Read(p []byte) (int, error) {
 			retryEvent := &roachpb.RetryTracingEvent{
 				Operation:     "ResumingReader.Reader.Read",
 				AttemptNumber: int32(retries + 1),
-				RetryError:    redactAndTruncateError(lastErr),
+				RetryError:    tracing.RedactAndTruncateErrorForTracing(lastErr),
 			}
 			span.RecordStructured(retryEvent)
 			if retries >= maxNoProgressReads {

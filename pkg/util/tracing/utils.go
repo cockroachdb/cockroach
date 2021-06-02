@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 )
@@ -64,4 +65,15 @@ func MessageToJSONString(msg protoutil.Message, emitDefaults bool) (string, erro
 	}
 
 	return msgJSON, nil
+}
+
+// RedactAndTruncateErrorForTracing redacts the error and truncates the string
+// representation of the error to a fixed length.
+func RedactAndTruncateErrorForTracing(err error) string {
+	maxErrLength := 250
+	redactedErr := string(redact.Sprintf("%v", err))
+	if len(redactedErr) < maxErrLength {
+		maxErrLength = len(redactedErr)
+	}
+	return redactedErr[:maxErrLength]
 }
