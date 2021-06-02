@@ -26,6 +26,5 @@ go_library(
         "//pkg/util/sysutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
