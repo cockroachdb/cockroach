@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -6300,8 +6301,8 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
 		tableID := getTableID(db, "test", "foo")
 		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{1-3}", tableID2)}, actualResolvedSpans)
+		require.Equal(t, []string{fmt.Sprintf("/Table/{%d/1-%d/4}", tableID, tableID2)},
+			actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6352,6 +6353,7 @@ func TestLogicallyMergedTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	codec := keys.TODOSQLCodec
 	unusedMap := make(map[tableAndIndex]bool)
+
 	testCases := []struct {
 		name                       string
 		checkForKVInBoundsOverride func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error)
@@ -6479,6 +6481,148 @@ func TestLogicallyMergedTableSpans(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, test.expectedSpans, mergedSpans)
+		})
+	}
+}
+
+// Unit tests for the getLogicallyMergedSpansAcrossTables() method
+func TestLogicallyMergedSpansAcrossTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	codec := keys.TODOSQLCodec
+	unusedMap := make(map[tableAndIndex]bool)
+
+	checkForTablesInBoundsOverride := func(startTableID, endTableID descpb.ID) (bool, error) {
+		if startTableID == 69 && endTableID == 71 {
+			return true, nil
+		}
+		return false, nil
+	}
+
+	testCases := []struct {
+		name                       string
+		checkForKVInBoundsOverride func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error)
+		tableID1                   descpb.ID
+		tableID2                   descpb.ID
+		pkIndex1                   descpb.IndexDescriptor
+		pkIndex2                   descpb.IndexDescriptor
+		indexes1                   []descpb.IndexDescriptor
+		indexes2                   []descpb.IndexDescriptor
+		addingIndexes1             []descpb.IndexDescriptor
+		addingIndexes2             []descpb.IndexDescriptor
+		droppingIndexes1           []descpb.IndexDescriptor
+		droppingIndexes2           []descpb.IndexDescriptor
+		expectedSpans              []string
+	}{
+		{
+			name: "contiguous-tables-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID1:      63,
+			tableID2:      64,
+			pkIndex1:      getMockIndexDesc(1),
+			pkIndex2:      getMockIndexDesc(1),
+			indexes1:      []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+			indexes2:      []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+			expectedSpans: []string{"/Table/6{3/1-4/3}"},
+		},
+		{
+			name: "dropped-index-before-start-key-on-rhs-span",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID1: 65,
+			tableID2: 66,
+			pkIndex1: getMockIndexDesc(1),
+			pkIndex2: getMockIndexDesc(1),
+			indexes1: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3)},
+			indexes2: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(4)},
+			expectedSpans: []string{"/Table/65/{1-4}", "/Table/66/{1-5}"},
+		},
+		{
+			name: "adding-index-between-contiguous-tables",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID1: 67,
+			tableID2: 68,
+			pkIndex1: getMockIndexDesc(1),
+			pkIndex2: getMockIndexDesc(1),
+			indexes1: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+			indexes2: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(4)},
+			addingIndexes1: []descpb.IndexDescriptor{getMockIndexDesc(4)},
+			expectedSpans:  []string{"/Table/67/{1-3}", "/Table/68/{1-5}"},
+		},
+		{
+			name: "offline-table-between-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID1: 69,
+			tableID2: 71,
+			pkIndex1: getMockIndexDesc(1),
+			pkIndex2: getMockIndexDesc(1),
+			indexes1: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+			indexes2: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(4)},
+			expectedSpans: []string{"/Table/69/{1-3}", "/Table/71/{1-5}"},
+		},
+		{
+			name: "gced-tables-between-spans",
+			checkForKVInBoundsOverride: func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+				return false, nil
+			},
+			tableID1: 72,
+			tableID2: 74,
+			pkIndex1: getMockIndexDesc(1),
+			pkIndex2: getMockIndexDesc(1),
+			indexes1: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(2)},
+			indexes2: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(4)},
+			expectedSpans: []string{"/Table/7{2/1-4/5}"},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			allTables := make(map[descpb.ID]*tableAndMergedSpans)
+			endTime := hlc.Timestamp{}
+
+			tableDesc1 := getMockTableDesc(test.tableID1, test.pkIndex1,
+				test.indexes1, test.addingIndexes1, test.droppingIndexes1)
+			tableDesc2 := getMockTableDesc(test.tableID2, test.pkIndex2,
+				test.indexes2, test.addingIndexes2, test.droppingIndexes2)
+
+			tableIDs := descpb.IDs{test.tableID1, test.tableID2}
+			tables := []catalog.TableDescriptor{tableDesc1, tableDesc2}
+
+			var mergedTableSpans []string
+			for _, table := range tables {
+				spans, err := getLogicallyMergedTableSpans(table, unusedMap, codec,
+					endTime, test.checkForKVInBoundsOverride)
+				require.NoError(t, err)
+
+				allTables[table.GetID()] = &tableAndMergedSpans{
+					table:       table,
+					mergedSpans: spans,
+				}
+			}
+
+			sort.Sort(tableIDs)
+			mergedInterTableSpans := getLogicallyMergedSpansAcrossTables(
+				tableIDs, allTables, endTime, unusedMap, checkForTablesInBoundsOverride, func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error) {
+					if start.String() == "/Table/65/4" && end.String() == "/Table/66/1" {
+						return true, nil
+					}
+					return false, nil
+				})
+
+			for _, span := range mergedInterTableSpans {
+				mergedTableSpans = append(mergedTableSpans, span.String())
+			}
+			require.Equal(t, test.expectedSpans, mergedTableSpans)
 		})
 	}
 }
