@@ -86,7 +86,7 @@ type Flow interface {
 	//
 	// Generally if errors are encountered during the setup part, they're returned.
 	// But if the flow is a synchronous one, then no error is returned; instead the
-	// setup error is pushed to the syncFlowConsumer. In this case, a subsequent
+	// setup error is pushed to the rowSyncFlowConsumer. In this case, a subsequent
 	// call to f.Wait() will not block.
 	Start(_ context.Context, doneFn func()) error
 
@@ -143,10 +143,13 @@ type FlowBase struct {
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []Startable
-	// syncFlowConsumer is a special outbox which instead of sending rows to
+	// rowSyncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
 	// or to the local host).
-	syncFlowConsumer execinfra.RowReceiver
+	rowSyncFlowConsumer execinfra.RowReceiver
+	// batchSyncFlowConsumer, if set, provides an alternative interface for
+	// pushing coldata.Batches to locally.
+	batchSyncFlowConsumer execinfra.BatchReceiver
 
 	localProcessors []execinfra.LocalProcessor
 
@@ -214,14 +217,16 @@ var _ Flow = &FlowBase{}
 func NewFlowBase(
 	flowCtx execinfra.FlowCtx,
 	flowReg *FlowRegistry,
-	syncFlowConsumer execinfra.RowReceiver,
+	rowSyncFlowConsumer execinfra.RowReceiver,
+	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 ) *FlowBase {
 	base := &FlowBase{
-		FlowCtx:          flowCtx,
-		flowRegistry:     flowReg,
-		syncFlowConsumer: syncFlowConsumer,
-		localProcessors:  localProcessors,
+		FlowCtx:               flowCtx,
+		flowRegistry:          flowReg,
+		rowSyncFlowConsumer:   rowSyncFlowConsumer,
+		batchSyncFlowConsumer: batchSyncFlowConsumer,
+		localProcessors:       localProcessors,
 	}
 	base.status = FlowNotStarted
 	return base
@@ -282,9 +287,15 @@ func (f *FlowBase) AddRemoteStream(streamID execinfrapb.StreamID, streamInfo *In
 	f.inboundStreams[streamID] = streamInfo
 }
 
-// GetSyncFlowConsumer returns the special syncFlowConsumer outbox.
-func (f *FlowBase) GetSyncFlowConsumer() execinfra.RowReceiver {
-	return f.syncFlowConsumer
+// GetRowSyncFlowConsumer returns the special rowSyncFlowConsumer outbox.
+func (f *FlowBase) GetRowSyncFlowConsumer() execinfra.RowReceiver {
+	return f.rowSyncFlowConsumer
+}
+
+// GetBatchSyncFlowConsumer returns the special batchSyncFlowConsumer outbox.
+// Will return nil if the consumer cannot receive batches.
+func (f *FlowBase) GetBatchSyncFlowConsumer() execinfra.BatchReceiver {
+	return f.batchSyncFlowConsumer
 }
 
 // GetLocalProcessors return the execinfra.LocalProcessors of this flow.
@@ -292,10 +303,10 @@ func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 	return f.localProcessors
 }
 
-// startInternal starts the flow. All processors are started, each in their own
-// goroutine. The caller must forward any returned error to syncFlowConsumer if
+// StartInternal starts the flow. All processors are started, each in their own
+// goroutine. The caller must forward any returned error to rowSyncFlowConsumer if
 // set.
-func (f *FlowBase) startInternal(
+func (f *FlowBase) StartInternal(
 	ctx context.Context, processors []execinfra.Processor, doneFn func(),
 ) error {
 	f.doneFn = doneFn
@@ -350,11 +361,11 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if err := f.startInternal(ctx, f.processors, doneFn); err != nil {
+	if err := f.StartInternal(ctx, f.processors, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
-		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
-			f.syncFlowConsumer.ProducerDone()
+		if f.rowSyncFlowConsumer != nil {
+			f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+			f.rowSyncFlowConsumer.ProducerDone()
 			return nil
 		}
 		return err
@@ -375,11 +386,11 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 	otherProcs := f.processors[:len(f.processors)-1]
 
 	var err error
-	if err = f.startInternal(ctx, otherProcs, doneFn); err != nil {
+	if err = f.StartInternal(ctx, otherProcs, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
-		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
-			f.syncFlowConsumer.ProducerDone()
+		if f.rowSyncFlowConsumer != nil {
+			f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+			f.rowSyncFlowConsumer.ProducerDone()
 			return nil
 		}
 		return err
