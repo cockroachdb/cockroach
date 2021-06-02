@@ -371,14 +371,20 @@ func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLo
 func getDescriptorsFromTargetListForPrivilegeChange(
 	ctx context.Context, p *planner, targets tree.TargetList,
 ) ([]catalog.Descriptor, error) {
+	const required = true
+	flags := tree.CommonLookupFlags{
+		Required:       required,
+		AvoidCached:    p.avoidCachedDescriptors,
+		RequireMutable: true,
+	}
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase
 		}
 		descs := make([]catalog.Descriptor, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
-				string(database), tree.DatabaseLookupFlags{Required: true})
+			descriptor, err := p.Descriptors().
+				GetMutableDatabaseByName(ctx, p.txn, string(database), flags)
 			if err != nil {
 				return nil, err
 			}
@@ -396,7 +402,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		descs := make([]catalog.Descriptor, 0, len(targets.Types))
 		for _, typ := range targets.Types {
-			descriptor, err := p.ResolveMutableTypeDescriptor(ctx, typ, true /* required */)
+			descriptor, err := p.ResolveMutableTypeDescriptor(ctx, typ, required)
 			if err != nil {
 				return nil, err
 			}
@@ -427,8 +433,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			if sc.ExplicitCatalog {
 				dbName = sc.Catalog()
 			}
-			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
-				tree.DatabaseLookupFlags{Required: true})
+			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, flags)
 			if err != nil {
 				return nil, err
 			}
@@ -436,8 +441,8 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		for _, sc := range targetSchemas {
-			resSchema, err := p.ResolveMutableSchemaDescriptor(
-				ctx, sc.dbDesc.ID, sc.schema, true /* required */)
+			resSchema, err := p.Descriptors().GetSchemaByName(
+				ctx, p.txn, sc.dbDesc.ID, sc.schema, flags)
 			if err != nil {
 				return nil, err
 			}
@@ -461,7 +466,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		if err != nil {
 			return nil, err
 		}
-		objectNames, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
+		_, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
 		if err != nil {
 			return nil, err
 		}
@@ -469,17 +474,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		for i := range objectIDs {
 			descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, objectIDs[i], p.txn)
 			if err != nil {
-				// If the table is virtual, the above lookup will not find the table.
-				// So, try resolving the table instead.
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					descriptor, err = resolver.ResolveMutableExistingTableObject(ctx, p,
-						&objectNames[i], false /* required */, tree.ResolveAnyTableKind)
-					if err != nil {
-						return nil, err
-					}
-				} else {
-					return nil, err
-				}
+				return nil, err
 			}
 			if descriptor != nil && descriptor.DescriptorType() == catalog.Table {
 				descs = append(descs, descriptor)
