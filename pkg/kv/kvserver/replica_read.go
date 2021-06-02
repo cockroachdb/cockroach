@@ -73,11 +73,11 @@ func (r *Replica) executeReadOnlyBatch(
 	// release latches immediately after we acquire an engine iterator as long
 	// as we're performing a non-locking read. Note that this also requires that
 	// the request is not being optimistically evaluated (optimistic evaluation
-	// does not check locks). It would also be nice, but not required for
-	// correctness, that the read-only engine eagerly create an iterator (that
-	// is later cloned) while the latches are held, so that this request does
-	// not "see" the effect of any later requests that happen after the latches
-	// are released.
+	// does not wait for latches or check locks). It would also be nice, but not
+	// required for correctness, that the read-only engine eagerly create an
+	// iterator (that is later cloned) while the latches are held, so that this
+	// request does not "see" the effect of any later requests that happen after
+	// the latches are released.
 
 	var result result.Result
 	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(
@@ -94,14 +94,12 @@ func (r *Replica) executeReadOnlyBatch(
 	if pErr == nil && g.EvalKind == concurrency.OptimisticEval {
 		// Gather the spans that were read -- we distinguish the spans in the
 		// request from the spans that were actually read, using resume spans in
-		// the response. For now we ignore the latch spans, but when we stop
-		// waiting for latches in optimistic evaluation we will use these to check
-		// latches first.
-		_, lockSpansRead, err := r.collectSpansRead(ba, br)
+		// the response.
+		latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
 		if err != nil {
 			return nil, g, roachpb.NewError(err)
 		}
-		if ok := g.CheckOptimisticNoConflicts(lockSpansRead); !ok {
+		if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
 			return nil, g, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 		}
 	}
