@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -219,7 +220,6 @@ func TestRollbackSyncRangedIntentResolution(t *testing.T) {
 func TestReliableIntentCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 65908, "flaky in CI")
 	skip.UnderShort(t) // takes 294s
 	skip.UnderRace(t, "timing-sensitive test")
 	skip.UnderStress(t, "memory-hungry test")
@@ -372,24 +372,50 @@ func TestReliableIntentCleanup(t *testing.T) {
 			}
 		}
 
-		// assertIntentCleanup checks that intents get cleaned up within a
-		// reasonable time.
+		// assertIntentCleanup checks that intents get cleaned up. It errors
+		// ~fast if the intent count does not decrease, but gives it ample time
+		// to complete when progress is being made.
 		assertIntentCleanup := func(t *testing.T) {
 			t.Helper()
-			var result storage.MVCCScanResult
-			if !assert.Eventually(t, func() bool {
-				result, err = storage.MVCCScan(ctx, store.Engine(), prefix, prefix.PrefixEnd(),
+			const (
+				checkInterval  = time.Second
+				stuckTimeout   = 30 * time.Second // intent count not decreasing
+				overallTimeout = 5 * time.Minute
+			)
+			var (
+				lastIntentDecrease = time.Time{}
+				minIntentCount     = math.MaxInt64
+				started            = time.Now()
+			)
+			for {
+				result, err := storage.MVCCScan(ctx, store.Engine(), prefix, prefix.PrefixEnd(),
 					hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
 				require.NoError(t, err)
-				return len(result.Intents) == 0
-			}, time.Minute, 200*time.Millisecond, "intent cleanup timed out") {
-				require.Fail(t, "found stale intents", "count=%v first=%v last=%v",
-					len(result.Intents), result.Intents[0], result.Intents[len(result.Intents)-1])
+				intentCount := len(result.Intents)
+				if intentCount == 0 {
+					return
+				}
+				if intentCount < minIntentCount {
+					minIntentCount = intentCount
+					lastIntentDecrease = time.Now()
+				}
+				if time.Since(lastIntentDecrease) >= stuckTimeout {
+					require.Fail(t, "found stale intents", "count=%v first=%v last=%v",
+						len(result.Intents), result.Intents[0], result.Intents[len(result.Intents)-1])
+				}
+				if time.Since(started) >= overallTimeout {
+					require.Fail(t, "intent cleanup timed out", "count=%v first=%v last=%v",
+						len(result.Intents), result.Intents[0], result.Intents[len(result.Intents)-1])
+				}
+				time.Sleep(checkInterval)
 			}
 		}
 
 		// assertTxnCleanup checks that the txn record is cleaned up within a
-		// reasonable time.
+		// reasonable time. We give it a long timeout, since there are cases
+		// where it will attempt to clean up all the intents again (even though
+		// they have already been removed), which takes time to process. This
+		// can happen due to multiple rollbacks being sent by different actors.
 		assertTxnCleanup := func(t *testing.T, txnKey roachpb.Key, txnID uuid.UUID) {
 			t.Helper()
 			var txnEntry roachpb.Transaction
@@ -399,7 +425,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 					storage.MVCCGetOptions{})
 				require.NoError(t, err)
 				return !ok
-			}, 10*time.Second, 100*time.Millisecond, "txn record cleanup timed out") {
+			}, time.Minute, 100*time.Millisecond, "txn record cleanup timed out") {
 				require.Fail(t, "found stale txn record", "%v", txnEntry)
 			}
 		}
@@ -586,13 +612,6 @@ func TestReliableIntentCleanup(t *testing.T) {
 
 			assertIntentCleanup(t)
 			for txnID, txnKey := range txns {
-				// TODO(erikgrinaker): this occasionally fails in CI with
-				// finalize=cancelAsync, but the reason hasn't been found. We're
-				// mostly concerned with intent cleanup, so skip the txn record
-				// assertion in these cases.
-				if spec.finalize == "cancelAsync" {
-					break
-				}
 				assertTxnCleanup(t, txnKey, txnID)
 			}
 		}
