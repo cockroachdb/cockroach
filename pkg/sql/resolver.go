@@ -49,23 +49,6 @@ func (p *planner) ResolveUncachedDatabaseByName(
 	return res, err
 }
 
-// ResolveUncachedSchemaDescriptor looks up a schema from the store.
-func (p *planner) ResolveUncachedSchemaDescriptor(
-	ctx context.Context, dbID descpb.ID, name string, required bool,
-) (schema catalog.SchemaDescriptor, err error) {
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		schema, err = p.Accessor().GetSchemaByName(
-			ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
-				Required: required, RequireMutable: true,
-			},
-		)
-	})
-	if err != nil || schema == nil {
-		return nil, err
-	}
-	return schema, err
-}
-
 // ResolveUncachedSchemaDescriptor looks up a mutable descriptor for a schema
 // from the store.
 func (p *planner) ResolveMutableSchemaDescriptor(
