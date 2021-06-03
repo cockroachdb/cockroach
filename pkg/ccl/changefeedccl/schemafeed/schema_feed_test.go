@@ -41,7 +41,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 		}
 	}
 
-	m := SchemaFeed{}
+	m := schemaFeed{}
 	m.mu.highWater = ts(0)
 
 	require.Equal(t, ts(0), m.highWater())
