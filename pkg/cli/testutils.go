@@ -387,6 +387,42 @@ func ElideInsecureDeprecationNotice(csvStr string) string {
 	return csvStr
 }
 
+// filterOutputFromWeeds removes lines from the input string that match any of
+// the provided regexps. Mind that regexp could match a substrings, so you need
+// to put ^ and $ around to ensure full matches.
+func filterOutputFromWeeds(output string, weeds []string) (string, error) {
+	if len(weeds) == 0 {
+		return output, nil
+	}
+
+	var patterns []*regexp.Regexp
+	for _, weed := range weeds {
+		p, err := regexp.Compile(weed)
+		if err != nil {
+			return "", errors.Errorf("Invalid filter pattern %s", weed)
+		}
+		patterns = append(patterns, p)
+	}
+	filter := func(line string) bool {
+		for _, pattern := range patterns {
+			if pattern.MatchString(line) {
+				return true
+			}
+		}
+		return false
+	}
+
+	result := strings.Builder{}
+	for _, line := range strings.Split(output, "\n") {
+		if filter(line) || len(line) == 0 {
+			continue
+		}
+		result.WriteString(line)
+		result.WriteRune('\n')
+	}
+	return result.String(), nil
+}
+
 // GetCsvNumCols returns the number of columns in the given csv string.
 func GetCsvNumCols(csvStr string) (cols int, err error) {
 	csvStr = ElideInsecureDeprecationNotice(csvStr)
@@ -400,7 +436,16 @@ func GetCsvNumCols(csvStr string) (cols int, err error) {
 
 // MatchCSV matches a multi-line csv string with the provided regex
 // (matchColRow[i][j] will be matched against the i-th line, j-th column).
-func MatchCSV(csvStr string, matchColRow [][]string) (err error) {
+func MatchCSV(csvStr string, matchColRow [][]string) error {
+	return MatchCSVFiltered(csvStr, matchColRow, []string{})
+}
+
+// MatchCSVFiltered matches a multi-line csv string with the provided regex
+// (matchColRow[i][j] will be matched against the i-th line, j-th column).
+// String is filtered initially using a set of regexps from filterOut.
+// Each regexp is applied to lines of original string to decide if it should
+// be considered.
+func MatchCSVFiltered(csvStr string, matchColRow [][]string, filterOut []string) (err error) {
 	defer func() {
 		if err != nil {
 			err = errors.Errorf("csv input:\n%v\nexpected:\n%s\nerrors:%s",
@@ -409,6 +454,11 @@ func MatchCSV(csvStr string, matchColRow [][]string) (err error) {
 	}()
 
 	csvStr = ElideInsecureDeprecationNotice(csvStr)
+	csvStr, err = filterOutputFromWeeds(csvStr, filterOut)
+	// Error here is a test problem, not unit under test problem.
+	if err != nil {
+		return err
+	}
 	reader := csv.NewReader(strings.NewReader(csvStr))
 	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
