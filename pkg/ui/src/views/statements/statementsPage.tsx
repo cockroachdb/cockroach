@@ -44,6 +44,7 @@ import {
   trackStatementsSearchAction,
   trackTableSortAction,
 } from "src/redux/analyticsActions";
+import { resetSQLStatsAction } from "src/redux/sqlStats";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -194,6 +195,7 @@ export default withRouter(
     {
       refreshStatements,
       refreshStatementDiagnosticsRequests,
+      resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>
         createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
       onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,

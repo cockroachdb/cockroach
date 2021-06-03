@@ -17,6 +17,7 @@ import { actions as statementActions } from "src/store/statements";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
+import { actions as resetSQLStatsActions } from "src/store/sqlStats";
 import {
   StatementsPage,
   StatementsPageDispatchProps,
@@ -49,6 +50,7 @@ export const ConnectedStatementsPage = withRouter(
       refreshStatements: () => dispatch(statementActions.refresh()),
       refreshStatementDiagnosticsRequests: () =>
         dispatch(statementDiagnosticsActions.refresh()),
+      resetSQLStats: () => dispatch(resetSQLStatsActions.request()),
       dismissAlertMessage: () =>
         dispatch(
           localStorageActions.update({

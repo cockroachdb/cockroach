@@ -18,6 +18,7 @@ import { livenessSaga } from "./liveness";
 import { sessionsSaga } from "./sessions";
 import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
+import { sqlStatsSaga } from "./sqlStats";
 
 export function* sagas(cacheInvalidationPeriod?: number) {
   yield all([
@@ -29,5 +30,6 @@ export function* sagas(cacheInvalidationPeriod?: number) {
     fork(sessionsSaga),
     fork(terminateSaga),
     fork(notifificationsSaga),
+    fork(sqlStatsSaga),
   ]);
 }
