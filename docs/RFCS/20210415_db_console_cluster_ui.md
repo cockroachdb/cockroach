@@ -1,6 +1,6 @@
 - Feature Name: Cluster UI Code Organization
-- Status: draft
-- Start Date: 2021-04-15
+- Status: in-progress
+- Start Date: 2021-06-03
 - Authors: Nathan Stilwell
 - RFC PR: (PR # after acceptance of initial draft)
 - Cockroach Issue: (one or more # from the issue tracker)
