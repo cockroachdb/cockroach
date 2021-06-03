@@ -67,7 +67,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(changefeed_emitted_bytes{job=\"crdb\",cluster=~\"cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(changefeed_emitted_bytes{job=\"cockroachdb\",cluster=~\"cluster\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Emitted Bytes",
@@ -163,7 +163,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(jobs_changefeed_resume_retry_error{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(jobs_changefeed_resume_retry_error{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Retryable Errors",
           "refId": "A"
@@ -258,13 +258,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(changefeed_flush_nanos{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(changefeed_flush_nanos{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Flush Time",
           "refId": "A"
         },
         {
-          "expr": "sum(changefeed_emitted_messages{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Message Emit time",
           "refId": "B"
@@ -359,13 +359,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(changefeed_flushes{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(changefeed_flushes{job=\"cockroachdb\",cluster=\"$cluster\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "Flushes",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(changefeed_emitted_messages{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "Messages",
           "refId": "B"
@@ -527,7 +527,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"crdb\"}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
         "error": null,
         "hide": 0,
         "includeAll": false,
@@ -535,7 +535,7 @@
         "multi": false,
         "name": "cluster",
         "options": [],
-        "query": "sys_uptime{job=\"crdb\"}",
+        "query": "sys_uptime{job=\"cockroachdb\"}",
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -550,7 +550,7 @@
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -558,7 +558,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

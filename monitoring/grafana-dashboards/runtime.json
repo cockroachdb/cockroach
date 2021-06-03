@@ -67,7 +67,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "clock_offset_meannanos{job=\"crdb\",instance=~\"$node\",cluster=~\"$cluster\"}",
+          "expr": "clock_offset_meannanos{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$cluster\"}",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -163,7 +163,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sys_gc_pause_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "sum(rate(sys_gc_pause_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "GC pause Time",
@@ -259,7 +259,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sys_goroutines{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(sys_goroutines{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Goroutines",
@@ -355,7 +355,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sys_gc_count{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "sum(rate(sys_gc_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "GC Runs",
@@ -451,7 +451,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sys_cpu_user_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sys_cpu_user_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "instant": false,
           "interval": "",
           "intervalFactor": 2,
@@ -459,7 +459,7 @@
           "refId": "A"
         },
         {
-          "expr": "sum(rate(sys_cpu_sys_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sys_cpu_sys_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "instant": false,
           "interval": "",
           "intervalFactor": 2,
@@ -556,35 +556,35 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sys_rss{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "sum(sys_rss{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "RSS",
           "refId": "A"
         },
         {
-          "expr": "sum(sys_cgo_allocbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "sum(sys_cgo_allocbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Go Allocated",
           "refId": "B"
         },
         {
-          "expr": "sum(sys_go_allocbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "sum(sys_go_allocbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "CGo Allocated",
           "refId": "C"
         },
         {
-          "expr": "sum(sys_go_totalbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "sum(sys_go_totalbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Go Total",
           "refId": "D"
         },
         {
-          "expr": "sum(sys_cgo_totalbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "sum(sys_cgo_totalbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "CGo Total",
@@ -680,7 +680,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "min(liveness_livenodes{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"})",
+          "expr": "min(liveness_livenodes{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"})",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Live nodes (node liveness heartbeats)",
@@ -748,7 +748,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"crdb\"}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
         "error": null,
         "hide": 0,
         "includeAll": false,
@@ -756,7 +756,7 @@
         "multi": false,
         "name": "cluster",
         "options": [],
-        "query": "sys_uptime{job=\"crdb\"}",
+        "query": "sys_uptime{job=\"cockroachdb\"}",
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -775,7 +775,7 @@
           "value": "$__all"
         },
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -783,7 +783,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -863,7 +863,7 @@
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "raftlog_behind{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}",
+        "definition": "raftlog_behind{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -871,7 +871,7 @@
         "multi": false,
         "name": "crdb_node",
         "options": [],
-        "query": "raftlog_behind{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}",
+        "query": "raftlog_behind{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}",
         "refresh": 1,
         "regex": "/store=\"([^\"]+)\"/",
         "skipUrlSync": false,

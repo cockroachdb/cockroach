@@ -77,7 +77,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_net_recv_bytes{job=\"cockroachdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -172,7 +172,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_net_recv_bytes{job=\"cockroachdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -267,7 +267,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_iopsinprogress{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_iopsinprogress{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -362,7 +362,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_write_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_write_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -457,7 +457,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_read_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_read_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -553,7 +553,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_write_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_write_bytes{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -648,7 +648,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(sys_host_disk_read_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
+          "expr": "rate(sys_host_disk_read_bytes{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -744,13 +744,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(container_memory_usage_bytes{job=\"crdb\",clusterfilter=~\"$clusterfilter\", instance=~\"$node\"}[5m])",
+          "expr": "rate(container_memory_usage_bytes{job=\"cockroachdb\",clusterfilter=~\"$clusterfilter\", instance=~\"$node\"}[5m])",
           "interval": "",
           "legendFormat": "{{instance}",
           "refId": "A"
         },
         {
-          "expr": "rate(sys_host_memory_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[5m])",
+          "expr": "rate(sys_host_memory_bytes{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[5m])",
           "interval": "",
           "legendFormat": "",
           "refId": "B"
@@ -919,7 +919,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"crdb\"}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -927,7 +927,7 @@
         "multi": true,
         "name": "clusterfilter",
         "options": [],
-        "query": "sys_uptime{job=\"crdb\"}",
+        "query": "sys_uptime{job=\"cockroachdb\"}",
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -942,7 +942,7 @@
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$clusterfilter\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -950,7 +950,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+        "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$clusterfilter\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

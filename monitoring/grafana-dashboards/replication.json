@@ -67,7 +67,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sysbytes{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum(rate(sysbytes{job=\"cockroachdb\",cluster=\"$cluster\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -162,7 +162,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sql_query_count{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_query_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -257,35 +257,35 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(range_snapshots_generated{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "sum(rate(range_snapshots_generated{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Generated",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(range_snapshots_normal_applied{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "sum(rate(range_snapshots_normal_applied{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Applied(raft-initiated)",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(range_snapshots_preemptive_applied{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "sum(rate(range_snapshots_preemptive_applied{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Applied(leaner)",
           "refId": "C"
         },
         {
-          "expr": "sum(rate(capacity_reserved{cluster=~\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(capacity_reserved{cluster=~\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Reserved capacity",
           "refId": "D"
         },
         {
-          "expr": "sum(rate(replicas_reserved{cluster=~\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(replicas_reserved{cluster=~\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Reserved Replicas",
@@ -381,49 +381,49 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(rate(range_splits{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
+          "expr": "sum(sum(rate(range_splits{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Splits",
           "refId": "A"
         },
         {
-          "expr": "sum(sum(rate(range_adds{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
+          "expr": "sum(sum(rate(range_adds{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Adds",
           "refId": "B"
         },
         {
-          "expr": "sum(sum(rate(range_merges{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
+          "expr": "sum(sum(rate(range_merges{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Merges",
           "refId": "C"
         },
         {
-          "expr": "sum(sum(rate(range_removes{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
+          "expr": "sum(sum(rate(range_removes{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Removes",
           "refId": "D"
         },
         {
-          "expr": "sum(sum(rate(range_raftleadertransfers{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
+          "expr": "sum(sum(rate(range_raftleadertransfers{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "leader Transfers",
           "refId": "E"
         },
         {
-          "expr": "sum(sum(rate(rebalancing_lease_transfers{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
+          "expr": "sum(sum(rate(rebalancing_lease_transfers{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Load-based Lease Transfers",
           "refId": "F"
         },
         {
-          "expr": "sum(sum(rate(rebalancing_range_rebalances{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
+          "expr": "sum(sum(rate(rebalancing_range_rebalances{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Load-based Range Rebalances",
@@ -520,14 +520,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(replicas{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))  ",
+          "expr": "sum(sum(replicas{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))  ",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Replicas",
           "refId": "A"
         },
         {
-          "expr": "sum(sum(replicas_quiescent{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sum(replicas_quiescent{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Quiescent",
@@ -623,7 +623,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(replicas_leaseholders{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance)",
+          "expr": "sum(replicas_leaseholders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance)",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -719,7 +719,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(replicas{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance)",
+          "expr": "sum(replicas{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance)",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -815,49 +815,49 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(replicas_leaseholders{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"})) by (instance)",
+          "expr": "sum(sum(replicas_leaseholders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"})) by (instance)",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Ranges",
           "refId": "A"
         },
         {
-          "expr": "sum(sum(replicas_leaders{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sum(replicas_leaders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Leaders",
           "refId": "B"
         },
         {
-          "expr": "sum(sum(replicas_leaders_not_leaseholders{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sum(replicas_leaders_not_leaseholders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Leaders W/O Lease Holders",
           "refId": "C"
         },
         {
-          "expr": "sum(sum(ranges_unavailable{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sum(ranges_unavailable{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Unavailable",
           "refId": "D"
         },
         {
-          "expr": "sum(sum(ranges_underreplicated{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sum(ranges_underreplicated{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "under-replicated",
           "refId": "E"
         },
         {
-          "expr": "sum(sum(ranges_overreplicated{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sum(ranges_overreplicated{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Over-replicated",
           "refId": "F"
         },
         {
-          "expr": "sum(sum(replicas_leaseholders{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sum(replicas_leaseholders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
           "interval": "",
           "legendFormat": "Lease Holders",
           "refId": "G"
@@ -986,7 +986,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"crdb\"}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
         "error": null,
         "hide": 0,
         "includeAll": false,
@@ -994,7 +994,7 @@
         "multi": false,
         "name": "cluster",
         "options": [],
-        "query": "sys_uptime{job=\"crdb\"}",
+        "query": "sys_uptime{job=\"cockroachdb\"}",
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -1009,7 +1009,7 @@
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -1017,7 +1017,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

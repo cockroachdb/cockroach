@@ -67,7 +67,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(request_slow_latch{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(request_slow_latch{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Slow Latch Acquisitions",
           "refId": "A"
@@ -162,7 +162,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(requests_slow_lease{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(requests_slow_lease{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Slow lease Acquisitions",
           "refId": "A"
@@ -257,7 +257,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(requests_slow_distsender{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(requests_slow_distsender{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Slow DistSender RPC",
           "queryType": "randomWalk",
@@ -353,7 +353,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "Sum(requests_slow_raft{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "Sum(requests_slow_raft{job=\"cockroachdb\",cluster=\"$cluster\"})",
           "interval": "",
           "legendFormat": "Slow Raft Proposals",
           "refId": "A"
@@ -420,7 +420,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"crdb\"}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
         "error": null,
         "hide": 0,
         "includeAll": false,
@@ -428,7 +428,7 @@
         "multi": false,
         "name": "cluster",
         "options": [],
-        "query": "sys_uptime{job=\"crdb\"}",
+        "query": "sys_uptime{job=\"cockroachdb\"}",
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -443,7 +443,7 @@
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -451,7 +451,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,

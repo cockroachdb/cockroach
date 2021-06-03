@@ -67,21 +67,21 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(capacity_used{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (instance))",
+          "expr": "sum(sum(capacity_used{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}) by (instance))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Used",
           "refId": "A"
         },
         {
-          "expr": "sum(sum(capacity_available{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (cluster))",
+          "expr": "sum(sum(capacity_available{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}) by (cluster))",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "Max",
           "refId": "B"
         },
         {
-          "expr": "sum(sum(capacity_available{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (cluster)) - sum(sum(capacity_used{job=\"crdb\",cluster=~\"$clusterfilter\"}) by (instance))",
+          "expr": "sum(sum(capacity_available{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}) by (cluster)) - sum(sum(capacity_used{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}) by (instance))",
           "interval": "",
           "legendFormat": "Available",
           "refId": "C"
@@ -176,7 +176,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(replicas{cluster=\"$clusterfilter\",job=\"crdb\",instance=~\"$node\"}) by (instance)",
+          "expr": "sum(replicas{cluster=\"$clusterfilter\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance)",
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -272,7 +272,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -384,31 +384,31 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sql_select_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))  + sum(rate(sql_update_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval])) + sum(rate(sql_delete_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))  + \nsum(rate(sql_insert_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_select_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))  + sum(rate(sql_update_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval])) + sum(rate(sql_delete_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))  + \nsum(rate(sql_insert_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "total QPS",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(sql_select_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_select_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "SELECTs",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(sql_insert_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_insert_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "INSERTs",
           "refId": "C"
         },
         {
-          "expr": "sum(rate(sql_update_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_update_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{cluster}} UPDATEs",
           "refId": "D"
         },
         {
-          "expr": "sum(rate(sql_delete_count{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
+          "expr": "sum(rate(sql_delete_count{job=\"cockroachdb\",cluster=~\"$clusterfilter\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "DELETEs",
           "refId": "E"
@@ -475,7 +475,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "sys_uptime{job=\"crdb\"}",
+        "definition": "sys_uptime{job=\"cockroachdb\"}",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -483,7 +483,7 @@
         "multi": true,
         "name": "clusterfilter",
         "options": [],
-        "query": "sys_uptime{job=\"crdb\"}",
+        "query": "sys_uptime{job=\"cockroachdb\"}",
         "refresh": 1,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
@@ -498,7 +498,7 @@
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+        "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$clusterfilter\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -506,7 +506,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
+        "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$clusterfilter\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
