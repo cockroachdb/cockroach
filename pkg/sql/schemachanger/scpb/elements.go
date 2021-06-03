@@ -42,11 +42,6 @@ type Element interface {
 	GetAttributes() Attributes
 }
 
-// ElementDescriptorSet represents all the descriptors touched by an element
-type ElementDescriptorSet interface {
-	DescriptorSet() []descpb.ID
-}
-
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
 	return e.GetValue().(Element)
