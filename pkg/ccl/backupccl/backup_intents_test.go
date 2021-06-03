@@ -36,7 +36,7 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 	// Time to create backup in presence of intents differs roughly 10x so some
 	// arbitrary number is picked which is 2x higher than current backup time on
 	// current (laptop) hardware.
-	const backupTimeout = time.Second * 10
+	const backupTimeout = time.Second * 20
 
 	const totalRowCount = 10000
 	const perTransactionRowCount = 10
