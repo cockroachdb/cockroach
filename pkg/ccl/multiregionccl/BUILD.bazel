@@ -23,6 +23,7 @@ go_test(
     name = "multiregionccl_test",
     size = "enormous",
     srcs = [
+        "datadriven_test.go",
         "main_test.go",
         "multiregion_test.go",
         "region_test.go",
@@ -30,6 +31,7 @@ go_test(
         "roundtrips_test.go",
         "show_test.go",
     ],
+    data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -62,6 +64,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],

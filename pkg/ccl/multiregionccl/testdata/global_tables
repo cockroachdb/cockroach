@@ -1,0 +1,102 @@
+new-cluster localities=us-east-1,us-east-1,us-east-1,us-west-1,us-central-1,eu-central-1
+----
+
+exec-sql idx=0
+CREATE DATABASE db PRIMARY REGION "us-east-1" REGIONS  "us-west-1", "us-central-1";
+----
+
+exec-sql idx=0
+CREATE TABLE db.global(k INT PRIMARY KEY, v INT) LOCALITY GLOBAL;
+----
+
+exec-sql idx=0
+INSERT INTO db.global VALUES (1, 1), (2,2)
+----
+
+wait-for-zone-config-changes idx=0 table-name=global num-voters=3 num-non-voters=2 lease-holder-node=0
+----
+
+refresh-range-descriptor-cache idx=0 table-name=global
+SELECT * FROM db.global WHERE k = 2
+----
+LEAD_FOR_GLOBAL_READS
+
+trace-sql idx=0
+SELECT * FROM db.global WHERE k = 1
+----
+served locally: true
+served via follower read: false
+
+refresh-range-descriptor-cache idx=1 table-name=global
+SELECT * FROM db.global WHERE k = 2
+----
+LEAD_FOR_GLOBAL_READS
+
+trace-sql idx=1
+SELECT * FROM db.global WHERE k = 1
+----
+served locally: true
+served via follower read: true
+
+refresh-range-descriptor-cache idx=2 table-name=global
+SELECT * FROM db.global WHERE k = 2
+----
+LEAD_FOR_GLOBAL_READS
+
+trace-sql idx=2
+SELECT * FROM db.global WHERE k = 1
+----
+served locally: true
+served via follower read: true
+
+refresh-range-descriptor-cache idx=3 table-name=global
+SELECT * FROM db.global WHERE k = 2
+----
+LEAD_FOR_GLOBAL_READS
+
+trace-sql idx=3
+SELECT * FROM db.global WHERE k = 1
+----
+served locally: true
+served via follower read: true
+
+refresh-range-descriptor-cache idx=4 table-name=global
+SELECT * FROM db.global WHERE k = 2
+----
+LEAD_FOR_GLOBAL_READS
+
+trace-sql idx=4
+SELECT * FROM db.global WHERE k = 1
+----
+served locally: true
+served via follower read: true
+
+refresh-range-descriptor-cache idx=5 table-name=global
+SELECT * FROM db.global WHERE k = 2
+----
+LEAD_FOR_GLOBAL_READS
+
+# Note that eu-central-1 is not a region on the database, therefore it shouldn't
+# have a replica to serve the query locally.
+trace-sql idx=5
+SELECT * FROM db.global WHERE k = 1
+----
+served locally: false
+
+exec-sql idx=0
+ALTER DATABASE db ADD REGION "eu-central-1"
+----
+
+wait-for-zone-config-changes idx=0 table-name=global num-voters=3 num-non-voters=3 lease-holder-node=0
+----
+
+refresh-range-descriptor-cache idx=5 table-name=global
+SELECT * FROM db.global WHERE k = 2
+----
+LEAD_FOR_GLOBAL_READS
+
+trace-sql idx=5
+SELECT * FROM db.global WHERE k = 1
+----
+served locally: true
+served via follower read: true
