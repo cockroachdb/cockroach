@@ -387,6 +387,39 @@ func ElideInsecureDeprecationNotice(csvStr string) string {
 	return csvStr
 }
 
+// RemoveMatchingLines removes lines from the input string that match any of
+// the provided regexps. Mind that regexp could match a substrings, so you need
+// to put ^ and $ around to ensure full matches.
+func RemoveMatchingLines(output string, regexps []string) string {
+	if len(regexps) == 0 {
+		return output
+	}
+
+	var patterns []*regexp.Regexp
+	for _, weed := range regexps {
+		p := regexp.MustCompile(weed)
+		patterns = append(patterns, p)
+	}
+	filter := func(line string) bool {
+		for _, pattern := range patterns {
+			if pattern.MatchString(line) {
+				return true
+			}
+		}
+		return false
+	}
+
+	result := strings.Builder{}
+	for _, line := range strings.Split(output, "\n") {
+		if filter(line) || len(line) == 0 {
+			continue
+		}
+		result.WriteString(line)
+		result.WriteRune('\n')
+	}
+	return result.String()
+}
+
 // GetCsvNumCols returns the number of columns in the given csv string.
 func GetCsvNumCols(csvStr string) (cols int, err error) {
 	csvStr = ElideInsecureDeprecationNotice(csvStr)
