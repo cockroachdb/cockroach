@@ -182,7 +182,7 @@ func authTrust(
 	_ *sql.ExecutorConfig,
 	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
-	return func(_ security.SQLUsername, _ bool) (func(), error) { return nil, nil }, nil
+	return func(_ context.Context, _ security.SQLUsername, _ bool) (func(), error) { return nil, nil }, nil
 }
 
 func authReject(
@@ -194,7 +194,7 @@ func authReject(
 	_ *sql.ExecutorConfig,
 	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
-	return func(_ security.SQLUsername, _ bool) (func(), error) {
+	return func(_ context.Context, _ security.SQLUsername, _ bool) (func(), error) {
 		return nil, errors.New("authentication rejected by configuration")
 	}, nil
 }
