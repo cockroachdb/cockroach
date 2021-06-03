@@ -11,6 +11,7 @@
 package security
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"strings"
@@ -27,7 +28,7 @@ var certPrincipalMap struct {
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster. It
 // returns an optional func that is run at connection close.
-type UserAuthHook func(SQLUsername, bool) (connClose func(), _ error)
+type UserAuthHook func(context.Context, SQLUsername, bool) (connClose func(), _ error)
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
@@ -108,7 +109,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 	}
 
-	return func(requestedUser SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
 		// TODO(marc): we may eventually need stricter user syntax rules.
 		if requestedUser.Undefined() {
 			return nil, errors.New("user is missing")
@@ -146,7 +147,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
-	return func(requestedUser SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
 		if requestedUser.Undefined() {
 			return nil, errors.New("user is missing")
 		}
@@ -160,7 +161,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 		}
 
 		// If the requested user has an empty password, disallow authentication.
-		if len(password) == 0 || CompareHashAndPassword(hashedPassword, password) != nil {
+		if len(password) == 0 || CompareHashAndPassword(ctx, hashedPassword, password) != nil {
 			return nil, errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
 		}
 

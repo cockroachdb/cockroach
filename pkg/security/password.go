@@ -11,12 +11,18 @@
 package security
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"runtime"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 )
@@ -56,12 +62,22 @@ func appendEmptySha256(password string) []byte {
 // CompareHashAndPassword tests that the provided bytes are equivalent to the
 // hash of the supplied password. If they are not equivalent, returns an
 // error.
-func CompareHashAndPassword(hashedPassword []byte, password string) error {
+func CompareHashAndPassword(ctx context.Context, hashedPassword []byte, password string) error {
+	sem := getBcryptSem(ctx)
+	if err := sem.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer sem.Release(1)
 	return bcrypt.CompareHashAndPassword(hashedPassword, appendEmptySha256(password))
 }
 
 // HashPassword takes a raw password and returns a bcrypt hashed password.
-func HashPassword(password string) ([]byte, error) {
+func HashPassword(ctx context.Context, password string) ([]byte, error) {
+	sem := getBcryptSem(ctx)
+	if err := sem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer sem.Release(1)
 	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
 }
 
@@ -88,3 +104,45 @@ var MinPasswordLength = settings.RegisterIntSetting(
 	1,
 	settings.NonNegativeInt,
 )
+
+// bcryptSemOnce wraps a semaphore that limits the number of concurrent calls
+// to the bcrypt hash functions. This is needed to avoid the risk of a
+// DoS attacks by malicious users or broken client apps that would
+// starve the server of CPU resources just by computing bcrypt hashes.
+//
+// We use a sync.Once to delay the creation of the semaphore to the
+// first time the password functions are used. This gives a chance to
+// the server process to update GOMAXPROCS before we compute the
+// maximum amount of concurrency for the semaphore.
+var bcryptSemOnce struct {
+	sem  semaphore.Semaphore
+	once sync.Once
+}
+
+// envMaxBcryptConcurrency allows a user to override the semaphore
+// configuration using an environment variable.
+// If the env var is set to a value >= 1, that value is used.
+// Otherwise, a default is computed from the configure GOMAXPROCS.
+var envMaxBcryptConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_BCRYPT_CONCURRENCY", 0)
+
+// getBcryptSem retrieves the bcrypt semaphore.
+func getBcryptSem(ctx context.Context) semaphore.Semaphore {
+	bcryptSemOnce.once.Do(func() {
+		var n int
+		if envMaxBcryptConcurrency >= 1 {
+			// The operator knows better. Use what they tell us to use.
+			n = envMaxBcryptConcurrency
+		} else {
+			// We divide by 10 so that the max CPU usage of bcrypt checks
+			// never exceeds 10% of total CPU resources allocated to this
+			// process.
+			n = runtime.GOMAXPROCS(-1) / 10
+		}
+		if n < 1 {
+			n = 1
+		}
+		log.Infof(ctx, "configured maximum bcrypt concurrency: %d", n)
+		bcryptSemOnce.sem = semaphore.New(n)
+	})
+	return bcryptSemOnce.sem
+}
