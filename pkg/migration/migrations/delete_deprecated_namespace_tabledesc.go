@@ -31,10 +31,8 @@ func deleteDeprecatedNamespaceTableDescriptorMigration(
 	const pageSize = 1000
 	deprecatedTablePrefix := d.Codec.TablePrefix(uint32(keys.DeprecatedNamespaceTableID))
 	deprecatedTableDescKey := d.Codec.DescMetadataKey(keys.DeprecatedNamespaceTableID)
-	namespaceNameKey := catalogkeys.MakeNameMetadataKey(
-		d.Codec, keys.SystemDatabaseID, keys.PublicSchemaID, `namespace`)
-	namespace2NameKey := catalogkeys.MakeNameMetadataKey(
-		d.Codec, keys.SystemDatabaseID, keys.PublicSchemaID, `namespace2`)
+	namespaceNameKey := catalogkeys.MakePublicObjectNameKey(d.Codec, keys.SystemDatabaseID, `namespace`)
+	namespace2NameKey := catalogkeys.MakePublicObjectNameKey(d.Codec, keys.SystemDatabaseID, `namespace2`)
 
 	log.Info(ctx, "removing references to deprecated system.namespace table descriptor")
 	return d.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -77,10 +75,10 @@ func checkDeprecatedEntries(
 		var newKey roachpb.Key
 		if parentID == keys.RootNamespaceID {
 			// This is a database key, look for it in the new namespace table.
-			newKey = catalogkeys.NewDatabaseKey(name).Key(codec)
+			newKey = catalogkeys.MakeDatabaseNameKey(codec, name)
 		} else {
 			// This is a table key, look for it in the new namespace table.
-			newKey = catalogkeys.NewPublicTableKey(parentID, name).Key(codec)
+			newKey = catalogkeys.MakePublicObjectNameKey(codec, parentID, name)
 		}
 		b.Get(newKey)
 	}

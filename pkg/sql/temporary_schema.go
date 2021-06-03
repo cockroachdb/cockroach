@@ -97,7 +97,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	ctx context.Context, dbID descpb.ID,
 ) (descpb.ID, error) {
 	tempSchemaName := p.TemporarySchemaName()
-	sKey := catalogkeys.NewSchemaKey(dbID, tempSchemaName)
+	sKey := catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, tempSchemaName)
 	schemaID, err := catalogkv.GetDescriptorID(ctx, p.txn, p.ExecCfg().Codec, sKey)
 	if err != nil {
 		return descpb.InvalidID, err
@@ -107,10 +107,10 @@ func (p *planner) getOrCreateTemporarySchema(
 		if err != nil {
 			return descpb.InvalidID, err
 		}
-		if err := p.CreateSchemaNamespaceEntry(ctx, sKey.Key(p.ExecCfg().Codec), id); err != nil {
+		if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), id); err != nil {
 			return descpb.InvalidID, err
 		}
-		p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
+		p.sessionDataMutator.SetTemporarySchemaName(sKey.GetName())
 		p.sessionDataMutator.SetTemporarySchemaIDForDatabase(uint32(dbID), uint32(id))
 		return id, nil
 	}
@@ -195,7 +195,8 @@ func cleanupSessionTempObjects(
 			// itself may still exist (eg. a temporary table was created and then
 			// dropped). So we remove the namespace table entry of the temporary
 			// schema.
-			if err := catalogkv.RemoveSchemaNamespaceEntry(ctx, txn, codec, id, tempSchemaName); err != nil {
+			key := catalogkeys.MakeSchemaNameKey(codec, id, tempSchemaName)
+			if err := txn.Del(ctx, key); err != nil {
 				return err
 			}
 		}

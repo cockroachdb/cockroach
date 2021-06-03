@@ -120,19 +120,19 @@ func getTableCreateParams(
 	tableName *tree.TableName,
 	kind tree.RequiredTableKind,
 	ifNotExists bool,
-) (tKey catalogkeys.DescriptorKey, schemaID descpb.ID, err error) {
+) (schemaID descpb.ID, err error) {
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
 	if tableName.Schema() == tree.PublicSchema {
 		if _, ok := types.PublicSchemaAliases[tableName.Object()]; ok {
-			return nil, 0, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
+			return descpb.InvalidID, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
 		}
 	}
 
 	if persistence.IsTemporary() {
 		if !params.SessionData().TempTablesEnabled {
-			return nil, 0, errors.WithTelemetry(
+			return descpb.InvalidID, errors.WithTelemetry(
 				pgerror.WithCandidateCode(
 					errors.WithHint(
 						errors.WithIssueLink(
@@ -151,20 +151,18 @@ func getTableCreateParams(
 		var err error
 		schemaID, err = params.p.getOrCreateTemporarySchema(params.ctx, dbID)
 		if err != nil {
-			return nil, 0, err
+			return descpb.InvalidID, err
 		}
-		tKey = catalogkeys.NewTableKey(dbID, schemaID, tableName.Table())
 	} else {
 		// Otherwise, find the ID of the schema to create the table within.
 		var err error
 		schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, dbID, tableName.Schema())
 		if err != nil {
-			return nil, 0, err
+			return descpb.InvalidID, err
 		}
 		if schemaID != keys.PublicSchemaID {
 			sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 		}
-		tKey = catalogkv.MakeObjectNameKey(dbID, schemaID, tableName.Table())
 	}
 
 	if persistence.IsUnlogged() {
@@ -178,7 +176,7 @@ func getTableCreateParams(
 	// Check permissions on the schema.
 	if err := params.p.canCreateOnSchema(
 		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
-		return nil, 0, err
+		return descpb.InvalidID, err
 	}
 
 	desc, err := catalogkv.GetDescriptorCollidingWithObject(
@@ -190,7 +188,7 @@ func getTableCreateParams(
 		tableName.Table(),
 	)
 	if err != nil {
-		return nil, descpb.InvalidID, err
+		return descpb.InvalidID, err
 	}
 	if desc != nil {
 		// Ensure that the descriptor that does exist has the appropriate type.
@@ -212,7 +210,7 @@ func getTableCreateParams(
 			// Only complain about mismatched types for
 			// if not exists clauses.
 			if mismatchedType && ifNotExists {
-				return nil, descpb.InvalidID, pgerror.Newf(pgcode.WrongObjectType,
+				return descpb.InvalidID, pgerror.Newf(pgcode.WrongObjectType,
 					"%q is not a %s",
 					tableName.Table(),
 					kind)
@@ -221,23 +219,23 @@ func getTableCreateParams(
 
 		// Check if the object already exists in a dropped state
 		if desc.Dropped() {
-			return nil, descpb.InvalidID, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			return descpb.InvalidID, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"%s %q is being dropped, try again later",
 				kind,
 				tableName.Table())
 		}
 
 		// Still return data in this case.
-		return tKey, schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.FQString())
+		return schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.FQString())
 	}
 
-	return tKey, schemaID, nil
+	return schemaID, nil
 }
 
 func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Table,
+	schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Table,
 		tree.ResolveRequireTableDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
@@ -360,7 +358,11 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
-		params.ctx, tKey.Key(params.ExecCfg().Codec), id, desc, params.EvalContext().Settings,
+		params.ctx,
+		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schemaID, n.n.Table.Table()),
+		id,
+		desc,
+		params.EvalContext().Settings,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
