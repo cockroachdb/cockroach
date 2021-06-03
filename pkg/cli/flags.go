@@ -770,10 +770,12 @@ func init() {
 	// Make the non-SQL client commands also recognize --url in strict SSL mode
 	// and ensure they can connect to clusters that use a cluster-name.
 	for _, cmd := range clientCmds {
-		if f := flagSetForCmd(cmd).Lookup(cliflags.URL.Name); f != nil {
-			// --url already registered above, nothing to do.
+		if fl := flagSetForCmd(cmd).Lookup(cliflags.URL.Name); fl != nil {
+			// --url already registered above: this is a SQL client command.
+			// The code below is not intended for it.
 			continue
 		}
+
 		f := cmd.PersistentFlags()
 		varFlag(f, urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
 
