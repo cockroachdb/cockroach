@@ -415,9 +415,14 @@ func defaultSaramaConfig() *saramaConfig {
 	// to test this one more before changing it.
 	config.Flush.MaxMessages = 1000
 
-	// config.Producer.Flush.Messages is set to 1 so we don't need this, but
-	// sarama prints scary things to the logs if we don't.
-	config.Flush.Frequency = jsonDuration(time.Hour)
+	// Setting Frequency to 0 disables time-based flushes. This is
+	// OK because we set Flush.Messages = 1, which should mean
+	// that sarama will always try to flush its buffer if it has
+	// at least 1 message in it.
+	//
+	// This will produce a warning at the start of a changefeed
+	// that may alarm some users.
+	config.Flush.Frequency = jsonDuration(0)
 
 	return config
 }
