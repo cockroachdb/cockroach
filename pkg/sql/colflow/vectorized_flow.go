@@ -454,11 +454,9 @@ type flowCreatorHelper interface {
 type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colmem.Allocator,
-		input colexecop.Operator,
+		input colexecargs.OpWithMetaInfo,
 		typs []*types.T,
 		getStats func() []*execinfrapb.ComponentStats,
-		metadataSources []colexecop.MetadataSource,
-		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
 	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
@@ -467,13 +465,11 @@ type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
-	input colexecop.Operator,
+	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	getStats func() []*execinfrapb.ComponentStats,
-	metadataSources []colexecop.MetadataSource,
-	toClose []colexecop.Closer,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, input, typs, getStats, metadataSources, toClose)
+	return colrpc.NewOutbox(allocator, input, typs, getStats)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -707,7 +703,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
-		op.Root, outputTyps, getStats, op.MetadataSources, op.ToClose,
+		op, outputTyps, getStats,
 	)
 	if err != nil {
 		return nil, err
