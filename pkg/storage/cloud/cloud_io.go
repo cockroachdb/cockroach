@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -21,12 +22,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -92,13 +95,21 @@ const MaxDelayedRetryAttempts = 3
 // fails. It knows about specific kinds of errors that need longer retry
 // delays than normal.
 func DelayedRetry(
-	ctx context.Context, customDelay func(error) time.Duration, fn func() error,
+	ctx context.Context, opName string, customDelay func(error) time.Duration, fn func() error,
 ) error {
+	span := tracing.SpanFromContext(ctx)
+	var numRetries int
 	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), MaxDelayedRetryAttempts, func() error {
 		err := fn()
 		if err == nil {
 			return nil
 		}
+		retryEvent := &roachpb.ExternalStorageRetryTracingEvent{
+			Operation:      opName,
+			Retries:        int32(numRetries),
+			RetryableError: fmt.Sprintf("%v", err),
+		}
+		span.RecordStructured(retryEvent)
 		if customDelay != nil {
 			if d := customDelay(err); d > 0 {
 				select {
@@ -116,6 +127,7 @@ func DelayedRetry(
 			case <-ctx.Done():
 			}
 		}
+		numRetries++
 		return err
 	})
 }
@@ -162,7 +174,7 @@ var _ io.ReadCloser = &ResumingReader{}
 
 // Open opens the reader at its current offset.
 func (r *ResumingReader) Open() error {
-	return DelayedRetry(r.Ctx, r.ErrFn, func() error {
+	return DelayedRetry(r.Ctx, "ResumingReader.Open", r.ErrFn, func() error {
 		var readErr error
 		r.Reader, readErr = r.Opener(r.Ctx, r.Pos)
 		return readErr
@@ -172,6 +184,7 @@ func (r *ResumingReader) Open() error {
 // Read implements io.Reader.
 func (r *ResumingReader) Read(p []byte) (int, error) {
 	var lastErr error
+	span := tracing.SpanFromContext(r.Ctx)
 	for retries := 0; lastErr == nil; retries++ {
 		if r.Reader == nil {
 			lastErr = r.Open()
@@ -191,6 +204,12 @@ func (r *ResumingReader) Read(p []byte) (int, error) {
 		}
 
 		if isResumableHTTPError(lastErr) {
+			retryEvent := &roachpb.ExternalStorageRetryTracingEvent{
+				Operation:      "ResumingReader.Read",
+				Retries:        int32(retries),
+				RetryableError: fmt.Sprintf("%v", lastErr),
+			}
+			span.RecordStructured(retryEvent)
 			if retries >= maxNoProgressReads {
 				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
 			}
