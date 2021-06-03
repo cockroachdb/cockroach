@@ -112,4 +112,4 @@ func (m *mutationDescGetter) RemoveObjectComments(ctx context.Context, id descpb
 	return err
 }
 
-var _ scmutationexec.MutableDescGetter = (*mutationDescGetter)(nil)
+var _ scmutationexec.Catalog = (*mutationDescGetter)(nil)
