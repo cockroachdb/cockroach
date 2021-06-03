@@ -187,7 +187,7 @@ DROP TABLE foo, bar
 
 # Sequence sanity tests
 statement ok
-CREATE SEQUENCE SQ1;
+CREATE SEQUENCE sq1;
 
 statement ok
 CREATE TABLE blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
@@ -425,7 +425,7 @@ CREATE TABLE IF NOT EXISTS defaultdb.orders (
   );
 
 statement ok
-CREATE SEQUENCE defaultdb.SQ2;
+CREATE SEQUENCE defaultdb.sq2;
 
 statement ok
 CREATE TABLE defaultdb.shipments (
@@ -442,7 +442,7 @@ statement error "fk_customer_ref_customers" is referenced by foreign key from ta
 DROP TABLE defaultdb.customers;
 
 statement ok
-CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier;
+CREATE SEQUENCE defaultdb.sq1 OWNED BY defaultdb.shipments.carrier;
 
 statement error cannot drop table sq1 because other objects depend on it
 DROP TABLE defaultdb.shipments;
@@ -554,6 +554,43 @@ DROP TYPE defaultdb.typ;
 statement ok
 COMMIT;
 
+# Drop schema testing
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SCHEMA db1.sc1
+
+
+statement ok
+CREATE SEQUENCE db1.sc1.sq1
+
+statement ok
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
+
+statement ok
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
+
+statement ok
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+
+statement ok
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+
+statement ok
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM('a')
+
+statement ok
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
+DROP SCHEMA db1.sc1 CASCADE
+
+statement ok
+DROP DATABASE db1
 
 # Drop database testing
 statement ok
@@ -563,10 +600,10 @@ statement ok
 CREATE SCHEMA db1.sc1
 
 statement ok
-CREATE SEQUENCE db1.public.SQ1
+CREATE SEQUENCE db1.public.sq1
 
 statement ok
-CREATE SEQUENCE db1.sc1.SQ1
+CREATE SEQUENCE db1.sc1.sq1
 
 statement ok
 CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
@@ -592,7 +629,10 @@ CREATE TYPE db1.sc1.typ AS ENUM('a')
 statement ok
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
 
-statement error cannot drop sequence sq1 because other objects depend on it
+statement error schema "sc1" is not empty and CASCADE was not specified
+DROP SCHEMA db1.sc1
+
+statement error database "db1" is not empty and CASCADE was not specified
 DROP DATABASE db1
 
 statement ok

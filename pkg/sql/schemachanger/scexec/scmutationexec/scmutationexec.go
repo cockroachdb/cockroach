@@ -161,6 +161,19 @@ func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) er
 		return err
 	}
 	mutDesc.AddReferencingDescriptorID(op.DescID)
+	// Sanity: Validate that a back reference exists by now.
+	desc, err := m.catalog.GetAnyDescriptorByID(ctx, op.DescID)
+	if err != nil {
+		return err
+	}
+	refDescs, err := desc.GetReferencedDescIDs()
+	if err != nil {
+		return err
+	}
+	if !refDescs.Contains(op.TypeID) {
+		errors.AssertionFailedf("Back reference for type %d is missing inside descriptor %d.",
+			op.TypeID, op.DescID)
+	}
 	return nil
 }
 

@@ -159,10 +159,23 @@ func (b *buildContext) alterTableAddColumn(
 		if err != nil {
 			panic(err)
 		}
-		b.addNode(scpb.Target_ADD, &scpb.TypeReference{
-			TypeID: typeDesc.GetID(),
-			DescID: table.GetID(),
-		})
+		// Only add a type reference node only if there isn't
+		// any existing reference inside this table. This makes
+		// it easier to handle drop columns and other operations,
+		// since those can for example only remove nodes.
+		found := false
+		for _, refID := range typeDesc.GetReferencingDescriptorIDs() {
+			if refID == table.GetID() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			b.addNode(scpb.Target_ADD, &scpb.TypeReference{
+				TypeID: typeDesc.GetID(),
+				DescID: table.GetID(),
+			})
+		}
 	}
 
 	b.addNode(scpb.Target_ADD, &scpb.Column{
@@ -644,17 +657,17 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 			}
 			b.dropSequenceDesc(ctx, table, tree.DropCascade)
 		}
-		// Setup logic to clean up the default expression,
-		// only if sequences are depending on it.
+		// Setup logic to clean up the default expression always.
+		defaultExpr := &scpb.DefaultExpression{
+			DefaultExpr:     col.GetDefaultExpr(),
+			TableID:         table.GetID(),
+			UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
+			ColumnID:        col.GetID()}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
+			b.addNode(scpb.Target_DROP, defaultExpr)
+		}
+		// If there was a sequence dependency clean that up next.
 		if col.NumUsesSequences() > 0 {
-			defaultExpr := &scpb.DefaultExpression{
-				DefaultExpr:     col.GetDefaultExpr(),
-				TableID:         table.GetID(),
-				UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-				ColumnID:        col.GetID()}
-			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
-				b.addNode(scpb.Target_DROP, defaultExpr)
-			}
 			// Drop the depends on within the sequence side.
 			for seqOrd := 0; seqOrd < col.NumUsesSequences(); seqOrd++ {
 				seqID := col.GetUsesSequenceID(seqOrd)

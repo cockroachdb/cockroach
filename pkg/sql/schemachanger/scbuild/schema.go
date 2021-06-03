@@ -47,11 +47,14 @@ func (b *buildContext) dropSchemaDesc(
 	if err != nil {
 		panic(err)
 	}
+	if behavior != tree.DropCascade && len(dropIDs) > 0 {
+		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"schema %q is not empty and CASCADE was not specified", sc.GetName()))
+	}
 	schemaNode := scpb.Schema{
 		SchemaID:         sc.GetID(),
 		DependentObjects: dropIDs,
 	}
-	// FIXME: Check for cascade
 	for _, descID := range dropIDs {
 		tableDesc, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, descID, tree.ObjectLookupFlagsWithRequired())
 		if err == nil {
@@ -67,7 +70,7 @@ func (b *buildContext) dropSchemaDesc(
 			if err != nil {
 				panic(err)
 			}
-			b.dropTypeDesc(ctx, typeDesc, behavior, true)
+			b.dropTypeDesc(ctx, typeDesc, behavior, true /* ignoreAlises*/)
 		} else {
 			panic(err)
 		}
