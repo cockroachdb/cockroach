@@ -248,6 +248,7 @@ func DescriptorsMatchingTargets(
 	searchPath sessiondata.SearchPath,
 	descriptors []catalog.Descriptor,
 	targets tree.TargetList,
+	asOf hlc.Timestamp,
 ) (DescriptorsMatched, error) {
 	ret := DescriptorsMatched{}
 
@@ -258,11 +259,16 @@ func DescriptorsMatchingTargets(
 
 	alreadyRequestedDBs := make(map[descpb.ID]struct{})
 	alreadyExpandedDBs := make(map[descpb.ID]struct{})
+	invalidRestoreTsErr := errors.Errorf("supplied backups do not cover requested time")
 	// Process all the DATABASE requests.
 	for _, d := range targets.Databases {
 		dbID, ok := resolver.DbsByName[string(d)]
 		if !ok {
-			return ret, errors.Errorf("unknown database %q", d)
+			// given a non-empty aost, it's possible that we're unable to find the database due to aost being set before gc ttl
+			if asOf.IsEmpty() {
+				return ret, errors.Errorf("database %q does not exist", d)
+			}
+			return ret, errors.Wrapf(invalidRestoreTsErr, "database %q does not exist, or invalid RESTORE timestamp", d)
 		}
 		if _, ok := alreadyRequestedDBs[dbID]; !ok {
 			desc := resolver.DescByID[dbID]
@@ -355,7 +361,10 @@ func DescriptorsMatchingTargets(
 			p.ObjectNamePrefix = prefix
 			doesNotExistErr := errors.Errorf(`table %q does not exist`, tree.ErrString(p))
 			if !found {
-				return ret, doesNotExistErr
+				if asOf.IsEmpty() {
+					return ret, doesNotExistErr
+				}
+				return ret, errors.Wrapf(invalidRestoreTsErr, `table %q does not exist, or invalid RESTORE timestamp`, tree.ErrString(p))
 			}
 			tableDesc, isTable := descI.(catalog.TableDescriptor)
 			// If the type assertion didn't work, then we resolved a type instead, so
@@ -513,7 +522,7 @@ func ResolveTargetsToDescriptors(
 
 	var matched DescriptorsMatched
 	if matched, err = DescriptorsMatchingTargets(ctx,
-		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets); err != nil {
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime); err != nil {
 		return nil, nil, err
 	}
 
