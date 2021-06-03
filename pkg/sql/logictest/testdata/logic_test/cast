@@ -60,3 +60,25 @@ SELECT _int8::INT4 FROM t64429
 
 statement error integer out of range for type int2
 SELECT _int4::INT2 FROM t64429
+
+# Regression test for #66067. Ensure that there is no correctness bug due to
+# improper casting of CHAR and VARCHAR.
+statement ok
+CREATE TABLE t66067_a (
+  a INT,
+  c CHAR(26),
+  CONSTRAINT c UNIQUE (c)
+);
+CREATE TABLE t66067_b (
+  a INT,
+  v VARCHAR(40)
+);
+INSERT INTO t66067_a VALUES (1, 'foo');
+INSERT INTO t66067_b VALUES (1, 'bar');
+
+query ITIT
+SELECT * FROM t66067_b b
+INNER LOOKUP JOIN t66067_a a ON b.a = a.a
+WHERE b.v = 'bar' AND a.c = 'foo'
+----
+1  bar  1  foo
