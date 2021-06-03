@@ -677,6 +677,7 @@ show_ranges_stmt ::=
 	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
 	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
 	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name
+	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_name '@' '*'
 
 show_range_for_row_stmt ::=
 	'SHOW' 'RANGE' 'FROM' 'TABLE' table_name 'FOR' 'ROW' '(' expr_list ')'
