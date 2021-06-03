@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -39,7 +40,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	input.Init(ctx)
-	outbox, err := NewOutbox(testAllocator, input, typs, nil /* getStats */, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(testAllocator, colexecargs.OpWithMetaInfo{Root: input}, typs, nil /* getStats */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -94,14 +95,22 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	// uint32 that is set atomically when the outbox drains a metadata source.
 	newOutboxWithMetaSources := func(allocator *colmem.Allocator) (*Outbox, *uint32, error) {
 		var sourceDrained uint32
-		outbox, err := NewOutbox(allocator, input, typs, nil /* getStats */, []colexecop.MetadataSource{
-			colexectestutils.CallbackMetadataSource{
-				DrainMetaCb: func() []execinfrapb.ProducerMetadata {
-					atomic.StoreUint32(&sourceDrained, 1)
-					return nil
+		outbox, err := NewOutbox(
+			allocator,
+			colexecargs.OpWithMetaInfo{
+				Root: input,
+				MetadataSources: []colexecop.MetadataSource{
+					colexectestutils.CallbackMetadataSource{
+						DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+							atomic.StoreUint32(&sourceDrained, 1)
+							return nil
+						},
+					},
 				},
 			},
-		}, nil /* toClose */)
+			typs,
+			nil, /* getStats */
+		)
 		if err != nil {
 			return nil, nil, err
 		}
