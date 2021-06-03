@@ -35,6 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats/clusterindexusagestats"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats/indexstatslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -268,6 +271,12 @@ type Server struct {
 	// pool is the parent monitor for all session monitors.
 	pool *mon.BytesMonitor
 
+	// indexUsageStats tracks the index usage statistics.
+	indexUsageStats indexusagestats.Provider
+
+	// clusterIndexUsageStats is used to fetch cluster-wide index usage statistics.
+	clusterIndexUsageStats clusterindexusagestats.Provider
+
 	// Metrics is used to account normal queries.
 	Metrics Metrics
 
@@ -319,7 +328,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.SQLStatReset,
 		reportedSQLStats,
 	)
-	return &Server{
+	s := &Server{
 		cfg:             cfg,
 		Metrics:         metrics,
 		InternalMetrics: makeMetrics(cfg, true /* internal */),
@@ -327,7 +336,17 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlStats:        sqlStats,
 		reportedStats:   reportedSQLStats,
 		reCache:         tree.NewRegexpCache(512),
+		indexUsageStats: indexstatslocal.New(&indexstatslocal.Config{
+			ChannelSize: indexstatslocal.DefaultChannelSize,
+			Setting:     cfg.Settings,
+			Knobs:       cfg.IndexUsageStatsTestingKnobs,
+		}),
+		clusterIndexUsageStats: clusterindexusagestats.New(indexstatslocal.New(&indexstatslocal.Config{
+			Setting: cfg.Settings,
+		}), cfg.SQLStatusServer),
 	}
+
+	return s
 }
 
 func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
@@ -380,6 +399,7 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
+	s.indexUsageStats.Start(ctx, stopper)
 	// Start a loop to clear SQL stats at the max reset interval. This is
 	// to ensure that we always have some worker clearing SQL stats to avoid
 	// continually allocating space for the SQL stats. Additionally, spawn
@@ -615,6 +635,17 @@ func (s *Server) ServeConn(
 	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
+// GetLocalIndexStatisticsReader returns a node-local indexusagestats.Reader.
+func (s *Server) GetLocalIndexStatisticsReader() indexusagestats.Reader {
+	return s.indexUsageStats
+}
+
+// GetClusterIndexStatisticsProvider returns a cluster-wide
+// clusterindexusagestats.Provider.
+func (s *Server) GetClusterIndexStatisticsProvider() clusterindexusagestats.Provider {
+	return s.clusterIndexUsageStats
+}
+
 // newSessionData a SessionData that can be passed to newConnExecutor.
 func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
@@ -728,12 +759,14 @@ func (s *Server) newConnExecutor(
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
-		ctxHolder:                 ctxHolder{connCtx: ctx},
-		phaseTimes:                sessionphase.NewTimes(),
-		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
-		executorType:              executorTypeExec,
-		hasCreatedTemporarySchema: false,
-		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
+		ctxHolder:                      ctxHolder{connCtx: ctx},
+		phaseTimes:                     sessionphase.NewTimes(),
+		rng:                            rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+		executorType:                   executorTypeExec,
+		hasCreatedTemporarySchema:      false,
+		stmtDiagnosticsRecorder:        s.cfg.StmtDiagnosticsRecorder,
+		indexUsageStatsWriter:          s.indexUsageStats,
+		clusterIndexUsageStatsProvider: s.GetClusterIndexStatisticsProvider(),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1280,6 +1313,13 @@ type connExecutor struct {
 	// stmtDiagnosticsRecorder is used to track which queries need to have
 	// information collected.
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
+
+	// indexUsageStatsWriter is used to track index usage stats.
+	indexUsageStatsWriter indexusagestats.Writer
+
+	// clusterIndexUsageStatsProvider is used to surface cluster-wide index usage
+	// statistics.
+	clusterIndexUsageStatsProvider clusterindexusagestats.Provider
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -2281,19 +2321,21 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsResetter:   ex.server,
 			CompactEngineSpan:  ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutator:       ex.dataMutator,
-		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
-		Tracing:              &ex.sessionTracing,
-		NodesStatusServer:    ex.server.cfg.NodesStatusServer,
-		SQLStatusServer:      ex.server.cfg.SQLStatusServer,
-		MemMetrics:           &ex.memMetrics,
-		Descs:                &ex.extraTxnState.descCollection,
-		ExecCfg:              ex.server.cfg,
-		DistSQLPlanner:       ex.server.cfg.DistSQLPlanner,
-		TxnModesSetter:       ex,
-		Jobs:                 &ex.extraTxnState.jobs,
-		SchemaChangeJobCache: ex.extraTxnState.schemaChangeJobsCache,
-		statsStorage:         ex.server.sqlStats,
+		SessionMutator:         ex.dataMutator,
+		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
+		Tracing:                &ex.sessionTracing,
+		NodesStatusServer:      ex.server.cfg.NodesStatusServer,
+		SQLStatusServer:        ex.server.cfg.SQLStatusServer,
+		MemMetrics:             &ex.memMetrics,
+		Descs:                  &ex.extraTxnState.descCollection,
+		ExecCfg:                ex.server.cfg,
+		DistSQLPlanner:         ex.server.cfg.DistSQLPlanner,
+		TxnModesSetter:         ex,
+		Jobs:                   &ex.extraTxnState.jobs,
+		SchemaChangeJobCache:   ex.extraTxnState.schemaChangeJobsCache,
+		statsStorage:           ex.server.sqlStats,
+		indexUsageStatsWriter:  ex.indexUsageStatsWriter,
+		clusterIndexUsageStats: ex.clusterIndexUsageStatsProvider,
 	}
 }
 

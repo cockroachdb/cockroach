@@ -140,3 +140,14 @@ func (t *tenantStatusServer) ListDistSQLFlows(
 ) (*serverpb.ListDistSQLFlowsResponse, error) {
 	return t.ListLocalDistSQLFlows(ctx, request)
 }
+
+func (t *tenantStatusServer) IndexUsageStatistics(
+	ctx context.Context, request *serverpb.IndexUsageStatisticsRequest,
+) (*serverpb.IndexUsageStatisticsResponse, error) {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	reader := t.sqlServer.pgServer.SQLServer.GetLocalIndexStatisticsReader()
+	return serializeIndexUsageStats(request, reader)
+}

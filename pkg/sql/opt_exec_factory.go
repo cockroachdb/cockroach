@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -88,6 +89,19 @@ func (ef *execFactory) ConstructScan(
 	// Create a scanNode.
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
+
+	indexUsageMd := indexusagestats.MetaData{
+		Key: roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		},
+	}
+	if scan.isFull {
+		indexUsageMd.UsageType = indexusagestats.FullScan
+	} else {
+		indexUsageMd.UsageType = indexusagestats.NonFullScan
+	}
+	ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(context.TODO(), indexUsageMd)
 
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
@@ -637,6 +651,15 @@ func (ef *execFactory) ConstructLookupJoin(
 		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	}
 
+	indexUsageMd := indexusagestats.MetaData{
+		Key: roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		},
+		UsageType: indexusagestats.LookupJoin,
+	}
+	ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(context.TODO(), indexUsageMd)
+
 	n := &lookupJoinNode{
 		input:                      input.(planNode),
 		table:                      tableScan,
@@ -757,6 +780,16 @@ func (ef *execFactory) ConstructInvertedJoin(
 	}
 	tableScan.index = idx
 
+	indexUsageMd := indexusagestats.MetaData{
+		Key: roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		},
+		UsageType: indexusagestats.InvertedJoin,
+	}
+
+	ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(context.TODO(), indexUsageMd)
+
 	n := &invertedJoinNode{
 		input:                     input.(planNode),
 		table:                     tableScan,
@@ -811,6 +844,16 @@ func (ef *execFactory) constructScanForZigzag(
 	if err := scan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
+
+	indexUsageMd := indexusagestats.MetaData{
+		Key: roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tableDesc.GetID()),
+			IndexID: roachpb.IndexID(index.GetID()),
+		},
+		UsageType: indexusagestats.ZigzagJoin,
+	}
+
+	ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(context.TODO(), indexUsageMd)
 
 	scan.index = index
 

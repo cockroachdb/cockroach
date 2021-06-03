@@ -1,0 +1,83 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.sql;
+option go_package = "roachpb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+// IndexUsageStatistics represents the index usage statistics per index.
+// Note that these stats are cleared for every
+// sql.metrics.index_usage_stats.reset_interval.
+// N.B. When fields are added to this struct, make sure to update
+// (*IndexUsageStatistics).Add in roachpb/index_usage_stats.go.
+message IndexUsageStatistics {
+  // FullScanCount is the number of times full scan is being performed on this
+  // index.
+  optional uint64 full_scan_count = 1 [(gogoproto.nullable) = false];
+
+  // NonFullScanCount is the number of times non-full scan is being performed on
+  // this index.
+  optional uint64 non_full_scan_count = 2 [(gogoproto.nullable) = false];
+
+  // LookupJoinCount is the number of times lookup join is being performed on
+  // this index.
+  optional uint64 lookup_join_count = 3 [(gogoproto.nullable) = false];
+
+  // ZigzagCount is the number of times zigzag join is being performed on
+  // this index.
+  optional uint64 zigzag_join_count = 4 [(gogoproto.nullable) = false];
+
+  // InvertedCount is the number of times inverted join is being performed on
+  // this index.
+  optional uint64 inverted_join_count = 5 [(gogoproto.nullable) = false];
+
+  // LastScan is the timestamp that this index is last being scanned.
+  optional google.protobuf.Timestamp last_scan = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // TotalScanRows is the number rows that this index has been scanned through.
+  // TODO(azhng): Currently this field is unused.
+  optional uint64 total_scan_rows = 7 [(gogoproto.nullable) = false];
+
+  // TotalScanRows is the number rows that has been updated in this index.
+  // TODO(azhng): Currently this field is unused.
+  optional uint64 update_counts = 8 [(gogoproto.nullable) = false];
+
+  // LastScan is the timestamp that this index is last being updated.
+  // TODO(azhng): Currently this field is unused.
+  optional uint64 total_updated_rows = 9 [(gogoproto.nullable) = false];
+
+  // LastUpdate is the timestamp that this index is being updated.
+  // TODO(azhng): Currently this field is unused.
+  optional google.protobuf.Timestamp last_update = 10 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // LastJoin is the timestamp that this index is last used for a join.
+  optional google.protobuf.Timestamp last_join = 11 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
+// IndexUsageKey uniquely identifies an index. It's a tuple of TableID and a
+// IndexID.
+message IndexUsageKey {
+  // TableID is the ID of the table this index is created on. This is same as
+  // descpb.TableID and is unique within the cluster.
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID", (gogoproto.casttype) = "TableID"];
+
+  // IndexID is the ID of the index within the scope of the given table.
+  optional uint32 index_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID" ];
+}
+
+// CollectedIndexUsageStatistics wraps collected index key and its usage
+// statistics.
+message CollectedIndexUsageStatistics {
+  optional IndexUsageKey key = 1 [(gogoproto.nullable) = false];
+  optional IndexUsageStatistics stats = 2 [(gogoproto.nullable) = false];
+}

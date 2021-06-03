@@ -394,6 +394,27 @@ CREATE TABLE crdb_internal.index_columns (
    column_direction STRING NULL,
    implicit BOOL NULL
 )  {}  {}
+CREATE TABLE crdb_internal.index_usage_statistics (
+   table_id INT8 NOT NULL,
+   index_id INT8 NOT NULL,
+   full_scans INT8 NOT NULL,
+   non_full_scans INT8 NOT NULL,
+   lookup_joins INT8 NOT NULL,
+   inverted_joins INT8 NOT NULL,
+   zigzag_joins INT8 NOT NULL,
+   last_scan TIMESTAMPTZ NULL,
+   last_join TIMESTAMPTZ NULL
+)  CREATE TABLE crdb_internal.index_usage_statistics (
+   table_id INT8 NOT NULL,
+   index_id INT8 NOT NULL,
+   full_scans INT8 NOT NULL,
+   non_full_scans INT8 NOT NULL,
+   lookup_joins INT8 NOT NULL,
+   inverted_joins INT8 NOT NULL,
+   zigzag_joins INT8 NOT NULL,
+   last_scan TIMESTAMPTZ NULL,
+   last_join TIMESTAMPTZ NULL
+)  {}  {}
 CREATE TABLE crdb_internal.interleaved (
    database_name STRING NOT NULL,
    schema_name STRING NOT NULL,

@@ -27,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats/clusterindexusagestats"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats/indexstatslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -92,6 +95,10 @@ type extendedEvalContext struct {
 	SchemaChangeJobCache map[descpb.ID]*jobs.Job
 
 	statsStorage sqlstats.Storage
+
+	indexUsageStatsWriter indexusagestats.Writer
+
+	clusterIndexUsageStats clusterindexusagestats.Provider
 
 	SchemaChangerState *SchemaChangerState
 }
@@ -410,9 +417,19 @@ func internalExtendedEvalCtx(
 ) extendedEvalContext {
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
+	var indexUsageStats indexusagestats.Writer
 	var sqlStatsResetter tree.SQLStatsResetter
 	if execCfg.InternalExecutor != nil {
 		sqlStatsResetter = execCfg.InternalExecutor.s
+		if execCfg.InternalExecutor.s != nil {
+			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
+		} else {
+			// If the indexUsageStats is nil from the sql.Server, we create a dummy
+			// index usage stats collector.
+			indexUsageStats = indexstatslocal.New(&indexstatslocal.Config{
+				Setting: execCfg.Settings,
+			})
+		}
 	}
 
 	return extendedEvalContext{
@@ -431,13 +448,14 @@ func internalExtendedEvalCtx(
 			InternalExecutor: execCfg.InternalExecutor,
 			SQLStatsResetter: sqlStatsResetter,
 		},
-		SessionMutator:    dataMutator,
-		VirtualSchemas:    execCfg.VirtualSchemas,
-		Tracing:           &SessionTracing{},
-		NodesStatusServer: execCfg.NodesStatusServer,
-		Descs:             tables,
-		ExecCfg:           execCfg,
-		DistSQLPlanner:    execCfg.DistSQLPlanner,
+		SessionMutator:        dataMutator,
+		VirtualSchemas:        execCfg.VirtualSchemas,
+		Tracing:               &SessionTracing{},
+		NodesStatusServer:     execCfg.NodesStatusServer,
+		Descs:                 tables,
+		ExecCfg:               execCfg,
+		DistSQLPlanner:        execCfg.DistSQLPlanner,
+		indexUsageStatsWriter: indexUsageStats,
 	}
 }
 

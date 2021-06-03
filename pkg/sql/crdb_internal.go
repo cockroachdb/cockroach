@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats/clusterindexusagestats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -106,6 +107,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalGossipLivenessTableID:            crdbInternalGossipLivenessTable,
 		catconstants.CrdbInternalGossipNetworkTableID:             crdbInternalGossipNetworkTable,
 		catconstants.CrdbInternalIndexColumnsTableID:              crdbInternalIndexColumnsTable,
+		catconstants.CrdbInternalIndexUsageStatisticsTableID:      crdbInternalIndexUsageStatistics,
 		catconstants.CrdbInternalInflightTraceSpanTableID:         crdbInternalInflightTraceSpanTable,
 		catconstants.CrdbInternalJobsTableID:                      crdbInternalJobsTable,
 		catconstants.CrdbInternalKVNodeStatusTableID:              crdbInternalKVNodeStatusTable,
@@ -844,6 +846,13 @@ func getSQLStats(p *planner, virtualTableName string) (sqlstats.Storage, error) 
 		return nil, errors.Newf("%s cannot be used in this context", virtualTableName)
 	}
 	return p.extendedEvalCtx.statsStorage, nil
+}
+
+func getClusterIndexUsageStatsProvider(p *planner) (clusterindexusagestats.Provider, error) {
+	if p.extendedEvalCtx.clusterIndexUsageStats == nil {
+		return nil, errors.New("unable to retrieve index usage statistics")
+	}
+	return p.extendedEvalCtx.clusterIndexUsageStats, nil
 }
 
 // ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
@@ -4636,5 +4645,85 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			return err
 		}
 		return nil
+	},
+}
+
+var crdbInternalIndexUsageStatistics = virtualSchemaTable{
+	comment: `cluster-wide index usage statistics (in-memory, not durable).` +
+		`This table is wiped periodically and it's an expensive operation.'`,
+	schema: `
+CREATE TABLE crdb_internal.index_usage_statistics (
+  table_id        INT NOT NULL,
+	index_id        INT NOT NULL,
+  full_scans      INT NOT NULL,
+  non_full_scans  INT NOT NULL,
+  lookup_joins    INT NOT NULL,
+  inverted_joins  INT NOT NULL,
+  zigzag_joins    INT NOT NULL,
+  last_scan       TIMESTAMPTZ,
+  last_join       TIMESTAMPTZ
+)
+`,
+	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		statsProvider, err := getClusterIndexUsageStatsProvider(p)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		statsProvider.Clear()
+
+		// This triggers cluster-wide RPC fanout.
+		err = statsProvider.LoadData(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		row := make(tree.Datums, 9 /* number of columns for this virtual table */)
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+					tableID := table.GetID()
+					return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) error {
+						indexID := idx.GetID()
+						stats := statsProvider.GetIndexUsageStats(roachpb.IndexUsageKey{
+							TableID: roachpb.TableID(tableID),
+							IndexID: roachpb.IndexID(indexID),
+						})
+
+						lastScanTs := tree.DNull
+						if !stats.LastScan.IsZero() {
+							lastScanTs, err = tree.MakeDTimestampTZ(stats.LastScan, time.Nanosecond)
+							if err != nil {
+								return err
+							}
+						}
+
+						lastJoinTs := tree.DNull
+						if !stats.LastJoin.IsZero() {
+							lastJoinTs, err = tree.MakeDTimestampTZ(stats.LastJoin, time.Nanosecond)
+							if err != nil {
+								return err
+							}
+						}
+
+						row = row[:0]
+
+						row = append(row,
+							tree.NewDInt(tree.DInt(tableID)),                 // tableID
+							tree.NewDInt(tree.DInt(indexID)),                 // indexID
+							tree.NewDInt(tree.DInt(stats.FullScanCount)),     // full_scans
+							tree.NewDInt(tree.DInt(stats.NonFullScanCount)),  // non_full_scans
+							tree.NewDInt(tree.DInt(stats.LookupJoinCount)),   // lookup_joins
+							tree.NewDInt(tree.DInt(stats.InvertedJoinCount)), // inverted_joins
+							tree.NewDInt(tree.DInt(stats.ZigzagJoinCount)),   // zigzag_joins
+							lastScanTs, // last_scan
+							lastJoinTs, // last_join
+						)
+
+						return pusher.pushRow(row...)
+					})
+				})
+		}
+		return setupGenerator(ctx, worker, stopper)
 	},
 }
