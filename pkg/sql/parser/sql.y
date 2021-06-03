@@ -5343,10 +5343,10 @@ show_transaction_stmt:
   }
 | SHOW TRANSACTION error // SHOW HELP: SHOW TRANSACTION
 
-// %Help: SHOW CREATE - display the CREATE statement for a table, sequence or view
+// %Help: SHOW CREATE - display the CREATE statement for a table, sequence, view, or database
 // %Category: DDL
 // %Text:
-// SHOW CREATE [ TABLE | SEQUENCE | VIEW ] <tablename>
+// SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE ] <object_name>
 // SHOW CREATE ALL TABLES
 // %SeeAlso: WEBDOCS/show-create-table.html
 show_create_stmt:
@@ -5354,21 +5354,31 @@ show_create_stmt:
   {
     $$.val = &tree.ShowCreate{Name: $3.unresolvedObjectName()}
   }
-| SHOW CREATE create_kw table_name
-  {
+| SHOW CREATE TABLE table_name
+	{
     /* SKIP DOC */
-    $$.val = &tree.ShowCreate{Name: $4.unresolvedObjectName()}
-  }
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeTable, Name: $4.unresolvedObjectName()}
+	}
+| SHOW CREATE VIEW table_name
+	{
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeView, Name: $4.unresolvedObjectName()}
+	}
+| SHOW CREATE SEQUENCE table_name
+	{
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSequence, Name: $4.unresolvedObjectName()}
+	}
+| SHOW CREATE DATABASE table_name
+	{
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeDatabase, Name: $4.unresolvedObjectName()}
+	}
 | SHOW CREATE ALL TABLES
   {
     $$.val = &tree.ShowCreateAllTables{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
-
-create_kw:
-  TABLE
-| VIEW
-| SEQUENCE
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv

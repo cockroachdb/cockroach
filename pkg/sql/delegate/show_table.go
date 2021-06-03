@@ -22,6 +22,41 @@ import (
 func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
 
+	switch n.Mode {
+	case tree.ShowCreateModeTable:
+		return d.delegateShowCreateTable(n)
+	case tree.ShowCreateModeView:
+		return d.delegateShowCreateTable(n)
+	case tree.ShowCreateModeSequence:
+		return d.delegateShowCreateTable(n)
+	case tree.ShowCreateModeDatabase:
+		return d.delegateShowCreateDatabase(n)
+	}
+
+	// should never reach this case, but need it for compiler
+	return d.delegateShowCreateTable(n)
+}
+
+func (d *delegator) delegateShowCreateDatabase (n *tree.ShowCreate) (tree.Statement, error) {
+	const showCreateQuery = `
+SELECT
+	name AS database_name,
+	create_statement
+FROM crdb_internal.databases
+WHERE name = '%s'
+;
+`
+
+	// checking if the database exists before running the sql
+	_, err := d.getSpecifiedOrCurrentDatabase(tree.Name(n.Name.Object()))
+	if err != nil {
+		return nil, err
+	}
+
+	return parse(fmt.Sprintf(showCreateQuery, n.Name))
+}
+
+func (d *delegator) delegateShowCreateTable (n *tree.ShowCreate) (tree.Statement, error) {
 	const showCreateQuery = `
 WITH zone_configs AS (
 		SELECT
