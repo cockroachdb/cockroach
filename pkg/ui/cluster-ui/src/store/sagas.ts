@@ -16,6 +16,7 @@ import { statementsSaga } from "./statements";
 import { nodesSaga } from "./nodes";
 import { livenessSaga } from "./liveness";
 import { sessionsSaga } from "./sessions";
+import { transactionsSaga } from "./transactions";
 import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
 import { sqlStatsSaga } from "./sqlStats";
@@ -29,6 +30,7 @@ export function* sagas(cacheInvalidationPeriod?: number) {
     fork(livenessSaga, cacheInvalidationPeriod),
     fork(sessionsSaga),
     fork(terminateSaga),
+    fork(transactionsSaga),
     fork(notifificationsSaga),
     fork(sqlStatsSaga),
   ]);
