@@ -385,7 +385,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		return err
 	}
 	parentID, parentSchemaID, descID := descpb.ID(parentIDInt), descpb.ID(parentSchemaIDInt), descpb.ID(descIDInt)
-	key := catalogkeys.MakeNameMetadataKey(p.execCfg.Codec, parentID, parentSchemaID, name)
+	key := catalogkeys.MakeObjectNameKey(p.execCfg.Codec, parentID, parentSchemaID, name)
 	val, err := p.txn.Get(ctx, key)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read namespace entry (%d, %d, %s)",
@@ -512,7 +512,7 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 		return err
 	}
 	parentID, parentSchemaID, descID := descpb.ID(parentIDInt), descpb.ID(parentSchemaIDInt), descpb.ID(descIDInt)
-	key := catalogkeys.MakeNameMetadataKey(p.execCfg.Codec, parentID, parentSchemaID, name)
+	key := catalogkeys.MakeObjectNameKey(p.execCfg.Codec, parentID, parentSchemaID, name)
 	val, err := p.txn.Get(ctx, key)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read namespace entry (%d, %d, %s)",

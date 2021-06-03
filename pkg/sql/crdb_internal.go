@@ -2960,25 +2960,18 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	},
 }
 
-// NamespaceKey represents a key from the namespace table.
-type NamespaceKey struct {
-	ParentID descpb.ID
-	// ParentSchemaID is not populated for rows under system.deprecated_namespace.
-	// This table will no longer exist on 20.2 or later.
-	ParentSchemaID descpb.ID
-	Name           string
-}
-
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
-func (p *planner) getAllNames(ctx context.Context) (map[descpb.ID]NamespaceKey, error) {
+func (p *planner) getAllNames(
+	ctx context.Context,
+) (map[descpb.ID]catalog.NameKeyComponents, error) {
 	return getAllNames(ctx, p.txn, p.ExtendedEvalContext().ExecCfg.InternalExecutor)
 }
 
 // TestingGetAllNames is a wrapper for getAllNames.
 func TestingGetAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]NamespaceKey, error) {
+) (map[descpb.ID]catalog.NameKeyComponents, error) {
 	return getAllNames(ctx, txn, executor)
 }
 
@@ -2986,8 +2979,8 @@ func TestingGetAllNames(
 // It is public so that it can be tested outside the sql package.
 func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]NamespaceKey, error) {
-	namespace := map[descpb.ID]NamespaceKey{}
+) (map[descpb.ID]catalog.NameKeyComponents, error) {
+	namespace := map[descpb.ID]catalog.NameKeyComponents{}
 	it, err := executor.QueryIterator(
 		ctx, "get-all-names", txn,
 		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
@@ -2999,7 +2992,7 @@ func getAllNames(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		r := it.Cur()
 		id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
-		namespace[descpb.ID(id)] = NamespaceKey{
+		namespace[descpb.ID(id)] = descpb.NameInfo{
 			ParentID:       descpb.ID(parentID),
 			ParentSchemaID: descpb.ID(parentSchemaID),
 			Name:           string(name),
@@ -3053,7 +3046,7 @@ CREATE TABLE crdb_internal.zones (
 				return 0, 0, string(tree.PublicSchemaName), nil
 			}
 			if entry, ok := namespace[descpb.ID(id)]; ok {
-				return uint32(entry.ParentID), uint32(entry.ParentSchemaID), entry.Name, nil
+				return uint32(entry.GetParentID()), uint32(entry.GetParentSchemaID()), entry.GetName(), nil
 			}
 			return 0, 0, "", errors.AssertionFailedf(
 				"object with ID %d does not exist", errors.Safe(id))

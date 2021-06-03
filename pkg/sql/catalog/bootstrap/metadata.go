@@ -112,7 +112,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		value.SetInt(int64(desc.GetID()))
 		if parentID != keys.RootNamespaceID {
 			ret = append(ret, roachpb.KeyValue{
-				Key:   catalogkeys.NewPublicTableKey(parentID, desc.GetName()).Key(ms.codec),
+				Key:   catalogkeys.MakePublicObjectNameKey(ms.codec, parentID, desc.GetName()),
 				Value: value,
 			})
 		} else {
@@ -123,11 +123,11 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			ret = append(
 				ret,
 				roachpb.KeyValue{
-					Key:   catalogkeys.NewDatabaseKey(desc.GetName()).Key(ms.codec),
+					Key:   catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()),
 					Value: value,
 				},
 				roachpb.KeyValue{
-					Key:   catalogkeys.NewPublicSchemaKey(desc.GetID()).Key(ms.codec),
+					Key:   catalogkeys.MakePublicSchemaNameKey(ms.codec, desc.GetID()),
 					Value: publicSchemaValue,
 				})
 		}

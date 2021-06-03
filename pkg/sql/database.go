@@ -49,7 +49,7 @@ func (p *planner) renameDatabase(
 	}
 
 	b := &kv.Batch{}
-	newKey := catalogkeys.NewDatabaseKey(newName).Key(p.ExecCfg().Codec)
+	newKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, newName)
 	descID := desc.GetID()
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -56,8 +57,8 @@ func TestGetAllNamesInternal(t *testing.T) {
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
-		batch.Put(catalogkeys.NewTableKey(999, 444, "bob").Key(keys.SystemSQLCodec), 9999)
-		batch.Put(catalogkeys.NewPublicTableKey(1000, "alice").Key(keys.SystemSQLCodec), 10000)
+		batch.Put(catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, 999, 444, "bob"), 9999)
+		batch.Put(catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, 1000, "alice"), 10000)
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)
@@ -65,8 +66,8 @@ func TestGetAllNamesInternal(t *testing.T) {
 	names, err := sql.TestingGetAllNames(ctx, nil, s.InternalExecutor().(*sql.InternalExecutor))
 	require.NoError(t, err)
 
-	assert.Equal(t, sql.NamespaceKey{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])
-	assert.Equal(t, sql.NamespaceKey{ParentID: 1000, ParentSchemaID: 29, Name: "alice"}, names[10000])
+	assert.Equal(t, descpb.NameInfo{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])
+	assert.Equal(t, descpb.NameInfo{ParentID: 1000, ParentSchemaID: 29, Name: "alice"}, names[10000])
 }
 
 // TestRangeLocalityBasedOnNodeIDs tests that the replica_localities shown in crdb_internal.ranges

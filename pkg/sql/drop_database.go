@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -138,13 +138,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		case catalog.SchemaTemporary, catalog.SchemaPublic:
 			// The public schema and temporary schemas are cleaned up by just removing
 			// the existing namespace entries.
-			if err := catalogkv.RemoveSchemaNamespaceEntry(
-				ctx,
-				p.txn,
-				p.ExecCfg().Codec,
-				n.dbDesc.GetID(),
-				schemaToDelete.GetName(),
-			); err != nil {
+			key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.dbDesc.GetID(), schemaToDelete.GetName())
+			if err := p.txn.Del(ctx, key); err != nil {
 				return err
 			}
 		case catalog.SchemaUserDefined:

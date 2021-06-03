@@ -38,7 +38,7 @@ func TestLookupNamespaceID(t *testing.T) {
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(
 			ctx,
-			catalogkeys.NewPublicTableKey(999, "bob").Key(keys.SystemSQLCodec),
+			catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, 999, "bob"),
 			9999,
 		)
 	})

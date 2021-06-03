@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -68,7 +69,7 @@ func (n *createSequenceNode) ReadingOwnWrites() {}
 func (n *createSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
 
-	_, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Name,
+	schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Name,
 		tree.ResolveRequireSequenceDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
@@ -131,7 +132,7 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateSelf() needed here.
 
-	key := catalogkv.MakeObjectNameKey(dbDesc.GetID(), schemaID, name.Object()).Key(params.ExecCfg().Codec)
+	key := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schemaID, name.Object())
 	if err = params.p.createDescriptorWithID(
 		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
 	); err != nil {

@@ -250,8 +250,8 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 	}
 
 	// Generate namespace entry.
-	key := catalogkeys.NewTableKey(50, keys.PublicSchemaID, testTable.Name)
-	k := rekey(m.config.tenantID, key.Key(keys.TODOSQLCodec))
+	key := catalogkeys.MakePublicObjectNameKey(keys.TODOSQLCodec, 50, testTable.Name)
+	k := rekey(m.config.tenantID, key)
 	var value roachpb.Value
 	value.SetInt(int64(testTable.GetID()))
 	value.InitChecksum(k)

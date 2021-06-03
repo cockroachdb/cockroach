@@ -289,7 +289,7 @@ func GetForDatabase(
 ) (map[descpb.ID]string, error) {
 	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
 
-	nameKey := catalogkeys.NewSchemaKey(dbID, "" /* name */).Key(codec)
+	nameKey := catalogkeys.MakeSchemaNameKey(codec, dbID, "" /* name */)
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
@@ -306,11 +306,11 @@ func GetForDatabase(
 		if _, ok := ret[id]; ok {
 			continue
 		}
-		_, _, name, err := catalogkeys.DecodeNameMetadataKey(codec, kv.Key)
+		k, err := catalogkeys.DecodeNameMetadataKey(codec, kv.Key)
 		if err != nil {
 			return nil, err
 		}
-		ret[id] = name
+		ret[id] = k.GetName()
 	}
 	return ret, nil
 }

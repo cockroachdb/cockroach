@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -122,8 +123,9 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	var replacingDesc *tabledesc.Mutable
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.persistence, n.viewName,
+	schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.persistence, n.viewName,
 		tree.ResolveRequireViewDesc, n.ifNotExists)
+	nameKey := catalogkeys.NewNameKeyComponents(n.dbDesc.GetID(), schemaID, n.viewName.Table())
 	if err != nil {
 		switch {
 		case !sqlerrors.IsRelationAlreadyExistsError(err):
@@ -133,7 +135,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, tKey)
+			id, err := catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, nameKey)
 			if err != nil {
 				return err
 			}
@@ -248,7 +250,11 @@ func (n *createViewNode) startExec(params runParams) error {
 		// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
 		// do some basic string formatting (not accurate in the general case).
 		if err = params.p.createDescriptorWithID(
-			params.ctx, tKey.Key(params.ExecCfg().Codec), id, &desc, params.EvalContext().Settings,
+			params.ctx,
+			catalogkeys.EncodeNameKey(params.ExecCfg().Codec, nameKey),
+			id,
+			&desc,
+			params.EvalContext().Settings,
 			fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
 		); err != nil {
 			return err

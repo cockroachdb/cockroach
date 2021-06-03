@@ -258,7 +258,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			}})
 
 			b := &kv.Batch{}
-			b.CPut(catalogkeys.NewDatabaseKey(mut.Name).Key(lm.Codec()), mut.GetID(), nil)
+			b.CPut(catalogkeys.MakeDatabaseNameKey(lm.Codec(), mut.Name), mut.GetID(), nil)
 			err = txn.Run(ctx, b)
 			require.NoError(t, err)
 
