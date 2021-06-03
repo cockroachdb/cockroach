@@ -535,6 +535,43 @@ ALTER TABLE t8 DROP COLUMN x;
 statement ok
 DROP TYPE typ8
 
+# Drop schema testing
+statement ok
+CREATE DATABASE db1;
+
+statement ok
+CREATE SCHEMA db1.sc1
+
+
+statement ok
+CREATE SEQUENCE db1.sc1.SQ1
+
+statement ok
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
+
+statement ok
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
+
+statement ok
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+
+statement ok
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+
+statement ok
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM('a')
+
+statement ok
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
+DROP SCHEMA db1.sc1 CASCADE
+
+statement ok
+DROP DATABASE db1
 
 # Drop database testing
 statement ok
@@ -573,7 +610,10 @@ CREATE TYPE db1.sc1.typ AS ENUM('a')
 statement ok
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
 
-statement error cannot drop sequence sq1 because other objects depend on it
+statement error schema "sc1" is not empty and CASCADE was not specified
+DROP SCHEMA db1.sc1
+
+statement error database "db1" is not empty and CASCADE was not specified
 DROP DATABASE db1
 
 statement ok

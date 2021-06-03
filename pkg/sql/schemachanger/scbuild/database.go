@@ -14,6 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -43,11 +45,16 @@ func (b *buildContext) dropDatabase(ctx context.Context, n *tree.DropDatabase) {
 	for schemaID := range schemas {
 		dropIDs = append(dropIDs, schemaID)
 		schemaDesc, err := b.Descs.GetMutableSchemaByID(ctx, b.EvalCtx.Txn, schemaID, tree.SchemaLookupFlags{Required: true})
-		//		if !n.DropBehavior FIXME: Error out here.
 		if err != nil {
 			panic(err)
 		}
-		nodeAdded, schemaDroppedIDs := b.dropSchemaDesc(ctx, schemaDesc, dbDesc, n.DropBehavior)
+		nodeAdded, schemaDroppedIDs := b.dropSchemaDesc(ctx, schemaDesc, dbDesc, tree.DropCascade)
+		// Block drops if cascade is not set.
+		if n.DropBehavior != tree.DropCascade &&
+			(nodeAdded || len(schemaDroppedIDs) > 0) {
+			panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"database %q is not empty and CASCADE was not specified", dbDesc.GetName()))
+		}
 		// If no schema exists to depend on, then depend on dropped IDs
 		if !nodeAdded {
 			dropIDs = append(dropIDs, schemaDroppedIDs...)
