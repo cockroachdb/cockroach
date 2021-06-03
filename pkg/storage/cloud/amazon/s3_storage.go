@@ -200,9 +200,11 @@ func MakeS3Storage(
 	if conf.Endpoint != "" {
 		opts.Config.S3ForcePathStyle = aws.Bool(true)
 	}
+
+	opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
+
 	if log.V(2) {
 		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
-		opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
 	}
 
 	// Ensure that a KMS ID is specified if server side encryption is set to use
