@@ -271,6 +271,7 @@ const queriesReducerObj = new CachedDataReducer(
   moment.duration(5, "m"),
   moment.duration(1, "m"),
 );
+export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
 const statementDiagnosticsReportsReducerObj = new CachedDataReducer(

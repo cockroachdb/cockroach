@@ -271,6 +271,12 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		}
 		return nil
 
+	case spec.Core.LocalPlanNode != nil:
+		// LocalPlanNode core is special (we don't have any plans on vectorizing
+		// it at the moment), so we want to return a custom error for it to
+		// distinguish from other unsupported cores.
+		return errLocalPlanNodeWrap
+
 	default:
 		return errCoreUnsupportedNatively
 	}
@@ -278,6 +284,7 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 
 var (
 	errCoreUnsupportedNatively        = errors.New("unsupported processor core")
+	errLocalPlanNodeWrap              = errors.New("LocalPlanNode core needs to be wrapped")
 	errMetadataTestSenderWrap         = errors.New("core.MetadataTestSender is not supported")
 	errMetadataTestReceiverWrap       = errors.New("core.MetadataTestReceiver is not supported")
 	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
@@ -287,6 +294,7 @@ var (
 	errSamplerWrap                    = errors.New("core.Sampler is not supported (not an execinfra.RowSource)")
 	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
+	errWrappedCast                    = errors.New("mismatched types in NewColOperator and unsupported casts")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
@@ -1302,55 +1310,70 @@ func NewColOperator(
 
 	// Check that the actual output types are equal to the expected ones and
 	// plan casts if they are not.
+	//
+	// For each output column we check whether the actual and expected types are
+	// identical, and if not, whether we support a native vectorized cast
+	// between them. If for at least one column the native cast is not
+	// supported, we will plan a wrapped row-execution noop processor that will
+	// be responsible for casting all mismatched columns (and for performing the
+	// projection of the original no longer needed types).
+	// TODO(yuzefovich): consider whether planning some vectorized casts is
+	// worth it even if we need to plan a wrapped processor for some other
+	// columns.
 	if len(args.Spec.ResultTypes) != len(r.ColumnTypes) {
 		return r, errors.AssertionFailedf("unexpectedly different number of columns are output: expected %v, actual %v", args.Spec.ResultTypes, r.ColumnTypes)
 	}
-	// projection is lazily allocated when the first column that needs an
-	// explicit cast is found. It'll remain nil if projection isn't necessary.
-	var projection []uint32
+	numMismatchedTypes, needWrappedCast := 0, false
 	for i := range args.Spec.ResultTypes {
 		expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
 		if !actual.Identical(expected) {
-			input := r.Op
-			castedIdx := len(r.ColumnTypes)
-			resultTypes := appendOneType(r.ColumnTypes, expected)
-			r.Op, err = colexecbase.GetCastOperator(
-				streamingAllocator, input, i, castedIdx, actual, expected,
-			)
-			if err != nil {
-				// We don't support a native vectorized cast between these
-				// types, so we will plan a noop row-execution processor to
-				// handle it with a post-processing spec that simply passes
-				// through all of the columns from the input and appends the
-				// result of the cast to the end of the schema.
-				post := &execinfrapb.PostProcessSpec{}
-				post.RenderExprs = make([]execinfrapb.Expression, castedIdx+1)
-				for j := 0; j < castedIdx; j++ {
-					post.RenderExprs[j].LocalExpr = tree.NewTypedOrdinalReference(j, r.ColumnTypes[j])
-				}
-				post.RenderExprs[castedIdx].LocalExpr = tree.NewTypedCastExpr(tree.NewTypedOrdinalReference(i, r.ColumnTypes[i]), expected)
-				result.Op = input
-				if err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, resultTypes, factory, err); err != nil {
-					return r, err
-				}
+			numMismatchedTypes++
+			if !colexecbase.IsCastSupported(actual, expected) {
+				needWrappedCast = true
 			}
-			r.ColumnTypes = resultTypes
-			if projection == nil {
-				// This is the first column that needs an explicit cast, so we
-				// need to actually allocate the slice and set all previous
-				// columns to be used as is.
-				projection = make([]uint32, len(args.Spec.ResultTypes))
-				for j := 0; j < i; j++ {
-					projection[j] = uint32(j)
-				}
-			}
-			projection[i] = uint32(castedIdx)
-		} else if projection != nil {
-			projection[i] = uint32(i)
 		}
 	}
-	if projection != nil {
-		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
+
+	if needWrappedCast {
+		post := &execinfrapb.PostProcessSpec{
+			RenderExprs: make([]execinfrapb.Expression, len(args.Spec.ResultTypes)),
+		}
+		for i := range args.Spec.ResultTypes {
+			expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
+			if !actual.Identical(expected) {
+				post.RenderExprs[i].LocalExpr = tree.NewTypedCastExpr(tree.NewTypedOrdinalReference(i, actual), expected)
+			} else {
+				post.RenderExprs[i].LocalExpr = tree.NewTypedOrdinalReference(i, args.Spec.ResultTypes[i])
+			}
+		}
+		if err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, args.Spec.ResultTypes, factory, errWrappedCast); err != nil {
+			return r, err
+		}
+	} else if numMismatchedTypes > 0 {
+		// We will need to project out the original mismatched columns, so
+		// we're keeping track of the required projection.
+		projection := make([]uint32, len(args.Spec.ResultTypes))
+		typesWithCasts := make([]*types.T, len(args.Spec.ResultTypes), len(args.Spec.ResultTypes)+numMismatchedTypes)
+		// All original mismatched columns will be passed through by all of the
+		// vectorized cast operators.
+		copy(typesWithCasts, r.ColumnTypes)
+		for i := range args.Spec.ResultTypes {
+			expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
+			if !actual.Identical(expected) {
+				castedIdx := len(typesWithCasts)
+				r.Op, err = colexecbase.GetCastOperator(
+					streamingAllocator, r.Op, i, castedIdx, actual, expected,
+				)
+				if err != nil {
+					return r, errors.AssertionFailedf("unexpectedly couldn't plan a cast although IsCastSupported returned true: %v", err)
+				}
+				projection[i] = uint32(castedIdx)
+				typesWithCasts = append(typesWithCasts, expected)
+			} else {
+				projection[i] = uint32(i)
+			}
+		}
+		r.Op, r.ColumnTypes = addProjection(r.Op, typesWithCasts, projection)
 	}
 	if args.TestingKnobs.PlanInvariantsCheckers {
 		r.Op = colexec.NewInvariantsChecker(r.Op)
@@ -1414,10 +1437,14 @@ func (r opResult) wrapPostProcessSpec(
 		Post:        *post,
 		ResultTypes: resultTypes,
 	}
-	return r.createAndWrapRowSource(
+	if err := r.createAndWrapRowSource(
 		ctx, flowCtx, args, []colexecop.Operator{r.Op}, [][]*types.T{r.ColumnTypes},
 		noopSpec, factory, causeToWrap,
-	)
+	); err != nil {
+		return err
+	}
+	r.ColumnTypes = resultTypes
+	return nil
 }
 
 // planPostProcessSpec plans the post processing stage specified in post on top

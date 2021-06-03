@@ -19,6 +19,7 @@ import { sessionsSaga } from "./sessions";
 import { terminateSaga } from "./terminateQuery";
 import { transactionsSaga } from "./transactions";
 import { notifificationsSaga } from "./notifications";
+import { sqlStatsSaga } from "./sqlStats";
 
 export function* sagas(cacheInvalidationPeriod?: number) {
   yield all([
@@ -31,5 +32,6 @@ export function* sagas(cacheInvalidationPeriod?: number) {
     fork(transactionsSaga),
     fork(terminateSaga),
     fork(notifificationsSaga),
+    fork(sqlStatsSaga),
   ]);
 }

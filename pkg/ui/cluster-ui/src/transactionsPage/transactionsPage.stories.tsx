@@ -26,7 +26,12 @@ storiesOf("Transactions Page", module)
     <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
   ))
   .add("with data", () => (
-    <TransactionsPage {...routeProps} data={data} refreshData={noop} />
+    <TransactionsPage
+      {...routeProps}
+      data={data}
+      refreshData={noop}
+      resetSQLStats={noop}
+    />
   ))
   .add("without data", () => {
     return (
@@ -34,6 +39,7 @@ storiesOf("Transactions Page", module)
         {...routeProps}
         data={getEmptyData()}
         refreshData={noop}
+        resetSQLStats={noop}
       />
     );
   })
@@ -50,12 +56,18 @@ storiesOf("Transactions Page", module)
         data={getEmptyData()}
         refreshData={noop}
         history={history}
+        resetSQLStats={noop}
       />
     );
   })
   .add("with loading indicator", () => {
     return (
-      <TransactionsPage {...routeProps} data={undefined} refreshData={noop} />
+      <TransactionsPage
+        {...routeProps}
+        data={undefined}
+        refreshData={noop}
+        resetSQLStats={noop}
+      />
     );
   })
   .add("with error alert", () => {
@@ -71,6 +83,7 @@ storiesOf("Transactions Page", module)
           )
         }
         refreshData={noop}
+        resetSQLStats={noop}
       />
     );
   });

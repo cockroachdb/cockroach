@@ -459,6 +459,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onActivateStatementDiagnostics: (_) => {},
   onDiagnosticsModalOpen: (_) => {},
   onPageChanged: (_) => {},
+  resetSQLStats: () => {},
 };
 
 export default statementsPagePropsFixture;

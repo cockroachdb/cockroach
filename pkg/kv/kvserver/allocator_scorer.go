@@ -407,6 +407,11 @@ func (cl candidateList) removeCandidate(c candidate) candidateList {
 // rankedCandidateListForAllocation creates a candidate list of all stores that
 // can be used for allocating a new replica ordered from the best to the worst.
 // Only stores that meet the criteria are included in the list.
+//
+// NB: When `allowMultipleReplsPerNode` is set to false, we disregard the
+// *nodes* of `existingReplicas`. Otherwise, we disregard only the *stores* of
+// `existingReplicas`. For instance, `allowMultipleReplsPerNode` is set to true
+// by callers performing lateral relocation of replicas within the same node.
 func rankedCandidateListForAllocation(
 	ctx context.Context,
 	candidateStores StoreList,
@@ -414,11 +419,19 @@ func rankedCandidateListForAllocation(
 	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	allowMultipleReplsPerNode bool,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
+	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
 	for _, s := range candidateStores.stores {
-		if nodeHasReplica(s.Node.NodeID, existingReplicas) {
+		// Disregard all the stores that already have replicas.
+		if storeHasReplica(s.StoreID, existingReplTargets) {
+			continue
+		}
+		// Unless the caller specifically allows us to allocate multiple replicas on
+		// the same node, we disregard nodes with existing replicas.
+		if !allowMultipleReplsPerNode && nodeHasReplica(s.Node.NodeID, existingReplTargets) {
 			continue
 		}
 		if !isNodeValidForRoutineReplicaTransfer(ctx, s.Node.NodeID) {
@@ -907,7 +920,7 @@ func shouldRebalanceBasedOnRangeCount(
 
 // nodeHasReplica returns true if the provided NodeID contains an entry in
 // the provided list of existing replicas.
-func nodeHasReplica(nodeID roachpb.NodeID, existing []roachpb.ReplicaDescriptor) bool {
+func nodeHasReplica(nodeID roachpb.NodeID, existing []roachpb.ReplicationTarget) bool {
 	for _, r := range existing {
 		if r.NodeID == nodeID {
 			return true

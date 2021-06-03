@@ -120,6 +120,35 @@ func GetCastOperator(
 	return nil, errors.Errorf("unhandled cast %s -> %s", fromType, toType)
 }
 
+func IsCastSupported(fromType, toType *types.T) bool {
+	if fromType.Family() == types.UnknownFamily {
+		return true
+	}
+	leftType, rightType := fromType, toType
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+	// {{range .LeftFamilies}}
+	case _LEFT_CANONICAL_TYPE_FAMILY:
+		switch leftType.Width() {
+		// {{range .LeftWidths}}
+		case _LEFT_TYPE_WIDTH:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+			// {{range .RightFamilies}}
+			case _RIGHT_CANONICAL_TYPE_FAMILY:
+				switch rightType.Width() {
+				// {{range .RightWidths}}
+				case _RIGHT_TYPE_WIDTH:
+					return true
+					// {{end}}
+				}
+				// {{end}}
+			}
+			// {{end}}
+		}
+		// {{end}}
+	}
+	return false
+}
+
 type castOpNullAny struct {
 	colexecop.OneInputCloserHelper
 
