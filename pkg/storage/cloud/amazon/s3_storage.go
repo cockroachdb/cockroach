@@ -250,7 +250,7 @@ func (s *s3Storage) newSession(ctx context.Context) (*session.Session, error) {
 		return nil, errors.Wrap(err, "new aws session")
 	}
 	if s.conf.Region == "" {
-		if err := cloud.DelayedRetry(ctx, s3ErrDelay, func() error {
+		if err := cloud.DelayedRetry(ctx, "s3manager.GetBucketRegion", s3ErrDelay, func() error {
 			var err error
 			s.conf.Region, err = s3manager.GetBucketRegion(ctx, sess, s.conf.Bucket, "us-east-1")
 			return err
