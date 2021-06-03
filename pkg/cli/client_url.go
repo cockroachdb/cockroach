@@ -306,7 +306,19 @@ func (u urlParser) setInternal(v string, warn bool) error {
 
 	// Check that the URL so far is valid.
 	if err := parsedURL.Validate(); err != nil {
-		return err
+		// This function is called by pflag.(*FlagSet).Set() and that code
+		// does not know how to use errors.Wrap properly. Instead, it
+		// reformats the error as a string, which loses any validation
+		// details.
+		// We make-do here by injecting the details as part of
+		// the error message.
+		// TODO(knz): Fix the upstream pflag and get rid of this
+		// horrendous logic.
+		msg := err.Error()
+		if details := errors.FlattenDetails(err); details != "" {
+			msg += "\n" + details
+		}
+		return fmt.Errorf("%s", msg)
 	}
 
 	// Store the parsed URL for later.
