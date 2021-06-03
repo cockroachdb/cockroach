@@ -15,7 +15,7 @@ import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
-import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
+import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
   AxisDomain,
@@ -25,6 +25,8 @@ import {
   ConfigureLineChart,
   ConfigureLinkedGuideline,
   configureUPlotLineChart,
+  formatMetricData,
+  formattedSeries,
   InitLineChart,
 } from "src/views/cluster/util/graphs";
 import {
@@ -40,8 +42,6 @@ import { MilliToSeconds, NanoToMilli } from "src/util/convert";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { findClosestTimeScale } from "src/redux/timewindow";
-import TimeSeriesQueryResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
-import {cockroach} from "src/js/protos";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -264,7 +264,7 @@ export class LineGraphOld extends React.Component<
 // touPlot formats our timeseries data into the format
 // uPlot expects which is a 2-dimensional array where the
 // first array contains the x-values (time).
-function touPlot(data: TimeSeriesQueryResponse): any {
+function touPlot(data: formattedSeries[]): uPlot.AlignedData {
   // Here's an example of what this code is attempting to control for.
   // We produce `result` series that contain their own x-values. uPlot
   // expects *one* x-series that all y-values match up to. So first we
@@ -282,21 +282,21 @@ function touPlot(data: TimeSeriesQueryResponse): any {
   //   [1, null, 2, 3, 4, null],
   //   [1, 20, null, 7, null, 40],
   // ]
-  if (!data || !data.results) {
-    return [];
+  if (!data || data.length === 0) {
+    return [[]];
   }
 
   const xValuesComplete: number[] = [
     ...new Set(
-      data.results.flatMap((result) =>
-        result.datapoints.map((d) => d.timestamp_nanos.toNumber()),
+      data.flatMap((series) =>
+        series.values.map((d) => d.timestamp_nanos.toNumber()),
       ),
     ),
   ].sort((a, b) => a - b);
 
-  const yValuesComplete: (number | null)[][] = data.results.map((result) => {
+  const yValuesComplete: (number | null)[][] = data.map((series) => {
     return xValuesComplete.map((ts) => {
-      const found = result.datapoints.find(
+      const found = series.values.find(
         (dp) => dp.timestamp_nanos.toNumber() === ts,
       );
       return found ? found.value : null;
@@ -381,8 +381,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // automatically when a narrower time frame is selected.
   setNewTimeRange(startMillis: number, endMillis: number) {
     const start = MilliToSeconds(startMillis);
-    // Enforce 10m minimum range from start
-    const end = Math.max(start + 600, MilliToSeconds(endMillis));
+    const end = MilliToSeconds(endMillis);
     this.props.setTimeRange({
       start: moment.unix(start),
       end: moment.unix(end),
@@ -402,46 +401,39 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
-    if (
-      // data was missing last time or we already have a `u`
-      // the latter could happen if we click away to a
-      // different dashboard and then back to one we had
-      // open previously.
-      (!prevProps.data || !this.u) &&
-      this.props.data &&
-      this.props.data.results
-    ) {
-      const data = this.props.data;
-      const metrics = this.metrics(this.props);
-      const axis = this.axis(this.props);
-      const uPlotData = touPlot(data);
-      this.yAxisDomain = calculateYAxisDomain(axis.props.units, data);
-      this.xAxisDomain = calculateXAxisDomain(this.props.timeInfo);
-
-      const options = configureUPlotLineChart(
-        metrics,
-        axis,
-        data,
-        this.setNewTimeRange,
-        () => this.xAxisDomain,
-        () => this.yAxisDomain,
-      );
-
-      this.u = new uPlot(options, uPlotData, this.el.current);
+    if (!this.props.data || !this.props.data.results) {
+      return;
     }
-    if (this.u && this.props.data && prevProps.data !== this.props.data) {
-      const axis = this.axis(this.props);
-      // The values of `this.yAxisDomain` and `this.xAxisDomain`
-      // are captured in arguments to `configureUPlotLineChart`
-      // and are called when recomputing certain axis and
-      // series options. This lets us use updated domains
-      // when redrawing the uPlot chart on data change.
-      this.yAxisDomain = calculateYAxisDomain(
-        axis.props.units,
-        this.props.data,
-      );
-      this.xAxisDomain = calculateXAxisDomain(this.props.timeInfo);
+    const data = this.props.data;
+    const metrics = this.metrics(this.props);
+    const axis = this.axis(this.props);
 
+    const fData = formatMetricData(metrics, data);
+    const uPlotData = touPlot(fData);
+
+    // The values of `this.yAxisDomain` and `this.xAxisDomain`
+    // are captured in arguments to `configureUPlotLineChart`
+    // and are called when recomputing certain axis and
+    // series options. This lets us use updated domains
+    // when redrawing the uPlot chart on data change.
+    this.yAxisDomain = calculateYAxisDomain(axis.props.units, data);
+    this.xAxisDomain = calculateXAxisDomain(this.props.timeInfo);
+
+    const prevKeys =
+      prevProps.data && prevProps.data.results
+        ? formatMetricData(metrics, prevProps.data).map((s) => s.key)
+        : [];
+    const keys = fData.map((s) => s.key);
+    const sameKeys =
+      keys.every((k) => prevKeys.includes(k)) &&
+      prevKeys.every((k) => keys.includes(k));
+
+    if (
+      this.u && // we already created a uPlot instance
+      prevProps.data && // prior update had data as well
+      prevProps.data !== this.props.data && // prior update had different data
+      sameKeys // prior update had same set of series identified by key
+    ) {
       // The axis label option on uPlot doesn't accept
       // a function that recomputes the label, so we need
       // to manually update it in cases where we change
@@ -452,8 +444,22 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         axis.props.label +
         (this.yAxisDomain.label ? ` (${this.yAxisDomain.label})` : "");
 
-      const uPlotData = touPlot(this.props.data);
+      // Updates existing plot with new points
       this.u.setData(uPlotData);
+    } else {
+      const options = configureUPlotLineChart(
+        metrics,
+        axis,
+        data,
+        this.setNewTimeRange,
+        () => this.xAxisDomain,
+        () => this.yAxisDomain,
+      );
+
+      if (this.u) {
+        this.u.destroy();
+      }
+      this.u = new uPlot(options, uPlotData, this.el.current);
     }
   }
 
