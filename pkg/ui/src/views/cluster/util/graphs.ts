@@ -293,7 +293,7 @@ export type formattedSeries = {
   fillOpacity: number,
 };
 
-function formatMetricData(
+export function formatMetricData(
   metrics: React.ReactElement<MetricProps>[],
   data: TSResponse,
 ): formattedSeries[] {
@@ -571,8 +571,6 @@ export function configureUPlotLineChart(
           width: 1,
           label: result.key,
           stroke: color,
-          // Adds transparency to the fill color
-          fill: color + "10",
           points: {
             show: false,
           },
