@@ -256,7 +256,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			targets := stmt.AST.(*tree.Grant).Targets
 
 			matched, err := DescriptorsMatchingTargets(context.Background(),
-				test.sessionDatabase, searchPath, descriptors, targets)
+				test.sessionDatabase, searchPath, descriptors, targets, hlc.Timestamp{})
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)
