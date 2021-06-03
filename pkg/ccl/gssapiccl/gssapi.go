@@ -50,7 +50,7 @@ func authGSS(
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
-	return func(requestedUser security.SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, requestedUser security.SQLUsername, clientConnection bool) (func(), error) {
 		var (
 			majStat, minStat, lminS, gflags C.OM_uint32
 			gbuf                            C.gss_buffer_desc

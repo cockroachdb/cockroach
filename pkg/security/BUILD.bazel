@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/metric",
+        "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
