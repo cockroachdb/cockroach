@@ -44,7 +44,7 @@ For guidance on installation, development, deployment, and administration, see o
    and talk to it via the [built-in SQL client](https://www.cockroachlabs.com/docs/stable/use-the-built-in-sql-client.html).
 3. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
 4. Use a PostgreSQL-compatible driver or ORM to
-   [build an app with CockroachDB](https://www.cockroachlabs.com/docs/stable/build-an-app-with-cockroachdb.html).
+   [build an app with CockroachDB](https://www.cockroachlabs.com/docs/stable/hello-world-example-apps.html).
 5. [Explore core features](https://www.cockroachlabs.com/docs/stable/demo-data-replication.html),
    such as data replication, automatic rebalancing, and fault tolerance and recovery.
 
@@ -53,7 +53,7 @@ For guidance on installation, development, deployment, and administration, see o
 CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages.
 
 - For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/stable/install-client-drivers.html).
-- For tutorials using these drivers, as well as supported ORMs, see [Build an App with CockroachDB](https://www.cockroachlabs.com/docs/stable/build-an-app-with-cockroachdb.html).
+- For tutorials using these drivers, as well as supported ORMs, see our [Hello World Example Apps](https://www.cockroachlabs.com/docs/stable/hello-world-example-apps.html).
 
 ## Deployment
 
