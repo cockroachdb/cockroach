@@ -288,10 +288,8 @@ func (p *planner) performRenameTypeDesc(
 	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {
 		return err
 	}
-	// Construct the new namespace key.
-	key := catalogkv.MakeObjectNameKey(desc.ParentID, desc.ParentSchemaID, newName)
-
-	return p.writeNameKey(ctx, key, desc.ID)
+	// Write the new namespace key.
+	return p.writeNameKey(ctx, desc, desc.ID)
 }
 
 func (p *planner) renameTypeValue(

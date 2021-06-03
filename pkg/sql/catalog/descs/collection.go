@@ -1984,7 +1984,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 	}
 
 	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.GetName())
-	prefix := catalogkeys.NewTableKey(dbDesc.GetID(), schema.GetID(), "").Key(tc.codec())
+	prefix := catalogkeys.MakeObjectNameKey(tc.codec(), dbDesc.GetID(), schema.GetID(), "")
 	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, nil, err

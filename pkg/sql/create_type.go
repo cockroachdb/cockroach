@@ -133,30 +133,29 @@ func resolveNewTypeName(
 }
 
 // getCreateTypeParams performs some initial validation on the input new
-// TypeName and returns the key for the new type descriptor, and the ID of
-// the parent schema.
+// TypeName and returns the ID of the parent schema.
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db catalog.DatabaseDescriptor,
-) (typeKey catalogkeys.DescriptorKey, schemaID descpb.ID, err error) {
+) (schemaID descpb.ID, err error) {
 	// Check we are not creating a type which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
 	if name.Schema() == tree.PublicSchema {
 		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
-			return nil, 0, sqlerrors.NewTypeAlreadyExistsError(name.String())
+			return descpb.InvalidID, sqlerrors.NewTypeAlreadyExistsError(name.String())
 		}
 	}
 	// Get the ID of the schema the type is being created in.
 	dbID := db.GetID()
 	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, dbID, name.Schema())
 	if err != nil {
-		return nil, 0, err
+		return descpb.InvalidID, err
 	}
 
 	// Check permissions on the schema.
 	if err := params.p.canCreateOnSchema(
 		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
-		return nil, 0, err
+		return descpb.InvalidID, err
 	}
 
 	if schemaID != keys.PublicSchemaID {
@@ -172,11 +171,10 @@ func getCreateTypeParams(
 		name,
 	)
 	if err != nil {
-		return nil, descpb.InvalidID, err
+		return descpb.InvalidID, err
 	}
 
-	typeKey = catalogkv.MakeObjectNameKey(db.GetID(), schemaID, name.Type())
-	return typeKey, schemaID, nil
+	return schemaID, nil
 }
 
 // Postgres starts off trying to create the type as _<typename>. It then
@@ -234,7 +232,7 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-	arrayTypeKey := catalogkv.MakeObjectNameKey(db.GetID(), schemaID, arrayTypeName)
+	arrayTypeKey := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
@@ -269,7 +267,7 @@ func (p *planner) createArrayType(
 	jobStr := fmt.Sprintf("implicit array type creation for %s", typ)
 	if err := p.createDescriptorWithID(
 		params.ctx,
-		arrayTypeKey.Key(params.ExecCfg().Codec),
+		arrayTypeKey,
 		id,
 		arrayTypDesc,
 		params.EvalContext().Settings,
@@ -321,7 +319,7 @@ func (p *planner) createEnumWithID(
 	}
 
 	// Generate a key in the namespace table and a new id for this type.
-	typeKey, schemaID, err := getCreateTypeParams(params, typeName, dbDesc)
+	schemaID, err := getCreateTypeParams(params, typeName, dbDesc)
 	if err != nil {
 		return err
 	}
@@ -392,7 +390,7 @@ func (p *planner) createEnumWithID(
 	// Now create the type after the implicit array type as been created.
 	if err := p.createDescriptorWithID(
 		params.ctx,
-		typeKey.Key(params.ExecCfg().Codec),
+		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schemaID, typeName.Type()),
 		id,
 		typeDesc,
 		params.EvalContext().Settings,

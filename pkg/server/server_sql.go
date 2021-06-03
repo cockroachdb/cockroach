@@ -756,7 +756,7 @@ func maybeCheckTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB)
 		// Skip check for system tenant and return early.
 		return nil
 	}
-	key := catalogkeys.NewDatabaseKey(systemschema.SystemDatabaseName).Key(codec)
+	key := catalogkeys.MakeDatabaseNameKey(codec, systemschema.SystemDatabaseName)
 	result, err := db.Get(ctx, key)
 	if err != nil {
 		return err

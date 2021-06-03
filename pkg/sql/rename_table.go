@@ -247,7 +247,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	newTbKey := catalogkv.MakeObjectNameKey(targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
+	newTbKey := catalogkeys.NewNameKeyComponents(targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
 
 	if err := p.writeNameKey(ctx, newTbKey, descID); err != nil {
 		return err
@@ -496,9 +496,9 @@ func (n *renameTableNode) checkForCrossDbReferences(
 
 // writeNameKey writes a name key to a batch and runs the batch.
 func (p *planner) writeNameKey(
-	ctx context.Context, key catalogkeys.DescriptorKey, ID descpb.ID,
+	ctx context.Context, nameKey catalog.NameKeyComponents, ID descpb.ID,
 ) error {
-	marshalledKey := key.Key(p.ExecCfg().Codec)
+	marshalledKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, nameKey)
 	b := &kv.Batch{}
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", marshalledKey, ID)
