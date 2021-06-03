@@ -78,7 +78,7 @@ func Build(catalog cat.Catalog, factory *norm.Factory, input string) (_ opt.Expr
 			if e, ok := r.(exprGenErr); ok {
 				err = e.error
 			} else {
-				panic(r)
+				err = r.(error)
 			}
 		}
 	}()
