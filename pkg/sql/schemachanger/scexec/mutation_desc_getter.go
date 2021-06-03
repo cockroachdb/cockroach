@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -84,8 +84,7 @@ func (m *mutationDescGetter) SubmitDrainedNames(
 ) error {
 	for _, drainedNames := range m.drainedNames {
 		for _, drain := range drainedNames {
-			catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-				ctx, ba, codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false /* KVTrace */)
+			ba.Del(catalogkeys.EncodeNameKey(codec, drain))
 		}
 	}
 	return nil

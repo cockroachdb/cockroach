@@ -51,9 +51,9 @@ func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (
 // GetDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
 func GetDescriptorID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey catalogkeys.DescriptorKey,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey catalog.NameKeyComponents,
 ) (descpb.ID, error) {
-	key := plainKey.Key(codec)
+	key := catalogkeys.EncodeNameKey(codec, plainKey)
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", key)
 	gr, err := txn.Get(ctx, key)
 	if err != nil {
@@ -75,7 +75,7 @@ func ResolveSchemaID(
 		return true, keys.PublicSchemaID, nil
 	}
 
-	sKey := catalogkeys.NewSchemaKey(dbID, scName)
+	sKey := catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, scName)
 	schemaID, err := GetDescriptorID(ctx, txn, codec, sKey)
 	if err != nil || schemaID == descpb.InvalidID {
 		return false, descpb.InvalidID, err
@@ -297,7 +297,7 @@ func getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(
 					m.Descriptors[desc.GetID()] = desc
 				}
 			case 1:
-				k.ParentID, k.ParentSchemaID, k.Name, err = catalogkeys.DecodeNameMetadataKey(codec, row.Key)
+				k, err = catalogkeys.DecodeNameMetadataKey(codec, row.Key)
 				m.Namespace[k] = descpb.ID(row.ValueInt())
 			default:
 				panic("missing switch case")
@@ -341,7 +341,7 @@ func GetAllDatabaseDescriptorIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) ([]descpb.ID, error) {
 	log.Eventf(ctx, "fetching all database descriptor IDs")
-	nameKey := catalogkeys.NewDatabaseKey("" /* name */).Key(codec)
+	nameKey := catalogkeys.MakeDatabaseNameKey(codec, "")
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /*maxRows */)
 	if err != nil {
 		return nil, err
