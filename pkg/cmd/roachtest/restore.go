@@ -408,9 +408,20 @@ func registerRestore(r *testRegistry) {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
-					// Tick once before starting the restore, and once after to capture the
-					// total elapsed time. This is used by roachperf to compute and display
-					// the average MB/sec per node.
+					// Tick once before starting the restore, and once after to
+					// capture the total elapsed time. This is used by
+					// roachperf to compute and display the average MB/sec per
+					// node.
+					if item.cpus >= 16 {
+						// If the nodes are large enough (specifically, if they
+						// have enough memory we can increase the parallelism
+						// of restore). Machines with 16 vCPUs typically have
+						// enough memory to supoprt 3 concurrent workers.
+						c.Run(ctx, c.Node(1),
+							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency = 3"`)
+						c.Run(ctx, c.Node(1),
+							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 3"`)
+					}
 					tick()
 					item.dataSet.runRestore(ctx, c)
 					tick()
