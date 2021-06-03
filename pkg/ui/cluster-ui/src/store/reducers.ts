@@ -19,6 +19,7 @@ import {
 import { NodesState, reducer as nodes } from "./nodes";
 import { LivenessState, reducer as liveness } from "./liveness";
 import { SessionsState, reducer as sessions } from "./sessions";
+import { TransactionsState, reducer as transactions } from "./transactions";
 import {
   TerminateQueryState,
   reducer as terminateQuery,
@@ -33,6 +34,7 @@ export type AdminUiState = {
   nodes: NodesState;
   liveness: LivenessState;
   sessions: SessionsState;
+  transactions: TransactionsState;
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
 };
@@ -48,6 +50,7 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
+  transactions,
   terminateQuery,
   uiConfig,
 });
