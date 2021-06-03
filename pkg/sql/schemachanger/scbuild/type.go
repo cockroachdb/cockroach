@@ -123,6 +123,6 @@ func (b *buildContext) dropType(ctx context.Context, n *tree.DropType) {
 		if typeDesc == nil {
 			continue
 		}
-		b.dropTypeDesc(ctx, typeDesc, n.DropBehavior, false)
+		b.dropTypeDesc(ctx, typeDesc, n.DropBehavior, false /* ignoreAliases */)
 	}
 }
