@@ -4120,6 +4120,30 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	sqlDB.Exec(
 		t, fmt.Sprintf(`RESTORE data.bank FROM $1 AS OF SYSTEM TIME %s`, postGC), lateFullTableBackup,
 	)
+
+	t.Run("restore-pre-gc-aost", func(t *testing.T) {
+		backupPath := dir + "/tbl-before-gc"
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, "CREATE DATABASE db")
+		sqlDB.Exec(t, "CREATE TABLE db.a (k int, v string)")
+		sqlDB.Exec(t, `BACKUP DATABASE db TO $1 WITH revision_history`, backupPath)
+
+		sqlDB.Exec(t, "DROP TABLE db.a")
+		sqlDB.ExpectErr(
+			t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: table "db.a" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time`,
+			fmt.Sprintf(`RESTORE TABLE db.a FROM $1 AS OF SYSTEM TIME %s`, preGC),
+			backupPath,
+		)
+
+		sqlDB.Exec(t, "DROP DATABASE db")
+		sqlDB.ExpectErr(
+			t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: database "db" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time`,
+			fmt.Sprintf(`RESTORE DATABASE db FROM $1 AS OF SYSTEM TIME %s`, preGC),
+			backupPath,
+		)
+	})
 }
 
 func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
