@@ -64,11 +64,10 @@ SELECT
 	CASE WHEN r.end_key >= x'%[6]s' THEN NULL ELSE crdb_internal.pretty_key(r.end_key, 2) END AS end_key,
 	range_id,
 	lease_holder,
-	gossip_nodes.locality as lease_holder_locality,
+	replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
 	replicas,
 	replica_localities
 FROM %[4]s.crdb_internal.ranges AS r
-LEFT JOIN %[4]s.crdb_internal.gossip_nodes ON lease_holder = node_id
 WHERE (r.start_key <= crdb_internal.encode_key(%[1]d, %[2]d, %[3]s))
   AND (r.end_key   >  crdb_internal.encode_key(%[1]d, %[2]d, %[3]s)) ORDER BY r.start_key
 	`
@@ -84,5 +83,4 @@ WHERE (r.start_key <= crdb_internal.encode_key(%[1]d, %[2]d, %[3]s))
 			idxSpanEnd,
 		),
 	)
-
 }

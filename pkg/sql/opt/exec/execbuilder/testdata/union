@@ -427,7 +427,7 @@ statement ok
 CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT, INDEX (b, c, d, e))
 
 query T
-EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT a, b, c, d, e FROM abcde UNION SELECT a, c, b, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY a
 ----
 distribution: local
 vectorized: true
@@ -450,23 +450,27 @@ vectorized: true
 │         table: abcde@primary
 │         spans: FULL SCAN
 │
-└── • filter
-    │ columns: (a, b, c, d, e)
+└── • sort
+    │ columns: (a, c, b, d, e)
     │ ordering: +a
     │ estimated row count: 1 (missing stats)
-    │ filter: (c = 1) AND (d = e)
+    │ order: +a
     │
-    └── • scan
-          columns: (a, b, c, d, e)
-          ordering: +a
-          estimated row count: 1,000 (missing stats)
-          table: abcde@primary
-          spans: FULL SCAN
+    └── • filter
+        │ columns: (a, b, c, d, e)
+        │ estimated row count: 1 (missing stats)
+        │ filter: d = e
+        │
+        └── • scan
+              columns: (a, b, c, d, e)
+              estimated row count: 10 (missing stats)
+              table: abcde@abcde_b_c_d_e_idx
+              spans: /1-/2
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskF-Lm0AUxd_7KS73SeuUxH9QBgKz27hUSHWr6T-KD65zWQRX7cwEWkK-e1ELu4ZN6DZ9nHvnnN85d4_6R4Mco6-3m6s4AWsd59v844bB5yi7TvPIhjzaRO-28BpusvQDWPNneVdJgk9JnCbwzMaGL--jLAKrghW4Nlwla7AkrIBsSLN1lMH1NyiRYdtJSsoH0si_o4sFw151FWndqWG0Hz_E8ifyJcO67XdmGBcMq04R8j2a2jSEHLflXUMZlZLUYokMJZmybkbbMZHoVf1Qql_IMO_LVnN4g8WBYbczj6balPeE3D2wvwff1I0hRWrhzqnTnIMl_OEGnPM42b79cwoRwApEaJ-M4L0kwtPu3oXd_X_q7v_P7sHJCI_kTklSJOdY4TpMeA4TvsNE4DAROlgcnsm9rrWp28osgmMDJjwmfCYCJsKTAcOX3Cgj3XetphnplPNySEvynqa2utupim5VV42Y6ZmOunEgSZtp606PuJ1WQ8CnYvesOJiJ3WOxd1bsnyf7l5CDs-LwiFwcXv0OAAD__4ZyhRo=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykku-L2k4Qxt9__4phXunXOWJ-HWVB2LuaowGbXBP7iyISs8MR8BK7WeGK-L8XE8HTalrbN4GdmWc-T57dDdbflygw-PI4uQsj6I3DdJp-mBB8CpL7OA36kAaT4O0U_oeHJH4Pvf0xI1gQ5ASKgNtWtsgVw8cojCM4TOXN4MlUHz6_C5IAejmMwO7DXTSGnoIRcB_iZBwkcP8VMiQsK8VR9sw1im9o44xwpauc67rSu9KmGQjVC4ohYVGu1mZXnhHmlWYUGzSFWTIKnGaLJSecKdbWEAkVm6xYNmsbR7L5zhfzfK7mPC_UCxKmq6ysBVj2jeXgbEtYrc0BUZvsiVHYW_pzGw_F0rBmbdnHHtq6AOnBCKR_EeZcA0srbVhbzjFK2gMkjNdGgLRJuiQdkh51QN1roK-Dds8FvdLFc6Z_HOK9uQj2_ipa73y0PenuHpsQIoymb_Zvbp93_6IF_6KFA7nSijWrX2Im6QxIugOS3oCkP8DZ9ozvcVGbosyN5Z8uaG7G_c3l3F6TUcL1qiprPiJd2jzcuWX1xO3f1tVa5_yoq7zBtMe40TUFxbVpu3Z7CMu2tTP4Wmx3ip1usdMp9o_E9qnY7RR73WTvX8h-p_j2hDzb_vczAAD__6qVwrQ=
 
 query T
-EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
+EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT a, b, c, d, e FROM abcde UNION SELECT  a, c, b, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e, a
 ----
 distribution: local
 vectorized: true
@@ -490,19 +494,19 @@ vectorized: true
 │         spans: FULL SCAN
 │
 └── • filter
-    │ columns: (a, b, c, d, e)
-    │ ordering: +b,+d,+a
+    │ columns: (a, c, b, d, e)
+    │ ordering: +c,+d,+a
     │ estimated row count: 1 (missing stats)
-    │ filter: (c = 1) AND (d = e)
+    │ filter: d = e
     │
     └── • scan
           columns: (a, b, c, d, e)
-          ordering: +b,+c,+d,+e,+a
-          estimated row count: 1,000 (missing stats)
+          ordering: +c,+d,+e,+a
+          estimated row count: 10 (missing stats)
           table: abcde@abcde_b_c_d_e_idx
-          spans: FULL SCAN
+          spans: /1-/2
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskG-Lm0AQxt_3UwzzKmmmJEYDZSGwd41HhVSvmv6jiBh3OASr6e4GDkK-e1ELd4ZL6PXujTAzPs_z2-eA5neFAv3vt-urIITRKkg2yec1wVc_vo4SfwyJv_Y_bOAt3MTRJxgNx3xbKIYvYRCF8MRlDN8--rEPowKW4IzhKlzBSMESeAxRvPJjuP4BW4KCQBEwQY6EdaM4zH-xQfETHUwJd7op2JhGt6tD90Og7lHMCMt6t7ftOiUsGs0oDmhLWzEK3OTbimPOFevpDAkV27ysOtuOTnbfbJsVmco4K9U9Eia7vDYC3mF6JGz29sHe2PyOUThH-neEm7KyrFlPnWF-vxcwkm7bjBAiCDfv_xYkPViCXIzPIsyfg_C4hfmrteD-Vwvua7bgnUV4SG60Ys1qGCvnE5LuhKQ3IelMSC4mmB6f4F6VxpZ1YafeiYFDck7SJemRXJwFXDyno5jNrqkND5LOOc9aWlZ33L_WNHtd8K1uii6mH6NO1y0UG9tfnX4I6v7UAj4WOxfF3kDsnIrnF8Xu5WT3JcneRfHiJDk9vvkTAAD__6G3jwo=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkm-L2kAQxt_3UwzzSuscukmEsiDsXc3RgE2u0f6jiMTscARsYndXOBC_ezER_MPF1vZNYGfmmeeXZ3eL9tcKJYbfnib3UQydcTSdTT9NCL6E6UMyDbswDSfh-xm8hcc0-QidwzEjWBLkBJqAm1a2zDXD5zhKYjhO5fXgxVQXvn4I0xA6OYxAdOE-HkNHwwi4C0k6DlN4-H6ynyBDwrLSHGc_2aL8gQLnhGtT5WxtZfalbT0Q6ReUA8KiXG_cvjwnzCvDKLfoCrdilDjLlitOOdNs-gMk1OyyYlWvrelU_V0sF_lCL3hR6BcknK6z0kroi7u-h_MdYbVxRwvrsmdGKXb09xiPxcqxYdMX5wxNXYIKYARqiITJxklQgpRPyiMVkBq2Ini3IJwm4d2YxF0rgv9PKfivp9BR_v6NSCmjePbu8FQO0XRbEYJWhKNzZTQb1ue2yuuR8nukgh4p0SM17OF89wr3uLCuKHPXDy4WiPqO_D9c0_CWjFK266q0fObUtnmwp2X9zM3f2mpjcn4yVV7bNMek1tUFzdY1XdEcorJp7QFPxeKqODgTi0uxd1XsX3f2_8c5uCoeXjjPd29-BwAA__-0e5X_
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde UNION ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a

@@ -656,7 +656,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "exprnorm":
 		e, err := ot.ExprNorm()
 		if err != nil {
-			d.Fatalf(tb, "%+v", err)
+			return fmt.Sprintf("error: %s\n", err)
 		}
 		ot.postProcess(tb, d, e)
 		return ot.FormatExpr(e)

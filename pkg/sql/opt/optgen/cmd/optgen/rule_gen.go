@@ -724,6 +724,7 @@ func (g *newRuleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.Rul
 	g.w.writeIndent("_f.appliedRule(opt.%s, nil, _expr)\n", rule.Name)
 	g.w.unnest("}\n")
 
+	g.w.writeIndent("_f.constructorStackDepth--\n")
 	g.w.writeIndent("return _expr\n")
 }
 

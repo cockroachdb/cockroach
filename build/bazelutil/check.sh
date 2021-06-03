@@ -42,8 +42,6 @@ pkg/cmd/prereqs/BUILD.bazel
 pkg/cmd/publish-artifacts/BUILD.bazel
 pkg/cmd/roachtest/BUILD.bazel
 pkg/cmd/teamcity-trigger/BUILD.bazel
-pkg/util/caller/BUILD.bazel
-pkg/util/log/BUILD.bazel
 "
 
 git grep 'go:generate stringer' pkg | while read LINE; do

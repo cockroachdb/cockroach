@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/errors"
 )
 
 // ProjectColMapLeft returns a Projections operator that maps the left side
@@ -83,4 +84,79 @@ func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *
 		}
 	}
 	return &prunedSet
+}
+
+// CanConvertUnionToDistinctUnionAll checks whether a Union can be replaced
+// with a DistinctOn-UnionAll complex. If the replacement is valid, it returns
+// a ColSet with the key columns the DistinctOn will need to group on.
+// Otherwise, returns ok=false. See the ConvertUnionToDistinctUnionAll rule
+// comment for more info on the conditions that allow this transformation.
+//
+// CanConvertUnionToDistinctUnionAll assumes that both expressions have
+// non-empty keys, that all key columns are contained within the given lists,
+// and that the lists contain no duplicates.
+//
+// leftCols and rightCols contain the columns from the left and right inputs of
+// the union that will be unioned together. leftColSet contains all columns from
+// the left input; it is used to ensure that all columns from the key selected
+// from the base table are present in the union.
+func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
+	leftCols, rightCols opt.ColList,
+) (keyCols opt.ColSet, ok bool) {
+	if len(leftCols) != len(rightCols) || len(leftCols) == 0 {
+		panic(errors.AssertionFailedf("invalid union"))
+	}
+	md := c.mem.Metadata()
+	leftTableID, rightTableID := md.ColumnMeta(leftCols[0]).Table, md.ColumnMeta(rightCols[0]).Table
+	if leftTableID == opt.TableID(0) || rightTableID == opt.TableID(0) {
+		// All columns must come from a base table.
+		return opt.ColSet{}, false
+	}
+	if md.Table(leftTableID) != md.Table(rightTableID) {
+		// All columns must come from the same base table.
+		return opt.ColSet{}, false
+	}
+	for i := range leftCols {
+		if leftTableID != md.ColumnMeta(leftCols[i]).Table ||
+			rightTableID != md.ColumnMeta(rightCols[i]).Table {
+			// All columns on a given side must come from the same meta table.
+			return opt.ColSet{}, false
+		}
+		if leftTableID.ColumnOrdinal(leftCols[i]) != rightTableID.ColumnOrdinal(rightCols[i]) {
+			// Pairs of equivalent columns must come from the same ordinal position in
+			// the original base table.
+			return opt.ColSet{}, false
+		}
+	}
+
+	// Now find a subset of the columns that forms a strict key over the base
+	// table.
+	leftFDs := memo.MakeTableFuncDep(md, leftTableID)
+	leftColSet := leftCols.ToSet()
+	if !leftFDs.ColsAreStrictKey(leftColSet) {
+		// The columns must form a strict key over the base table.
+		return opt.ColSet{}, false
+	}
+	keyCols = leftFDs.ReduceCols(leftColSet)
+	if keyCols.Equals(leftColSet) {
+		// The key columns must form a strict subset of the union columns, or the
+		// transformation is not worth it.
+		return opt.ColSet{}, false
+	}
+	rightFDs := memo.MakeTableFuncDep(md, rightTableID)
+	if !rightFDs.ColsAreStrictKey(c.TranslateColSet(keyCols, leftCols, rightCols)) {
+		// The columns must form a strict key over both meta tables. The meta tables
+		// can have different functional dependencies when the
+		// IgnoreUniqueWithoutIndexKeys flag is set for one table and not the other.
+		// A meta table with the flag set will not be able to take advantage of a
+		// UNIQUE NOT NULL column in calculating functional dependencies.
+		return opt.ColSet{}, false
+	}
+	return keyCols, true
+}
+
+// TranslateColSet is used to translate a ColSet from one set of column IDs
+// to an equivalent set. See the opt.TranslateColSet comment for more info.
+func (c *CustomFuncs) TranslateColSet(colSetIn opt.ColSet, from, to opt.ColList) opt.ColSet {
+	return opt.TranslateColSet(colSetIn, from, to)
 }
