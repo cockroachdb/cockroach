@@ -116,6 +116,7 @@ go_test(
     embed = [":batcheval"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
