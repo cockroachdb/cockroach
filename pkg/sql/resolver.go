@@ -38,17 +38,6 @@ import (
 
 var _ resolver.SchemaResolver = &planner{}
 
-// ResolveUncachedDatabaseByName looks up a database name from the store.
-// TODO (lucy): See if we can rework the PlanHookState interface to just use
-// the desc.Collection methods directly.
-func (p *planner) ResolveUncachedDatabaseByName(
-	ctx context.Context, dbName string, required bool,
-) (res catalog.DatabaseDescriptor, err error) {
-	res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
-		tree.DatabaseLookupFlags{Required: required, AvoidCached: true})
-	return res, err
-}
-
 // ResolveUncachedSchemaDescriptor looks up a mutable descriptor for a schema
 // from the store.
 func (p *planner) ResolveMutableSchemaDescriptor(
