@@ -52,11 +52,17 @@ type testHelper struct {
 // The testHelper will accelerate the adoption and cancellation loops inside of
 // the registry.
 func newTestHelper(t *testing.T) (*testHelper, func()) {
-	return newTestHelperForTables(t, jobstest.UseTestTables)
+	return newTestHelperForTables(t, jobstest.UseTestTables, nil)
+}
+
+func newTestHelperWithServerArgs(
+	t *testing.T, argsFn func(args *base.TestServerArgs),
+) (*testHelper, func()) {
+	return newTestHelperForTables(t, jobstest.UseTestTables, argsFn)
 }
 
 func newTestHelperForTables(
-	t *testing.T, envTableType jobstest.EnvTablesType,
+	t *testing.T, envTableType jobstest.EnvTablesType, argsFn func(args *base.TestServerArgs),
 ) (*testHelper, func()) {
 	var execSchedules execSchedulesFn
 
@@ -68,9 +74,15 @@ func newTestHelperForTables(
 			execSchedules = daemon
 		},
 	}
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+
+	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{JobsTestingKnobs: knobs},
-	})
+	}
+	if argsFn != nil {
+		argsFn(&args)
+	}
+
+	s, db, kvDB := serverutils.StartServer(t, args)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 

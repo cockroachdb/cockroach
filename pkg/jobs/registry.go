@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,23 +43,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
-)
-
-var (
-	gcSetting = settings.RegisterDurationSetting(
-		"jobs.retention_time",
-		"the amount of time to retain records for completed jobs before",
-		time.Hour*24*14,
-	).WithPublic()
-
-	// CancellationsUpdateLimitSetting the number of jobs can be updated when canceling jobs
-	// concurrently from dead sessions.
-	CancellationsUpdateLimitSetting = settings.RegisterIntSetting(
-		"jobs.cancel_update_limit",
-		"the number of jobs can be updated when canceling jobs concurrently from dead sessions",
-		1000,
-		settings.NonNegativeInt,
-	)
 )
 
 // adoptedJobs represents a the epoch and cancelation of a job id being run
@@ -582,43 +563,12 @@ func (r *Registry) UpdateJobWithTxn(
 	return j.Update(ctx, txn, updateFunc)
 }
 
-// DefaultCancelInterval is a reasonable interval at which to poll this node
-// for liveness failures and cancel running jobs.
-var DefaultCancelInterval = 10 * time.Second
-
-// DefaultAdoptInterval is a reasonable interval at which to poll system.jobs
-// for jobs with expired leases.
-//
-// DefaultAdoptInterval is mutable for testing. NB: Updates to this value after
-// Registry.Start has been called will not have any effect.
-var DefaultAdoptInterval = 30 * time.Second
-
-// TestingSetAdoptAndCancelIntervals can be used to accelerate job adoption and
-// state changes.
-func TestingSetAdoptAndCancelIntervals(adopt, cancel time.Duration) (cleanup func()) {
-	prevAdopt := DefaultAdoptInterval
-	prevCancel := DefaultCancelInterval
-	DefaultAdoptInterval = adopt
-	DefaultCancelInterval = cancel
-	return func() {
-		DefaultAdoptInterval = prevAdopt
-		DefaultCancelInterval = prevCancel
-	}
-}
-
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
-
-// maxGCInterval is the maximum duration for how often we check for and delete job
-// records older than the retention limit.
-const maxGCInterval = 1 * time.Hour
 
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
-func (r *Registry) Start(
-	ctx context.Context, stopper *stop.Stopper, cancelInterval, adoptInterval time.Duration,
-) error {
-
+func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	every := log.Every(time.Second)
 	withSession := func(
 		f func(ctx context.Context, s sqlliveness.Session),
@@ -637,6 +587,8 @@ func (r *Registry) Start(
 		}
 	}
 
+	// removeClaimsFromDeadSessions queries the jobs table for non-terminal
+	// jobs and nullifies their claims if the claims are owned by known dead sessions.
 	removeClaimsFromDeadSessions := func(ctx context.Context, s sqlliveness.Session) {
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Run the expiration transaction at low priority to ensure that it does
@@ -655,7 +607,7 @@ SELECT claim_session_id
  WHERE claim_session_id <> $1
    AND status IN `+claimableStatusTupleString+`
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id) FETCH 
-	 FIRST `+strconv.Itoa(int(CancellationsUpdateLimitSetting.Get(&r.settings.SV)))+` ROWS ONLY)`,
+	 FIRST `+strconv.Itoa(int(cancellationsUpdateLimitSetting.Get(&r.settings.SV)))+` ROWS ONLY)`,
 				s.ID().UnsafeBytes(),
 			)
 			return err
@@ -663,6 +615,9 @@ SELECT claim_session_id
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
+	// servePauseAndCancelRequests queries tho pause-requested and cancel-requested
+	// jobs that this node has claimed and sets their states to paused or cancel
+	// respectively, and then stops the execution of those jobs.
 	servePauseAndCancelRequests := func(ctx context.Context, s sqlliveness.Session) {
 		if err := r.servePauseAndCancelRequests(ctx, s); err != nil {
 			log.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
@@ -673,11 +628,16 @@ SELECT claim_session_id
 		r.maybeCancelJobs(ctx, s)
 		servePauseAndCancelRequests(ctx, s)
 	})
+	// claimJobs iterates the set of jobs which are not currently claimed and
+	// claims jobs up to maxAdoptionsPerLoop.
 	claimJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
 		if err := r.claimJobs(ctx, s); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
 		}
 	})
+	// processClaimedJobs iterates the jobs claimed by the current node that
+	// are in the running or reverting state, and then it starts those jobs if
+	// they are not already running.
 	processClaimedJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
 		if r.adoptionDisabled(ctx) {
 			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
@@ -690,19 +650,23 @@ SELECT claim_session_id
 	})
 
 	if err := stopper.RunAsyncTask(context.Background(), "jobs/cancel", func(ctx context.Context) {
-		// Calling maybeCancelJobs once at the start ensures we have an up-to-date
-		// liveness epoch before we wait out the first cancelInterval.
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
+
 		cancelLoopTask(ctx)
+		lc, cleanup := makeLoopController(r.settings, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
+		defer cleanup()
 		for {
 			select {
+			case <-lc.updated:
+				lc.onUpdate()
 			case <-r.stopper.ShouldQuiesce():
 				log.Warningf(ctx, "canceling all adopted jobs due to stopper quiescing")
 				r.cancelAllAdoptedJobs()
 				return
-			case <-time.After(cancelInterval):
+			case <-lc.timer.C:
 				cancelLoopTask(ctx)
+				lc.onExecute()
 			}
 		}
 	}); err != nil {
@@ -710,43 +674,31 @@ SELECT claim_session_id
 	}
 	if err := stopper.RunAsyncTask(context.Background(), "jobs/gc", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
-		settingChanged := make(chan struct{}, 1)
-		gcSetting.SetOnChange(&r.settings.SV, func(ctx context.Context) {
-			select {
-			case settingChanged <- struct{}{}:
-			default:
-			}
-		})
-		gcInterval := func() time.Duration {
-			if setting := gcSetting.Get(&r.settings.SV); setting < maxGCInterval {
-				return setting
-			}
-			return maxGCInterval
-		}
-		timer := timeutil.NewTimer()
-		lastGC := timeutil.Now()
-		// We'll jitter the first cleanup run to avoid contention in case multiple
-		// nodes restart at once.
-
-		const jitter = 1 / 6
-		jitterFraction := 1 + (2*rand.Float64()-1)*jitter // 1 + [-1/6, +1/6)
-		jitterredDuration := float64(gcInterval()) * jitterFraction
-		timer.Reset(time.Duration(jitterredDuration))
 		defer cancel()
+
+		lc, cleanup := makeLoopController(r.settings, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
+		defer cleanup()
+
+		// Retention duration of terminal job records.
+		retentionDuration := func() time.Duration {
+			if r.knobs.IntervalOverrides.RetentionTime != nil {
+				return *r.knobs.IntervalOverrides.RetentionTime
+			}
+			return retentionTimeSetting.Get(&r.settings.SV)
+		}
+
 		for {
 			select {
-			case <-settingChanged:
-				timer.Reset(timeutil.Until(lastGC.Add(gcInterval())))
+			case <-lc.updated:
+				lc.onUpdate()
 			case <-stopper.ShouldQuiesce():
 				return
-			case <-timer.C:
-				timer.Read = true
-				old := timeutil.Now().Add(-1 * gcSetting.Get(&r.settings.SV))
+			case <-lc.timer.C:
+				old := timeutil.Now().Add(-1 * retentionDuration())
 				if err := r.cleanupOldJobs(ctx, old); err != nil {
 					log.Warningf(ctx, "error cleaning up old job records: %v", err)
 				}
-				lastGC = timeutil.Now()
-				timer.Reset(gcInterval())
+				lc.onExecute()
 			}
 		}
 	}); err != nil {
@@ -755,11 +707,12 @@ SELECT claim_session_id
 	return stopper.RunAsyncTask(context.Background(), "jobs/adopt", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
-		timer.Reset(adoptInterval)
+		lc, cleanup := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
+		defer cleanup()
 		for {
 			select {
+			case <-lc.updated:
+				lc.onUpdate()
 			case <-stopper.ShouldQuiesce():
 				return
 			case shouldClaim := <-r.adoptionCh:
@@ -768,11 +721,10 @@ SELECT claim_session_id
 					claimJobs(ctx)
 				}
 				processClaimedJobs(ctx)
-			case <-timer.C:
-				timer.Read = true
+			case <-lc.timer.C:
 				claimJobs(ctx)
 				processClaimedJobs(ctx)
-				timer.Reset(adoptInterval)
+				lc.onExecute()
 			}
 		}
 	})
@@ -804,17 +756,18 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 	}
 }
 
+const expiredJobsQuery = "SELECT id, payload, status, created FROM system.jobs " +
+	"WHERE (created < $1) AND (id > $2) " +
+	"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
+	"LIMIT $3"
+
 // cleanupOldJobsPage deletes up to cleanupPageSize job rows with ID > minID.
 // minID is supposed to be the maximum ID returned by the previous page (0 if no
 // previous page).
 func (r *Registry) cleanupOldJobsPage(
 	ctx context.Context, olderThan time.Time, minID jobspb.JobID, pageSize int,
 ) (done bool, maxID jobspb.JobID, retErr error) {
-	const stmt = "SELECT id, payload, status, created FROM system.jobs " +
-		"WHERE created < $1 AND id > $2 " +
-		"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
-		"LIMIT $3"
-	it, err := r.ex.QueryIterator(ctx, "gc-jobs", nil /* txn */, stmt, olderThan, minID, pageSize)
+	it, err := r.ex.QueryIterator(ctx, "gc-jobs", nil /* txn */, expiredJobsQuery, olderThan, minID, pageSize)
 	if err != nil {
 		return false, 0, err
 	}

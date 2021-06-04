@@ -77,7 +77,6 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	skip.UnderRaceWithIssue(t, 60710)
 
 	ctx := context.Background()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	canBeCompletedCh := make(chan struct{})
 	const threshold = 10
@@ -120,6 +119,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		},
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
 	numNodes := 3
 	tc := testcluster.StartTestCluster(t, numNodes, params)

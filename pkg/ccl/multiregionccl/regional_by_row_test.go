@@ -169,9 +169,6 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	var chunkSize int64 = 100
 	var maxValue = 4000
 	if util.RaceEnabled {
@@ -366,6 +363,8 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 										return errorMode.runOnChunk(db)
 									},
 								},
+								// Decrease the adopt loop interval so that retries happen quickly.
+								JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 							}
 							var s serverutils.TestServerInterface
 							var kvDB *kv.DB
@@ -501,9 +500,6 @@ func TestRepartitionFailureRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	var mu syncutil.Mutex
 	errorReturned := false
 	knobs := base.TestingKnobs{
@@ -518,6 +514,8 @@ func TestRepartitionFailureRollback(t *testing.T) {
 				return nil
 			},
 		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, knobs,
@@ -556,9 +554,6 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	for _, tc := range []struct {
 		locality string
 	}{
@@ -567,21 +562,25 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 		{locality: "REGIONAL BY ROW AS region_col"},
 	} {
 		t.Run(tc.locality, func(t *testing.T) {
-			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-				t, 3 /* numServers */, base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						// Disable the merge queue because it makes this test flakey
-						// under stress. Consider changing this when admin commands are
-						// better synchronized leading to less thrashing of the range cache.
-						// We may also need to retry ClearRange operations which bump into
-						// the GC threshold. Generally that's not a concern because
-						// generally that threshold isn't super small. The problem with
-						// ranges is that when they merge, as may happen during the parallel
-						// execution of a big ClearRange is that the highest threshold will
-						// be inherited.
-						DisableMergeQueue: true,
-					},
+			knobs := base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable the merge queue because it makes this test flakey
+					// under stress. Consider changing this when admin commands are
+					// better synchronized leading to less thrashing of the range cache.
+					// We may also need to retry ClearRange operations which bump into
+					// the GC threshold. Generally that's not a concern because
+					// generally that threshold isn't super small. The problem with
+					// ranges is that when they merge, as may happen during the parallel
+					// execution of a big ClearRange is that the highest threshold will
+					// be inherited.
+					DisableMergeQueue: true,
 				},
+				// Decrease the adopt loop interval so that retries happen quickly.
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			}
+
+			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+				t, 3 /* numServers */, knobs,
 			)
 			defer cleanup()
 
