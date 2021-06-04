@@ -220,6 +220,28 @@ message Entry {
 
   // Channel is the channel on which the message was sent.
   Channel channel = 10;
+
+  // StructuredEnd, if non-zero, indicates that the entry
+  // is structured; it is also the index
+  // inside the Message field where the JSON payload ends (exclusive).
+  uint32 structured_end = 11;
+
+  // StructuredStart, when StructuredEnd is non-zero, is the index
+  // inside the Message field where the JSON payload starts (inclusive).
+  uint32 structured_start = 12;
+
+  // StackTraceStart is the index inside Message where a detailed
+  // stack trace starts. If zero, no stack trace is present. Stack
+  // traces are always separated from the message using a newline
+  // character. If a stack trace is included, StackTracePosition is
+  // the index of the character immediately after the newline
+  // character.
+  //
+  // We use an index-in-string field in the protobuf, instead of two
+  // separate string fields, because previous-version consumers of
+  // Entry are still expecting the message and the stack trace in the
+  // same field.
+  uint32 stack_trace_start = 13;
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of
