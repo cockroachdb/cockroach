@@ -4,6 +4,7 @@ go_library(
     name = "colinfo",
     srcs = [
         "col_type_info.go",
+        "column_item_resolver.go",
         "column_resolver.go",
         "column_type_properties.go",
         "data_source.go",
@@ -31,7 +32,16 @@ go_library(
 go_test(
     name = "colinfo_test",
     size = "small",
-    srcs = ["result_columns_test.go"],
+    srcs = [
+        "column_item_resolver_test.go",
+        "result_columns_test.go",
+    ],
     embed = [":colinfo"],
-    deps = ["//pkg/sql/types"],
+    deps = [
+        "//pkg/sql/catalog/colinfo/colinfotestutils",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
 )

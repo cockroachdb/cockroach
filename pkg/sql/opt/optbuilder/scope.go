@@ -699,7 +699,7 @@ func (*scopeColumn) ColumnResolutionResult() {}
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (s *scope) FindSourceProvidingColumn(
 	_ context.Context, colName tree.Name,
-) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
+) (prefix *tree.TableName, srcMeta colinfo.ColumnSourceMeta, colHint int, err error) {
 	var candidateFromAnonSource *scopeColumn
 	var candidateWithPrefix *scopeColumn
 	var hiddenCandidate *scopeColumn
@@ -799,9 +799,9 @@ func (s *scope) FindSourceProvidingColumn(
 func (s *scope) FindSourceMatchingName(
 	_ context.Context, tn tree.TableName,
 ) (
-	res tree.NumResolutionResults,
+	res colinfo.NumResolutionResults,
 	prefix *tree.TableName,
-	srcMeta tree.ColumnSourceMeta,
+	srcMeta colinfo.ColumnSourceMeta,
 	err error,
 ) {
 	// If multiple sources match tn in the same scope, we return an error
@@ -821,18 +821,18 @@ func (s *scope) FindSourceMatchingName(
 				continue
 			}
 			if found {
-				return tree.MoreThanOne, nil, s, newAmbiguousSourceError(&tn)
+				return colinfo.MoreThanOne, nil, s, newAmbiguousSourceError(&tn)
 			}
 			found = true
 			source = src
 		}
 
 		if found {
-			return tree.ExactlyOne, &source, s, nil
+			return colinfo.ExactlyOne, &source, s, nil
 		}
 	}
 
-	return tree.NoResults, nil, s, nil
+	return colinfo.NoResults, nil, s, nil
 }
 
 // sourceNameMatches checks whether a request for table name toFind
@@ -862,10 +862,10 @@ func sourceNameMatches(srcName tree.TableName, toFind tree.TableName) bool {
 func (s *scope) Resolve(
 	_ context.Context,
 	prefix *tree.TableName,
-	srcMeta tree.ColumnSourceMeta,
+	srcMeta colinfo.ColumnSourceMeta,
 	colHint int,
 	colName tree.Name,
-) (tree.ColumnResolutionResult, error) {
+) (colinfo.ColumnResolutionResult, error) {
 	if colHint >= 0 {
 		// Column was found by FindSourceProvidingColumn above.
 		return srcMeta.(*scopeColumn), nil
@@ -924,7 +924,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		colI, resolveErr := t.Resolve(s.builder.ctx, s)
+		colI, resolveErr := colinfo.ResolveColumnItem(s.builder.ctx, s, t)
 		if resolveErr != nil {
 			if sqlerrors.IsUndefinedColumnError(resolveErr) {
 				// Attempt to resolve as columnname.*, which allows items

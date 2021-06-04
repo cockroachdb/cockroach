@@ -102,23 +102,18 @@ type ColumnResolver struct {
 // FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceMatchingName(
 	ctx context.Context, tn tree.TableName,
-) (
-	res tree.NumResolutionResults,
-	prefix *tree.TableName,
-	srcMeta tree.ColumnSourceMeta,
-	err error,
-) {
+) (res NumResolutionResults, prefix *tree.TableName, srcMeta ColumnSourceMeta, err error) {
 	if !sourceNameMatches(&r.Source.SourceAlias, tn) {
-		return tree.NoResults, nil, nil, nil
+		return NoResults, nil, nil, nil
 	}
 	prefix = &r.Source.SourceAlias
-	return tree.ExactlyOne, prefix, nil, nil
+	return ExactlyOne, prefix, nil, nil
 }
 
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceProvidingColumn(
 	ctx context.Context, col tree.Name,
-) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
+) (prefix *tree.TableName, srcMeta ColumnSourceMeta, colHint int, err error) {
 	colIdx := tree.NoColumnIdx
 	colName := string(col)
 
@@ -142,12 +137,8 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 
 // Resolve is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) Resolve(
-	ctx context.Context,
-	prefix *tree.TableName,
-	srcMeta tree.ColumnSourceMeta,
-	colHint int,
-	col tree.Name,
-) (tree.ColumnResolutionResult, error) {
+	ctx context.Context, prefix *tree.TableName, srcMeta ColumnSourceMeta, colHint int, col tree.Name,
+) (ColumnResolutionResult, error) {
 	if colHint != -1 {
 		// (*ColumnItem).Resolve() is telling us that we found the source
 		// via FindSourceProvidingColumn(). So we can count on
