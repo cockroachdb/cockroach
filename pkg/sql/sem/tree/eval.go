@@ -3065,10 +3065,34 @@ type EvalDatabase interface {
 	) (isVisible bool, exists bool, err error)
 }
 
+type TypeResolver interface {
+	TypeReferenceResolver
+
+	// ResolveOIDFromString looks up the populated value of the OID with the
+	// desired resultType which matches the provided name.
+	//
+	// The return value is a fresh DOid of the input oid.Oid with name and OID
+	// set to the result of the query. If there was not exactly one result to the
+	// query, an error will be returned.
+	ResolveOIDFromString(
+		ctx context.Context, resultType *types.T, toResolve *DString,
+	) (*DOid, error)
+
+	// ResolveOIDFromOID looks up the populated value of the oid with the
+	// desired resultType which matches the provided oid.
+	//
+	// The return value is a fresh DOid of the input oid.Oid with name and OID
+	// set to the result of the query. If there was not exactly one result to the
+	// query, an error will be returned.
+	ResolveOIDFromOID(
+		ctx context.Context, resultType *types.T, toResolve *DOid,
+	) (*DOid, error)
+}
+
 // EvalPlanner is a limited planner that can be used from EvalContext.
 type EvalPlanner interface {
 	EvalDatabase
-	TypeReferenceResolver
+	TypeResolver
 
 	// GetImmutableTableInterfaceByID returns an interface{} with
 	// catalog.TableDescriptor to avoid a circular dependency.
@@ -3786,75 +3810,6 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 // name of the function into group 1.
 // e.g. function(a, b, c) or function( a )
 var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\."]+)\s*\((?:(?:\s*[\w"]+\s*,)*\s*[\w"]+)?\s*\)\s*$`)
-
-// regTypeInfo contains details on a pg_catalog table that has a reg* type.
-type regTypeInfo struct {
-	tableName string
-	// nameCol is the name of the column that contains the table's entity name.
-	nameCol string
-	// objName is a human-readable name describing the objects in the table.
-	objName string
-	// errType is the pg error code in case the object does not exist.
-	errType pgcode.Code
-}
-
-// regTypeInfos maps an oid.Oid to a regTypeInfo that describes the pg_catalog
-// table that contains the entities of the type of the key.
-var regTypeInfos = map[oid.Oid]regTypeInfo{
-	oid.T_regclass:     {"pg_class", "relname", "relation", pgcode.UndefinedTable},
-	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
-	oid.T_regproc:      {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
-	oid.T_regprocedure: {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
-	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
-}
-
-// queryOidWithJoin looks up the name or OID of an input OID or string in the
-// pg_catalog table that the input oid.Oid belongs to. If the input Datum
-// is a DOid, the relevant table will be queried by OID; if the input is a
-// DString, the table will be queried by its name column.
-//
-// The return value is a fresh DOid of the input oid.Oid with name and OID
-// set to the result of the query. If there was not exactly one result to the
-// query, an error will be returned.
-func queryOidWithJoin(
-	ctx *EvalContext, typ *types.T, d Datum, joinClause string, additionalWhere string,
-) (*DOid, error) {
-	ret := &DOid{semanticType: typ}
-	info := regTypeInfos[typ.Oid()]
-	var queryCol string
-	switch d.(type) {
-	case *DOid:
-		queryCol = "oid"
-	case *DString:
-		queryCol = info.nameCol
-	default:
-		return nil, errors.AssertionFailedf("invalid argument to OID cast: %s", d)
-	}
-	results, err := ctx.InternalExecutor.QueryRow(
-		ctx.Ctx(), "queryOidWithJoin",
-		ctx.Txn,
-		fmt.Sprintf(
-			"SELECT %s.oid, %s FROM pg_catalog.%s %s WHERE %s = $1 %s",
-			info.tableName, info.nameCol, info.tableName, joinClause, queryCol, additionalWhere),
-		d)
-	if err != nil {
-		if errors.HasType(err, (*MultipleResultsError)(nil)) {
-			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
-				"more than one %s named %s", info.objName, d)
-		}
-		return nil, err
-	}
-	if results.Len() == 0 {
-		return nil, pgerror.Newf(info.errType, "%s %s does not exist", info.objName, d)
-	}
-	ret.DInt = results[0].(*DOid).DInt
-	ret.name = AsStringWithFlags(results[1], FmtBareStrings)
-	return ret, nil
-}
-
-func queryOid(ctx *EvalContext, typ *types.T, d Datum) (*DOid, error) {
-	return queryOidWithJoin(ctx, typ, d, "", "")
-}
 
 // Eval implements the TypedExpr interface.
 func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
