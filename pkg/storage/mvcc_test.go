@@ -3682,7 +3682,8 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 				t.Fatal(err)
 			}
 			num, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1e2Commit, roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}), 2)
+				roachpb.MakeLockUpdate(txn1e2Commit, roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
+				2, engine.IsSeparatedIntentsEnabledForTesting(ctx))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3883,7 +3884,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1, EndKey: testKey4.Next()}),
-				math.MaxInt64)
+				math.MaxInt64, engine.IsSeparatedIntentsEnabledForTesting(ctx))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3948,11 +3949,16 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			// Write 10 keys from txn1, 10 from txn2, and 10 with no txn, interleaved.
+			// Write 10 keys from txn1, 10 from txn2, and 10 with no txn,
+			// interleaved. The length of these keys changes and is non-decreasing.
+			// This exercises a subtle bug where separatedIntentAndVersionIter
+			// forgot to update its intentKey, but in some cases the shared slice
+			// for the unsafe key caused it to be inadvertently updated in a correct
+			// way.
 			for i := 0; i < 30; i += 3 {
-				key0 := roachpb.Key(fmt.Sprintf("%02d", i+0))
-				key1 := roachpb.Key(fmt.Sprintf("%02d", i+1))
-				key2 := roachpb.Key(fmt.Sprintf("%02d", i+2))
+				key0 := roachpb.Key(fmt.Sprintf("%02d%d", i+0, i+0))
+				key1 := roachpb.Key(fmt.Sprintf("%02d%d", i+1, i+1))
+				key2 := roachpb.Key(fmt.Sprintf("%02d%d", i+2, i+2))
 				if err := MVCCPut(ctx, engine, nil, key0, txn1.ReadTimestamp, value1, txn1); err != nil {
 					t.Fatal(err)
 				}
@@ -3965,20 +3971,78 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 				}
 			}
 
-			// Resolve up to 5 intents.
-			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
-				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: roachpb.Key("00"), EndKey: roachpb.Key("30")}),
-				5)
+			rw := engine.NewBatch()
+
+			// Resolve up to 6 intents: the keys are 000, 033, 066, 099, 1212, 1515.
+			num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, rw, nil,
+				roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: roachpb.Key("00"), EndKey: roachpb.Key("33")}),
+				6, engine.IsSeparatedIntentsEnabledForTesting(ctx))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if num != 5 || resumeSpan == nil {
-				t.Errorf("expected resolution for only 5 keys; got %d, resume=%s", num, resumeSpan)
+			if num != 6 || resumeSpan == nil {
+				t.Errorf("expected resolution for only 6 keys; got %d, resume=%s", num, resumeSpan)
 			}
-			expResumeSpan := roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
+			expResumeSpan := roachpb.Span{Key: roachpb.Key("1515").Next(), EndKey: roachpb.Key("33")}
 			if !resumeSpan.Equal(expResumeSpan) {
 				t.Errorf("expected resume span %s; got %s", expResumeSpan, resumeSpan)
 			}
+			require.NoError(t, rw.Commit(true))
+			// Check that the intents are actually gone by trying to read above them
+			// using txn2.
+			for i := 0; i < 18; i += 3 {
+				val, intent, err := MVCCGet(ctx, engine, roachpb.Key(fmt.Sprintf("%02d%d", i, i)),
+					txn2.ReadTimestamp, MVCCGetOptions{Txn: txn2})
+				require.NotNil(t, val)
+				require.NoError(t, err)
+				require.Nil(t, intent)
+			}
+		})
+	}
+}
+
+// This test is similar to TestMVCCResolveTxnRangeResume, and additionally has
+// keys with many versions and resumes intent resolution until it completes.
+func TestMVCCResolveTxnRangeResumeWithManyVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			// Write 1000 keys with intents of which 100 are by the txn for which we
+			// will perform intent resolution.
+			lockUpdate := setupKeysWithIntent(t, engine, 5, /* numVersions */
+				1 /* numFlushedVersions */, false, 10,
+				false /* resolveIntentForLatestVersionWhenNonLockUpdateTxn */)
+			lockUpdate.Key = makeKey(nil, 0)
+			lockUpdate.EndKey = makeKey(nil, numIntentKeys)
+			i := 0
+			for {
+				// Resolve up to 20 intents.
+				num, resumeSpan, err := MVCCResolveWriteIntentRange(ctx, engine, nil, lockUpdate,
+					20, engine.IsSeparatedIntentsEnabledForTesting(ctx))
+				require.NoError(t, err)
+				if resumeSpan == nil {
+					// Last call resolves 0 intents.
+					require.Equal(t, int64(0), num)
+					break
+				}
+				require.Equal(t, int64(20), num)
+				i++
+				expResumeSpan := roachpb.Span{
+					Key:    makeKey(nil, (i*20-1)*10).Next(),
+					EndKey: lockUpdate.EndKey,
+				}
+				if !resumeSpan.Equal(expResumeSpan) {
+					t.Errorf("expected resume span %s; got %s", expResumeSpan, resumeSpan)
+				}
+				lockUpdate.Span = expResumeSpan
+			}
+			require.Equal(t, 5, i)
 		})
 	}
 }

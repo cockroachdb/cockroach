@@ -1566,6 +1566,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		return ""
 	}
 
+	var onlySeparatedIntents bool
 	resolve := func(s *state, status roachpb.TransactionStatus) string {
 		ranged := s.rng.Intn(2) == 0
 		desc := fmt.Sprintf("ranged=%t", ranged)
@@ -1577,7 +1578,8 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			} else {
 				max := s.rng.Int63n(5)
 				desc += fmt.Sprintf(", max=%d", max)
-				if _, _, err := MVCCResolveWriteIntentRange(ctx, s.eng, s.MS, s.intentRange(status), max); err != nil {
+				if _, _, err := MVCCResolveWriteIntentRange(
+					ctx, s.eng, s.MS, s.intentRange(status), max, onlySeparatedIntents); err != nil {
 					return desc + ": " + err.Error()
 				}
 			}
@@ -1641,6 +1643,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 							eng := engineImpl.create()
 							defer eng.Close()
 
+							onlySeparatedIntents = eng.IsSeparatedIntentsEnabledForTesting(ctx)
 							s := &randomTest{
 								actions: actions,
 								inline:  inline,
