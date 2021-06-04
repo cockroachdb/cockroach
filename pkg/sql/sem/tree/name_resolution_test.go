@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -617,12 +618,12 @@ func TestResolveTablePatternOrName(t *testing.T) {
 						// TODO: As part of work for #34240, we should be operating on
 						//  UnresolvedObjectNames here, rather than TableNames.
 						un := tpv.ToUnresolvedObjectName()
-						found, prefix, obMeta, err = tree.ResolveExisting(ctx, un, fakeResolver, flags, tc.curDb, tc.searchPath)
+						found, prefix, obMeta, err = resolver.ResolveExisting(ctx, un, fakeResolver, flags, tc.curDb, tc.searchPath)
 					} else {
 						// TODO: As part of work for #34240, we should be operating on
 						//  UnresolvedObjectNames here, rather than TableNames.
 						un := tpv.ToUnresolvedObjectName()
-						found, prefix, scMeta, err = tree.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
+						found, prefix, scMeta, err = resolver.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
 					}
 					tpv.ObjectNamePrefix = prefix
 					scPrefix = tpv.Schema()
