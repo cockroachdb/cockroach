@@ -185,9 +185,16 @@ func noopPauseRequestFunc(
 }
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
-	rts.cleanupSettings = jobs.TestingSetAdoptAndCancelIntervals(time.Millisecond, 2*time.Millisecond)
+	adoptInterval := time.Millisecond
+	cancelInterval := 2 * time.Millisecond
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: &jobs.TestingKnobs{
+		AdoptIntervalOverride:  &adoptInterval,
+		CancelIntervalOverride: &cancelInterval,
+	}}}
+
+	rts.cleanupSettings = func() {}
 	rts.ctx = context.Background()
-	rts.s, rts.outerDB, _ = serverutils.StartServer(t, base.TestServerArgs{})
+	rts.s, rts.outerDB, _ = serverutils.StartServer(t, args)
 	rts.sqlDB = sqlutils.MakeSQLRunner(rts.outerDB)
 	rts.registry = rts.s.JobRegistry().(*jobs.Registry)
 	rts.done = make(chan struct{})
@@ -1411,8 +1418,8 @@ func TestShowJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	ctx := context.Background()
@@ -1806,10 +1813,16 @@ func TestShowJobWhenComplete(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Canceling a job relies on adopt daemon to move the job to state
 	// reverting.
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
+	adoptAndCancelInterval := 10 * time.Millisecond
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{JobsTestingKnobs: &jobs.TestingKnobs{
+			AdoptIntervalOverride:  &adoptAndCancelInterval,
+			CancelIntervalOverride: &adoptAndCancelInterval,
+		}},
+	}
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 	mockJob := jobs.Record{
@@ -1944,10 +1957,11 @@ func TestJobInTxn(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Set the adoption interval to be very long to test the adoption channel.
-	defer jobs.TestingSetAdoptAndCancelIntervals(time.Hour, time.Hour)()
-
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour)},
+	}
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	// Accessed atomically.
@@ -2044,7 +2058,7 @@ func TestJobInTxn(t *testing.T) {
 		require.Equal(t, int32(0), atomic.LoadInt32(&hasRun),
 			"job has run in transaction before txn commit")
 
-		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
+		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval(), "job should have been adopted immediately")
 	})
 
 	t.Run("normal success", func(t *testing.T) {
@@ -2066,7 +2080,7 @@ func TestJobInTxn(t *testing.T) {
 			"more than one job ran")
 		require.Equal(t, "", j.Payload().Error)
 
-		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
+		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval(), "job should have been adopted immediately")
 	})
 
 	t.Run("one of the queued jobs fails", func(t *testing.T) {
@@ -2084,7 +2098,7 @@ func TestJobInTxn(t *testing.T) {
 		// Now let's actually commit the transaction and check that there is a
 		// failure.
 		require.Error(t, txn.Commit())
-		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
+		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval(), "job should have been adopted immediately")
 	})
 }
 
@@ -2377,11 +2391,10 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	ctx := context.Background()
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	registry := s.JobRegistry().(*jobs.Registry)
@@ -2496,7 +2509,6 @@ func TestStatusSafeFormatter(t *testing.T) {
 
 func TestMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.TestingSetAdoptAndCancelIntervals(time.Millisecond, time.Millisecond)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2542,7 +2554,10 @@ func TestMetrics(t *testing.T) {
 		s serverutils.TestServerInterface, db *gosql.DB, r *jobs.Registry, cleanup func(),
 	) {
 		jobConstructorCleanup := jobs.ResetConstructors()
-		s, db, _ = serverutils.StartServer(t, base.TestServerArgs{})
+		args := base.TestServerArgs{Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Millisecond, time.Millisecond)},
+		}
+		s, db, _ = serverutils.StartServer(t, args)
 		r = s.JobRegistry().(*jobs.Registry)
 		return s, db, r, func() {
 			jobConstructorCleanup()
@@ -2709,11 +2724,11 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Disable the loops from messing with the job execution.
-	defer jobs.TestingSetAdoptAndCancelIntervals(time.Hour, time.Hour)()
+	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 

@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,9 +38,6 @@ func TestDrainingNamesAreCleanedOnTypeChangeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
@@ -49,6 +45,8 @@ func TestDrainingNamesAreCleanedOnTypeChangeFailure(t *testing.T) {
 			return errors.New("boom")
 		},
 	}
+	// Decrease the adopt loop interval so that retries happen quickly.
+	params.Knobs.JobsTestingKnobs = sqltestutils.JobsFastTestingKnobs()
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -125,9 +123,6 @@ func TestTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	ctx := context.Background()
 	// Protects errorReturned.
 	var mu syncutil.Mutex
@@ -145,6 +140,8 @@ func TestTypeSchemaChangeRetriesTransparently(t *testing.T) {
 			return context.DeadlineExceeded
 		},
 	}
+	// Decrease the adopt loop interval so that retries happen quickly.
+	params.Knobs.JobsTestingKnobs = sqltestutils.JobsFastTestingKnobs()
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -170,9 +167,6 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	ctx := context.Background()
 	// Protects errReturned.
 	var mu syncutil.Mutex
@@ -195,6 +189,8 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 			return context.DeadlineExceeded
 		},
 	}
+	// Decrease the adopt loop interval so that retries happen quickly.
+	params.Knobs.JobsTestingKnobs = sqltestutils.JobsFastTestingKnobs()
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -235,9 +231,10 @@ func TestAddDropValuesInTransaction(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 	params, _ := tests.CreateTestServerParams()
+	// Decrease the adopt loop interval so that retries happen quickly.
+	params.Knobs.JobsTestingKnobs = sqltestutils.JobsFastTestingKnobs()
+
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -483,10 +480,6 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(
-		100*time.Millisecond, 100*time.Millisecond,
-	)()
-
 	testCases := []struct {
 		desc       string
 		query      string
@@ -532,6 +525,7 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			var finishedSchemaChange sync.WaitGroup
 			finishedSchemaChange.Add(1)
 
+			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 				RunBeforeEnumMemberPromotion: func() error {
 					typeSchemaChangeStarted.Done()

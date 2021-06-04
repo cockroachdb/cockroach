@@ -12,9 +12,11 @@ package jobs
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 )
 
 // FakeResumer calls optional callbacks during the job lifecycle.
@@ -82,4 +84,52 @@ func (j *Job) Failed(ctx context.Context, causingErr error) error {
 // succeeded state.
 func (j *Job) Succeeded(ctx context.Context) error {
 	return j.succeeded(ctx, nil /* txn */, nil /* fn */)
+}
+
+func AdoptQuery() string {
+	return claimQuery
+}
+
+func CancelQuery() string {
+	return cancelQuery
+}
+
+func GcQuery() string {
+	return jobsQuery
+}
+
+func IntervalBaseSettingKey() string {
+	return intervalBaseSettingKey
+}
+
+func AdoptIntervalSettingKey() string {
+	return adoptIntervalSettingKey
+}
+
+func CancelIntervalSettingKey() string {
+	return cancelIntervalSettingKey
+}
+
+func GcIntervalSettingKey() string {
+	return gcIntervalSettingKey
+}
+
+func IntervalBaseSetting() *settings.FloatSetting {
+	return intervalBaseSetting
+}
+
+func AdoptIntervalSetting() *settings.DurationSetting {
+	return adoptIntervalSetting
+}
+
+func CancelIntervalSetting() *settings.DurationSetting {
+	return cancelIntervalSetting
+}
+
+func GcIntervalSetting() *settings.DurationSetting {
+	return gcIntervalSetting
+}
+
+func DefaultAdoptInterval() time.Duration {
+	return defaultAdoptInterval
 }

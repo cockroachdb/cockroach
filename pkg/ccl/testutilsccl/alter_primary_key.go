@@ -47,9 +47,6 @@ type AlterPrimaryKeyCorrectZoneConfigTestCase struct {
 func AlterPrimaryKeyCorrectZoneConfigTest(
 	t *testing.T, createDBStatement string, testCases []AlterPrimaryKeyCorrectZoneConfigTestCase,
 ) {
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	chunkSize := int64(100)
 	maxValue := 4000
 
@@ -93,6 +90,8 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 						return nil
 					},
 				},
+				// Decrease the adopt loop interval so that retries happen quickly.
+				JobsTestingKnobs: sqltestutils.JobsFastTestingKnobs(),
 			}
 			s, sqlDB, _ := serverutils.StartServer(t, params)
 			db = sqlDB

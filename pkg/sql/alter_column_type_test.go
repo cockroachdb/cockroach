@@ -190,8 +190,6 @@ func TestVisibilityDuringAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	ctx := context.Background()
 	swapNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
@@ -205,6 +203,8 @@ func TestVisibilityDuringAlterColumnType(t *testing.T) {
 				<-waitBeforeContinuing
 			},
 		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: sqltestutils.JobsFastTestingKnobs(),
 	}
 	s, db, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -290,9 +290,10 @@ ALTER TABLE t.test ALTER COLUMN x TYPE INT;
 func TestQueryIntToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	params, _ := tests.CreateTestServerParams()
+	// Decrease the adopt loop interval so that retries happen quickly.
+	params.Knobs.JobsTestingKnobs = sqltestutils.JobsFastTestingKnobs()
 
 	s, db, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)

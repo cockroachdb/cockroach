@@ -68,11 +68,14 @@ func AddDefaultZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, err
 	return cfg, err
 }
 
-// SetTestJobsAdoptInterval sets a short job adoption interval for a test
-// and returns a function to reset it after the test. The intention is that
-// the returned function should be deferred.
-func SetTestJobsAdoptInterval() (reset func()) {
-	return jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)
+// JobsFastTestingKnobs returns the knobs that override job adoption and cancel
+// intervals with short durations.
+func JobsFastTestingKnobs() *jobs.TestingKnobs {
+	interval := 100 * time.Millisecond
+	return &jobs.TestingKnobs{
+		AdoptIntervalOverride:  &interval,
+		CancelIntervalOverride: &interval,
+	}
 }
 
 // BulkInsertIntoTable fills up table t.test with (maxValue + 1) rows.

@@ -217,9 +217,6 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 
 	skip.UnderRace(t, "times out under race")
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	regionAlterCmds := []struct {
 		name          string
 		cmd           string
@@ -284,6 +281,8 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 							return nil
 						},
 					},
+					// Decrease the adopt loop interval so that retries happen quickly.
+					JobsTestingKnobs: sqltestutils.JobsFastTestingKnobs(),
 				}
 
 				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -432,9 +431,6 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	// Protects expectedCleanupRuns
 	var mu syncutil.Mutex
 	// We need to cleanup 2 times, once for the multi-region type descriptor and
@@ -456,6 +452,8 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 				return nil
 			},
 		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: sqltestutils.JobsFastTestingKnobs(),
 	}
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -504,15 +502,14 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 
 	skip.UnderRace(t, "times out under race")
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 			RunBeforeMultiRegionUpdates: func() error {
 				return errors.New("boom")
 			},
 		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: sqltestutils.JobsFastTestingKnobs(),
 	}
 
 	// Setup.
@@ -594,9 +591,6 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 
 	skip.UnderRace(t, "times out under race")
 
-	// Decrease the adopt loop interval so that retries happen quickly.
-	defer sqltestutils.SetTestJobsAdoptInterval()()
-
 	regionAlterCmds := []struct {
 		name               string
 		cmd                string
@@ -665,6 +659,8 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 							return nil
 						},
 					},
+					// Decrease the adopt loop interval so that retries happen quickly.
+					JobsTestingKnobs: sqltestutils.JobsFastTestingKnobs(),
 				}
 
 				tempExternalIODir, tempDirCleanup := testutils.TempDir(t)
@@ -718,6 +714,8 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 							return nil
 						},
 					},
+					// Decrease the adopt loop interval so that retries happen quickly.
+					JobsTestingKnobs: sqltestutils.JobsFastTestingKnobs(),
 				}
 
 				// Start a new cluster (with new testing knobs) for restore.
