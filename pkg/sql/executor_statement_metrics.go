@@ -143,7 +143,7 @@ func (ex *connExecutor) recordStatementSummary(
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
 
-	// We limit the number of statementIDs stored for a transaction, as dictated
+	// We limit the number of statementFingerprintIDs stored for a transaction, as dictated
 	// by the TxnStatsNumStmtIDsToRecord cluster setting.
 	maxStmtIDsLen := TxnStatsNumStmtIDsToRecord.Get(&ex.server.cfg.Settings.SV)
 	if int64(len(ex.extraTxnState.transactionStatementIDs)) < maxStmtIDsLen {

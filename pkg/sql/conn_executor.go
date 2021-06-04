@@ -1133,9 +1133,9 @@ type connExecutor struct {
 		// transactionStatementIDs tracks all statement IDs that make up the current
 		// transaction. It's length is bound by the TxnStatsNumStmtIDsToRecord
 		// cluster setting.
-		transactionStatementIDs []roachpb.StmtID
+		transactionStatementIDs []roachpb.StmtFingerprintID
 
-		// transactionStatementsHash is the hashed accumulation of all statementIDs
+		// transactionStatementsHash is the hashed accumulation of all statementFingerprintIDs
 		// that comprise the transaction. It is used to construct the key when
 		// recording transaction statistics. It's important to accumulate this hash
 		// as we go along in addition to the transactionStatementIDs as
