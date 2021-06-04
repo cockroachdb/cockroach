@@ -58,7 +58,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, pgerror.DangerousStatementf("RENAME DATABASE on current database")
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err

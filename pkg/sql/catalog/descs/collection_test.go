@@ -225,11 +225,11 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			_, db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 			dbID = db.GetID()
 
-			_, resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 
 			require.Same(t, db, resolved)
@@ -244,7 +244,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			flags.RequireMutable = false
 
-			_, immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
@@ -263,20 +263,20 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 
 			// Try to get the database descriptor by the old name and fail.
-			_, failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.Regexp(t, `database "db" does not exist`, err)
 			require.Nil(t, failedToResolve)
 
 			// Try to get the database descriptor by the new name and succeed but get
 			// the old version with the old name (this is bizarre but is the
 			// contract now).
-			_, immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
 			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
 
 			require.NoError(t, descriptors.AddUncommittedDescriptor(mut))
 
-			_, immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
 			require.Equal(t, db.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy(), immByNameAfter)
@@ -296,20 +296,20 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			ok, schema, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			schema, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
 			require.NoError(t, err)
-			require.True(t, ok)
+			require.NotNil(t, schema)
 
-			ok, resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
 			require.NoError(t, err)
-			require.True(t, ok)
+			require.NotNil(t, schema)
 
-			require.Same(t, schema.Desc, resolved.Desc)
+			require.Same(t, schema, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.ID, txn)
+			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.GetID(), txn)
 			require.NoError(t, err)
 
-			require.Same(t, schema.Desc, byID)
+			require.Same(t, schema, byID)
 			return nil
 		}))
 	})
@@ -488,16 +488,16 @@ CREATE TABLE test.schema.t(x INT);
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				_, dbDesc, err := descsCol.GetImmutableDatabaseByName(ctx, txn, "test", tree.DatabaseLookupFlags{Required: true})
+				dbDesc, err := descsCol.GetImmutableDatabaseByName(ctx, txn, "test", tree.DatabaseLookupFlags{Required: true})
 				if err != nil {
 					return err
 				}
-				_, schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
+				schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
 				if err != nil {
 					return err
 				}
 				// Write garbage privileges into the schema desc.
-				privs := schemaDesc.Desc.GetPrivileges()
+				privs := schemaDesc.GetPrivileges()
 				for i := range privs.Users {
 					// SELECT is valid on a database but not a schema, however
 					// due to issue #65697, after running ALTER DATABASE ...
@@ -510,7 +510,7 @@ CREATE TABLE test.schema.t(x INT);
 				}
 
 				descsCol.SkipValidationOnWrite()
-				return descsCol.WriteDesc(ctx, false, schemaDesc.Desc.(catalog.MutableDescriptor), txn)
+				return descsCol.WriteDesc(ctx, false, schemaDesc.(catalog.MutableDescriptor), txn)
 			}),
 	)
 

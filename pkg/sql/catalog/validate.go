@@ -14,7 +14,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
@@ -202,7 +202,7 @@ func (ve *validationErrors) CombinedError() error {
 	// Otherwise, those not in the causal chain will be ignored.
 	for _, err := range ve.errors {
 		for _, key := range errors.GetTelemetryKeys(err) {
-			if strings.HasPrefix(key, catconstants.ValidationTelemetryKeyPrefix) {
+			if strings.HasPrefix(key, telemetry.ValidationTelemetryKeyPrefix) {
 				extraTelemetryKeys = append(extraTelemetryKeys, key)
 			}
 		}
@@ -328,7 +328,7 @@ func (vea *validationErrorAccumulator) decorate(err error) error {
 	default:
 		return err
 	}
-	return errors.WithTelemetry(err, catconstants.ValidationTelemetryKeyPrefix+tkSuffix)
+	return errors.WithTelemetry(err, telemetry.ValidationTelemetryKeyPrefix+tkSuffix)
 }
 
 // ValidationDescGetter is used by the validation methods on Descriptor.

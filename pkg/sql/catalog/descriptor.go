@@ -152,8 +152,7 @@ type Descriptor interface {
 	ValidateTxnCommit(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
 }
 
-// DatabaseDescriptor will eventually be called dbdesc.Descriptor.
-// It is implemented by Immutable.
+// DatabaseDescriptor encapsulates the concept of a database.
 type DatabaseDescriptor interface {
 	Descriptor
 
@@ -172,13 +171,6 @@ type DatabaseDescriptor interface {
 	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
 	GetSchemaID(name string) descpb.ID
 	GetNonDroppedSchemaName(schemaID descpb.ID) string
-}
-
-// SchemaDescriptor will eventually be called schemadesc.Descriptor.
-// It is implemented by Immutable.
-type SchemaDescriptor interface {
-	Descriptor
-	SchemaDesc() *descpb.SchemaDescriptor
 }
 
 // TableDescriptor is an interface around the table descriptor types.

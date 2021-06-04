@@ -25,11 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/errors"
@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	pgCatalogName = sessiondata.PgCatalogName
+	pgCatalogName = catconstants.PgCatalogName
 )
 
 var pgCatalogNameDString = tree.NewDString(pgCatalogName)
@@ -45,7 +45,7 @@ var pgCatalogNameDString = tree.NewDString(pgCatalogName)
 // informationSchema lists all the table definitions for
 // information_schema.
 var informationSchema = virtualSchema{
-	name: sessiondata.InformationSchemaName,
+	name: catconstants.InformationSchemaName,
 	undefinedTables: buildStringSet(
 		// Generated with:
 		// select distinct '"'||table_name||'",' from information_schema.tables
@@ -1067,13 +1067,13 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
-						tree.NewDString(sc.Name),      // schema_name
+						tree.NewDString(sc.GetName()), // schema_name
 						tree.DNull,                    // default_character_set_name
 						tree.DNull,                    // sql_path
-						yesOrNoDatum(sc.Kind == catalog.SchemaUserDefined), // crdb_is_user_defined
+						yesOrNoDatum(sc.SchemaKind() == catalog.SchemaUserDefined), // crdb_is_user_defined
 					)
 				})
 			})
@@ -1165,17 +1165,19 @@ CREATE TABLE information_schema.schema_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					var privs []descpb.UserPrivilegeString
-					if sc.Kind == catalog.SchemaUserDefined {
+					if sc.SchemaKind() == catalog.SchemaUserDefined {
 						// User defined schemas have their own privileges.
-						privs = sc.Desc.GetPrivileges().Show(privilege.Schema)
+						privs = sc.GetPrivileges().Show(privilege.Schema)
 					} else {
 						// Other schemas inherit from the parent database.
+						// TODO(ajwerner): Fix this because it's bogus for everything other
+						// than public.
 						privs = db.GetPrivileges().Show(privilege.Database)
 					}
 					dbNameStr := tree.NewDString(db.GetName())
-					scNameStr := tree.NewDString(sc.Name)
+					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					for _, u := range privs {
@@ -1185,7 +1187,7 @@ CREATE TABLE information_schema.schema_privileges (
 							// Non-user defined schemas inherit privileges from the database,
 							// but the USAGE privilege is conferred by having SELECT privilege
 							// on the database. (There is no SELECT privilege on schemas.)
-							if sc.Kind != catalog.SchemaUserDefined {
+							if sc.SchemaKind() != catalog.SchemaUserDefined {
 								if privKind == privilege.SELECT {
 									priv = privilege.USAGE.String()
 								} else if !privilege.SchemaPrivileges.Contains(privKind) {
@@ -1748,30 +1750,22 @@ func forEachSchema(
 	ctx context.Context,
 	p *planner,
 	db catalog.DatabaseDescriptor,
-	fn func(sc catalog.ResolvedSchema) error,
+	fn func(sc catalog.SchemaDescriptor) error,
 ) error {
 	schemaNames, err := getSchemaNames(ctx, p, db)
 	if err != nil {
 		return err
 	}
 
-	vtableEntries := p.getVirtualTabler().getEntries()
-	schemas := make([]catalog.ResolvedSchema, 0, len(schemaNames)+len(vtableEntries))
+	vtableEntries := p.getVirtualTabler().getSchemas()
+	schemas := make([]catalog.SchemaDescriptor, 0, len(schemaNames)+len(vtableEntries))
 	var userDefinedSchemaIDs []descpb.ID
 	for id, name := range schemaNames {
 		switch {
-		case strings.HasPrefix(name, sessiondata.PgTempSchemaName):
-			schemas = append(schemas, catalog.ResolvedSchema{
-				Name: name,
-				ID:   id,
-				Kind: catalog.SchemaTemporary,
-			})
+		case strings.HasPrefix(name, catconstants.PgTempSchemaName):
+			schemas = append(schemas, schemadesc.NewTemporarySchema(name, id, db.GetID()))
 		case name == tree.PublicSchema:
-			schemas = append(schemas, catalog.ResolvedSchema{
-				Name: name,
-				ID:   id,
-				Kind: catalog.SchemaPublic,
-			})
+			schemas = append(schemas, schemadesc.GetPublicSchema())
 		default:
 			// The default case is a user defined schema. Collect the ID to get the
 			// descriptor later.
@@ -1792,23 +1786,15 @@ func forEachSchema(
 		if !canSeeDescriptor {
 			continue
 		}
-		schemas = append(schemas, catalog.ResolvedSchema{
-			Name: desc.GetName(),
-			ID:   desc.GetID(),
-			Kind: catalog.SchemaUserDefined,
-			Desc: desc,
-		})
+		schemas = append(schemas, desc)
 	}
 
 	for _, schema := range vtableEntries {
-		schemas = append(schemas, catalog.ResolvedSchema{
-			Name: schema.desc.GetName(),
-			Kind: catalog.SchemaVirtual,
-		})
+		schemas = append(schemas, schema.Desc())
 	}
 
 	sort.Slice(schemas, func(i int, j int) bool {
-		return schemas[i].Name < schemas[j].Name
+		return schemas[i].GetName() < schemas[j].GetName()
 	})
 
 	for _, sc := range schemas {
@@ -2099,7 +2085,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
 		// Virtual descriptors first.
 		vt := p.getVirtualTabler()
-		vEntries := vt.getEntries()
+		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()
 		iterate := func(dbDesc catalog.DatabaseDescriptor) error {
 			for _, virtSchemaName := range vSchemaNames {

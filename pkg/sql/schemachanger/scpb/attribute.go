@@ -61,7 +61,7 @@ func (id IndexID) String() string {
 
 // String implements AttributeValue.
 func (id ElementTypeID) String() string {
-	return strconv.Itoa(int(id))
+	return ElementIDToString(id)
 }
 
 // String implements AttributeValue.
@@ -146,8 +146,12 @@ func (a Attributes) Equal(other Attributes) bool {
 // String seralizes attribute into a string
 func (a Attributes) String() string {
 	result := strings.Builder{}
-	result.WriteString("[ ")
+	result.WriteString(a.Get(AttributeType).String())
+	result.WriteString(":{")
 	for attribIdx, attrib := range a.values {
+		if attrib.key == AttributeType {
+			continue
+		}
 		result.WriteString(attrib.key.String())
 		result.WriteString(": ")
 		result.WriteString(attrib.value.String())
@@ -155,7 +159,7 @@ func (a Attributes) String() string {
 			result.WriteString(", ")
 		}
 	}
-	result.WriteString(" ]")
+	result.WriteString("}")
 	return result.String()
 }
 
