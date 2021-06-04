@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -251,7 +252,7 @@ func DescriptorsMatchingTargets(
 ) (DescriptorsMatched, error) {
 	ret := DescriptorsMatched{}
 
-	resolver, err := NewDescriptorResolver(descriptors)
+	r, err := NewDescriptorResolver(descriptors)
 	if err != nil {
 		return ret, err
 	}
@@ -260,12 +261,12 @@ func DescriptorsMatchingTargets(
 	alreadyExpandedDBs := make(map[descpb.ID]struct{})
 	// Process all the DATABASE requests.
 	for _, d := range targets.Databases {
-		dbID, ok := resolver.DbsByName[string(d)]
+		dbID, ok := r.DbsByName[string(d)]
 		if !ok {
 			return ret, errors.Errorf("unknown database %q", d)
 		}
 		if _, ok := alreadyRequestedDBs[dbID]; !ok {
-			desc := resolver.DescByID[dbID]
+			desc := r.DescByID[dbID]
 			ret.Descs = append(ret.Descs, desc)
 			ret.RequestedDBs = append(ret.RequestedDBs,
 				desc.(catalog.DatabaseDescriptor))
@@ -282,7 +283,7 @@ func DescriptorsMatchingTargets(
 			return nil
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
-			schemaDesc := resolver.DescByID[id]
+			schemaDesc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
 				schemaDesc, tree.CommonLookupFlags{},
 			); err != nil {
@@ -294,13 +295,13 @@ func DescriptorsMatchingTargets(
 				return nil
 			}
 			alreadyRequestedSchemas[id] = struct{}{}
-			ret.Descs = append(ret.Descs, resolver.DescByID[id])
+			ret.Descs = append(ret.Descs, r.DescByID[id])
 		}
 
 		return nil
 	}
 	getSchemaIDByName := func(scName string, dbID descpb.ID) (descpb.ID, error) {
-		schemas, ok := resolver.SchemasByName[dbID]
+		schemas, ok := r.SchemasByName[dbID]
 		if !ok {
 			return 0, errors.Newf("database with ID %d not found", dbID)
 		}
@@ -318,11 +319,11 @@ func DescriptorsMatchingTargets(
 			// need to request the parent database because it has already been
 			// requested by the table that holds this type.
 			alreadyRequestedTypes[id] = struct{}{}
-			ret.Descs = append(ret.Descs, resolver.DescByID[id])
+			ret.Descs = append(ret.Descs, r.DescByID[id])
 		}
 	}
 	getTypeByID := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-		desc, ok := resolver.DescByID[id]
+		desc, ok := r.DescByID[id]
 		if !ok {
 			return nil, errors.Newf("type with ID %d not found", id)
 		}
@@ -348,7 +349,7 @@ func DescriptorsMatchingTargets(
 			// TODO: As part of work for #34240, this should not be a TableName.
 			//  Instead, it should be an UnresolvedObjectName.
 			un := p.ToUnresolvedObjectName()
-			found, prefix, descI, err := tree.ResolveExisting(ctx, un, resolver, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
+			found, prefix, descI, err := resolver.ResolveExisting(ctx, un, r, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}
@@ -375,7 +376,7 @@ func DescriptorsMatchingTargets(
 			// If the parent database is not requested already, request it now.
 			parentID := tableDesc.GetParentID()
 			if _, ok := alreadyRequestedDBs[parentID]; !ok {
-				parentDesc := resolver.DescByID[parentID]
+				parentDesc := r.DescByID[parentID]
 				ret.Descs = append(ret.Descs, parentDesc)
 				alreadyRequestedDBs[parentID] = struct{}{}
 			}
@@ -390,7 +391,7 @@ func DescriptorsMatchingTargets(
 				return ret, err
 			}
 			// Get all the types used by this table.
-			desc := resolver.DescByID[tableDesc.GetParentID()]
+			desc := r.DescByID[tableDesc.GetParentID()]
 			dbDesc := desc.(catalog.DatabaseDescriptor)
 			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 			if err != nil {
@@ -401,7 +402,7 @@ func DescriptorsMatchingTargets(
 			}
 
 		case *tree.AllTablesSelector:
-			found, descI, err := p.ObjectNamePrefix.Resolve(ctx, resolver, currentDatabase, searchPath)
+			found, descI, err := p.ObjectNamePrefix.Resolve(ctx, r, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}
@@ -430,7 +431,7 @@ func DescriptorsMatchingTargets(
 
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
-		for schemaName, schemas := range resolver.ObjsByName[dbID] {
+		for schemaName, schemas := range r.ObjsByName[dbID] {
 			schemaID, err := getSchemaIDByName(schemaName, dbID)
 			if err != nil {
 				return ret, err
@@ -440,7 +441,7 @@ func DescriptorsMatchingTargets(
 			}
 
 			for _, id := range schemas {
-				desc := resolver.DescByID[id]
+				desc := r.DescByID[id]
 				switch desc := desc.(type) {
 				case catalog.TableDescriptor:
 					if err := catalog.FilterDescriptorState(
@@ -465,7 +466,7 @@ func DescriptorsMatchingTargets(
 						}
 					}
 					// Get all the types used by this table.
-					dbRaw := resolver.DescByID[desc.GetParentID()]
+					dbRaw := r.DescByID[desc.GetParentID()]
 					dbDesc := dbRaw.(catalog.DatabaseDescriptor)
 					typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 					if err != nil {

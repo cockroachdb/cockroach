@@ -38,7 +38,7 @@ import (
 // use a different plan builder.
 // TODO(rytaft,andyk): study and reuse this.
 type SchemaResolver interface {
-	tree.ObjectNameExistingResolver
+	ObjectNameExistingResolver
 	tree.ObjectNameTargetResolver
 	tree.QualifiedNameResolver
 
@@ -154,7 +154,7 @@ func ResolveExistingObject(
 	un *tree.UnresolvedObjectName,
 	lookupFlags tree.ObjectLookupFlags,
 ) (res tree.NameResolutionResult, prefix tree.ObjectNamePrefix, err error) {
-	found, prefix, descI, err := tree.ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, prefix, descI, err := ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, prefix, err
 	}
@@ -294,4 +294,167 @@ func GetForDatabase(
 		ret[id] = name
 	}
 	return ret, nil
+}
+
+// ResolveExisting performs name resolution for an object name when
+// the target object is expected to exist already. It does not
+// mutate the input name. It additionally returns the resolved
+// prefix qualification for the object. For example, if the unresolved
+// name was "a.b" and the name was resolved to "a.public.b", the
+// prefix "a.public" is returned.
+func ResolveExisting(
+	ctx context.Context,
+	u *tree.UnresolvedObjectName,
+	r ObjectNameExistingResolver,
+	lookupFlags tree.ObjectLookupFlags,
+	curDb string,
+	searchPath sessiondata.SearchPath,
+) (bool, tree.ObjectNamePrefix, tree.NameResolutionResult, error) {
+	namePrefix := tree.ObjectNamePrefix{
+		SchemaName:      tree.Name(u.Schema()),
+		ExplicitSchema:  u.HasExplicitSchema(),
+		CatalogName:     tree.Name(u.Catalog()),
+		ExplicitCatalog: u.HasExplicitCatalog(),
+	}
+	if u.HasExplicitSchema() {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(u.Schema())
+		if err != nil {
+			return false, namePrefix, nil, err
+		}
+		if u.HasExplicitCatalog() {
+			// Already 3 parts: nothing to search. Delegate to the resolver.
+			namePrefix.CatalogName = tree.Name(u.Catalog())
+			namePrefix.SchemaName = tree.Name(scName)
+			found, result, err := r.LookupObject(ctx, lookupFlags, u.Catalog(), scName, u.Object())
+			return found, namePrefix, result, err
+		}
+		// Two parts: D.T.
+		// Try to use the current database, and be satisfied if it's sufficient to find the object.
+		//
+		// Note: CockroachDB supports querying virtual schemas even when the current
+		// database is not set. For example, `select * from pg_catalog.pg_tables` is
+		// meant to show all tables across all databases when there is no current
+		// database set. Therefore, we test this even if curDb == "", as long as the
+		// schema name is for a virtual schema.
+
+		if _, isVirtualSchema := catconstants.VirtualSchemaNames[scName]; isVirtualSchema || curDb != "" {
+			if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, u.Object()); found || err != nil {
+				if err == nil {
+					namePrefix.CatalogName = tree.Name(curDb)
+					namePrefix.SchemaName = tree.Name(scName)
+				}
+				return found, namePrefix, objMeta, err
+			}
+		}
+
+		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T instead.
+		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, u.Schema(), tree.PublicSchema, u.Object()); found || err != nil {
+			if err == nil {
+				namePrefix.CatalogName = tree.Name(u.Schema())
+				namePrefix.SchemaName = tree.PublicSchemaName
+				namePrefix.ExplicitCatalog = true
+			}
+			return found, namePrefix, objMeta, err
+		}
+		// Welp, really haven't found anything.
+		return false, namePrefix, nil, nil
+	}
+
+	// This is a naked table name. Use the search path.
+	iter := searchPath.Iter()
+	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
+		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, next,
+			u.Object()); found || err != nil {
+			if err == nil {
+				namePrefix.CatalogName = tree.Name(curDb)
+				namePrefix.SchemaName = tree.Name(next)
+			}
+			return found, namePrefix, objMeta, err
+		}
+	}
+	return false, namePrefix, nil, nil
+}
+
+// ResolveTarget performs name resolution for an object name when
+// the target object is not expected to exist already. It does not
+// mutate the input name. It additionally returns the resolved
+// prefix qualification for the object. For example, if the unresolved
+// name was "a.b" and the name was resolved to "a.public.b", the
+// prefix "a.public" is returned.
+func ResolveTarget(
+	ctx context.Context,
+	u *tree.UnresolvedObjectName,
+	r tree.ObjectNameTargetResolver,
+	curDb string,
+	searchPath sessiondata.SearchPath,
+) (found bool, namePrefix tree.ObjectNamePrefix, scMeta tree.SchemaMeta, err error) {
+	namePrefix = tree.ObjectNamePrefix{
+		SchemaName:      tree.Name(u.Schema()),
+		ExplicitSchema:  u.HasExplicitSchema(),
+		CatalogName:     tree.Name(u.Catalog()),
+		ExplicitCatalog: u.HasExplicitCatalog(),
+	}
+	if u.HasExplicitSchema() {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(u.Schema())
+		if err != nil {
+			return false, namePrefix, nil, err
+		}
+		if u.HasExplicitCatalog() {
+			// Already 3 parts: nothing to do.
+			namePrefix.CatalogName = tree.Name(u.Catalog())
+			namePrefix.SchemaName = tree.Name(scName)
+			found, scMeta, err = r.LookupSchema(ctx, u.Catalog(), scName)
+			return found, namePrefix, scMeta, err
+		}
+		// Two parts: D.T.
+		// Try to use the current database, and be satisfied if it's sufficient to find the object.
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
+			if err == nil {
+				namePrefix.CatalogName = tree.Name(curDb)
+				namePrefix.SchemaName = tree.Name(scName)
+			}
+			return found, namePrefix, scMeta, err
+		}
+		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
+		if found, scMeta, err = r.LookupSchema(ctx, u.Schema(), tree.PublicSchema); found || err != nil {
+			if err == nil {
+				namePrefix.CatalogName = tree.Name(u.Schema())
+				namePrefix.SchemaName = tree.PublicSchemaName
+				namePrefix.ExplicitCatalog = true
+			}
+			return found, namePrefix, scMeta, err
+		}
+		// Welp, really haven't found anything.
+		return false, namePrefix, nil, nil
+	}
+
+	// This is a naked table name. Use the current schema = the first
+	// valid item in the search path.
+	iter := searchPath.IterWithoutImplicitPGSchemas()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
+			if err == nil {
+				namePrefix.CatalogName = tree.Name(curDb)
+				namePrefix.SchemaName = tree.Name(scName)
+			}
+			break
+		}
+	}
+	return found, namePrefix, scMeta, err
+}
+
+// ObjectNameExistingResolver is the helper interface to resolve table
+// names when the object is expected to exist already. The boolean passed
+// is used to specify if a MutableTableDescriptor is to be returned in the
+// result.
+type ObjectNameExistingResolver interface {
+	LookupObject(ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string) (
+		found bool, objMeta tree.NameResolutionResult, err error,
+	)
 }
