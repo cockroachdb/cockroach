@@ -52,6 +52,10 @@ func FakePHS(opName string, user security.SQLUsername) (interface{}, func()) {
 func TestRegistryCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	//TODO(Sajjad): Replace with the testing knob
+	jobAdoptInterval := time.Duration(math.MaxInt64)
+	jobCancelInterval := time.Nanosecond
+	defer TestingSetAdoptAndCancelIntervals(jobAdoptInterval, jobCancelInterval)()
 
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -88,10 +92,7 @@ func TestRegistryCancelation(t *testing.T) {
 		"",
 		nil, /* knobs */
 	)
-
-	const cancelInterval = time.Nanosecond
-	const adoptInterval = time.Duration(math.MaxInt64)
-	if err := registry.Start(ctx, stopper, cancelInterval, adoptInterval); err != nil {
+	if err := registry.Start(ctx, stopper); err != nil {
 		t.Fatal(err)
 	}
 
