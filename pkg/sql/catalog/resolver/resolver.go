@@ -39,7 +39,7 @@ import (
 // TODO(rytaft,andyk): study and reuse this.
 type SchemaResolver interface {
 	ObjectNameExistingResolver
-	tree.ObjectNameTargetResolver
+	ObjectNameTargetResolver
 	tree.QualifiedNameResolver
 
 	// Accessor is a crufty name and interface that wraps the *descs.Collection.
@@ -53,6 +53,32 @@ type SchemaResolver interface {
 	LookupTableByID(ctx context.Context, id descpb.ID) (catalog.TableDescriptor, error)
 
 	tree.TypeReferenceResolver
+}
+
+// ObjectNameExistingResolver is the helper interface to resolve table
+// names when the object is expected to exist already. The boolean passed
+// is used to specify if a MutableTableDescriptor is to be returned in the
+// result.
+type ObjectNameExistingResolver interface {
+	LookupObject(ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string) (
+		found bool, objMeta catalog.Descriptor, err error,
+	)
+}
+
+// ObjectNameTargetResolver is the helper interface to resolve object
+// names when the object is not expected to exist. The planner implements
+// LookupSchema to return an object consisting of the parent database and
+// resolved target schema.
+type ObjectNameTargetResolver interface {
+	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
+}
+
+// SchemaMeta is an opaque reference returned by LookupSchema().
+//
+// TODO(ajwerner): Remove this.
+type SchemaMeta interface {
+	// SchemaMeta is the interface anchor.
+	SchemaMeta()
 }
 
 // ErrNoPrimaryKey is returned when resolving a table object and the
@@ -153,8 +179,8 @@ func ResolveExistingObject(
 	sc SchemaResolver,
 	un *tree.UnresolvedObjectName,
 	lookupFlags tree.ObjectLookupFlags,
-) (res tree.NameResolutionResult, prefix tree.ObjectNamePrefix, err error) {
-	found, prefix, descI, err := ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
+) (res catalog.Descriptor, prefix tree.ObjectNamePrefix, err error) {
+	found, prefix, obj, err := ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, prefix, err
 	}
@@ -167,7 +193,6 @@ func ResolveExistingObject(
 		return nil, prefix, nil
 	}
 
-	obj := descI.(catalog.Descriptor)
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
 		typ, isType := obj.(catalog.TypeDescriptor)
@@ -206,7 +231,7 @@ func ResolveExistingObject(
 			return nil, prefix, ErrNoPrimaryKey
 		}
 
-		return descI.(catalog.TableDescriptor), prefix, nil
+		return obj.(catalog.TableDescriptor), prefix, nil
 	default:
 		return nil, prefix, errors.AssertionFailedf(
 			"unknown desired object kind %d", lookupFlags.DesiredObjectKind)
@@ -309,7 +334,7 @@ func ResolveExisting(
 	lookupFlags tree.ObjectLookupFlags,
 	curDb string,
 	searchPath sessiondata.SearchPath,
-) (bool, tree.ObjectNamePrefix, tree.NameResolutionResult, error) {
+) (bool, tree.ObjectNamePrefix, catalog.Descriptor, error) {
 	namePrefix := tree.ObjectNamePrefix{
 		SchemaName:      tree.Name(u.Schema()),
 		ExplicitSchema:  u.HasExplicitSchema(),
@@ -387,10 +412,10 @@ func ResolveExisting(
 func ResolveTarget(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
-	r tree.ObjectNameTargetResolver,
+	r ObjectNameTargetResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
-) (found bool, namePrefix tree.ObjectNamePrefix, scMeta tree.SchemaMeta, err error) {
+) (found bool, namePrefix tree.ObjectNamePrefix, scMeta SchemaMeta, err error) {
 	namePrefix = tree.ObjectNamePrefix{
 		SchemaName:      tree.Name(u.Schema()),
 		ExplicitSchema:  u.HasExplicitSchema(),
@@ -449,12 +474,61 @@ func ResolveTarget(
 	return found, namePrefix, scMeta, err
 }
 
-// ObjectNameExistingResolver is the helper interface to resolve table
-// names when the object is expected to exist already. The boolean passed
-// is used to specify if a MutableTableDescriptor is to be returned in the
-// result.
-type ObjectNameExistingResolver interface {
-	LookupObject(ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string) (
-		found bool, objMeta tree.NameResolutionResult, err error,
-	)
+// ResolveObjectNamePrefix is used for table prefixes. This is adequate for table
+// patterns with stars, e.g. AllTablesSelector.
+func ResolveObjectNamePrefix(
+	ctx context.Context,
+	r ObjectNameTargetResolver,
+	curDb string,
+	searchPath sessiondata.SearchPath,
+	tp *tree.ObjectNamePrefix,
+) (found bool, scMeta SchemaMeta, err error) {
+	if tp.ExplicitSchema {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(tp.Schema())
+		if err != nil {
+			return false, nil, err
+		}
+		if tp.ExplicitCatalog {
+			// Catalog name is explicit; nothing to do.
+			tp.SchemaName = tree.Name(scName)
+			return r.LookupSchema(ctx, tp.Catalog(), scName)
+		}
+		// Try with the current database. This may be empty, because
+		// virtual schemas exist even when the db name is empty
+		// (CockroachDB extension).
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
+			if err == nil {
+				tp.CatalogName = tree.Name(curDb)
+				tp.SchemaName = tree.Name(scName)
+			}
+			return found, scMeta, err
+		}
+		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
+		if found, scMeta, err = r.LookupSchema(ctx, tp.Schema(), tree.PublicSchema); found || err != nil {
+			if err == nil {
+				tp.CatalogName = tp.SchemaName
+				tp.SchemaName = tree.PublicSchemaName
+				tp.ExplicitCatalog = true
+			}
+			return found, scMeta, err
+		}
+		// No luck.
+		return false, nil, nil
+	}
+	// This is a naked table name. Use the current schema = the first
+	// valid item in the search path.
+	iter := searchPath.IterWithoutImplicitPGSchemas()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
+			if err == nil {
+				tp.CatalogName = tree.Name(curDb)
+				tp.SchemaName = tree.Name(scName)
+			}
+			break
+		}
+	}
+	return found, scMeta, err
 }

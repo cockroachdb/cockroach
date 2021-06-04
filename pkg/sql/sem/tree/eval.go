@@ -3048,9 +3048,9 @@ type EvalDatabase interface {
 	// It returns the ID of the resolved table, and an error if the table doesn't exist.
 	ResolveTableName(ctx context.Context, tn *TableName) (ID, error)
 
-	// LookupSchema looks up the schema with the given name in the given
-	// database.
-	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
+	// SchemaExists looks up the schema with the given name and determines
+	// whether it exists.
+	SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error)
 
 	// IsTableVisible checks if the table with the given ID belongs to a schema
 	// on the given sessiondata.SearchPath.

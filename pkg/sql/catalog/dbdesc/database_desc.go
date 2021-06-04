@@ -95,9 +95,6 @@ func (desc *immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
-// NameResolutionResult implements the Descriptor interface.
-func (desc *immutable) NameResolutionResult() {}
-
 // GetAuditMode is part of the DescriptorProto interface.
 // This is a stub until per-database auditing is enabled.
 func (desc *immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
