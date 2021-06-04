@@ -83,3 +83,35 @@ func (j *Job) Failed(ctx context.Context, causingErr error) error {
 func (j *Job) Succeeded(ctx context.Context) error {
 	return j.succeeded(ctx, nil /* txn */, nil /* fn */)
 }
+
+var (
+	AdoptQuery = claimQuery
+
+	CancelQuery = cancelQuery
+
+	GcQuery = expiredJobsQuery
+
+	IntervalBaseSettingKey = intervalBaseSettingKey
+
+	AdoptIntervalSettingKey = adoptIntervalSettingKey
+
+	CancelIntervalSettingKey = cancelIntervalSettingKey
+
+	GcIntervalSettingKey = gcIntervalSettingKey
+
+	RetentionTimeSettingKey = retentionTimeSettingKey
+
+	IntervalBaseSetting = intervalBaseSetting
+
+	AdoptIntervalSetting = adoptIntervalSetting
+
+	CancelIntervalSetting = cancelIntervalSetting
+
+	CancellationsUpdateLimitSetting = cancellationsUpdateLimitSetting
+
+	GcIntervalSetting = gcIntervalSetting
+
+	RetentionTimeSetting = retentionTimeSetting
+
+	DefaultAdoptInterval = defaultAdoptInterval
+)

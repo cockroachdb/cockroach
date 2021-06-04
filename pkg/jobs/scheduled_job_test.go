@@ -113,7 +113,7 @@ func TestPauseUnpauseJob(t *testing.T) {
 
 	// Verify job is no longer paused
 	loaded = h.loadSchedule(t, j.ScheduleID())
-	// Running schedules have nextRun set to non-null value
+	// Running schedules have nextRun set to non-null shortInterval
 	require.False(t, loaded.IsPaused())
 	require.False(t, loaded.NextRun().Equal(time.Time{}))
 }

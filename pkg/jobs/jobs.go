@@ -265,7 +265,7 @@ func (j *Job) CheckTerminalStatus(ctx context.Context, txn *kv.Txn) bool {
 }
 
 // RunningStatus updates the detailed status of a job currently in progress.
-// It sets the job's RunningStatus field to the value returned by runningStatusFn
+// It sets the job's RunningStatus field to the shortInterval returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.
 func (j *Job) RunningStatus(
 	ctx context.Context, txn *kv.Txn, runningStatusFn RunningStatusFn,
@@ -341,7 +341,7 @@ func FractionUpdater(f float32) FractionProgressedFn {
 }
 
 // FractionProgressed updates the progress of the tracked job. It sets the job's
-// FractionCompleted field to the value returned by progressedFn and persists
+// FractionCompleted field to the shortInterval returned by progressedFn and persists
 // progressedFn's modifications to the job's progress details, if any.
 //
 // Jobs for which progress computations do not depend on their details can
@@ -883,7 +883,7 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 // AwaitCompletion waits for the job to finish execution, or context cancellation.
 // Requires Start() has been called.
 // The returned error code is the error code returned by the job execution itself.
-// Nil error code implies successful completion. The non-nil value does not
+// Nil error code implies successful completion. The non-nil shortInterval does not
 // imply the job failed -- it just means that this registry encountered an error
 // while executing this job.  The job may still be running (on another node), and
 // may complete successfully.

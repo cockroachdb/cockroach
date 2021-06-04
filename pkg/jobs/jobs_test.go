@@ -185,9 +185,15 @@ func noopPauseRequestFunc(
 }
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
-	rts.cleanupSettings = jobs.TestingSetAdoptAndCancelIntervals(time.Millisecond, 2*time.Millisecond)
+	adopt := time.Millisecond
+	cancel := 2 * time.Millisecond
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(adopt, cancel)},
+	}
+
+	rts.cleanupSettings = func() {}
 	rts.ctx = context.Background()
-	rts.s, rts.outerDB, _ = serverutils.StartServer(t, base.TestServerArgs{})
+	rts.s, rts.outerDB, _ = serverutils.StartServer(t, args)
 	rts.sqlDB = sqlutils.MakeSQLRunner(rts.outerDB)
 	rts.registry = rts.s.JobRegistry().(*jobs.Registry)
 	rts.done = make(chan struct{})
@@ -1411,8 +1417,8 @@ func TestShowJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	ctx := context.Background()
@@ -1544,7 +1550,7 @@ func TestShowJobs(t *testing.T) {
 				out.fractionCompleted = *maybeFractionCompleted
 			}
 
-			// details field is not explicitly checked for equality; its value is
+			// details field is not explicitly checked for equality; its shortInterval is
 			// confirmed via the job_type field, which is dependent on the details
 			// field.
 			out.details = in.details
@@ -1692,13 +1698,13 @@ func TestShowJobsWithError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`
-     -- Test what happens with a NULL progress field (which is a valid value).
+     -- Test what happens with a NULL progress field (which is a valid shortInterval).
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs WHERE id = $1;
 	`, jobID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`
-     -- Test what happens with a NULL progress field (which is a valid value).
+     -- Test what happens with a NULL progress field (which is a valid shortInterval).
      INSERT INTO system.jobs(id, status, payload, progress) SELECT id+5, status, '\xaaaa'::BYTES, NULL::BYTES FROM system.jobs WHERE id = $1;
 	`, jobID); err != nil {
 		t.Fatal(err)
@@ -1804,12 +1810,13 @@ func TestShowJobsWithError(t *testing.T) {
 func TestShowJobWhenComplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// Canceling a job relies on adopt daemon to move the job to state
-	// reverting.
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
+	// Canceling a job relies on adopt daemon to move the job to state reverting.
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}}
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 	mockJob := jobs.Record{
@@ -1944,10 +1951,11 @@ func TestJobInTxn(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Set the adoption interval to be very long to test the adoption channel.
-	defer jobs.TestingSetAdoptAndCancelIntervals(time.Hour, time.Hour)()
-
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour)},
+	}
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	// Accessed atomically.
@@ -2377,16 +2385,15 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	ctx := context.Background()
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	registry := s.JobRegistry().(*jobs.Registry)
 
-	// The default FormatVersion value in SchemaChangeDetails corresponds to a
+	// The default FormatVersion shortInterval in SchemaChangeDetails corresponds to a
 	// pre-20.1 job.
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},
@@ -2447,7 +2454,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 
-	// The default FormatVersion value in SchemaChangeDetails corresponds to a
+	// The default FormatVersion shortInterval in SchemaChangeDetails corresponds to a
 	// pre-20.1 job.
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},
@@ -2496,7 +2503,6 @@ func TestStatusSafeFormatter(t *testing.T) {
 
 func TestMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.TestingSetAdoptAndCancelIntervals(time.Millisecond, time.Millisecond)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2542,7 +2548,10 @@ func TestMetrics(t *testing.T) {
 		s serverutils.TestServerInterface, db *gosql.DB, r *jobs.Registry, cleanup func(),
 	) {
 		jobConstructorCleanup := jobs.ResetConstructors()
-		s, db, _ = serverutils.StartServer(t, base.TestServerArgs{})
+		args := base.TestServerArgs{Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Millisecond, time.Millisecond)},
+		}
+		s, db, _ = serverutils.StartServer(t, args)
 		r = s.JobRegistry().(*jobs.Registry)
 		return s, db, r, func() {
 			jobConstructorCleanup()
@@ -2709,15 +2718,15 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Disable the loops from messing with the job execution.
-	defer jobs.TestingSetAdoptAndCancelIntervals(time.Hour, time.Hour)()
+	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 
-	// The default FormatVersion value in SchemaChangeDetails corresponds to a
+	// The default FormatVersion shortInterval in SchemaChangeDetails corresponds to a
 	// pre-20.1 job.
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},

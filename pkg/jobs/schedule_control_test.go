@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -229,11 +230,14 @@ func TestJobsControlForSchedules(t *testing.T) {
 func TestFilterJobsControlForSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ResetConstructors()()
-	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables)
-	defer cleanup()
 
-	// Prevent registry from changing job state while running this test.
-	defer TestingSetAdoptAndCancelIntervals(24*time.Hour, 24*time.Hour)()
+	argsFn := func(args *base.TestServerArgs) {
+		// Prevent registry from changing job state while running this test.
+		interval := 24 * time.Hour
+		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithIntervals(interval, interval)
+	}
+	th, cleanup := newTestHelperForTablesWithServerArgs(t, jobstest.UseSystemTables, argsFn)
+	defer cleanup()
 
 	registry := th.server.JobRegistry().(*Registry)
 	blockResume := make(chan struct{})

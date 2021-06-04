@@ -51,7 +51,46 @@ type TestingKnobs struct {
 	// has run. If an error is returned, it will be propagated and the update will
 	// not be committed.
 	BeforeUpdate func(orig, updated JobMetadata) error
+
+	// IntervalOverrides consists of override knobs for job intervals.
+	IntervalOverrides TestingIntervalOverrides
+}
+
+// TestingIntervalOverrides contains variables to override job cluster settings.
+type TestingIntervalOverrides struct {
+	// Adopt overrides the adoptIntervalSetting cluster setting.
+	Adopt *time.Duration
+
+	// Cancel overrides the cancelIntervalSetting cluster setting.
+	Cancel *time.Duration
+
+	// Gc overrides the gcIntervalSetting cluster setting.
+	Gc *time.Duration
+
+	// Base overrides the intervalBaseSetting cluster setting.
+	Base *float64
+
+	// RetentionTime overrides the retentionTimeSetting cluster setting.
+	RetentionTime *time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
+
+// NewTestingKnobsWithShortIntervals return a TestingKnobs structure with
+// overrides for short adopt and cancel intervals.
+func NewTestingKnobsWithShortIntervals() *TestingKnobs {
+	const defaultShortInterval = 10 * time.Millisecond
+	return NewTestingKnobsWithIntervals(defaultShortInterval, defaultShortInterval)
+}
+
+// NewTestingKnobsWithIntervals return a TestingKnobs structure with overrides
+// for adopt and cancel intervals.
+func NewTestingKnobsWithIntervals(adopt, cancel time.Duration) *TestingKnobs {
+	return &TestingKnobs{
+		IntervalOverrides: TestingIntervalOverrides{
+			Adopt:  &adopt,
+			Cancel: &cancel,
+		},
+	}
+}
