@@ -164,11 +164,9 @@ func (oc *optCatalog) ResolveSchema(
 	}
 
 	oc.tn.ObjectNamePrefix = *name
-	found, prefixI, err := oc.tn.ObjectNamePrefix.Resolve(
-		ctx,
-		oc.planner,
-		oc.planner.CurrentDatabase(),
-		oc.planner.CurrentSearchPath(),
+	found, prefixI, err := resolver.ResolveObjectNamePrefix(
+		ctx, oc.planner, oc.planner.CurrentDatabase(),
+		oc.planner.CurrentSearchPath(), &oc.tn.ObjectNamePrefix,
 	)
 	if err != nil {
 		return nil, cat.SchemaName{}, err

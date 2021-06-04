@@ -261,67 +261,6 @@ type QualifiedNameResolver interface {
 	CurrentDatabase() string
 }
 
-// NameResolutionResult is an opaque reference returned by LookupObject().
-type NameResolutionResult interface {
-	// NameResolutionResult is the interface anchor.
-	NameResolutionResult()
-}
-
-// Resolve is used for table prefixes. This is adequate for table
-// patterns with stars, e.g. AllTablesSelector.
-func (tp *ObjectNamePrefix) Resolve(
-	ctx context.Context, r ObjectNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
-) (found bool, scMeta SchemaMeta, err error) {
-	if tp.ExplicitSchema {
-		// pg_temp can be used as an alias for the current sessions temporary schema.
-		// We must perform this resolution before looking up the object. This
-		// resolution only succeeds if the session already has a temporary schema.
-		scName, err := searchPath.MaybeResolveTemporarySchema(tp.Schema())
-		if err != nil {
-			return false, nil, err
-		}
-		if tp.ExplicitCatalog {
-			// Catalog name is explicit; nothing to do.
-			tp.SchemaName = Name(scName)
-			return r.LookupSchema(ctx, tp.Catalog(), scName)
-		}
-		// Try with the current database. This may be empty, because
-		// virtual schemas exist even when the db name is empty
-		// (CockroachDB extension).
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
-			if err == nil {
-				tp.CatalogName = Name(curDb)
-				tp.SchemaName = Name(scName)
-			}
-			return found, scMeta, err
-		}
-		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
-		if found, scMeta, err = r.LookupSchema(ctx, tp.Schema(), PublicSchema); found || err != nil {
-			if err == nil {
-				tp.CatalogName = tp.SchemaName
-				tp.SchemaName = PublicSchemaName
-				tp.ExplicitCatalog = true
-			}
-			return found, scMeta, err
-		}
-		// No luck.
-		return false, nil, nil
-	}
-	// This is a naked table name. Use the current schema = the first
-	// valid item in the search path.
-	iter := searchPath.IterWithoutImplicitPGSchemas()
-	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
-			if err == nil {
-				tp.CatalogName = Name(curDb)
-				tp.SchemaName = Name(scName)
-			}
-			break
-		}
-	}
-	return found, scMeta, err
-}
-
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
 //
 // Function resolution currently takes a "short path" using the

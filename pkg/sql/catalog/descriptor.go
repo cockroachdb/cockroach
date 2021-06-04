@@ -106,8 +106,6 @@ type IndexOpts struct {
 // Descriptor is an interface to be shared by individual descriptor
 // types.
 type Descriptor interface {
-	tree.NameResolutionResult
-
 	GetID() descpb.ID
 	GetName() string
 	GetParentID() descpb.ID
@@ -161,7 +159,8 @@ type DatabaseDescriptor interface {
 	//
 	// TODO(ajwerner): Remove this in the 20.2 cycle as part of user-defined
 	// schemas.
-	tree.SchemaMeta
+	SchemaMeta()
+
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
 	GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig
