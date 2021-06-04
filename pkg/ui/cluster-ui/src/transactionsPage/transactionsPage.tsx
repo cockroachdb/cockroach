@@ -64,6 +64,7 @@ export interface TransactionsPageStateProps {
 
 export interface TransactionsPageDispatchProps {
   refreshData: () => void;
+  resetSQLStats: () => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &

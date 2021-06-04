@@ -9,3 +9,4 @@
 // licenses/APL.txt.
 
 export * from "./transactionsPage";
+export * from "./transactionsPageConnected";
