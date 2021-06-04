@@ -197,6 +197,21 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			case *tree.CTE:
 				walk(node.Stmt)
 			case *tree.DBool:
+			case *tree.Delete:
+				walk(node.Table)
+				if node.With != nil {
+					walk(node.With)
+				}
+				if node.Where != nil {
+					walk(node.Where)
+				}
+				walk(node.OrderBy)
+				if node.Limit != nil {
+					walk(node.Limit)
+				}
+				if node.Returning != nil {
+					walk(node.Returning)
+				}
 			case tree.Exprs:
 				for _, expr := range node {
 					walk(expr)
@@ -209,6 +224,17 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				walk(node.Exprs, node.Filter)
 			case *tree.IndexTableDef:
 				walk(node.Predicate)
+			case *tree.Insert:
+				walk(node.Table)
+				if node.Rows != nil {
+					walk(node.Rows)
+				}
+				if node.With != nil {
+					walk(node.With)
+				}
+				if node.Returning != nil {
+					walk(node.Returning)
+				}
 			case *tree.JoinTableExpr:
 				walk(node.Left, node.Right, node.Cond)
 			case *tree.Limit:
@@ -291,6 +317,24 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				walk(node.Left, node.Right)
 			case tree.UnqualifiedStar:
 			case *tree.UnresolvedName:
+			case *tree.Update:
+				walk(node.Table)
+				if node.Exprs != nil {
+					walk(node.Exprs)
+				}
+				if node.With != nil {
+					walk(node.With)
+				}
+				if node.Where != nil {
+					walk(node.Where)
+				}
+				walk(node.OrderBy)
+				if node.Limit != nil {
+					walk(node.Limit)
+				}
+				if node.Returning != nil {
+					walk(node.Returning)
+				}
 			case *tree.ValuesClause:
 				for _, row := range node.Rows {
 					walk(row)
