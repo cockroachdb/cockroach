@@ -13,48 +13,45 @@ package limit
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/marusama/semaphore"
+	"github.com/cockroachdb/errors"
 )
 
 // ConcurrentRequestLimiter wraps a simple semaphore, adding a tracing span when
 // a request is forced to wait.
 type ConcurrentRequestLimiter struct {
 	spanName string
-	sem      semaphore.Semaphore
+	sem      *quotapool.IntPool
 }
 
 // MakeConcurrentRequestLimiter creates a ConcurrentRequestLimiter.
 func MakeConcurrentRequestLimiter(spanName string, limit int) ConcurrentRequestLimiter {
-	return ConcurrentRequestLimiter{spanName: spanName, sem: semaphore.New(limit)}
+	return ConcurrentRequestLimiter{
+		spanName: spanName,
+		sem:      quotapool.NewIntPool(spanName, uint64(limit)),
+	}
 }
 
 // Begin attempts to reserve a spot in the pool, blocking if needed until the
 // one is available or the context is canceled and adding a tracing span if it
 // is forced to block.
-func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
+func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (*quotapool.IntAlloc, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
-	if l.sem.TryAcquire(1) {
-		return nil
+	alloc, err := l.sem.TryAcquire(ctx, 1)
+	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
+		var span *tracing.Span
+		ctx, span = tracing.ChildSpan(ctx, l.spanName)
+		defer span.Finish()
+		alloc, err = l.sem.Acquire(ctx, 1)
 	}
-	// If not, start a span and begin waiting.
-	ctx, span := tracing.ChildSpan(ctx, l.spanName)
-	defer span.Finish()
-	return l.sem.Acquire(ctx, 1)
-}
-
-// Finish indicates a concurrent request has completed and its reservation can
-// be returned to the pool.
-func (l *ConcurrentRequestLimiter) Finish() {
-	l.sem.Release(1)
+	return alloc, err
 }
 
 // SetLimit adjusts the size of the pool.
 func (l *ConcurrentRequestLimiter) SetLimit(newLimit int) {
-	l.sem.SetLimit(newLimit)
+	l.sem.UpdateCapacity(uint64(newLimit))
 }
