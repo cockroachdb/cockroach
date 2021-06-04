@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -409,7 +410,7 @@ func importPlanHook(
 			//  UnresolvedObjectNames here, rather than TableNames.
 			// We have a target table, so it might specify a DB in its name.
 			un := table.ToUnresolvedObjectName()
-			found, prefix, resPrefixI, err := tree.ResolveTarget(ctx,
+			found, prefix, resPrefixI, err := resolver.ResolveTarget(ctx,
 				un, p, p.SessionData().Database, p.SessionData().SearchPath)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedTable,
