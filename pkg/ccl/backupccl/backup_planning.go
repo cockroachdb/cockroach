@@ -199,6 +199,9 @@ func spansForAllTableIndexes(
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State == descpb.DescriptorState_PUBLIC {
 			tbl := tabledesc.NewImmutable(*rawTbl)
+			if !tbl.IsPhysicalTable() {
+				continue
+			}
 
 			if index := tbl.GetPrimaryIndex(); index != nil {
 				addIndexToTree(tbl, *index)

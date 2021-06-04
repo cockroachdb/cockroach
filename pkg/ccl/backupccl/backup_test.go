@@ -3145,6 +3145,29 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	})
 }
 
+// This is a regression test ensuring that the spans represented by views are
+// not included in backups when their descriptors are included in descriptor
+// revisions.
+func TestViewRevisions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, tc, _, _, cleanup := BackupRestoreTestSetup(t, singleNode, 10, InitNone)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer cleanup()
+
+	sqlDB.Exec(t, `
+CREATE DATABASE test;
+USE test;
+CREATE VIEW v AS SELECT 1;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+ALTER VIEW v RENAME TO v2;
+BACKUP TO 'nodelocal://1/foo' WITH revision_history;
+`)
+}
+
 func checksumBankPayload(t *testing.T, sqlDB *sqlutils.SQLRunner) uint32 {
 	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	rows := sqlDB.Query(t, `SELECT id, balance, payload FROM data.bank`)
