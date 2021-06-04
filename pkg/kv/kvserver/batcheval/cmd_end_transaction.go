@@ -456,6 +456,13 @@ func resolveLocalLocks(
 		// These transactions rely on having their locks resolved synchronously.
 		resolveAllowance = math.MaxInt64
 	}
+	onlySeparatedIntents := false
+	st := evalCtx.ClusterSettings()
+	// Some tests have st == nil.
+	if st != nil {
+		onlySeparatedIntents = st.Version.ActiveVersionOrEmpty(ctx).IsActive(
+			clusterversion.PostSeparatedIntentsMigration)
+	}
 	for _, span := range args.LockSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
@@ -496,7 +503,7 @@ func resolveLocalLocks(
 			if inSpan != nil {
 				update.Span = *inSpan
 				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-					ctx, readWriter, ms, update, resolveAllowance)
+					ctx, readWriter, ms, update, resolveAllowance, onlySeparatedIntents)
 				if err != nil {
 					return err
 				}
