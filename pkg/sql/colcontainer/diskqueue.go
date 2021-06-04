@@ -433,6 +433,9 @@ func (d *diskQueue) closeFileDeserializer() error {
 }
 
 func (d *diskQueue) Close(ctx context.Context) error {
+	defer func() {
+		*d = diskQueue{}
+	}()
 	if d.serializer != nil {
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
@@ -759,6 +762,7 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 		if err := d.deserializerState.GetBatch(d.deserializerState.curBatch, b); err != nil {
 			return false, err
 		}
+		// At this moment, we're ready to clear our scratch bytes.
 		d.deserializerState.curBatch++
 	}
 
