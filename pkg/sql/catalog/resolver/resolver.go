@@ -220,7 +220,7 @@ func ResolveExistingObject(
 func ResolveTargetObject(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName,
 ) (*catalog.ResolvedObjectPrefix, tree.ObjectNamePrefix, error) {
-	found, prefix, scMeta, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, prefix, scMeta, err := ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, prefix, err
 	}

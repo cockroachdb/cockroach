@@ -623,7 +623,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 						// TODO: As part of work for #34240, we should be operating on
 						//  UnresolvedObjectNames here, rather than TableNames.
 						un := tpv.ToUnresolvedObjectName()
-						found, prefix, scMeta, err = tree.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
+						found, prefix, scMeta, err = resolver.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
 					}
 					tpv.ObjectNamePrefix = prefix
 					scPrefix = tpv.Schema()
