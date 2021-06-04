@@ -139,6 +139,13 @@ func (so *DummySequenceOperators) SetSequenceValueByID(
 // errors.
 type DummyEvalPlanner struct{}
 
+// ResolveOIDFromStringOrOID is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) ResolveOIDFromStringOrOID(
+	ctx context.Context, oidTyp *types.T, stringOrOIDToResolve tree.Datum,
+) (*tree.DOid, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // UnsafeUpsertDescriptor is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	ctx context.Context, descID int64, encodedDescriptor []byte, force bool,

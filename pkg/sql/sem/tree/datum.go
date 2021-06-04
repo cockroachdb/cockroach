@@ -4297,7 +4297,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 	// If it is an integer in string form, convert it as an int.
 	if val, err := ParseDInt(strings.TrimSpace(s)); err == nil {
 		tmpOid := NewDOid(*val)
-		oid, err := queryOid(ctx, t, tmpOid)
+		oid, err := ctx.Planner.ResolveOIDFromStringOrOID(ctx.Ctx(), t, tmpOid)
 		if err != nil {
 			oid = tmpOid
 			oid.semanticType = t
@@ -4368,7 +4368,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 		// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 
-		dOid, missingTypeErr := queryOid(ctx, t, NewDString(Name(s).Normalize()))
+		dOid, missingTypeErr := ctx.Planner.ResolveOIDFromStringOrOID(ctx.Ctx(), t, NewDString(Name(s).Normalize()))
 		if missingTypeErr == nil {
 			return dOid, missingTypeErr
 		}
@@ -4407,7 +4407,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 			name:         tn.ObjectName.String(),
 		}, nil
 	default:
-		return queryOid(ctx, t, NewDString(s))
+		return ctx.Planner.ResolveOIDFromStringOrOID(ctx.Ctx(), t, NewDString(s))
 	}
 }
 
