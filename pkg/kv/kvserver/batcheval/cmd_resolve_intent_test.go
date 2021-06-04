@@ -16,9 +16,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -76,6 +78,16 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 	}
 	ctx := context.Background()
 	engine := storage.NewDefaultInMemForTesting()
+	var st *cluster.Settings
+	{
+		version := clusterversion.TestingBinaryVersion
+		if !engine.IsSeparatedIntentsEnabledForTesting(ctx) {
+			// Before PostSeparatedIntentsMigration, so intent resolution will
+			// not assume only separated intents.
+			version = clusterversion.ByKey(clusterversion.SeparatedIntentsMigration)
+		}
+		st = cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
+	}
 	defer engine.Close()
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		for _, test := range tests {
@@ -105,7 +117,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 				h.RangeID = desc.RangeID
 
 				cArgs := CommandArgs{Header: h}
-				cArgs.EvalCtx = (&MockEvalCtx{AbortSpan: as}).EvalContext()
+				cArgs.EvalCtx = (&MockEvalCtx{ClusterSettings: st, AbortSpan: as}).EvalContext()
 
 				if !ranged {
 					cArgs.Args = &ri
