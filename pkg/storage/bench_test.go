@@ -142,20 +142,57 @@ func BenchmarkExportToSst(b *testing.B) {
 
 const numIntentKeys = 1000
 
+// setupKeysWithIntent writes keys using transactions to eng. The number of
+// different keys is equal to numIntentKeys and each key has numVersions
+// versions written to it. The number of versions that are resolved is either
+// numVersions-1 or numVersions, which is controlled by the resolveAll
+// parameter (when true, numVersions are resolved). The latest version for a
+// key is generated using one of possibly two transactions. One of these is
+// what is returned in the LockUpdate so that the caller can resolve intents
+// for it (if any). This distinguished transaction writes the latest version
+// with a stride equal to lockUpdateTxnHasLatestVersionStride. A stride of k
+// means it writes every k-th latest version. Strides longer than 1 are for
+// use in tests with ranged intent resolution for this distinguished
+// transaction, where some of the intents encountered should not be resolved.
+// The latest intents written by the non-distinguished transaction may also be
+// resolved, if resolveIntentForLatestVersionWhenNonLockUpdateTxn is true.
+// This causes ranged intent resolution to not encounter intents owned by
+// other transactions, but may have to skip through keys that have no intents
+// at all. numFlushedVersions is a parameter that controls how many versions
+// are flushed out from the memtable to sstables -- when less is flushed out,
+// and we are using separated intents, the SingleDeletes, Sets corresponding
+// to resolved intents still exist in the memtable, and can result in more
+// work during intent resolution. In a production setting numFlushedVersions
+// should be close to all the versions.
 func setupKeysWithIntent(
-	b *testing.B, eng Engine, numVersions int, numFlushedVersions int, resolveAll bool,
+	b testing.TB,
+	eng Engine,
+	numVersions int,
+	numFlushedVersions int,
+	resolveAll bool,
+	lockUpdateTxnHasLatestVersionStride int,
+	resolveIntentForLatestVersionWhenNonLockUpdateTxn bool,
 ) roachpb.LockUpdate {
 	txnIDCount := 2 * numVersions
+	adjustTxnID := func(txnID int) int {
+		// Assign txn IDs in a deterministic way that will mimic the end result of
+		// random assignment -- the live intent is centered between dead intents,
+		// when we have separated intents.
+		if txnID%2 == 0 {
+			txnID = txnIDCount - txnID
+		}
+		return txnID
+	}
+	txnIDWithLatestVersion := adjustTxnID(numVersions)
+	otherTxnWithLatestVersion := txnIDCount + 2
+	otherTxnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(otherTxnWithLatestVersion)))
 	val := []byte("value")
-	var lockUpdate roachpb.LockUpdate
+	var rvLockUpdate roachpb.LockUpdate
 	for i := 1; i <= numVersions; i++ {
 		// Assign txn IDs in a deterministic way that will mimic the end result of
 		// random assignment -- the live intent is centered between dead intents,
 		// when we have separated intents.
-		txnID := i
-		if i%2 == 0 {
-			txnID = txnIDCount - txnID
-		}
+		txnID := adjustTxnID(i)
 		txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txnID)))
 		ts := hlc.Timestamp{WallTime: int64(i)}
 		txn := roachpb.Transaction{
@@ -169,24 +206,62 @@ func setupKeysWithIntent(
 			ReadTimestamp:          ts,
 			GlobalUncertaintyLimit: ts,
 		}
-		value := roachpb.Value{RawBytes: val}
-		batch := eng.NewBatch()
-		for j := 0; j < numIntentKeys; j++ {
-			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(context.Background(), batch, nil, key, ts, value, &txn))
-		}
-		require.NoError(b, batch.Commit(true))
-		batch.Close()
-		lockUpdate = roachpb.LockUpdate{
+		lockUpdate := roachpb.LockUpdate{
 			Txn:    txn.TxnMeta,
 			Status: roachpb.COMMITTED,
 		}
-		if i < numVersions || resolveAll {
+		var otherTxn roachpb.Transaction
+		var otherLockUpdate roachpb.LockUpdate
+		if txnID == txnIDWithLatestVersion {
+			rvLockUpdate = lockUpdate
+			if lockUpdateTxnHasLatestVersionStride != 1 {
+				otherTxn = roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             otherTxnUUID,
+						Key:            []byte("foo"),
+						WriteTimestamp: ts,
+						MinTimestamp:   ts,
+					},
+					Status:                 roachpb.PENDING,
+					ReadTimestamp:          ts,
+					GlobalUncertaintyLimit: ts,
+				}
+				otherLockUpdate = roachpb.LockUpdate{
+					Txn:    otherTxn.TxnMeta,
+					Status: roachpb.COMMITTED,
+				}
+			}
+		}
+		value := roachpb.Value{RawBytes: val}
+		batch := eng.NewBatch()
+		for j := 0; j < numIntentKeys; j++ {
+			putTxn := &txn
+			if txnID == txnIDWithLatestVersion && j%lockUpdateTxnHasLatestVersionStride != 0 {
+				putTxn = &otherTxn
+			}
+			key := makeKey(nil, j)
+			require.NoError(b, MVCCPut(context.Background(), batch, nil, key, ts, value, putTxn))
+		}
+		require.NoError(b, batch.Commit(true))
+		batch.Close()
+		if i < numVersions || resolveAll || resolveIntentForLatestVersionWhenNonLockUpdateTxn {
 			batch := eng.NewBatch()
 			for j := 0; j < numIntentKeys; j++ {
 				key := makeKey(nil, j)
-				lockUpdate.Key = key
-				found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate)
+				lu := lockUpdate
+				latestVersionNonLockUpdateTxn := false
+				if txnID == txnIDWithLatestVersion && j%lockUpdateTxnHasLatestVersionStride != 0 {
+					lu = otherLockUpdate
+					latestVersionNonLockUpdateTxn = true
+				}
+				lu.Key = key
+				if i == numVersions && !resolveAll && !latestVersionNonLockUpdateTxn {
+					// Only here because of
+					// resolveIntentForLatestVersionWhenNonLockUpdateTxn, and this key
+					// is not one that should be resolved.
+					continue
+				}
+				found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu)
 				require.Equal(b, true, found)
 				require.NoError(b, err)
 			}
@@ -197,7 +272,7 @@ func setupKeysWithIntent(
 			require.NoError(b, eng.Flush())
 		}
 	}
-	return lockUpdate
+	return rvLockUpdate
 }
 
 // BenchmarkIntentScan compares separated and interleaved intents, when
@@ -212,9 +287,10 @@ func BenchmarkIntentScan(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 80, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false /* resolveAll */)
+							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false, /* resolveAll */
+								1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
 							lower := makeKey(nil, 0)
 							iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
@@ -275,9 +351,10 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true /* resolveAll */)
+							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true, /* resolveAll */
+								1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
 							lower := makeKey(nil, 0)
 							var iter MVCCIterator
 							var buf []byte
@@ -345,9 +422,10 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true /* resolveAll */)
+							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true, /* resolveAll */
+								1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
 							lower := makeKey(nil, 0)
 							upper := makeKey(nil, numIntentKeys)
 							buf := append([]byte(nil), lower...)
@@ -396,9 +474,11 @@ func BenchmarkIntentResolution(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, percentFlushed := range []int{0, 50, 80, 90, 100} {
 						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, sep)
+							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false /* resolveAll */)
+							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions,
+								false /* resolveAll */, 1,
+								false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
 							keys := make([]roachpb.Key, numIntentKeys)
 							for i := range keys {
 								keys[i] = makeKey(nil, i)
@@ -435,44 +515,62 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 
 	for _, sep := range []bool{false, true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
-			for _, numVersions := range []int{10, 100, 200, 400} {
+			for _, numVersions := range []int{10, 100, 400} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
-					for _, percentFlushed := range []int{0, 50, 80, 90, 100} {
-						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
-							eng := setupMVCCInMemPebbleWithSeparatedIntents(b, sep)
-							numFlushedVersions := (percentFlushed * numVersions) / 100
-							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false /* resolveAll */)
-							keys := make([]roachpb.Key, numIntentKeys+1)
-							for i := range keys {
-								keys[i] = makeKey(nil, i)
+					for _, sparseness := range []int{1, 100, 1000} {
+						b.Run(fmt.Sprintf("sparseness=%d", sparseness), func(b *testing.B) {
+							otherTxnUnresolvedIntentsCases := []bool{false, true}
+							if sparseness == 1 {
+								// Every intent is owned by the main txn.
+								otherTxnUnresolvedIntentsCases = []bool{false}
 							}
-							keys[numIntentKeys] = makeKey(nil, numIntentKeys)
-							batch := eng.NewBatch()
-							numKeysPerRange := 100
-							numRanges := numIntentKeys / numKeysPerRange
-							b.ResetTimer()
-							for i := 0; i < b.N; i++ {
-								if i > 0 && i%numRanges == 0 {
-									// Wrapped around.
-									b.StopTimer()
-									batch.Close()
-									batch = eng.NewBatch()
-									b.StartTimer()
-								}
-								rangeNum := i % numRanges
-								lockUpdate.Key = keys[rangeNum*numKeysPerRange]
-								lockUpdate.EndKey = keys[(rangeNum+1)*numKeysPerRange]
-								resolved, span, err := MVCCResolveWriteIntentRange(
-									context.Background(), batch, nil, lockUpdate, 1000 /* max */)
-								if err != nil {
-									b.Fatal(err)
-								}
-								if resolved != int64(numKeysPerRange) {
-									b.Fatalf("expected to resolve %d, actual %d", numKeysPerRange, resolved)
-								}
-								if span != nil {
-									b.Fatal("unexpected resume span")
-								}
+							for _, haveOtherTxnUnresolvedIntents := range otherTxnUnresolvedIntentsCases {
+								b.Run(fmt.Sprintf("other-txn-intents=%t", haveOtherTxnUnresolvedIntents), func(b *testing.B) {
+									for _, percentFlushed := range []int{0, 50, 100} {
+										b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
+											eng := setupMVCCInMemPebbleWithSeparatedIntents(b, !sep)
+											numFlushedVersions := (percentFlushed * numVersions) / 100
+											lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions,
+												false /* resolveAll */, sparseness, !haveOtherTxnUnresolvedIntents)
+											keys := make([]roachpb.Key, numIntentKeys+1)
+											for i := range keys {
+												keys[i] = makeKey(nil, i)
+											}
+											batch := eng.NewBatch()
+											numKeysPerRange := 100
+											numRanges := numIntentKeys / numKeysPerRange
+											var resolvedCount int64
+											expectedResolvedCount := int64(numIntentKeys / sparseness)
+											b.ResetTimer()
+											for i := 0; i < b.N; i++ {
+												if i > 0 && i%numRanges == 0 {
+													// Wrapped around.
+													b.StopTimer()
+													if resolvedCount != expectedResolvedCount {
+														b.Fatalf("expected to resolve %d, actual %d",
+															expectedResolvedCount, resolvedCount)
+													}
+													resolvedCount = 0
+													batch.Close()
+													batch = eng.NewBatch()
+													b.StartTimer()
+												}
+												rangeNum := i % numRanges
+												lockUpdate.Key = keys[rangeNum*numKeysPerRange]
+												lockUpdate.EndKey = keys[(rangeNum+1)*numKeysPerRange]
+												resolved, span, err := MVCCResolveWriteIntentRange(
+													context.Background(), batch, nil, lockUpdate, 1000 /* max */, sep)
+												if err != nil {
+													b.Fatal(err)
+												}
+												resolvedCount += resolved
+												if span != nil {
+													b.Fatal("unexpected resume span")
+												}
+											}
+										})
+									}
+								})
 							}
 						})
 					}
