@@ -97,7 +97,6 @@ func newSpillingQueue(
 		items:              make([]coldata.Batch, itemsLen),
 		diskQueueCfg:       cfg,
 		fdSemaphore:        fdSemaphore,
-		dequeueScratch:     unlimitedAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize()),
 		diskAcc:            diskAcc,
 	}
 }
@@ -165,6 +164,9 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		// Note that there must be at least one element on disk.
 		if !q.rewindable && q.curHeadIdx != q.curTailIdx {
 			colexecerror.InternalError(errors.AssertionFailedf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
+		}
+		if q.dequeueScratch == nil {
+			q.dequeueScratch = q.unlimitedAllocator.NewMemBatchWithFixedCapacity(q.typs, coldata.BatchSize())
 		}
 		// NOTE: Only one item is dequeued from disk since a deserialized batch is
 		// only valid until the next call to Dequeue. In practice we could Dequeue
