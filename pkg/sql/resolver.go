@@ -148,11 +148,11 @@ func (p *planner) ResolveTargetObject(
 // LookupSchema implements the tree.ObjectNameTargetResolver interface.
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
-) (found bool, scMeta tree.SchemaMeta, err error) {
+) (found bool, prefix resolver.SchemaMeta, err error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
 	if err != nil || dbDesc == nil {
-		return false, nil, err
+		return false, dbDesc, err
 	}
 	sc := p.Accessor()
 	var resolvedSchema catalog.SchemaDescriptor
@@ -168,10 +168,16 @@ func (p *planner) LookupSchema(
 	}, nil
 }
 
+// SchemaExists implements the tree.EvalDatabase interface.
+func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error) {
+	found, _, err = p.LookupSchema(ctx, dbName, scName)
+	return found, err
+}
+
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (p *planner) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
-) (found bool, objMeta tree.NameResolutionResult, err error) {
+) (found bool, objMeta catalog.Descriptor, err error) {
 	sc := p.Accessor()
 	lookupFlags.CommonLookupFlags.Required = false
 	lookupFlags.CommonLookupFlags.AvoidCached = p.avoidCachedDescriptors
@@ -725,7 +731,9 @@ func expandIndexName(
 	// references the table name.
 
 	// Look up the table prefix.
-	found, _, err := tn.ObjectNamePrefix.Resolve(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, _, err := resolver.ResolveObjectNamePrefix(
+		ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath(), &tn.ObjectNamePrefix,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -816,7 +824,7 @@ var _ resolver.SchemaResolver = &fkSelfResolver{}
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
-) (found bool, objMeta tree.NameResolutionResult, err error) {
+) (found bool, objMeta catalog.Descriptor, err error) {
 	if dbName == r.newTableName.Catalog() &&
 		scName == r.newTableName.Schema() &&
 		tbName == r.newTableName.Table() {

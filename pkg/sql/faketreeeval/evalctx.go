@@ -71,10 +71,10 @@ func (so *DummySequenceOperators) ResolveTableName(
 }
 
 // LookupSchema is part of the tree.EvalDatabase interface.
-func (so *DummySequenceOperators) LookupSchema(
+func (so *DummySequenceOperators) SchemaExists(
 	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errors.WithStack(errSequenceOperators)
+) (bool, error) {
+	return false, errors.WithStack(errSequenceOperators)
 }
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
@@ -211,10 +211,8 @@ func (ep *DummyEvalPlanner) ParseQualifiedTableName(sql string) (*tree.TableName
 }
 
 // LookupSchema is part of the tree.EvalDatabase interface.
-func (ep *DummyEvalPlanner) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errors.WithStack(errEvalPlanner)
+func (ep *DummyEvalPlanner) SchemaExists(ctx context.Context, dbName, scName string) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
 }
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
