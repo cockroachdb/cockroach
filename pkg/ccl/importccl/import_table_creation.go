@@ -249,10 +249,10 @@ func (so *importSequenceOperators) ResolveTableName(
 }
 
 // Implements the tree.EvalDatabase interface.
-func (so *importSequenceOperators) LookupSchema(
+func (so *importSequenceOperators) SchemaExists(
 	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errSequenceOperators
+) (bool, error) {
+	return false, errSequenceOperators
 }
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
@@ -364,7 +364,7 @@ func (r *fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.
 // Implements the tree.ObjectNameExistingResolver interface.
 func (r *fkResolver) LookupObject(
 	_ context.Context, _ tree.ObjectLookupFlags, catalogName, scName, obName string,
-) (found bool, objMeta tree.NameResolutionResult, err error) {
+) (found bool, objMeta catalog.Descriptor, err error) {
 	// PGDUMP supports non-public schemas so respect the schema name.
 	var lookupName string
 	if r.format.Format == roachpb.IOFileFormat_PgDump {
@@ -391,14 +391,14 @@ func (r *fkResolver) LookupObject(
 		lookupName, suggestions)
 }
 
-// Implements the tree.ObjectNameTargetResolver interface.
+// LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (r fkResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
-) (found bool, scMeta tree.SchemaMeta, err error) {
+) (found bool, scMeta resolver.SchemaMeta, err error) {
 	return false, nil, errSchemaResolver
 }
 
-// Implements the sql.SchemaResolver interface.
+// LookupTableByID implements the sql.SchemaResolver interface.
 func (r fkResolver) LookupTableByID(
 	ctx context.Context, id descpb.ID,
 ) (catalog.TableDescriptor, error) {

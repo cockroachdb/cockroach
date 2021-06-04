@@ -72,10 +72,10 @@ type DescriptorResolver struct {
 	ObjsByName map[descpb.ID]map[string]map[string]descpb.ID
 }
 
-// LookupSchema implements the tree.ObjectNameTargetResolver interface.
+// LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (r *DescriptorResolver) LookupSchema(
 	_ context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
+) (bool, resolver.SchemaMeta, error) {
 	dbID, ok := r.DbsByName[dbName]
 	if !ok {
 		return false, nil, nil
@@ -94,7 +94,7 @@ func (r *DescriptorResolver) LookupSchema(
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *DescriptorResolver) LookupObject(
 	_ context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
-) (bool, tree.NameResolutionResult, error) {
+) (bool, catalog.Descriptor, error) {
 	if flags.RequireMutable {
 		panic("did not expect request for mutable descriptor")
 	}
@@ -402,7 +402,7 @@ func DescriptorsMatchingTargets(
 			}
 
 		case *tree.AllTablesSelector:
-			found, descI, err := p.ObjectNamePrefix.Resolve(ctx, r, currentDatabase, searchPath)
+			found, descI, err := resolver.ResolveObjectNamePrefix(ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix)
 			if err != nil {
 				return ret, err
 			}

@@ -42,9 +42,6 @@ type wrapper struct {
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 }
 
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*wrapper) NameResolutionResult() {}
-
 // IsUncommittedVersion implements the catalog.Descriptor interface.
 func (*wrapper) IsUncommittedVersion() bool {
 	return false
