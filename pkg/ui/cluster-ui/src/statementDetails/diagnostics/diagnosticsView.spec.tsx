@@ -65,7 +65,7 @@ describe("DiagnosticsView", () => {
       );
     });
 
-    it("calls activate callback with statementId when click on Activate button", () => {
+    it("calls activate callback with statementFingerprintId when click on Activate button", () => {
       const activateButtonComponent = wrapper.find(Button).first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
@@ -96,7 +96,7 @@ describe("DiagnosticsView", () => {
       assert.isTrue(wrapper.find(Table).exists());
     });
 
-    it("calls activate callback with statementId when click on Activate button", () => {
+    it("calls activate callback with statementFingerprintId when click on Activate button", () => {
       const activateButtonComponent = wrapper
         .findWhere(n => n.prop("children") === "Activate diagnostics")
         .first();

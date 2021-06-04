@@ -44,7 +44,7 @@ import (
 
 // TODO(arul): The fields on stmtKey should really be immutable fields on
 // stmtStats which are set once (on first addition to the map). Instead, we
-// should use stmtID (which is a hashed string of the fields below) as the
+// should use stmtFingerprintID (which is a hashed string of the fields below) as the
 // stmtKey.
 type stmtKey struct {
 	anonymizedStmt string
@@ -64,7 +64,7 @@ func (s stmtKey) size() int64 {
 	return int64(unsafe.Sizeof(s)) + int64(len(s.anonymizedStmt)) + int64(len(s.database))
 }
 
-const invalidStmtID = 0
+const invalidStmtFingerprintID = 0
 
 // txnKey is the hashed string constructed using the individual statement IDs
 // that comprise the transaction.
@@ -97,7 +97,7 @@ type appStats struct {
 }
 
 type txnStats struct {
-	statementIDs []roachpb.StmtID
+	statementFingerprintIDs []roachpb.StmtFingerprintID
 
 	mu struct {
 		syncutil.Mutex
@@ -108,21 +108,21 @@ type txnStats struct {
 
 func (t *txnStats) sizeUnsafe() int64 {
 	const txnStatsShallowSize = int64(unsafe.Sizeof(txnStats{}))
-	stmtIDsSize := int64(cap(t.statementIDs)) *
-		int64(unsafe.Sizeof(roachpb.StmtID(0)))
+	stmtFingerprintIDsSize := int64(cap(t.statementFingerprintIDs)) *
+		int64(unsafe.Sizeof(roachpb.StmtFingerprintID(0)))
 
 	// t.mu.data might contain pointer types, so we subtract its shallow size
 	// and include the actual size.
 	dataSize := -int64(unsafe.Sizeof(roachpb.TransactionStatistics{})) +
 		int64(t.mu.data.Size())
 
-	return txnStatsShallowSize + stmtIDsSize + dataSize
+	return txnStatsShallowSize + stmtFingerprintIDsSize + dataSize
 }
 
 // stmtStats holds per-statement statistics.
 type stmtStats struct {
-	// ID is the statementID constructed using the stmtKey fields.
-	ID roachpb.StmtID
+	// ID is the statementFingerprintID constructed using the stmtKey fields.
+	ID roachpb.StmtFingerprintID
 
 	// data contains all fields that are modified when new statements matching
 	// the stmtKey are executed, and therefore must be protected by a mutex.
@@ -188,10 +188,10 @@ var stmtStatsEnable = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
 ).WithPublic()
 
-// TxnStatsNumStmtIDsToRecord limits the number of statementIDs stored for in
+// TxnStatsNumStmtFingerprintIDsToRecord limits the number of statementFingerprintIDs stored for in
 // transactions statistics for a single transaction. This defaults to 1000, and
 // currently is non-configurable (hidden setting).
-var TxnStatsNumStmtIDsToRecord = settings.RegisterIntSetting(
+var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
 	"sql.metrics.transaction_details.max_statement_ids",
 	"max number of statement IDs to store for transaction statistics",
 	1000,
@@ -260,7 +260,7 @@ var maxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 //
 // samplePlanDescription can be nil, as these are only sampled periodically
 // per unique fingerprint.
-// recordStatement always returns a valid stmtID corresponding to the given
+// recordStatement always returns a valid stmtFingerprintID corresponding to the given
 // stmt regardless of whether the statement is actually recorded or not.
 //
 // If the statement is not actually recorded due to either:
@@ -284,18 +284,18 @@ func (a *appStats) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
 	planner *planner,
-) (roachpb.StmtID, error) {
+) (roachpb.StmtFingerprintID, error) {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
 	// recorded we don't need to create an entry in the stmts map for it. We do
-	// still need stmtID for transaction level metrics tracking.
+	// still need stmtFingerprintID for transaction level metrics tracking.
 	t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV)
 	if !stmtStatsEnable.Get(&a.st.SV) || (t > 0 && t.Seconds() >= svcLat) {
 		createIfNonExistent = false
 	}
 
 	// Get the statistics object.
-	s, statementKey, stmtID, created, throttled := a.getStatsForStmt(
+	s, statementKey, stmtFingerprintID, created, throttled := a.getStatsForStmt(
 		stmt.AnonymizedStr, implicitTxn, planner.SessionData().Database,
 		stmtErr, createIfNonExistent,
 	)
@@ -303,7 +303,7 @@ func (a *appStats) recordStatement(
 	// This means we have reached the limit of unique fingerprints. We don't
 	// record anything and abort the operation.
 	if throttled {
-		return stmtID, errors.New("unique fingerprint limit has been reached")
+		return stmtFingerprintID, errors.New("unique fingerprint limit has been reached")
 	}
 
 	// This statement was below the latency threshold or sql stats aren't being
@@ -311,7 +311,7 @@ func (a *appStats) recordStatement(
 	// for this statement, though we do need to return the statement ID for
 	// transaction level metrics collection.
 	if !createIfNonExistent {
-		return stmtID, nil
+		return stmtFingerprintID, nil
 	}
 
 	// Retrieve the list of all nodes which the statement was executed on.
@@ -380,11 +380,17 @@ func (a *appStats) recordStatement(
 }
 
 // getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid
-// stat object is returned or not, we always return the correct stmtID
+// stat object is returned or not, we always return the correct stmtFingerprintID
 // for the given stmt.
 func (a *appStats) getStatsForStmt(
 	anonymizedStmt string, implicitTxn bool, database string, stmtErr error, createIfNonexistent bool,
-) (stats *stmtStats, key stmtKey, stmtID roachpb.StmtID, created bool, throttled bool) {
+) (
+	stats *stmtStats,
+	key stmtKey,
+	stmtFingerprintID roachpb.StmtFingerprintID,
+	created bool,
+	throttled bool,
+) {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
 	key = stmtKey{
@@ -395,19 +401,19 @@ func (a *appStats) getStatsForStmt(
 	}
 
 	// We first try and see if we can get by without creating a new entry for this
-	// key, as this allows us to not construct the statementID from scratch (which
+	// key, as this allows us to not construct the statementFingerprintID from scratch (which
 	// is an expensive operation)
-	stats, _, _ = a.getStatsForStmtWithKey(key, invalidStmtID, false /* createIfNonexistent */)
+	stats, _, _ = a.getStatsForStmtWithKey(key, invalidStmtFingerprintID, false /* createIfNonexistent */)
 	if stats == nil {
-		stmtID = constructStatementIDFromStmtKey(key)
-		stats, created, throttled = a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent)
-		return stats, key, stmtID, created, throttled
+		stmtFingerprintID = constructStatementFingerprintIDFromStmtKey(key)
+		stats, created, throttled = a.getStatsForStmtWithKey(key, stmtFingerprintID, createIfNonexistent)
+		return stats, key, stmtFingerprintID, created, throttled
 	}
 	return stats, key, stats.ID, false /* created */, false /* throttled */
 }
 
 func (a *appStats) getStatsForStmtWithKey(
-	key stmtKey, stmtID roachpb.StmtID, createIfNonexistent bool,
+	key stmtKey, stmtFingerprintID roachpb.StmtFingerprintID, createIfNonexistent bool,
 ) (stats *stmtStats, created, throttled bool) {
 	a.Lock()
 	defer a.Unlock()
@@ -429,7 +435,7 @@ func (a *appStats) getStatsForStmtWithKey(
 		}
 
 		stats = &stmtStats{}
-		stats.ID = stmtID
+		stats.ID = stmtFingerprintID
 		a.stmts[key] = stats
 		return stats, true /* created */, false /* throttled */
 	}
@@ -437,7 +443,7 @@ func (a *appStats) getStatsForStmtWithKey(
 }
 
 func (a *appStats) getStatsForTxnWithKey(
-	key txnKey, stmtIDs []roachpb.StmtID, createIfNonexistent bool,
+	key txnKey, stmtFingerprintIDs []roachpb.StmtFingerprintID, createIfNonexistent bool,
 ) (stats *txnStats, created, throttled bool) {
 	a.Lock()
 	defer a.Unlock()
@@ -456,7 +462,7 @@ func (a *appStats) getStatsForTxnWithKey(
 			return nil /* stats */, false /* created */, true /* throttled */
 		}
 		stats = &txnStats{}
-		stats.statementIDs = stmtIDs
+		stats.statementFingerprintIDs = stmtFingerprintIDs
 		a.txns[key] = stats
 		return stats, true /* created */, false /* throttled */
 	}
@@ -537,7 +543,7 @@ func (a *appStats) Add(ctx context.Context, other *appStats) (err error) {
 		txnCopy := &txnStats{}
 		txnCopy.mu.data = v.mu.data
 		v.mu.Unlock()
-		txnCopy.statementIDs = v.statementIDs
+		txnCopy.statementFingerprintIDs = v.statementFingerprintIDs
 		txnMap[k] = txnCopy
 	}
 
@@ -546,7 +552,7 @@ func (a *appStats) Add(ctx context.Context, other *appStats) (err error) {
 		// We don't check if we have created a new entry here because we have
 		// already accounted for all the memory that we will be allocating in this
 		// function.
-		t, created, throttled := a.getStatsForTxnWithKey(k, v.statementIDs, true /* createIfNonExistent */)
+		t, created, throttled := a.getStatsForTxnWithKey(k, v.statementFingerprintIDs, true /* createIfNonExistent */)
 
 		// If we have reached the unique fingerprint limit, we skip adding the
 		// current fingerprint. No cleanup is necessary.
@@ -639,7 +645,7 @@ func (a *appStats) recordTransaction(
 	ctx context.Context,
 	key txnKey,
 	retryCount int64,
-	statementIDs []roachpb.StmtID,
+	statementFingerprintIDs []roachpb.StmtFingerprintID,
 	serviceLat time.Duration,
 	retryLat time.Duration,
 	commitLat time.Duration,
@@ -661,7 +667,7 @@ func (a *appStats) recordTransaction(
 	}
 
 	// Get the statistics object.
-	s, created, throttled := a.getStatsForTxnWithKey(key, statementIDs, true /* createIfNonexistent */)
+	s, created, throttled := a.getStatsForTxnWithKey(key, statementFingerprintIDs, true /* createIfNonexistent */)
 
 	if throttled {
 		return errors.New("unique fingerprint limit has been reached")
@@ -923,8 +929,8 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
-func constructStatementIDFromStmtKey(key stmtKey) roachpb.StmtID {
-	return roachpb.ConstructStatementID(
+func constructStatementFingerprintIDFromStmtKey(key stmtKey) roachpb.StmtFingerprintID {
+	return roachpb.ConstructStatementFingerprintID(
 		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
 	)
 }
@@ -972,9 +978,9 @@ func (s *sqlStats) getUnscrubbedTxnStats() []roachpb.CollectedTransactionStatist
 			stats.mu.Unlock()
 
 			ret = append(ret, roachpb.CollectedTransactionStatistics{
-				StatementIDs: stats.statementIDs,
-				App:          appName,
-				Stats:        data,
+				StatementFingerprintIDs: stats.statementFingerprintIDs,
+				App:                     appName,
+				Stats:                   data,
 			})
 		}
 		a.Unlock()

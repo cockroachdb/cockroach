@@ -39,7 +39,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	getStmtStats := func(t *testing.T, server serverutils.TestServerInterface, stmt string, implicitTxn bool, database string) (*stmtStats, roachpb.StmtID) {
+	getStmtStats := func(t *testing.T, server serverutils.TestServerInterface, stmt string, implicitTxn bool, database string) (*stmtStats, roachpb.StmtFingerprintID) {
 		t.Helper()
 		applicationStats := server.SQLServer().(*Server).sqlStats.getStatsForApplication("")
 		require.NotNil(t, applicationStats, "could not find app stats for default app")

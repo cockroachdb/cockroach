@@ -30,7 +30,7 @@ import {
 import {
   searchTransactionsData,
   filterTransactions,
-  getStatementsById,
+  getStatementsByFingerprintId,
 } from "./utils";
 import { forIn } from "lodash";
 import Long from "long";
@@ -56,7 +56,7 @@ interface TState {
   pagination: ISortedTablePagination;
   search?: string;
   filters?: Filters;
-  statementIds: Long[] | null;
+  statementFingerprintIds: Long[] | null;
   transactionStats: TransactionStats | null;
 }
 
@@ -89,7 +89,7 @@ export class TransactionsPage extends React.Component<
     },
     search: this.trxSearchParams("q", "").toString(),
     filters: this.filters,
-    statementIds: null,
+    statementFingerprintIds: null,
     transactionStats: null,
   };
 
@@ -191,10 +191,10 @@ export class TransactionsPage extends React.Component<
   };
 
   handleDetails = (
-    statementIds: Long[] | null,
+    statementFingerprintIds: Long[] | null,
     transactionStats: TransactionStats,
   ) => {
-    this.setState({ statementIds, transactionStats });
+    this.setState({ statementFingerprintIds, transactionStats });
   };
 
   lastReset = () => {
@@ -317,9 +317,10 @@ export class TransactionsPage extends React.Component<
 
   renderTransactionDetails() {
     const { statements } = this.props.data;
-    const { statementIds } = this.state;
+    const { statementFingerprintIds } = this.state;
     const transactionDetails =
-      statementIds && getStatementsById(statementIds, statements);
+      statementFingerprintIds &&
+      getStatementsByFingerprintId(statementFingerprintIds, statements);
 
     return (
       <TransactionDetails
@@ -335,8 +336,8 @@ export class TransactionsPage extends React.Component<
   }
 
   render() {
-    const { statementIds } = this.state;
-    const renderTxDetailsView = !!statementIds;
+    const { statementFingerprintIds } = this.state;
+    const renderTxDetailsView = !!statementFingerprintIds;
     return renderTxDetailsView
       ? this.renderTransactionDetails()
       : this.renderTransactionsList();
