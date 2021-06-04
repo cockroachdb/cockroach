@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "layered",
+    srcs = [
+        "errors.go",
+        "event.go",
+        "run.go",
+        "scheduler.go",
+        "sequence.go",
+        "step.go",
+        "step_simple.go",
+        "supporter.go",
+        "uml.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/layered",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/registry",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "layered_test",
+    srcs = [
+        "datadriven_test.go",
+        "uml_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":layered"],
+    deps = [
+        "//pkg/cmd/roachtest/registry",
+        "//pkg/testutils",
+        "//pkg/testutils/echotest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

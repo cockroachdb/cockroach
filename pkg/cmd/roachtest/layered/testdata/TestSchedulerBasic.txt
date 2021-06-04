@@ -1,0 +1,76 @@
+echo
+----
+@startuml
+concise "1" as W1
+concise "2" as W2
+concise "3" as W3
+@00:00:00
+W1 is "AOST.s1"
+W2 is "import.s1"
+W3 is "kv0.s1"
+@00:00:04
+W1 is "ycsb.s1"
+W1 is "{-}"
+W2 is "tpcc.s1"
+W2 is "{-}"
+W3 is "AOST.s2"
+W3 is "{-}"
+@00:00:05
+W3 is "import.s2"
+W3 is "{-}"
+@00:00:06
+W3 is "kv0.s2"
+W3 is "{-}"
+@00:00:07
+W3 is "kv0.s3"
+W3 is "{-}"
+@00:00:08
+W1 is "AOST.s3"
+W1 is "{-}"
+W2 is "ycsb.s2"
+W2 is "{-}"
+@00:00:09
+W2 is "ycsb.s3"
+W2 is "{-}"
+@00:00:10
+W3 is "kv0.s4"
+W3 is "{-}"
+@00:00:11
+W1 is "tpcc.s2"
+W1 is "{-}"
+@00:00:12
+W1 is "tpcc.s3"
+W1 is "{-}"
+W2 is "AOST.s4"
+W2 is "{-}"
+@00:00:15
+W1 is "tpcc.s4"
+W1 is "{-}"
+W3 is "ycsb.s4"
+W3 is "{-}"
+@00:00:17
+W2 is "AOST.s5"
+W2 is "{-}"
+@00:00:19
+W2 is "kv0.s5"
+W2 is "{-}"
+@00:00:20
+W1 is "tpcc.s5"
+W1 is "{-}"
+W3 is "ycsb.s5"
+W3 is "{-}"
+@00:00:21
+W2 is "import.s3"
+W2 is "{-}"
+@00:00:22
+W1 is "{-}"
+W3 is "{-}"
+@00:00:24
+W1 is "import.s4"
+W2 is "{-}"
+@00:00:29
+W1 is "import.s5"
+W1 is "{-}"
+@00:00:31
+W1 is "{-}"
+@enduml

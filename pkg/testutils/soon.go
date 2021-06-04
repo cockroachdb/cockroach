@@ -76,6 +76,7 @@ func SucceedsWithinError(fn func() error, duration time.Duration) error {
 }
 
 func succeedsSoonDuration() time.Duration {
+	return 5 * time.Second // HACK
 	if util.RaceEnabled {
 		return RaceSucceedsSoonDuration
 	}

@@ -100,6 +100,9 @@ func (i *formattableTagsIterator) next() (key, val []byte, done bool) {
 	// No need to check for the value -1 because of the invariant
 	// that all parts are nul-terminated.
 	nv := bytes.IndexByte(i.tags, 0)
+	if nv == -1 {
+		return nil, nil, true
+	}
 	// The key is everything so far.
 	key = i.tags[:nv]
 	// Truncate the buffer to the value and everything after.

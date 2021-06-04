@@ -67,6 +67,7 @@ func RegisterTests(r registry.Registry) {
 	registerKVSplits(r)
 	registerKVRangeLookups(r)
 	registerKVMultiStoreWithOverload(r)
+	registerLayer(r)
 	registerLargeRange(r)
 	registerLedger(r)
 	registerLibPQ(r)

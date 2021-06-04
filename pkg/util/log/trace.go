@@ -190,6 +190,8 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 		sp.Redactable(),
 		format, args...)
 	eventInternal(sp, el, false /* isErr */, &entry)
+	logger := logging.getLogger(channel.DEV)
+	logger.outputLogEntry(entry)
 }
 
 func vEventf(
