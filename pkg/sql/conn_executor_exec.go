@@ -351,6 +351,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
+	// Special top-level handling for EXPLAIN ANALYZE.
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {
 		case tree.ExplainDebug:
@@ -386,6 +387,40 @@ func (ex *connExecutor) execStmtInOpenState(
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
 		stmt.ExpectedTypes = nil
+	}
+
+	// Special top-level handling for EXECUTE. This must happen after the handling
+	// for EXPLAIN ANALYZE (in order to support EXPLAIN ANALYZE EXECUTE) but
+	// before setting up the instrumentation helper.
+	if e, ok := ast.(*tree.Execute); ok {
+		// Replace the `EXECUTE foo` statement with the prepared statement, and
+		// continue execution.
+		name := e.Name.String()
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		if !ok {
+			err := pgerror.Newf(
+				pgcode.InvalidSQLStatementName,
+				"prepared statement %q does not exist", name,
+			)
+			return makeErrEvent(err)
+		}
+		var err error
+		pinfo, err = fillInPlaceholders(ctx, ps, name, e.Params, ex.sessionData.SearchPath)
+		if err != nil {
+			return makeErrEvent(err)
+		}
+
+		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
+		stmt.Statement = ps.Statement
+		stmt.Prepared = ps
+		stmt.ExpectedTypes = ps.Columns
+		stmt.AnonymizedStr = ps.AnonymizedStr
+		res.ResetStmtType(ps.AST)
+
+		if e.DiscardRows {
+			ih.SetDiscardRows()
+		}
+		ast = stmt.Statement.AST
 	}
 
 	var needFinish bool
@@ -523,35 +558,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		return nil, nil, nil
-
-	case *tree.Execute:
-		// Replace the `EXECUTE foo` statement with the prepared statement, and
-		// continue execution below.
-		name := s.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
-		if !ok {
-			err := pgerror.Newf(
-				pgcode.InvalidSQLStatementName,
-				"prepared statement %q does not exist", name,
-			)
-			return makeErrEvent(err)
-		}
-		var err error
-		pinfo, err = fillInPlaceholders(ctx, ps, name, s.Params, ex.sessionData.SearchPath)
-		if err != nil {
-			return makeErrEvent(err)
-		}
-
-		stmt.Statement = ps.Statement
-		ast = stmt.AST
-		stmt.Prepared = ps
-		stmt.ExpectedTypes = ps.Columns
-		stmt.AnonymizedStr = ps.AnonymizedStr
-		res.ResetStmtType(ps.AST)
-
-		if s.DiscardRows {
-			ih.SetDiscardRows()
-		}
 	}
 
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
