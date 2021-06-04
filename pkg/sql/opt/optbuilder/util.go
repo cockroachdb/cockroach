@@ -110,7 +110,7 @@ func (b *Builder) expandStar(
 		}
 
 	case *tree.AllColumnsSelector:
-		src, srcMeta, err := t.Resolve(b.ctx, inScope)
+		src, srcMeta, err := colinfo.ResolveAllColumnsSelector(b.ctx, inScope, t)
 		if err != nil {
 			panic(err)
 		}

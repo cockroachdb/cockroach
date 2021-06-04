@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "colinfotestutils",
+    srcs = ["name_resolution_testutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo/colinfotestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils",
+    ],
+)
