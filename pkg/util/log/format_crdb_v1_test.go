@@ -13,6 +13,8 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"reflect"
 	"strings"
@@ -23,10 +25,69 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
 )
 
-func TestEntryDecoder(t *testing.T) {
+func TestCrdbV1FormatDecode(t *testing.T) {
+	var templateEntry logpb.Entry
+	// We only use the datadriven framework for the ability to rewrite the output.
+	datadriven.RunTest(t, "testdata/crdb_v1", func(t *testing.T, td *datadriven.TestData) string {
+		switch td.Cmd {
+		case "common":
+			templateEntry = logpb.Entry{}
+			if err := json.Unmarshal([]byte(td.Input), &templateEntry); err != nil {
+				td.Fatalf(t, "invalid input syntax: %v", err)
+			}
+
+		case "entries":
+			var inputEntries []logpb.Entry
+			for _, line := range strings.Split(td.Input, "\n") {
+				entry := templateEntry
+				if err := json.Unmarshal([]byte(line), &entry); err != nil {
+					td.Fatalf(t, "invalid input syntax: %v", err)
+				}
+				inputEntries = append(inputEntries, entry)
+			}
+
+			var buf bytes.Buffer
+			// Encode.
+			for _, entry := range inputEntries {
+				_ = FormatLegacyEntry(entry, &buf)
+			}
+			// Decode.
+			entryStr := buf.String()
+			decoder := NewEntryDecoder(strings.NewReader(entryStr), WithMarkedSensitiveData)
+			var outputEntries []logpb.Entry
+			for {
+				var entry logpb.Entry
+				if err := decoder.Decode(&entry); err != nil {
+					if err == io.EOF {
+						break
+					}
+					td.Fatalf(t, "error while decoding: %v", err)
+				}
+				outputEntries = append(outputEntries, entry)
+			}
+			if len(outputEntries) != len(inputEntries) {
+				td.Fatalf(t, "parse results in %d entries, expected %d. Input:\n%s", len(outputEntries), len(inputEntries), entryStr)
+			}
+			// Show what has been decoded.
+			buf.WriteString("# after parse:\n")
+			for _, entry := range outputEntries {
+				fmt.Fprintf(&buf, "%# v\n", pretty.Formatter(entry))
+			}
+			return buf.String()
+
+		default:
+			t.Fatalf("unsupported command: %q", td.Cmd)
+		}
+		return ""
+		// unreachable
+	})
+}
+
+func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 	entryIdx := 1
 	formatEntry := func(s Severity, c Channel, now time.Time, gid int, file string, line int, tags, msg string) string {
 		entry := logpb.Entry{
@@ -48,15 +109,6 @@ func TestEntryDecoder(t *testing.T) {
 
 	t1 := timeutil.Now().Round(time.Microsecond)
 	t2 := t1.Add(time.Microsecond)
-	t3 := t2.Add(time.Microsecond)
-	t4 := t3.Add(time.Microsecond)
-	t5 := t4.Add(time.Microsecond)
-	t6 := t5.Add(time.Microsecond)
-	t7 := t6.Add(time.Microsecond)
-	t8 := t7.Add(time.Microsecond)
-	t9 := t8.Add(time.Microsecond)
-	t10 := t9.Add(time.Microsecond)
-	t11 := t10.Add(time.Microsecond)
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
@@ -65,24 +117,8 @@ func TestEntryDecoder(t *testing.T) {
 	reallyLongEntry := string(bytes.Repeat([]byte("a"), maxMessageLength))
 	tooLongEntry := reallyLongEntry + "a"
 
-	contents := formatEntry(severity.INFO, channel.DEV, t1, 0, "clog_test.go", 136, ``, "info")
-	contents += formatEntry(severity.INFO, channel.DEV, t2, 1, "clog_test.go", 137, ``, "multi-\nline")
-	contents += formatEntry(severity.INFO, channel.DEV, t3, 2, "clog_test.go", 138, ``, reallyLongEntry)
-	contents += formatEntry(severity.INFO, channel.DEV, t4, 3, "clog_test.go", 139, ``, tooLongEntry)
-	contents += formatEntry(severity.WARNING, channel.DEV, t5, 4, "clog_test.go", 140, ``, "warning")
-	contents += formatEntry(severity.ERROR, channel.DEV, t6, 5, "clog_test.go", 141, ``, "error")
-	contents += formatEntry(severity.FATAL, channel.DEV, t7, 6, "clog_test.go", 142, ``, "fatal\nstack\ntrace")
-	contents += formatEntry(severity.INFO, channel.DEV, t8, 7, "clog_test.go", 143, ``, tooLongEntry)
-
-	// Regression test for #56873.
-	contents += formatEntry(severity.INFO, channel.DEV, t8, 8, "clog_test.go", 144, `sometags`, "foo")
-	contents += formatEntry(severity.INFO, channel.DEV, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
-	// Different channel.
-	contents += formatEntry(severity.INFO, channel.SESSIONS, t9, 10, "clog_test.go", 146, ``, "info")
-	// Ensure that IPv6 addresses in tags get parsed properly.
-	contents += formatEntry(severity.INFO, channel.DEV, t10, 11, "clog_test.go", 147, `client=[1::]:2`, "foo")
-	// Ensure that empty messages don't wreak havoc.
-	contents += formatEntry(severity.INFO, channel.DEV, t11, 12, "clog_test.go", 148, "", "")
+	contents := formatEntry(severity.INFO, channel.DEV, t1, 2, "clog_test.go", 138, ``, reallyLongEntry)
+	contents += formatEntry(severity.INFO, channel.DEV, t2, 3, "clog_test.go", 139, ``, tooLongEntry)
 
 	readAllEntries := func(contents string) []logpb.Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
@@ -106,137 +142,21 @@ func TestEntryDecoder(t *testing.T) {
 			Severity:  severity.INFO,
 			Channel:   channel.DEV,
 			Time:      t1.UnixNano(),
-			Goroutine: 0,
+			Goroutine: 2,
 			File:      `clog_test.go`,
-			Line:      136,
-			Message:   `info`,
+			Line:      138,
+			Message:   reallyLongEntry,
 			Counter:   2,
 		},
 		{
 			Severity:  severity.INFO,
 			Channel:   channel.DEV,
 			Time:      t2.UnixNano(),
-			Goroutine: 1,
-			File:      `clog_test.go`,
-			Line:      137,
-			Message: `multi-
-line`,
-			Counter: 3,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t3.UnixNano(),
-			Goroutine: 2,
-			File:      `clog_test.go`,
-			Line:      138,
-			Message:   reallyLongEntry,
-			Counter:   4,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t4.UnixNano(),
 			Goroutine: 3,
 			File:      `clog_test.go`,
 			Line:      139,
 			Message:   tooLongEntry[:maxMessageLength],
-			Counter:   5,
-		},
-		{
-			Severity:  severity.WARNING,
-			Channel:   channel.DEV,
-			Time:      t5.UnixNano(),
-			Goroutine: 4,
-			File:      `clog_test.go`,
-			Line:      140,
-			Message:   `warning`,
-			Counter:   6,
-		},
-		{
-			Severity:  severity.ERROR,
-			Channel:   channel.DEV,
-			Time:      t6.UnixNano(),
-			Goroutine: 5,
-			File:      `clog_test.go`,
-			Line:      141,
-			Message:   `error`,
-			Counter:   7,
-		},
-		{
-			Severity:  severity.FATAL,
-			Channel:   channel.DEV,
-			Time:      t7.UnixNano(),
-			Goroutine: 6,
-			File:      `clog_test.go`,
-			Line:      142,
-			Message: `fatal
-stack
-trace`,
-			Counter: 8,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t8.UnixNano(),
-			Goroutine: 7,
-			File:      `clog_test.go`,
-			Line:      143,
-			Message:   tooLongEntry[:maxMessageLength],
-			Counter:   9,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t8.UnixNano(),
-			Goroutine: 8,
-			File:      `clog_test.go`,
-			Line:      144,
-			Tags:      `sometags`,
-			Message:   `foo`,
-			Counter:   10,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t8.UnixNano(),
-			Goroutine: 9,
-			File:      `clog_test.go`,
-			Line:      145,
-			Message:   `bar`,
-			Counter:   11,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.SESSIONS,
-			Time:      t9.UnixNano(),
-			Goroutine: 10,
-			File:      `clog_test.go`,
-			Line:      146,
-			Message:   `info`,
-			Counter:   12,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t10.UnixNano(),
-			Goroutine: 11,
-			File:      `clog_test.go`,
-			Line:      147,
-			Tags:      `client=[1::]:2`,
-			Message:   `foo`,
-			Counter:   13,
-		},
-		{
-			Severity:  severity.INFO,
-			Channel:   channel.DEV,
-			Time:      t11.UnixNano(),
-			Goroutine: 12,
-			File:      `clog_test.go`,
-			Line:      148,
-			Tags:      ``,
-			Message:   ``,
-			Counter:   14,
+			Counter:   3,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
