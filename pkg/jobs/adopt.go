@@ -44,6 +44,15 @@ const (
 	NonTerminalStatusTupleString = `(` + nonTerminalStatusList + `)`
 )
 
+const claimQuery = `
+   UPDATE system.jobs
+      SET claim_session_id = $1, claim_instance_id = $2
+    WHERE (claim_session_id IS NULL)
+      AND (status IN ` + claimableStatusTupleString + `)
+ ORDER BY created DESC
+    LIMIT $3
+RETURNING id;`
+
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
@@ -54,14 +63,7 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 			return errors.WithAssertionFailure(err)
 		}
 		numRows, err := r.ex.Exec(
-			ctx, "claim-jobs", txn, `
-   UPDATE system.jobs
-      SET claim_session_id = $1, claim_instance_id = $2
-    WHERE claim_session_id IS NULL
-      AND status IN `+claimableStatusTupleString+`
- ORDER BY created DESC
-    LIMIT $3
-RETURNING id;`,
+			ctx, "claim-jobs", txn, claimQuery,
 			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
 		)
 		if err != nil {
@@ -287,6 +289,17 @@ func (r *Registry) runJob(
 	return err
 }
 
+const cancelQuery = `
+UPDATE system.jobs
+SET status =
+    CASE
+      WHEN status = $1 THEN $2
+      WHEN status = $3 THEN $4
+      ELSE status
+    END
+WHERE (status IN ($1, $3)) AND ((claim_session_id = $5) AND (claim_instance_id = $6))
+RETURNING id, status`
+
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Run the claim transaction at low priority to ensure that it does not
@@ -299,16 +312,8 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		// error (otherwise, the system.jobs table might diverge from the jobs
 		// registry).
 		rows, err := r.ex.QueryBufferedEx(
-			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
-UPDATE system.jobs
-SET status =
-		CASE
-			WHEN status = $1 THEN $2
-			WHEN status = $3 THEN $4
-			ELSE status
-		END
-WHERE (status IN ($1, $3)) AND (claim_session_id = $5 AND claim_instance_id = $6)
-RETURNING id, status`,
+			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			cancelQuery,
 			StatusPauseRequested, StatusPaused,
 			StatusCancelRequested, StatusReverting,
 			s.ID().UnsafeBytes(), r.ID(),
