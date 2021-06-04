@@ -79,14 +79,14 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
 					roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
-				math.MaxInt64); err != nil {
+				math.MaxInt64, false); err != nil {
 				t.Fatal(err)
 			}
 			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
 				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
 					roachpb.Span{Key: localKey, EndKey: localKey.Next()}),
-				math.MaxInt64); err != nil {
+				math.MaxInt64, false); err != nil {
 				t.Fatal(err)
 			}
 

@@ -492,8 +492,9 @@ func resolveLocalLocks(
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan
+				// TODO: don't hardwire onlySeparatedIntents=false
 				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-					ctx, readWriter, ms, update, resolveAllowance)
+					ctx, readWriter, ms, update, resolveAllowance, false)
 				if err != nil {
 					return err
 				}
