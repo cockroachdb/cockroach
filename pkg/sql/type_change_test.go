@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -481,6 +482,10 @@ CREATE TYPE ab AS ENUM ('a', 'b')`,
 func TestTypeChangeJobCancelSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	defer jobs.TestingSetAdoptAndCancelIntervals(
+		100*time.Millisecond, 100*time.Millisecond,
+	)()
 
 	testCases := []struct {
 		desc       string
