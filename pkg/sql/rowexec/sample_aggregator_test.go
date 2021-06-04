@@ -57,6 +57,7 @@ func runSampleAggregator(
 	evalCtx *tree.EvalContext,
 	memLimitBytes int64,
 	expectOutOfMemory bool,
+	numSamples, aggNumSamples uint32,
 	inputRows [][]int,
 	expected []result,
 ) {
@@ -118,7 +119,7 @@ func runSampleAggregator(
 		outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 		spec := &execinfrapb.SamplerSpec{
-			SampleSize: 100, Sketches: sketchSpecs,
+			SampleSize: numSamples, MinSampleSize: 2, Sketches: sketchSpecs,
 		}
 		p, err := newSamplerProcessor(
 			&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, outputs[i],
@@ -147,7 +148,8 @@ func runSampleAggregator(
 	// Now run the sample aggregator.
 	finalOut := distsqlutils.NewRowBuffer([]*types.T{}, nil /* rows*/, distsqlutils.RowBufferArgs{})
 	spec := &execinfrapb.SampleAggregatorSpec{
-		SampleSize:       100,
+		SampleSize:       aggNumSamples,
+		MinSampleSize:    2,
 		Sketches:         sketchSpecs,
 		SampledColumnIDs: []descpb.ColumnID{100, 101},
 		TableID:          13,
@@ -283,8 +285,66 @@ func TestSampleAggregator(t *testing.T) {
 		},
 	}
 
-	runSampleAggregator(t, server, sqlDB, kvDB, st, &evalCtx, 0, false, inputRows, expected)
-	runSampleAggregator(t, server, sqlDB, kvDB, st, &evalCtx, 1<<0, true, inputRows, expected)
-	runSampleAggregator(t, server, sqlDB, kvDB, st, &evalCtx, 1<<4, true, inputRows, expected)
-	runSampleAggregator(t, server, sqlDB, kvDB, st, &evalCtx, 1<<15, false, inputRows, expected)
+	runSampleAggregator(
+		t, server, sqlDB, kvDB, st, &evalCtx, 0 /* memLimitBytes */, false, /* expectOutOfMemory */
+		100 /* numSamples */, 100 /* aggNumSamples */, inputRows, expected,
+	)
+	runSampleAggregator(
+		t, server, sqlDB, kvDB, st, &evalCtx, 1<<0 /* memLimitBytes */, true, /* expectOutOfMemory */
+		100 /* numSamples */, 100 /* aggNumSamples */, inputRows, expected,
+	)
+	runSampleAggregator(
+		t, server, sqlDB, kvDB, st, &evalCtx, 1<<4 /* memLimitBytes */, true, /* expectOutOfMemory */
+		100 /* numSamples */, 100 /* aggNumSamples */, inputRows, expected,
+	)
+	runSampleAggregator(
+		t, server, sqlDB, kvDB, st, &evalCtx, 1<<15 /* memLimitBytes */, false, /* expectOutOfMemory */
+		100 /* numSamples */, 100 /* aggNumSamples */, inputRows, expected,
+	)
+
+	inputRows = [][]int{
+		{1, 1},
+		{1, 1},
+		{1, 1},
+		{1, 1},
+		{1, 1},
+		{1, 1},
+		{1, 1},
+		{1, 1},
+	}
+
+	expected = []result{
+		{
+			tableID:       13,
+			name:          "a",
+			colIDs:        "{100}",
+			rowCount:      8,
+			distinctCount: 1,
+			nullCount:     0,
+		},
+		{
+			tableID:       13,
+			name:          "<NULL>",
+			colIDs:        "{101}",
+			rowCount:      8,
+			distinctCount: 1,
+			nullCount:     0,
+			buckets: []resultBucket{
+				{numEq: 8, numRange: 0, upper: 1},
+			},
+		},
+	}
+
+	runSampleAggregator(
+		t, server, sqlDB, kvDB, st, &evalCtx, 1<<15 /* memLimitBytes */, false, /* expectOutOfMemory */
+		8 /* numSamples */, 8 /* aggNumSamples */, inputRows, expected,
+	)
+	runSampleAggregator(
+		t, server, sqlDB, kvDB, st, &evalCtx, 1<<15 /* memLimitBytes */, false, /* expectOutOfMemory */
+		4 /* numSamples */, 4 /* aggNumSamples */, inputRows, expected,
+	)
+	runSampleAggregator(
+		t, server, sqlDB, kvDB, st, &evalCtx, 1<<15 /* memLimitBytes */, false, /* expectOutOfMemory */
+		2 /* numSamples */, 4 /* aggNumSamples */, inputRows, expected,
+	)
 }
