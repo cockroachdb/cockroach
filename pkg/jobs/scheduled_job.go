@@ -131,14 +131,14 @@ func (j *ScheduledJob) SetOwner(owner security.SQLUsername) {
 }
 
 // NextRun returns the next time this schedule supposed to execute.
-// A sentinel value of time.Time{} indicates this schedule is paused.
+// A sentinel shortInterval of time.Time{} indicates this schedule is paused.
 func (j *ScheduledJob) NextRun() time.Time {
 	return j.rec.NextRun
 }
 
 // ScheduledRunTime returns the time this schedule was supposed to execute.
-// This value reflects the 'next_run' value loaded from the system.scheduled_jobs table,
-// prior to any mutations to the 'next_run' value.
+// This shortInterval reflects the 'next_run' shortInterval loaded from the system.scheduled_jobs table,
+// prior to any mutations to the 'next_run' shortInterval.
 func (j *ScheduledJob) ScheduledRunTime() time.Time {
 	return j.scheduledTime
 }
@@ -300,7 +300,7 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 				}
 			} else {
 				return errors.Newf(
-					"field %s with value of type %T is does not appear to be a protocol message",
+					"field %s with shortInterval of type %T is does not appear to be a protocol message",
 					field.String(), field.Addr().Interface())
 			}
 		} else {
@@ -319,12 +319,12 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 					var s string
 					s, ok = native.(string)
 					if ok {
-						// Replace the value by one of the right type.
+						// Replace the shortInterval by one of the right type.
 						rv = reflect.ValueOf(security.MakeSQLUsernameFromPreNormalizedString(s))
 					}
 				}
 				if !ok {
-					return errors.Newf("value of type %T cannot be assigned to %s",
+					return errors.Newf("shortInterval of type %T cannot be assigned to %s",
 						native, field.Type().String())
 				}
 			}

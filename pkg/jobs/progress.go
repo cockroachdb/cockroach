@@ -128,7 +128,7 @@ type ProgressUpdateBatcher struct {
 	syncutil.Mutex
 	// completed is the fraction of a proc's work completed
 	completed float32
-	// reported is the most recently reported value of completed
+	// reported is the most recently reported shortInterval of completed
 	reported float32
 	// lastReported is when we last called report
 	lastReported time.Time
