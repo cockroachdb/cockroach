@@ -347,17 +347,21 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 			// if embedded, the embedding platform owns the network
 			// configuration.
 			`#
-# Connection parameters:
-#`,
-			strings.ReplaceAll(strings.TrimSuffix(nodeList.String(), "\n"), "\n", "\n# "))
+# If you wish to access this demo cluster using another tool, you will need
+# the following details:
+#
+#   - Connection parameters:
+#  `,
+			strings.ReplaceAll(strings.TrimSuffix(nodeList.String(), "\n"), "\n", "\n#   "))
 
 		if !demoCtx.insecure {
-			fmt.Printf(`#
-# The user %q with password %q has been created. Use it to access the Web UI!
+			fmt.Printf(`#   - Username: %q, password: %q
+#   - Directory with certificate files (for certain SQL drivers/tools): %s
 #
 `,
 				c.adminUser,
 				c.adminPassword,
+				c.demoDir,
 			)
 		}
 
