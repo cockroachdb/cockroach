@@ -523,7 +523,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					storage.CacheSize(cfg.CacheSize),
 					storage.MaxSize(sizeInBytes),
 					storage.EncryptionAtRest(spec.EncryptionOptions),
-					storage.Settings(cfg.Settings))
+					storage.Settings(cfg.Settings),
+					storage.SetSeparatedIntents(disableSeparatedIntents))
 				if err != nil {
 					return Engines{}, err
 				}

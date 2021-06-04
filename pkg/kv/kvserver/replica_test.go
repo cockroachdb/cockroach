@@ -198,7 +198,8 @@ func (tc *testContext) Clock() *hlc.Clock {
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
 	tc.manualClock = hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(
+		hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	// testContext tests like to move the manual clock around and assume that they can write at past
 	// timestamps.
 	cfg.TestingKnobs.DontCloseTimestamps = true
@@ -232,12 +233,17 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	}
 	if tc.engine == nil {
+		disableSeparatedIntents :=
+			!cfg.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(
+				clusterversion.PostSeparatedIntentsMigration)
+		log.Infof(context.Background(), "engine creation is randomly setting disableSeparatedIntents: %t",
+			disableSeparatedIntents)
 		var err error
 		tc.engine, err = storage.Open(context.Background(),
 			storage.InMemory(),
 			storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
 			storage.MaxSize(1<<20),
-			storage.ForTesting)
+			storage.SetSeparatedIntents(disableSeparatedIntents))
 		if err != nil {
 			t.Fatal(err)
 		}

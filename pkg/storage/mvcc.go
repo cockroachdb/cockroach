@@ -2752,13 +2752,171 @@ func unsafeNextVersion(iter MVCCIterator, latestKey MVCCKey) (MVCCKey, []byte, b
 	return unsafeKey, iter.UnsafeValue(), true, nil
 }
 
+// iterForKeyVersions provides a subset of the functionality of MVCCIterator.
+// The expected use-case is when the iter is already positioned at the intent
+// (if one exists) for a particular key, or some version, and positioning
+// operators like SeekGE, Next are only being used to find other versions for
+// that key, and never to find intents for other keys. A full-fledged
+// MVCCIterator can be used here. The methods below have the same behavior as
+// in MVCCIterator, but the caller should never call SeekGE with an empty
+// MVCCKey.Timestamp. Additionally, Next must be preceded by at least one call
+// to SeekGE.
+type iterForKeyVersions interface {
+	Valid() (bool, error)
+	SeekGE(key MVCCKey)
+	Next()
+	UnsafeKey() MVCCKey
+	UnsafeValue() []byte
+	ValueProto(msg protoutil.Message) error
+	IsCurIntentSeparated() bool
+}
+
+// separatedIntentAndVersionIter is an implementation of iterForKeyVersions
+// used for ranged intent resolution. The MVCCIterator used by it is of
+// MVCCKeyIterKind. The caller attempting to do ranged intent resolution uses
+// seekEngineKey, nextEngineKey to iterate over the lock table, and for each
+// lock/intent that needs to be resolved passes this iterator to
+// mvccResolveWriteIntent. The MVCCIterator is positioned lazily, only if
+// needed -- the fast path for intent resolution when a transaction is
+// committing and does not need to change the provisional value or timestamp,
+// does not need to position the MVCCIterator. The other cases, which include
+// transaction aborts and changing provisional value timestamps, or changing
+// the provisional value due to savepoint rollback, will position the
+// MVCCIterator, and are the slow path.
+// Note that even this slow path is faster than when intents were interleaved,
+// since it can avoid iterating over keys with no intents.
+type separatedIntentAndVersionIter struct {
+	engineIter EngineIterator
+	mvccIter   MVCCIterator
+
+	// Already parsed meta, when the starting position is at an intent.
+	meta            *enginepb.MVCCMetadata
+	atMVCCIter      bool
+	engineIterValid bool
+	engineIterErr   error
+	intentKey       roachpb.Key
+}
+
+var _ iterForKeyVersions = &separatedIntentAndVersionIter{}
+
+func (s *separatedIntentAndVersionIter) seekEngineKeyGE(key EngineKey) {
+	s.atMVCCIter = false
+	s.meta = nil
+	s.engineIterValid, s.engineIterErr = s.engineIter.SeekEngineKeyGE(key)
+	s.initIntentKey()
+}
+
+func (s *separatedIntentAndVersionIter) nextEngineKey() {
+	s.atMVCCIter = false
+	s.meta = nil
+	s.engineIterValid, s.engineIterErr = s.engineIter.NextEngineKey()
+	s.initIntentKey()
+}
+
+func (s *separatedIntentAndVersionIter) initIntentKey() {
+	if s.engineIterValid {
+		engineKey, err := s.engineIter.UnsafeEngineKey()
+		if err != nil {
+			s.engineIterErr = err
+			s.engineIterValid = false
+			return
+		}
+		if s.intentKey, err = keys.DecodeLockTableSingleKey(engineKey.Key); err != nil {
+			s.engineIterErr = err
+			s.engineIterValid = false
+			return
+		}
+	}
+}
+
+func (s *separatedIntentAndVersionIter) Valid() (bool, error) {
+	if s.atMVCCIter {
+		return s.mvccIter.Valid()
+	}
+	return s.engineIterValid, s.engineIterErr
+}
+
+func (s *separatedIntentAndVersionIter) SeekGE(key MVCCKey) {
+	if !key.IsValue() {
+		panic(errors.AssertionFailedf("SeekGE only permitted for values"))
+	}
+	s.mvccIter.SeekGE(key)
+	s.atMVCCIter = true
+}
+
+func (s *separatedIntentAndVersionIter) Next() {
+	if !s.atMVCCIter {
+		panic(errors.AssertionFailedf("Next not preceded by SeekGE"))
+	}
+	s.mvccIter.Next()
+}
+
+func (s *separatedIntentAndVersionIter) UnsafeKey() MVCCKey {
+	if s.atMVCCIter {
+		return s.mvccIter.UnsafeKey()
+	}
+	return MVCCKey{Key: s.intentKey}
+}
+
+func (s *separatedIntentAndVersionIter) UnsafeValue() []byte {
+	if s.atMVCCIter {
+		return s.mvccIter.UnsafeValue()
+	}
+	return s.engineIter.UnsafeValue()
+}
+
+func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error {
+	if s.atMVCCIter {
+		return s.mvccIter.ValueProto(msg)
+	}
+	meta, ok := msg.(*enginepb.MVCCMetadata)
+	if ok && meta == s.meta {
+		// Already parsed.
+		return nil
+	}
+	v := s.engineIter.UnsafeValue()
+	return protoutil.Unmarshal(v, msg)
+}
+
+func (s *separatedIntentAndVersionIter) IsCurIntentSeparated() bool {
+	if s.atMVCCIter {
+		panic(errors.AssertionFailedf("IsCurIntentSeparated called when not positioned at intent"))
+	}
+	return true
+}
+
+// mvccGetIntent uses an iterForKeyVersions that has been seeked to
+// metaKey.Key for a potential intent, and tries to retrieve an intent if it
+// is present. ok returns true iff an intent for that key is found. In that
+// case, keyBytes and valBytes are set to non-zero and the deserialized intent
+// is placed in meta.
+func mvccGetIntent(
+	iter iterForKeyVersions, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
+) (ok bool, isSeparated bool, keyBytes, valBytes int64, err error) {
+	if ok, err := iter.Valid(); !ok {
+		return false, false, 0, 0, err
+	}
+	unsafeKey := iter.UnsafeKey()
+	if !unsafeKey.Key.Equal(metaKey.Key) {
+		return false, false, 0, 0, nil
+	}
+	if unsafeKey.IsValue() {
+		return false, false, 0, 0, nil
+	}
+	if err := iter.ValueProto(meta); err != nil {
+		return false, false, 0, 0, err
+	}
+	return true, iter.IsCurIntentSeparated(), int64(unsafeKey.EncodedSize()),
+		int64(len(iter.UnsafeValue())), nil
+}
+
 // mvccResolveWriteIntent is the core logic for resolving an intent.
 // REQUIRES: iter is already seeked to intent.Key.
 // Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
 	ctx context.Context,
 	rw ReadWriter,
-	iter MVCCIterator,
+	iter iterForKeyVersions,
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	buf *putBuffer,
@@ -2766,7 +2924,7 @@ func mvccResolveWriteIntent(
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
 	ok, isIntentSeparated, origMetaKeySize, origMetaValSize, err :=
-		mvccGetMetadata(iter, metaKey, true /* iterAlreadyPositioned */, meta)
+		mvccGetIntent(iter, metaKey, meta)
 	if err != nil {
 		return false, err
 	}
@@ -2998,11 +3156,33 @@ func mvccResolveWriteIntent(
 		Key: intent.Key,
 	})
 
-	unsafeNextKey, unsafeNextValue, ok, err := unsafeNextVersion(iter, latestKey)
-	if err != nil {
-		return false, err
+	nextKey := latestKey.Next()
+	ok = false
+	var unsafeNextKey MVCCKey
+	var unsafeNextValue []byte
+	if nextKey.IsValue() {
+		// The latestKey was not the smallest possible timestamp {WallTime: 0,
+		// Logical: 1}. Practically, this is the only case that will occur in
+		// production.
+		iter.SeekGE(nextKey)
+		ok, err = iter.Valid()
+		if err != nil {
+			return false, err
+		}
+		if ok && iter.UnsafeKey().Key.Equal(latestKey.Key) {
+			unsafeNextKey = iter.UnsafeKey()
+			if !unsafeNextKey.IsValue() {
+				// Should never see an intent for this key since we seeked to a
+				// particular timestamp.
+				return false, errors.Errorf("expected an MVCC value key: %s", unsafeNextKey)
+			}
+			unsafeNextValue = iter.UnsafeValue()
+		} else {
+			ok = false
+		}
+		iter = nil // prevent accidental use below
 	}
-	iter = nil // prevent accidental use below
+	// Else stepped to next key, so !ok
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
@@ -3127,52 +3307,127 @@ func (b IterAndBuf) Cleanup() {
 // intent span as the resume span. Returns the number of intents resolved and a
 // resume span if the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	intent roachpb.LockUpdate,
+	max int64,
+	onlySeparatedIntents bool,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
 		return 0, &resumeSpan, nil
 	}
 
-	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
-	defer iterAndBuf.Cleanup()
+	var putBuf *putBuffer
+	// Exactly one of sepIter and mvccIter is non-nil. sepIter is used when
+	// onlySeparatedIntents=true and rw provides consistent iterators, else
+	// mvccIter is initialized and used. The former allows for more efficient
+	// intent resolution.
+	var sepIter *separatedIntentAndVersionIter
+	var mvccIter MVCCIterator
+	// iter is set to either sepIter or mvccIter and used for individual intent
+	// resolution.
+	var iter iterForKeyVersions
 
-	encKey := MakeMVCCMetadataKey(intent.Key)
-	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
-	nextKey := encKey
+	// If onlySeparatedIntents, we can find relevant intents quickly by
+	// iterating over the lock table. We additionally require
+	// ConsistentIterators() since we want the two iterators to be mutually
+	// consistent (and production code will have consistent iterators).
+	//
+	// TODO(sumeer): when removing the slow path, use
+	// newMVCCIteratorByCloningEngineIter for the inconsistent iterators case.
+	if onlySeparatedIntents && rw.ConsistentIterators() {
+		ltStart, _ := keys.LockTableSingleKey(intent.Key, nil)
+		ltEnd, _ := keys.LockTableSingleKey(intent.EndKey, nil)
+		engineIter := rw.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+		iterAndBuf :=
+			GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: intent.EndKey}))
+		defer func() {
+			engineIter.Close()
+			iterAndBuf.Cleanup()
+		}()
+		putBuf = iterAndBuf.buf
+		sepIter = &separatedIntentAndVersionIter{
+			engineIter: engineIter,
+			mvccIter:   iterAndBuf.iter,
+		}
+		iter = sepIter
+		// Seek sepIter to position it for the loop below. The loop itself will
+		// only step the iterator and not seek.
+		sepIter.seekEngineKeyGE(EngineKey{Key: ltStart})
+	} else {
+		iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
+		defer iterAndBuf.Cleanup()
+		putBuf = iterAndBuf.buf
+		mvccIter = iterAndBuf.iter
+		iter = mvccIter
+	}
+	nextKey := MakeMVCCMetadataKey(intent.Key)
+	intentEndKey := intent.EndKey
+	intent.EndKey = nil
 
 	var keyBuf []byte
 	num := int64(0)
-	intent.EndKey = nil
-
 	for {
 		if max > 0 && num == max {
-			return num, &roachpb.Span{Key: nextKey.Key, EndKey: encEndKey.Key}, nil
+			return num, &roachpb.Span{Key: nextKey.Key, EndKey: intentEndKey}, nil
 		}
-
-		iterAndBuf.iter.SeekGE(nextKey)
-		if ok, err := iterAndBuf.iter.Valid(); err != nil {
-			return 0, nil, err
-		} else if !ok || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
-			// No more keys exists in the given range.
-			break
+		var key MVCCKey
+		if sepIter != nil {
+			// sepIter is already positioned since it is seeked prior to the loop
+			// and then stepped at the end of each iteration, to prepare for the
+			// next iteration.
+			if valid, err := sepIter.Valid(); err != nil {
+				return 0, nil, err
+			} else if !valid {
+				// No more intents in the given range.
+				break
+			}
+			// Parse the MVCCMetadata to see if it is a relevant intent.
+			meta := &putBuf.meta
+			if err := sepIter.ValueProto(meta); err != nil {
+				return 0, nil, err
+			}
+			if meta.Txn == nil {
+				return 0, nil, errors.Errorf("intent with no txn")
+			}
+			if intent.Txn.ID == meta.Txn.ID {
+				// Stash the parsed meta so don't need to parse it again in
+				// mvccResolveWriteIntent. This parsing can be ~10% of the
+				// resolution cost in some benchmarks.
+				sepIter.meta = meta
+				// Manually copy the underlying bytes of the unsafe key. This
+				// construction reuses keyBuf across iterations.
+				key = sepIter.UnsafeKey()
+				keyBuf = append(keyBuf[:0], key.Key...)
+				key.Key = keyBuf
+			} else {
+				sepIter.nextEngineKey()
+				continue
+			}
+		} else {
+			// mvccIter needs to be positioned at the start of each iteration.
+			mvccIter.SeekGE(nextKey)
+			if valid, err := mvccIter.Valid(); err != nil {
+				return 0, nil, err
+			} else if !valid {
+				// No more keys exists in the given range.
+				break
+			}
+			key = mvccIter.UnsafeKey()
+			// Manually copy the underlying bytes of the unsafe key. This
+			// construction reuses keyBuf across iterations.
+			keyBuf = append(keyBuf[:0], key.Key...)
+			key.Key = keyBuf
 		}
-
-		// Manually copy the underlying bytes of the unsafe key. This construction
-		// reuses keyBuf across iterations.
-		key := iterAndBuf.iter.UnsafeKey()
-		keyBuf = append(keyBuf[:0], key.Key...)
-		key.Key = keyBuf
 
 		var err error
 		var ok bool
 		if !key.IsValue() {
-			// When we start allowing existence of multiple intents on the same key,
-			// the iter is not necessarily positioned at the intent for this key
-			// that is owned by this txn (if there is any such intent). The logic in
-			// this function will need to be adjusted.
+			// NB: This if-condition is always true for the sepIter != nil path.
 			intent.Key = key.Key
-			ok, err = mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+			ok, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, putBuf)
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", key.Key, err)
@@ -3180,15 +3435,18 @@ func MVCCResolveWriteIntentRange(
 			num++
 		}
 
+		if sepIter != nil {
+			sepIter.nextEngineKey()
+			// We could also compute a tighter nextKey here if we wanted to.
+		}
 		// nextKey is already a metadata key...
 		nextKey.Key = key.Key.Next()
-		if !nextKey.Less(encEndKey) {
+		if nextKey.Key.Compare(intentEndKey) >= 0 {
 			// ... but we don't want to Seek to a key outside of the range as we validate
 			// those span accesses (see TestSpanSetMVCCResolveWriteIntentRangeUsingIter).
 			break
 		}
 	}
-
 	return num, nil, nil
 }
 

@@ -654,7 +654,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	lul hlc.Timestamp,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
-	batch, opLogger := r.newBatchedEngine(latchSpans, lockSpans)
+	batch, opLogger := r.newBatchedEngine(ba, latchSpans, lockSpans)
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, lul, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
@@ -671,7 +671,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
 func (r *Replica) newBatchedEngine(
-	latchSpans, lockSpans *spanset.SpanSet,
+	ba *roachpb.BatchRequest, latchSpans, lockSpans *spanset.SpanSet,
 ) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.Engine().NewBatch()
 	if !batch.ConsistentIterators() {
@@ -720,14 +720,37 @@ func (r *Replica) newBatchedEngine(
 		// To account for separated intent accesses, we translate the lock spans
 		// to lock table spans.
 		spans := latchSpans.Copy()
-		lockSpans.Iterate(func(sa spanset.SpanAccess, _ spanset.SpanScope, span spanset.Span) {
+		addLockTableSpan := func(sa spanset.SpanAccess, span spanset.Span) {
 			ltKey, _ := keys.LockTableSingleKey(span.Key, nil)
 			var ltEndKey roachpb.Key
 			if span.EndKey != nil {
 				ltEndKey, _ = keys.LockTableSingleKey(span.EndKey, nil)
 			}
 			spans.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
+		}
+		lockSpans.Iterate(func(sa spanset.SpanAccess, _ spanset.SpanScope, span spanset.Span) {
+			addLockTableSpan(sa, span)
 		})
+		// The lock spans are insufficient for ranged intent resolution, which
+		// does not declare lock spans and directly calls
+		// spanSetBatch.NewEngineIterator.
+		//
+		// TODO(sumeer): we can't keep adding additional cases here -- come up
+		// with something cleaner.
+		for _, union := range ba.Requests {
+			inner := union.GetInner()
+			switch req := inner.(type) {
+			case *roachpb.ResolveIntentRangeRequest:
+				span := req.Span()
+				addLockTableSpan(spanset.SpanReadWrite, spanset.Span{Span: span})
+			case *roachpb.EndTxnRequest:
+				// EndTxnRequest does local intent resolution. We don't know the
+				// spans up front so we just allow everything.
+				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+					Key: keys.LockTableSingleKeyStart, EndKey: keys.LockTableSingleKeyEnd})
+			}
+		}
+
 		// During writes we may encounter a versioned value newer than the request
 		// timestamp, and may have to retry at a higher timestamp. This is still
 		// safe as we're only ever writing at timestamps higher than the timestamp
