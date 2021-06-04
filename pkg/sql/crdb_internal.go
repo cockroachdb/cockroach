@@ -240,7 +240,8 @@ CREATE TABLE crdb_internal.databases (
 	owner NAME NOT NULL,
 	primary_region STRING,
 	regions STRING[],
-	survival_goal STRING
+	survival_goal STRING,
+	create_statement STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
@@ -248,25 +249,38 @@ CREATE TABLE crdb_internal.databases (
 				var survivalGoal tree.Datum = tree.DNull
 				var primaryRegion tree.Datum = tree.DNull
 				regions := tree.NewDArray(types.String)
+
+				createNode := tree.CreateDatabase{}
+				createNode.ConnectionLimit = -1
+				createNode.Name = tree.Name(db.GetName())
 				if db.IsMultiRegion() {
-					switch db.GetRegionConfig().SurvivalGoal {
-					case descpb.SurvivalGoal_ZONE_FAILURE:
-						survivalGoal = tree.NewDString("zone")
-					case descpb.SurvivalGoal_REGION_FAILURE:
-						survivalGoal = tree.NewDString("region")
-					default:
-						return errors.Newf("unknown survival goal: %d", db.GetRegionConfig().SurvivalGoal)
-					}
 					primaryRegion = tree.NewDString(string(db.GetRegionConfig().PrimaryRegion))
+
+					createNode.PrimaryRegion = tree.Name(db.GetRegionConfig().PrimaryRegion)
 
 					regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db.GetID(), p.Descriptors())
 					if err != nil {
 						return err
 					}
-					for _, region := range regionConfig.Regions() {
+
+					createNode.Regions = make(tree.NameList, len(regionConfig.Regions()))
+					for i, region := range regionConfig.Regions() {
 						if err := regions.Append(tree.NewDString(string(region))); err != nil {
 							return err
 						}
+						createNode.Regions[i] = tree.Name(region)
+					}
+
+					createNode.SurvivalGoal = tree.SurvivalGoalDefault
+					switch db.GetRegionConfig().SurvivalGoal {
+					case descpb.SurvivalGoal_ZONE_FAILURE:
+						survivalGoal = tree.NewDString("zone")
+						createNode.SurvivalGoal = tree.SurvivalGoalZoneFailure
+					case descpb.SurvivalGoal_REGION_FAILURE:
+						survivalGoal = tree.NewDString("region")
+						createNode.SurvivalGoal = tree.SurvivalGoalRegionFailure
+					default:
+						return errors.Newf("unknown survival goal: %d", db.GetRegionConfig().SurvivalGoal)
 					}
 				}
 
@@ -274,9 +288,10 @@ CREATE TABLE crdb_internal.databases (
 					tree.NewDInt(tree.DInt(db.GetID())),            // id
 					tree.NewDString(db.GetName()),                  // name
 					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
-					primaryRegion, // primary_region
-					regions,       // regions
-					survivalGoal,  // survival_goal
+					primaryRegion,                        // primary_region
+					regions,                              // regions
+					survivalGoal,                         // survival_goal
+					tree.NewDString(createNode.String()), // create_statement
 				)
 			})
 	},
