@@ -29,7 +29,7 @@ import (
 
 // runSampler runs the sampler aggregator on numRows and returns numSamples rows.
 func runSampler(
-	t *testing.T, numRows, numSamples int, memLimitBytes int64, expectOutOfMemory bool,
+	t *testing.T, numRows, numSamples, minNumSamples int, memLimitBytes int64, expectOutOfMemory bool,
 ) []int {
 	rows := make([]rowenc.EncDatumRow, numRows)
 	for i := range rows {
@@ -73,7 +73,8 @@ func runSampler(
 				GenerateHistogram: true,
 			},
 		},
-		SampleSize: uint32(numSamples),
+		SampleSize:    uint32(numSamples),
+		MinSampleSize: uint32(minNumSamples),
 	}
 	p, err := newSamplerProcessor(
 		&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, out,
@@ -83,11 +84,10 @@ func runSampler(
 	}
 	p.Run(context.Background())
 
-	// Verify we have numSamples distinct rows.
+	// Verify we have at least minNumSamples distinct rows.
 	res := make([]int, 0, numSamples)
 	seen := make(map[tree.DInt]bool)
 	histogramDisabled := false
-	n := 0
 	for {
 		row, meta := out.Next()
 		if meta != nil {
@@ -117,43 +117,53 @@ func runSampler(
 		}
 		seen[v] = true
 		res = append(res, int(v))
-		n++
 	}
 	if expectOutOfMemory {
 		if !histogramDisabled {
 			t.Fatal("expected processor to disable histogram collection")
 		}
-	} else if n != numSamples {
-		t.Fatalf("expected %d rows, got %d", numSamples, n)
+	} else if histogramDisabled {
+		t.Fatal("processor unexpectedly disabled histogram collection")
+	} else if memLimitBytes != 0 && minNumSamples != 0 {
+		if len(res) < minNumSamples || len(res) > numSamples {
+			t.Fatalf(
+				"expected at least %d rows and at most %d rows, got %d",
+				minNumSamples, numSamples, len(res),
+			)
+		}
+	} else if len(res) != numSamples {
+		t.Fatalf("expected %d rows, got %d", numSamples, len(res))
 	}
 	return res
 }
 
-func TestSampler(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// We run many samplings and record the frequencies.
-	numRows := 100
-	numSamples := 20
+// checkSamplerDistribution runs the sampler many times over the same input and
+// verifies that the distribution of samples approaches a uniform distribution.
+func checkSamplerDistribution(
+	t *testing.T, numRows, numSamples, minNumSamples int, memLimitBytes int64,
+) {
 	minRuns := 200
 	maxRuns := 5000
 	delta := 0.5
+	totalSamples := 0
 
 	freq := make([]int, numRows)
 	var err error
 	// Instead of doing maxRuns and checking at the end, we do minRuns at a time
-	// and exit early. This speeds up the test.
+	// and exit as soon as the distribution is uniform enough. This speeds up the
+	// test.
 	for r := 0; r < maxRuns; r += minRuns {
 		for i := 0; i < minRuns; i++ {
 			for _, v := range runSampler(
-				t, numRows, numSamples, 0 /* memLimitBytes */, false, /* expectOutOfMemory */
+				t, numRows, numSamples, minNumSamples, memLimitBytes, false, /* expectOutOfMemory */
 			) {
 				freq[v]++
+				totalSamples++
 			}
 		}
 
-		// The expected frequency of each row is f = numRuns * (numSamples / numRows).
-		f := float64(r) * float64(numSamples) / float64(numRows)
+		// The expected frequency of each row is totalSamples / numRows.
+		f := float64(totalSamples) / float64(numRows)
 
 		// Verify that no frequency is outside of the range (f / (1+delta), f * (1+delta));
 		// the probability of a given row violating this is subject to the Chernoff
@@ -169,18 +179,33 @@ func TestSampler(t *testing.T) {
 			return
 		}
 	}
+	// The distribution failed to become uniform enough after maxRuns.
 	t.Error(err)
+}
+
+func TestSampler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	checkSamplerDistribution(t, 100 /* numRows */, 20 /* numSamples */, 0 /* minNumSamples */, 0 /* memLimitBytes */)
+	checkSamplerDistribution(t, 1000 /* numRows */, 200 /* numSamples */, 2 /* minNumSamples */, 1<<14 /* memLimitBytes */)
 }
 
 func TestSamplerMemoryLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	numRows := 100
 	numSamples := 20
+	minNumSamples := 2
+	runSampler(t, numRows, numSamples, minNumSamples, 0 /* memLimitBytes */, false /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, minNumSamples, 1<<0 /* memLimitBytes */, true /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, minNumSamples, 1<<4 /* memLimitBytes */, true /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, minNumSamples, 1<<8 /* memLimitBytes */, true /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, minNumSamples, 1<<14 /* memLimitBytes */, false /* expectOutOfMemory */)
 
-	runSampler(t, numRows, numSamples, 0 /* memLimitBytes */, false /* expectOutOfMemory */)
-	runSampler(t, numRows, numSamples, 1 /* memLimitBytes */, true /* expectOutOfMemory */)
-	runSampler(t, numRows, numSamples, 20 /* memLimitBytes */, true /* expectOutOfMemory */)
-	runSampler(t, numRows, numSamples, 20*1024 /* memLimitBytes */, false /* expectOutOfMemory */)
+	var memLimitBytes int64 = 1 << 14
+	numRows = 1000
+	numSamples = 200
+	runSampler(t, numRows, numSamples, numSamples/2, memLimitBytes, true /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, numSamples/3, memLimitBytes, true /* expectOutOfMemory */)
+	runSampler(t, numRows, numSamples, numSamples/4, memLimitBytes, false /* expectOutOfMemory */)
 }
 
 func TestSamplerSketch(t *testing.T) {
