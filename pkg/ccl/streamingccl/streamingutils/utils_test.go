@@ -32,9 +32,11 @@ import (
 func TestCutoverBuiltin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewFastTestingKnobs()},
+	}}
+	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))

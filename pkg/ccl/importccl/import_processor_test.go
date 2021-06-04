@@ -17,7 +17,6 @@ import (
 	"os"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -641,11 +640,11 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewFastTestingKnobs(),
 				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,
@@ -748,11 +747,11 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewFastTestingKnobs(),
 				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,

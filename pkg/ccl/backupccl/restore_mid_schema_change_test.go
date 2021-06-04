@@ -229,11 +229,18 @@ func restoreMidSchemaChange(
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
-		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 		dir, dirCleanupFn := testutils.TempDir(t)
+		adoptInterval := 100 * time.Millisecond
+		cancelInterval := 100 * time.Millisecond
 		params := base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{ExternalIODir: dir},
+			ServerArgs: base.TestServerArgs{
+				ExternalIODir: dir,
+				Knobs: base.TestingKnobs{JobsTestingKnobs: &jobs.TestingKnobs{
+					AdoptIntervalOverride:  &adoptInterval,
+					CancelIntervalOverride: &cancelInterval,
+				}},
+			},
 		}
 		tc := testcluster.StartTestCluster(t, singleNode, params)
 		defer func() {

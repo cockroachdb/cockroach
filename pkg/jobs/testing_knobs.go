@@ -51,7 +51,46 @@ type TestingKnobs struct {
 	// has run. If an error is returned, it will be propagated and the update will
 	// not be committed.
 	BeforeUpdate func(orig, updated JobMetadata) error
+
+	// AdoptIntervalOverride overrides adoptIntervalSetting cluster setting
+	AdoptIntervalOverride *time.Duration
+
+	// CancelIntervalOverride overrides cancelIntervalSetting cluster setting
+	CancelIntervalOverride *time.Duration
+
+	// GcIntervalOverride overrides gcIntervalSetting cluster setting
+	GcIntervalOverride *time.Duration
+
+	// IntervalBaseSettingOverride overrides intervalBaseSetting cluster setting
+	IntervalBaseOverride *float64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
+
+// NewFastTestingKnobs return a TestingKnobs structure with knobs that override
+// adopt, cancel, and gc cluster settings with small intervals.
+func NewFastTestingKnobs() *TestingKnobs {
+	adoptInterval := 100 * time.Millisecond
+	cancelInterval := 100 * time.Millisecond
+	gcInterval := 100 * time.Millisecond
+	intervalBase := 1.0
+	return &TestingKnobs{
+		AdoptIntervalOverride:  &adoptInterval,
+		CancelIntervalOverride: &cancelInterval,
+		GcIntervalOverride:     &gcInterval,
+		IntervalBaseOverride:   &intervalBase,
+	}
+}
+
+// NewTestingKnobWithIntervals return a TestingKnobs structure that
+// override job intervals with the given interval
+func NewTestingKnobWithIntervals(interval time.Duration) *TestingKnobs {
+	intervalBase := 1.0
+	return &TestingKnobs{
+		AdoptIntervalOverride:  &interval,
+		CancelIntervalOverride: &interval,
+		GcIntervalOverride:     &interval,
+		IntervalBaseOverride:   &intervalBase,
+	}
+}

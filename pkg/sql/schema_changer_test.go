@@ -6163,7 +6163,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 func TestMultipleRevert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	shouldBlockBackfill := true
 	ranCancelCommand := false
@@ -6172,6 +6171,7 @@ func TestMultipleRevert(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	var db *gosql.DB
 	params.Knobs = base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewFastTestingKnobs(),
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
 				if !shouldBlockBackfill {

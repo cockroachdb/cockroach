@@ -38,14 +38,15 @@ import (
 func TestTenantStreaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	skip.UnderRace(t, "slow under race")
 
 	ctx := context.Background()
 
+	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewFastTestingKnobs()}}
+
 	// Start the source server.
-	source, sourceDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	source, sourceDB, _ := serverutils.StartServer(t, args)
 	defer source.Stopper().Stop(ctx)
 
 	// Start tenant server in the srouce cluster.

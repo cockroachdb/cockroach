@@ -1681,12 +1681,19 @@ func createAndWaitForJob(
 func TestBackupRestoreResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	ctx := context.Background()
 
+	adoptAndCancelInterval := 100 * time.Millisecond
+	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{JobsTestingKnobs: &jobs.TestingKnobs{
+			AdoptIntervalOverride:  &adoptAndCancelInterval,
+			CancelIntervalOverride: &adoptAndCancelInterval,
+		}}},
+	}
+
 	const numAccounts = 1000
-	_, tc, outerDB, dir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+	_, tc, outerDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, MultiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
 
 	backupTableDesc := catalogkv.TestingGetTableDescriptor(tc.Servers[0].DB(), keys.SystemSQLCodec, "data", "bank")
@@ -1819,9 +1826,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 	// force every call to update
 	defer jobs.TestingSetProgressThresholds()()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
-	serverArgs := base.TestServerArgs{}
+	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewFastTestingKnobs()}}
 	// Disable external processing of mutations so that the final check of
 	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
 	// was never observed by a stress test, it is here for safety.
@@ -6604,10 +6610,8 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
-
 	const numAccounts = 1
-	serverArgs := base.TestServerArgs{}
+	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewFastTestingKnobs()}}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	var numExportRequests int
 	exportRequestSpans := make([]string, 0)
@@ -6829,10 +6833,18 @@ func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+	adoptAndCancelInterval := 100 * time.Millisecond
+	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{JobsTestingKnobs: &jobs.TestingKnobs{
+			AdoptIntervalOverride:  &adoptAndCancelInterval,
+			CancelIntervalOverride: &adoptAndCancelInterval,
+		}}},
+	}
 
 	const numAccounts = 1
-	ctx, tc, systemDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	ctx, tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, params,
+	)
 	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
@@ -8086,10 +8098,9 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	defer jobs.TestingSetProgressThresholds()()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	baseDir := "testdata"
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewFastTestingKnobs()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	_, tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
 		InitManualReplication, params)
@@ -8362,13 +8373,12 @@ func TestBackupWorkerFailure(t *testing.T) {
 	skip.UnderStress(t, "under stress the test unexpectedly surfaces non-retryable errors on"+
 		" backup failure")
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
-
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobWithIntervals(10 * time.Millisecond)
 
 	const numAccounts = 100
 

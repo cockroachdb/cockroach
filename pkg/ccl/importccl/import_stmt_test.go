@@ -4260,11 +4260,11 @@ func TestImportDefaultWithResume(t *testing.T) {
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewFastTestingKnobs(),
 				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,
@@ -4890,10 +4890,9 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
-
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobWithIntervals(10 * time.Millisecond)
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
@@ -4968,8 +4967,6 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	skip.WithIssue(t, 51794, "TODO(dt): this relies on chunking done by prior version of IMPORT."+
 		"Rework this test, or replace it with resume-tests + jobs infra tests.")
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
-
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
 	serverArgs := base.TestServerArgs{
@@ -4979,6 +4976,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 			true),
 		Knobs: base.TestingKnobs{
 			RegistryLiveness: nl,
+			JobsTestingKnobs: jobs.NewTestingKnobWithIntervals(10 * time.Millisecond),
 		},
 	}
 
@@ -5099,8 +5097,6 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
-
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
 	serverArgs := base.TestServerArgs{
@@ -5110,6 +5106,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 			true),
 		Knobs: base.TestingKnobs{
 			RegistryLiveness: nl,
+			JobsTestingKnobs: jobs.NewTestingKnobWithIntervals(10 * time.Millisecond),
 		},
 	}
 
@@ -7129,7 +7126,6 @@ func TestImportJobEventLogging(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	defer jobs.TestingSetProgressThresholds()()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	const (
 		nodes = 3
@@ -7137,6 +7133,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	ctx := context.Background()
 	baseDir := filepath.Join("testdata", "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
+	args.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewFastTestingKnobs()}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)

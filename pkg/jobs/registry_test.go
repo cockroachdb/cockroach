@@ -73,6 +73,8 @@ func TestRegistryCancelation(t *testing.T) {
 		true)
 	sqlStorage := slstorage.NewStorage(stopper, clock, db, keys.SystemSQLCodec, settings)
 	sqlInstance := slinstance.NewSQLInstance(stopper, clock, sqlStorage, settings)
+	jobAdoptInterval := time.Duration(math.MaxInt64)
+	jobCancelInterval := time.Nanosecond
 	registry := MakeRegistry(
 		log.AmbientContext{},
 		stopper,
@@ -86,12 +88,12 @@ func TestRegistryCancelation(t *testing.T) {
 		histogramWindowInterval,
 		FakePHS,
 		"",
-		nil, /* knobs */
+		&TestingKnobs{
+			AdoptIntervalOverride:  &jobAdoptInterval,
+			CancelIntervalOverride: &jobCancelInterval,
+		}, /* knobs */
 	)
-
-	const cancelInterval = time.Nanosecond
-	const adoptInterval = time.Duration(math.MaxInt64)
-	if err := registry.Start(ctx, stopper, cancelInterval, adoptInterval); err != nil {
+	if err := registry.Start(ctx, stopper); err != nil {
 		t.Fatal(err)
 	}
 

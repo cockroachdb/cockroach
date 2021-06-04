@@ -9,6 +9,7 @@ go_library(
         "helpers.go",
         "job_scheduler.go",
         "jobs.go",
+        "jobs_config.go",
         "metrics.go",
         "progress.go",
         "registry.go",
