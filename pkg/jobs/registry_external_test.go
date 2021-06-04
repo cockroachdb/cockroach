@@ -14,8 +14,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"reflect"
+	"regexp"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -82,6 +87,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 
+	//TODO(Ssajjad): Replace with a testing knob
+	adoptInterval := time.Microsecond
+	cancelInterval := time.Duration(math.MaxInt64)
+	defer jobs.TestingSetAdoptAndCancelIntervals(adoptInterval, cancelInterval)()
+
 	// This test exercises code that has not been in use since the 20.1->20.2
 	// mixed version state. It is scheduled for removal and thus not worth
 	// de-flaking.
@@ -98,8 +108,6 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 	// Disable leniency for instant expiration
 	jobs.LeniencySetting.Override(ctx, &s.ClusterSettings().SV, 0)
-	const cancelInterval = time.Duration(math.MaxInt64)
-	const adoptInterval = time.Microsecond
 	slinstance.DefaultTTL.Override(ctx, &s.ClusterSettings().SV, 2*adoptInterval)
 	slinstance.DefaultHeartBeat.Override(ctx, &s.ClusterSettings().SV, adoptInterval)
 
@@ -119,9 +127,12 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 			ac, s.Stopper(), clock, optionalnodeliveness.MakeContainer(nodeLiveness), db,
 			s.InternalExecutor().(sqlutil.InternalExecutor), idContainer, sqlInstance,
 			s.ClusterSettings(), base.DefaultHistogramWindowInterval(), jobs.FakePHS, "",
-			nil, /* knobs */
+			&jobs.TestingKnobs{
+				AdoptIntervalOverride:  &adoptInterval,
+				CancelIntervalOverride: &cancelInterval,
+			},
 		)
-		if err := r.Start(ctx, s.Stopper(), cancelInterval, adoptInterval); err != nil {
+		if err := r.Start(ctx, s.Stopper()); err != nil {
 			t.Fatal(err)
 		}
 		return r
@@ -405,5 +416,121 @@ RETURNING id;
 	// Ensure that the terminal jobs still have a nil claim.
 	for _, id := range terminalIDs {
 		require.NoError(t, checkClaimEqual(id, nil))
+	}
+}
+
+func TestRegistrySettingUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testRun := func(test string, setting string, value string, matchStmt string, atLeast int32) {
+		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
+		ctx := context.Background()
+
+		var seen int32
+		seen = 0
+		stmtFilter := func(ctxt context.Context, stmt string, err error) {
+			if err != nil {
+				return
+			}
+			if stmt == matchStmt {
+				atomic.AddInt32(&seen, 1)
+			}
+		}
+
+		cs := cluster.MakeTestingClusterSettings()
+		jobs.AdoptIntervalSetting().Override(ctx, &cs.SV, time.Hour)
+		jobs.CancelIntervalSetting().Override(ctx, &cs.SV, time.Hour)
+		jobs.GcIntervalSetting().Override(ctx, &cs.SV, time.Hour)
+		jobs.IntervalBaseSetting().Override(ctx, &cs.SV, 1.0)
+		args := base.TestServerArgs{
+			Settings: cs,
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					StatementFilter: stmtFilter,
+				},
+			},
+		}
+		s, sdb, _ := serverutils.StartServer(t, args)
+		defer s.Stopper().Stop(ctx)
+		tdb := sqlutils.MakeSQLRunner(sdb)
+
+		atomic.StoreInt32(&seen, 0)
+		tdb.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", setting, value))
+		testutils.SucceedsSoon(t, func() error {
+			counted := atomic.LoadInt32(&seen)
+			if counted >= atLeast {
+				return nil
+			}
+			return errors.Errorf(fmt.Sprintf("Test %s: expected at least %d calls, counted %d",
+				test, atLeast, counted))
+		})
+	}
+
+	adoptQuery := jobs.AdoptQuery()
+	cancelQuery := jobs.CancelQuery()
+	gcQuery := jobs.GcQuery()
+
+	adoptSettingKey := jobs.AdoptIntervalSettingKey()
+	cancelSettingKey := jobs.CancelIntervalSettingKey()
+	gcSettingKey := jobs.GcIntervalSettingKey()
+	baseSettingKey := jobs.IntervalBaseSettingKey()
+
+	testCases := [...]struct {
+		name      string
+		setting   string
+		value     string
+		matchStmt string
+		toCount   int32
+	}{
+		{
+			name:      "adopt setting",
+			setting:   adoptSettingKey,
+			value:     "10ms",
+			matchStmt: adoptQuery,
+			toCount:   10,
+		},
+		{
+			name:      "adopt setting with base",
+			setting:   baseSettingKey,
+			value:     "0.000002", //To convert an hour to a smaller value
+			matchStmt: adoptQuery,
+			toCount:   10,
+		},
+		{
+			name:      "cancel setting",
+			setting:   cancelSettingKey,
+			value:     "10ms",
+			matchStmt: cancelQuery,
+			toCount:   10,
+		},
+		{
+			name:      "cancel setting with base",
+			setting:   baseSettingKey,
+			value:     "0.000002", //To convert an hour to a smaller value
+			matchStmt: cancelQuery,
+			toCount:   10,
+		},
+		{
+			name:      "gc setting",
+			setting:   gcSettingKey,
+			value:     "10ms",
+			matchStmt: gcQuery,
+			toCount:   10,
+		},
+		{
+			name:      "gc setting with base",
+			setting:   baseSettingKey,
+			value:     "0.000002", //To convert an hour to a smaller value
+			matchStmt: gcQuery,
+			toCount:   10,
+		},
+	}
+
+	for _, test := range testCases {
+		// Replace multiple white spaces with a single space, remove the last ';', and
+		// trim leading and trailing spaces
+		stmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(test.matchStmt, " "))
+		testRun(test.name, test.setting, test.value, stmt, test.toCount)
 	}
 }

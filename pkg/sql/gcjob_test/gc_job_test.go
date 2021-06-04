@@ -49,7 +49,6 @@ import (
 func TestSchemaChangeGCJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 60664, "flaky test")
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	type DropItem int
 	const (
@@ -75,6 +74,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					return nil
 				},
 			}
+			params.Knobs.JobsTestingKnobs = jobs.NewFastTestingKnobs()
 			s, db, kvDB := serverutils.StartServer(t, params)
 			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)

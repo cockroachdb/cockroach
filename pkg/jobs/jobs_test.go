@@ -2705,11 +2705,11 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Disable the loops from messing with the job execution.
-	defer jobs.TestingSetAdoptAndCancelIntervals(time.Hour, time.Hour)()
+	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewFastTestingKnobs()}
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: knobs})
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 
