@@ -100,7 +100,7 @@ SELECT span_id, goroutine_id, operation, start_time, duration
 FROM crdb_internal.node_inflight_trace_spans 
 WHERE trace_id=$1
 ) SELECT *
-FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
+FROM spans, LATERAL (select * from crdb_internal.payloads_for_span(spans.span_id)) ORDER BY spans.start_time`
 
 	var f *os.File
 	if f, err = os.Create(traceFilePath); err != nil {
