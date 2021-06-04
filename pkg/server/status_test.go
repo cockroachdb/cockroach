@@ -1502,9 +1502,9 @@ func TestStatusAPITransactions(t *testing.T) {
 	}
 
 	// Construct a map of all the statement IDs.
-	statementIDs := make(map[roachpb.StmtID]bool, len(resp.Statements))
+	statementFingerprintIDs := make(map[roachpb.StmtFingerprintID]bool, len(resp.Statements))
 	for _, respStatement := range resp.Statements {
-		statementIDs[respStatement.ID] = true
+		statementFingerprintIDs[respStatement.ID] = true
 	}
 
 	respAppNames := make(map[string]bool)
@@ -1516,11 +1516,11 @@ func TestStatusAPITransactions(t *testing.T) {
 			continue
 		}
 		respAppNames[appName] = true
-		// Ensure all statementIDs comprised by the Transaction Response can be
-		// linked to StatementIDs for statements in the response.
-		for _, stmtID := range respTransaction.StatsData.StatementIDs {
-			if _, found := statementIDs[stmtID]; !found {
-				t.Fatalf("app: %s, expected stmtID: %d not found in StatementResponse.", appName, stmtID)
+		// Ensure all statementFingerprintIDs comprised by the Transaction Response can be
+		// linked to StatementFingerprintIDs for statements in the response.
+		for _, stmtFingerprintID := range respTransaction.StatsData.StatementFingerprintIDs {
+			if _, found := statementFingerprintIDs[stmtFingerprintID]; !found {
+				t.Fatalf("app: %s, expected stmtFingerprintID: %d not found in StatementResponse.", appName, stmtFingerprintID)
 			}
 		}
 		stats := respTransaction.StatsData.Stats
@@ -1555,7 +1555,7 @@ func TestStatusAPITransactions(t *testing.T) {
 	}
 }
 
-func TestStatusAPITransactionStatementIDsTruncation(t *testing.T) {
+func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1569,15 +1569,16 @@ func TestStatusAPITransactionStatementIDsTruncation(t *testing.T) {
 	thirdServerSQL.Exec(t, `CREATE DATABASE db; CREATE TABLE db.t();`)
 	thirdServerSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, testingApp))
 
-	maxStmtIDsLen := int(sql.TxnStatsNumStmtIDsToRecord.Get(
+	maxStmtFingerprintIDsLen := int(sql.TxnStatsNumStmtFingerprintIDsToRecord.Get(
 		&firstServerProto.ExecutorConfig().(sql.ExecutorConfig).Settings.SV))
 
 	// Construct 2 transaction queries that include an absurd number of statements.
 	// These two queries have the same first 1000 statements, but should still have
-	// different fingerprints, as fingerprints take into account all statementIDs
-	// (unlike the statementIDs stored on the proto response, which are capped).
+	// different fingerprints, as fingerprints take into account all
+	// statementFingerprintIDs (unlike the statementFingerprintIDs stored on the
+	// proto response, which are capped).
 	testQuery1 := "BEGIN;"
-	for i := 0; i < maxStmtIDsLen+1; i++ {
+	for i := 0; i < maxStmtFingerprintIDsLen+1; i++ {
 		testQuery1 += "SELECT * FROM db.t;"
 	}
 	testQuery2 := testQuery1 + "SELECT * FROM db.t; COMMIT;"
@@ -1601,9 +1602,9 @@ func TestStatusAPITransactionStatementIDsTruncation(t *testing.T) {
 		}
 
 		txnsFound++
-		if len(respTransaction.StatsData.StatementIDs) != maxStmtIDsLen {
-			t.Fatalf("unexpected length of StatementIDs. expected:%d, got:%d",
-				maxStmtIDsLen, len(respTransaction.StatsData.StatementIDs))
+		if len(respTransaction.StatsData.StatementFingerprintIDs) != maxStmtFingerprintIDsLen {
+			t.Fatalf("unexpected length of StatementFingerprintIDs. expected:%d, got:%d",
+				maxStmtFingerprintIDsLen, len(respTransaction.StatsData.StatementFingerprintIDs))
 		}
 	}
 	if txnsFound != 2 {

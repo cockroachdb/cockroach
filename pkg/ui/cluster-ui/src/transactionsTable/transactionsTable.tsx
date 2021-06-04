@@ -31,7 +31,7 @@ import { textCell } from "./transactionsCells";
 import { FixLong, longToInt } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
-  getStatementsById,
+  getStatementsByFingerprintId,
   collectStatementsText,
 } from "../transactionsPage/utils";
 import Long from "long";
@@ -48,7 +48,7 @@ interface TransactionsTable {
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   handleDetails: (
-    statementIds: Long[] | null,
+    statementFingerprintIds: Long[] | null,
     transactionStats: TransactionStats,
   ) => void;
   pagination: ISortedTablePagination;
@@ -114,16 +114,22 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       cell: (item: TransactionInfo) =>
         textCell({
           transactionText: collectStatementsText(
-            getStatementsById(item.stats_data.statement_ids, statements),
+            getStatementsByFingerprintId(
+              item.stats_data.statement_fingerprint_ids,
+              statements,
+            ),
           ),
-          transactionIds: item.stats_data.statement_ids,
+          transactionFingerprintIds: item.stats_data.statement_fingerprint_ids,
           transactionStats: item.stats_data.stats,
           handleDetails,
           search,
         }),
       sort: (item: TransactionInfo) =>
         collectStatementsText(
-          getStatementsById(item.stats_data.statement_ids, statements),
+          getStatementsByFingerprintId(
+            item.stats_data.statement_fingerprint_ids,
+            statements,
+          ),
         ),
     },
     {
@@ -199,8 +205,10 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     {
       name: "statements",
       title: <>Statements</>,
-      cell: (item: TransactionInfo) => item.stats_data.statement_ids.length,
-      sort: (item: TransactionInfo) => item.stats_data.statement_ids.length,
+      cell: (item: TransactionInfo) =>
+        item.stats_data.statement_fingerprint_ids.length,
+      sort: (item: TransactionInfo) =>
+        item.stats_data.statement_fingerprint_ids.length,
     },
   ];
 
