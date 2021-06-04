@@ -856,9 +856,7 @@ func (s *SQLServer) preStart(
 	)
 	s.sqlmigrationsMgr = sqlmigrationsMgr // only for testing via TestServer
 
-	if err := s.jobRegistry.Start(
-		ctx, stopper, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
-	); err != nil {
+	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err
 	}
 

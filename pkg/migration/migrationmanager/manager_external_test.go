@@ -382,10 +382,6 @@ func TestPauseMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer jobs.TestingSetAdoptAndCancelIntervals(
-		10*time.Millisecond, 10*time.Millisecond,
-	)()
-
 	// We're going to be migrating from startCV to endCV.
 	startCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 41}}
 	endCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 42}}
@@ -401,6 +397,7 @@ func TestPauseMigration(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(endCV.Version, startCV.Version, false),
 			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: 1,

@@ -17,10 +17,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -66,13 +64,6 @@ func AddDefaultZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, err
 	}
 	_, err = sqlDB.Exec(`UPSERT INTO system.zones VALUES ($1, $2)`, id, buf)
 	return cfg, err
-}
-
-// SetTestJobsAdoptInterval sets a short job adoption interval for a test
-// and returns a function to reset it after the test. The intention is that
-// the returned function should be deferred.
-func SetTestJobsAdoptInterval() (reset func()) {
-	return jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)
 }
 
 // BulkInsertIntoTable fills up table t.test with (maxValue + 1) rows.
