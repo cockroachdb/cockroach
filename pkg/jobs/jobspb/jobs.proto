@@ -588,7 +588,18 @@ message ResolvedSpans {
 
 message ChangefeedProgress {
   reserved 1;
-  repeated ResolvedSpan resolved_spans = 2 [(gogoproto.nullable) = false];
+
+  // Checkpoint describes changefeed checkpoint.
+  // Checkpoints are needed when performing certain operations, such as backfill.
+  // When changefeed restarts from previouis high water mark timestamp, all
+  // spans in checkpoint fill be filtered out during initial scan.
+  // That is: this checkpoint describes spans that have already advanced to the high water mark.
+  message Checkpoint {
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  }
+
+  reserved 2;
+  Checkpoint checkpoint = 4;
 
   // ProtectedTimestampRecord is the ID of the protected timestamp record
   // corresponding to this job. While the job ought to clean up the record
