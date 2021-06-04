@@ -732,6 +732,13 @@ func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
 	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
 }
 
+// IsQuiescent returns whether the replica is quiescent or not.
+func (r *Replica) IsQuiescent() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.quiescent
+}
+
 // DescAndZone returns the authoritative range descriptor as well
 // as the zone config for the replica.
 func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig) {
