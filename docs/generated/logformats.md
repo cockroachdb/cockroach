@@ -292,7 +292,7 @@ to indicate whether the remainder of the line is a
 structured entry, or a continuation of a previous entry.
 
 Finally, in the previous format, structured entries
-were prefixed with the string `Structured entry:`. In
+were prefixed with the string `Structured entry: `. In
 the new format, they are prefixed by the `=` continuation
 indicator.
 
