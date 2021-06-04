@@ -362,10 +362,6 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
-	if err := p.MaybeUpgradeDependentOldForeignKeyVersionTables(ctx, tableDesc); err != nil {
-		return err
-	}
-
 	// If the we aren't at a high enough version to drop indexes on the origin
 	// side then we have to attempt to delete them.
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NoOriginFKIndexes) {

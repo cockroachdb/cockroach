@@ -256,12 +256,6 @@ func (p *planner) AlterPrimaryKey(
 		}
 	}
 
-	// Since we are potentially dropping indexes here, make sure to upgrade any potentially out of
-	// date foreign key representations on old tables.
-	if err := p.MaybeUpgradeDependentOldForeignKeyVersionTables(ctx, tableDesc); err != nil {
-		return err
-	}
-
 	var allowedNewColumnNames []tree.Name
 	var err error
 	// isNewPartitionAllBy is set if a new PARTITION ALL BY statement is introduced.

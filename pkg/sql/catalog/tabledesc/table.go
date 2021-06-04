@@ -379,29 +379,6 @@ func FindFKReferencedUniqueConstraint(
 	)
 }
 
-// FindFKOriginIndex finds the first index in the supplied originTable
-// that can satisfy an outgoing foreign key of the supplied column ids.
-func FindFKOriginIndex(
-	originTable catalog.TableDescriptor, originColIDs descpb.ColumnIDs,
-) (*descpb.IndexDescriptor, error) {
-	// Search for an index on the origin table that matches our foreign
-	// key columns.
-	if primaryIndex := originTable.GetPrimaryIndex(); primaryIndex.IsValidOriginIndex(originColIDs) {
-		return primaryIndex.IndexDesc(), nil
-	}
-	// If the PK doesn't match, find the index corresponding to the origin column.
-	for _, idx := range originTable.PublicNonPrimaryIndexes() {
-		if idx.IsValidOriginIndex(originColIDs) {
-			return idx.IndexDesc(), nil
-		}
-	}
-	return nil, pgerror.Newf(
-		pgcode.ForeignKeyViolation,
-		"there is no index matching given keys for referenced table %s",
-		originTable.GetName(),
-	)
-}
-
 // FindFKOriginIndexInTxn finds the first index in the supplied originTable
 // that can satisfy an outgoing foreign key of the supplied column ids.
 // It returns either an index that is active, or an index that was created
