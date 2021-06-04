@@ -453,7 +453,6 @@ go_test(
         "metric_util_test.go",
         "mutation_test.go",
         "namespace_test.go",
-        "old_foreign_key_desc_test.go",
         "partition_test.go",
         "pg_metadata_test.go",
         "pg_oid_test.go",

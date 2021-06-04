@@ -578,47 +578,6 @@ const (
 	NonEmptyTable
 )
 
-// MaybeUpgradeDependentOldForeignKeyVersionTables upgrades the on-disk foreign key descriptor
-// version of all table descriptors that have foreign key relationships with desc. This is intended
-// to catch upgrade 19.1 version table descriptors that haven't been upgraded yet before an operation
-// like drop index which could cause them to lose FK information in the old representation.
-func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
-	ctx context.Context, desc *tabledesc.Mutable,
-) error {
-	// In order to avoid having old version foreign key descriptors that depend on this
-	// index lose information when this index is dropped, ensure that they get updated.
-	maybeUpgradeFKRepresentation := func(id descpb.ID) error {
-		// Read the referenced table and see if the foreign key representation has changed. If it has, write
-		// the upgraded descriptor back to disk.
-		tbl, err := catalogkv.MustGetMutableTableDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
-		if err != nil {
-			return err
-		}
-		changes := tbl.GetPostDeserializationChanges()
-		if changes.UpgradedForeignKeyRepresentation {
-			err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID,
-				fmt.Sprintf("updating foreign key references on table %s(%d)",
-					tbl.Name, tbl.ID),
-			)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	for i := range desc.OutboundFKs {
-		if err := maybeUpgradeFKRepresentation(desc.OutboundFKs[i].ReferencedTableID); err != nil {
-			return err
-		}
-	}
-	for i := range desc.InboundFKs {
-		if err := maybeUpgradeFKRepresentation(desc.InboundFKs[i].OriginTableID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // addUniqueWithoutIndexColumnTableDef runs various checks on the given
 // ColumnTableDef before adding it as a UNIQUE WITHOUT INDEX constraint to the
 // given table descriptor.
