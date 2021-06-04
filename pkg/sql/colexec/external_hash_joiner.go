@@ -390,23 +390,6 @@ func NewExternalHashJoiner(
 	if ehj.memState.maxRightPartitionSizeToJoin < externalHJMinimalMaxRightPartitionSize {
 		ehj.memState.maxRightPartitionSizeToJoin = externalHJMinimalMaxRightPartitionSize
 	}
-	ehj.scratch.leftBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.left.sourceTypes, coldata.BatchSize())
-	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.left.sourceTypes, coldata.BatchSize())
-	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
-	for i, leftType := range spec.left.sourceTypes {
-		if i < len(spec.right.sourceTypes) && !leftType.Identical(spec.right.sourceTypes[i]) {
-			sameSourcesSchema = false
-		}
-	}
-	if sameSourcesSchema {
-		// The schemas of both sources are the same, so we can reuse the left
-		// scratch batch.
-		ehj.scratch.rightBatch = ehj.scratch.leftBatch
-		ehj.recursiveScratch.rightBatch = ehj.recursiveScratch.leftBatch
-	} else {
-		ehj.scratch.rightBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.right.sourceTypes, coldata.BatchSize())
-		ehj.recursiveScratch.rightBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.right.sourceTypes, coldata.BatchSize())
-	}
 	ehj.testingKnobs.numForcedRepartitions = numForcedRepartitions
 	ehj.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions
 	return ehj
@@ -421,6 +404,23 @@ func (hj *externalHashJoiner) Init() {
 	hj.tupleDistributor = newTupleHashDistributor(
 		defaultInitHashValue+1, hj.numBuckets,
 	)
+	hj.scratch.leftBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.left.sourceTypes, coldata.BatchSize())
+	hj.recursiveScratch.leftBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.left.sourceTypes, coldata.BatchSize())
+	sameSourcesSchema := len(hj.spec.left.sourceTypes) == len(hj.spec.right.sourceTypes)
+	for i, leftType := range hj.spec.left.sourceTypes {
+		if i < len(hj.spec.right.sourceTypes) && !leftType.Identical(hj.spec.right.sourceTypes[i]) {
+			sameSourcesSchema = false
+		}
+	}
+	if sameSourcesSchema {
+		// The schemas of both sources are the same, so we can reuse the left
+		// scratch batch.
+		hj.scratch.rightBatch = hj.scratch.leftBatch
+		hj.recursiveScratch.rightBatch = hj.recursiveScratch.leftBatch
+	} else {
+		hj.scratch.rightBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.right.sourceTypes, coldata.BatchSize())
+		hj.recursiveScratch.rightBatch = hj.unlimitedAllocator.NewMemBatchWithFixedCapacity(hj.spec.right.sourceTypes, coldata.BatchSize())
+	}
 	hj.state = externalHJInitialPartitioning
 }
 
