@@ -86,6 +86,15 @@ func TestDiagnosticsRequest(t *testing.T) {
 	_, err = db.Exec("INSERT INTO test VALUES (2)")
 	require.NoError(t, err)
 	checkCompleted(id1)
+
+	// Verify that EXECUTE triggers diagnostics collection (#66048).
+	id4, err := registry.InsertRequestInternal(ctx, "SELECT x + $1 FROM test")
+	require.NoError(t, err)
+	_, err = db.Exec("PREPARE stmt AS SELECT x + $1 FROM test")
+	require.NoError(t, err)
+	_, err = db.Exec("EXECUTE stmt(1)")
+	require.NoError(t, err)
+	checkCompleted(id4)
 }
 
 // Test that a different node can service a diagnostics request.
