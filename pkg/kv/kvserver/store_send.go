@@ -56,10 +56,11 @@ func (s *Store) Send(
 	// and block all other writes to the same span.
 	if ba.IsSingleAddSSTableRequest() {
 		before := timeutil.Now()
-		if err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx); err != nil {
+		alloc, err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx)
+		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		defer s.limiters.ConcurrentAddSSTableRequests.Finish()
+		defer alloc.Release()
 
 		beforeEngineDelay := timeutil.Now()
 		s.engine.PreIngestDelay(ctx)
