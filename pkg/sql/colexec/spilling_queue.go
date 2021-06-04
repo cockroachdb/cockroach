@@ -97,7 +97,6 @@ func newSpillingQueue(
 		items:              make([]coldata.Batch, itemsLen),
 		diskQueueCfg:       cfg,
 		fdSemaphore:        fdSemaphore,
-		dequeueScratch:     unlimitedAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize()),
 		diskAcc:            diskAcc,
 	}
 }
@@ -172,7 +171,11 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		// the previous batches), but Dequeue calls are already amortized, so this
 		// is acceptable.
 		// Release a batch to make space for a new batch from disk.
-		q.unlimitedAllocator.ReleaseBatch(q.dequeueScratch)
+		if q.dequeueScratch != nil {
+			q.unlimitedAllocator.ReleaseBatch(q.dequeueScratch)
+		} else {
+			q.dequeueScratch = q.unlimitedAllocator.NewMemBatchWithFixedCapacity(q.typs, coldata.BatchSize())
+		}
 		ok, err := q.diskQueue.Dequeue(ctx, q.dequeueScratch)
 		if err != nil {
 			return nil, err
