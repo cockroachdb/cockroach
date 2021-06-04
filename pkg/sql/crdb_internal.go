@@ -940,8 +940,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					anonymized = tree.NewDString(anonStr)
 				}
 
-				stmtID := constructStatementIDFromStmtKey(stmtKey)
-				s, _, _ := appStats.getStatsForStmtWithKey(stmtKey, stmtID, false /* createIfNonexistent */)
+				stmtFingerprintID := constructStatementFingerprintIDFromStmtKey(stmtKey)
+				s, _, _ := appStats.getStatsForStmtWithKey(stmtKey, stmtFingerprintID, false /* createIfNonexistent */)
 
 				// If the key is not found (and we expected to find it), the table must
 				// have been cleared between now and the time we read all the keys. In
@@ -963,15 +963,15 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					flags = "!" + flags
 				}
 				err := addRow(
-					tree.NewDInt(tree.DInt(nodeID)),                         // node_id
-					tree.NewDString(appName),                                // application_name
-					tree.NewDString(flags),                                  // flags
-					tree.NewDString(strconv.FormatUint(uint64(stmtID), 10)), // statement_id
-					tree.NewDString(stmtKey.anonymizedStmt),                 // key
-					anonymized,                                              // anonymized
-					tree.NewDInt(tree.DInt(s.mu.data.Count)),                // count
-					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)),    // first_attempt_count
-					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),           // max_retries
+					tree.NewDInt(tree.DInt(nodeID)), // node_id
+					tree.NewDString(appName),        // application_name
+					tree.NewDString(flags),          // flags
+					tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10)), // statement_id
+					tree.NewDString(stmtKey.anonymizedStmt),                            // key
+					anonymized,                                                         // anonymized
+					tree.NewDInt(tree.DInt(s.mu.data.Count)),                           // count
+					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)),               // first_attempt_count
+					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),                      // max_retries
 					errString, // last_error
 					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),                             // rows_avg
 					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),     // rows_var
@@ -1014,7 +1014,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 // TODO(arul): Explore updating the schema below to have key be an INT and
 // statement_ids be INT[] now that we've moved to having uint64 as the type of
-// StmtID and TxnKey. Issue #55284
+// StmtFingerprintID and TxnKey. Issue #55284
 var crdbInternalTransactionStatisticsTable = virtualSchemaTable{
 	comment: `finer-grained transaction statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -1089,7 +1089,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			// Now retrieve the per-txn stats proper.
 			for _, txnKey := range txnKeys {
 				// We don't want to create the key if it doesn't exist, so it's okay to
-				// pass nil for the statementIDs, as they are only set when a key is
+				// pass nil for the statementFingerprintIDs, as they are only set when a key is
 				// constructed.
 				s, _, _ := appStats.getStatsForTxnWithKey(txnKey, nil, false /* createIfNonexistent */)
 				// If the key is not found (and we expected to find it), the table must
@@ -1098,9 +1098,9 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				if s == nil {
 					continue
 				}
-				stmtIDsDatum := tree.NewDArray(types.String)
-				for _, stmtID := range s.statementIDs {
-					if err := stmtIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtID), 10))); err != nil {
+				stmtFingerprintIDsDatum := tree.NewDArray(types.String)
+				for _, stmtFingerprintID := range s.statementFingerprintIDs {
+					if err := stmtFingerprintIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10))); err != nil {
 						return err
 					}
 				}
@@ -1108,10 +1108,10 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				s.mu.Lock()
 
 				err := addRow(
-					tree.NewDInt(tree.DInt(nodeID)),                         // node_id
-					tree.NewDString(appName),                                // application_name
-					tree.NewDString(strconv.FormatUint(uint64(txnKey), 10)), // key
-					stmtIDsDatum,                                                                   // statement_ids
+					tree.NewDInt(tree.DInt(nodeID)),                                                // node_id
+					tree.NewDString(appName),                                                       // application_name
+					tree.NewDString(strconv.FormatUint(uint64(txnKey), 10)),                        // key
+					stmtFingerprintIDsDatum,                                                        // statement_ids
 					tree.NewDInt(tree.DInt(s.mu.data.Count)),                                       // count
 					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),                                  // max_retries
 					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),                         // service_lat_avg

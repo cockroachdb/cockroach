@@ -743,7 +743,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
   transactions: [
     {
       stats_data: {
-        statement_ids: [Long.fromInt(100)],
+        statement_fingerprint_ids: [Long.fromInt(100)],
         app: "$ internal-select-running/get-claimed-jobs",
         stats: {
           count: Long.fromInt(93),
@@ -764,7 +764,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(101)],
+        statement_fingerprint_ids: [Long.fromInt(101)],
         app: "$ internal-stmt-diag-poll",
         stats: {
           count: Long.fromInt(281),
@@ -785,7 +785,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(102)],
+        statement_fingerprint_ids: [Long.fromInt(102)],
         app: "$ internal-get-tables",
         stats: {
           count: Long.fromInt(1),
@@ -800,7 +800,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(103)],
+        statement_fingerprint_ids: [Long.fromInt(103)],
         app: "$ internal-read orphaned leases",
         stats: {
           count: Long.fromInt(1),
@@ -815,7 +815,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(104)],
+        statement_fingerprint_ids: [Long.fromInt(104)],
         app: "$ internal-expire-sessions",
         stats: {
           count: Long.fromInt(280),
@@ -833,7 +833,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(105)],
+        statement_fingerprint_ids: [Long.fromInt(105)],
         app: "$ internal-show-version",
         stats: {
           count: Long.fromInt(1),
@@ -848,7 +848,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(106), Long.fromInt(107)],
+        statement_fingerprint_ids: [Long.fromInt(106), Long.fromInt(107)],
         app: "$ internal-delete-sessions",
         stats: {
           count: Long.fromInt(141),
@@ -869,7 +869,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(108)],
+        statement_fingerprint_ids: [Long.fromInt(108)],
         app: "$ TEST",
         stats: {
           count: Long.fromInt(278),
@@ -887,7 +887,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(109)],
+        statement_fingerprint_ids: [Long.fromInt(109)],
         app: "$ TEST",
         stats: {
           count: Long.fromInt(140),
@@ -908,7 +908,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(107)],
+        statement_fingerprint_ids: [Long.fromInt(107)],
         app: "$ TEST",
         stats: {
           count: Long.fromInt(280),
@@ -929,7 +929,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
-        statement_ids: [Long.fromInt(107)],
+        statement_fingerprint_ids: [Long.fromInt(107)],
         app: "$ TEST EXACT",
         stats: {
           count: Long.fromInt(280),

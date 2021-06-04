@@ -66,7 +66,7 @@ interface TransactionDetailsProps {
   transactionStats?: TransactionStats;
   lastReset?: string | Date;
   handleDetails: (
-    statementIds: Long[] | null,
+    statementFingerprintIds: Long[] | null,
     transactionStats: TransactionStats | null,
   ) => void;
   error?: Error | null;

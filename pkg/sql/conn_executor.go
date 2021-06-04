@@ -1130,17 +1130,17 @@ type connExecutor struct {
 		// going to restore this snapshot.
 		savepointsAtTxnRewindPos savepointStack
 
-		// transactionStatementIDs tracks all statement IDs that make up the current
-		// transaction. It's length is bound by the TxnStatsNumStmtIDsToRecord
+		// transactionStatementFingerprintIDs tracks all statement IDs that make up the current
+		// transaction. It's length is bound by the TxnStatsNumStmtFingerprintIDsToRecord
 		// cluster setting.
-		transactionStatementIDs []roachpb.StmtID
+		transactionStatementFingerprintIDs []roachpb.StmtFingerprintID
 
-		// transactionStatementsHash is the hashed accumulation of all statementIDs
+		// transactionStatementsHash is the hashed accumulation of all statementFingerprintIDs
 		// that comprise the transaction. It is used to construct the key when
 		// recording transaction statistics. It's important to accumulate this hash
-		// as we go along in addition to the transactionStatementIDs as
-		// transactionStatementIDs are capped to prevent unbound expansion, but we
-		// still need the statementID hash to disambiguate beyond the capped
+		// as we go along in addition to the transactionStatementFingerprintIDs as
+		// transactionStatementFingerprintIDs are capped to prevent unbound expansion, but we
+		// still need the statementFingerprintID hash to disambiguate beyond the capped
 		// statements.
 		transactionStatementsHash util.FNV64
 

@@ -2510,7 +2510,7 @@ func (s *sqlStatsCollector) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
 	planner *planner,
-) (roachpb.StmtID, error) {
+) (roachpb.StmtFingerprintID, error) {
 	return s.appStats.recordStatement(
 		ctx, stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn, fullScan,
 		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
@@ -2526,7 +2526,7 @@ func (s *sqlStatsCollector) recordTransaction(
 	ev txnEvent,
 	implicit bool,
 	retryCount int,
-	statementIDs []roachpb.StmtID,
+	statementFingerprintIDs []roachpb.StmtFingerprintID,
 	serviceLat time.Duration,
 	retryLat time.Duration,
 	commitLat time.Duration,
@@ -2538,7 +2538,7 @@ func (s *sqlStatsCollector) recordTransaction(
 ) error {
 	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
 	return s.appStats.recordTransaction(
-		ctx, key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat,
+		ctx, key, int64(retryCount), statementFingerprintIDs, serviceLat, retryLat, commitLat,
 		numRows, collectedExecStats, execStats, rowsRead, bytesRead,
 	)
 }
