@@ -52,7 +52,7 @@ func (p *planner) AlterDatabaseOwner(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -133,7 +133,7 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -292,7 +292,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -643,7 +643,7 @@ func (p *planner) AlterDatabasePrimaryRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -957,7 +957,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {

@@ -44,7 +44,7 @@ var _ resolver.SchemaResolver = &planner{}
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
 ) (res catalog.DatabaseDescriptor, err error) {
-	_, res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+	res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{Required: required, AvoidCached: true})
 	return res, err
 }
@@ -52,28 +52,35 @@ func (p *planner) ResolveUncachedDatabaseByName(
 // ResolveUncachedSchemaDescriptor looks up a schema from the store.
 func (p *planner) ResolveUncachedSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
-) (found bool, schema catalog.ResolvedSchema, err error) {
+) (schema catalog.SchemaDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		found, schema, err = p.Accessor().GetSchemaByName(
+		schema, err = p.Accessor().GetSchemaByName(
 			ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
 				Required: required, RequireMutable: true,
 			},
 		)
 	})
-	return found, schema, err
+	if err != nil || schema == nil {
+		return nil, err
+	}
+	return schema, err
 }
 
 // ResolveUncachedSchemaDescriptor looks up a mutable descriptor for a schema
 // from the store.
 func (p *planner) ResolveMutableSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
-) (found bool, schema catalog.ResolvedSchema, err error) {
-	return p.Accessor().GetSchemaByName(
+) (schema catalog.SchemaDescriptor, err error) {
+	schema, err = p.Accessor().GetSchemaByName(
 		ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
 			Required:       required,
 			RequireMutable: true,
 		},
 	)
+	if err != nil || schema == nil {
+		return nil, err
+	}
+	return schema, nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -152,7 +159,7 @@ func (p *planner) ResolveTargetObject(
 	ctx context.Context, un *tree.UnresolvedObjectName,
 ) (
 	db catalog.DatabaseDescriptor,
-	schema catalog.ResolvedSchema,
+	schema catalog.SchemaDescriptor,
 	namePrefix tree.ObjectNamePrefix,
 	err error,
 ) {
@@ -161,7 +168,7 @@ func (p *planner) ResolveTargetObject(
 		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
 	})
 	if err != nil {
-		return nil, catalog.ResolvedSchema{}, namePrefix, err
+		return nil, nil, namePrefix, err
 	}
 	return prefix.Database, prefix.Schema, namePrefix, err
 }
@@ -170,20 +177,20 @@ func (p *planner) ResolveTargetObject(
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
-	found, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
-	if err != nil || !found {
+	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
 	sc := p.Accessor()
-	var resolvedSchema catalog.ResolvedSchema
-	found, resolvedSchema, err = sc.GetSchemaByName(
+	var resolvedSchema catalog.SchemaDescriptor
+	resolvedSchema, err = sc.GetSchemaByName(
 		ctx, p.txn, dbDesc.GetID(), scName, p.CommonLookupFlags(false /* required */),
 	)
-	if err != nil {
+	if err != nil || resolvedSchema == nil {
 		return false, nil, err
 	}
-	return found, &catalog.ResolvedObjectPrefix{
+	return true, &catalog.ResolvedObjectPrefix{
 		Database: dbDesc,
 		Schema:   resolvedSchema,
 	}, nil
@@ -244,7 +251,7 @@ func (p *planner) IsTableVisible(
 	if err != nil {
 		return false, false, err
 	}
-	if schemaDesc.Kind != catalog.SchemaVirtual {
+	if schemaDesc.SchemaKind() != catalog.SchemaVirtual {
 		dbID := tableDesc.GetParentID()
 		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
 			tree.DatabaseLookupFlags{
@@ -261,7 +268,7 @@ func (p *planner) IsTableVisible(
 	}
 	iter := searchPath.Iter()
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-		if schemaDesc.Name == scName {
+		if schemaDesc.GetName() == scName {
 			return true, true, nil
 		}
 	}
@@ -328,7 +335,7 @@ func (p *planner) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.Name, desc.GetName())
+	name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.GetName(), desc.GetName())
 	return name, desc, nil
 }
 
@@ -398,7 +405,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		descs := make([]catalog.Descriptor, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			_, descriptor, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
+			descriptor, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
 				string(database), tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err
@@ -448,7 +455,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			if sc.ExplicitCatalog {
 				dbName = sc.Catalog()
 			}
-			_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
 				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err
@@ -457,17 +464,17 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		for _, sc := range targetSchemas {
-			_, resSchema, err := p.ResolveMutableSchemaDescriptor(
+			resSchema, err := p.ResolveMutableSchemaDescriptor(
 				ctx, sc.dbDesc.ID, sc.schema, true /* required */)
 			if err != nil {
 				return nil, err
 			}
-			switch resSchema.Kind {
+			switch resSchema.SchemaKind() {
 			case catalog.SchemaUserDefined:
-				descs = append(descs, resSchema.Desc)
+				descs = append(descs, resSchema)
 			default:
 				return nil, pgerror.Newf(pgcode.InvalidSchemaName,
-					"cannot change privileges on schema %q", resSchema.Name)
+					"cannot change privileges on schema %q", resSchema.GetName())
 			}
 		}
 		return descs, nil
@@ -554,7 +561,7 @@ func (p *planner) getQualifiedTableName(
 		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
+	scDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
 		tree.SchemaLookupFlags{
 			IncludeOffline: true,
 			IncludeDropped: true,
@@ -564,7 +571,7 @@ func (p *planner) getQualifiedTableName(
 	}
 	tbName := tree.MakeTableNameWithSchema(
 		tree.Name(dbDesc.GetName()),
-		tree.Name(resolvedSchema.Name),
+		tree.Name(scDesc.GetName()),
 		tree.Name(desc.GetName()),
 	)
 	return &tbName, nil
@@ -623,14 +630,16 @@ func (p *planner) getQualifiedTypeName(
 	}
 
 	schemaID := desc.GetParentSchemaID()
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID, tree.SchemaLookupFlags{})
+	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.txn, schemaID, tree.SchemaLookupFlags{},
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	typeName := tree.MakeNewQualifiedTypeName(
 		dbDesc.GetName(),
-		resolvedSchema.Name,
+		scDesc.GetName(),
 		desc.GetName(),
 	)
 

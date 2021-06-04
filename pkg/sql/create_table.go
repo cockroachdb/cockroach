@@ -96,17 +96,17 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getSchemaIDForCreate(
 	ctx context.Context, codec keys.SQLCodec, dbID descpb.ID, scName string,
 ) (descpb.ID, error) {
-	_, res, err := p.ResolveUncachedSchemaDescriptor(ctx, dbID, scName, true /* required */)
+	res, err := p.ResolveUncachedSchemaDescriptor(ctx, dbID, scName, true /* required */)
 	if err != nil {
 		return 0, err
 	}
-	switch res.Kind {
+	switch res.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaUserDefined:
-		return res.ID, nil
+		return res.GetID(), nil
 	case catalog.SchemaVirtual:
 		return 0, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
-		return 0, errors.AssertionFailedf("invalid schema kind for getSchemaIDForCreate: %d", res.Kind)
+		return 0, errors.AssertionFailedf("invalid schema kind for getSchemaIDForCreate: %d", res.SchemaKind())
 	}
 }
 

@@ -64,7 +64,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 
 	// Filter for all objects in current database.
 	currentDatabase := params.p.CurrentDatabase()
-	_, currentDbDesc, err := params.p.Descriptors().GetMutableDatabaseByName(
+	currentDbDesc, err := params.p.Descriptors().GetMutableDatabaseByName(
 		params.ctx, params.p.txn, currentDatabase, tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err

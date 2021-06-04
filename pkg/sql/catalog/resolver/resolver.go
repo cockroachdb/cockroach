@@ -239,20 +239,11 @@ func ResolveTargetObject(
 		return nil, prefix, err
 	}
 	scInfo := scMeta.(*catalog.ResolvedObjectPrefix)
-	if scInfo.Schema.Kind == catalog.SchemaVirtual {
+	if scInfo.Schema.SchemaKind() == catalog.SchemaVirtual {
 		return nil, prefix, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
 	return scInfo, prefix, nil
-}
-
-// StaticSchemaIDMap is a map of statically known schema IDs.
-var StaticSchemaIDMap = map[descpb.ID]string{
-	keys.PublicSchemaID:              tree.PublicSchema,
-	catconstants.PgCatalogID:         sessiondata.PgCatalogName,
-	catconstants.InformationSchemaID: sessiondata.InformationSchemaName,
-	catconstants.CrdbInternalID:      sessiondata.CRDBInternalSchemaName,
-	catconstants.PgExtensionSchemaID: sessiondata.PgExtensionSchemaName,
 }
 
 // ResolveSchemaNameByID resolves a schema's name based on db and schema id.
@@ -263,10 +254,8 @@ func ResolveSchemaNameByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, schemaID descpb.ID,
 ) (string, error) {
 	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
-	for id, schemaName := range StaticSchemaIDMap {
-		if id == schemaID {
-			return schemaName, nil
-		}
+	if schemaName, ok := catconstants.StaticSchemaIDMap[uint32(schemaID)]; ok {
+		return schemaName, nil
 	}
 	schemas, err := GetForDatabase(ctx, txn, codec, dbID)
 	if err != nil {

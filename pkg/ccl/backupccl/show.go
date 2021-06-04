@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -269,7 +269,7 @@ func backupShowerDefault(
 				// Map database ID to descriptor name.
 				dbIDToName := make(map[descpb.ID]string)
 				schemaIDToName := make(map[descpb.ID]string)
-				schemaIDToName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+				schemaIDToName[keys.PublicSchemaID] = catconstants.PublicSchemaName
 				for i := range manifest.Descriptors {
 					_, db, _, schema := descpb.FromDescriptor(&manifest.Descriptors[i])
 					if db != nil {

@@ -93,18 +93,18 @@ type optSchema struct {
 	planner *planner
 
 	database catalog.DatabaseDescriptor
-	schema   catalog.ResolvedSchema
+	schema   catalog.SchemaDescriptor
 
 	name cat.SchemaName
 }
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
-	switch os.schema.Kind {
+	switch os.schema.SchemaKind() {
 	case catalog.SchemaUserDefined, catalog.SchemaTemporary:
 		// User defined schemas and the temporary schema have real ID's, so use
 		// them here.
-		return cat.StableID(os.schema.ID)
+		return cat.StableID(os.schema.GetID())
 	default:
 		// Virtual schemas and the public schema don't, so just fall back to the
 		// parent database's ID.
@@ -145,8 +145,8 @@ func (os *optSchema) GetDataSourceNames(
 
 func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	// If the schema is backed by a descriptor, then return it.
-	if os.schema.Kind == catalog.SchemaUserDefined {
-		return os.schema.Desc
+	if os.schema.SchemaKind() == catalog.SchemaUserDefined {
+		return os.schema
 	}
 	// Otherwise, just return the database descriptor.
 	return os.database

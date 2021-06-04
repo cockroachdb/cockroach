@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -396,7 +396,7 @@ func constructNameToIDMapping(
 		require.NoError(t, err)
 
 		namesToID[name] = descpb.ID(id)
-		if strings.HasPrefix(name, sessiondata.PgTempSchemaName) {
+		if strings.HasPrefix(name, catconstants.PgTempSchemaName) {
 			tempSchemaNames = append(tempSchemaNames, name)
 		}
 	}
