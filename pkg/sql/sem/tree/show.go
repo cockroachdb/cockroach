@@ -492,14 +492,34 @@ func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowCreateMode denotes what kind of SHOW CREATE should be used
+type ShowCreateMode int
+
+const (
+	// ShowCreateModeTable represents SHOW CREATE TABLE
+	ShowCreateModeTable ShowCreateMode = iota
+	// ShowCreateModeView represents SHOW CREATE VIEW
+	ShowCreateModeView
+	// ShowCreateModeSequence represents SHOW CREATE SEQUENCE
+	ShowCreateModeSequence
+	// ShowCreateModeDatabase represents SHOW CREATE DATABASE
+	ShowCreateModeDatabase
+)
+
 // ShowCreate represents a SHOW CREATE statement.
 type ShowCreate struct {
+	Mode ShowCreateMode
 	Name *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowCreate) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ")
+
+	switch node.Mode {
+	case ShowCreateModeDatabase:
+		ctx.WriteString("DATABASE ")
+	}
 	ctx.FormatNode(node.Name)
 }
 

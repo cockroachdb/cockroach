@@ -253,14 +253,16 @@ CREATE TABLE crdb_internal.databases (
    owner NAME NOT NULL,
    primary_region STRING NULL,
    regions STRING[] NULL,
-   survival_goal STRING NULL
+   survival_goal STRING NULL,
+   create_statement STRING NOT NULL
 )  CREATE TABLE crdb_internal.databases (
    id INT8 NOT NULL,
    name STRING NOT NULL,
    owner NAME NOT NULL,
    primary_region STRING NULL,
    regions STRING[] NULL,
-   survival_goal STRING NULL
+   survival_goal STRING NULL,
+   create_statement STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.feature_usage (
    feature_name STRING NOT NULL,
