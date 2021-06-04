@@ -471,6 +471,25 @@ func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 		r = d.sensitiveEditor(r)
 		entry.Message = string(r.msg)
 		entry.Redactable = r.redactable
+
+		if strings.HasPrefix(entry.Message, structuredEntryPrefix+"{") /* crdb-v1 prefix */ {
+			// Note: we do not recognize the v2 marker here (" ={") because
+			// v2 entries can be split across multiple lines.
+			entry.StructuredStart = uint32(len(structuredEntryPrefix))
+
+			if nl := strings.IndexByte(entry.Message, '\n'); nl != -1 {
+				entry.StructuredEnd = uint32(nl)
+				entry.StackTraceStart = uint32(nl + 1)
+			} else {
+				entry.StructuredEnd = uint32(len(entry.Message))
+			}
+		}
+		// Note: we only know how to populate entry.StackTraceStart upon
+		// parse if the entry was structured (see above). If it is not
+		// structured, we cannot distinguish where the message ends and
+		// where the stack trace starts. This is another reason why the
+		// crdb-v1 format is lossy.
+
 		return nil
 	}
 }

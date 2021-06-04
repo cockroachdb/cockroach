@@ -76,6 +76,13 @@ func TestCrdbV1EncodeDecode(t *testing.T) {
 			buf.WriteString("# after parse:\n")
 			for _, entry := range outputEntries {
 				fmt.Fprintf(&buf, "%# v\n", pretty.Formatter(entry))
+				if entry.StructuredEnd != 0 {
+					var payload interface{}
+					if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &payload); err != nil {
+						td.Fatalf(t, "JSON entry not parsable: %v", err)
+					}
+					fmt.Fprintf(&buf, "JSON payload in previous entry: %+v\n", payload)
+				}
 			}
 			return buf.String()
 

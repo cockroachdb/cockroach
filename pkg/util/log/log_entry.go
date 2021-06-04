@@ -248,15 +248,20 @@ func (e logEntry) convertToLegacy() (res logpb.Entry) {
 		// At this point, the message only contains the JSON fields of the
 		// payload. Add the decoration suitable for our legacy file
 		// format.
-		res.Message = "Structured entry: {" + res.Message + "}"
+		res.Message = structuredEntryPrefix + "{" + res.Message + "}"
+		res.StructuredStart = uint32(len(structuredEntryPrefix))
+		res.StructuredEnd = uint32(len(res.Message))
 	}
 
 	if e.stacks != nil {
+		res.StackTraceStart = uint32(len(res.Message)) + 1
 		res.Message += "\n" + string(e.stacks)
 	}
 
 	return res
 }
+
+const structuredEntryPrefix = "Structured entry: "
 
 func renderTagsAsString(tags *logtags.Buffer, redactable bool) string {
 	if redactable {
