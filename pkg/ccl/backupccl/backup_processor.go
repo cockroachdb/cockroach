@@ -11,7 +11,6 @@ package backupccl
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -346,7 +344,7 @@ func runBackupProcessor(
 				files := make([]BackupManifest_File, 0)
 				for _, file := range res.Files {
 					if writeSSTsInProcessor {
-						file.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(flowCtx.EvalCtx.NodeID.SQLInstanceID()))
+						file.Path = storageccl.GenerateUniqueSSTName(flowCtx.EvalCtx.NodeID.SQLInstanceID())
 						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV); err != nil {
 							return err
 						}
