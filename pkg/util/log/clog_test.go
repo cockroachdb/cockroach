@@ -634,13 +634,13 @@ func TestLogEntryPropagation(t *testing.T) {
 	for _, si := range l.sinkInfos {
 		if si.sink == &logging.stderrSink {
 			si.threshold.SetValue(severity.INFO)
+
+			// Make stderr non-critical.
+			defer func(prevCriticality bool, si *sinkInfo) { si.criticality = prevCriticality }(si.criticality, si)
+			si.criticality = false
+			break
 		}
 	}
-
-	// Make stderr non-critical.
-	// We assume that the stderr sink is the first one.
-	defer func(prevCriticality bool) { debugLog.sinkInfos[0].criticality = prevCriticality }(debugLog.sinkInfos[0].criticality)
-	debugLog.sinkInfos[0].criticality = false
 
 	// Now emit the log message. If criticality is respected, the
 	// failure to write on stderr is graceful and the message gets

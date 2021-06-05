@@ -12,31 +12,127 @@ package log
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// Intercept diverts log traffic to the given function `f`. When `f` is not nil,
-// the logging package begins operating at full verbosity (i.e. `V(n) == true`
-// for all `n`) but nothing will be printed to the logs. Instead, `f` is invoked
-// for each log entry.
+// InterceptWith diverts log traffic to the given interceptor `fn`.
+// `fn.Intercept()` is invoked for each log entry, regardless of the
+// filtering configured on log sinks.
 //
-// To end log interception, invoke `Intercept()` with `f == nil`. Note that
-// interception does not terminate atomically, that is, the originally supplied
-// callback may still be invoked after a call to `Intercept` with `f == nil`.
-func Intercept(ctx context.Context, f InterceptorFn) {
-	// TODO(tschottdorf): restore sanity so that all methods have a *loggingT
-	// receiver.
-	if f != nil {
-		logfDepth(ctx, 1, severity.WARNING, channel.DEV, "log traffic is now intercepted; log files will be incomplete")
-	}
-	logging.interceptor.Store(f) // intentionally also when f == nil
-	if f == nil {
-		logfDepth(ctx, 1, severity.INFO, channel.DEV, "log interception is now stopped; normal logging resumes")
+// When at least one interceptor is configured, the logging package
+// begins operating at full verbosity (i.e. `V(n) == true` for all
+// `n`).
+//
+// The returned function should be called to cancel the interception.
+//
+// Multiple interceptors can be configured simultaneously.
+// This enables e.g. concurrent uses of the "logspy" debug API.
+// When multiple interceptors are configured, each of them
+// are served each log entry.
+func InterceptWith(ctx context.Context, fn Interceptor) func() {
+	InfofDepth(ctx, 1, "starting log interception")
+	logging.interceptor.add(fn)
+	return func() {
+		logging.interceptor.del(fn)
+		InfofDepth(ctx, 1, "stopping log interception")
 	}
 }
 
-// InterceptorFn is the type of function accepted by Intercept().
-type InterceptorFn func(entry logpb.Entry)
+// Interceptor is the type of an object that can be passed to
+// InterceptWith().
+type Interceptor interface {
+	// Intercept is passed each log entries.
+	// It is passed the entry payload in JSON format.
+	// This can be converted to other formats by de-serializing the JSON
+	// to logpb.Entry.
+	//
+	// Note that the argument byte buffer is only valid during the call
+	// to Intercept(): it will be reused after the call to Intercept()
+	// terminates. If the Intercept() implementation wants to share this
+	// data across goroutines, it must take care of copying it first.
+	Intercept(entry []byte)
+}
+
+func (l *loggingT) newInterceptorSinkInfo() *sinkInfo {
+	return &sinkInfo{
+		sink:       &l.interceptor,
+		threshold:  severity.INFO, // all events
+		editor:     getEditor(WithMarkedSensitiveData),
+		formatter:  formatInterceptor{},
+		redact:     false, // do not redact sensitive information
+		redactable: true,  // keep redaction markers
+	}
+}
+
+// formatInterceptor converts the raw logpb.Entry to JSON.
+type formatInterceptor struct{}
+
+func (formatInterceptor) formatterName() string { return "json-intercept" }
+func (formatInterceptor) doc() string           { return "internal only" }
+func (formatInterceptor) formatEntry(entry logEntry) *buffer {
+	pEntry := entry.convertToLegacy()
+	buf := getBuffer()
+	if j, err := json.Marshal(pEntry); err != nil {
+		fmt.Fprintf(buf, "unable to format entry: %v", err)
+	} else {
+		buf.Write(j)
+	}
+	return buf
+}
+
+type interceptorSink struct {
+	// activeCount is the number of functions under the mutex. We keep
+	// it out to avoid locking the mutex in the active() method.
+	activeCount uint32
+	mu          struct {
+		syncutil.RWMutex
+
+		// fns is the list of interceptor functions.
+		fns []Interceptor
+	}
+}
+
+func (i *interceptorSink) add(fn Interceptor) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.mu.fns = append(i.mu.fns, fn)
+	atomic.AddUint32(&i.activeCount, 1)
+}
+
+func (i *interceptorSink) del(toDel Interceptor) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	for j, fn := range i.mu.fns {
+		if fn == toDel {
+			i.mu.fns = append(i.mu.fns[:j], i.mu.fns[j+1:]...)
+			break
+		}
+	}
+	atomic.AddUint32(&i.activeCount, ^uint32(0) /* -1 */)
+}
+
+func (i *interceptorSink) active() bool {
+	return atomic.LoadUint32(&i.activeCount) > 0
+}
+
+func (i *interceptorSink) output(_ bool, b []byte) error {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	for _, fn := range i.mu.fns {
+		fn.Intercept(b)
+	}
+	return nil
+}
+
+func (i *interceptorSink) emergencyOutput(b []byte) {
+	i.output(false, b)
+}
+
+func (i *interceptorSink) attachHints(stacks []byte) []byte { return stacks }
+func (i *interceptorSink) exitCode() exit.Code              { return exit.UnspecifiedError() }
