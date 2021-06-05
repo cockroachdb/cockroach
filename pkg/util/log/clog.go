@@ -42,8 +42,8 @@ type loggingT struct {
 	// allocation pool for slices of buffer pointers.
 	bufSlicePool sync.Pool
 
-	// interceptor is the configured InterceptorFn callback, if any.
-	interceptor atomic.Value
+	// interceptor contains the configured InterceptorFn callbacks, if any.
+	interceptor interceptorSink
 
 	// vmoduleConfig maintains the configuration for the log.V and vmodule
 	// facilities.
@@ -257,11 +257,6 @@ func SetTenantIDs(tenantID string, sqlInstanceID int32) {
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
 func (l *loggerT) outputLogEntry(entry logEntry) {
-	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
-		f(entry.convertToLegacy())
-		return
-	}
-
 	// Mark the logger as active, so that further configuration changes
 	// are disabled. See IsActive() and its callers for details.
 	setActive()

@@ -285,6 +285,14 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		}
 	}
 
+	// Prepend the interceptor sink to all channels.
+	// We prepend it because we want the interceptors
+	// to see every event before they make their way to disk/network.
+	interceptorSinkInfo := logging.newInterceptorSinkInfo()
+	for _, l := range chans {
+		l.sinkInfos = append([]*sinkInfo{interceptorSinkInfo}, l.sinkInfos...)
+	}
+
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 

@@ -85,7 +85,7 @@ func (c *vmoduleConfig) vDepth(l Level, depth int) bool {
 		return true
 	}
 
-	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
+	if logging.interceptor.active() {
 		return true
 	}
 
