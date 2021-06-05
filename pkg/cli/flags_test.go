@@ -11,13 +11,16 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
@@ -1109,5 +1113,117 @@ func TestMaxDiskTempStorageFlagValue(t *testing.T) {
 		if td.expected != tempStorageFlag.Value.String() {
 			t.Errorf("%d. tempStorageFlag.Value expected %v, but got %v", i, td.expected, tempStorageFlag.Value)
 		}
+	}
+}
+
+// TestFlagUsage is a basic test to make sure the fragile
+// help template does not break.
+func TestFlagUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	expUsage := `Usage:
+  cockroach [command]
+
+Available Commands:
+  start             start a node in a multi-node cluster
+  start-single-node start a single-node cluster
+  connect           Create certificates for securely connecting with clusters
+
+  init              initialize a cluster
+  cert              create ca, node, and client certs
+  sql               open a sql shell
+  statement-diag    commands for managing statement diagnostics bundles
+  auth-session      log in and out of HTTP sessions
+  node              list, inspect, drain or remove nodes
+
+  nodelocal         upload and delete nodelocal files
+  userfile          upload, list and delete user scoped files
+  import            import a db or table from a local PGDUMP or MYSQLDUMP file
+  demo              open a demo sql shell
+  gen               generate auxiliary files
+  version           output version information
+  debug             debugging commands
+  sqlfmt            format SQL statements
+  workload          generators for data and query loads
+  help              Help about any command
+
+Flags:
+  -h, --help                     help for cockroach
+      --log <string>             
+                                  Logging configuration, expressed using YAML syntax. For example, you can
+                                  change the default logging directory with: --log='file-defaults: {dir: ...}'.
+                                  See the documentation for more options and details.  To preview how the log
+                                  configuration is applied, or preview the default configuration, you can use
+                                  the 'cockroach debug check-log-config' sub-command.
+                                 
+      --log-config-file <file>   
+                                  File name to read the logging configuration from. This has the same effect as
+                                  passing the content of the file via the --log flag.
+                                  (default <unset>)
+      --version                  version for cockroach
+
+Use "cockroach [command] --help" for more information about a command.
+`
+	helpExpected := fmt.Sprintf("CockroachDB command-line interface and server.\n\n%s",
+		// Due to a bug in spf13/cobra, 'cockroach help' does not include the --version
+		// flag. Strangely, 'cockroach --help' does, as well as usage error messages.
+		strings.ReplaceAll(expUsage, "      --version                  version for cockroach\n", ""))
+	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
+
+	testCases := []struct {
+		flags    []string
+		expErr   bool
+		expected string
+	}{
+		{[]string{"help"}, false, helpExpected},    // request help specifically
+		{[]string{"--foo"}, true, badFlagExpected}, // unknown flag
+	}
+	for _, test := range testCases {
+		t.Run(strings.Join(test.flags, ","), func(t *testing.T) {
+			// Override os.Stdout or os.Stderr with our own.
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cockroachCmd.SetOutput(w)
+			defer cockroachCmd.SetOutput(nil)
+
+			done := make(chan error)
+			var buf bytes.Buffer
+			// copy the output in a separate goroutine so printing can't block indefinitely.
+			go func() {
+				// Copy reads 'r' until EOF is reached.
+				_, err := io.Copy(&buf, r)
+				done <- err
+			}()
+
+			if err := Run(test.flags); err != nil {
+				fmt.Fprintln(w, "Error:", err)
+				if !test.expErr {
+					t.Error(err)
+				}
+			}
+
+			// back to normal state
+			w.Close()
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+
+			// Filter out all test flags.
+			testFlagRE := regexp.MustCompile(`--(test\.|vmodule|rewrite)`)
+			lines := strings.Split(buf.String(), "\n")
+			final := []string{}
+			for _, l := range lines {
+				if testFlagRE.MatchString(l) {
+					continue
+				}
+				final = append(final, l)
+			}
+			got := strings.Join(final, "\n")
+
+			assert.Equal(t, test.expected, got)
+		})
 	}
 }
