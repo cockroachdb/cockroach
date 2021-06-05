@@ -348,7 +348,6 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-
 	r.Add(testSpec{
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
 		Owner:      OwnerKV,
@@ -394,6 +393,24 @@ func registerTPCC(r *testRegistry) {
 				Duration:       time.Minute * 15,
 				ExtraSetupArgs: "--interleaved=true",
 				SetupType:      usingInit,
+			})
+		},
+	})
+	// Overload runs with TPCC on a cluster with insufficient resources for the
+	// warehouse count. At time of writing a cluster with this spec cannot
+	// support even half this warehouse count. The goal of this test is to ensure
+	// that nodes do not crash.
+	overloadSpec := makeClusterSpec(4, cpu(4))
+	r.Add(testSpec{
+		Name:       "tpcc/overload/" + overloadSpec.String(),
+		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		Cluster:    overloadSpec,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			warehouses := 1000
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Duration:   2 * time.Hour,
+				Extra:      "--tolerate-errors",
 			})
 		},
 	})
