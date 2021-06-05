@@ -851,6 +851,10 @@ type Index struct {
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
+
+	// hypothetical is true if the index is a hypothetical index that cannot be
+	// written to or read from.
+	hypothetical bool
 }
 
 // ID is part of the cat.Index interface.
@@ -934,6 +938,11 @@ func (ti *Index) Span() roachpb.Span {
 // partial, the empty string and false is returned.
 func (ti *Index) Predicate() (string, bool) {
 	return ti.predicate, ti.predicate != ""
+}
+
+// Hypothetical is part of the cat.Index interface.
+func (ti *Index) Hypothetical() bool {
+	return ti.hypothetical
 }
 
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.

@@ -118,7 +118,7 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
-		if !ignoreIndexes.Contains(int(index.GetID())) {
+		if !index.IsHypothetical() && !ignoreIndexes.Contains(int(index.GetID())) {
 			entries, err := rowenc.EncodeSecondaryIndex(rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
 			if err != nil {
 				return nil, err

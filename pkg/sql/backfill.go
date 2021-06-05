@@ -251,8 +251,10 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			if col := m.AsColumn(); col != nil {
 				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
-				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
-				addedIndexes = append(addedIndexes, idx.GetID())
+				if !idx.IsHypothetical() {
+					addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
+					addedIndexes = append(addedIndexes, idx.GetID())
+				}
 			} else if c := m.AsConstraint(); c != nil {
 				isValidating := false
 				if c.IsCheck() {

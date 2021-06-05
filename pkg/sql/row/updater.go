@@ -281,11 +281,14 @@ func (ru *Updater) UpdateRow(
 		// set includeEmpty to false while generating the old and new index
 		// entries.
 		//
+		// If the index is hypothetical, we don't build entries for old and new
+		// values because a hypothetical index cannot be written to.
+		//
 		// Also, we don't build entries for old and new values if the index
 		// exists in ignoreIndexesForDel and ignoreIndexesForPut, respectively.
 		// Index IDs in these sets indicate that old and new values for the row
 		// do not satisfy a partial index's predicate expression.
-		if pm.IgnoreForDel.Contains(int(index.GetID())) {
+		if index.IsHypothetical() || pm.IgnoreForDel.Contains(int(index.GetID())) {
 			ru.oldIndexEntries[i] = nil
 		} else {
 			ru.oldIndexEntries[i], err = rowenc.EncodeSecondaryIndex(
@@ -300,7 +303,7 @@ func (ru *Updater) UpdateRow(
 				return nil, err
 			}
 		}
-		if pm.IgnoreForPut.Contains(int(index.GetID())) {
+		if index.IsHypothetical() || pm.IgnoreForPut.Contains(int(index.GetID())) {
 			ru.newIndexEntries[i] = nil
 		} else {
 			ru.newIndexEntries[i], err = rowenc.EncodeSecondaryIndex(

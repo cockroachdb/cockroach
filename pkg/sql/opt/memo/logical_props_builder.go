@@ -1712,6 +1712,13 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			continue
 		}
 
+		if index.Hypothetical() {
+			// Skip hypothetical indexes for now.
+			// TODO(mgartner): They should probably be allowed in the context of
+			// EXPLAIN (HYPOTHETICAL).
+			continue
+		}
+
 		if _, isPartial := index.Predicate(); isPartial {
 			// Partial indexes cannot be considered while building functional
 			// dependency keys for the table because their keys are only unique

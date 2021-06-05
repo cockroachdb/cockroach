@@ -231,6 +231,12 @@ type Index interface {
 	// Partition returns the ith PARTITION BY LIST partition within the index
 	// definition, where i < PartitionCount.
 	Partition(i int) Partition
+
+	// Hypothetical returns true if the index is a hypothetical index that
+	// cannot be written to or read from. A hypothetical index can be used to
+	// test if an index improves a query plan without having to actually create
+	// the index.
+	Hypothetical() bool
 }
 
 // IndexColumn describes a single column that is part of an index definition.

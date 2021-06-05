@@ -48,5 +48,6 @@ func (tc *Catalog) CreateIndex(stmt *tree.CreateIndex, version descpb.IndexDescr
 		idxType = uniqueIndex
 
 	}
-	tab.addIndexWithVersion(indexTableDef, idxType, version)
+	idx := tab.addIndexWithVersion(indexTableDef, idxType, version)
+	idx.hypothetical = stmt.Hypothetical
 }

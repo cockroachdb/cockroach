@@ -104,6 +104,11 @@ func (rd *Deleter) DeleteRow(
 
 	// Delete the row from any secondary indices.
 	for i := range rd.Helper.Indexes {
+		// If the index is hypothetical, do not attempt to delete entries in it.
+		if rd.Helper.Indexes[i].IsHypothetical() {
+			continue
+		}
+
 		// If the index ID exists in the set of indexes to ignore, do not
 		// attempt to delete from the index.
 		if pm.IgnoreForDel.Contains(int(rd.Helper.Indexes[i].GetID())) {
