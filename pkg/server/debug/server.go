@@ -110,6 +110,7 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 		setIntercept: log.InterceptWith,
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
+	mux.HandleFunc("/debug/vmodule", vmoduleHandleDebug)
 
 	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, labels bool, do func()) {
 		ctx := context.Background()
