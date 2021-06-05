@@ -13,6 +13,7 @@ package debug
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // regexpAsString wraps a *regexp.Regexp for better printing and
@@ -90,10 +92,10 @@ const (
 )
 
 type logSpyOptions struct {
-	Count    intAsString
-	Duration durationAsString
-	Grep     regexpAsString
-	Flatten  intAsString
+	Count          intAsString
+	Grep           regexpAsString
+	Flatten        intAsString
+	vmoduleOptions `json:",inline"`
 }
 
 func logSpyOptionsFromValues(values url.Values) (logSpyOptions, error) {
@@ -111,17 +113,15 @@ func logSpyOptionsFromValues(values url.Values) (logSpyOptions, error) {
 	if err := json.Unmarshal(data, &opts); err != nil {
 		return logSpyOptions{}, err
 	}
-	if opts.Duration == 0 {
-		opts.Duration = logSpyDefaultDuration
-	}
 	if opts.Count == 0 {
 		opts.Count = logSpyDefaultCount
 	}
+	opts.vmoduleOptions.setDefaults(values)
 	return opts, nil
 }
 
 type logSpy struct {
-	active       int32 // updated atomically between 0 and 1
+	vsrv         *vmoduleServer
 	setIntercept func(ctx context.Context, f log.Interceptor) func()
 }
 
@@ -163,8 +163,37 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 	cleanup := spy.setIntercept(ctx, interceptor)
 	defer cleanup()
 
-	// This log message will be served through the interceptor.
-	log.Infof(ctx, "intercepting logs with options %+v", opts)
+	// This log message will be served through the interceptor
+	// AND it is also reported in other log sinks, so that
+	// administrators know the logspy was used.
+	log.Infof(ctx, "intercepting logs with options: %+v", opts)
+
+	// Set up the temporary vmodule config, if requested.
+	prevVModule := log.GetVModule()
+	if opts.hasVModule {
+		if err := spy.vsrv.lockVModule(ctx); err != nil {
+			fmt.Fprintf(w, "error: %v", err)
+			return err
+		}
+
+		log.Infof(ctx, "previous vmodule configuration: %s", prevVModule)
+		// Install the new configuration.
+		if err := log.SetVModule(opts.VModule); err != nil {
+			fmt.Fprintf(w, "error: %v", err)
+			return err
+		}
+		log.Infof(ctx, "new vmodule configuration (previous will be restored when logspy session completes): %s", redact.SafeString(opts.VModule))
+		defer func() {
+			// Restore the configuration.
+			err := log.SetVModule(prevVModule)
+
+			// Report the change in logs.
+			log.Infof(ctx, "restoring vmodule configuration (%q): %v", redact.SafeString(prevVModule), err)
+			spy.vsrv.unlockVModule(ctx)
+		}()
+	} else {
+		log.Infof(ctx, "current vmodule setting: %s", redact.SafeString(prevVModule))
+	}
 
 	const flushInterval = time.Second
 	var flushTimer timeutil.Timer
@@ -183,7 +212,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 			return err
 
 		case jsonEntry := <-interceptor.jsonEntries:
-			if err := interceptor.outputJsonEntry(w, jsonEntry); err != nil {
+			if err := interceptor.outputJSONEntry(w, jsonEntry); err != nil {
 				return errors.Wrapf(err, "while writing entry %s", jsonEntry)
 			}
 			numReportedEntries++
@@ -241,10 +270,10 @@ func (i *logSpyInterceptor) outputEntry(w io.Writer, entry logpb.Entry) error {
 		return log.FormatLegacyEntry(entry, w)
 	}
 	j, _ := json.Marshal(entry)
-	return i.outputJsonEntry(w, j)
+	return i.outputJSONEntry(w, j)
 }
 
-func (i *logSpyInterceptor) outputJsonEntry(w io.Writer, jsonEntry []byte) error {
+func (i *logSpyInterceptor) outputJSONEntry(w io.Writer, jsonEntry []byte) error {
 	if i.opts.Flatten == 0 {
 		_, err1 := w.Write(jsonEntry)
 		_, err2 := w.Write([]byte("\n"))

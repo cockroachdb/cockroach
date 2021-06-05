@@ -218,9 +218,24 @@ export default function Debug() {
           <DebugTableLink name="Requests" url="/debug/requests" />
           <DebugTableLink name="Events" url="/debug/events" />
           <DebugTableLink
-            name="Logs"
-            url="/debug/logspy?count=1&amp;duration=10s&amp;grep=."
+            name="Logs (JSON)"
+            url="/debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=0"
             note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
+          />
+          <DebugTableLink
+            name="Logs (text)"
+            url="/debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=1"
+            note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]&amp;flatten=1"
+          />
+          <DebugTableLink
+            name="Logs (text, high verbosity; IMPACTS PERFORMANCE)"
+            url="/debug/logspy?count=100&amp;duration=10s&amp;grep=.&flatten=1&vmodule=*=2"
+            note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]&amp;flatten=[0/1]&amp;vmodule=[vmodule]"
+          />
+          <DebugTableLink
+            name="VModule setting"
+            url="/debug/vmodule"
+            note="/debug/vmodule?duration=[duration]&amp;vmodule=[vmodule]"
           />
         </DebugTableRow>
         <DebugTableRow title="Enqueue Range">

@@ -25,10 +25,6 @@ import (
 // `fn.Intercept()` is invoked for each log entry, regardless of the
 // filtering configured on log sinks.
 //
-// When at least one interceptor is configured, the logging package
-// begins operating at full verbosity (i.e. `V(n) == true` for all
-// `n`).
-//
 // The returned function should be called to cancel the interception.
 //
 // Multiple interceptors can be configured simultaneously.

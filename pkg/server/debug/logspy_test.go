@@ -48,9 +48,9 @@ func TestDebugLogSpyOptions(t *testing.T) {
 				"Grep":                       {`^foo$`},
 			},
 			expOpts: logSpyOptions{
-				Count:    123,
-				Duration: durationAsString(9 * time.Second),
-				Grep:     regexpAsString{re: regexp.MustCompile(`^foo$`)},
+				Count:          123,
+				vmoduleOptions: vmoduleOptions{Duration: durationAsString(9 * time.Second)},
+				Grep:           regexpAsString{re: regexp.MustCompile(`^foo$`)},
 			},
 		},
 		{
@@ -62,16 +62,16 @@ func TestDebugLogSpyOptions(t *testing.T) {
 				"Grep":                       {`123`},
 			},
 			expOpts: logSpyOptions{
-				Count:    123,
-				Duration: durationAsString(9 * time.Second),
-				Grep:     regexpAsString{re: regexp.MustCompile(`123`)},
+				Count:          123,
+				vmoduleOptions: vmoduleOptions{Duration: durationAsString(9 * time.Second)},
+				Grep:           regexpAsString{re: regexp.MustCompile(`123`)},
 			},
 		},
 		{
 			// When nothing is given, default to "infinite" count and a 5s duration.
 			expOpts: logSpyOptions{
-				Count:    logSpyDefaultCount,
-				Duration: logSpyDefaultDuration,
+				Count:          logSpyDefaultCount,
+				vmoduleOptions: vmoduleOptions{Duration: logSpyDefaultDuration},
 			},
 		},
 		// Various parse errors.
@@ -153,9 +153,9 @@ func TestDebugLogSpyRun(t *testing.T) {
 			close(send)
 		}()
 		if err := spy.run(ctx, &buf, logSpyOptions{
-			Duration: durationAsString(5 * time.Second),
-			Count:    2,
-			Grep:     regexpAsString{re: regexp.MustCompile(`first\.go|#2`)},
+			vmoduleOptions: vmoduleOptions{Duration: durationAsString(5 * time.Second)},
+			Count:          2,
+			Grep:           regexpAsString{re: regexp.MustCompile(`first\.go|#2`)},
 		}); err != nil {
 			panic(err)
 		}
@@ -165,17 +165,17 @@ func TestDebugLogSpyRun(t *testing.T) {
 	f := <-send
 	t.Logf("got interceptor, sending some events")
 
-	f.Intercept(toJson(t, logpb.Entry{
+	f.Intercept(toJSON(t, logpb.Entry{
 		File:    "first.go",
 		Line:    1,
 		Message: "#1",
 	}))
-	f.Intercept(toJson(t, logpb.Entry{
+	f.Intercept(toJSON(t, logpb.Entry{
 		File:    "nonmatching.go",
 		Line:    12345,
 		Message: "ignored because neither message nor file match",
 	}))
-	f.Intercept(toJson(t, logpb.Entry{
+	f.Intercept(toJSON(t, logpb.Entry{
 		File:    "second.go",
 		Line:    2,
 		Message: "#2",
@@ -190,7 +190,7 @@ func TestDebugLogSpyRun(t *testing.T) {
 		// f could be invoked arbitrarily after the operation finishes (though
 		// in reality the duration would be limited to the blink of an eye). It
 		// must not fill up a channel and block, or panic.
-		f.Intercept(toJson(t, logpb.Entry{}))
+		f.Intercept(toJSON(t, logpb.Entry{}))
 	}
 
 	t.Logf("check results")
@@ -219,7 +219,7 @@ func (bcw *brokenConnWriter) Write(p []byte) (int, error) {
 	return bcw.buf.Write(p)
 }
 
-func toJson(t *testing.T, entry logpb.Entry) []byte {
+func toJSON(t *testing.T, entry logpb.Entry) []byte {
 	j, err := json.Marshal(entry)
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +261,7 @@ func TestDebugLogSpyBrokenConnection(t *testing.T) {
 			defer w.Unlock()
 			t.Logf("writing entries...")
 			for i := 0; i < 2*logSpyChanCap; i++ {
-				f.Intercept(toJson(t, logpb.Entry{
+				f.Intercept(toJSON(t, logpb.Entry{
 					File:    "fake.go",
 					Line:    int64(i),
 					Message: fmt.Sprintf("foobar #%d", i),
@@ -274,8 +274,8 @@ func TestDebugLogSpyBrokenConnection(t *testing.T) {
 
 		t.Logf("running logspy...")
 		if err := spy.run(ctx, w, logSpyOptions{
-			Duration: durationAsString(5 * time.Second),
-			Count:    logSpyChanCap - 1, // will definitely see that many entries
+			vmoduleOptions: vmoduleOptions{Duration: durationAsString(5 * time.Second)},
+			Count:          logSpyChanCap - 1, // will definitely see that many entries
 		}); !testutils.IsError(err, test.failStr) {
 			t.Fatal(err)
 		}
