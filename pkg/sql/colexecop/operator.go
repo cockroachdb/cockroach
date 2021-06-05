@@ -419,3 +419,29 @@ type VectorizedStatsCollector interface {
 	// always return non-nil (but possibly empty) object.
 	GetStats() *execinfrapb.ComponentStats
 }
+
+// StreamingMetadataReceiver should be implemented by the root components (like
+// flow coordinators and outboxes) in order to propagate the metadata in a
+// streaming fashion. This is in contrast with MetadataSource where the metadata
+// is buffered in place where it originates until the flow transitions into the
+// draining state.
+type StreamingMetadataReceiver interface {
+	// PushStreamingMeta pushes the metadata in a streaming fashion and returns
+	// an error if the push wasn't successful. If no error is returned, then the
+	// metadata can be assumed to have been delivered.
+	//
+	// WARNING: the caller is **not** allowed to reuse the metadata object.
+	PushStreamingMeta(context.Context, *execinfrapb.ProducerMetadata) error
+}
+
+// StreamingMetadataSource should be implemented by all components that want
+// to propagate the metadata in a streaming fashion. The interface exists in
+// order to facilitate instantiation of the source before the receiver is
+// created.
+type StreamingMetadataSource interface {
+	SetReceiver(receiver StreamingMetadataReceiver)
+}
+
+// TODO(yuzefovich): remove this once the interfaces are used.
+var _ StreamingMetadataReceiver
+var _ StreamingMetadataSource
