@@ -13,8 +13,8 @@ package debug
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -64,7 +64,7 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			expOpts: logSpyOptions{
 				Count:    123,
 				Duration: durationAsString(9 * time.Second),
-				Grep:     regexpAsString{re: regexp.MustCompile(`123`), i: 123},
+				Grep:     regexpAsString{re: regexp.MustCompile(`123`)},
 			},
 		},
 		{
@@ -114,8 +114,9 @@ func TestDebugLogSpyHandle(t *testing.T) {
 	// Verify that a parse error doesn't execute anything.
 	{
 		spy := logSpy{
-			setIntercept: func(ctx context.Context, f log.InterceptorFn) {
+			setIntercept: func(ctx context.Context, f log.Interceptor) func() {
 				t.Fatal("tried to intercept")
+				return nil
 			},
 		}
 
@@ -130,84 +131,17 @@ func TestDebugLogSpyHandle(t *testing.T) {
 			t.Fatalf("expected: %q\ngot: %q", exp, body)
 		}
 	}
-
-	// Verify that overlapping intercepts are prevented.
-	{
-		waiting := make(chan struct{})
-		waitingAlias := waiting
-		spy := logSpy{
-			setIntercept: func(ctx context.Context, f log.InterceptorFn) {
-				if f != nil && waitingAlias != nil {
-					close(waitingAlias)
-					waitingAlias = nil
-					<-ctx.Done()
-				}
-			},
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		{
-			r := httptest.NewRequest("GET", "/?duration=1m", nil)
-			r = r.WithContext(ctx)
-			rec := httptest.NewRecorder()
-			go spy.handleDebugLogSpy(rec, r)
-		}
-
-		<-waiting // goroutine is now armed, new requests should bounce
-
-		request := func() (int, string) {
-			rec := httptest.NewRecorder()
-			r := httptest.NewRequest("GET", "/", nil)
-			ctx, c := context.WithCancel(context.Background())
-			c() // intentionally to avoid doing any real work
-			r = r.WithContext(ctx)
-			spy.handleDebugLogSpy(rec, r)
-			resp := rec.Result()
-			defer resp.Body.Close()
-			bodyBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				panic(err)
-			}
-			return resp.StatusCode, string(bodyBytes)
-		}
-
-		for {
-			status, body := request()
-
-			if cancel != nil {
-				cancel() // cancel open request, should finish soon
-				cancel = nil
-			}
-
-			if cancel != nil || status == http.StatusInternalServerError {
-				exp := "a log interception is already in progress\n"
-				if status != http.StatusInternalServerError || body != exp {
-					t.Fatalf("expected: %d %q\ngot: %d %q",
-						http.StatusInternalServerError, exp,
-						status, body)
-				}
-				continue
-			} else {
-				if status != http.StatusOK {
-					t.Fatalf("%d %s", status, body)
-				}
-				if re := regexp.MustCompile(`intercepting logs with options`); !re.MatchString(body) {
-					t.Fatal(body)
-				}
-				break
-			}
-		}
-	}
 }
 
 func TestDebugLogSpyRun(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	send := make(chan log.InterceptorFn, 1)
+	send := make(chan log.Interceptor, 1)
 	spy := logSpy{
-		setIntercept: func(ctx context.Context, f log.InterceptorFn) {
+		setIntercept: func(ctx context.Context, f log.Interceptor) func() {
 			send <- f
+			return func() {}
 		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -215,50 +149,58 @@ func TestDebugLogSpyRun(t *testing.T) {
 
 	var buf bytes.Buffer
 	go func() {
+		defer func() {
+			close(send)
+		}()
 		if err := spy.run(ctx, &buf, logSpyOptions{
-			Duration: durationAsString(time.Hour),
-			Count:    3, // we expect 2 results but log spy sends a header event
+			Duration: durationAsString(5 * time.Second),
+			Count:    2,
 			Grep:     regexpAsString{re: regexp.MustCompile(`first\.go|#2`)},
 		}); err != nil {
 			panic(err)
 		}
-		close(send)
 	}()
 
+	t.Logf("waiting for interceptor")
 	f := <-send
+	t.Logf("got interceptor, sending some events")
 
-	f(logpb.Entry{
+	f.Intercept(toJson(t, logpb.Entry{
 		File:    "first.go",
 		Line:    1,
 		Message: "#1",
-	})
-	f(logpb.Entry{
+	}))
+	f.Intercept(toJson(t, logpb.Entry{
 		File:    "nonmatching.go",
 		Line:    12345,
 		Message: "ignored because neither message nor file match",
-	})
-	f(logpb.Entry{
+	}))
+	f.Intercept(toJson(t, logpb.Entry{
 		File:    "second.go",
 		Line:    2,
 		Message: "#2",
-	})
+	}))
 	if undoF := <-send; undoF != nil {
 		t.Fatal("interceptor closed with non-nil function")
 	}
+
+	t.Logf("fill in the channel")
 
 	for i := 0; i < 10000; i++ {
 		// f could be invoked arbitrarily after the operation finishes (though
 		// in reality the duration would be limited to the blink of an eye). It
 		// must not fill up a channel and block, or panic.
-		f(logpb.Entry{})
+		f.Intercept(toJson(t, logpb.Entry{}))
 	}
 
+	t.Logf("check results")
+
 	body := buf.String()
-	re := regexp.MustCompile(
-		`(?m:.*intercepting.*\n.*first\.go:1\s+#1\n.*second\.go:2\s+#2)`,
-	)
-	if !re.MatchString(body) {
-		t.Fatal(body)
+	const expected = `{"file":"first.go","line":1,"message":"#1"}
+{"file":"second.go","line":2,"message":"#2"}
+`
+	if expected != body {
+		t.Fatalf("expected:\n%q\ngot:\n%q", expected, body)
 	}
 }
 
@@ -277,8 +219,17 @@ func (bcw *brokenConnWriter) Write(p []byte) (int, error) {
 	return bcw.buf.Write(p)
 }
 
+func toJson(t *testing.T, entry logpb.Entry) []byte {
+	j, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return j
+}
+
 func TestDebugLogSpyBrokenConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, test := range []struct {
 		name, failStr string
@@ -286,10 +237,11 @@ func TestDebugLogSpyBrokenConnection(t *testing.T) {
 		{name: "OnEntry", failStr: "foobar #1"},
 		{name: "OnDropped", failStr: "messages were dropped"},
 	} {
-		send := make(chan log.InterceptorFn, 1)
+		send := make(chan log.Interceptor, 1)
 		spy := logSpy{
-			setIntercept: func(_ context.Context, f log.InterceptorFn) {
+			setIntercept: func(_ context.Context, f log.Interceptor) func() {
 				send <- f
+				return func() {}
 			},
 		}
 
@@ -298,31 +250,34 @@ func TestDebugLogSpyBrokenConnection(t *testing.T) {
 		}
 
 		go func() {
+			t.Logf("waiting for intercept function")
 			f := <-send
+			t.Logf("got interceptor")
 			// Block the writer while we create entries. That way, the spy will
 			// have to drop entries and that's what we want (in one of the
 			// tests. In the other, we error out earlier instead, so causing
 			// dropped entries doesn't hurt either).
 			w.Lock()
 			defer w.Unlock()
+			t.Logf("writing entries...")
 			for i := 0; i < 2*logSpyChanCap; i++ {
-				f(logpb.Entry{
+				f.Intercept(toJson(t, logpb.Entry{
 					File:    "fake.go",
 					Line:    int64(i),
 					Message: fmt.Sprintf("foobar #%d", i),
-				})
+				}))
 			}
+			t.Logf("all entries written")
 		}()
 
 		ctx := context.Background()
 
-		func() {
-			if err := spy.run(ctx, w, logSpyOptions{
-				Duration: durationAsString(time.Hour),
-				Count:    logSpyChanCap - 1, // will definitely see that many entries
-			}); !testutils.IsError(err, test.failStr) {
-				t.Fatal(err)
-			}
-		}()
+		t.Logf("running logspy...")
+		if err := spy.run(ctx, w, logSpyOptions{
+			Duration: durationAsString(5 * time.Second),
+			Count:    logSpyChanCap - 1, // will definitely see that many entries
+		}); !testutils.IsError(err, test.failStr) {
+			t.Fatal(err)
+		}
 	}
 }
