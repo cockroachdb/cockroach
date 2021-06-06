@@ -16,6 +16,7 @@ go_library(
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
+        "//pkg/sql/colflow/colmeta",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
