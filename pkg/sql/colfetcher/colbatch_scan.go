@@ -61,7 +61,13 @@ type ColBatchScan struct {
 		// rowsRead contains the number of total rows this ColBatchScan has
 		// returned so far.
 		rowsRead int64
+		// rowsReadSinceLastUpdate tracks how many rows this ColBatchScan has
+		// returned since the last progress update metadata has been emitted.
+		rowsReadSinceLastUpdate int64
 	}
+	// streamingMetaReceiver, if set, will be used to propagate the metrics
+	// about the number of rows read in order to show the progress of the query.
+	streamingMetaReceiver colexecop.StreamingMetadataReceiver
 	// ResultTypes is the slice of resulting column types from this operator.
 	// It should be used rather than the slice of column types from the scanned
 	// table because the scan might synthesize additional implicit system columns.
@@ -72,6 +78,11 @@ var _ colexecop.KVReader = &ColBatchScan{}
 var _ execinfra.Releasable = &ColBatchScan{}
 var _ colexecop.Closer = &ColBatchScan{}
 var _ colexecop.Operator = &ColBatchScan{}
+
+// SetReceiver is part of the colexecop.StreamingMetadataSource interface.
+func (s *ColBatchScan) SetReceiver(receiver colexecop.StreamingMetadataReceiver) {
+	s.streamingMetaReceiver = receiver
+}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init(ctx context.Context) {
@@ -101,9 +112,41 @@ func (s *ColBatchScan) Next() coldata.Batch {
 	if bat.Selection() != nil {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly a selection vector is set on the batch coming from CFetcher"))
 	}
+	var sinceLastUpdate int64
 	s.mu.Lock()
 	s.mu.rowsRead += int64(bat.Length())
+	s.mu.rowsReadSinceLastUpdate += int64(bat.Length())
+	if s.streamingMetaReceiver != nil {
+		sinceLastUpdate = s.mu.rowsReadSinceLastUpdate
+		if sinceLastUpdate >= execinfra.ScanProgressFrequency {
+			s.mu.rowsReadSinceLastUpdate = 0
+		} else {
+			sinceLastUpdate = 0
+		}
+	}
 	s.mu.Unlock()
+	if sinceLastUpdate > 0 {
+		// It's time to emit the progress update.
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		meta.Metrics.RowsRead = sinceLastUpdate
+		if err := s.streamingMetaReceiver.PushStreamingMeta(s.Ctx, meta); err != nil {
+			// If this progress metadata wasn't successfully propagated, it's
+			// not an issue for correctness. However, we still want to try
+			// propagating the correct metrics via DrainMeta route.
+			//
+			// Note that it is ok to swallow the error without inspecting it
+			// because the error is either
+			// 1. a context cancellation (but we always plan a cancel checker
+			//    on top of the ColBatchScan, and the checker will see it), or
+			// 2. an error indicating that the data producing goroutine of the
+			//    streaming metadata receiver has exited. In this case we don't
+			//    want to do anything about the error.
+			s.mu.Lock()
+			s.mu.rowsReadSinceLastUpdate = sinceLastUpdate
+			s.mu.Unlock()
+		}
+	}
 	return bat
 }
 
@@ -125,7 +168,14 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
-	meta.Metrics.RowsRead = s.GetRowsRead()
+	// We have been emitting the progress about the rows read, so in order to
+	// not double count some rows, we have to emit the number of rows read since
+	// the last update. (If s.streamingMetaReceiver is nil,
+	// s.mu.rowsReadSinceLastUpdate still contains the correct number.)
+	s.mu.Lock()
+	meta.Metrics.RowsRead = s.mu.rowsReadSinceLastUpdate
+	s.mu.rowsReadSinceLastUpdate = 0
+	s.mu.Unlock()
 	trailingMeta = append(trailingMeta, *meta)
 	if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})

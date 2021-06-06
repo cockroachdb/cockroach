@@ -41,6 +41,9 @@ type OpWithMetaInfo struct {
 	// rooted in Root for which the responsibility of retrieving stats hasn't
 	// been claimed yet.
 	StatsCollectors []colexecop.VectorizedStatsCollector
+	// StreamingMetadataSources contains all metadata sources that want to be
+	// able to propagate metadata in a streaming fashion.
+	StreamingMetadataSources []colexecop.StreamingMetadataSource
 	// MetadataSources are all sources of the metadata that are present in the
 	// tree rooted in Root for which the responsibility of draining hasn't been
 	// claimed yet.
@@ -156,6 +159,9 @@ func (r *NewColOperatorResult) Release() {
 	for i := range r.StatsCollectors {
 		r.StatsCollectors[i] = nil
 	}
+	for i := range r.StreamingMetadataSources {
+		r.StreamingMetadataSources[i] = nil
+	}
 	for i := range r.MetadataSources {
 		r.MetadataSources[i] = nil
 	}
@@ -167,9 +173,10 @@ func (r *NewColOperatorResult) Release() {
 	}
 	*r = NewColOperatorResult{
 		OpWithMetaInfo: OpWithMetaInfo{
-			StatsCollectors: r.StatsCollectors[:0],
-			MetadataSources: r.MetadataSources[:0],
-			ToClose:         r.ToClose[:0],
+			StatsCollectors:          r.StatsCollectors[:0],
+			StreamingMetadataSources: r.StreamingMetadataSources[:0],
+			MetadataSources:          r.MetadataSources[:0],
+			ToClose:                  r.ToClose[:0],
 		},
 		// There is no need to deeply reset the column types and the memory
 		// monitoring infra slices because these objects are very tiny in the

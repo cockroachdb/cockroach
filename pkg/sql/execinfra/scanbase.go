@@ -17,3 +17,17 @@ const (
 	ScanVisibilityPublic             = execinfrapb.ScanVisibility_PUBLIC
 	ScanVisibilityPublicAndNotPublic = execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 )
+
+// ScanProgressFrequency determines how often the scan operators should emit
+// the metadata about how many rows they have read - once the operators have
+// read at least this number of rows, then the new progress metadata should be
+// produced.
+var ScanProgressFrequency int64 = 5000
+
+// TestingSetScanProgressFrequency changes the frequency at which row-scanned
+// progress metadata is emitted by the scan operators.
+func TestingSetScanProgressFrequency(val int64) func() {
+	oldVal := ScanProgressFrequency
+	ScanProgressFrequency = val
+	return func() { ScanProgressFrequency = oldVal }
+}
