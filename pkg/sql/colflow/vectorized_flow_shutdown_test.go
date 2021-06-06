@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -52,10 +53,9 @@ type testScenario struct {
 }
 
 var (
-	consumerDone     = testScenario{"ConsumerDone"}
-	consumerClosed   = testScenario{"ConsumerClosed"}
+	useRowReceiver   = testScenario{"RowReceiver"}
 	useBatchReceiver = testScenario{"BatchReceiver"}
-	testScenarios    = []testScenario{consumerDone, consumerClosed, useBatchReceiver}
+	testScenarios    = []testScenario{useRowReceiver, useBatchReceiver}
 )
 
 type callbackCloser struct {
@@ -363,33 +363,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					}}},
 				}
 
-				// runFlowCoordinator creates a pair of a materializer and a
-				// FlowCoordinator, requests 10 rows from it, and returns the
-				// coordinator.
-				runFlowCoordinator := func() *colflow.FlowCoordinator {
-					materializer := colexec.NewMaterializer(
-						flowCtx,
-						1, /* processorID */
-						inputInfo,
-						typs,
-					)
-					coordinator := colflow.NewFlowCoordinator(
-						flowCtx,
-						1, /* processorID */
-						materializer,
-						nil, /* output */
-						cancelLocal,
-					)
-					coordinator.Start(ctxLocal)
-
-					for i := 0; i < 10; i++ {
-						row, meta := coordinator.Next()
-						require.NotNil(t, row)
-						require.Nil(t, meta)
-					}
-					return coordinator
-				}
-
 				// checkMetadata verifies that all the metadata from all
 				// outboxes has been received.
 				checkMetadata := func(receivedMeta []execinfrapb.ProducerMetadata) {
@@ -406,28 +379,31 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 
 				switch scenario {
-				case consumerDone:
-					coordinator := runFlowCoordinator()
-					coordinator.ConsumerDone()
-					var receivedMeta []execinfrapb.ProducerMetadata
-					for {
-						row, meta := coordinator.Next()
-						require.Nil(t, row)
-						if meta == nil {
-							break
-						}
-						receivedMeta = append(receivedMeta, *meta)
-					}
-					checkMetadata(receivedMeta)
-
-				case consumerClosed:
-					coordinator := runFlowCoordinator()
-					coordinator.ConsumerClosed()
+				case useRowReceiver:
+					// Use a row receiver that will ask for 10 rows and then
+					// will transition to draining.
+					recv := &fakeReceiver{numMoreItemsNeeded: 10}
+					materializer := colexec.NewMaterializer(
+						flowCtx,
+						1, /* processorID */
+						inputInfo,
+						typs,
+					)
+					coordinator := colflow.NewFlowCoordinator(
+						flowCtx,
+						1, /* processorID */
+						materializer,
+						recv,
+						nil, /* streamingMetadataSources */
+						cancelLocal,
+					)
+					coordinator.Run(ctxLocal)
+					checkMetadata(recv.receivedMeta)
 
 				case useBatchReceiver:
 					// Use a batch receiver that will ask for 10 batches and
 					// then will transition to draining.
-					recv := &batchReceiver{numMoreBatchesNeeded: 10}
+					recv := &fakeReceiver{numMoreItemsNeeded: 10}
 					coordinator := colflow.NewBatchFlowCoordinator(
 						flowCtx,
 						1, /* processorID */
@@ -465,26 +441,47 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	}
 }
 
-// batchReceiver is a utility execinfra.BatchReceiver that will request the
-// specified number of batches before transitioning to draining.
+// fakeReceiver is a utility execinfra.RowReceiver and execinfra.BatchReceiver
+// that will request the specified number of rows/batches before transitioning
+// to draining.
 //
-// numMoreBatchesReceived is expected to be set to a positive number before the
+// numMoreItemsNeeded is expected to be set to a positive number before the
 // usage of the receiver.
-type batchReceiver struct {
-	numMoreBatchesNeeded int
-	receivedMeta         []execinfrapb.ProducerMetadata
+type fakeReceiver struct {
+	numMoreItemsNeeded int
+	receivedMeta       []execinfrapb.ProducerMetadata
 }
 
-var _ execinfra.BatchReceiver = &batchReceiver{}
+var _ execinfra.RowReceiver = &fakeReceiver{}
+var _ execinfra.BatchReceiver = &fakeReceiver{}
 
-func (b *batchReceiver) ProducerDone() {}
+func (b *fakeReceiver) ProducerDone() {}
 
-func (b *batchReceiver) PushBatch(
+func (b *fakeReceiver) Push(
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if row != nil {
+		b.numMoreItemsNeeded--
+		if b.numMoreItemsNeeded < 0 {
+			colexecerror.InternalError(errors.New("unexpectedly received a row after drain was requested"))
+		}
+	} else if meta != nil {
+		b.receivedMeta = append(b.receivedMeta, *meta)
+	} else {
+		colexecerror.InternalError(errors.New("unexpectedly Push is called with two nil arguments"))
+	}
+	if b.numMoreItemsNeeded == 0 {
+		return execinfra.DrainRequested
+	}
+	return execinfra.NeedMoreRows
+}
+
+func (b *fakeReceiver) PushBatch(
 	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if batch != nil {
-		b.numMoreBatchesNeeded--
-		if b.numMoreBatchesNeeded < 0 {
+		b.numMoreItemsNeeded--
+		if b.numMoreItemsNeeded < 0 {
 			colexecerror.InternalError(errors.New("unexpectedly received a batch after drain was requested"))
 		}
 	} else if meta != nil {
@@ -492,7 +489,7 @@ func (b *batchReceiver) PushBatch(
 	} else {
 		colexecerror.InternalError(errors.New("unexpectedly PushBatch is called with two nil arguments"))
 	}
-	if b.numMoreBatchesNeeded == 0 {
+	if b.numMoreItemsNeeded == 0 {
 		return execinfra.DrainRequested
 	}
 	return execinfra.NeedMoreRows

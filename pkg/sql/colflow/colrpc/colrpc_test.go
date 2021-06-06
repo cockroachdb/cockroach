@@ -294,7 +294,17 @@ func TestOutboxInbox(t *testing.T) {
 			// to create a context of the node on which the outbox runs and keep
 			// it different from the streamCtx. This matters in
 			// 'transportBreaks' scenario.
-			outbox.runnerCtx = outboxCtx
+			outbox.producerCtx = outboxCtx
+			// We want the outbox not call CloseSend in order for the stream to
+			// be shutdown ungracefully in streamCtxCancel scenario.
+			//
+			// If we let the outbox work in a regular fashion, there is a race
+			// between the outbox calling CloseSend (a graceful termination of
+			// FlowStream RPC) and the inbox noticing the stream context
+			// cancellation (an ungraceful termination of FlowStream RPC). This
+			// makes the "expected behavior" undefined, so we force the latter
+			// to occur.
+			outbox.testingKnobs.skipCloseSend = cancellationScenario == streamCtxCancel
 			outbox.runWithStream(streamCtx, clientStream, flowCtxCancel, outboxCtxCancel)
 			wg.Done()
 		}()

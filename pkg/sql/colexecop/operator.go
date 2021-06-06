@@ -441,7 +441,3 @@ type StreamingMetadataReceiver interface {
 type StreamingMetadataSource interface {
 	SetReceiver(receiver StreamingMetadataReceiver)
 }
-
-// TODO(yuzefovich): remove this once the interfaces are used.
-var _ StreamingMetadataReceiver
-var _ StreamingMetadataSource

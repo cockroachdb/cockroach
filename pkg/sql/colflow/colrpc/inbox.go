@@ -90,8 +90,13 @@ type Inbox struct {
 	// done prevents double closing. It should not be used by the RunWithStream
 	// goroutine.
 	done bool
-	// bufferedMeta buffers any metadata found in Next when reading from the
-	// stream and is returned by DrainMeta.
+	// streamingMetaReceiver, if set, is used to propagate all of the metadata
+	// received in Next in a streaming fashion.
+	streamingMetaReceiver colexecop.StreamingMetadataReceiver
+	// bufferedMeta is used if streamingMetaReceiver is not set (which can
+	// happen only in test environment) or an error is encountered when pushing
+	// the metadata in a streaming fashion. It accumulates the metadata to be
+	// returned by DrainMeta.
 	bufferedMeta []execinfrapb.ProducerMetadata
 
 	// stream is the RPC stream. It is set when RunWithStream is called but
@@ -122,6 +127,7 @@ type Inbox struct {
 }
 
 var _ colexecop.Operator = &Inbox{}
+var _ colexecop.StreamingMetadataSource = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
@@ -221,6 +227,11 @@ func (i *Inbox) Timeout(err error) {
 	i.timeoutCh <- err
 }
 
+// SetReceiver is part of the colexecop.StreamingMetadataSource interface.
+func (i *Inbox) SetReceiver(receiver colexecop.StreamingMetadataReceiver) {
+	i.streamingMetaReceiver = receiver
+}
+
 // Init is part of the Operator interface.
 func (i *Inbox) Init(ctx context.Context) {
 	if !i.InitHelper.Init(ctx) {
@@ -313,13 +324,18 @@ func (i *Inbox) Next() coldata.Batch {
 				if !ok {
 					continue
 				}
-				if meta.Err != nil {
-					// If an error was encountered, it needs to be propagated
-					// immediately. All other metadata will simply be buffered
-					// and returned in DrainMeta.
-					colexecerror.ExpectedError(meta.Err)
+				if i.streamingMetaReceiver == nil || i.streamingMetaReceiver.PushStreamingMeta(i.Ctx, &meta) != nil {
+					// Either we don't have a streaming metadata receiver or we
+					// encountered an error when using it. Buffer up this
+					// metadata.
+					if meta.Err != nil {
+						// If an error was encountered, it needs to be propagated
+						// immediately. All other metadata will simply be buffered
+						// and returned in DrainMeta.
+						colexecerror.ExpectedError(meta.Err)
+					}
+					i.bufferedMeta = append(i.bufferedMeta, meta)
 				}
-				i.bufferedMeta = append(i.bufferedMeta, meta)
 			}
 			// Continue until we get the next batch or EOF.
 			continue
@@ -393,17 +409,15 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 // DrainMeta is part of the colexecop.MetadataSource interface. DrainMeta may
 // not be called concurrently with Next.
 func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
-	allMeta := i.bufferedMeta
-	i.bufferedMeta = i.bufferedMeta[:0]
-
+	drainedMeta := i.bufferedMeta
 	if i.done {
 		// Next exhausted the stream of metadata.
-		return allMeta
+		return drainedMeta
 	}
 	defer i.close()
 
 	if err := i.sendDrainSignal(i.Ctx); err != nil {
-		return allMeta
+		return drainedMeta
 	}
 
 	for {
@@ -415,16 +429,16 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 			if log.V(1) {
 				log.Warningf(i.Ctx, "Inbox Recv connection error while draining metadata: %+v", err)
 			}
-			return allMeta
+			return drainedMeta
 		}
 		for _, remoteMeta := range msg.Data.Metadata {
 			meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(i.Ctx, remoteMeta)
 			if !ok {
 				continue
 			}
-			allMeta = append(allMeta, meta)
+			drainedMeta = append(drainedMeta, meta)
 		}
 	}
 
-	return allMeta
+	return drainedMeta
 }
