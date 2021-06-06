@@ -536,9 +536,9 @@ func uploadData(
 		ctx, dest, base.ExternalIODirConfig{}, testSettings,
 		nil, nil, nil)
 	require.NoError(t, err)
-	defer s.Close()
 	require.NoError(t, cloud.WriteFile(ctx, s, basename, bytes.NewReader(data)))
 	return data, func() {
+		defer s.Close()
 		_ = s.Delete(ctx, basename)
 	}
 }
