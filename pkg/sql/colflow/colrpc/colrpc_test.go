@@ -146,9 +146,8 @@ func TestOutboxInbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Set up the RPC layer.
-	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
@@ -199,7 +198,7 @@ func TestOutboxInbox(t *testing.T) {
 		}()
 	}
 
-	streamCtx, streamCancelFn := context.WithCancel(ctx)
+	streamCtx, streamCancelFn := context.WithCancel(context.Background())
 	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(streamCtx)
 	require.NoError(t, err)
@@ -254,26 +253,6 @@ func TestOutboxInbox(t *testing.T) {
 				args.BatchAccumulator = nil
 			}
 		}
-		inputMemAcc := testMemMonitor.MakeBoundAccount()
-		defer inputMemAcc.Close(ctx)
-		input := coldatatestutils.NewRandomDataOp(
-			colmem.NewAllocator(ctx, &inputMemAcc, coldata.StandardColumnFactory), rng, args,
-		)
-
-		outboxMemAcc := testMemMonitor.MakeBoundAccount()
-		defer outboxMemAcc.Close(ctx)
-		outbox, err := NewOutbox(
-			colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-			colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
-		)
-		require.NoError(t, err)
-
-		inboxMemAcc := testMemMonitor.MakeBoundAccount()
-		defer inboxMemAcc.Close(ctx)
-		inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
-		require.NoError(t, err)
-
-		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
 
 		var (
 			flowCtxCanceled uint32
@@ -285,23 +264,42 @@ func TestOutboxInbox(t *testing.T) {
 		)
 		wg.Add(1)
 		go func() {
+			flowCtx, flowCtxCancelFn := context.WithCancel(context.Background())
+			flowCtxCancel := func() {
+				atomic.StoreUint32(&flowCtxCanceled, 1)
+				flowCtxCancelFn()
+			}
+			outboxCtx, outboxCtxCancelFn := context.WithCancel(flowCtx)
+			outboxCtxCancel := func() {
+				atomic.StoreUint32(&outboxCtxCanceled, 1)
+				outboxCtxCancelFn()
+			}
+
+			inputMemAcc := testMemMonitor.MakeBoundAccount()
+			defer inputMemAcc.Close(outboxCtx)
+			input := coldatatestutils.NewRandomDataOp(
+				colmem.NewAllocator(outboxCtx, &inputMemAcc, coldata.StandardColumnFactory), rng, args,
+			)
+			outboxMemAcc := testMemMonitor.MakeBoundAccount()
+			defer outboxMemAcc.Close(outboxCtx)
+			outbox, err := NewOutbox(
+				colmem.NewAllocator(outboxCtx, &outboxMemAcc, coldata.StandardColumnFactory),
+				colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
+			)
+			require.NoError(t, err)
+
 			// There is a bit of trickery going on here with the context
 			// management caused by the fact that we're using an internal
 			// runWithStream method rather than exported Run method. The goal is
 			// to create a context of the node on which the outbox runs and keep
 			// it different from the streamCtx. This matters in
 			// 'transportBreaks' scenario.
-			var flowCtxCancelFn context.CancelFunc
-			outbox.runnerCtx, flowCtxCancelFn = context.WithCancel(ctx)
-			flowCtxCancel := func() {
-				atomic.StoreUint32(&flowCtxCanceled, 1)
-				flowCtxCancelFn()
-			}
-			outbox.runWithStream(streamCtx, clientStream, flowCtxCancel, func() { atomic.StoreUint32(&outboxCtxCanceled, 1) })
+			outbox.runnerCtx = outboxCtx
+			outbox.runWithStream(streamCtx, clientStream, flowCtxCancel, outboxCtxCancel)
 			wg.Done()
 		}()
 
-		readerCtx, readerCancelFn := context.WithCancel(ctx)
+		readerCtx, readerCancelFn := context.WithCancel(context.Background())
 		wg.Add(1)
 		go func() {
 			if sleepBeforeCancellation {
@@ -321,14 +319,21 @@ func TestOutboxInbox(t *testing.T) {
 			wg.Done()
 		}()
 
+		inboxMemAcc := testMemMonitor.MakeBoundAccount()
+		defer inboxMemAcc.Close(readerCtx)
+		inbox, err := NewInbox(colmem.NewAllocator(readerCtx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+		require.NoError(t, err)
+
+		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
+
 		// Use a deselector op to verify that the Outbox gets rid of the selection
 		// vector.
 		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
-		defer deselectorMemAcc.Close(ctx)
+		defer deselectorMemAcc.Close(readerCtx)
 		inputBatches := colexecutils.NewDeselectorOp(
-			colmem.NewAllocator(ctx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
+			colmem.NewAllocator(readerCtx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
 		)
-		inputBatches.Init(ctx)
+		inputBatches.Init(readerCtx)
 		outputBatches := colexecop.NewBatchBuffer()
 		var readerErr error
 		for {
