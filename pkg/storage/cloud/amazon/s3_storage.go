@@ -363,20 +363,15 @@ func (s *s3Storage) ReadFileAt(
 		}
 		size = *stream.ContentLength
 	}
-
-	return &cloud.ResumingReader{
-		Ctx: ctx,
-		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
-			s, err := s.openStreamAt(ctx, basename, pos)
-			if err != nil {
-				return nil, err
-			}
-			return s.Body, nil
-		},
-		Reader: stream.Body,
-		Pos:    offset,
-		ErrFn:  s3ErrDelay,
-	}, size, nil
+	opener := func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+		s, err := s.openStreamAt(ctx, basename, pos)
+		if err != nil {
+			return nil, err
+		}
+		return s.Body, nil
+	}
+	return cloud.NewResumingReader(ctx, opener, stream.Body, offset,
+		cloud.IsResumableHTTPError, s3ErrDelay), size, nil
 }
 
 func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
