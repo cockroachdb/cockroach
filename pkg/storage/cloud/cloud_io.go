@@ -139,8 +139,22 @@ func IsResumableHTTPError(err error) bool {
 	return errors.Is(err, io.ErrUnexpectedEOF) ||
 		sysutil.IsErrConnectionReset(err) ||
 		sysutil.IsErrConnectionRefused(err) ||
+		isResumableGoAwayError(err)
 }
 
+// isResumableGoAwayError returns true if we can resume download after receiving
+// a GOAWAY error. A GoAwayError is returned by the Transport when the server
+// closes the TCP connection after sending a GOAWAY frame.
+// When the GoAwayError frame has a NO_ERROR error code, the server is either
+// indicating that a shutdown is imminent, or has completed a graceful shutdown.
+// In both cases, we can establish a new connection and retry the download.
+// Currently, we do not consider GoAwayErrors with other error codes as
+// resumable.
+func isResumableGoAwayError(err error) bool {
+	if strings.Contains(err.Error(), "server sent GOAWAY") {
+		return true
+	}
+	return false
 }
 
 // Maximum number of times we can attempt to retry reading from external storage,
