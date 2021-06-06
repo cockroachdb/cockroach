@@ -176,7 +176,8 @@ func (g *gcsStorage) ReadFileAt(
 		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
 		},
-		Pos: offset,
+		RetryOnErrFn: cloud.IsResumableHTTPError,
+		Pos:          offset,
 	}
 
 	if err := r.Open(); err != nil {
@@ -189,7 +190,7 @@ func (g *gcsStorage) ReadFileAt(
 		}
 		return nil, 0, err
 	}
-	return r.Reader, r.Reader.(*gcs.Reader).Attrs.Size, nil
+	return r, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
