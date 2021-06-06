@@ -231,6 +231,10 @@ type TestingKnobs struct {
 
 	// BackupRestoreTestingKnobs are backup and restore specific testing knobs.
 	BackupRestoreTestingKnobs base.ModuleTestingKnobs
+
+	// DistSQLNoSpans, if enabled, causes the root components of the vectorized
+	// DistSQL flows to not create tracing spans.
+	DistSQLNoSpans bool
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

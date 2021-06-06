@@ -93,6 +93,10 @@ func wrapRowSources(
 			// TODO(yuzefovich): possibly set the length to 0 in order to be
 			// able to pool the underlying slices.
 			inputs[i].StatsCollectors = nil
+			// NOTE: we deliberately don't give the streaming metadata sources
+			// to the materializer because it doesn't know how to handle those.
+			// We want to propagate such sources all the way to the root of the
+			// tree.
 			inputs[i].MetadataSources = nil
 			inputs[i].ToClose = nil
 			toWrapInputs = append(toWrapInputs, toWrapInput)
@@ -516,10 +520,12 @@ func (r opResult) makeDiskBackedSorterConstructor(
 func takeOverMetaInfo(target *colexecargs.OpWithMetaInfo, inputs []colexecargs.OpWithMetaInfo) {
 	for i := range inputs {
 		target.StatsCollectors = append(target.StatsCollectors, inputs[i].StatsCollectors...)
+		target.StreamingMetadataSources = append(target.StreamingMetadataSources, inputs[i].StreamingMetadataSources...)
 		target.MetadataSources = append(target.MetadataSources, inputs[i].MetadataSources...)
 		target.ToClose = append(target.ToClose, inputs[i].ToClose...)
-		inputs[i].MetadataSources = nil
 		inputs[i].StatsCollectors = nil
+		inputs[i].StreamingMetadataSources = nil
+		inputs[i].MetadataSources = nil
 		inputs[i].ToClose = nil
 	}
 }
@@ -615,9 +621,9 @@ func (r opResult) createAndWrapRowSource(
 
 // MaybeRemoveRootColumnarizer examines whether r represents such a tree of
 // operators that has a columnarizer as its root with no responsibility over
-// other meta components. If that's the case, the input to the columnarizer is
-// returned and the columnarizer is marked as removed from the flow; otherwise,
-// nil is returned.
+// other meta components (streaming metadata sources are ignored). If that's the
+// case, the input to the columnarizer is returned and the columnarizer is
+// marked as removed from the flow; otherwise, nil is returned.
 func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSource {
 	root := r.Root
 	if util.CrdbTestBuild {
@@ -768,6 +774,7 @@ func NewColOperator(
 				result.Root = colexec.NewInvariantsChecker(result.Root)
 			}
 			result.KVReader = scanOp
+			result.StreamingMetadataSources = append(result.StreamingMetadataSources, scanOp)
 			result.MetadataSources = append(result.MetadataSources, result.Root.(colexecop.MetadataSource))
 			result.Releasables = append(result.Releasables, scanOp)
 
