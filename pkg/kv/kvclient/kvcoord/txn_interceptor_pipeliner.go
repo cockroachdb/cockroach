@@ -511,7 +511,10 @@ func (tp *txnPipeliner) updateLockTracking(
 	if br == nil {
 		// The transaction cannot continue in this epoch whether this is
 		// a retryable error or not.
-		ba.LockSpanIterate(nil, tp.trackLocks)
+		// WIP: we need some way to indicate that a request definitely did not leave
+		// an intent. Otherwise, during hard rejects, we end up attempting to
+		// resolve intents and disrupting traffic that was not rejected.
+		//ba.LockSpanIterate(nil, tp.trackLocks)
 		return
 	}
 

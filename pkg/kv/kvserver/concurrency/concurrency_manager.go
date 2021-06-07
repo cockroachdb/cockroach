@@ -32,6 +32,37 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// MaxLockWaitQueueLength sets the maximum length of a lock wait-queue that the
+// request is willing to enter and wait in. Used to provide a release valve and
+// ensure some level of quality-of-service under severe per-key contention. If
+// set to a non-zero value and an existing lock wait-queue is already equal to
+// or exceeding this length, the request will be rejected eagerly instead of
+// entering the queue and waiting.
+var MaxLockWaitQueueLength = settings.RegisterIntSetting(
+	"kv.lock_table.maximum_lock_wait_queue_length",
+	"the maximum length of a lock wait-queue that requests are willing to enter "+
+		"and wait in. The setting can be used to ensure some level of quality-of-service "+
+		"under severe per-key contention. If set to a non-zero value and an existing lock "+
+		"wait-queue is already equal to or exceeding this length, requests will be rejected "+
+		"eagerly instead of entering the queue and waiting. Set to 0 to disable.",
+	0,
+	func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("cannot be set to a negative value: %d", v)
+		}
+		if v == 0 {
+			return nil // disabled
+		}
+		// Don't let the setting be dropped below a reasonable value that we don't
+		// expect to impact internal transaction processing.
+		const minSafeMaxLength = 3
+		if v < minSafeMaxLength {
+			return errors.Errorf("cannot be set below %d: %d", minSafeMaxLength, v)
+		}
+		return nil
+	},
+)
+
 // DiscoveredLocksThresholdToConsultFinalizedTxnCache sets a threshold as
 // mentioned in the description string. The default of 200 is somewhat
 // arbitrary but should suffice for small OLTP transactions. Given the default
@@ -213,6 +244,9 @@ func (m *managerImpl) sequenceReqWithGuard(
 		if req.LockSpans.Empty() {
 			return nil, nil
 		}
+
+		// Set the request's MaxWaitQueueLength based on the cluster setting.
+		g.Req.MaxLockWaitQueueLength = int(MaxLockWaitQueueLength.Get(&m.st.SV))
 
 		if g.EvalKind == OptimisticEval {
 			if g.ltg != nil {

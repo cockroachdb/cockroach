@@ -280,6 +280,13 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// request's transaction is sending multiple requests concurrently.
 				// Proceed with waiting without pushing anyone.
 
+			case waitQueueMaxLengthExceeded:
+				// The request attempted to wait in a lock wait-queue whose length was
+				// already equal to or exceeding the request's configured maximum. As a
+				// result, the request was rejected.
+				// WIP: this should be a structured error.
+				return roachpb.NewErrorf(state.String())
+
 			case doneWaiting:
 				// The request has waited for all conflicting locks to be released
 				// and is at the front of any lock wait-queues. It can now stop
@@ -770,7 +777,7 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 			}
 			h.tBegin = timeutil.Now()
 		}
-	case waitElsewhere, doneWaiting:
+	case waitElsewhere, waitQueueMaxLengthExceeded, doneWaiting:
 		// If we have an event, emit it now and that's it - the case we're in
 		// does not give us a new transaction/key.
 		if h.ev != nil {

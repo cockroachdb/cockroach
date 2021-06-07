@@ -183,6 +183,9 @@ func (g *ycsb) Hooks() workload.Hooks {
 				g.readFreq = 0.5
 				g.readModifyWriteFreq = 0.5
 				g.requestDistribution = "zipfian"
+			case "U":
+				g.updateFreq = 1
+				g.requestDistribution = "uniform"
 			default:
 				return errors.Errorf("Unknown workload: %q", g.workload)
 			}
