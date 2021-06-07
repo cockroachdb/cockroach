@@ -526,7 +526,7 @@ user root
 query T
 SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-5096189069466142898):::INT8);
 ----
-/Table/32/???/9/6/81
+/ProtectedTimestampsRecordsTable/32/???/9/6/81
 
 subtest max_retry_counter
 # Verify that the max_retry counter in statement stats actually increases with retries.

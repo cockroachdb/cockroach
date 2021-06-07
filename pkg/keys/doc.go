@@ -263,7 +263,6 @@ var _ = [...]interface{}{
 	// 	3. System tenant SQL keys: This is where we store all system-tenant
 	// 	table data.
 	TableDataMin,
-	NamespaceTableMin,
 	UserTableDataMin,
 	TableDataMax,
 
