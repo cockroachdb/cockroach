@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -38,7 +39,7 @@ func GetCumulativeContentionTime(ctx context.Context) time.Duration {
 	}
 	var ev roachpb.ContentionEvent
 	for i := range recording {
-		recording[i].Structured(func(any *pbtypes.Any) {
+		if err := recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
 			if !pbtypes.Is(any, &ev) {
 				return
 			}
@@ -46,7 +47,10 @@ func GetCumulativeContentionTime(ctx context.Context) time.Duration {
 				return
 			}
 			cumulativeContentionTime += ev.Duration
-		})
+		}); err != nil {
+			log.Errorf(ctx, "failed to collect contention time for all spans: %+v", err)
+			return cumulativeContentionTime
+		}
 	}
 	return cumulativeContentionTime
 }

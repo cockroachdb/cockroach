@@ -875,7 +875,7 @@ func TestRouterDiskSpill(t *testing.T) {
 					var stats execinfrapb.ComponentStats
 					var err error
 					var unmarshalled bool
-					span.Structured(func(any *pbtypes.Any) {
+					require.NoError(t, span.Structured(func(any *pbtypes.Any, _ time.Time) {
 						if !pbtypes.Is(any, &stats) {
 							return
 						}
@@ -883,7 +883,7 @@ func TestRouterDiskSpill(t *testing.T) {
 							return
 						}
 						unmarshalled = true
-					})
+					}))
 					require.NoError(t, err)
 					require.True(t, unmarshalled)
 					require.True(t, stats.Inputs[0].NumTuples.HasValue())

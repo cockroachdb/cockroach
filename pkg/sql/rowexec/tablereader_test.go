@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTableReader(t *testing.T) {
@@ -438,14 +440,14 @@ func TestLimitScans(t *testing.T) {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
 			stats := execinfrapb.ComponentStats{}
-			span.Structured(func(item *types.Any) {
+			require.NoError(t, span.Structured(func(item *types.Any, _ time.Time) {
 				if !types.Is(item, &stats) {
 					return
 				}
 				if err := types.UnmarshalAny(item, &stats); err != nil {
 					t.Fatal(err)
 				}
-			})
+			}))
 
 			if stats.KV.TuplesRead.Value() != limit {
 				t.Fatalf("read %d rows, but stats counted: %s", limit, stats.KV.TuplesRead)
