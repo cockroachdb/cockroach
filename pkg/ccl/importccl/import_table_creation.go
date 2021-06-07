@@ -394,8 +394,8 @@ func (r *fkResolver) LookupObject(
 // LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (r fkResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
-) (found bool, scMeta resolver.SchemaMeta, err error) {
-	return false, nil, errSchemaResolver
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
+	return false, scMeta, errSchemaResolver
 }
 
 // LookupTableByID implements the sql.SchemaResolver interface.

@@ -154,13 +154,6 @@ type Descriptor interface {
 type DatabaseDescriptor interface {
 	Descriptor
 
-	// Note: Prior to user-defined schemas, databases were the schema meta for
-	// objects.
-	//
-	// TODO(ajwerner): Remove this in the 20.2 cycle as part of user-defined
-	// schemas.
-	SchemaMeta()
-
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
 	GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig

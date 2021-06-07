@@ -74,6 +74,3 @@ type ResolvedObjectPrefix struct {
 	// Schema is the parent schema.
 	Schema SchemaDescriptor
 }
-
-// SchemaMeta implements the SchemaMeta interface.
-func (*ResolvedObjectPrefix) SchemaMeta() {}

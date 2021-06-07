@@ -16,8 +16,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,8 +41,6 @@ type knownSchema struct {
 	tables []tree.Name
 }
 
-func (*knownSchema) SchemaMeta() {}
-
 type knownCatalog struct {
 	ctName  tree.Name
 	schemas []knownSchema
@@ -48,28 +48,36 @@ type knownCatalog struct {
 
 // LookupSchema implements the TableNameResolver interface.
 func (f *fakeMetadata) LookupSchema(
-	_ context.Context, dbName, scName string,
-) (found bool, scMeta resolver.SchemaMeta, err error) {
+	ctx context.Context, dbName, scName string,
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	defer func() {
 		f.t.Logf("LookupSchema(%s, %s) -> found %v meta %v err %v",
 			dbName, scName, found, scMeta, err)
 	}()
+	makeResolvedObjectPrefix := func() catalog.ResolvedObjectPrefix {
+		return catalog.ResolvedObjectPrefix{
+			Database: dbdesc.NewBuilder(&descpb.DatabaseDescriptor{Name: dbName}).
+				BuildImmutableDatabase(),
+			Schema: schemadesc.NewBuilder(&descpb.SchemaDescriptor{Name: scName}).
+				BuildImmutableSchema(),
+		}
+	}
 	for i := range f.knownVSchemas {
 		v := &f.knownVSchemas[i]
 		if scName == string(v.scName) {
 			// Virtual schema found, check that the db exists.
 			// The empty database is valid.
 			if dbName == "" {
-				return true, v, nil
+				return true, makeResolvedObjectPrefix(), nil
 			}
 			for j := range f.knownCatalogs {
 				c := &f.knownCatalogs[j]
 				if dbName == string(c.ctName) {
-					return true, v, nil
+					return true, makeResolvedObjectPrefix(), nil
 				}
 			}
 			// No valid database, schema is invalid.
-			return false, nil, nil
+			return false, catalog.ResolvedObjectPrefix{}, nil
 		}
 	}
 	for i := range f.knownCatalogs {
@@ -78,13 +86,13 @@ func (f *fakeMetadata) LookupSchema(
 			for j := range c.schemas {
 				s := &c.schemas[j]
 				if scName == string(s.scName) {
-					return true, s, nil
+					return true, makeResolvedObjectPrefix(), nil
 				}
 			}
 			break
 		}
 	}
-	return false, nil, nil
+	return false, catalog.ResolvedObjectPrefix{}, nil
 }
 
 // LookupObject implements the TableNameResolver interface.
@@ -434,7 +442,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 
 				var found bool
 				var scPrefix, ctPrefix string
-				var scMeta interface{}
+				var scMeta catalog.ResolvedObjectPrefix
 				var obMeta catalog.Descriptor
 				ctx := context.Background()
 				switch tpv := tp.(type) {
@@ -467,12 +475,8 @@ func TestResolveTablePatternOrName(t *testing.T) {
 				}
 
 				var scRes string
-				if scMeta != nil {
-					sc, ok := scMeta.(*knownSchema)
-					if !ok {
-						t.Fatalf("%s: scMeta not of correct type: %v", t.Name(), scMeta)
-					}
-					scRes = fmt.Sprintf("%s.%s", ctPrefix, sc.scName)
+				if scMeta != (catalog.ResolvedObjectPrefix{}) {
+					scRes = fmt.Sprintf("%s.%s", scMeta.Database.GetName(), scMeta.Schema.GetName())
 				}
 				if obMeta != nil {
 					obIdx := obMeta.GetID()

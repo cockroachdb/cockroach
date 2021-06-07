@@ -164,7 +164,7 @@ func (oc *optCatalog) ResolveSchema(
 	}
 
 	oc.tn.ObjectNamePrefix = *name
-	found, prefixI, err := resolver.ResolveObjectNamePrefix(
+	found, prefix, err := resolver.ResolveObjectNamePrefix(
 		ctx, oc.planner, oc.planner.CurrentDatabase(),
 		oc.planner.CurrentSearchPath(), &oc.tn.ObjectNamePrefix,
 	)
@@ -182,7 +182,6 @@ func (oc *optCatalog) ResolveSchema(
 		)
 	}
 
-	prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 	return &optSchema{
 		planner:  oc.planner,
 		database: prefix.Database,
@@ -1763,11 +1762,11 @@ func newOptVirtualTable(
 	id := cat.StableID(desc.GetID())
 	if name.Catalog() != "" {
 		// TODO(radu): it's unfortunate that we have to lookup the schema again.
-		_, prefixI, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
+		found, prefix, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
 		if err != nil {
 			return nil, err
 		}
-		if prefixI == nil {
+		if !found {
 			// The database was not found. This can happen e.g. when
 			// accessing a virtual schema over a non-existent
 			// database. This is a common scenario when the current db
@@ -1780,7 +1779,6 @@ func newOptVirtualTable(
 			// both cases.
 			id |= cat.StableID(math.MaxUint32) << 32
 		} else {
-			prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 			id |= cat.StableID(prefix.Database.GetID()) << 32
 		}
 	}

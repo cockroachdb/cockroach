@@ -30,7 +30,9 @@ go_test(
     deps = [
         ":resolver",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",

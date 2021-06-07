@@ -120,7 +120,7 @@ func (p *planner) ResolveTargetObject(
 	namePrefix tree.ObjectNamePrefix,
 	err error,
 ) {
-	var prefix *catalog.ResolvedObjectPrefix
+	var prefix catalog.ResolvedObjectPrefix
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
 	})
@@ -133,11 +133,11 @@ func (p *planner) ResolveTargetObject(
 // LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
-) (found bool, prefix resolver.SchemaMeta, err error) {
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
 	if err != nil || dbDesc == nil {
-		return false, dbDesc, err
+		return false, catalog.ResolvedObjectPrefix{}, err
 	}
 	sc := p.Accessor()
 	var resolvedSchema catalog.SchemaDescriptor
@@ -145,9 +145,9 @@ func (p *planner) LookupSchema(
 		ctx, p.txn, dbDesc.GetID(), scName, p.CommonLookupFlags(false /* required */),
 	)
 	if err != nil || resolvedSchema == nil {
-		return false, nil, err
+		return false, catalog.ResolvedObjectPrefix{}, err
 	}
-	return true, &catalog.ResolvedObjectPrefix{
+	return true, catalog.ResolvedObjectPrefix{
 		Database: dbDesc,
 		Schema:   resolvedSchema,
 	}, nil
