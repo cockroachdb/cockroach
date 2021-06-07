@@ -70,9 +70,9 @@ type Reader interface {
 	// IterateStatementStats.
 	IterateTransactionStats(context.Context, *IteratorOptions, TransactionVisitor) error
 
-	// IterateAppLevelTransactionStats iterates through all the collected app-level
+	// IterateAggregatedTransactionStats iterates through all the collected app-level
 	// transactions statistics. It behaves similarly to IterateStatementStats.
-	IterateAppLevelTransactionStats(context.Context, *IteratorOptions, AppLevelTransactionVisitor) error
+	IterateAggregatedTransactionStats(context.Context, *IteratorOptions, AggregatedTransactionVisitor) error
 
 	// GetStatementStats performs a point lookup of statement statistics for a
 	// given key.
@@ -107,11 +107,11 @@ type StatementVisitor func(*roachpb.CollectedStatementStatistics) error
 // encountered when calling the visitor, the iteration is aborted.
 type TransactionVisitor func(TransactionFingerprintID, *roachpb.CollectedTransactionStatistics) error
 
-// AppLevelTransactionVisitor is the callback invoked when iterate through
+// AggregatedTransactionVisitor is the callback invoked when iterate through
 // transaction statistics collected at the application level using
-// IterateAppLevelTransactionStats(). If an error is encountered when calling
+// IterateAggregatedTransactionStats(). If an error is encountered when calling
 // the visitor, the iteration is aborted.
-type AppLevelTransactionVisitor func(appName string, statistics *roachpb.TxnStats) error
+type AggregatedTransactionVisitor func(appName string, statistics *roachpb.TxnStats) error
 
 // StatsCollector is an interface that collects statistics for transactions and
 // statements for the entire lifetime of a session.

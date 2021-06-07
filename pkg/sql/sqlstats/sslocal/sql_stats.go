@@ -11,19 +11,14 @@
 package sslocal
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"math"
-	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -54,7 +49,7 @@ type sqlStats struct {
 		// lastReset is the time at which the app containers were reset.
 		lastReset time.Time
 		// apps is the container for all the per-application statistics objects.
-		apps map[string]*appStats
+		apps map[string]*ssmemstorage.StatsContainer
 	}
 
 	atomic struct {
@@ -99,25 +94,26 @@ func newSQLStats(
 		resetInterval:              resetInterval,
 		flushTarget:                flushTarget,
 	}
-	s.mu.apps = make(map[string]*appStats)
+	s.mu.apps = make(map[string]*ssmemstorage.StatsContainer)
 	s.mu.mon = monitor
 	s.mu.mon.Start(context.Background(), parentMon, mon.BoundAccount{})
 	return s
 }
 
-func (s *sqlStats) getStatsForApplication(appName string) *appStats {
+func (s *sqlStats) getStatsForApplication(appName string) *ssmemstorage.StatsContainer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a, ok := s.mu.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{
-		st:       s.st,
-		sqlStats: s,
-		acc:      s.mu.mon.MakeBoundAccount(),
-		stmts:    make(map[stmtKey]*stmtStats),
-		txns:     make(map[sqlstats.TransactionFingerprintID]*txnStats),
-	}
+	a := ssmemstorage.New(
+		s.st,
+		s.uniqueStmtFingerprintLimit,
+		s.uniqueTxnFingerprintLimit,
+		&s.atomic.uniqueStmtFingerprintCount,
+		&s.atomic.uniqueTxnFingerprintCount,
+		s.mu.mon,
+	)
 	s.mu.apps[appName] = a
 	return a
 }
@@ -139,12 +135,12 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 
 	// appStatsCopy will hold a snapshot of the stats being cleared
 	// to dump into target.
-	var appStatsCopy map[string]*appStats
+	var appStatsCopy map[string]*ssmemstorage.StatsContainer
 
 	s.mu.Lock()
 
 	if target != nil {
-		appStatsCopy = make(map[string]*appStats, len(s.mu.apps))
+		appStatsCopy = make(map[string]*ssmemstorage.StatsContainer, len(s.mu.apps))
 	}
 
 	// Clear the per-apps maps manually,
@@ -152,38 +148,19 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 	// pointer to its appStats object and will continue to
 	// accumulate data using that until it closes (or changes its
 	// application_name).
-	for appName, a := range s.mu.apps {
-		a.Lock()
+	for appName, statsContainer := range s.mu.apps {
+		if sqlstats.DumpStmtStatsToLogBeforeReset.Get(&s.st.SV) {
+			statsContainer.SaveToLog(ctx, appName)
+		}
 
 		// Save the existing data to logs.
-		// TODO(knz/dt): instead of dumping the stats to the log, save
-		// them in a SQL table so they can be inspected by the DBA and/or
 		// the UI.
-		if sqlstats.DumpStmtStatsToLogBeforeReset.Get(&a.st.SV) {
-			dumpStmtStats(ctx, appName, a.stmts)
-		}
-
 		// Only save a copy of a if we need to dump a copy of the stats.
 		if target != nil {
-			aCopy := &appStats{
-				st:       a.st,
-				sqlStats: s,
-				stmts:    a.stmts,
-				txns:     a.txns,
-			}
-			appStatsCopy[appName] = aCopy
+			appStatsCopy[appName] = statsContainer.ShallowClone()
 		}
 
-		atomic.AddInt64(&s.atomic.uniqueStmtFingerprintCount, int64(-len(a.stmts)))
-		atomic.AddInt64(&s.atomic.uniqueTxnFingerprintCount, int64(-len(a.txns)))
-
-		// Clear the map, to release the memory; make the new map somewhat already
-		// large for the likely future workload.
-		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
-		a.txns = make(map[sqlstats.TransactionFingerprintID]*txnStats, len(a.txns)/2)
-
-		a.acc.Empty(ctx)
-		a.Unlock()
+		statsContainer.Clear(ctx)
 	}
 	s.mu.lastReset = timeutil.Now()
 	s.mu.Unlock()
@@ -206,56 +183,4 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 	}
 
 	return err
-}
-
-// Save the existing data for an application to the info log.
-func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtStats) {
-	if len(stats) == 0 {
-		return
-	}
-	var buf bytes.Buffer
-	for key, s := range stats {
-		s.mu.Lock()
-		json, err := json.Marshal(s.mu.data)
-		s.mu.Unlock()
-		if err != nil {
-			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.String(), err)
-			continue
-		}
-		fmt.Fprintf(&buf, "%q: %s\n", key.String(), json)
-	}
-	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
-}
-
-func constructStatementIDFromStmtKey(key stmtKey) roachpb.StmtID {
-	return roachpb.ConstructStatementID(
-		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
-	)
-}
-
-func (s *sqlStats) getUnscrubbedTxnStats() []roachpb.CollectedTransactionStatistics {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var ret []roachpb.CollectedTransactionStatistics
-	for appName, a := range s.mu.apps {
-		a.Lock()
-		// guesstimate that we'll need apps*(transactions-per-app)
-		if cap(ret) == 0 {
-			ret =
-				make([]roachpb.CollectedTransactionStatistics, 0, len(a.txns)*len(s.mu.apps))
-		}
-		for _, stats := range a.txns {
-			stats.mu.Lock()
-			data := stats.mu.data
-			stats.mu.Unlock()
-
-			ret = append(ret, roachpb.CollectedTransactionStatistics{
-				StatementIDs: stats.statementIDs,
-				App:          appName,
-				Stats:        data,
-			})
-		}
-		a.Unlock()
-	}
-	return ret
 }

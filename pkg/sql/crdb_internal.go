@@ -1081,7 +1081,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
-		var appTxnStatsVisitor sqlstats.AppLevelTransactionVisitor
+		var appTxnStatsVisitor sqlstats.AggregatedTransactionVisitor
 		appTxnStatsVisitor = func(appName string, stat *roachpb.TxnStats) error {
 			return addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
@@ -1094,7 +1094,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			)
 		}
 
-		return sqlStats.IterateAppLevelTransactionStats(ctx, &sqlstats.IteratorOptions{
+		return sqlStats.IterateAggregatedTransactionStats(ctx, &sqlstats.IteratorOptions{
 			SortedAppNames: true,
 		}, appTxnStatsVisitor)
 	},
