@@ -174,11 +174,8 @@ type eventLogOptions struct {
 func (p *planner) logEventsWithOptions(
 	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
-	// TODO(thomas): place the redaction markers during the formatting
-	// and get rid of the call to redact.Sprint here.
-	// https://github.com/cockroachdb/cockroach/issues/65401
-	rawStmtString := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
-	redactableStmt := redact.Sprint(rawStmtString)
+
+	redactableStmt := formatStmtKeyAsRedactableString(p.extendedEvalCtx.VirtualSchemas, p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
 
 	commonPayload := sqlEventCommonExecPayload{
 		user:         p.User(),
@@ -187,6 +184,7 @@ func (p *planner) logEventsWithOptions(
 		placeholders: p.extendedEvalCtx.EvalContext.Placeholders.Values,
 		appName:      p.SessionData().ApplicationName,
 	}
+
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
 		1+depth,
