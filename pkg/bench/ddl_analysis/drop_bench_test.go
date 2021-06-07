@@ -15,19 +15,19 @@ import "testing"
 func BenchmarkDropRole(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name:  "drop 1 role",
-			setup: "CREATE ROLE a",
-			stmt:  "DROP ROLE a",
+			Name:  "drop 1 role",
+			Setup: "CREATE ROLE a",
+			Stmt:  "DROP ROLE a",
 		},
 		{
-			name:  "drop 2 roles",
-			setup: "CREATE ROLE a; CREATE ROLE b;",
-			stmt:  "DROP ROLE a, b",
+			Name:  "drop 2 roles",
+			Setup: "CREATE ROLE a; CREATE ROLE b;",
+			Stmt:  "DROP ROLE a, b",
 		},
 		{
-			name:  "drop 3 roles",
-			setup: "CREATE ROLE a; CREATE ROLE b; CREATE ROLE c;",
-			stmt:  "DROP ROLE a, b, c",
+			Name:  "drop 3 roles",
+			Setup: "CREATE ROLE a; CREATE ROLE b; CREATE ROLE c;",
+			Stmt:  "DROP ROLE a, b, c",
 		},
 	}
 
@@ -37,19 +37,19 @@ func BenchmarkDropRole(b *testing.B) {
 func BenchmarkDropTable(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name:  "drop 1 table",
-			setup: "CREATE TABLE t1()",
-			stmt:  "DROP TABLE t1",
+			Name:  "drop 1 table",
+			Setup: "CREATE TABLE t1()",
+			Stmt:  "DROP TABLE t1",
 		},
 		{
-			name:  "drop 2 tables",
-			setup: "CREATE TABLE t1(); CREATE TABLE t2();",
-			stmt:  "DROP TABLE t1,t2",
+			Name:  "drop 2 tables",
+			Setup: "CREATE TABLE t1(); CREATE TABLE t2();",
+			Stmt:  "DROP TABLE t1,t2",
 		},
 		{
-			name:  "drop 3 tables",
-			setup: "CREATE TABLE t1(); CREATE TABLE t2(); CREATE TABLE t3();",
-			stmt:  "DROP TABLE t1,t2,t3",
+			Name:  "drop 3 tables",
+			Setup: "CREATE TABLE t1(); CREATE TABLE t2(); CREATE TABLE t3();",
+			Stmt:  "DROP TABLE t1,t2,t3",
 		},
 	}
 
@@ -59,24 +59,24 @@ func BenchmarkDropTable(b *testing.B) {
 func BenchmarkDropView(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name:  "drop 1 view",
-			setup: "CREATE TABLE t(x INT); CREATE VIEW vx1 AS SELECT x FROM t",
-			stmt:  "DROP VIEW vx1",
+			Name:  "drop 1 view",
+			Setup: "CREATE TABLE t(x INT); CREATE VIEW vx1 AS SELECT x FROM t",
+			Stmt:  "DROP VIEW vx1",
 		},
 		{
-			name: "drop 2 views",
-			setup: `CREATE TABLE t(x INT); 
+			Name: "drop 2 views",
+			Setup: `CREATE TABLE t(x INT); 
 CREATE VIEW vx1 AS SELECT x FROM t;
 CREATE VIEW vx2 AS SELECT x FROM t;`,
-			stmt: "DROP VIEW vx1, vx2",
+			Stmt: "DROP VIEW vx1, vx2",
 		},
 		{
-			name: "drop 3 views",
-			setup: `CREATE TABLE t(x INT); 
+			Name: "drop 3 views",
+			Setup: `CREATE TABLE t(x INT); 
 CREATE VIEW vx1 AS SELECT x FROM t;
 CREATE VIEW vx2 AS SELECT x FROM t;
 CREATE VIEW vx3 AS SELECT x FROM t;`,
-			stmt: "DROP VIEW vx1,vx2,vx3",
+			Stmt: "DROP VIEW vx1,vx2,vx3",
 		},
 	}
 
@@ -86,19 +86,19 @@ CREATE VIEW vx3 AS SELECT x FROM t;`,
 func BenchmarkDropSequence(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name:  "drop 1 sequence",
-			setup: "CREATE SEQUENCE s",
-			stmt:  "DROP SEQUENCE s",
+			Name:  "drop 1 sequence",
+			Setup: "CREATE SEQUENCE s",
+			Stmt:  "DROP SEQUENCE s",
 		},
 		{
-			name:  "drop 2 sequences",
-			setup: "CREATE SEQUENCE s1; CREATE SEQUENCE s2;",
-			stmt:  "DROP SEQUENCE s1,s2",
+			Name:  "drop 2 sequences",
+			Setup: "CREATE SEQUENCE s1; CREATE SEQUENCE s2;",
+			Stmt:  "DROP SEQUENCE s1,s2",
 		},
 		{
-			name:  "drop 3 sequences",
-			setup: "CREATE SEQUENCE s1; CREATE SEQUENCE s2; CREATE SEQUENCE s3;",
-			stmt:  "DROP SEQUENCE s1,s2,s3",
+			Name:  "drop 3 sequences",
+			Setup: "CREATE SEQUENCE s1; CREATE SEQUENCE s2; CREATE SEQUENCE s3;",
+			Stmt:  "DROP SEQUENCE s1,s2,s3",
 		},
 	}
 
@@ -108,34 +108,34 @@ func BenchmarkDropSequence(b *testing.B) {
 func BenchmarkDropDatabase(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name: "drop database 0 tables",
-			setup: `CREATE DATABASE d; 
+			Name: "drop database 0 tables",
+			Setup: `CREATE DATABASE d; 
 USE d;`,
-			stmt: "DROP DATABASE d",
+			Stmt: "DROP DATABASE d",
 		},
 		{
-			name: "drop database 1 table",
-			setup: `CREATE DATABASE d; 
+			Name: "drop database 1 table",
+			Setup: `CREATE DATABASE d; 
 USE d;
 CREATE TABLE t()`,
-			stmt: "DROP DATABASE d",
+			Stmt: "DROP DATABASE d",
 		},
 		{
-			name: "drop database 2 tables",
-			setup: `CREATE DATABASE d; 
+			Name: "drop database 2 tables",
+			Setup: `CREATE DATABASE d; 
 USE d;
 CREATE TABLE t1();
 CREATE TABLE t2();`,
-			stmt: "DROP DATABASE d",
+			Stmt: "DROP DATABASE d",
 		},
 		{
-			name: "drop database 3 tables",
-			setup: `CREATE DATABASE d; 
+			Name: "drop database 3 tables",
+			Setup: `CREATE DATABASE d; 
 USE d;
 CREATE TABLE t1();
 CREATE TABLE t2();
 CREATE TABLE t3();`,
-			stmt: "DROP DATABASE d",
+			Stmt: "DROP DATABASE d",
 		},
 	}
 

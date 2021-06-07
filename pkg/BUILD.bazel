@@ -15,6 +15,7 @@ ALL_TESTS = [
     "//pkg/ccl/changefeedccl/schemafeed:schemafeed_test",
     "//pkg/ccl/changefeedccl:changefeedccl_test",
     "//pkg/ccl/cliccl:cliccl_test",
+    "//pkg/ccl/ddl_analysisccl:ddl_analysisccl_test",
     "//pkg/ccl/importccl:importccl_test",
     "//pkg/ccl/kvccl/kvfollowerreadsccl:kvfollowerreadsccl_test",
     "//pkg/ccl/kvccl/kvtenantccl:kvtenantccl_test",
