@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -414,4 +415,57 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 		// observed status to be set.
 		require.Equal(t, roachpb.ABORTED, th.mu.finalObservedStatus)
 	})
+}
+
+func heartbeaterRunning(th *txnHeartbeater) bool {
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	return th.heartbeatLoopRunningLocked()
+}
+
+// TestTxnHeartbeaterCommitLoopHandling tests that interceptor cancels
+// heartbeats early for rolled back transactions while keeping it untouched
+// for committed ones.
+func TestTxnHeartbeaterEndTxnLoopHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		transactionCommit      bool
+		expectHeartbeatRunning bool
+	}{
+		{true, true},
+		{false, false},
+	} {
+		t.Run(fmt.Sprintf("commit:%t", tc.transactionCommit), func(t *testing.T) {
+			ctx := context.Background()
+			txn := makeTxnProto()
+			th, _, _ := makeMockTxnHeartbeater(&txn)
+			defer th.stopper.Stop(ctx)
+
+			// Kick off the heartbeat loop.
+			key := roachpb.Key("a")
+			var ba roachpb.BatchRequest
+			ba.Header = roachpb.Header{Txn: txn.Clone()}
+			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+
+			br, pErr := th.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.True(t, heartbeaterRunning(&th), "heartbeat running")
+
+			// End transaction to validate heartbeat state.
+			var ba2 roachpb.BatchRequest
+			ba2.Header = roachpb.Header{Txn: txn.Clone()}
+			ba2.Add(&roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: key}, Commit: tc.transactionCommit})
+
+			th.mu.Lock()
+			br, pErr = th.SendLocked(ctx, ba2)
+			th.mu.Unlock()
+
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.Equal(t, tc.expectHeartbeatRunning, heartbeaterRunning(&th), "heartbeat loop state")
+		})
+	}
 }
