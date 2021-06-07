@@ -25,11 +25,11 @@ import (
 )
 
 func init() {
-	sql.InitializeMultiRegionMetadataCCL = initializeMultiRegionMetadata
-	sql.GetMultiRegionEnumAddValuePlacementCCL = getMultiRegionEnumAddValuePlacement
+	sql.InitializeMultiRegionMetadataCCL = InitializeMultiRegionMetadata
+	sql.GetMultiRegionEnumAddValuePlacementCCL = GetMultiRegionEnumAddValuePlacement
 }
 
-func initializeMultiRegionMetadata(
+func InitializeMultiRegionMetadata(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	execCfg *sql.ExecutorConfig,
@@ -125,7 +125,7 @@ func checkClusterSupportsMultiRegion(evalCtx *tree.EvalContext) error {
 	return nil
 }
 
-func getMultiRegionEnumAddValuePlacement(
+func GetMultiRegionEnumAddValuePlacement(
 	execCfg *sql.ExecutorConfig, typeDesc *typedesc.Mutable, region tree.Name,
 ) (tree.AlterTypeAddValue, error) {
 	if err := utilccl.CheckEnterpriseEnabled(
