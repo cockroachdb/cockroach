@@ -33,7 +33,7 @@ func (node *SetVar) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Values)
 		ctx.WriteString(")")
 	} else {
-		ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+		ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 			// Session var names never contain PII and should be distinguished
 			// for feature tracking purposes.
 			ctx.FormatNameP(&node.Name)
@@ -55,12 +55,20 @@ func (node *SetClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 		ctx.FormatNameP(&node.Name)
 	})
 
 	ctx.WriteString(" = ")
-	ctx.FormatNode(node.Value)
+
+	switch v := node.Value.(type) {
+	case *DBool, *DInt:
+		ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
+			ctx.FormatNode(v)
+		})
+	default:
+		ctx.FormatNode(v)
+	}
 }
 
 // SetTransaction represents a SET TRANSACTION statement.
@@ -103,5 +111,9 @@ type SetTracing struct {
 // Format implements the NodeFormatter interface.
 func (node *SetTracing) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET TRACING = ")
-	ctx.FormatNode(&node.Values)
+	// Set tracing values never contain PII and should be distinguished
+	// for feature tracking purposes.
+	ctx.WithFlags(ctx.flags&^FmtMarkRedactionNode, func() {
+		ctx.FormatNode(&node.Values)
+	})
 }
