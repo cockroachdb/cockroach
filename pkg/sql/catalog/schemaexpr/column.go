@@ -59,7 +59,7 @@ func dequalifyColumnRefs(
 					return false, nil, err
 				}
 				if c, ok := v.(*tree.ColumnItem); ok {
-					_, err := c.Resolve(ctx, &resolver)
+					_, err := colinfo.ResolveColumnItem(ctx, &resolver, c)
 					if err != nil {
 						return false, nil, err
 					}

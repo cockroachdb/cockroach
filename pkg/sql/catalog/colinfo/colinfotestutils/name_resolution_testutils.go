@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlutils
+package colinfotestutils
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -27,7 +28,7 @@ type ColumnItemResolverTester interface {
 	// GetColumnItemResolver returns the tree.ColumnItemResolver. Since any
 	// struct implementing ColumnItemResolverTester should also implement
 	// tree.ColumnItemResolver, this is basically an identity function.
-	GetColumnItemResolver() tree.ColumnItemResolver
+	GetColumnItemResolver() colinfo.ColumnItemResolver
 
 	// AddTable adds a table with the given column names to the
 	// tree.ColumnItemResolver.
@@ -36,12 +37,12 @@ type ColumnItemResolverTester interface {
 	// ResolveQualifiedStarTestResults returns the results of running
 	// RunResolveQualifiedStarTest on the tree.ColumnItemResolver.
 	ResolveQualifiedStarTestResults(
-		srcName *tree.TableName, srcMeta tree.ColumnSourceMeta,
+		srcName *tree.TableName, srcMeta colinfo.ColumnSourceMeta,
 	) (string, string, error)
 
 	// ResolveColumnItemTestResults returns the results of running
 	// RunResolveColumnItemTest on the tree.ColumnItemResolver.
-	ResolveColumnItemTestResults(colRes tree.ColumnResolutionResult) (string, error)
+	ResolveColumnItemTestResults(colRes colinfo.ColumnResolutionResult) (string, error)
 }
 
 func initColumnItemResolverTester(t *testing.T, ct ColumnItemResolverTester) {
@@ -88,7 +89,7 @@ func RunResolveQualifiedStarTest(t *testing.T, ct ColumnItemResolverTester) {
 					return "", "", fmt.Errorf("var name %s (%T) did not resolve to AllColumnsSelector, found %T instead",
 						v, v, c)
 				}
-				tn, res, err := acs.Resolve(context.Background(), resolver)
+				tn, res, err := colinfo.ResolveAllColumnsSelector(context.Background(), resolver, acs)
 				if err != nil {
 					return "", "", err
 				}
@@ -167,7 +168,7 @@ func RunResolveColumnItemTest(t *testing.T, ct ColumnItemResolverTester) {
 					return "", fmt.Errorf("var name %s (%T) did not resolve to ColumnItem, found %T instead",
 						v, v, c)
 				}
-				res, err := ci.Resolve(context.Background(), resolver)
+				res, err := colinfo.ResolveColumnItem(context.Background(), resolver, ci)
 				if err != nil {
 					return "", err
 				}

@@ -58,7 +58,7 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		return v.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		_, err := t.Resolve(context.TODO(), &v.resolver)
+		_, err := colinfo.ResolveColumnItem(context.TODO(), &v.resolver, t)
 		if err != nil {
 			v.err = err
 			return false, expr

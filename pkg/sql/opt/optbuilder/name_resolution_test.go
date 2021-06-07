@@ -14,16 +14,17 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo/colinfotestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
-var _ sqlutils.ColumnItemResolverTester = &scope{}
+var _ colinfotestutils.ColumnItemResolverTester = &scope{}
 
 // GetColumnItemResolver is part of the sqlutils.ColumnItemResolverTester
 // interface.
-func (s *scope) GetColumnItemResolver() tree.ColumnItemResolver {
+func (s *scope) GetColumnItemResolver() colinfo.ColumnItemResolver {
 	return s
 }
 
@@ -37,7 +38,7 @@ func (s *scope) AddTable(tabName tree.TableName, colNames []tree.Name) {
 // ResolveQualifiedStarTestResults is part of the
 // sqlutils.ColumnItemResolverTester interface.
 func (s *scope) ResolveQualifiedStarTestResults(
-	srcName *tree.TableName, srcMeta tree.ColumnSourceMeta,
+	srcName *tree.TableName, srcMeta colinfo.ColumnSourceMeta,
 ) (string, string, error) {
 	s, ok := srcMeta.(*scope)
 	if !ok {
@@ -55,7 +56,9 @@ func (s *scope) ResolveQualifiedStarTestResults(
 
 // ResolveColumnItemTestResults is part of the
 // sqlutils.ColumnItemResolverTester interface.
-func (s *scope) ResolveColumnItemTestResults(colRes tree.ColumnResolutionResult) (string, error) {
+func (s *scope) ResolveColumnItemTestResults(
+	colRes colinfo.ColumnResolutionResult,
+) (string, error) {
 	col, ok := colRes.(*scopeColumn)
 	if !ok {
 		return "", fmt.Errorf("resolver did not return *scopeColumn, found %T instead", colRes)
@@ -65,10 +68,10 @@ func (s *scope) ResolveColumnItemTestResults(colRes tree.ColumnResolutionResult)
 
 func TestResolveQualifiedStar(t *testing.T) {
 	s := &scope{}
-	sqlutils.RunResolveQualifiedStarTest(t, s)
+	colinfotestutils.RunResolveQualifiedStarTest(t, s)
 }
 
 func TestResolveColumnItem(t *testing.T) {
 	s := &scope{}
-	sqlutils.RunResolveColumnItemTest(t, s)
+	colinfotestutils.RunResolveColumnItemTest(t, s)
 }
