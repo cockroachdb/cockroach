@@ -22,7 +22,7 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
-var supportedSQLAlchemyTag = "rel_1_3_24"
+var supportedSQLAlchemyTag = "rel_1_4_17"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
@@ -155,7 +155,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	// will fail. And it is safe to swallow it here.
 	rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
 		`cd /mnt/data1/sqlalchemy/ && pytest --maxfail=0 \
-		--requirements=cockroachdb.sqlalchemy.test_requirements:Requirements \
+		--requirements=sqlalchemy_cockroachdb.requirements:Requirements \
 		--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable \
 		test/dialect/test_suite.py
 	`)
