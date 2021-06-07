@@ -51,7 +51,7 @@ func WithReplicationMode(
 // of nodes and the provided testing knobs applied to each of the nodes. Every
 // node is placed in its own locality, named "us-east1", "us-east2", and so on.
 func TestingCreateMultiRegionCluster(
-	t *testing.T, numServers int, knobs base.TestingKnobs, opts ...MultiRegionTestClusterParamsOption,
+	t testing.TB, numServers int, knobs base.TestingKnobs, opts ...MultiRegionTestClusterParamsOption,
 ) (*testcluster.TestCluster, *gosql.DB, func()) {
 	serverArgs := make(map[int]base.TestServerArgs)
 	regionNames := make([]string, numServers)
