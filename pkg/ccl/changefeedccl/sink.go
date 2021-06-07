@@ -411,27 +411,36 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) {
 	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
 }
 
+func (c saramaConfig) Validate() error {
+	// If Flush.Bytes > 0 or Flush.Messages > 1 without
+	// Flush.Frequency, sarama may wait forever to flush the
+	// messages to Kafka.  We want to guard against such
+	// configurations to ensure that we don't get into a situation
+	// where our call to Flush() would block forever.
+	if (c.Flush.Bytes > 0 || c.Flush.Messages > 1) && c.Flush.Frequency == 0 {
+		return errors.New("Flush.Frequency must be > 0 when Flush.Bytes > 0 or Flush.Messages > 1")
+	}
+	return nil
+}
+
 var defaultSaramaConfig = func() *saramaConfig {
 	config := &saramaConfig{}
 
-	// When we emit messages to sarama, they're placed in a queue (as does any
-	// reasonable kafka producer client). When our sink's Flush is called, we
-	// have to wait for all buffered and inflight requests to be sent and then
-	// acknowledged. Quite unfortunately, we have no way to hint to the producer
-	// that it should immediately send out whatever is buffered. This
-	// configuration can have a dramatic impact on how quickly this happens
-	// naturally (and some configurations will block forever!).
+	// When we emit messages to sarama, they're placed in a queue
+	// (as does any reasonable kafka producer client). When our
+	// sink's Flush is called, we have to wait for all buffered
+	// and inflight requests to be sent and then
+	// acknowledged. Quite unfortunately, we have no way to hint
+	// to the producer that it should immediately send out
+	// whatever is buffered. This configuration can have a
+	// dramatic impact on how quickly this happens naturally (and
+	// some configurations will block forever!).
 	//
-	// We can configure the producer to send out its batches based on number of
-	// messages and/or total buffered message size and/or time. If none of them
-	// are set, it uses some defaults, but if any of the three are set, it does
-	// no defaulting. Which means that if `Flush.Messages` is set to 10 and
-	// nothing else is set, then 9/10 times `Flush` will block forever. We can
-	// work around this by also setting `Flush.Frequency` but a cleaner way is
-	// to set `Flush.Messages` to 1. In the steady state, this sends a request
-	// with some messages, buffers any messages that come in while it is in
-	// flight, then sends those out.
-	config.Flush.Messages = 1
+	// The default configuration of all 0 values will send
+	// messages as quickly as possible.
+	config.Flush.Messages = 0
+	config.Flush.Frequency = jsonDuration(0)
+	config.Flush.Bytes = 0
 
 	// This works around what seems to be a bug in sarama where it isn't
 	// computing the right value to compare against `Producer.MaxMessageBytes`
@@ -444,15 +453,6 @@ var defaultSaramaConfig = func() *saramaConfig {
 	// this workaround is the one that's been running in roachtests and I'd want
 	// to test this one more before changing it.
 	config.Flush.MaxMessages = 1000
-
-	// Setting Frequency to 0 disables time-based flushes. This is
-	// OK because we set Flush.Messages = 1, which should mean
-	// that sarama will always try to flush its buffer if it has
-	// at least 1 message in it.
-	//
-	// This will produce a warning at the start of a changefeed
-	// that may alarm some users.
-	config.Flush.Frequency = jsonDuration(0)
 
 	return config
 }()
@@ -543,6 +543,10 @@ func makeKafkaSink(
 		return nil, errors.Wrapf(err, "failed to parse sarama config; check changefeed.experimental_kafka_config setting")
 	}
 	saramaCfg.Apply(config)
+
+	if err := saramaCfg.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid sarama configuration")
+	}
 
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
