@@ -371,6 +371,14 @@ type Request struct {
 	// transactions.
 	WaitPolicy lock.WaitPolicy
 
+	// The maximum length of a lock wait-queue that the request is willing
+	// to enter and wait in. Used to provide a release valve and ensure some
+	// level of quality-of-service under severe per-key contention. If set
+	// to a non-zero value and an existing lock wait-queue is already equal
+	// to or exceeding this length, the request will be rejected eagerly
+	// with a WriteIntentError instead of entering the queue and waiting.
+	MaxLockWaitQueueLength int
+
 	// The individual requests in the batch.
 	Requests []roachpb.RequestUnion
 

@@ -55,7 +55,7 @@ new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 
  Creates a TxnMeta.
 
-new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+...
+new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [max-lock-wait-queue-length=<int>]
 ----
 
  Creates a Request.
@@ -250,11 +250,16 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
+				var maxLockWaitQueueLength int
+				if d.HasArg("max-lock-wait-queue-length") {
+					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
+				}
 				spans := scanSpans(t, d, ts)
 				req := Request{
-					Timestamp:  ts,
-					LatchSpans: spans,
-					LockSpans:  spans,
+					Timestamp:              ts,
+					MaxLockWaitQueueLength: maxLockWaitQueueLength,
+					LatchSpans:             spans,
+					LockSpans:              spans,
 				}
 				if txnMeta != nil {
 					// Update the transaction's timestamp, if necessary. The transaction
@@ -479,12 +484,16 @@ func TestLockTableBasic(t *testing.T) {
 					typeStr = "waitElsewhere"
 				case waitSelf:
 					return str + "state=waitSelf"
+				case waitQueueMaxLengthExceeded:
+					typeStr = "waitQueueMaxLengthExceeded"
 				case doneWaiting:
 					var toResolveStr string
 					if stateTransition {
 						toResolveStr = intentsToResolveToStr(g.ResolveBeforeScanning(), true)
 					}
 					return str + "state=doneWaiting" + toResolveStr
+				default:
+					d.Fatalf(t, "unexpected state: %v", state.kind)
 				}
 				id := state.txn.ID
 				var txnS string

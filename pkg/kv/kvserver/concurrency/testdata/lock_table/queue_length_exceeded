@@ -1,0 +1,186 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-txn txn=txn3 ts=10 epoch=0
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=w@a
+----
+
+new-request r=req2 txn=txn2 ts=10 spans=w@a
+----
+
+new-request r=req3 txn=txn3 ts=10 spans=w@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+scan r=req2
+----
+start-waiting: true
+
+scan r=req3
+----
+start-waiting: true
+
+print
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 2
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Read requests do not observe a queue length limit, because they don't wait in the
+# queuedWriters list.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn4 ts=10 epoch=0
+----
+
+new-request r=req4 txn=txn4 ts=10 spans=r@a max-lock-wait-queue-length=2
+----
+
+scan r=req4
+----
+start-waiting: true
+
+guard-state r=req4
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-access=read
+
+dequeue r=req4
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 2
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Write requests with a large enough MaxLockWaitQueueLength do not throw an error.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn5 ts=10 epoch=0
+----
+
+new-request r=req5 txn=txn5 ts=10 spans=w@a max-lock-wait-queue-length=3
+----
+
+scan r=req5
+----
+start-waiting: true
+
+guard-state r=req5
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+
+dequeue r=req5
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 2
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Write requests with a sufficiently low MaxLockWaitQueueLength throw an error.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn6 ts=10 epoch=0
+----
+
+new-request r=req6 txn=txn6 ts=10 spans=w@a max-lock-wait-queue-length=2
+----
+
+scan r=req6
+----
+start-waiting: true
+
+guard-state r=req6
+----
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
+
+dequeue r=req6
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 2
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Same as previous two cases, but for non-transactional writes.
+# ---------------------------------------------------------------------------------
+
+new-request r=req7 txn=none ts=10 spans=w@a max-lock-wait-queue-length=3
+----
+
+scan r=req7
+----
+start-waiting: true
+
+guard-state r=req7
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+
+dequeue r=req7
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 2
+local: num=0
+
+new-request r=req8 txn=none ts=10 spans=w@a max-lock-wait-queue-length=2
+----
+
+scan r=req8
+----
+start-waiting: true
+
+guard-state r=req8
+----
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
+
+dequeue r=req8
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+   queued writers:
+    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 2
+local: num=0
