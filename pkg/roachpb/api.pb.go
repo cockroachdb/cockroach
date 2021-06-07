@@ -6220,7 +6220,7 @@ type Header struct {
 	// request types:
 	// - ScanRequest
 	// - ReverseScanRequest
-	// - DeleteRangeRequest
+	// - DeleteRangeRequest(*)
 	// - GetRequest
 	// - RevertRangeRequest
 	// - ResolveIntentRangeRequest
@@ -6229,6 +6229,9 @@ type Header struct {
 	// the limit has no effect on them:
 	// - QueryIntentRequest
 	// - EndTxnRequest
+	//
+	// [*] DeleteRangeRequests are generally not allowed to be batched together
+	// with a commit (i.e. 1PC), except if Require1PC is also set. See #37457.
 	//
 	// Forward requests and reverse requests cannot be mixed in the same batch if
 	// a limit is set. There doesn't seem to be a fundamental reason for this
