@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rttanalysis",
+    srcs = [
+        "rtt_analysis_bench.go",
+        "validate_benchmark_data.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/bench/rttanalysis",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/sql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "rttanalysis_test",
+    srcs = [
+        "alter_table_bench_test.go",
+        "bench_test.go",
+        "create_alter_role_bench_test.go",
+        "drop_bench_test.go",
+        "grant_revoke_bench_test.go",
+        "grant_revoke_role_bench_test.go",
+        "orm_queries_bench_test.go",
+        "system_bench_test.go",
+        "truncate_bench_test.go",
+        "validate_benchmark_data_test.go",
+        "virtual_table_bench_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":rttanalysis"],
+    deps = [
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/randutil",
+    ],
+)

@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rttanalysisccl",
+    srcs = ["rtt_analysis_bench.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/benchccl/rttanalysisccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/bench/rttanalysis",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
+        "//pkg/sql",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+    ],
+)
+
+go_test(
+    name = "rttanalysisccl_test",
+    srcs = [
+        "bench_test.go",
+        "multi_region_bench_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":rttanalysisccl"],
+    deps = [
+        "//pkg/bench/rttanalysis",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/randutil",
+    ],
+)

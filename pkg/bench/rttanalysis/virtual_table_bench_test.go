@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bench
+package rttanalysis
 
 import "testing"
 
@@ -17,22 +17,22 @@ func BenchmarkVirtualTableQueries(b *testing.B) {
 		// This benchmark should perform exactly one kv operation to fetch all of
 		// the descriptors.
 		{
-			name: "select crdb_internal.tables with 1 fk",
-			setup: `
+			Name: "select crdb_internal.tables with 1 fk",
+			Setup: `
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 `,
-			stmt: `SELECT * FROM "".crdb_internal.tables`,
+			Stmt: `SELECT * FROM "".crdb_internal.tables`,
 		},
 		{
 			// We expect this to perform exactly one kv operation to fetch all of
 			// the descriptors.
-			name: "select crdb_internal.invalid_objects with 1 fk",
-			setup: `
+			Name: "select crdb_internal.invalid_objects with 1 fk",
+			Setup: `
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 `,
-			stmt: `SELECT * FROM "".crdb_internal.invalid_objects`,
+			Stmt: `SELECT * FROM "".crdb_internal.invalid_objects`,
 		},
 	}
 
