@@ -514,6 +514,32 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expected, cfg)
 	})
+	t.Run("validate returns nil for valid flush configuration", func(t *testing.T) {
+		opts := make(map[string]string)
+
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"Messages": 1000, "Frequency": "1s"}}`
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate())
+
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"Messages": 1}}`
+		cfg, err = getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.NoError(t, cfg.Validate())
+	})
+	t.Run("validate returns error for bad flush configurationg", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"Messages": 1000}}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Error(t, cfg.Validate())
+
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"Bytes": 10}}`
+		cfg, err = getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Error(t, cfg.Validate())
+	})
 	t.Run("apply parses valid version", func(t *testing.T) {
 		opts := make(map[string]string)
 		opts[changefeedbase.OptKafkaSinkConfig] = `{"version": "0.8.2.0"}`
