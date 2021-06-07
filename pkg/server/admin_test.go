@@ -562,10 +562,6 @@ func TestRangeCount(t *testing.T) {
 		}
 
 		sysDBMap["public.descriptor"] = 1
-		// public.namespace resolves to public.namespace2, which means that we
-		// double count public.namespace2's range in this test. Set it to 0 to remove
-		// this double counting.
-		sysDBMap["public.namespace"] = 0
 	}
 	var systemTableRangeCount int64
 	for _, n := range sysDBMap {

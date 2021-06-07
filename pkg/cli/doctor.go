@@ -355,7 +355,13 @@ func fromZipDir(
 		return nil, nil, nil, err
 	}
 
-	namespaceFile, err := os.Open(maybePrint("system.namespace2.txt"))
+	// Handle old debug zips where the namespace table dump is from namespace2.
+	namespaceFileName := "system.namespace2.txt"
+	if _, err := os.Stat(namespaceFileName); err != nil {
+		namespaceFileName = "system.namespace.txt"
+	}
+
+	namespaceFile, err := os.Open(maybePrint(namespaceFileName))
 	if err != nil {
 		return nil, nil, nil, err
 	}

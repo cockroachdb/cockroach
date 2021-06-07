@@ -144,8 +144,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
-		databaseID, desiredSchemaID, tableDesc.Name)
+	newTbKey := catalogkv.MakeObjectNameKey(databaseID, desiredSchemaID, tableDesc.Name)
 
 	if err := p.writeNameKey(ctx, newTbKey, tableDesc.ID); err != nil {
 		return err
