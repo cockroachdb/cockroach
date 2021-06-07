@@ -506,7 +506,7 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      {{- else if ne .ReportingSafeRe "" }}
      if {{ .ReportingSafeRe }}.MatchString(m.{{.FieldName}}) {
        b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.{{.FieldName}})))))
-     } else {
+	} else {
        b = append(b, redact.StartMarker()...)
        b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.{{.FieldName}})))))
        b = append(b, redact.EndMarker()...)
