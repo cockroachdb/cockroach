@@ -1151,12 +1151,6 @@ testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow:
 	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
-.PHONY: upload-coverage
-upload-coverage: bin/.bootstrap
-	$(GO) install github.com/wadey/gocovmerge
-	$(GO) install github.com/mattn/goveralls
-	@build/upload-coverage.sh
-
 .PHONY: acceptance
 acceptance: TESTTIMEOUT := $(ACCEPTANCETIMEOUT)
 acceptance: export TESTTIMEOUT := $(TESTTIMEOUT)
