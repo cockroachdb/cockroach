@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -38,6 +39,13 @@ const (
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
 	CredentialsParam = "CREDENTIALS"
+)
+
+// featureBackupEnabled is used to enable and disable the BACKUP feature.
+var gcsChunkingEnabled = settings.RegisterBoolSetting(
+	"cloudstorage.gs.chunking.enabled",
+	"enable chunking of file upload to Google Cloud Storage",
+	true, /* default */
 )
 
 func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
@@ -158,6 +166,9 @@ func makeGCSStorage(
 
 func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+	if !gcsChunkingEnabled.Get(&g.settings.SV) {
+		w.ChunkSize = 0
+	}
 	return w, nil
 }
 
