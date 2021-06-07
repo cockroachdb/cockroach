@@ -875,7 +875,7 @@ func TestRouterDiskSpill(t *testing.T) {
 					var stats execinfrapb.ComponentStats
 					var err error
 					var unmarshalled bool
-					span.Structured(func(any *pbtypes.Any) {
+					span.Structured(func(any *pbtypes.Any, _ time.Time) {
 						if !pbtypes.Is(any, &stats) {
 							return
 						}

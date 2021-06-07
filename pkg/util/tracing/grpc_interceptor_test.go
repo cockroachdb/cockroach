@@ -209,14 +209,17 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
 			require.NoError(t, types.UnmarshalAny(recAny, &rec))
-			require.Len(t, rec.InternalStructured, 1)
+			require.Len(t, rec.DeprecatedInternalStructured, 1)
+			require.Len(t, rec.StructuredRecords, 1)
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
 			sp.Finish()
+			var deprecatedN int
 			var n int
 			finalRecs := sp.GetRecording()
 			sp.SetVerbose(false)
 			for _, rec := range finalRecs {
-				n += len(rec.InternalStructured)
+				deprecatedN += len(rec.DeprecatedInternalStructured)
+				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
 				// in this test we are pulling the recorder in the handler impl,
 				// but the span is only closed in the interceptor. Additionally,
@@ -227,6 +230,7 @@ func TestGRPCInterceptors(t *testing.T) {
 				delete(rec.Tags, "_unfinished")
 				delete(rec.Tags, "_verbose")
 			}
+			require.Equal(t, 1, deprecatedN)
 			require.Equal(t, 1, n)
 
 			exp := fmt.Sprintf(`

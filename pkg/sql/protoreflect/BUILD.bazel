@@ -31,6 +31,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//types",
