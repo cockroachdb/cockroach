@@ -311,7 +311,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 		)
 		if err != nil {
 			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
-			if grpcutil.IsAuthError(err) {
+			if grpcutil.IsConnectionRejected(err) {
 				return
 			}
 			firstAttempt = false

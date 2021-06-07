@@ -1061,7 +1061,8 @@ func (ctx *Context) grpcDialNodeInternal(
 			if err := ctx.Stopper.RunAsyncTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					err := ctx.runHeartbeat(conn, target, redialChan)
-					if err != nil && !grpcutil.IsClosedConnection(err) && !grpcutil.IsAuthError(err) {
+					if err != nil && !grpcutil.IsClosedConnection(err) &&
+						!grpcutil.IsConnectionRejected(err) {
 						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 					}
 					ctx.removeConn(conn, thisConnKeys...)
@@ -1177,7 +1178,7 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 
-			if grpcutil.IsAuthError(err) {
+			if grpcutil.IsConnectionRejected(err) {
 				returnErr = true
 			}
 
