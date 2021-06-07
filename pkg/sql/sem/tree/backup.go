@@ -176,7 +176,11 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(&n.Key)
+		// KVOption Key values never contain PII and should be distinguished
+		// for feature tracking purposes.
+		ctx.WithFlags(ctx.flags&^FmtMarkRedactionNode, func() {
+			ctx.FormatNode(&n.Key)
+		})
 		if n.Value != nil {
 			ctx.WriteString(` = `)
 			ctx.FormatNode(n.Value)

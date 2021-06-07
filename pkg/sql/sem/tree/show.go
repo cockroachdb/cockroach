@@ -35,7 +35,7 @@ func (node *ShowVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	// Session var names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 		ctx.FormatNameP(&node.Name)
 	})
 }
@@ -50,7 +50,7 @@ func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
-	ctx.WithFlags(ctx.flags & ^FmtAnonymize, func() {
+	ctx.WithFlags(ctx.flags & ^FmtAnonymize & ^FmtMarkRedactionNode, func() {
 		ctx.FormatNameP(&node.Name)
 	})
 }
