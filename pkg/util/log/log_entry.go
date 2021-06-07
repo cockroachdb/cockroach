@@ -221,8 +221,13 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
-	messages = append(messages,
-		makeStartLine(f, "line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
+	messages = append(messages, makeStartLine(f, "log format (utf8=\u2713): %s", Safe(f.formatterName())))
+
+	if strings.HasPrefix(f.formatterName(), "crdb-") {
+		// For the crdb file formats, suggest the structure of each log line.
+		messages = append(messages,
+			makeStartLine(f, `line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg`))
+	}
 	return messages
 }
 
