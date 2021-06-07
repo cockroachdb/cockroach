@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bench
+package rttanalysis
 
 import "testing"
 
 func BenchmarkORMQueries(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name:  "django table introspection 1 table",
-			setup: `CREATE TABLE t1(a int primary key, b int);`,
-			stmt: `SELECT
+			Name:  "django table introspection 1 table",
+			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Stmt: `SELECT
     a.attname AS column_name,
     NOT (a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull)) AS is_nullable,
     pg_get_expr(ad.adbin, ad.adrelid) AS column_default
@@ -34,12 +34,12 @@ WHERE (
 		},
 
 		{
-			name: "django table introspection 4 tables",
-			setup: `CREATE TABLE t1(a int primary key, b int);
+			Name: "django table introspection 4 tables",
+			Setup: `CREATE TABLE t1(a int primary key, b int);
 CREATE TABLE t2(a int primary key, b int);
 CREATE TABLE t3(a int primary key, b int);
 CREATE TABLE t4(a int primary key, b int);`,
-			stmt: `SELECT
+			Stmt: `SELECT
     a.attname AS column_name,
     NOT (a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull)) AS is_nullable,
     pg_get_expr(ad.adbin, ad.adrelid) AS column_default
@@ -56,8 +56,8 @@ WHERE (
 		},
 
 		{
-			name: "django table introspection 8 tables",
-			setup: `CREATE TABLE t1(a int primary key, b int);
+			Name: "django table introspection 8 tables",
+			Setup: `CREATE TABLE t1(a int primary key, b int);
 CREATE TABLE t2(a int primary key, b int);
 CREATE TABLE t3(a int primary key, b int);
 CREATE TABLE t4(a int primary key, b int);
@@ -65,7 +65,7 @@ CREATE TABLE t5(a int primary key, b int);
 CREATE TABLE t6(a int primary key, b int);
 CREATE TABLE t7(a int primary key, b int);
 CREATE TABLE t8(a int primary key, b int);`,
-			stmt: `SELECT
+			Stmt: `SELECT
     a.attname AS column_name,
     NOT (a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull)) AS is_nullable,
     pg_get_expr(ad.adbin, ad.adrelid) AS column_default
@@ -82,8 +82,8 @@ WHERE (
 		},
 
 		{
-			name: "activerecord type introspection query",
-			stmt: `SELECT
+			Name: "activerecord type introspection query",
+			Stmt: `SELECT
   t.oid, t.typname, t.typelem, t.typdelim, t.typinput, r.rngsubtype, t.typtype, t.typbasetype
 FROM
   pg_type AS t LEFT JOIN pg_range AS r ON oid = rngtypid
@@ -99,7 +99,7 @@ WHERE
       'text',
       'varchar',
       'char',
-      'name',
+      'Name',
       'bpchar',
       'bool',
       'bit',
@@ -137,27 +137,27 @@ WHERE
 		},
 
 		{
-			name:  "pg_type",
-			setup: `CREATE TABLE t1(a int primary key, b int);`,
-			stmt:  `SELECT * FROM pg_type`,
+			Name:  "pg_type",
+			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Stmt:  `SELECT * FROM pg_type`,
 		},
 
 		{
-			name:  "pg_class",
-			setup: `CREATE TABLE t1(a int primary key, b int);`,
-			stmt:  `SELECT * FROM pg_class`,
+			Name:  "pg_class",
+			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Stmt:  `SELECT * FROM pg_class`,
 		},
 
 		{
-			name:  "pg_namespace",
-			setup: `CREATE TABLE t1(a int primary key, b int);`,
-			stmt:  `SELECT * FROM pg_namespace`,
+			Name:  "pg_namespace",
+			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Stmt:  `SELECT * FROM pg_namespace`,
 		},
 
 		{
-			name:  "pg_attribute",
-			setup: `CREATE TABLE t1(a int primary key, b int);`,
-			stmt:  `SELECT * FROM pg_attribute`,
+			Name:  "pg_attribute",
+			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Stmt:  `SELECT * FROM pg_attribute`,
 		},
 		{
 			name:  "has_table_privilege real table",
