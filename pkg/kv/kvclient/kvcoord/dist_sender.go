@@ -617,6 +617,23 @@ func (ds *DistSender) initAndVerifyBatch(
 		}
 	}
 
+	// Check that we don't combine a limited DeleteRange with a commit. We cannot
+	// attempt to run such a batch as a 1PC because, if it gets split and thus
+	// doesn't run as a 1PC, resolving the intents will be very expensive.
+	// Resolving the intents would require scanning the whole key span, which
+	// might be much larger than the span of keys deleted before the limit was
+	// hit. Requests that actually run as 1PC don't have this problem, as they
+	// don't write and resolve intents. So, we make an exception and allow batches
+	// that set Require1PC - those are guaranteed to either execute as 1PC or
+	// fail. See also #37457.
+	if ba.Txn != nil && ba.Header.MaxSpanRequestKeys != 0 {
+		e, endTxn := ba.GetArg(roachpb.EndTxn)
+		_, delRange := ba.GetArg(roachpb.DeleteRange)
+		if delRange && endTxn && !e.(*roachpb.EndTxnRequest).Require1PC {
+			return roachpb.NewErrorf("possible 1PC batch cannot contain EndTxn without setting Require1PC")
+		}
+	}
+
 	return nil
 }
 
