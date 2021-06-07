@@ -36,6 +36,8 @@ cockroachdb/geospatial:
   triage_column_id: 9487269
 cockroachdb/dev-inf:
   triage_column_id: 10210759
+cockroachdb/multiregion:
+  triage_column_id: 11926170
 cockroachdb/storage:
   triage_column_id: 6668367
 cockroachdb/test-eng:
