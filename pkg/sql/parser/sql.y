@@ -1622,7 +1622,6 @@ alter_database_primary_region_stmt:
   }
 | ALTER DATABASE database_name SET primary_region_clause
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterDatabasePrimaryRegion{
       Name: tree.Name($3),
       PrimaryRegion: tree.Name($5),

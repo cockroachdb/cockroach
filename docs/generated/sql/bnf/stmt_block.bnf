@@ -1759,6 +1759,7 @@ alter_database_survival_goal_stmt ::=
 
 alter_database_primary_region_stmt ::=
 	'ALTER' 'DATABASE' database_name primary_region_clause
+	| 'ALTER' 'DATABASE' database_name 'SET' primary_region_clause
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
