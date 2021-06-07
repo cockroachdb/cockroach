@@ -77,7 +77,7 @@ function run_json_test() {
       exit 1
     else
       tc_start_block "post issues"
-      github-post < "${tmpfile}"
+      (github-post < "${tmpfile}") || (echo "failed to post github issue")
       tc_end_block "post issues"
     fi
   fi
