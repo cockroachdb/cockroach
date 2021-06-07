@@ -70,6 +70,7 @@ func MakeCollection(
 		hydratedTables: hydratedTables,
 		virtualSchemas: virtualSchemas,
 		leased:         makeLeasedDescriptors(),
+		synthetic:      makeSyntheticDescriptors(),
 	}
 }
 
@@ -132,6 +133,15 @@ type Collection struct {
 	// These are purged at the same time as allDescriptors.
 	allSchemasForDatabase map[descpb.ID]map[descpb.ID]string
 
+	// syntheticDescriptors contains in-memory descriptors which override all
+	// other matching descriptors during immutable descriptor resolution (by name
+	// or by ID), but should not be written to disk. These support internal
+	// queries which need to use a special modified descriptor (e.g. validating
+	// non-public schema elements during a schema change). Attempting to resolve
+	// a mutable descriptor by name or ID when a matching synthetic descriptor
+	// exists is illegal.
+	synthetic syntheticDescriptors
+
 	// settings dictate whether we validate descriptors on write.
 	settings *cluster.Settings
 
@@ -143,15 +153,6 @@ type Collection struct {
 	// hydratedTables is node-level cache of table descriptors which utlize
 	// user-defined types.
 	hydratedTables *hydratedtables.Cache
-
-	// syntheticDescriptors contains in-memory descriptors which override all
-	// other matching descriptors during immutable descriptor resolution (by name
-	// or by ID), but should not be written to disk. These support internal
-	// queries which need to use a special modified descriptor (e.g. validating
-	// non-public schema elements during a schema change). Attempting to resolve
-	// a mutable descriptor by name or ID when a matching synthetic descriptor
-	// exists is illegal.
-	syntheticDescriptors []catalog.Descriptor
 
 	// skipValidationOnWrite should only be set to true during forced descriptor
 	// repairs.
@@ -1069,7 +1070,7 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		); vd != nil || err != nil {
 			return vd, err
 		}
-		if found, sd := tc.getSyntheticDescriptorByID(id); found {
+		if found, sd := tc.synthetic.getByID(id); found {
 			if flags.RequireMutable {
 				return nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
 			}
@@ -1369,7 +1370,7 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommittedDescriptors = nil
-	tc.syntheticDescriptors = nil
+	tc.synthetic.reset()
 	tc.deletedDescs = nil
 	tc.releaseAllDescriptors()
 }
@@ -1620,8 +1621,7 @@ func (tc *Collection) getTypeByID(
 func (tc *Collection) getSyntheticOrUncommittedDescriptor(
 	dbID descpb.ID, schemaID descpb.ID, name string, mutable bool,
 ) (found bool, refuseFurtherLookup bool, desc catalog.Descriptor, err error) {
-	if found, sd := tc.getSyntheticDescriptorByName(
-		dbID, schemaID, name); found {
+	if found, sd := tc.synthetic.getByName(dbID, schemaID, name); found {
 		if mutable {
 			return false, false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
 		}
@@ -1673,28 +1673,6 @@ func (tc *Collection) getUncommittedDescriptor(
 		// after the previous draining names check?
 		if lease.NameMatchesDescriptor(mutDesc, dbID, schemaID, name) {
 			return false, desc
-		}
-	}
-	return false, nil
-}
-
-func (tc *Collection) getSyntheticDescriptorByName(
-	dbID descpb.ID, schemaID descpb.ID, name string,
-) (found bool, desc catalog.Descriptor) {
-	for _, sd := range tc.syntheticDescriptors {
-		if lease.NameMatchesDescriptor(sd, dbID, schemaID, name) {
-			return true, sd
-		}
-	}
-	return false, nil
-}
-
-func (tc *Collection) getSyntheticDescriptorByID(
-	id descpb.ID,
-) (found bool, desc catalog.Descriptor) {
-	for _, sd := range tc.syntheticDescriptors {
-		if sd.GetID() == id {
-			return true, sd
 		}
 	}
 	return false, nil
@@ -1958,15 +1936,7 @@ func (tc *Collection) releaseAllDescriptors() {
 // access. An immutable copy is made if the descriptor is mutable. See the
 // documentation on syntheticDescriptors.
 func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
-	immutableCopies := make([]catalog.Descriptor, 0, len(descs))
-	for _, desc := range descs {
-		if mut, ok := desc.(catalog.MutableDescriptor); ok {
-			immutableCopies = append(immutableCopies, mut.ImmutableCopy())
-		} else {
-			immutableCopies = append(immutableCopies, desc)
-		}
-	}
-	tc.syntheticDescriptors = immutableCopies
+	tc.synthetic.set(descs)
 }
 
 func (tc *Collection) codec() keys.SQLCodec {
