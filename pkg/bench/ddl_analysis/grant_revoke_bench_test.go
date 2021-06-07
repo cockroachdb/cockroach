@@ -15,28 +15,28 @@ import "testing"
 func BenchmarkGrant(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name: "grant all on 1 table",
-			setup: `CREATE USER TEST; 
+			Name: "grant all on 1 table",
+			Setup: `CREATE USER TEST; 
 CREATE TABLE t0();`,
-			stmt:  "GRANT ALL ON * TO TEST",
-			reset: "DROP ROLE TEST",
+			Stmt:  "GRANT ALL ON * TO TEST",
+			Reset: "DROP ROLE TEST",
 		},
 		{
-			name: "grant all on 2 tables",
-			setup: `CREATE USER TEST; 
+			Name: "grant all on 2 tables",
+			Setup: `CREATE USER TEST; 
 CREATE TABLE t0();
 CREATE TABLE t1();`,
-			stmt:  "GRANT ALL ON * TO TEST",
-			reset: "DROP ROLE TEST",
+			Stmt:  "GRANT ALL ON * TO TEST",
+			Reset: "DROP ROLE TEST",
 		},
 		{
-			name: "grant all on 3 tables",
-			setup: `CREATE USER TEST; 
+			Name: "grant all on 3 tables",
+			Setup: `CREATE USER TEST; 
 CREATE TABLE t0();
 CREATE TABLE t1();
 CREATE TABLE t2();`,
-			stmt:  "GRANT ALL ON * TO TEST",
-			reset: "DROP ROLE TEST",
+			Stmt:  "GRANT ALL ON * TO TEST",
+			Reset: "DROP ROLE TEST",
 		},
 	}
 
@@ -46,31 +46,31 @@ CREATE TABLE t2();`,
 func BenchmarkRevoke(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name: "revoke all on 1 table",
-			setup: `CREATE USER TEST; 
+			Name: "revoke all on 1 table",
+			Setup: `CREATE USER TEST; 
 CREATE TABLE t0();
 GRANT ALL ON * TO TEST;`,
-			stmt:  "REVOKE ALL ON * FROM TEST",
-			reset: "DROP ROLE TEST",
+			Stmt:  "REVOKE ALL ON * FROM TEST",
+			Reset: "DROP ROLE TEST",
 		},
 		{
-			name: "revoke all on 2 tables",
-			setup: `CREATE USER TEST; 
+			Name: "revoke all on 2 tables",
+			Setup: `CREATE USER TEST; 
 CREATE TABLE t0();
 CREATE TABLE t1();
 GRANT ALL ON * TO TEST;`,
-			stmt:  "REVOKE ALL ON * FROM TEST",
-			reset: "DROP ROLE TEST",
+			Stmt:  "REVOKE ALL ON * FROM TEST",
+			Reset: "DROP ROLE TEST",
 		},
 		{
-			name: "revoke all on 3 tables",
-			setup: `CREATE USER TEST; 
+			Name: "revoke all on 3 tables",
+			Setup: `CREATE USER TEST; 
 CREATE TABLE t0();
 CREATE TABLE t1();
 CREATE TABLE t2();
 GRANT ALL ON * TO TEST;`,
-			stmt:  "REVOKE ALL ON * FROM TEST",
-			reset: "DROP ROLE TEST",
+			Stmt:  "REVOKE ALL ON * FROM TEST",
+			Reset: "DROP ROLE TEST",
 		},
 	}
 

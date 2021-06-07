@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ddl_analysisccl",
+    srcs = [
+        "ddl_analysis_bench.go",
+        "multiregion.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/ddl_analysisccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/bench/ddl_analysis",
+        "//pkg/ccl/multiregionccl",
+        "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+    ],
+)
+
+go_test(
+    name = "ddl_analysisccl_test",
+    srcs = [
+        "bench_test.go",
+        "multi_region_bench_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":ddl_analysisccl"],
+    deps = [
+        "//pkg/bench/ddl_analysis",
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/randutil",
+    ],
+)
