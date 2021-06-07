@@ -294,12 +294,10 @@ type ShowChangefeedJobs struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowChangefeedJobs) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CHANGEFEED")
+	ctx.WriteString("SHOW CHANGEFEED JOBS")
 	if node.Jobs != nil {
-		ctx.WriteString(" JOB")
+		ctx.WriteString(" ")
 		ctx.FormatNode(node.Jobs)
-	} else {
-		ctx.WriteString(" JOBS")
 	}
 }
 

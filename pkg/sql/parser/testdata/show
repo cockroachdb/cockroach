@@ -466,6 +466,22 @@ EXPLAIN SHOW USERS -- literals removed
 EXPLAIN SHOW USERS -- identifiers removed
 
 parse
+SHOW JOB 1234
+----
+SHOW JOBS VALUES (1234) -- normalized!
+SHOW JOBS VALUES ((1234)) -- fully parenthesized
+SHOW JOBS VALUES (_) -- literals removed
+SHOW JOBS VALUES (1234) -- identifiers removed
+
+parse
+EXPLAIN SHOW JOB 1234
+----
+EXPLAIN SHOW JOBS VALUES (1234) -- normalized!
+EXPLAIN SHOW JOBS VALUES ((1234)) -- fully parenthesized
+EXPLAIN SHOW JOBS VALUES (_) -- literals removed
+EXPLAIN SHOW JOBS VALUES (1234) -- identifiers removed
+
+parse
 SHOW JOBS
 ----
 SHOW JOBS
@@ -496,6 +512,22 @@ EXPLAIN SHOW AUTOMATIC JOBS
 EXPLAIN SHOW AUTOMATIC JOBS -- fully parenthesized
 EXPLAIN SHOW AUTOMATIC JOBS -- literals removed
 EXPLAIN SHOW AUTOMATIC JOBS -- identifiers removed
+
+parse
+SHOW CHANGEFEED JOB 1234
+----
+SHOW CHANGEFEED JOBS VALUES (1234) -- normalized!
+SHOW CHANGEFEED JOBS VALUES ((1234)) -- fully parenthesized
+SHOW CHANGEFEED JOBS VALUES (_) -- literals removed
+SHOW CHANGEFEED JOBS VALUES (1234) -- identifiers removed
+
+parse
+EXPLAIN SHOW CHANGEFEED JOB 1234
+----
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) -- normalized!
+EXPLAIN SHOW CHANGEFEED JOBS VALUES ((1234)) -- fully parenthesized
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (_) -- literals removed
+EXPLAIN SHOW CHANGEFEED JOBS VALUES (1234) -- identifiers removed
 
 parse
 SHOW CHANGEFEED JOBS
