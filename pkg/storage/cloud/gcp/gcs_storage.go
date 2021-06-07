@@ -192,11 +192,9 @@ func (g *gcsStorage) ReadFileAt(
 	return r.Reader, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 
-func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
-	var fileList []string
-	it := g.bucket.Objects(ctx, &gcs.Query{
-		Prefix: cloud.GetPrefixBeforeWildcard(g.prefix),
-	})
+func (g *gcsStorage) ListFiles(
+	ctx context.Context, patternSuffix, delimiter string,
+) ([]string, error) {
 
 	pattern := g.prefix
 	if patternSuffix != "" {
@@ -205,6 +203,12 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
+	var fileList []string
+
+	it := g.bucket.Objects(ctx, &gcs.Query{
+		Prefix:    cloud.GetPrefixBeforeWildcard(pattern),
+		Delimiter: delimiter,
+	})
 
 	for {
 		attrs, err := it.Next()
@@ -215,22 +219,27 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 			return nil, errors.Wrap(err, "unable to list files in gcs bucket")
 		}
 
-		matches, errMatch := path.Match(pattern, attrs.Name)
+		key := attrs.Name
+		if attrs.Prefix != "" {
+			key = attrs.Prefix
+		}
+
+		matches, errMatch := path.Match(pattern, key)
 		if errMatch != nil {
 			continue
 		}
 		if matches {
 			if patternSuffix != "" {
-				if !strings.HasPrefix(attrs.Name, g.prefix) {
+				if !strings.HasPrefix(key, g.prefix) {
 					// TODO(dt): return a nice rel-path instead of erroring out.
 					return nil, errors.New("pattern matched file outside of path")
 				}
-				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(attrs.Name, g.prefix), "/"))
+				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(key, g.prefix), "/"))
 			} else {
 				gsURL := url.URL{
 					Scheme:   "gs",
 					Host:     attrs.Bucket,
-					Path:     attrs.Name,
+					Path:     key,
 					RawQuery: gcsQueryParams(g.conf),
 				}
 				fileList = append(fileList, gsURL.String())

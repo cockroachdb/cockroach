@@ -807,7 +807,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
 			require.NoError(t, err)
 			defer store.Close()
-			files, err := store.ListFiles(ctx, "*/*/*/"+backupManifestName)
+			files, err := store.ListFiles(ctx, "*/*/*/"+backupManifestName, cloud.NoDelimiter)
 			require.NoError(t, err)
 			full1 = strings.TrimSuffix(files[0], backupManifestName)
 			full2 = strings.TrimSuffix(files[1], backupManifestName)
@@ -816,7 +816,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 			// each also check if we can restore to individual times captured with
 			// incremental backups that were appended to that backup.
 			subdirFiles, err := store.ListFiles(ctx, path.Join("foo", fmt.Sprintf("%s*",
-				specifiedSubdir), backupManifestName))
+				specifiedSubdir), backupManifestName), cloud.NoDelimiter)
 			require.NoError(t, err)
 			subdirFull1 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[0], "foo"),
 				backupManifestName)

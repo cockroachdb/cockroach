@@ -314,19 +314,33 @@ func matchesPrefixAndPattern(name, prefix, pattern string) (bool, error) {
 
 // ListFiles implements the ExternalStorage interface and lists the files stored
 // in the user scoped FileToTableSystem.
-func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
+func (f *fileTableStorage) ListFiles(
+	ctx context.Context, patternSuffix, delimiter string,
+) ([]string, error) {
 	prefix, pattern, err := getPrefixAndPattern(f.prefix, patternSuffix)
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO(dt): push delimiter down.
 	var fileList []string
 	matches, err := f.fs.ListFiles(ctx, prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to match pattern provided")
 	}
 
+	var prevGroup string
 	for _, match := range matches {
+		if delimiter != "" {
+			suffix := strings.TrimPrefix(match, prefix)
+			if idx := strings.Index(suffix, delimiter); idx != -1 {
+				if prevGroup == suffix[0:idx] {
+					continue
+				}
+				prevGroup = suffix[0:idx]
+				match = prefix + suffix[0:idx]
+			}
+		}
 		if matches, err := matchesPrefixAndPattern(match, prefix, pattern); err != nil {
 			return nil, err
 		} else if matches {

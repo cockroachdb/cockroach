@@ -379,7 +379,9 @@ func (s *s3Storage) ReadFileAt(
 	}, size, nil
 }
 
-func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
+func (s *s3Storage) ListFiles(
+	ctx context.Context, patternSuffix, delimiter string,
+) ([]string, error) {
 	var fileList []string
 
 	pattern := s.prefix
@@ -394,32 +396,49 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 		return nil, err
 	}
 
+	var delim *string
+	if delimiter != "" {
+		delim = aws.String(delimiter)
+	}
+
 	var matchErr error
 	err = client.ListObjectsPagesWithContext(
 		ctx,
 		&s3.ListObjectsInput{
-			Bucket: s.bucket,
-			Prefix: aws.String(cloud.GetPrefixBeforeWildcard(s.prefix)),
+			Bucket:    s.bucket,
+			Prefix:    aws.String(cloud.GetPrefixBeforeWildcard(pattern)),
+			Delimiter: delim,
 		},
 		func(page *s3.ListObjectsOutput, lastPage bool) bool {
-			for _, fileObject := range page.Contents {
-				matches, err := path.Match(pattern, *fileObject.Key)
+			acc := func(key string) error {
+				matches, err := path.Match(pattern, key)
 				if err != nil {
-					matchErr = err
-					return false
+					return err
 				}
 				if matches {
 					if patternSuffix != "" {
-						if !strings.HasPrefix(*fileObject.Key, s.prefix) {
+						if !strings.HasPrefix(key, s.prefix) {
 							// TODO(dt): return a nice rel-path instead of erroring out.
 							matchErr = errors.New("pattern matched file outside of path")
-							return false
 						}
-						fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(*fileObject.Key, s.prefix), "/"))
+						fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(key, s.prefix), "/"))
 					} else {
 
-						fileList = append(fileList, S3URI(*s.bucket, *fileObject.Key, s.conf))
+						fileList = append(fileList, S3URI(*s.bucket, key, s.conf))
 					}
+				}
+				return nil
+			}
+			for _, fileObject := range page.Contents {
+				if err := acc(*fileObject.Key); err != nil {
+					matchErr = err
+					return false
+				}
+			}
+			for _, dir := range page.CommonPrefixes {
+				if err := acc(*dir.Prefix); err != nil {
+					matchErr = err
+					return false
 				}
 			}
 			return !lastPage
