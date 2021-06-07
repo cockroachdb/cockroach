@@ -333,10 +333,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "cluster nodes", strings.Join(s.Nodes, ", "))
+			e.ob.AddRedactableField(RedactNodes, "nodes", strings.Join(s.Nodes, ", "))
 		}
 		if len(s.Regions) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "cluster regions", strings.Join(s.Regions, ", "))
+			e.ob.AddRedactableField(RedactNodes, "regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
 			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))

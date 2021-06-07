@@ -402,7 +402,7 @@ func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
 func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 	ob.AddRedactableTopLevelField(
 		RedactNodes,
-		"cluster regions",
+		"regions",
 		strings.Join(regions, ", "),
 	)
 }
