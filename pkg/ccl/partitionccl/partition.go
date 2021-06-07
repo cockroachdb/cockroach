@@ -344,7 +344,7 @@ func createPartitioning(
 
 	// Truncate existing implicitly partitioned column names.
 	oldNumImplicitColumns := int(indexDesc.Partitioning.NumImplicitColumns)
-	newIdxColumnNames := indexDesc.ColumnNames[oldNumImplicitColumns:]
+	newIdxColumnNames := indexDesc.KeyColumnNames[oldNumImplicitColumns:]
 
 	if allowImplicitPartitioning {
 		newImplicitCols, err = collectImplicitPartitionColumns(
@@ -366,7 +366,7 @@ func createPartitioning(
 		for i, col := range newImplicitCols {
 			newIdxColumnNames[i] = col.GetName()
 		}
-		newIdxColumnNames = append(newIdxColumnNames, indexDesc.ColumnNames[oldNumImplicitColumns:]...)
+		newIdxColumnNames = append(newIdxColumnNames, indexDesc.KeyColumnNames[oldNumImplicitColumns:]...)
 	}
 
 	// If we had implicit column partitioning beforehand, check we have the
@@ -382,7 +382,7 @@ func createPartitioning(
 			)
 		}
 		for i, col := range newImplicitCols {
-			if indexDesc.ColumnIDs[i] != col.GetID() {
+			if indexDesc.KeyColumnIDs[i] != col.GetID() {
 				return nil, newPartitioning, errors.AssertionFailedf("found new implicit partitioning at column ordinal %d", i)
 			}
 		}
@@ -506,7 +506,7 @@ func selectPartitionExprsByName(
 		// the column ordinal references, so reconstruct them here.
 		colVars = make(tree.Exprs, len(prefixDatums)+part.NumColumns())
 		for i := range colVars {
-			col, err := tabledesc.FindPublicColumnWithID(tableDesc, idx.GetColumnID(i))
+			col, err := tabledesc.FindPublicColumnWithID(tableDesc, idx.GetKeyColumnID(i))
 			if err != nil {
 				return err
 			}

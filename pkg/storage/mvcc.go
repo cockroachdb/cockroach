@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 )
@@ -53,6 +54,12 @@ const (
 	// compatibility. See:
 	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
 	MinimumMaxOpenFiles = 1700
+	// Default value for maximum number of intents reported by ExportToSST
+	// and Scan operations in WriteIntentError is set to half of the maximum
+	// lock table size.
+	// This value is subject to tuning in real environment as we have more
+	// data available.
+	maxIntentsPerWriteIntentErrorDefault = 5000
 )
 
 var (
@@ -68,6 +75,14 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
 )
+
+// MaxIntentsPerWriteIntentError sets maximum number of intents returned in
+// WriteIntentError in operations that return multiple intents per error.
+// Currently it is used in Scan, ReverseScan, and ExportToSST.
+var MaxIntentsPerWriteIntentError = settings.RegisterIntSetting(
+	"storage.mvcc.max_intents_per_error",
+	"maximum number of intents returned in error during export of scan requests",
+	maxIntentsPerWriteIntentErrorDefault)
 
 var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_ROCKSDB_CONCURRENCY", func() int {
@@ -2372,6 +2387,7 @@ func mvccScanToBytes(
 		ts:               timestamp,
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
+		maxIntents:       opts.MaxIntents,
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
@@ -2508,6 +2524,12 @@ type MVCCScanOptions struct {
 	//
 	// The zero value indicates no limit.
 	TargetBytes int64
+	// MaxIntents is a maximum number of intents collected by scanner in
+	// consistent mode before returning WriteIntentError.
+	//
+	// Not used in inconsistent scans.
+	// The zero value indicates no limit.
+	MaxIntents int64
 }
 
 func (opts *MVCCScanOptions) validate() error {
@@ -3690,7 +3712,9 @@ func ComputeStatsForRange(
 
 // computeCapacity returns capacity details for the engine's available storage,
 // by querying the underlying file system.
-func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, error) {
+func computeCapacity(
+	m *pebble.Metrics, path string, maxSizeBytes int64, auxDir string,
+) (roachpb.StoreCapacity, error) {
 	fileSystemUsage := gosigar.FileSystemUsage{}
 	dir := path
 	if dir == "" {
@@ -3723,13 +3747,17 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 	fsuTotal := int64(fileSystemUsage.Total)
 	fsuAvail := int64(fileSystemUsage.Avail)
 
-	// Find the total size of all the files in the r.dir and all its
-	// subdirectories.
-	var totalUsedBytes int64
-	if errOuter := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	// Pebble has detailed accounting of its own disk space usage, and it's
+	// incrementally updated which helps avoid O(# files) work here.
+	totalUsedBytes := int64(m.DiskSpaceUsage())
+
+	// We don't have incremental accounting of the disk space usage of files
+	// in the auxiliary directory. Walk the auxiliary directory and all its
+	// subdirectories, adding to the total used bytes.
+	if errOuter := filepath.Walk(auxDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			// This can happen if rocksdb removes files out from under us - just keep
-			// going to get the best estimate we can.
+			// This can happen if CockroachDB removes files out from under us -
+			// just keep going to get the best estimate we can.
 			if oserror.IsNotExist(err) {
 				return nil
 			}

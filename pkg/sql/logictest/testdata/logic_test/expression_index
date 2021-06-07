@@ -1,0 +1,138 @@
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c STRING,
+  comp INT AS (a + 10) VIRTUAL,
+  FAMILY (a, b, c)
+)
+
+statement error unimplemented: only simple columns are supported as index elements
+CREATE INDEX err ON t ((a + b))
+
+statement ok
+SET experimental_enable_expression_based_indexes=true
+
+statement ok
+CREATE INDEX t_a_plus_b_idx ON t ((a + b))
+
+statement ok
+CREATE INDEX t_lower_c_idx ON t (lower(c))
+
+statement ok
+CREATE INDEX t_lower_c_a_plus_b_idx ON t (lower(c), (a + b))
+
+statement ok
+CREATE INDEX t_a_plus_ten_idx ON t ((a + 10))
+
+# TODO(mgartner): The expression should be printed in expression-based indexes
+# instead of the virtual column name.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+   k INT8 NOT NULL,
+   a INT8 NULL,
+   b INT8 NULL,
+   c STRING NULL,
+   comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
+   crdb_idx_expr INT8 NOT VISIBLE NULL AS (a + b) VIRTUAL,
+   crdb_idx_expr_1 STRING NOT VISIBLE NULL AS (lower(c)) VIRTUAL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   INDEX t_a_plus_b_idx (crdb_idx_expr ASC),
+   INDEX t_lower_c_idx (crdb_idx_expr_1 ASC),
+   INDEX t_lower_c_a_plus_b_idx (crdb_idx_expr_1 ASC, crdb_idx_expr ASC),
+   INDEX t_a_plus_ten_idx (comp ASC),
+   FAMILY fam_0_a_b_c_k (a, b, c, k)
+)
+
+statement error volatile functions are not allowed in index expression
+CREATE INDEX err ON t ((a + random()::INT))
+
+statement error column \"z\" does not exist
+CREATE INDEX err ON t ((a + z))
+
+# TODO(mgartner): This error message should be more clear. The user would not
+# think that they are creating a computed column at all.
+statement error computed columns cannot reference other computed columns
+CREATE INDEX err ON t ((comp + 10))
+
+statement ok
+CREATE TABLE child (
+  fk INT REFERENCES t (k) ON UPDATE CASCADE,
+  a INT
+)
+
+# An expression-based index cannot reference columns in other tables.
+statement error no data source matches prefix: t in this context
+CREATE INDEX err ON child ((t.a + 10))
+
+# Querying expression-based indexes.
+
+statement ok
+INSERT INTO t VALUES
+  (1, 10, 100, 'Foo'),
+  (2, 20, 200, 'FOO'),
+  (3, 10, 100, 'foo'),
+  (4, 40, 400, 'BAR'),
+  (5, 100, 10, 'Food')
+
+query IIITI colnames,rowsort
+SELECT * FROM t@t_a_plus_b_idx WHERE a + b = 110
+----
+k  a    b    c     comp
+1  10   100  Foo   20
+3  10   100  foo   20
+5  100  10   Food  110
+
+query IIITI colnames,rowsort
+SELECT * FROM t@t_a_plus_b_idx WHERE a + b > 110
+----
+k  a   b    c    comp
+2  20  200  FOO  30
+4  40  400  BAR  50
+
+query IIITI colnames,rowsort
+SELECT * FROM t@t_lower_c_idx WHERE lower(c) = 'foo'
+----
+k  a   b    c    comp
+1  10  100  Foo  20
+2  20  200  FOO  30
+3  10  100  foo  20
+
+query IIITI colnames,rowsort
+SELECT * FROM t@t_lower_c_idx WHERE lower(c) LIKE 'foo%'
+----
+k  a    b    c     comp
+1  10   100  Foo   20
+2  20   200  FOO   30
+3  10   100  foo   20
+5  100  10   Food  110
+
+query IIITI colnames,rowsort
+SELECT * FROM t@t_lower_c_a_plus_b_idx WHERE lower(c) = 'foo' AND a + b > 110
+----
+k  a   b    c    comp
+2  20  200  FOO  30
+
+# Backfilling expression-based indexes.
+
+statement ok
+CREATE INDEX t_a_times_two_idx ON t ((a * 2))
+
+query IIITI colnames,rowsort
+SELECT * FROM t@t_a_times_two_idx WHERE a * 2 = 20
+----
+k  a   b    c    comp
+1  10  100  Foo  20
+3  10  100  foo  20
+
+query IIITI colnames,rowsort
+SELECT * FROM t@t_a_times_two_idx WHERE a * 2 < 100
+----
+k  a   b    c    comp
+1  10  100  Foo  20
+2  20  200  FOO  30
+3  10  100  foo  20
+4  40  400  BAR  50

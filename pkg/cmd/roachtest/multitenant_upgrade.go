@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -102,14 +103,32 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c *cluster, binary str
 	require.NoError(t, err)
 	u.Host = internalUrls[0] + ":" + strconv.Itoa(tn.sqlPort)
 	tn.pgURL = u.String()
-	c.l.Printf("sql server for tenant %d should be running at %s", tn.tenantID, tn.pgURL)
 
-	const warmupPeriod = 3 * time.Second
-	select {
-	case err := <-tn.errCh:
+	// The tenant is usually responsive ~right away, but it
+	// has on occasions taken more than 3s for it to connect
+	// to the KV layer, and it won't open the SQL port until
+	// it has.
+	if err := retry.ForDuration(45*time.Second, func() error {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-tn.errCh:
+			t.Fatal(err)
+		default:
+		}
+
+		db, err := gosql.Open("postgres", tn.pgURL)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		_, err = db.ExecContext(ctx, `SELECT 1`)
+		return err
+	}); err != nil {
 		t.Fatal(err)
-	case <-time.After(warmupPeriod):
 	}
+
+	c.l.Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
 }
 
 // runMultiTenantUpgrade exercises upgrading tenants and their host cluster.
@@ -169,6 +188,34 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}))
 
+	var needsWorkaround bool
+	if v, err := version.Parse("v" + predecessor); err != nil {
+		t.Fatal(err)
+	} else if !v.AtLeast(version.MustParse("v21.1.2")) {
+		// Tenant upgrades are only fully functional when starting out at version
+		// v21.1.2, which includes #64488. That PR is responsible for giving tenants
+		// the initial cluster version, which is thus absent here.
+		//
+		// Without this workaround, the tenant would report a cluster version of
+		// 20.2 which is going to trip up the test by making the read/write of the
+		// cluster setting fail (after a time out), and also leading to an
+		// ill-advised 20.2 cluster version reported for the tenant (once we run the
+		// current binary). We won't actually upgrade tenants in production in
+		// scenarios in which this branch is active (the host cluster will be at the
+		// latest patch release before attempting an upgrade, which is going to be
+		// at least 21.1.2).
+		//
+		// This can be deleted once PredecessorVersion(21.2) is >= 21.1.2.
+		needsWorkaround = true
+	}
+
+	if !needsWorkaround {
+		verifySQL(t, tenant11.pgURL,
+			mkStmt("SHOW CLUSTER SETTING version").
+				withResults([][]string{{initialVersion}}),
+		)
+	}
+
 	t.Status("preserving downgrade option on host server")
 	{
 		s := runner.QueryStr(t, `SHOW CLUSTER SETTING version`)
@@ -207,7 +254,6 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
-		// Note that the version here should be the version that is active on the
 		mkStmt("SHOW CLUSTER SETTING version").
 			withResults([][]string{{initialVersion}}),
 	)
@@ -230,7 +276,6 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
-		// Note that the version here should be the version that is active on the
 		mkStmt("SHOW CLUSTER SETTING version").
 			withResults([][]string{{initialVersion}}),
 	)
@@ -241,18 +286,9 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 	t.Status("starting the tenant 11 server with the current binary")
 	tenant11.start(ctx, t, c, currentBinary)
 
-	if v, err := version.Parse("v" + predecessor); err != nil {
-		t.Fatal(err)
-	} else if !v.AtLeast(version.MustParse("v21.1.1")) {
-		// If we take this branch, the current branch is 21.2 but we haven't released 21.1.1 yet.
-		// The multi-tenant upgrade PR #60730 will only be contained in 21.1.1. That PR is responsible
-		// for giving tenants the initial cluster version, which is thus absent here. We still want to
-		// run this test until #60730 is backported, so fill the cluster version in. Without this, the
-		// tenant would report a cluster version of 20.2 which is going to trip up the test. We won't
-		// actually upgrade tenants in production in scenarios in which this branch is active (the host
-		// cluster will be at the latest patch release before attempting an upgrade, which is going to
-		// be at least 21.1.1).
-		// This can be deleted once the PredecessorVersion(21.2) is >= 21.1.1.
+	if needsWorkaround {
+		// NB: we can't do this earlier, as the tenant would not be able to write
+		// its cluster version under the binary that needed the workaround.
 		verifySQL(t, tenant11.pgURL, mkStmt(`SET CLUSTER SETTING version = $1`, initialVersion))
 	}
 

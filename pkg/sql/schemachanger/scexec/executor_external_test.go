@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,11 +139,11 @@ CREATE TABLE db.t (
 	}
 
 	indexToAdd := descpb.IndexDescriptor{
-		ID:          2,
-		Name:        "foo",
-		ColumnIDs:   []descpb.ColumnID{1},
-		ColumnNames: []string{"i"},
-		ColumnDirections: []descpb.IndexDescriptor_Direction{
+		ID:             2,
+		Name:           "foo",
+		KeyColumnIDs:   []descpb.ColumnID{1},
+		KeyColumnNames: []string{"i"},
+		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 			descpb.IndexDescriptor_ASC,
 		},
 	}
@@ -220,7 +219,6 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var id descpb.ID
 		var ts []*scpb.Node
 		var targetSlice []*scpb.Target
 		require.NoError(t, ti.txn(ctx, func(
@@ -229,7 +227,6 @@ func TestSchemaChanger(t *testing.T) {
 			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
-			id = fooTable.GetID()
 
 			// Corresponds to:
 			//
@@ -239,13 +236,13 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
 					TableID: fooTable.GetID(),
 					Index: descpb.IndexDescriptor{
-						Name:             "new_primary_key",
-						ID:               2,
-						ColumnIDs:        []descpb.ColumnID{1},
-						ColumnNames:      []string{"i"},
-						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						Unique:           true,
-						Type:             descpb.IndexDescriptor_FORWARD,
+						Name:                "new_primary_key",
+						ID:                  2,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnNames:      []string{"i"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Unique:              true,
+						Type:                descpb.IndexDescriptor_FORWARD,
 					},
 					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
 					StoreColumnIDs:      []descpb.ColumnID{2},
@@ -266,13 +263,13 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
 					TableID: fooTable.GetID(),
 					Index: descpb.IndexDescriptor{
-						Name:             "primary",
-						ID:               1,
-						ColumnIDs:        []descpb.ColumnID{1},
-						ColumnNames:      []string{"i"},
-						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						Unique:           true,
-						Type:             descpb.IndexDescriptor_FORWARD,
+						Name:                "primary",
+						ID:                  1,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnNames:      []string{"i"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Unique:              true,
+						Type:                descpb.IndexDescriptor_FORWARD,
 					},
 					OtherPrimaryIndexID: 2,
 					StoreColumnIDs:      []descpb.ColumnID{},
@@ -349,8 +346,6 @@ func TestSchemaChanger(t *testing.T) {
 				State:  scpb.State_ABSENT,
 			},
 		}, after)
-		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
-		require.NoError(t, err)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 	t.Run("with builder", func(t *testing.T) {
@@ -359,16 +354,10 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var id descpb.ID
 		var ts []*scpb.Node
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
-			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
-			require.NoError(t, err)
-			id = fooTable.GetID()
-
 			execCfg := ti.tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 			ip, cleanup := sql.NewInternalPlanner(
 				"foo",
@@ -382,13 +371,15 @@ func TestSchemaChanger(t *testing.T) {
 				resolver.SchemaResolver
 				SemaCtx() *tree.SemaContext
 				EvalContext() *tree.EvalContext
+				sql.AuthorizationAccessor
 			})
 			defer cleanup()
 			buildDeps := scbuild.Dependencies{
-				Res:     planner,
-				SemaCtx: planner.SemaCtx(),
-				EvalCtx: planner.EvalContext(),
-				Descs:   descriptors,
+				Res:          planner,
+				SemaCtx:      planner.SemaCtx(),
+				EvalCtx:      planner.EvalContext(),
+				Descs:        descriptors,
+				AuthAccessor: planner,
 			}
 			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 			require.NoError(t, err)
@@ -425,8 +416,6 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
-		require.NoError(t, err)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 }

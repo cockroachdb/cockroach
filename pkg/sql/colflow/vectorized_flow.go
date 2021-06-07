@@ -118,6 +118,10 @@ type vectorizedFlow struct {
 	// released back to the pool.
 	creator *vectorizedFlowCreator
 
+	// batchFlowCoordinator will be set if the flow is pushing coldata.Batches
+	// to the consumer.
+	batchFlowCoordinator *BatchFlowCoordinator
+
 	// countingSemaphore is a wrapper over a semaphore.Semaphore that keeps track
 	// of the number of resources held in a semaphore.Semaphore requested from the
 	// context of this flow so that these can be released unconditionally upon
@@ -174,9 +178,7 @@ func (f *vectorizedFlow) Setup(
 	if err != nil {
 		return ctx, nil, err
 	}
-	if log.V(1) {
-		log.Infof(ctx, "setting up vectorize flow %s", f.ID.Short())
-	}
+	log.VEvent(ctx, 2, "setting up vectorized flow")
 	recordingStats := false
 	if execinfra.ShouldCollectStats(ctx, &f.FlowCtx) {
 		recordingStats = true
@@ -199,7 +201,8 @@ func (f *vectorizedFlow) Setup(
 		recordingStats,
 		f.Gateway,
 		f.GetWaitGroup(),
-		f.GetSyncFlowConsumer(),
+		f.GetRowSyncFlowConsumer(),
+		f.GetBatchSyncFlowConsumer(),
 		flowCtx.Cfg.NodeDialer,
 		f.GetID(),
 		diskQueueCfg,
@@ -209,29 +212,47 @@ func (f *vectorizedFlow) Setup(
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(f.creator)
 	}
-	opChains, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
+	opChains, batchFlowCoordinator, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
 	if err != nil {
 		// It is (theoretically) possible that some of the memory monitoring
 		// infrastructure was created even in case of an error, and we need to
 		// clean that up.
 		f.creator.cleanup(ctx)
 		f.creator.Release()
-		if log.V(1) {
-			log.Infof(ctx, "failed to vectorize: %s", err)
-		}
+		log.VEventf(ctx, 1, "failed to vectorize: %v", err)
 		return ctx, nil, err
 	}
+	f.batchFlowCoordinator = batchFlowCoordinator
 	f.testingInfo.numClosers = f.creator.numClosers
 	f.testingInfo.numClosed = &f.creator.numClosed
-	if log.V(1) {
-		log.Info(ctx, "vectorized flow setup succeeded")
-	}
+	log.VEventf(ctx, 2, "vectorized flow setup succeeded")
 	if !f.IsLocal() {
 		// For distributed flows set opChains to nil, per the contract of
 		// flowinfra.Flow.Setup.
 		opChains = nil
 	}
 	return ctx, opChains, nil
+}
+
+// Run is part of the Flow interface.
+func (f *vectorizedFlow) Run(ctx context.Context, doneFn func()) {
+	if f.batchFlowCoordinator == nil {
+		// If we didn't create a BatchFlowCoordinator, then we have a processor
+		// as the root, so we run this flow with the default implementation.
+		f.FlowBase.Run(ctx, doneFn)
+		return
+	}
+
+	defer f.Wait()
+
+	if err := f.StartInternal(ctx, nil /* processors */, doneFn); err != nil {
+		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+		f.GetRowSyncFlowConsumer().ProducerDone()
+		return
+	}
+
+	log.VEvent(ctx, 1, "running the batch flow coordinator in the flow's goroutine")
+	f.batchFlowCoordinator.Run(ctx)
 }
 
 var _ colcontainer.GetPather = &vectorizedFlow{}
@@ -469,12 +490,20 @@ type vectorizedFlowCreator struct {
 	flowCreatorHelper
 	remoteComponentCreator
 
+	// rowReceiver is always set.
+	rowReceiver execinfra.RowReceiver
+	// batchReceiver might be set if the consumer supports pushing of
+	// coldata.Batches.
+	batchReceiver execinfra.BatchReceiver
+	// batchFlowCoordinator, if set, indicates that the vectorized flow should
+	// not use the default FlowBase.Run implementation.
+	batchFlowCoordinator *BatchFlowCoordinator
+
 	streamIDToInputOp map[execinfrapb.StreamID]colexecargs.OpWithMetaInfo
 	streamIDToSpecIdx map[execinfrapb.StreamID]int
 	recordingStats    bool
 	isGatewayNode     bool
 	waitGroup         *sync.WaitGroup
-	syncFlowConsumer  execinfra.RowReceiver
 	nodeDialer        *nodedialer.Dialer
 	flowID            execinfrapb.FlowID
 	exprHelper        *colexecargs.ExprHelper
@@ -537,7 +566,8 @@ func newVectorizedFlowCreator(
 	recordingStats bool,
 	isGatewayNode bool,
 	waitGroup *sync.WaitGroup,
-	syncFlowConsumer execinfra.RowReceiver,
+	rowSyncFlowConsumer execinfra.RowReceiver,
+	batchSyncFlowConsumer execinfra.BatchReceiver,
 	nodeDialer *nodedialer.Dialer,
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
@@ -553,7 +583,8 @@ func newVectorizedFlowCreator(
 		recordingStats:         recordingStats,
 		isGatewayNode:          isGatewayNode,
 		waitGroup:              waitGroup,
-		syncFlowConsumer:       syncFlowConsumer,
+		rowReceiver:            rowSyncFlowConsumer,
+		batchReceiver:          batchSyncFlowConsumer,
 		nodeDialer:             nodeDialer,
 		flowID:                 flowID,
 		exprHelper:             creator.exprHelper,
@@ -848,9 +879,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE
 				// diagrams.
 				latency = 0
-				if log.V(1) {
-					log.Infof(ctx, "an error occurred during vectorized planning while getting latency: %v", err)
-				}
+				log.VEventf(ctx, 1, "an error occurred during vectorized planning while getting latency: %v", err)
 			}
 
 			inbox, err := s.remoteComponentCreator.newInbox(colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID)
@@ -896,23 +925,24 @@ func (s *vectorizedFlowCreator) setupInput(
 				MetadataSources: colexecop.MetadataSources{os},
 				ToClose:         colexecop.Closers{os},
 			}
-		} else {
-			if opt == flowinfra.FuseAggressively {
-				sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
-				opWithMetaInfo = colexecargs.OpWithMetaInfo{
-					Root:            sync,
-					MetadataSources: colexecop.MetadataSources{sync},
-					ToClose:         colexecop.Closers{sync},
-				}
-			} else {
-				sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
-				opWithMetaInfo = colexecargs.OpWithMetaInfo{
-					Root:            sync,
-					MetadataSources: colexecop.MetadataSources{sync},
-					ToClose:         colexecop.Closers{sync},
-				}
-				s.operatorConcurrency = true
+		} else if input.Type == execinfrapb.InputSyncSpec_SERIAL_UNORDERED || opt == flowinfra.FuseAggressively {
+			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
+			opWithMetaInfo = colexecargs.OpWithMetaInfo{
+				Root:            sync,
+				MetadataSources: colexecop.MetadataSources{sync},
+				ToClose:         colexecop.Closers{sync},
 			}
+		} else {
+			// Note that if we have opt == flowinfra.FuseAggressively, then we
+			// must use the serial unordered sync above in order to remove any
+			// concurrency.
+			sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
+			opWithMetaInfo = colexecargs.OpWithMetaInfo{
+				Root:            sync,
+				MetadataSources: colexecop.MetadataSources{sync},
+				ToClose:         colexecop.Closers{sync},
+			}
+			s.operatorConcurrency = true
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.
@@ -988,32 +1018,49 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// Check whether the root of the chain is a columnarizer - if so, we can
 		// avoid creating the materializer.
 		input := colbuilder.MaybeRemoveRootColumnarizer(opWithMetaInfo)
-		if input != nil {
-			// We successfully removed the columnarizer.
-			if util.CrdbTestBuild {
-				// That columnarizer was added as a closer, so we need to
-				// decrement the number of expected closers.
-				s.numClosers--
-			}
-		} else {
-			input = colexec.NewMaterializer(
+		if input == nil && s.batchReceiver != nil {
+			// We can create a batch flow coordinator and avoid materializing
+			// the batches.
+			s.batchFlowCoordinator = NewBatchFlowCoordinator(
 				flowCtx,
 				pspec.ProcessorID,
 				opWithMetaInfo,
-				opOutputTypes,
+				s.batchReceiver,
+				s.getCancelFlowFn(),
 			)
+			// The flow coordinator is a root of its operator chain.
+			s.opChains = append(s.opChains, s.batchFlowCoordinator)
+		} else {
+			// We need to use the row receiving output.
+			if input != nil {
+				// We successfully removed the columnarizer.
+				if util.CrdbTestBuild {
+					// That columnarizer was added as a closer, so we need to
+					// decrement the number of expected closers.
+					s.numClosers--
+				}
+			} else {
+				input = colexec.NewMaterializer(
+					flowCtx,
+					pspec.ProcessorID,
+					opWithMetaInfo,
+					opOutputTypes,
+				)
+			}
+			// Make the FlowCoordinator, which will write to the given row
+			// receiver.
+			f := NewFlowCoordinator(
+				flowCtx,
+				pspec.ProcessorID,
+				input,
+				s.rowReceiver,
+				s.getCancelFlowFn(),
+			)
+			// The flow coordinator is a root of its operator chain.
+			s.opChains = append(s.opChains, f)
+			s.addFlowCoordinator(f)
 		}
-		// Make the FlowCoordinator, which will write to the given receiver.
-		f := NewFlowCoordinator(
-			flowCtx,
-			pspec.ProcessorID,
-			input,
-			s.syncFlowConsumer,
-			s.getCancelFlowFn,
-		)
-		// The flow coordinator is a root of its operator chain.
-		s.opChains = append(s.opChains, f)
-		s.addFlowCoordinator(f)
+
 	default:
 		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
 	}
@@ -1023,14 +1070,14 @@ func (s *vectorizedFlowCreator) setupOutput(
 // callbackCloser is a utility struct that implements the Closer interface by
 // calling the provided callback.
 type callbackCloser struct {
-	closeCb func(context.Context) error
+	closeCb func() error
 }
 
 var _ colexecop.Closer = &callbackCloser{}
 
 // Close implements the Closer interface.
-func (c *callbackCloser) Close(ctx context.Context) error {
-	return c.closeCb(ctx)
+func (c *callbackCloser) Close() error {
+	return c.closeCb()
 }
 
 func (s *vectorizedFlowCreator) setupFlow(
@@ -1039,7 +1086,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	processorSpecs []execinfrapb.ProcessorSpec,
 	localProcessors []execinfra.LocalProcessor,
 	opt flowinfra.FuseOpt,
-) (opChains execinfra.OpChains, err error) {
+) (opChains execinfra.OpChains, batchFlowCoordinator *BatchFlowCoordinator, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		// The column factory will not change the eval context, so we can use
 		// the one we have in the flow context, without making a copy.
@@ -1120,12 +1167,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 				for i := range toCloseCopy {
 					func(idx int) {
 						closed := false
-						result.ToClose[idx] = &callbackCloser{closeCb: func(ctx context.Context) error {
+						result.ToClose[idx] = &callbackCloser{closeCb: func() error {
 							if !closed {
 								closed = true
 								atomic.AddInt32(&s.numClosed, 1)
 							}
-							return toCloseCopy[idx].Close(ctx)
+							return toCloseCopy[idx].Close()
 						}}
 					}(i)
 				}
@@ -1184,9 +1231,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 		}
 	}); vecErr != nil {
-		return s.opChains, vecErr
+		return s.opChains, s.batchFlowCoordinator, vecErr
 	}
-	return s.opChains, err
+	return s.opChains, s.batchFlowCoordinator, err
 }
 
 type vectorizedInboundStreamHandler struct {

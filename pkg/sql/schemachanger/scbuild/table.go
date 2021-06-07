@@ -88,6 +88,12 @@ func (b *buildContext) alterTableAddColumn(
 		))
 	}
 
+	// User defined columns are not supported, since we don't
+	// do type back references correctly.
+	if toType.UserDefined() {
+		panic(&notImplementedError{n: t, detail: "user defined type in column."})
+	}
+
 	if d.IsSerial {
 		panic(&notImplementedError{n: t.ColumnDef, detail: "contains serial data type"})
 	}
@@ -372,7 +378,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// ID and name.
 	idxID = b.nextIndexID(table)
 	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
-	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
+	newIdx.Name = tabledesc.GenerateUniqueName(
 		"new_primary_key",
 		func(name string) bool {
 			// TODO (lucy): Also check the new indexes specified in the targets.
@@ -386,7 +392,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	var storeColNames []string
 	for _, col := range table.PublicColumns() {
 		containsCol := false
-		for _, id := range newIdx.ColumnIDs {
+		for _, id := range newIdx.KeyColumnIDs {
 			if id == col.GetID() {
 				containsCol = true
 				break
@@ -444,7 +450,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// ID and name.
 	idxID = b.nextIndexID(table)
 	newIdx := protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)
-	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
+	newIdx.Name = tabledesc.GenerateUniqueName(
 		"new_primary_key",
 		func(name string) bool {
 			// TODO (lucy): Also check the new indexes specified in the targets.
@@ -460,7 +466,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	var dropStoreColNames []string
 	for _, col := range table.PublicColumns() {
 		containsCol := false
-		for _, id := range newIdx.ColumnIDs {
+		for _, id := range newIdx.KeyColumnIDs {
 			if id == col.GetID() {
 				containsCol = true
 				break

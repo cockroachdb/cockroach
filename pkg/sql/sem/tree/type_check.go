@@ -464,7 +464,8 @@ func (expr *CastExpr) TypeCheck(
 			// is in its resolvable type set), we desire the cast's type for the
 			// Constant. In many cases, the CastExpr will then become a no-op and will
 			// be elided below. In other cases, the types may be equivalent but not
-			// Identical (e.g. string vs char(2)) and the CastExpr is still needed.
+			// Identical (e.g. string::char(2) or oid::regclass) and the CastExpr is
+			// still needed.
 			desired = exprType
 		}
 	case semaCtx.isUnresolvedPlaceholder(expr.Expr):

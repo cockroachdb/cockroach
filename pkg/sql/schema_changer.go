@@ -138,11 +138,11 @@ func NewSchemaChangerForTesting(
 	}
 }
 
-// isPermanentSchemaChangeError returns true if the error results in
+// IsPermanentSchemaChangeError returns true if the error results in
 // a permanent failure of a schema change. This function is a allowlist
 // instead of a blocklist: only known safe errors are confirmed to not be
 // permanent errors. Anything unknown is assumed to be permanent.
-func isPermanentSchemaChangeError(err error) bool {
+func IsPermanentSchemaChangeError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -385,13 +385,6 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 		return nil
 	}
 	log.Info(ctx, "making table public")
-
-	fks := table.AllActiveAndInactiveForeignKeys()
-	for _, fk := range fks {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, fk.ReferencedTableID); err != nil {
-			return err
-		}
-	}
 
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
@@ -985,9 +978,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	}
 
 	log.Info(ctx, "finished stepping through state machine")
-
-	// wait for the state change to propagate to all leases.
-	return WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+	return nil
 }
 
 func (sc *SchemaChanger) createIndexGCJob(
@@ -1029,19 +1020,6 @@ func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID des
 	return err
 }
 
-// WaitToUpdateLeasesMultiple waits until the entire cluster has been updated to
-// the latest versions of all the specified descriptors.
-func WaitToUpdateLeasesMultiple(
-	ctx context.Context, leaseMgr *lease.Manager, ids []lease.IDVersion,
-) error {
-	for _, idVer := range ids {
-		if err := WaitToUpdateLeases(ctx, leaseMgr, idVer.ID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of
 // sc.descID and that all nodes are on the new (post-update) version of
@@ -1054,7 +1032,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// descriptor updates are published.
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
-	modified, err := sc.txnWithModified(ctx, func(
+	err := descs.Txn(ctx, sc.settings, sc.leaseMgr, sc.execCfg.InternalExecutor, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
@@ -1124,8 +1102,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						return err
 					}
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey())
-					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
-						return err
+					if backrefTable != scTable {
+						if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
+							return err
+						}
 					}
 				}
 			}
@@ -1384,17 +1364,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	})
 	if err != nil {
 		return err
-	}
-	// Wait for the modified versions of tables other than the table we're
-	// updating to have their leases updated.
-	for _, desc := range modified {
-		// sc.descID gets waited for above this call in sc.exec().
-		if desc.ID == sc.descID {
-			continue
-		}
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, desc.ID); err != nil {
-			return err
-		}
 	}
 	// Notify the job registry to start jobs, in case we started any.
 	if err := sc.jobRegistry.NotifyToAdoptJobs(ctx); err != nil {
@@ -1678,16 +1647,6 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	if err != nil || alreadyReversed {
 		return err
 	}
-
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-		return err
-	}
-	for id := range fksByBackrefTable {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -1792,7 +1751,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				if idx := mutation.GetIndex(); idx != nil {
-					for _, name := range idx.ColumnNames {
+					for _, name := range idx.KeyColumnNames {
 						if _, ok := columns[name]; ok {
 							// Such an index mutation has to be with direction ADD and
 							// in the DELETE_ONLY state. Live indexes referencing live
@@ -2003,28 +1962,8 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
-	_, err := sc.txnWithModified(ctx, f)
+	err := descs.Txn(ctx, sc.settings, sc.leaseMgr, sc.execCfg.InternalExecutor, sc.db, f)
 	return err
-}
-
-// txnWithModified is a convenient wrapper around descs.Txn() which additionally
-// returns the set of modified descriptors.
-func (sc *SchemaChanger) txnWithModified(
-	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
-) (descsWithNewVersions []lease.IDVersion, _ error) {
-	ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
-	if err := descs.Txn(ctx, sc.settings, sc.leaseMgr, ie, sc.db, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-	) error {
-		if err := f(ctx, txn, descsCol); err != nil {
-			return err
-		}
-		descsWithNewVersions = descsCol.GetDescriptorsWithNewVersion()
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return descsWithNewVersions, nil
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
@@ -2181,7 +2120,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 					descID, mutationID,
 				)
 				return nil
-			case !isPermanentSchemaChangeError(scErr):
+			case !IsPermanentSchemaChangeError(scErr):
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
 				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
@@ -2346,7 +2285,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 			// We check for this case so that we can just return the error without
 			// wrapping it in a retry error.
 			return rollbackErr
-		case !isPermanentSchemaChangeError(rollbackErr):
+		case !IsPermanentSchemaChangeError(rollbackErr):
 			// Check if the error is on a allowlist of errors we should retry on, and
 			// have the job registry retry.
 			return jobs.NewRetryJobError(rollbackErr.Error())

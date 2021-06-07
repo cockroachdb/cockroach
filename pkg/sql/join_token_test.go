@@ -26,9 +26,10 @@ import (
 func TestCreateJoinToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	settings := cluster.MakeTestingClusterSettings()
-	FeatureTLSAutoJoinEnabled.Override(&settings.SV, true)
+	FeatureTLSAutoJoinEnabled.Override(ctx, &settings.SV, true)
 	s, sqldb, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})

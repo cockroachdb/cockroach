@@ -35,19 +35,23 @@ vectorized: <hidden>
 rows read from KV: 6 (48 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • sort
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
@@ -55,12 +59,14 @@ network usage: <hidden>
         │
         └── • inverted filter
             │ cluster nodes: <hidden>
+            │ cluster regions: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
                   cluster nodes: <hidden>
+                  cluster regions: <hidden>
                   actual row count: 4
                   KV rows read: 4
                   KV bytes read: 32 B
@@ -111,19 +117,23 @@ vectorized: <hidden>
 rows read from KV: 4 (32 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • sort
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
@@ -131,12 +141,14 @@ network usage: <hidden>
         │
         └── • inverted filter
             │ cluster nodes: <hidden>
+            │ cluster regions: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
                   cluster nodes: <hidden>
+                  cluster regions: <hidden>
                   actual row count: 2
                   KV rows read: 2
                   KV bytes read: 16 B
@@ -163,19 +175,23 @@ vectorized: <hidden>
 rows read from KV: 4 (32 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
+cluster regions: <hidden>
 ·
 • sort
 │ cluster nodes: <hidden>
+│ cluster regions: <hidden>
 │ actual row count: 2
 │ order: +k
 │
 └── • filter
     │ cluster nodes: <hidden>
+    │ cluster regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join
         │ cluster nodes: <hidden>
+        │ cluster regions: <hidden>
         │ actual row count: 2
         │ KV rows read: 2
         │ KV bytes read: 16 B
@@ -183,12 +199,14 @@ network usage: <hidden>
         │
         └── • inverted filter
             │ cluster nodes: <hidden>
+            │ cluster regions: <hidden>
             │ actual row count: 2
             │ inverted column: geom_inverted_key
             │ num spans: 31
             │
             └── • scan
                   cluster nodes: <hidden>
+                  cluster regions: <hidden>
                   actual row count: 2
                   KV rows read: 2
                   KV bytes read: 16 B

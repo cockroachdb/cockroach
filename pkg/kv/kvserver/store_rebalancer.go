@@ -200,7 +200,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterNone)
+			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterSuspect)
 			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})
@@ -543,6 +543,16 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		rangeDesc, zone := replWithStats.repl.DescAndZone()
 		clusterNodes := sr.rq.allocator.storePool.ClusterNodeCount()
 		numDesiredVoters := GetNeededVoters(zone.GetNumVoters(), clusterNodes)
+		numDesiredNonVoters := GetNeededNonVoters(numDesiredVoters, int(zone.GetNumNonVoters()), clusterNodes)
+		if rs := rangeDesc.Replicas(); numDesiredVoters != len(rs.VoterDescriptors()) ||
+			numDesiredNonVoters != len(rs.NonVoterDescriptors()) {
+			// If the StoreRebalancer is allowed past this point, it may accidentally
+			// downreplicate and this can cause unavailable ranges.
+			//
+			// See: https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
+			log.VEventf(ctx, 3, "range needs up/downreplication; not considering rebalance")
+			continue
+		}
 
 		rebalanceCtx := rangeRebalanceContext{
 			replWithStats:       replWithStats,
@@ -550,7 +560,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			zone:                zone,
 			clusterNodes:        clusterNodes,
 			numDesiredVoters:    numDesiredVoters,
-			numDesiredNonVoters: GetNeededNonVoters(numDesiredVoters, int(zone.GetNumNonVoters()), clusterNodes),
+			numDesiredNonVoters: numDesiredNonVoters,
 		}
 		targetVoterRepls, targetNonVoterRepls := sr.getRebalanceCandidatesBasedOnQPS(
 			ctx, rebalanceCtx, localDesc, storeMap, storeList, minQPS, maxQPS,
@@ -776,6 +786,10 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 			partialVoterTargets,
 			partialNonVoterTargets,
 			options,
+			// The store rebalancer should never need to perform lateral relocations,
+			// so we ask the allocator to disregard all the nodes that exist in
+			// `partial{Non}VoterTargets`.
+			false, /* allowMultipleReplsPerNode */
 			targetType,
 		)
 		if target == nil {
@@ -934,7 +948,7 @@ func (sr *StoreRebalancer) shouldNotMoveTo(
 	// about node liveness.
 	targetNodeID := candidateStore.Node.NodeID
 	if targetNodeID != sr.rq.store.Ident.NodeID {
-		if !sr.rq.store.cfg.StorePool.isNodeReadyForRoutineReplicaTransfer(ctx, targetNodeID) {
+		if !sr.rq.allocator.storePool.isStoreReadyForRoutineReplicaTransfer(ctx, candidateStore.StoreID) {
 			log.VEventf(ctx, 3,
 				"refusing to transfer replica to n%d/s%d", targetNodeID, candidateStore.StoreID)
 			return true

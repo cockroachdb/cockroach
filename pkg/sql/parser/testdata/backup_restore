@@ -1,0 +1,837 @@
+parse
+BACKUP TABLE foo TO 'bar'
+----
+BACKUP TABLE foo TO 'bar'
+BACKUP TABLE (foo) TO ('bar') -- fully parenthesized
+BACKUP TABLE foo TO _ -- literals removed
+BACKUP TABLE foo TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' -- identifiers removed
+
+parse
+BACKUP foo TO 'bar'
+----
+BACKUP TABLE foo TO 'bar' -- normalized!
+BACKUP TABLE (foo) TO ('bar') -- fully parenthesized
+BACKUP TABLE foo TO _ -- literals removed
+BACKUP TABLE foo TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' -- identifiers removed
+
+parse
+BACKUP TO 'bar'
+----
+BACKUP TO 'bar'
+BACKUP TO ('bar') -- fully parenthesized
+BACKUP TO _ -- literals removed
+BACKUP TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TO 'bar' -- identifiers removed
+
+parse
+BACKUP role TO 'bar'
+----
+BACKUP TABLE role TO 'bar' -- normalized!
+BACKUP TABLE (role) TO ('bar') -- fully parenthesized
+BACKUP TABLE role TO _ -- literals removed
+BACKUP TABLE role TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' -- identifiers removed
+
+parse
+BACKUP TABLE foo INTO 'bar'
+----
+BACKUP TABLE foo INTO 'bar'
+BACKUP TABLE (foo) INTO ('bar') -- fully parenthesized
+BACKUP TABLE foo INTO _ -- literals removed
+BACKUP TABLE foo INTO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ INTO 'bar' -- identifiers removed
+
+parse
+BACKUP TABLE foo INTO LATEST IN 'bar'
+----
+BACKUP TABLE foo INTO LATEST IN 'bar'
+BACKUP TABLE (foo) INTO LATEST IN ('bar') -- fully parenthesized
+BACKUP TABLE foo INTO LATEST IN _ -- literals removed
+BACKUP TABLE foo INTO LATEST IN '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ INTO LATEST IN 'bar' -- identifiers removed
+
+parse
+BACKUP TABLE foo INTO 'subdir' IN 'bar'
+----
+BACKUP TABLE foo INTO 'subdir' IN 'bar'
+BACKUP TABLE (foo) INTO ('subdir') IN ('bar') -- fully parenthesized
+BACKUP TABLE foo INTO _ IN _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "in": syntax error
+BACKUP TABLE _ INTO 'subdir' IN 'bar' -- identifiers removed
+
+parse
+BACKUP TABLE foo INTO $1 IN $2
+----
+BACKUP TABLE foo INTO $1 IN $2
+BACKUP TABLE (foo) INTO ($1) IN ($2) -- fully parenthesized
+BACKUP TABLE foo INTO $1 IN $2 -- literals removed
+BACKUP TABLE _ INTO $1 IN $2 -- identifiers removed
+
+parse
+EXPLAIN BACKUP TABLE foo TO 'bar'
+----
+EXPLAIN BACKUP TABLE foo TO 'bar'
+EXPLAIN BACKUP TABLE (foo) TO ('bar') -- fully parenthesized
+EXPLAIN BACKUP TABLE foo TO _ -- literals removed
+EXPLAIN BACKUP TABLE foo TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPLAIN BACKUP TABLE _ TO 'bar' -- identifiers removed
+
+parse
+BACKUP TABLE foo.foo, baz.baz TO 'bar'
+----
+BACKUP TABLE foo.foo, baz.baz TO 'bar'
+BACKUP TABLE (foo.foo), (baz.baz) TO ('bar') -- fully parenthesized
+BACKUP TABLE foo.foo, baz.baz TO _ -- literals removed
+BACKUP TABLE foo.foo, baz.baz TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _._, _._ TO 'bar' -- identifiers removed
+
+parse
+BACKUP foo.foo, baz.baz TO 'bar'
+----
+BACKUP TABLE foo.foo, baz.baz TO 'bar' -- normalized!
+BACKUP TABLE (foo.foo), (baz.baz) TO ('bar') -- fully parenthesized
+BACKUP TABLE foo.foo, baz.baz TO _ -- literals removed
+BACKUP TABLE foo.foo, baz.baz TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _._, _._ TO 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP 'bar'
+----
+SHOW BACKUP 'bar'
+SHOW BACKUP ('bar') -- fully parenthesized
+SHOW BACKUP _ -- literals removed
+SHOW BACKUP '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUP 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP 'bar' WITH foo = 'bar'
+----
+SHOW BACKUP 'bar' WITH foo = 'bar'
+SHOW BACKUP ('bar') WITH foo = ('bar') -- fully parenthesized
+SHOW BACKUP _ WITH foo = _ -- literals removed
+SHOW BACKUP '_' WITH foo = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUP 'bar' WITH _ = 'bar' -- identifiers removed
+
+parse
+EXPLAIN SHOW BACKUP 'bar'
+----
+EXPLAIN SHOW BACKUP 'bar'
+EXPLAIN SHOW BACKUP ('bar') -- fully parenthesized
+EXPLAIN SHOW BACKUP _ -- literals removed
+EXPLAIN SHOW BACKUP '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPLAIN SHOW BACKUP 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP RANGES 'bar'
+----
+SHOW BACKUP RANGES 'bar'
+SHOW BACKUP RANGES ('bar') -- fully parenthesized
+SHOW BACKUP RANGES _ -- literals removed
+SHOW BACKUP RANGES '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUP RANGES 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP FILES 'bar'
+----
+SHOW BACKUP FILES 'bar'
+SHOW BACKUP FILES ('bar') -- fully parenthesized
+SHOW BACKUP FILES _ -- literals removed
+SHOW BACKUP FILES '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUP FILES 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP FILES 'bar' WITH foo = 'bar'
+----
+SHOW BACKUP FILES 'bar' WITH foo = 'bar'
+SHOW BACKUP FILES ('bar') WITH foo = ('bar') -- fully parenthesized
+SHOW BACKUP FILES _ WITH foo = _ -- literals removed
+SHOW BACKUP FILES '_' WITH foo = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUP FILES 'bar' WITH _ = 'bar' -- identifiers removed
+
+parse
+SHOW BACKUPS IN 'bar'
+----
+SHOW BACKUPS IN 'bar'
+SHOW BACKUPS IN ('bar') -- fully parenthesized
+SHOW BACKUPS IN _ -- literals removed
+SHOW BACKUPS IN '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUPS IN 'bar' -- identifiers removed
+
+parse
+SHOW BACKUPS IN $1
+----
+SHOW BACKUPS IN $1
+SHOW BACKUPS IN ($1) -- fully parenthesized
+SHOW BACKUPS IN $1 -- literals removed
+SHOW BACKUPS IN $1 -- identifiers removed
+
+parse
+SHOW BACKUP 'foo' IN 'bar'
+----
+SHOW BACKUP 'foo' IN 'bar'
+SHOW BACKUP ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP _ IN _ -- literals removed
+SHOW BACKUP '_' IN '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP $1 IN $2 WITH foo = 'bar'
+----
+SHOW BACKUP $1 IN $2 WITH foo = 'bar'
+SHOW BACKUP ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
+SHOW BACKUP $1 IN $2 WITH foo = _ -- literals removed
+SHOW BACKUP $1 IN $2 WITH foo = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SHOW BACKUP $1 IN $2 WITH _ = 'bar' -- identifiers removed
+
+parse
+BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
+----
+BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
+BACKUP TABLE (foo) TO ('bar') AS OF SYSTEM TIME ('1') INCREMENTAL FROM ('baz') -- fully parenthesized
+BACKUP TABLE foo TO _ AS OF SYSTEM TIME _ INCREMENTAL FROM _ -- literals removed
+BACKUP TABLE foo TO '_' AS OF SYSTEM TIME _ INCREMENTAL FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz' -- identifiers removed
+
+parse
+BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
+----
+BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz' -- normalized!
+BACKUP TABLE (foo) TO ('bar') AS OF SYSTEM TIME ('1') INCREMENTAL FROM ('baz') -- fully parenthesized
+BACKUP TABLE foo TO _ AS OF SYSTEM TIME _ INCREMENTAL FROM _ -- literals removed
+BACKUP TABLE foo TO '_' AS OF SYSTEM TIME _ INCREMENTAL FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz' -- identifiers removed
+
+parse
+BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
+----
+BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
+BACKUP TABLE (foo) TO ($1) INCREMENTAL FROM ('bar'), ($2), ('baz') -- fully parenthesized
+BACKUP TABLE foo TO $1 INCREMENTAL FROM _, $2, _ -- literals removed
+BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- identifiers removed
+
+parse
+BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
+----
+BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- normalized!
+BACKUP TABLE (foo) TO ($1) INCREMENTAL FROM ('bar'), ($2), ('baz') -- fully parenthesized
+BACKUP TABLE foo TO $1 INCREMENTAL FROM _, $2, _ -- literals removed
+BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- identifiers removed
+
+parse
+BACKUP DATABASE foo TO 'bar'
+----
+BACKUP DATABASE foo TO 'bar'
+BACKUP DATABASE foo TO ('bar') -- fully parenthesized
+BACKUP DATABASE foo TO _ -- literals removed
+BACKUP DATABASE foo TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP DATABASE _ TO 'bar' -- identifiers removed
+
+parse
+BACKUP DATABASE foo TO ($1)
+----
+BACKUP DATABASE foo TO $1 -- normalized!
+BACKUP DATABASE foo TO ($1) -- fully parenthesized
+BACKUP DATABASE foo TO $1 -- literals removed
+BACKUP DATABASE _ TO $1 -- identifiers removed
+
+parse
+EXPLAIN BACKUP DATABASE foo TO 'bar'
+----
+EXPLAIN BACKUP DATABASE foo TO 'bar'
+EXPLAIN BACKUP DATABASE foo TO ('bar') -- fully parenthesized
+EXPLAIN BACKUP DATABASE foo TO _ -- literals removed
+EXPLAIN BACKUP DATABASE foo TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPLAIN BACKUP DATABASE _ TO 'bar' -- identifiers removed
+
+parse
+BACKUP DATABASE foo TO bar
+----
+BACKUP DATABASE foo TO 'bar' -- normalized!
+BACKUP DATABASE foo TO ('bar') -- fully parenthesized
+BACKUP DATABASE foo TO _ -- literals removed
+BACKUP DATABASE foo TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP DATABASE _ TO 'bar' -- identifiers removed
+
+
+parse
+BACKUP DATABASE foo, baz TO 'bar'
+----
+BACKUP DATABASE foo, baz TO 'bar'
+BACKUP DATABASE foo, baz TO ('bar') -- fully parenthesized
+BACKUP DATABASE foo, baz TO _ -- literals removed
+BACKUP DATABASE foo, baz TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP DATABASE _, _ TO 'bar' -- identifiers removed
+
+parse
+BACKUP DATABASE foo TO "bar.12" INCREMENTAL FROM "baz.34"
+----
+BACKUP DATABASE foo TO 'bar.12' INCREMENTAL FROM 'baz.34' -- normalized!
+BACKUP DATABASE foo TO ('bar.12') INCREMENTAL FROM ('baz.34') -- fully parenthesized
+BACKUP DATABASE foo TO _ INCREMENTAL FROM _ -- literals removed
+BACKUP DATABASE foo TO '_' INCREMENTAL FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP DATABASE _ TO 'bar.12' INCREMENTAL FROM 'baz.34' -- identifiers removed
+
+
+parse
+BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
+----
+BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
+BACKUP DATABASE foo TO ('bar') AS OF SYSTEM TIME ('1') INCREMENTAL FROM ('baz') -- fully parenthesized
+BACKUP DATABASE foo TO _ AS OF SYSTEM TIME _ INCREMENTAL FROM _ -- literals removed
+BACKUP DATABASE foo TO '_' AS OF SYSTEM TIME _ INCREMENTAL FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP DATABASE _ TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz' -- identifiers removed
+
+parse
+BACKUP DATABASE foo TO ($1, $2)
+----
+BACKUP DATABASE foo TO ($1, $2)
+BACKUP DATABASE foo TO (($1), ($2)) -- fully parenthesized
+BACKUP DATABASE foo TO ($1, $2) -- literals removed
+BACKUP DATABASE _ TO ($1, $2) -- identifiers removed
+
+parse
+BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'
+----
+BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'
+BACKUP DATABASE foo TO (($1), ($2)) INCREMENTAL FROM ('baz') -- fully parenthesized
+BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM _ -- literals removed
+BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP DATABASE _ TO ($1, $2) INCREMENTAL FROM 'baz' -- identifiers removed
+
+parse
+BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history
+----
+BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = '*****' -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history, encryption_passphrase = '*****' -- fully parenthesized
+BACKUP TABLE foo TO _ WITH revision_history, encryption_passphrase = '*****' -- literals removed
+BACKUP TABLE foo TO '_' WITH revision_history, encryption_passphrase = '*****' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' WITH revision_history, encryption_passphrase = '*****' -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = 'secret' -- passwords exposed
+
+parse
+BACKUP foo TO 'bar' WITH KMS = 'foo', revision_history, include_deprecated_interleaves
+----
+BACKUP TABLE foo TO 'bar' WITH revision_history, kms = 'foo', include_deprecated_interleaves -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history, kms = ('foo'), include_deprecated_interleaves -- fully parenthesized
+BACKUP TABLE foo TO _ WITH revision_history, kms = _, include_deprecated_interleaves -- literals removed
+BACKUP TABLE foo TO '_' WITH revision_history, kms = '_', include_deprecated_interleaves -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' WITH revision_history, kms = 'foo', include_deprecated_interleaves -- identifiers removed
+
+parse
+BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
+----
+BACKUP TABLE foo TO 'bar' WITH revision_history, kms = ('foo', 'bar') -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history, kms = (('foo'), ('bar')) -- fully parenthesized
+BACKUP TABLE foo TO _ WITH revision_history, kms = (_, _) -- literals removed
+BACKUP TABLE foo TO '_' WITH revision_history, kms = ('_', '_') -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' WITH revision_history, kms = ('foo', 'bar') -- identifiers removed
+
+parse
+BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)
+----
+BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = '*****', detached -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history, encryption_passphrase = '*****', detached -- fully parenthesized
+BACKUP TABLE foo TO _ WITH revision_history, encryption_passphrase = '*****', detached -- literals removed
+BACKUP TABLE foo TO '_' WITH revision_history, encryption_passphrase = '*****', detached -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' WITH revision_history, encryption_passphrase = '*****', detached -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = 'secret', detached -- passwords exposed
+
+parse
+BACKUP foo TO 'bar' WITH OPTIONS (detached, KMS = ('foo', 'bar'), revision_history)
+----
+BACKUP TABLE foo TO 'bar' WITH revision_history, detached, kms = ('foo', 'bar') -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history, detached, kms = (('foo'), ('bar')) -- fully parenthesized
+BACKUP TABLE foo TO _ WITH revision_history, detached, kms = (_, _) -- literals removed
+BACKUP TABLE foo TO '_' WITH revision_history, detached, kms = ('_', '_') -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' WITH revision_history, detached, kms = ('foo', 'bar') -- identifiers removed
+
+parse
+BACKUP TENANT 36 TO 'bar'
+----
+BACKUP TENANT 36 TO 'bar'
+BACKUP TENANT 36 TO ('bar') -- fully parenthesized
+BACKUP TENANT 36 TO _ -- literals removed
+BACKUP TENANT 36 TO '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TENANT 36 TO 'bar' -- identifiers removed
+
+parse
+RESTORE TABLE foo FROM 'bar'
+----
+RESTORE TABLE foo FROM 'bar'
+RESTORE TABLE (foo) FROM ('bar') -- fully parenthesized
+RESTORE TABLE foo FROM _ -- literals removed
+RESTORE TABLE foo FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'bar' -- identifiers removed
+
+parse
+EXPLAIN RESTORE TABLE foo FROM 'bar'
+----
+EXPLAIN RESTORE TABLE foo FROM 'bar'
+EXPLAIN RESTORE TABLE (foo) FROM ('bar') -- fully parenthesized
+EXPLAIN RESTORE TABLE foo FROM _ -- literals removed
+EXPLAIN RESTORE TABLE foo FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPLAIN RESTORE TABLE _ FROM 'bar' -- identifiers removed
+
+parse
+RESTORE foo FROM 'bar'
+----
+RESTORE TABLE foo FROM 'bar' -- normalized!
+RESTORE TABLE (foo) FROM ('bar') -- fully parenthesized
+RESTORE TABLE foo FROM _ -- literals removed
+RESTORE TABLE foo FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'bar' -- identifiers removed
+
+parse
+RESTORE TABLE foo FROM $1
+----
+RESTORE TABLE foo FROM $1
+RESTORE TABLE (foo) FROM ($1) -- fully parenthesized
+RESTORE TABLE foo FROM $1 -- literals removed
+RESTORE TABLE _ FROM $1 -- identifiers removed
+
+
+parse
+RESTORE foo FROM $1
+----
+RESTORE TABLE foo FROM $1 -- normalized!
+RESTORE TABLE (foo) FROM ($1) -- fully parenthesized
+RESTORE TABLE foo FROM $1 -- literals removed
+RESTORE TABLE _ FROM $1 -- identifiers removed
+
+parse
+RESTORE TABLE foo FROM $2 IN $1
+----
+RESTORE TABLE foo FROM $2 IN $1
+RESTORE TABLE (foo) FROM ($2) IN ($1) -- fully parenthesized
+RESTORE TABLE foo FROM $2 IN $1 -- literals removed
+RESTORE TABLE _ FROM $2 IN $1 -- identifiers removed
+
+parse
+RESTORE TABLE foo FROM $1, $2, 'bar'
+----
+RESTORE TABLE foo FROM $1, $2, 'bar'
+RESTORE TABLE (foo) FROM ($1), ($2), ('bar') -- fully parenthesized
+RESTORE TABLE foo FROM $1, $2, _ -- literals removed
+RESTORE TABLE foo FROM $1, $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM $1, $2, 'bar' -- identifiers removed
+
+parse
+RESTORE foo FROM $1, $2, 'bar'
+----
+RESTORE TABLE foo FROM $1, $2, 'bar' -- normalized!
+RESTORE TABLE (foo) FROM ($1), ($2), ('bar') -- fully parenthesized
+RESTORE TABLE foo FROM $1, $2, _ -- literals removed
+RESTORE TABLE foo FROM $1, $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM $1, $2, 'bar' -- identifiers removed
+
+parse
+RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'
+----
+RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'
+RESTORE TABLE (foo) FROM ('abc') IN ($1), ($2), ('bar') -- fully parenthesized
+RESTORE TABLE foo FROM _ IN $1, $2, _ -- literals removed
+RESTORE TABLE foo FROM '_' IN $1, $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'abc' IN $1, $2, 'bar' -- identifiers removed
+
+parse
+RESTORE TABLE foo FROM $4 IN $1, $2, 'bar'
+----
+RESTORE TABLE foo FROM $4 IN $1, $2, 'bar'
+RESTORE TABLE (foo) FROM ($4) IN ($1), ($2), ('bar') -- fully parenthesized
+RESTORE TABLE foo FROM $4 IN $1, $2, _ -- literals removed
+RESTORE TABLE foo FROM $4 IN $1, $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM $4 IN $1, $2, 'bar' -- identifiers removed
+
+parse
+RESTORE TABLE foo, baz FROM 'bar'
+----
+RESTORE TABLE foo, baz FROM 'bar'
+RESTORE TABLE (foo), (baz) FROM ('bar') -- fully parenthesized
+RESTORE TABLE foo, baz FROM _ -- literals removed
+RESTORE TABLE foo, baz FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _, _ FROM 'bar' -- identifiers removed
+
+
+parse
+RESTORE foo, baz FROM 'bar'
+----
+RESTORE TABLE foo, baz FROM 'bar' -- normalized!
+RESTORE TABLE (foo), (baz) FROM ('bar') -- fully parenthesized
+RESTORE TABLE foo, baz FROM _ -- literals removed
+RESTORE TABLE foo, baz FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _, _ FROM 'bar' -- identifiers removed
+
+parse
+RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
+----
+RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
+RESTORE TABLE (foo), (baz) FROM ('bar') AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE TABLE foo, baz FROM _ AS OF SYSTEM TIME _ -- literals removed
+RESTORE TABLE foo, baz FROM '_' AS OF SYSTEM TIME _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _, _ FROM 'bar' AS OF SYSTEM TIME '1' -- identifiers removed
+
+
+parse
+RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
+----
+RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1' -- normalized!
+RESTORE TABLE (foo), (baz) FROM ('bar') AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE TABLE foo, baz FROM _ AS OF SYSTEM TIME _ -- literals removed
+RESTORE TABLE foo, baz FROM '_' AS OF SYSTEM TIME _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _, _ FROM 'bar' AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM 'bar'
+----
+RESTORE DATABASE foo FROM 'bar'
+RESTORE DATABASE foo FROM ('bar') -- fully parenthesized
+RESTORE DATABASE foo FROM _ -- literals removed
+RESTORE DATABASE foo FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE DATABASE _ FROM 'bar' -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM ($1)
+----
+RESTORE DATABASE foo FROM $1 -- normalized!
+RESTORE DATABASE foo FROM ($1) -- fully parenthesized
+RESTORE DATABASE foo FROM $1 -- literals removed
+RESTORE DATABASE _ FROM $1 -- identifiers removed
+
+parse
+EXPLAIN RESTORE DATABASE foo FROM 'bar'
+----
+EXPLAIN RESTORE DATABASE foo FROM 'bar'
+EXPLAIN RESTORE DATABASE foo FROM ('bar') -- fully parenthesized
+EXPLAIN RESTORE DATABASE foo FROM _ -- literals removed
+EXPLAIN RESTORE DATABASE foo FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+EXPLAIN RESTORE DATABASE _ FROM 'bar' -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM bar
+----
+RESTORE DATABASE foo FROM 'bar' -- normalized!
+RESTORE DATABASE foo FROM ('bar') -- fully parenthesized
+RESTORE DATABASE foo FROM _ -- literals removed
+RESTORE DATABASE foo FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE DATABASE _ FROM 'bar' -- identifiers removed
+
+
+parse
+RESTORE DATABASE foo, baz FROM 'bar'
+----
+RESTORE DATABASE foo, baz FROM 'bar'
+RESTORE DATABASE foo, baz FROM ('bar') -- fully parenthesized
+RESTORE DATABASE foo, baz FROM _ -- literals removed
+RESTORE DATABASE foo, baz FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE DATABASE _, _ FROM 'bar' -- identifiers removed
+
+parse
+RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
+----
+RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
+RESTORE DATABASE foo, baz FROM ('bar') AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE DATABASE foo, baz FROM _ AS OF SYSTEM TIME _ -- literals removed
+RESTORE DATABASE foo, baz FROM '_' AS OF SYSTEM TIME _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE DATABASE _, _ FROM 'bar' AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM ($1, $2)
+----
+RESTORE DATABASE foo FROM ($1, $2)
+RESTORE DATABASE foo FROM (($1), ($2)) -- fully parenthesized
+RESTORE DATABASE foo FROM ($1, $2) -- literals removed
+RESTORE DATABASE _ FROM ($1, $2) -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM ($1), ($2)
+----
+RESTORE DATABASE foo FROM $1, $2 -- normalized!
+RESTORE DATABASE foo FROM ($1), ($2) -- fully parenthesized
+RESTORE DATABASE foo FROM $1, $2 -- literals removed
+RESTORE DATABASE _ FROM $1, $2 -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM ($1), ($2, $3)
+----
+RESTORE DATABASE foo FROM $1, ($2, $3) -- normalized!
+RESTORE DATABASE foo FROM ($1), (($2), ($3)) -- fully parenthesized
+RESTORE DATABASE foo FROM $1, ($2, $3) -- literals removed
+RESTORE DATABASE _ FROM $1, ($2, $3) -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM ($1, $2), $3
+----
+RESTORE DATABASE foo FROM ($1, $2), $3
+RESTORE DATABASE foo FROM (($1), ($2)), ($3) -- fully parenthesized
+RESTORE DATABASE foo FROM ($1, $2), $3 -- literals removed
+RESTORE DATABASE _ FROM ($1, $2), $3 -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM $1, ($2, $3)
+----
+RESTORE DATABASE foo FROM $1, ($2, $3)
+RESTORE DATABASE foo FROM ($1), (($2), ($3)) -- fully parenthesized
+RESTORE DATABASE foo FROM $1, ($2, $3) -- literals removed
+RESTORE DATABASE _ FROM $1, ($2, $3) -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM ($1, $2), ($3, $4)
+----
+RESTORE DATABASE foo FROM ($1, $2), ($3, $4)
+RESTORE DATABASE foo FROM (($1), ($2)), (($3), ($4)) -- fully parenthesized
+RESTORE DATABASE foo FROM ($1, $2), ($3, $4) -- literals removed
+RESTORE DATABASE _ FROM ($1, $2), ($3, $4) -- identifiers removed
+
+parse
+RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
+----
+RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
+RESTORE DATABASE foo FROM (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME _ -- literals removed
+RESTORE DATABASE _ FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE FROM ($1, $2)
+----
+RESTORE FROM ($1, $2)
+RESTORE FROM (($1), ($2)) -- fully parenthesized
+RESTORE FROM ($1, $2) -- literals removed
+RESTORE FROM ($1, $2) -- identifiers removed
+
+parse
+RESTORE FROM ($1, $2), $3
+----
+RESTORE FROM ($1, $2), $3
+RESTORE FROM (($1), ($2)), ($3) -- fully parenthesized
+RESTORE FROM ($1, $2), $3 -- literals removed
+RESTORE FROM ($1, $2), $3 -- identifiers removed
+
+parse
+RESTORE FROM $1, ($2, $3)
+----
+RESTORE FROM $1, ($2, $3)
+RESTORE FROM ($1), (($2), ($3)) -- fully parenthesized
+RESTORE FROM $1, ($2, $3) -- literals removed
+RESTORE FROM $1, ($2, $3) -- identifiers removed
+
+parse
+RESTORE FROM ($1, $2), ($3, $4)
+----
+RESTORE FROM ($1, $2), ($3, $4)
+RESTORE FROM (($1), ($2)), (($3), ($4)) -- fully parenthesized
+RESTORE FROM ($1, $2), ($3, $4) -- literals removed
+RESTORE FROM ($1, $2), ($3, $4) -- identifiers removed
+
+parse
+RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
+----
+RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
+RESTORE FROM (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME _ -- literals removed
+RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE FROM $1, $2, 'bar'
+----
+RESTORE FROM $1, $2, 'bar'
+RESTORE FROM ($1), ($2), ('bar') -- fully parenthesized
+RESTORE FROM $1, $2, _ -- literals removed
+RESTORE FROM $1, $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE FROM $1, $2, 'bar' -- identifiers removed
+
+parse
+RESTORE FROM $4 IN $1, $2, 'bar'
+----
+RESTORE FROM $4 IN $1, $2, 'bar'
+RESTORE FROM ($4) IN ($1), ($2), ('bar') -- fully parenthesized
+RESTORE FROM $4 IN $1, $2, _ -- literals removed
+RESTORE FROM $4 IN $1, $2, '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE FROM $4 IN $1, $2, 'bar' -- identifiers removed
+
+parse
+RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys
+----
+RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys
+RESTORE FROM ($4) IN ($1), ($2), ('bar') AS OF SYSTEM TIME ('1') WITH skip_missing_foreign_keys -- fully parenthesized
+RESTORE FROM $4 IN $1, $2, _ AS OF SYSTEM TIME _ WITH skip_missing_foreign_keys -- literals removed
+RESTORE FROM $4 IN $1, $2, '_' AS OF SYSTEM TIME _ WITH skip_missing_foreign_keys -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys -- identifiers removed
+
+parse
+RESTORE abc.xzy FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys
+----
+RESTORE TABLE abc.xzy FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys -- normalized!
+RESTORE TABLE (abc.xzy) FROM ('a') WITH into_db = ('foo'), skip_missing_foreign_keys -- fully parenthesized
+RESTORE TABLE abc.xzy FROM _ WITH into_db = _, skip_missing_foreign_keys -- literals removed
+RESTORE TABLE abc.xzy FROM '_' WITH into_db = '_', skip_missing_foreign_keys -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _._ FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys -- identifiers removed
+
+parse
+RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check
+----
+RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check
+RESTORE FROM ('a') WITH into_db = ('foo'), skip_missing_foreign_keys, skip_localities_check -- fully parenthesized
+RESTORE FROM _ WITH into_db = _, skip_missing_foreign_keys, skip_localities_check -- literals removed
+RESTORE FROM '_' WITH into_db = '_', skip_missing_foreign_keys, skip_localities_check -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check -- identifiers removed
+
+parse
+RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz',
+skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, detached, skip_localities_check)
+----
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- fully parenthesized
+RESTORE TABLE foo FROM _ WITH encryption_passphrase = _, into_db = _, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- literals removed
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- identifiers removed
+
+parse
+RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz,
+SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS, SKIP_LOCALITIES_CHECK
+----
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- fully parenthesized
+RESTORE TABLE foo FROM _ WITH encryption_passphrase = _, into_db = _, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- literals removed
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- identifiers removed
+
+
+parse
+RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
+----
+RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
+RESTORE TENANT 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME _ -- literals removed
+RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'
+----
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM ('bar') -- fully parenthesized
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM _ -- literals removed
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' -- identifiers removed
+
+parse
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1
+----
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM ($1) -- fully parenthesized
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 -- literals removed
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 -- identifiers removed
+
+parse
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' AS OF SYSTEM TIME '1'
+----
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' AS OF SYSTEM TIME '1'
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM ('bar') AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM _ AS OF SYSTEM TIME _ -- literals removed
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM '_' AS OF SYSTEM TIME _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME '1'
+----
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME '1'
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM ($1) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME _ -- literals removed
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+BACKUP TABLE foo TO 'bar' WITH revision_history, detached
+----
+BACKUP TABLE foo TO 'bar' WITH revision_history, detached
+BACKUP TABLE (foo) TO ('bar') WITH revision_history, detached -- fully parenthesized
+BACKUP TABLE foo TO _ WITH revision_history, detached -- literals removed
+BACKUP TABLE foo TO '_' WITH revision_history, detached -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' WITH revision_history, detached -- identifiers removed
+
+parse
+RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached
+----
+RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached
+RESTORE TABLE (foo) FROM ('bar') WITH skip_missing_foreign_keys, skip_missing_sequences, detached -- fully parenthesized
+RESTORE TABLE foo FROM _ WITH skip_missing_foreign_keys, skip_missing_sequences, detached -- literals removed
+RESTORE TABLE foo FROM '_' WITH skip_missing_foreign_keys, skip_missing_sequences, detached -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached -- identifiers removed
+
+error
+BACKUP foo TO 'bar' WITH key1, key2 = 'value'
+----
+at or near "key1": syntax error
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH key1, key2 = 'value'
+                         ^
+HINT: try \h BACKUP
+
+error
+BACKUP foo TO 'bar' WITH revision_history, revision_history
+----
+at or near "revision_history": syntax error: revision_history option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH revision_history, revision_history
+                                           ^
+
+error
+BACKUP foo TO 'bar' WITH detached, revision_history, detached
+----
+at or near "detached": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH detached, revision_history, detached
+                                                     ^
+
+error
+RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
+----
+at or near "key1": syntax error
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH key1, key2 = 'value'
+                            ^
+HINT: try \h RESTORE
+
+error
+RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
+----
+at or near "skip_missing_foreign_keys": syntax error: skip_missing_foreign_keys specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_foreign_keys
+                                                       ^
+
+error
+RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
+----
+at or near "skip_missing_sequences": syntax error: skip_missing_sequences specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
+                                                                        ^
+
+error
+RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
+----
+at or near "detached": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
+                                                          ^
+
+error
+BACKUP ROLE foo, bar TO 'baz'
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+BACKUP ROLE foo, bar TO 'baz'
+            ^
+HINT: try \h BACKUP
+
+error
+RESTORE ROLE foo, bar FROM 'baz'
+----
+at or near "foo": syntax error
+DETAIL: source SQL:
+RESTORE ROLE foo, bar FROM 'baz'
+             ^
+HINT: try \h RESTORE

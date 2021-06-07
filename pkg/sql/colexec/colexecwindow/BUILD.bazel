@@ -4,6 +4,7 @@ load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 go_library(
     name = "colexecwindow",
     srcs = [
+        "buffered_window.go",
         "partitioner.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
@@ -12,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",  # keep
+        "//pkg/col/typeconv",  # keep
         "//pkg/sql/colcontainer",  # keep
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecutils",  # keep
@@ -19,6 +21,7 @@ go_library(
         "//pkg/sql/colexecop",  # keep
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfrapb",  # keep
+        "//pkg/sql/sem/builtins",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util/mon",  # keep
@@ -63,6 +66,9 @@ go_test(
 
 # Map between target name and relevant template.
 targets = [
+    ("lag.eg.go", "lead_lag_tmpl.go"),
+    ("lead.eg.go", "lead_lag_tmpl.go"),
+    ("ntile.eg.go", "ntile_tmpl.go"),
     ("rank.eg.go", "rank_tmpl.go"),
     ("relative_rank.eg.go", "relative_rank_tmpl.go"),
     ("row_number.eg.go", "row_number_tmpl.go"),

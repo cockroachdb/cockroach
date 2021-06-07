@@ -73,7 +73,7 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   tree.NewRegexpCache(512),
-		flowRegistry:  flowinfra.NewFlowRegistry(cfg.NodeID.SQLInstanceID()),
+		flowRegistry:  flowinfra.NewFlowRegistry(),
 		flowScheduler: flowinfra.NewFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
 		memMonitor: mon.NewMonitor(
 			"distsql",
@@ -87,7 +87,7 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 
-	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func() {
+	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		if !colexec.HashAggregationDiskSpillingEnabled.Get(&cfg.Settings.SV) {
 			telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
 		}
@@ -120,6 +120,19 @@ func (ds *ServerImpl) Start() {
 	}
 
 	ds.flowScheduler.Start()
+}
+
+// NumRemoteFlowsInQueue returns the number of remote flows scheduled to run on
+// this server which are currently in the queue of the flow scheduler.
+func (ds *ServerImpl) NumRemoteFlowsInQueue() int {
+	return ds.flowScheduler.NumFlowsInQueue()
+}
+
+// SetCancelDeadFlowsCallback sets a testing callback that will be executed by
+// the flow scheduler at the end of CancelDeadFlows call. The callback must be
+// concurrency-safe.
+func (ds *ServerImpl) SetCancelDeadFlowsCallback(cb func(int)) {
+	ds.flowScheduler.TestingKnobs.CancelDeadFlowsCallback = cb
 }
 
 // Drain changes the node's draining state through gossip and drains the
@@ -187,7 +200,8 @@ func (ds *ServerImpl) setupFlow(
 	parentSpan *tracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	syncFlowConsumer execinfra.RowReceiver,
+	rowSyncFlowConsumer execinfra.RowReceiver,
+	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
@@ -314,7 +328,10 @@ func (ds *ServerImpl) setupFlow(
 	// itself when the vectorize mode needs to be changed because we would need
 	// to restore the original value which can have data races under stress.
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
+	f := newFlow(
+		flowCtx, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
+		localState.LocalProcs, isVectorized,
+	)
 	opt := flowinfra.FuseNormally
 	if localState.IsLocal {
 		// If there's no remote flows, fuse everything. This is needed in order for
@@ -435,11 +452,12 @@ func (ds *ServerImpl) newFlowContext(
 func newFlow(
 	flowCtx execinfra.FlowCtx,
 	flowReg *flowinfra.FlowRegistry,
-	syncFlowConsumer execinfra.RowReceiver,
+	rowSyncFlowConsumer execinfra.RowReceiver,
+	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, flowReg, syncFlowConsumer, localProcessors)
+	base := flowinfra.NewFlowBase(flowCtx, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}
@@ -481,10 +499,11 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
+	batchOutput execinfra.BatchReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	ctx, f, opChains, err := ds.setupFlow(
-		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
+		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, batchOutput, localState,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -492,7 +511,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	return ctx, f, opChains, err
 }
 
-// SetupFlow is part of the DistSQLServer interface.
+// SetupFlow is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
@@ -502,7 +521,10 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, _, err := ds.setupFlow(ctx, parentSpan, ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
+	ctx, f, _, err := ds.setupFlow(
+		ctx, parentSpan, ds.memMonitor, req, nil, /* rowSyncFlowConsumer */
+		nil /* batchSyncFlowConsumer */, LocalState{},
+	)
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
@@ -512,6 +534,14 @@ func (ds *ServerImpl) SetupFlow(
 		// function, they become part of an rpc error.
 		return &execinfrapb.SimpleResponse{Error: execinfrapb.NewError(ctx, err)}, nil
 	}
+	return &execinfrapb.SimpleResponse{}, nil
+}
+
+// CancelDeadFlows is part of the execinfrapb.DistSQLServer interface.
+func (ds *ServerImpl) CancelDeadFlows(
+	_ context.Context, req *execinfrapb.CancelDeadFlowsRequest,
+) (*execinfrapb.SimpleResponse, error) {
+	ds.flowScheduler.CancelDeadFlows(req)
 	return &execinfrapb.SimpleResponse{}, nil
 }
 
@@ -545,7 +575,7 @@ func (ds *ServerImpl) flowStreamInt(
 	return streamStrategy.Run(f.AnnotateCtx(ctx), stream, msg, f)
 }
 
-// FlowStream is part of the DistSQLServer interface.
+// FlowStream is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) error {
 	ctx := ds.AnnotateCtx(stream.Context())
 	err := ds.flowStreamInt(ctx, stream)

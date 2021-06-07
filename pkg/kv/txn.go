@@ -17,11 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -85,6 +87,12 @@ type Txn struct {
 		// deadline.
 		deadline *hlc.Timestamp
 	}
+
+	// admissionHeader is used for admission control for work done in this
+	// transaction. Only certain paths initialize this properly, and the
+	// remaining just use the zero value. The set of code paths that initialize
+	// this are expected to expand over time.
+	admissionHeader roachpb.AdmissionHeader
 }
 
 // NewTxn returns a new RootTxn.
@@ -122,9 +130,16 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 }
 
-// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL.
+// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
+// that this initializes Txn.admissionHeader to specify that the source is
+// FROM_SQL.
 func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
+	txn.admissionHeader = roachpb.AdmissionHeader{
+		Priority:   int32(admission.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     roachpb.AdmissionHeader_FROM_SQL,
+	}
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
 	return txn
 }
@@ -371,7 +386,7 @@ func (txn *Txn) DisablePipelining() error {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{txn: txn}
+	return &Batch{txn: txn, AdmissionHeader: txn.admissionHeader}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -621,6 +636,10 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
+	// A batch with only endTxnReq is not subject to admission control, in order
+	// to reduce contention by releasing locks. In multi-tenant settings, it
+	// will be subject to admission control, and the zero CreateTime will give
+	// it preference within the tenant.
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
@@ -713,7 +732,7 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 
 	readTimestamp := txn.readTimestampLocked()
 	if deadline.Less(readTimestamp) {
-		log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
+		return errors.AssertionFailedf("deadline below read timestamp is nonsensical; "+
 			"txn has would have no chance to commit. Deadline: %s. Read timestamp: %s Previous Deadline: %s.",
 			deadline, readTimestamp, txn.mu.deadline)
 	}
@@ -744,6 +763,10 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	// below. Note that this is the common path when a client disconnects in the
 	// middle of an open transaction or during statement execution.
 	if ctx.Err() == nil {
+		// A batch with only endTxnReq is not subject to admission control, in
+		// order to reduce contention by releasing locks. In multi-tenant
+		// settings, it will be subject to admission control, and the zero
+		// CreateTime will give it preference within the tenant.
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		_, pErr := txn.Send(ctx, ba)
@@ -766,6 +789,10 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
 		defer cancel()
+		// A batch with only endTxnReq is not subject to admission control, in
+		// order to reduce contention by releasing locks. In multi-tenant
+		// settings, it will be subject to admission control, and the zero
+		// CreateTime will give it preference within the tenant.
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
@@ -943,6 +970,10 @@ func (txn *Txn) Send(
 	if txn.gatewayNodeID != 0 {
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
+
+	// Some callers have not initialized ba using a Batch constructed using
+	// Txn.NewBatch. So we fallback to initializing here.
+	ba.AdmissionHeader = txn.admissionHeader
 
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID
@@ -1347,4 +1378,10 @@ func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.DeferCommitWait(ctx)
+}
+
+// AdmissionHeader returns the admission header for work done in the context
+// of this transaction.
+func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
+	return txn.admissionHeader
 }

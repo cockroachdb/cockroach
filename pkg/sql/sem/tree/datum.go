@@ -455,14 +455,19 @@ func (d *DBool) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBool) AmbiguousFormat() bool { return false }
 
+// PgwireFormatBool returns a single byte representing a boolean according to
+// pgwire encoding.
+func PgwireFormatBool(d bool) byte {
+	if d {
+		return 't'
+	}
+	return 'f'
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DBool) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
-		if bool(*d) {
-			ctx.WriteByte('t')
-		} else {
-			ctx.WriteByte('f')
-		}
+		ctx.WriteByte(PgwireFormatBool(bool(*d)))
 		return
 	}
 	ctx.WriteString(strconv.FormatBool(bool(*d)))
@@ -1887,17 +1892,22 @@ func (d *DDate) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DDate) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DDate) Format(ctx *FmtCtx) {
+// FormatDate writes d into ctx according to the format flags.
+func FormatDate(d pgdate.Date, ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Date.Format(&ctx.Buffer)
+	d.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DDate) Format(ctx *FmtCtx) {
+	FormatDate(d.Date, ctx)
 }
 
 // Size implements the Datum interface.
@@ -2771,17 +2781,22 @@ func (d *DInterval) ValueAsString() string {
 // AmbiguousFormat implements the Datum interface.
 func (*DInterval) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DInterval) Format(ctx *FmtCtx) {
+// FormatDuration writes d into ctx according to the format flags.
+func FormatDuration(d duration.Duration, ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Duration.Format(&ctx.Buffer)
+	d.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DInterval) Format(ctx *FmtCtx) {
+	FormatDuration(d.Duration, ctx)
 }
 
 // Size implements the Datum interface.
@@ -4282,7 +4297,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 	// If it is an integer in string form, convert it as an int.
 	if val, err := ParseDInt(strings.TrimSpace(s)); err == nil {
 		tmpOid := NewDOid(*val)
-		oid, err := queryOid(ctx, t, tmpOid)
+		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
 		if err != nil {
 			oid = tmpOid
 			oid.semanticType = t
@@ -4353,7 +4368,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 		// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 
-		dOid, missingTypeErr := queryOid(ctx, t, NewDString(Name(s).Normalize()))
+		dOid, missingTypeErr := ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, NewDString(Name(s).Normalize()))
 		if missingTypeErr == nil {
 			return dOid, missingTypeErr
 		}
@@ -4392,7 +4407,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 			name:         tn.ObjectName.String(),
 		}, nil
 	default:
-		return queryOid(ctx, t, NewDString(s))
+		return ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, NewDString(s))
 	}
 }
 

@@ -31,7 +31,6 @@ go_library(
         "django.go",
         "django_blocklist.go",
         "drop.go",
-        "election.go",
         "encryption.go",
         "engine_switch.go",
         "event_log.go",
@@ -133,6 +132,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",
+        "//pkg/cli",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/internal/issues",
         "//pkg/gossip",

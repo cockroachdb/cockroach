@@ -86,7 +86,7 @@ limit
 # --------------------------------------------------
 
 opt
-SELECT * FROM (SELECT * FROM t UNION SELECT * from t) LIMIT 10
+SELECT * FROM (SELECT x, y, z FROM t UNION SELECT x, z, y from t) LIMIT 10
 ----
 limit
  ├── columns: x:9!null y:10 z:11
@@ -95,7 +95,7 @@ limit
  ├── union
  │    ├── columns: x:9!null y:10 z:11
  │    ├── left columns: t.x:1 t.y:2 t.z:3
- │    ├── right columns: t.x:5 t.y:6 t.z:7
+ │    ├── right columns: t.x:5 t.z:7 t.y:6
  │    ├── key: (9-11)
  │    ├── limit hint: 10.00
  │    ├── scan t
@@ -562,7 +562,7 @@ project
       ├── cardinality: [0 - 0]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(4,5,8)
+      ├── fd: ()-->(4,5,8), (8)==(5), (5)==(8)
       ├── inner-join (cross)
       │    ├── columns: "?column?":4!null t0.c0:5!null t1.c0:8!null
       │    ├── cardinality: [0 - 0]

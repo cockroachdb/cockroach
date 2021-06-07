@@ -108,7 +108,7 @@ func getShowZoneConfigRow(
 			return nil, err
 		}
 	} else if zoneSpecifier.Database != "" {
-		_, database, err := p.Descriptors().GetImmutableDatabaseByName(
+		database, err := p.Descriptors().GetImmutableDatabaseByName(
 			ctx,
 			p.txn,
 			string(zoneSpecifier.Database),

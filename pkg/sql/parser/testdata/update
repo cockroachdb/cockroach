@@ -1,0 +1,210 @@
+parse
+UPDATE a SET b = 3
+----
+UPDATE a SET b = 3
+UPDATE a SET b = (3) -- fully parenthesized
+UPDATE a SET b = _ -- literals removed
+UPDATE _ SET _ = 3 -- identifiers removed
+
+parse
+EXPLAIN UPDATE a SET b = 3
+----
+EXPLAIN UPDATE a SET b = 3
+EXPLAIN UPDATE a SET b = (3) -- fully parenthesized
+EXPLAIN UPDATE a SET b = _ -- literals removed
+EXPLAIN UPDATE _ SET _ = 3 -- identifiers removed
+
+parse
+UPDATE a.b SET b = 3
+----
+UPDATE a.b SET b = 3
+UPDATE a.b SET b = (3) -- fully parenthesized
+UPDATE a.b SET b = _ -- literals removed
+UPDATE _._ SET _ = 3 -- identifiers removed
+
+parse
+UPDATE a.b@c SET b = 3
+----
+UPDATE a.b@c SET b = 3
+UPDATE a.b@c SET b = (3) -- fully parenthesized
+UPDATE a.b@c SET b = _ -- literals removed
+UPDATE _._@_ SET _ = 3 -- identifiers removed
+
+parse
+UPDATE a SET b = 3, c = DEFAULT
+----
+UPDATE a SET b = 3, c = DEFAULT
+UPDATE a SET b = (3), c = (DEFAULT) -- fully parenthesized
+UPDATE a SET b = _, c = DEFAULT -- literals removed
+UPDATE _ SET _ = 3, _ = DEFAULT -- identifiers removed
+
+parse
+UPDATE a SET b = 3, c = DEFAULT FROM b
+----
+UPDATE a SET b = 3, c = DEFAULT FROM b
+UPDATE a SET b = (3), c = (DEFAULT) FROM b -- fully parenthesized
+UPDATE a SET b = _, c = DEFAULT FROM b -- literals removed
+UPDATE _ SET _ = 3, _ = DEFAULT FROM _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3, c = DEFAULT FROM a AS other
+----
+UPDATE a SET b = 3, c = DEFAULT FROM a AS other
+UPDATE a SET b = (3), c = (DEFAULT) FROM a AS other -- fully parenthesized
+UPDATE a SET b = _, c = DEFAULT FROM a AS other -- literals removed
+UPDATE _ SET _ = 3, _ = DEFAULT FROM _ AS _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3, c = DEFAULT FROM a AS other, b
+----
+UPDATE a SET b = 3, c = DEFAULT FROM a AS other, b
+UPDATE a SET b = (3), c = (DEFAULT) FROM a AS other, b -- fully parenthesized
+UPDATE a SET b = _, c = DEFAULT FROM a AS other, b -- literals removed
+UPDATE _ SET _ = 3, _ = DEFAULT FROM _ AS _, _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 + 4
+----
+UPDATE a SET b = 3 + 4
+UPDATE a SET b = ((3) + (4)) -- fully parenthesized
+UPDATE a SET b = _ + _ -- literals removed
+UPDATE _ SET _ = 3 + 4 -- identifiers removed
+
+parse
+UPDATE a SET (b, c) = (3, DEFAULT)
+----
+UPDATE a SET (b, c) = (3, DEFAULT)
+UPDATE a SET (b, c) = (((3), (DEFAULT))) -- fully parenthesized
+UPDATE a SET (b, c) = (_, DEFAULT) -- literals removed
+UPDATE _ SET (_, _) = (3, DEFAULT) -- identifiers removed
+
+parse
+UPDATE a SET (b, c) = (SELECT 3, 4)
+----
+UPDATE a SET (b, c) = (SELECT 3, 4)
+UPDATE a SET (b, c) = ((SELECT (3), (4))) -- fully parenthesized
+UPDATE a SET (b, c) = (SELECT _, _) -- literals removed
+UPDATE _ SET (_, _) = (SELECT 3, 4) -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b
+----
+UPDATE a SET b = 3 WHERE a = b
+UPDATE a SET b = (3) WHERE ((a) = (b)) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b LIMIT c
+----
+UPDATE a SET b = 3 WHERE a = b LIMIT c
+UPDATE a SET b = (3) WHERE ((a) = (b)) LIMIT (c) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b LIMIT c -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ LIMIT _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b ORDER BY c
+----
+UPDATE a SET b = 3 WHERE a = b ORDER BY c
+UPDATE a SET b = (3) WHERE ((a) = (b)) ORDER BY (c) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b ORDER BY c -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ ORDER BY _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d
+----
+UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d
+UPDATE a SET b = (3) WHERE ((a) = (b)) ORDER BY (c) LIMIT (d) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b ORDER BY c LIMIT d -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ ORDER BY _ LIMIT _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b RETURNING a
+----
+UPDATE a SET b = 3 WHERE a = b RETURNING a
+UPDATE a SET b = (3) WHERE ((a) = (b)) RETURNING (a) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b RETURNING a -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ RETURNING _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b RETURNING 1, 2
+----
+UPDATE a SET b = 3 WHERE a = b RETURNING 1, 2
+UPDATE a SET b = (3) WHERE ((a) = (b)) RETURNING (1), (2) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b RETURNING _, _ -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ RETURNING 1, 2 -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b RETURNING a, a + b
+----
+UPDATE a SET b = 3 WHERE a = b RETURNING a, a + b
+UPDATE a SET b = (3) WHERE ((a) = (b)) RETURNING (a), ((a) + (b)) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b RETURNING a, a + b -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ RETURNING _, _ + _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b RETURNING NOTHING
+----
+UPDATE a SET b = 3 WHERE a = b RETURNING NOTHING
+UPDATE a SET b = (3) WHERE ((a) = (b)) RETURNING NOTHING -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b RETURNING NOTHING -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ RETURNING NOTHING -- identifiers removed
+
+parse
+UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d RETURNING e
+----
+UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d RETURNING e
+UPDATE a SET b = (3) WHERE ((a) = (b)) ORDER BY (c) LIMIT (d) RETURNING (e) -- fully parenthesized
+UPDATE a SET b = _ WHERE a = b ORDER BY c LIMIT d RETURNING e -- literals removed
+UPDATE _ SET _ = 3 WHERE _ = _ ORDER BY _ LIMIT _ RETURNING _ -- identifiers removed
+
+parse
+UPDATE a SET b = 3 FROM other WHERE a = b ORDER BY c LIMIT d RETURNING e
+----
+UPDATE a SET b = 3 FROM other WHERE a = b ORDER BY c LIMIT d RETURNING e
+UPDATE a SET b = (3) FROM other WHERE ((a) = (b)) ORDER BY (c) LIMIT (d) RETURNING (e) -- fully parenthesized
+UPDATE a SET b = _ FROM other WHERE a = b ORDER BY c LIMIT d RETURNING e -- literals removed
+UPDATE _ SET _ = 3 FROM _ WHERE _ = _ ORDER BY _ LIMIT _ RETURNING _ -- identifiers removed
+
+# regression test: "0" once mistakenly lost its quotes
+
+parse
+UPDATE t AS "0" SET k = ''
+----
+UPDATE t AS "0" SET k = ''
+UPDATE t AS "0" SET k = ('') -- fully parenthesized
+UPDATE t AS "0" SET k = _ -- literals removed
+UPDATE _ AS _ SET _ = '' -- identifiers removed
+
+parse
+UPDATE ONLY a SET b = 3
+----
+UPDATE a SET b = 3 -- normalized!
+UPDATE a SET b = (3) -- fully parenthesized
+UPDATE a SET b = _ -- literals removed
+UPDATE _ SET _ = 3 -- identifiers removed
+
+parse
+UPDATE ONLY a * SET b = 3
+----
+UPDATE a SET b = 3 -- normalized!
+UPDATE a SET b = (3) -- fully parenthesized
+UPDATE a SET b = _ -- literals removed
+UPDATE _ SET _ = 3 -- identifiers removed
+
+parse
+UPDATE a * SET b = 3
+----
+UPDATE a SET b = 3 -- normalized!
+UPDATE a SET b = (3) -- fully parenthesized
+UPDATE a SET b = _ -- literals removed
+UPDATE _ SET _ = 3 -- identifiers removed
+
+error
+UPDATE kv SET k[0] = 9
+----
+at or near "[": syntax error
+DETAIL: source SQL:
+UPDATE kv SET k[0] = 9
+               ^
+HINT: try \h UPDATE

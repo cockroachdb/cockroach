@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -113,129 +114,10 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 const (
 	// PublicSchema is the name of the physical schema in every
 	// database/catalog.
-	PublicSchema string = sessiondata.PublicSchemaName
+	PublicSchema string = catconstants.PublicSchemaName
 	// PublicSchemaName is the same, typed as Name.
 	PublicSchemaName Name = Name(PublicSchema)
 )
-
-// NumResolutionResults represents the number of results in the lookup
-// of data sources matching a given prefix.
-type NumResolutionResults int
-
-const (
-	// NoResults for when there is no result.
-	NoResults NumResolutionResults = iota
-	// ExactlyOne indicates just one source matching the requested name.
-	ExactlyOne
-	// MoreThanOne signals an ambiguous match.
-	MoreThanOne
-)
-
-// ColumnItemResolver is the helper interface to resolve column items.
-type ColumnItemResolver interface {
-	// FindSourceMatchingName searches for a data source with name tn.
-	//
-	// This must error out with "ambiguous table name" if there is more
-	// than one data source matching tn. The srcMeta is subsequently
-	// passed to Resolve() if resolution succeeds. The prefix will not be
-	// modified.
-	FindSourceMatchingName(ctx context.Context, tn TableName) (res NumResolutionResults, prefix *TableName, srcMeta ColumnSourceMeta, err error)
-
-	// FindSourceProvidingColumn searches for a data source providing
-	// a column with the name given.
-	//
-	// This must error out with "ambiguous column name" if there is more
-	// than one data source matching tn, "column not found" if there is
-	// none. The srcMeta and colHints are subsequently passed to
-	// Resolve() if resolution succeeds. The prefix will not be
-	// modified.
-	FindSourceProvidingColumn(ctx context.Context, col Name) (prefix *TableName, srcMeta ColumnSourceMeta, colHint int, err error)
-
-	// Resolve() is called if resolution succeeds.
-	Resolve(ctx context.Context, prefix *TableName, srcMeta ColumnSourceMeta, colHint int, col Name) (ColumnResolutionResult, error)
-}
-
-// ColumnSourceMeta is an opaque reference passed through column item resolution.
-type ColumnSourceMeta interface {
-	// ColumnSourcMeta is the interface anchor.
-	ColumnSourceMeta()
-}
-
-// ColumnResolutionResult is an opaque reference returned by ColumnItemResolver.Resolve().
-type ColumnResolutionResult interface {
-	// ColumnResolutionResult is the interface anchor.
-	ColumnResolutionResult()
-}
-
-// Resolve performs name resolution for a qualified star using a resolver.
-func (a *AllColumnsSelector) Resolve(
-	ctx context.Context, r ColumnItemResolver,
-) (srcName *TableName, srcMeta ColumnSourceMeta, err error) {
-	prefix := a.TableName.ToTableName()
-
-	// Is there a data source with this prefix?
-	var res NumResolutionResults
-	res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
-	if err != nil {
-		return nil, nil, err
-	}
-	if res == NoResults && a.TableName.NumParts == 2 {
-		// No, but name of form db.tbl.*?
-		// Special rule for compatibility with CockroachDB v1.x:
-		// search name db.public.tbl.* instead.
-		prefix.ExplicitCatalog = true
-		prefix.CatalogName = prefix.SchemaName
-		prefix.SchemaName = PublicSchemaName
-		res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	if res == NoResults {
-		return nil, nil, newSourceNotFoundError("no data source matches pattern: %s", a)
-	}
-	return srcName, srcMeta, nil
-}
-
-// Resolve performs name resolution for a column item using a resolver.
-func (c *ColumnItem) Resolve(
-	ctx context.Context, r ColumnItemResolver,
-) (ColumnResolutionResult, error) {
-	colName := c.ColumnName
-	if c.TableName == nil {
-		// Naked column name: simple case.
-		srcName, srcMeta, cHint, err := r.FindSourceProvidingColumn(ctx, colName)
-		if err != nil {
-			return nil, err
-		}
-		return r.Resolve(ctx, srcName, srcMeta, cHint, colName)
-	}
-
-	// There is a prefix. We need to search for it.
-	prefix := c.TableName.ToTableName()
-
-	// Is there a data source with this prefix?
-	res, srcName, srcMeta, err := r.FindSourceMatchingName(ctx, prefix)
-	if err != nil {
-		return nil, err
-	}
-	if res == NoResults && c.TableName.NumParts == 2 {
-		// No, but name of form db.tbl.x?
-		// Special rule for compatibility with CockroachDB v1.x:
-		// search name db.public.tbl.x instead.
-		prefix.ExplicitCatalog = true
-		prefix.CatalogName = prefix.SchemaName
-		prefix.SchemaName = PublicSchemaName
-		res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if res == NoResults {
-		return nil, newSourceNotFoundError("no data source matches prefix: %s in this context", c.TableName)
-	}
-	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
-}
 
 // ObjectNameTargetResolver is the helper interface to resolve object
 // names when the object is not expected to exist. The planner implements
@@ -320,7 +202,7 @@ func ResolveExisting(
 		// database set. Therefore, we test this even if curDb == "", as long as the
 		// schema name is for a virtual schema.
 
-		if _, isVirtualSchema := sessiondata.VirtualSchemaNames[scName]; isVirtualSchema || curDb != "" {
+		if _, isVirtualSchema := catconstants.VirtualSchemaNames[scName]; isVirtualSchema || curDb != "" {
 			if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, u.Object()); found || err != nil {
 				if err == nil {
 					namePrefix.CatalogName = Name(curDb)
@@ -520,12 +402,12 @@ func (n *UnresolvedName) ResolveFunction(
 
 	fullName := function
 
-	if prefix == sessiondata.PgCatalogName {
+	if prefix == catconstants.PgCatalogName {
 		// If the user specified e.g. `pg_catalog.max()` we want to find
 		// it in the global namespace.
 		prefix = ""
 	}
-	if prefix == sessiondata.PublicSchemaName {
+	if prefix == catconstants.PublicSchemaName {
 		// If the user specified public, it may be from a PostgreSQL extension.
 		// Double check the function definition allows resolution on the public
 		// schema, and resolve as such if appropriate.
@@ -574,10 +456,6 @@ func newInvColRef(n *UnresolvedName) error {
 func newInvTableNameError(n fmt.Stringer) error {
 	return pgerror.NewWithDepthf(1, pgcode.InvalidName,
 		"invalid table name: %s", n)
-}
-
-func newSourceNotFoundError(fmt string, args ...interface{}) error {
-	return pgerror.NewWithDepthf(1, pgcode.UndefinedTable, fmt, args...)
 }
 
 // CommonLookupFlags is the common set of flags for the various accessor interfaces.

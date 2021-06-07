@@ -493,19 +493,62 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	opts := make(map[string]string)
-	cfg, err := getSaramaConfig(opts)
-	require.NoError(t, err)
-	require.Equal(t, defaultSaramaConfig, cfg)
+	t.Run("defaults returned if not option set", func(t *testing.T) {
+		opts := make(map[string]string)
 
-	expected := &saramaConfig{}
-	expected.Flush.MaxMessages = 1000
-	expected.Flush.Frequency = jsonDuration(time.Second)
+		expected := defaultSaramaConfig()
 
-	opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"MaxMessages": 1000, "Frequency": "1s"}}`
-	cfg, err = getSaramaConfig(opts)
-	require.NoError(t, err)
-	require.Equal(t, expected, cfg)
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Equal(t, expected, cfg)
+	})
+	t.Run("options overlay defaults", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"MaxMessages": 1000, "Frequency": "1s"}}`
+
+		expected := defaultSaramaConfig()
+		expected.Flush.MaxMessages = 1000
+		expected.Flush.Frequency = jsonDuration(time.Second)
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Equal(t, expected, cfg)
+	})
+	t.Run("apply parses valid version", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"version": "0.8.2.0"}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.Equal(t, sarama.V0_8_2_0, saramaCfg.Version)
+	})
+	t.Run("apply allows for unset version", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.Equal(t, sarama.KafkaVersion{}, saramaCfg.Version)
+	})
+	t.Run("apply errors if version is invalid", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"version": "invalid"}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.Error(t, err)
+	})
 }
 
 func TestKafkaSinkTracksMemory(t *testing.T) {
@@ -557,13 +600,13 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 	// regular messages since it doesn't have Key set.
 	// We bypass majority of EmitResolvedTimestamp logic since we don't have
 	// a real kafka client instantiated.  Instead, we call emitMessage directly.
-	reg := cdctest.MakeTestSchemaRegistry()
+	reg := cdctest.StartTestSchemaRegistry()
 	defer reg.Close()
 	opts := map[string]string{
 		changefeedbase.OptEnvelope:                string(changefeedbase.OptEnvelopeWrapped),
 		changefeedbase.OptConfluentSchemaRegistry: reg.URL(),
 	}
-	encoder, err := newConfluentAvroEncoder(opts, makeChangefeedTargets("t"))
+	encoder, err := newConfluentAvroEncoder(ctx, opts, makeChangefeedTargets("t"))
 	require.NoError(t, err)
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "t", hlc.Timestamp{})
 	require.NoError(t, err)

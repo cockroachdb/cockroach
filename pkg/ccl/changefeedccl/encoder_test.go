@@ -10,8 +10,12 @@ package changefeedccl
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
@@ -27,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -194,7 +199,7 @@ func TestEncoders(t *testing.T) {
 				rowStringFn = func(k, v []byte) string { return fmt.Sprintf(`%s->%s`, k, v) }
 				resolvedStringFn = func(r []byte) string { return string(r) }
 			case string(changefeedbase.OptFormatAvro):
-				reg := cdctest.MakeTestSchemaRegistry()
+				reg := cdctest.StartTestSchemaRegistry()
 				defer reg.Close()
 				o[changefeedbase.OptConfluentSchemaRegistry] = reg.URL()
 				rowStringFn = func(k, v []byte) string {
@@ -214,7 +219,7 @@ func TestEncoders(t *testing.T) {
 			targets := jobspb.ChangefeedTargets{}
 			targets[tableDesc.GetID()] = target
 
-			e, err := getEncoder(o, targets)
+			e, err := getEncoder(context.Background(), o, targets)
 			if len(expected.err) > 0 {
 				require.EqualError(t, err, expected.err)
 				return
@@ -263,7 +268,7 @@ func TestAvroEncoder(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -313,22 +318,176 @@ func TestAvroEncoder(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func newCACertBase64Encoded() (*tls.Certificate, string, error) {
+	keyLength := 2048
+
+	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA private key")
+	}
+
+	CACert, _, err := cdctest.GenerateCACert(CAKey)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA cert gen")
+	}
+
+	CAKeyPEM, err := cdctest.PemEncodePrivateKey(CAKey)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "pem encode CA key")
+	}
+
+	CACertPEM, err := cdctest.PemEncodeCert(CACert)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "pem encode CA cert")
+	}
+
+	cert, err := tls.X509KeyPair([]byte(CACertPEM), []byte(CAKeyPEM))
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA cert parse from PEM")
+	}
+
+	var CACertBase64 string
+	cdctest.EncodeBase64ToString([]byte(CACertPEM), &CACertBase64)
+
+	return &cert, CACertBase64, nil
+}
+
+func TestAvroEncoderWithTLS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+	row := rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString(`bar`)},
+	}
+	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
+
+	opts := map[string]string{
+		changefeedbase.OptFormat:   "experimental_avro",
+		changefeedbase.OptEnvelope: "key_only",
+	}
+	expected := struct {
+		insert   string
+		delete   string
+		resolved string
+	}{
+		insert:   `{"a":{"long":1}}->`,
+		delete:   `{"a":{"long":1}}->`,
+		resolved: `{"resolved":{"string":"1.0000000002"}}`,
+	}
+
+	t.Run("format=experimental_avro,envelope=key_only", func(t *testing.T) {
+		cert, certBase64, err := newCACertBase64Encoded()
+		require.NoError(t, err)
+
+		var rowStringFn func([]byte, []byte) string
+		var resolvedStringFn func([]byte) string
+		reg, err := cdctest.StartTestSchemaRegistryWithTLS(cert)
+		require.NoError(t, err)
+		defer reg.Close()
+
+		params := url.Values{}
+		params.Add("ca_cert", certBase64)
+		regURL, err := url.Parse(reg.URL())
+		require.NoError(t, err)
+		regURL.RawQuery = params.Encode()
+		opts[changefeedbase.OptConfluentSchemaRegistry] = regURL.String()
+
+		rowStringFn = func(k, v []byte) string {
+			key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
+			return fmt.Sprintf(`%s->%s`, key, value)
+		}
+		resolvedStringFn = func(r []byte) string {
+			return string(avroToJSON(t, reg, r))
+		}
+
+		target := jobspb.ChangefeedTarget{
+			StatementTimeName: tableDesc.GetName(),
+		}
+		targets := jobspb.ChangefeedTargets{}
+		targets[tableDesc.GetID()] = target
+
+		e, err := getEncoder(context.Background(), opts, targets)
+		require.NoError(t, err)
+
+		rowInsert := encodeRow{
+			datums:        row,
+			updated:       ts,
+			tableDesc:     tableDesc,
+			prevDatums:    nil,
+			prevTableDesc: tableDesc,
+		}
+		keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
+		require.NoError(t, err)
+		keyInsert = append([]byte(nil), keyInsert...)
+		valueInsert, err := e.EncodeValue(context.Background(), rowInsert)
+		require.NoError(t, err)
+		require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
+
+		rowDelete := encodeRow{
+			datums:        row,
+			deleted:       true,
+			prevDatums:    row,
+			updated:       ts,
+			tableDesc:     tableDesc,
+			prevTableDesc: tableDesc,
+		}
+		keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
+		require.NoError(t, err)
+		keyDelete = append([]byte(nil), keyDelete...)
+		valueDelete, err := e.EncodeValue(context.Background(), rowDelete)
+		require.NoError(t, err)
+		require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
+
+		resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
+		require.NoError(t, err)
+		require.Equal(t, expected.resolved, resolvedStringFn(resolved))
+
+		noCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(nil)
+		require.NoError(t, err)
+		defer noCertReg.Close()
+		opts[changefeedbase.OptConfluentSchemaRegistry] = noCertReg.URL()
+
+		_, err = getEncoder(context.Background(), opts, targets)
+		require.EqualError(t, err, fmt.Sprintf("schema registry unavailable: retryable changefeed error: "+
+			"Get \"%s/mode\": x509: certificate signed by unknown authority",
+			opts[changefeedbase.OptConfluentSchemaRegistry]))
+
+		wrongCert, _, err := newCACertBase64Encoded()
+		require.NoError(t, err)
+
+		wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert)
+		require.NoError(t, err)
+		defer wrongCertReg.Close()
+		opts[changefeedbase.OptConfluentSchemaRegistry] = wrongCertReg.URL()
+
+		_, err = getEncoder(context.Background(), opts, targets)
+		require.EqualError(t, err, fmt.Sprintf("schema registry unavailable: retryable changefeed error: "+
+			"Get \"%s/mode\": x509: certificate signed by unknown authority",
+			opts[changefeedbase.OptConfluentSchemaRegistry]))
+	})
+}
+
 func TestAvroArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
 		sqlDB.Exec(t,
-			`INSERT INTO foo VALUES 
-			(1, ARRAY[10,20,30]), 
-			(2, NULL), 
+			`INSERT INTO foo VALUES
+			(1, ARRAY[10,20,30]),
+			(2, NULL),
 			(3, ARRAY[42, NULL, 42, 43]),
-			(4, ARRAY[])`,
+			(4, ARRAY[]),
+			(5, ARRAY[1,2,3,4,NULL,6]),
+			(6, ARRAY[1,2,3,4,NULL,6,7,NULL,9])`,
 		)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
@@ -340,7 +499,64 @@ func TestAvroArray(t *testing.T) {
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
 			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"array":[{"long":42},null,{"long":42},{"long":43}]}}},"before":null}`,
 			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[]}}},"before":null}`,
+			`foo: {"a":{"long":5}}->{"after":{"foo":{"a":{"long":5},"b":{"array":[{"long":1},{"long":2},{"long":3},{"long":4},null,{"long":6}]}}},"before":null}`,
+			`foo: {"a":{"long":6}}->{"after":{"foo":{"a":{"long":6},"b":{"array":[{"long":1},{"long":2},{"long":3},{"long":4},null,{"long":6},{"long":7},null,{"long":9}]}}},"before":null}`,
 		})
+
+		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0] where a=1`)
+		sqlDB.Exec(t, `UPDATE foo SET b = ARRAY[0,0,0,0] where a=2`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"array":[{"long":0},{"long":0},{"long":0}]}}},` +
+				`"before":{"foo_before":{"a":{"long":1},"b":{"array":[{"long":10},{"long":20},{"long":30}]}}}}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":{"array":[{"long":0},{"long":0},{"long":0},{"long":0}]}}},` +
+				`"before":{"foo_before":{"a":{"long":2},"b":null}}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroArrayCap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, ARRAY[])`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.URL())
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":0}}->{"after":{"foo":{"a":{"long":0},"b":{"array":[]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (8, ARRAY[null,null,null,null,null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":8}}->{"after":{"foo":{"a":{"long":8},"b":{"array":[null,null,null,null,null,null,null,null]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4, ARRAY[null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[null,null,null,null]}}}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (5, ARRAY[null,null,null,null,null])`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":5}}->{"after":{"foo":{"a":{"long":5},"b":{"array":[null,null,null,null,null]}}}}`,
+		})
+
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -352,7 +568,7 @@ func TestAvroCollatedString(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -372,12 +588,77 @@ func TestAvroCollatedString(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestAvroEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := cdctest.StartTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b status, c int default 0)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'open')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, null)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.URL())
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"open"},"c":{"long":0}}}}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null,"c":{"long":0}}}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TYPE status ADD value 'review'`)
+		sqlDB.Exec(t, `INSERT INTO foo values (4, 'review')`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"string":"review"},"c":{"long":0}}}}`,
+		})
+
+		// Renaming an enum type doesn't count as a change itself but gets picked up by the encoder
+		sqlDB.Exec(t, `ALTER TYPE status RENAME value 'open' to 'active'`)
+		sqlDB.Exec(t, `INSERT INTO foo values (3, 'active')`)
+		sqlDB.Exec(t, `UPDATE foo set c=1 where a=1`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"active"},"c":{"long":0}}}}`,
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"active"},"c":{"long":1}}}}`,
+		})
+
+		// Enum can be part of a compound primary key
+		sqlDB.Exec(t, `CREATE TABLE soft_deletes (a INT, b status, c INT default 0, PRIMARY KEY (a,b))`)
+		sqlDB.Exec(t, `INSERT INTO soft_deletes values (0, 'active')`)
+
+		sd := feed(t, f, `CREATE CHANGEFEED FOR soft_deletes `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.URL())
+		defer closeFeed(t, sd)
+		assertPayloadsAvro(t, reg, sd, []string{
+			`soft_deletes: {"a":{"long":0},"b":{"string":"active"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"active"},"c":{"long":0}}}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TYPE status RENAME value 'active' to 'open'`)
+		sqlDB.Exec(t, `UPDATE soft_deletes set c=1 where a=0`)
+
+		assertPayloadsAvro(t, reg, sd, []string{
+			`soft_deletes: {"a":{"long":0},"b":{"string":"open"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"open"},"c":{"long":1}}}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestAvroSchemaNaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -468,7 +749,7 @@ func TestAvroSchemaNamespace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -510,7 +791,7 @@ func TestTableNameCollision(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -566,7 +847,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -597,7 +878,7 @@ func TestAvroLedger(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := cdctest.MakeTestSchemaRegistry()
+		reg := cdctest.StartTestSchemaRegistry()
 		defer reg.Close()
 
 		ctx := context.Background()

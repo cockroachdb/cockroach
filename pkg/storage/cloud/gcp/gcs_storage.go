@@ -156,9 +156,7 @@ func makeGCSStorage(
 	}, nil
 }
 
-func (g *gcsStorage) Writer(
-	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 	return w, nil
 }

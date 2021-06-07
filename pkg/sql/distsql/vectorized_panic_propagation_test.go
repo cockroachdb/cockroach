@@ -45,7 +45,8 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	base := flowinfra.NewFlowBase(
 		flowCtx,
 		nil, /* flowReg */
-		nil, /* syncFlowConsumer */
+		nil, /* rowSyncFlowConsumer */
+		nil, /* batchSyncFlowConsumer */
 		nil, /* localProcessors */
 	)
 	flow := colflow.NewVectorizedFlow(base)
@@ -79,5 +80,5 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		}),
 	)
 
-	require.Panics(t, func() { require.NoError(t, flow.Run(ctx, nil)) })
+	require.Panics(t, func() { flow.Run(ctx, nil) })
 }

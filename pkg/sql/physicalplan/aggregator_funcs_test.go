@@ -75,13 +75,11 @@ func runTestFlow(
 
 	var rowBuf distsqlutils.RowBuffer
 
-	ctx, flow, _, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, distsql.LocalState{})
+	ctx, flow, _, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Run(ctx, func() {}); err != nil {
-		t.Fatal(err)
-	}
+	flow.Run(ctx, func() {})
 	flow.Cleanup(ctx)
 
 	if !rowBuf.ProducerClosed() {
@@ -127,8 +125,9 @@ func checkDistAggregationInfo(
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
-			Table: *tableDesc.TableDesc(),
-			Spans: make([]execinfrapb.TableReaderSpan, 1),
+			Table:         *tableDesc.TableDesc(),
+			Spans:         make([]execinfrapb.TableReaderSpan, 1),
+			NeededColumns: []uint32{uint32(colIdx)},
 		}
 
 		var err error
@@ -204,13 +203,26 @@ func checkDistAggregationInfo(
 	txn := kv.NewTxn(ctx, srv.DB(), srv.NodeID())
 
 	// First run a flow that aggregates all the rows without any local stages.
-
+	nonDistFinalOutputTypes := finalOutputTypes
+	if info.FinalRendering != nil {
+		h := tree.MakeTypesOnlyIndexedVarHelper(finalOutputTypes)
+		renderExpr, err := info.FinalRendering(&h, varIdxs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var expr execinfrapb.Expression
+		expr, err = MakeExpression(renderExpr, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nonDistFinalOutputTypes = []*types.T{expr.LocalExpr.ResolvedType()}
+	}
 	rowsNonDist := runTestFlow(
 		t, srv, txn,
 		makeTableReader(1, numRows+1, 0),
 		execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_UNORDERED,
+				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 0},
@@ -225,7 +237,7 @@ func checkDistAggregationInfo(
 					{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE},
 				},
 			}},
-			ResultTypes: finalOutputTypes,
+			ResultTypes: nonDistFinalOutputTypes,
 		},
 	)
 
@@ -251,7 +263,7 @@ func checkDistAggregationInfo(
 	}
 	finalProc := execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_UNORDERED,
+			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 			ColumnTypes: intermediaryTypes,
 		}},
 		Core: execinfrapb.ProcessorCoreUnion{Aggregator: &execinfrapb.AggregatorSpec{
@@ -271,7 +283,7 @@ func checkDistAggregationInfo(
 		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
 		agg := execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
-				Type:        execinfrapb.InputSyncSpec_UNORDERED,
+				Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 				ColumnTypes: []*types.T{colType},
 				Streams: []execinfrapb.StreamEndpointSpec{
 					{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: execinfrapb.StreamID(2 * i)},
@@ -307,7 +319,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		finalProc.Post.RenderExprs = []execinfrapb.Expression{expr}
-
+		finalProc.ResultTypes = []*types.T{expr.LocalExpr.ResolvedType()}
 	}
 
 	procs = append(procs, finalProc)

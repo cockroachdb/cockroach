@@ -200,9 +200,11 @@ func MakeS3Storage(
 	if conf.Endpoint != "" {
 		opts.Config.S3ForcePathStyle = aws.Bool(true)
 	}
+
+	opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
+
 	if log.V(2) {
 		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
-		opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
 	}
 
 	// Ensure that a KMS ID is specified if server side encryption is set to use
@@ -285,9 +287,7 @@ func (s *s3Storage) Settings() *cluster.Settings {
 	return s.settings
 }
 
-func (s *s3Storage) Writer(
-	ctx context.Context, basename string,
-) (cloud.WriteCloserWithError, error) {
+func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	sess, err := s.newSession(ctx)
 	if err != nil {
 		return nil, err

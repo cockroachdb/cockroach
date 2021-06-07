@@ -1,0 +1,63 @@
+parse
+DROP INDEX a.b@c
+----
+DROP INDEX a.b@c
+DROP INDEX a.b@c -- fully parenthesized
+DROP INDEX a.b@c -- literals removed
+DROP INDEX _._@_ -- identifiers removed
+
+parse
+DROP INDEX a
+----
+DROP INDEX a
+DROP INDEX a -- fully parenthesized
+DROP INDEX a -- literals removed
+DROP INDEX _ -- identifiers removed
+
+parse
+DROP INDEX a.b
+----
+DROP INDEX a.b
+DROP INDEX a.b -- fully parenthesized
+DROP INDEX a.b -- literals removed
+DROP INDEX _._ -- identifiers removed
+
+parse
+DROP INDEX IF EXISTS a.b@c
+----
+DROP INDEX IF EXISTS a.b@c
+DROP INDEX IF EXISTS a.b@c -- fully parenthesized
+DROP INDEX IF EXISTS a.b@c -- literals removed
+DROP INDEX IF EXISTS _._@_ -- identifiers removed
+
+parse
+DROP INDEX a.b@c, d@f
+----
+DROP INDEX a.b@c, d@f
+DROP INDEX a.b@c, d@f -- fully parenthesized
+DROP INDEX a.b@c, d@f -- literals removed
+DROP INDEX _._@_, _@_ -- identifiers removed
+
+parse
+DROP INDEX IF EXISTS a.b@c, d@f
+----
+DROP INDEX IF EXISTS a.b@c, d@f
+DROP INDEX IF EXISTS a.b@c, d@f -- fully parenthesized
+DROP INDEX IF EXISTS a.b@c, d@f -- literals removed
+DROP INDEX IF EXISTS _._@_, _@_ -- identifiers removed
+
+parse
+DROP INDEX a.b@c CASCADE
+----
+DROP INDEX a.b@c CASCADE
+DROP INDEX a.b@c CASCADE -- fully parenthesized
+DROP INDEX a.b@c CASCADE -- literals removed
+DROP INDEX _._@_ CASCADE -- identifiers removed
+
+parse
+DROP INDEX IF EXISTS a.b@c RESTRICT
+----
+DROP INDEX IF EXISTS a.b@c RESTRICT
+DROP INDEX IF EXISTS a.b@c RESTRICT -- fully parenthesized
+DROP INDEX IF EXISTS a.b@c RESTRICT -- literals removed
+DROP INDEX IF EXISTS _._@_ RESTRICT -- identifiers removed

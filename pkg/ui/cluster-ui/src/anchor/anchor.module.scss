@@ -1,0 +1,9 @@
+@import '../core/index.module.scss';
+
+.crl-anchor {
+  @include text--body;
+  color: $colors--link;
+  &:hover{
+    color: $colors--info-4;
+  }
+}

@@ -1,0 +1,55 @@
+parse
+DROP TYPE a
+----
+DROP TYPE a
+DROP TYPE a -- fully parenthesized
+DROP TYPE a -- literals removed
+DROP TYPE _ -- identifiers removed
+
+parse
+DROP TYPE a, b, c
+----
+DROP TYPE a, b, c
+DROP TYPE a, b, c -- fully parenthesized
+DROP TYPE a, b, c -- literals removed
+DROP TYPE _, _, _ -- identifiers removed
+
+parse
+DROP TYPE db.sc.a, sc.a
+----
+DROP TYPE db.sc.a, sc.a
+DROP TYPE db.sc.a, sc.a -- fully parenthesized
+DROP TYPE db.sc.a, sc.a -- literals removed
+DROP TYPE _._._, _._ -- identifiers removed
+
+parse
+DROP TYPE IF EXISTS db.sc.a, sc.a
+----
+DROP TYPE IF EXISTS db.sc.a, sc.a
+DROP TYPE IF EXISTS db.sc.a, sc.a -- fully parenthesized
+DROP TYPE IF EXISTS db.sc.a, sc.a -- literals removed
+DROP TYPE IF EXISTS _._._, _._ -- identifiers removed
+
+parse
+DROP TYPE db.sc.a, sc.a CASCADE
+----
+DROP TYPE db.sc.a, sc.a CASCADE
+DROP TYPE db.sc.a, sc.a CASCADE -- fully parenthesized
+DROP TYPE db.sc.a, sc.a CASCADE -- literals removed
+DROP TYPE _._._, _._ CASCADE -- identifiers removed
+
+parse
+DROP TYPE IF EXISTS db.sc.a, sc.a CASCADE
+----
+DROP TYPE IF EXISTS db.sc.a, sc.a CASCADE
+DROP TYPE IF EXISTS db.sc.a, sc.a CASCADE -- fully parenthesized
+DROP TYPE IF EXISTS db.sc.a, sc.a CASCADE -- literals removed
+DROP TYPE IF EXISTS _._._, _._ CASCADE -- identifiers removed
+
+parse
+DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT
+----
+DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT
+DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT -- fully parenthesized
+DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT -- literals removed
+DROP TYPE IF EXISTS _._._, _._ RESTRICT -- identifiers removed

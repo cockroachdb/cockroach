@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -650,6 +651,7 @@ func TestEvaluateBatch(t *testing.T) {
 			}
 			d.AbortSpan = abortspan.New(1)
 			d.ba.Header.Timestamp = ts
+			d.ClusterSettings = cluster.MakeClusterSettings()
 
 			tc.setup(t, d)
 

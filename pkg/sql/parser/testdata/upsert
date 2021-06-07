@@ -1,0 +1,223 @@
+parse
+UPSERT INTO a VALUES (1)
+----
+UPSERT INTO a VALUES (1)
+UPSERT INTO a VALUES ((1)) -- fully parenthesized
+UPSERT INTO a VALUES (_) -- literals removed
+UPSERT INTO _ VALUES (1) -- identifiers removed
+
+parse
+EXPLAIN UPSERT INTO a VALUES (1)
+----
+EXPLAIN UPSERT INTO a VALUES (1)
+EXPLAIN UPSERT INTO a VALUES ((1)) -- fully parenthesized
+EXPLAIN UPSERT INTO a VALUES (_) -- literals removed
+EXPLAIN UPSERT INTO _ VALUES (1) -- identifiers removed
+
+parse
+UPSERT INTO a.b VALUES (1)
+----
+UPSERT INTO a.b VALUES (1)
+UPSERT INTO a.b VALUES ((1)) -- fully parenthesized
+UPSERT INTO a.b VALUES (_) -- literals removed
+UPSERT INTO _._ VALUES (1) -- identifiers removed
+
+parse
+UPSERT INTO a VALUES (1, 2)
+----
+UPSERT INTO a VALUES (1, 2)
+UPSERT INTO a VALUES ((1), (2)) -- fully parenthesized
+UPSERT INTO a VALUES (_, _) -- literals removed
+UPSERT INTO _ VALUES (1, 2) -- identifiers removed
+
+parse
+UPSERT INTO a VALUES (1, DEFAULT)
+----
+UPSERT INTO a VALUES (1, DEFAULT)
+UPSERT INTO a VALUES ((1), (DEFAULT)) -- fully parenthesized
+UPSERT INTO a VALUES (_, DEFAULT) -- literals removed
+UPSERT INTO _ VALUES (1, DEFAULT) -- identifiers removed
+
+parse
+UPSERT INTO a VALUES (1, 2), (3, 4)
+----
+UPSERT INTO a VALUES (1, 2), (3, 4)
+UPSERT INTO a VALUES ((1), (2)), ((3), (4)) -- fully parenthesized
+UPSERT INTO a VALUES (_, _), (__more1__) -- literals removed
+UPSERT INTO _ VALUES (1, 2), (3, 4) -- identifiers removed
+
+parse
+UPSERT INTO a VALUES (a + 1, 2 * 3)
+----
+UPSERT INTO a VALUES (a + 1, 2 * 3)
+UPSERT INTO a VALUES (((a) + (1)), ((2) * (3))) -- fully parenthesized
+UPSERT INTO a VALUES (a + _, _ * _) -- literals removed
+UPSERT INTO _ VALUES (_ + 1, 2 * 3) -- identifiers removed
+
+parse
+UPSERT INTO a(a, b) VALUES (1, 2)
+----
+UPSERT INTO a(a, b) VALUES (1, 2)
+UPSERT INTO a(a, b) VALUES ((1), (2)) -- fully parenthesized
+UPSERT INTO a(a, b) VALUES (_, _) -- literals removed
+UPSERT INTO _(_, _) VALUES (1, 2) -- identifiers removed
+
+parse
+UPSERT INTO a SELECT b, c FROM d
+----
+UPSERT INTO a SELECT b, c FROM d
+UPSERT INTO a SELECT (b), (c) FROM d -- fully parenthesized
+UPSERT INTO a SELECT b, c FROM d -- literals removed
+UPSERT INTO _ SELECT _, _ FROM _ -- identifiers removed
+
+parse
+UPSERT INTO a DEFAULT VALUES
+----
+UPSERT INTO a DEFAULT VALUES
+UPSERT INTO a DEFAULT VALUES -- fully parenthesized
+UPSERT INTO a DEFAULT VALUES -- literals removed
+UPSERT INTO _ DEFAULT VALUES -- identifiers removed
+
+parse
+UPSERT INTO a DEFAULT VALUES RETURNING a, b
+----
+UPSERT INTO a DEFAULT VALUES RETURNING a, b
+UPSERT INTO a DEFAULT VALUES RETURNING (a), (b) -- fully parenthesized
+UPSERT INTO a DEFAULT VALUES RETURNING a, b -- literals removed
+UPSERT INTO _ DEFAULT VALUES RETURNING _, _ -- identifiers removed
+
+parse
+UPSERT INTO a DEFAULT VALUES RETURNING 1, 2
+----
+UPSERT INTO a DEFAULT VALUES RETURNING 1, 2
+UPSERT INTO a DEFAULT VALUES RETURNING (1), (2) -- fully parenthesized
+UPSERT INTO a DEFAULT VALUES RETURNING _, _ -- literals removed
+UPSERT INTO _ DEFAULT VALUES RETURNING 1, 2 -- identifiers removed
+
+parse
+UPSERT INTO a DEFAULT VALUES RETURNING a + b
+----
+UPSERT INTO a DEFAULT VALUES RETURNING a + b
+UPSERT INTO a DEFAULT VALUES RETURNING ((a) + (b)) -- fully parenthesized
+UPSERT INTO a DEFAULT VALUES RETURNING a + b -- literals removed
+UPSERT INTO _ DEFAULT VALUES RETURNING _ + _ -- identifiers removed
+
+parse
+UPSERT INTO a DEFAULT VALUES RETURNING NOTHING
+----
+UPSERT INTO a DEFAULT VALUES RETURNING NOTHING
+UPSERT INTO a DEFAULT VALUES RETURNING NOTHING -- fully parenthesized
+UPSERT INTO a DEFAULT VALUES RETURNING NOTHING -- literals removed
+UPSERT INTO _ DEFAULT VALUES RETURNING NOTHING -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT DO NOTHING
+----
+INSERT INTO a VALUES (1) ON CONFLICT DO NOTHING
+INSERT INTO a VALUES ((1)) ON CONFLICT DO NOTHING -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT DO NOTHING -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT DO NOTHING -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO NOTHING
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO NOTHING
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO NOTHING -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO NOTHING -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO NOTHING -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) WHERE b > 0 DO NOTHING
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) WHERE b > 0 DO NOTHING
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) WHERE ((b) > (0)) DO NOTHING -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) WHERE b > _ DO NOTHING -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) WHERE _ > 0 DO NOTHING -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET a = (1) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET a = _ -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET _ = 1 -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 1
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 1
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) WHERE ((b) > (0)) DO UPDATE SET a = (1) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) WHERE b > _ DO UPDATE SET a = _ -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) WHERE _ > 0 DO UPDATE SET _ = 1 -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a, b) DO UPDATE SET a = 1
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a, b) DO UPDATE SET a = 1
+INSERT INTO a VALUES ((1)) ON CONFLICT (a, b) DO UPDATE SET a = (1) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a, b) DO UPDATE SET a = _ -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_, _) DO UPDATE SET _ = 1 -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1, b = excluded.a
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1, b = excluded.a
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET a = (1), b = (excluded.a) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET a = _, b = excluded.a -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET _ = 1, _ = _._ -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1 WHERE b > 2
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1 WHERE b > 2
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET a = (1) WHERE ((b) > (2)) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET a = _ WHERE b > _ -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET _ = 1 WHERE _ > 2 -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = DEFAULT
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = DEFAULT
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET a = (DEFAULT) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET a = DEFAULT -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET _ = DEFAULT -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2)
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2)
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET (a, b) = ((SELECT (1), (2))) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT _, _) -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET (_, _) = (SELECT 1, 2) -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING a, b
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING a, b
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET (a, b) = ((SELECT (1), (2))) RETURNING (a), (b) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT _, _) RETURNING a, b -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET (_, _) = (SELECT 1, 2) RETURNING _, _ -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING 1, 2
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING 1, 2
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET (a, b) = ((SELECT (1), (2))) RETURNING (1), (2) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT _, _) RETURNING _, _ -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET (_, _) = (SELECT 1, 2) RETURNING 1, 2 -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING a + b
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING a + b
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET (a, b) = ((SELECT (1), (2))) RETURNING ((a) + (b)) -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT _, _) RETURNING a + b -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET (_, _) = (SELECT 1, 2) RETURNING _ + _ -- identifiers removed
+
+parse
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING NOTHING
+----
+INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT 1, 2) RETURNING NOTHING
+INSERT INTO a VALUES ((1)) ON CONFLICT (a) DO UPDATE SET (a, b) = ((SELECT (1), (2))) RETURNING NOTHING -- fully parenthesized
+INSERT INTO a VALUES (_) ON CONFLICT (a) DO UPDATE SET (a, b) = (SELECT _, _) RETURNING NOTHING -- literals removed
+INSERT INTO _ VALUES (1) ON CONFLICT (_) DO UPDATE SET (_, _) = (SELECT 1, 2) RETURNING NOTHING -- identifiers removed

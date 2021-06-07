@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -19,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -110,7 +110,7 @@ func (b *Builder) expandStar(
 		}
 
 	case *tree.AllColumnsSelector:
-		src, srcMeta, err := t.Resolve(b.ctx, inScope)
+		src, srcMeta, err := colinfo.ResolveAllColumnsSelector(b.ctx, inScope, t)
 		if err != nil {
 			panic(err)
 		}
@@ -436,10 +436,10 @@ func (b *Builder) resolveAndBuildScalar(
 func resolveTemporaryStatus(name *tree.TableName, persistence tree.Persistence) bool {
 	// An explicit schema can only be provided in the CREATE TEMP TABLE statement
 	// iff it is pg_temp.
-	if persistence.IsTemporary() && name.ExplicitSchema && name.SchemaName != sessiondata.PgTempSchemaName {
+	if persistence.IsTemporary() && name.ExplicitSchema && name.SchemaName != catconstants.PgTempSchemaName {
 		panic(pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema"))
 	}
-	return name.SchemaName == sessiondata.PgTempSchemaName || persistence.IsTemporary()
+	return name.SchemaName == catconstants.PgTempSchemaName || persistence.IsTemporary()
 }
 
 // resolveSchemaForCreate returns the schema that will contain a newly created

@@ -1,0 +1,79 @@
+parse
+CREATE SCHEMA IF NOT EXISTS foo
+----
+CREATE SCHEMA IF NOT EXISTS foo
+CREATE SCHEMA IF NOT EXISTS foo -- fully parenthesized
+CREATE SCHEMA IF NOT EXISTS foo -- literals removed
+CREATE SCHEMA IF NOT EXISTS _ -- identifiers removed
+
+parse
+CREATE SCHEMA foo
+----
+CREATE SCHEMA foo
+CREATE SCHEMA foo -- fully parenthesized
+CREATE SCHEMA foo -- literals removed
+CREATE SCHEMA _ -- identifiers removed
+
+parse
+CREATE SCHEMA IF NOT EXISTS foo.bar
+----
+CREATE SCHEMA IF NOT EXISTS foo.bar
+CREATE SCHEMA IF NOT EXISTS foo.bar -- fully parenthesized
+CREATE SCHEMA IF NOT EXISTS foo.bar -- literals removed
+CREATE SCHEMA IF NOT EXISTS _._ -- identifiers removed
+
+parse
+CREATE SCHEMA foo.bar
+----
+CREATE SCHEMA foo.bar
+CREATE SCHEMA foo.bar -- fully parenthesized
+CREATE SCHEMA foo.bar -- literals removed
+CREATE SCHEMA _._ -- identifiers removed
+
+parse
+CREATE SCHEMA IF NOT EXISTS foo AUTHORIZATION foobar
+----
+CREATE SCHEMA IF NOT EXISTS foo AUTHORIZATION foobar
+CREATE SCHEMA IF NOT EXISTS foo AUTHORIZATION foobar -- fully parenthesized
+CREATE SCHEMA IF NOT EXISTS foo AUTHORIZATION foobar -- literals removed
+CREATE SCHEMA IF NOT EXISTS _ AUTHORIZATION _ -- identifiers removed
+
+parse
+CREATE SCHEMA IF NOT EXISTS foo.bar AUTHORIZATION foobar
+----
+CREATE SCHEMA IF NOT EXISTS foo.bar AUTHORIZATION foobar
+CREATE SCHEMA IF NOT EXISTS foo.bar AUTHORIZATION foobar -- fully parenthesized
+CREATE SCHEMA IF NOT EXISTS foo.bar AUTHORIZATION foobar -- literals removed
+CREATE SCHEMA IF NOT EXISTS _._ AUTHORIZATION _ -- identifiers removed
+
+parse
+CREATE SCHEMA foo AUTHORIZATION foobar
+----
+CREATE SCHEMA foo AUTHORIZATION foobar
+CREATE SCHEMA foo AUTHORIZATION foobar -- fully parenthesized
+CREATE SCHEMA foo AUTHORIZATION foobar -- literals removed
+CREATE SCHEMA _ AUTHORIZATION _ -- identifiers removed
+
+parse
+CREATE SCHEMA foo.bar AUTHORIZATION foobar
+----
+CREATE SCHEMA foo.bar AUTHORIZATION foobar
+CREATE SCHEMA foo.bar AUTHORIZATION foobar -- fully parenthesized
+CREATE SCHEMA foo.bar AUTHORIZATION foobar -- literals removed
+CREATE SCHEMA _._ AUTHORIZATION _ -- identifiers removed
+
+parse
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION foobar
+----
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION foobar
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION foobar -- fully parenthesized
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION foobar -- literals removed
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION _ -- identifiers removed
+
+parse
+CREATE SCHEMA AUTHORIZATION foobar
+----
+CREATE SCHEMA AUTHORIZATION foobar
+CREATE SCHEMA AUTHORIZATION foobar -- fully parenthesized
+CREATE SCHEMA AUTHORIZATION foobar -- literals removed
+CREATE SCHEMA AUTHORIZATION _ -- identifiers removed

@@ -16,6 +16,5 @@ go_test(
         "resolver_test.go",
     ],
     embed = [":caller"],
-    tags = ["broken_in_bazel"],
     deps = ["//pkg/util/log"],
 )

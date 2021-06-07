@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -41,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
@@ -531,18 +531,10 @@ func (r *Registry) CreateStartableJobWithTxn(
 
 	var resumerCtx context.Context
 	var cancel func()
-	var span *tracing.Span
 	var execDone chan struct{}
 	if !alreadyInitialized {
-		// Construct a context which contains a tracing span that follows from the
-		// span in the parent context. We don't directly use the parent span because
-		// we want independent lifetimes and cancellation. For the same reason, we
-		// don't use the Context returned by ForkSpan.
+		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
-		_, span = tracing.ForkSpan(ctx, "job")
-		if span != nil {
-			resumerCtx = tracing.ContextWithSpan(resumerCtx, span)
-		}
 
 		if r.startUsingSQLLivenessAdoption(ctx) {
 			r.mu.Lock()
@@ -566,7 +558,6 @@ func (r *Registry) CreateStartableJobWithTxn(
 		*sj = &StartableJob{}
 		(*sj).resumerCtx = resumerCtx
 		(*sj).cancel = cancel
-		(*sj).span = span
 		(*sj).execDone = execDone
 	}
 	(*sj).Job = j
@@ -669,16 +660,25 @@ func (r *Registry) Start(
 	}
 
 	removeClaimsFromDeadSessions := func(ctx context.Context, s sqlliveness.Session) {
-		if _, err := r.ex.QueryRowEx(
-			ctx, "expire-sessions", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Run the expiration transaction at low priority to ensure that it does
+			// not contend with foreground reads. Note that the adoption and cancellation
+			// queries also use low priority so they will interact nicely.
+			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+				return errors.WithAssertionFailure(err)
+			}
+			_, err := r.ex.ExecEx(
+				ctx, "expire-sessions", nil,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id <> $1
    AND status IN `+claimableStatusTupleString+`
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
-			s.ID().UnsafeBytes(),
-		); err != nil {
+				s.ID().UnsafeBytes(),
+			)
+			return err
+		}); err != nil {
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
@@ -742,7 +742,7 @@ UPDATE system.jobs
 	if err := stopper.RunAsyncTask(context.Background(), "jobs/gc", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		settingChanged := make(chan struct{}, 1)
-		gcSetting.SetOnChange(&r.settings.SV, func() {
+		gcSetting.SetOnChange(&r.settings.SV, func(ctx context.Context) {
 			select {
 			case settingChanged <- struct{}{}:
 			default:
@@ -933,7 +933,7 @@ func (r *Registry) cleanupOldJobsPage(
 
 	log.VEventf(ctx, 2, "read potentially expired jobs: %d", numRows)
 	if len(toDelete.Array) > 0 {
-		log.Infof(ctx, "cleaning up expired job records: %d", len(toDelete.Array))
+		log.Infof(ctx, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
 		var nDeleted int
 		if nDeleted, err = r.ex.Exec(
@@ -941,10 +941,7 @@ func (r *Registry) cleanupOldJobsPage(
 		); err != nil {
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
-		if nDeleted != len(toDelete.Array) {
-			return false, 0, errors.AssertionFailedf("asked to delete %d rows but %d were actually deleted",
-				len(toDelete.Array), nDeleted)
-		}
+		log.Infof(ctx, "cleaned up %d expired job records", nDeleted)
 	}
 	// If we got as many rows as we asked for, there might be more.
 	morePages := numRows == pageSize

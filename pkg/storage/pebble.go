@@ -45,15 +45,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-const (
-	maxSyncDurationFatalOnExceededDefault = true
-
-	// Default value for maximum number of intents reported by ExportToSST
-	// in WriteIntentError is set to half of the maximum lock table size.
-	// This value is subject to tuning in real environment as we have more
-	// data available.
-	maxIntentsPerSstExportErrorDefault = 5000
-)
+const maxSyncDurationFatalOnExceededDefault = true
 
 // Default for MaxSyncDuration below.
 var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 60*time.Second)
@@ -74,11 +66,6 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	maxSyncDurationFatalOnExceededDefault,
 )
-
-var maxIntentsPerSstExportError = settings.RegisterIntSetting(
-	"storage.sst_export.max_intents_per_error",
-	"maximum number of intents returned in error when sst export fails",
-	maxIntentsPerSstExportErrorDefault)
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
@@ -668,7 +655,7 @@ func (p *Pebble) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := maxIntentsPerSstExportError.Get(&p.settings.SV)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
 	summary, k, err := pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
 		maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
@@ -699,14 +686,6 @@ func (p *Pebble) rawGet(key []byte) ([]byte, error) {
 		return nil, nil
 	}
 	return ret, err
-}
-
-// GetCompactionStats implements the Engine interface.
-func (p *Pebble) GetCompactionStats() string {
-	// NB: The initial blank line matches the formatting used by RocksDB and
-	// ensures that compaction stats display will not contain the log prefix
-	// (this method is only used for logging purposes).
-	return "\n" + p.db.Metrics().String()
 }
 
 // MVCCGetProto implements the Engine interface.
@@ -945,7 +924,7 @@ func (p *Pebble) Attrs() roachpb.Attributes {
 
 // Capacity implements the Engine interface.
 func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
-	return computeCapacity(p.path, p.maxSize)
+	return computeCapacity(p.db.Metrics(), p.path, p.maxSize, p.auxDir)
 }
 
 // Flush implements the Engine interface.
@@ -954,41 +933,13 @@ func (p *Pebble) Flush() error {
 }
 
 // GetMetrics implements the Engine interface.
-func (p *Pebble) GetMetrics() (*Metrics, error) {
+func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
-
-	// Aggregate compaction stats across levels.
-	var ingestedBytes, compactedBytesRead, compactedBytesWritten, numSSTables int64
-	for _, lm := range m.Levels {
-		ingestedBytes += int64(lm.BytesIngested)
-		compactedBytesRead += int64(lm.BytesRead)
-		compactedBytesWritten += int64(lm.BytesCompacted)
-		numSSTables += lm.NumFiles
+	return Metrics{
+		Metrics:        m,
+		DiskSlowCount:  int64(atomic.LoadUint64(&p.diskSlowCount)),
+		DiskStallCount: int64(atomic.LoadUint64(&p.diskStallCount)),
 	}
-
-	return &Metrics{
-		BlockCacheHits:                 m.BlockCache.Hits,
-		BlockCacheMisses:               m.BlockCache.Misses,
-		BlockCacheUsage:                m.BlockCache.Size,
-		BlockCachePinnedUsage:          0,
-		BloomFilterPrefixChecked:       m.Filter.Hits + m.Filter.Misses,
-		BloomFilterPrefixUseful:        m.Filter.Hits,
-		DiskSlowCount:                  int64(atomic.LoadUint64(&p.diskSlowCount)),
-		DiskStallCount:                 int64(atomic.LoadUint64(&p.diskStallCount)),
-		MemtableTotalSize:              int64(m.MemTable.Size),
-		Flushes:                        m.Flush.Count,
-		FlushedBytes:                   int64(m.Levels[0].BytesFlushed),
-		Compactions:                    m.Compact.Count,
-		IngestedBytes:                  ingestedBytes,
-		CompactedBytesRead:             compactedBytesRead,
-		CompactedBytesWritten:          compactedBytesWritten,
-		TableReadersMemEstimate:        m.TableCache.Size,
-		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
-		L0FileCount:                    m.Levels[0].NumFiles,
-		L0SublevelCount:                int64(m.Levels[0].Sublevels),
-		ReadAmplification:              int64(m.ReadAmp()),
-		NumSSTables:                    numSSTables,
-	}, nil
 }
 
 // GetEncryptionRegistries implements the Engine interface.
@@ -1340,7 +1291,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := maxIntentsPerSstExportError.Get(&p.parent.settings.SV)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.parent.settings.SV)
 	summary, k, err := pebbleExportToSst(
 		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
 	r.Free()
@@ -1605,7 +1556,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	maxIntentCount := maxIntentsPerSstExportError.Get(&p.settings.SV)
+	maxIntentCount := MaxIntentsPerWriteIntentError.Get(&p.settings.SV)
 	summary, k, err := pebbleExportToSst(
 		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, dest, maxIntentCount)
 	r.Free()

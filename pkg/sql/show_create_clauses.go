@@ -107,7 +107,7 @@ func ShowCreateView(
 	}
 	f.WriteString(") AS ")
 
-	// Convert sequences referenced by ID in the view back to their names.
+	// Deserialize user-defined types in the view query.
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, desc)
 	if err != nil {
 		log.Warningf(ctx,
@@ -115,7 +115,7 @@ func ShowCreateView(
 			desc.GetName(), desc.GetID(), err)
 		f.WriteString(desc.GetViewQuery())
 	} else {
-		// Deserialize user-defined types in the view query.
+		// Convert sequences referenced by ID in the view back to their names.
 		sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(
 			ctx, semaCtx, typeReplacedViewQuery)
 		if err != nil {
@@ -415,7 +415,7 @@ func showCreateInterleave(
 	fmtCtx.FormatNode(&parentName)
 	buf.WriteString(fmtCtx.CloseAndGetString())
 	buf.WriteString(" (")
-	formatQuoteNames(buf, idx.IndexDesc().ColumnNames[:sharedPrefixLen]...)
+	formatQuoteNames(buf, idx.IndexDesc().KeyColumnNames[:sharedPrefixLen]...)
 	buf.WriteString(")")
 	return nil
 }
@@ -479,7 +479,7 @@ func ShowCreatePartitioning(
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(idx.GetColumnName(colOffset + i))
+		buf.WriteString(idx.GetKeyColumnName(colOffset + i))
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)

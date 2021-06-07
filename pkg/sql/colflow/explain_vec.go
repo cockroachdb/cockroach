@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -49,9 +50,12 @@ func convertToVecTree(
 	if isPlanLocal {
 		fuseOpt = flowinfra.FuseAggressively
 	}
+	// We optimistically assume that sql.DistSQLReceiver can be used as an
+	// execinfra.BatchReceiver, so we always pass in a fakeBatchReceiver to the
+	// creator.
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, false,
-		nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
 		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
 	)
 	// We create an unlimited memory account because we're interested whether the
@@ -70,8 +74,22 @@ func convertToVecTree(
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer creator.cleanup(ctx)
-	opChains, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
+	opChains, _, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
 	return opChains, creator.Release, err
+}
+
+// fakeBatchReceiver exists for the sole purpose of convertToVecTree method. In
+// the production code it would have been sql.DistSQLReceiver.
+type fakeBatchReceiver struct{}
+
+var _ execinfra.BatchReceiver = &fakeBatchReceiver{}
+
+func (f fakeBatchReceiver) ProducerDone() {}
+
+func (f fakeBatchReceiver) PushBatch(
+	coldata.Batch, *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	return execinfra.ConsumerClosed
 }
 
 type flowWithNode struct {

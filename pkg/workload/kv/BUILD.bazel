@@ -9,10 +9,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/kv",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/pgwire/pgcode",
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx//:pgx",
         "@com_github_spf13_pflag//:pflag",
     ],
 )

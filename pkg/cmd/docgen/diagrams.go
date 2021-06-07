@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -82,17 +83,18 @@ func init() {
 				write(filepath.Join(bnfDir, name+".bnf"), g)
 			}
 
-			for _, s := range specs {
+			stmtSpecs, err := getAllStmtSpecs(addr, bnfAPITimeout)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, s := range stmtSpecs {
 				if filterRE.MatchString(s.name) == invertMatch {
 					continue
 				}
 				if !quiet {
 					fmt.Println("processing", s.name)
 				}
-				if s.stmt == "" {
-					s.stmt = s.name
-				}
-				g, err := runParse(br(), s.inline, s.stmt, false, s.nosplit, s.match, s.exclude)
+				g, err := runParse(br(), s.inline, s.GetStatement(), false, s.nosplit, s.match, s.exclude)
 				if err != nil {
 					log.Fatalf("%s: %+v", s.name, err)
 				}
@@ -170,10 +172,14 @@ func init() {
 			}
 
 			specMap := make(map[string]stmtSpec)
-			for _, s := range specs {
+			stmtSpecs, err := getAllStmtSpecs(addr, bnfAPITimeout)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, s := range stmtSpecs {
 				specMap[s.name] = s
 			}
-			if len(specs) != len(specMap) {
+			if len(stmtSpecs) != len(specMap) {
 				log.Fatal("duplicate spec name")
 			}
 
@@ -281,6 +287,15 @@ type stmtSpec struct {
 	nosplit        bool
 }
 
+// GetStatement returns the sql statement of a stmtSpec.
+func (s stmtSpec) GetStatement() string {
+	if s.stmt == "" {
+		return s.name
+	}
+
+	return s.stmt
+}
+
 func runBNF(addr string, bnfAPITimeout time.Duration) ([]byte, error) {
 	return extract.GenerateBNF(addr, bnfAPITimeout)
 }
@@ -356,6 +371,15 @@ var specs = []stmtSpec{
 		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		unlink:  []string{"table_name"},
+	},
+	{
+		name:   "alter_database_primary_region",
+		stmt:   "alter_database_primary_region_stmt",
+		inline: []string{"primary_region_clause", "opt_equal"},
+	},
+	{
+		name: "alter_database_drop_region",
+		stmt: "alter_database_drop_region_stmt",
 	},
 	{
 		name:   "alter_primary_key",
@@ -468,8 +492,7 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
-		name: "begin_transaction",
-		stmt: "begin_stmt",
+		name: "begin_stmt",
 		inline: []string{
 			"opt_transaction",
 			"begin_transaction",
@@ -562,10 +585,13 @@ var specs = []stmtSpec{
 		unlink:  []string{"session_id"},
 	},
 	{
-		name:    "create_database_stmt",
-		inline:  []string{"opt_encoding_clause", "opt_connection_limit", "opt_equal"},
-		replace: map[string]string{"'SCONST'": "encoding"},
-		unlink:  []string{"name", "encoding"},
+		name:   "create_database_stmt",
+		inline: []string{"opt_with", "opt_encoding_clause", "opt_connection_limit", "opt_equal", "opt_primary_region_clause", "primary_region_clause", "opt_regions_list", "region_or_regions", "opt_survival_goal_clause", "survival_goal_clause", "opt_equal"},
+		replace: map[string]string{
+			"non_reserved_word_or_sconst": "encoding",
+			"signed_iconst":               "limit"},
+		unlink:  []string{"non_reserved_word_or_sconst", "signed_iconst", "encoding", "limit"},
+		nosplit: true,
 	},
 	{
 		name:   "create_changefeed_stmt",
@@ -658,6 +684,12 @@ var specs = []stmtSpec{
 		name:    "create_table_stmt",
 		inline:  []string{"opt_table_elem_list", "table_elem_list", "table_elem", "opt_table_with", "opt_create_table_on_commit"},
 		nosplit: true,
+	},
+	{
+		name:    "opt_locality",
+		inline:  []string{"locality"},
+		replace: map[string]string{" name": "column_name"},
+		unlink:  []string{"column_name"},
 	},
 	{
 		name: "create_type",
@@ -855,31 +887,13 @@ var specs = []stmtSpec{
 		inline: []string{"name_list"},
 	},
 	{
-		name:   "grant_privileges",
-		stmt:   "grant_stmt",
-		inline: []string{"privileges", "privilege_list", "privilege", "table_pattern_list", "name_list"},
-		replace: map[string]string{
-			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
-			"table_pattern":                     "table_name",
-			"'TO' ( ( name ) ( ( ',' name ) )*": "'TO' ( ( user_name ) ( ( ',' user_name ) )*",
-			"| 'GRANT' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'TO' ( ( user_name ) ( ( ',' user_name ) )* )": "",
-			"'WITH' 'ADMIN' 'OPTION'": "",
-			"targets":                 "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-		},
-		unlink:  []string{"table_name", "database_name", "user_name"},
-		nosplit: true,
-	},
-	{
-		name: "grant_roles",
-		stmt: "grant_stmt",
+		name:   "grant_stmt",
+		inline: []string{"privileges", "opt_privileges_clause"},
 		exclude: []*regexp.Regexp{
-			// Ignore other grant statements that are granting privileges.
-			regexp.MustCompile("'GRANT' privileges"),
-		}, replace: map[string]string{
-			"'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'": "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )* 'WITH' 'ADMIN' 'OPTION'",
-			"| 'GRANT' privilege_list 'TO' name_list":                       "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )*",
+			regexp.MustCompile("'TYPE' target_types"),
+			regexp.MustCompile("'SCHEMA' schema_name_list"),
 		},
-		unlink: []string{"role_name", "user_name"},
+		unlink: []string{"targets"},
 	},
 	{
 		name: "foreign_key_column_level",
@@ -1086,33 +1100,13 @@ var specs = []stmtSpec{
 		unlink:  []string{"schedule_id"},
 	},
 	{
-		name:   "revoke_privileges",
-		stmt:   "revoke_stmt",
-		inline: []string{"privileges", "privilege_list", "privilege", "name_list"},
-		replace: map[string]string{
-			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
-			"targets":                             "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"'FROM' ( ( name ) ( ( ',' name ) )*": "'FROM' ( ( user_name ) ( ( ',' user_name ) )*",
-			"| 'REVOKE' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )":  "",
-			"| 'REVOKE'  ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )": "",
-			"'ADMIN' 'OPTION' 'FOR'": "",
-		},
-		unlink:  []string{"table_name", "database_name", "user_name"},
-		nosplit: true,
-	},
-	{
-		name: "revoke_roles",
-		stmt: "revoke_stmt",
+		name:   "revoke_stmt",
+		inline: []string{"privileges", "opt_privileges_clause"},
 		exclude: []*regexp.Regexp{
-			// Ignore other grant statements that are granting privileges.
-			regexp.MustCompile("'REVOKE' privileges"),
+			regexp.MustCompile("'TYPE' target_types"),
+			regexp.MustCompile("'SCHEMA' schema_name_list"),
 		},
-		replace: map[string]string{
-			"'REVOKE' privileges 'ON' targets 'FROM' name_list":               "",
-			"'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list": "'REVOKE' 'ADMIN' 'OPTION' 'FOR' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",
-			"| 'REVOKE' privilege_list 'FROM' name_list":                      "'REVOKE' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",
-		},
-		unlink: []string{"role_name", "user_name"},
+		unlink: []string{"targets"},
 	},
 	{
 		name:    "rollback_transaction",
@@ -1524,6 +1518,73 @@ var specs = []stmtSpec{
 		name:   "opt_frame_clause",
 		inline: []string{"frame_extent"},
 	},
+}
+
+// getAllStmtSpecs returns a slice of stmtSpecs for all sql.y statements that
+// should have a diagram generated for.
+// getAllStmtSpecs appends to the "specs" slice any sql.y statements that do
+// not have an entry in specs but are not specified to be skipped.
+func getAllStmtSpecs(sqlGrammarFile string, bnfAPITimeout time.Duration) ([]stmtSpec, error) {
+	sqlStmts := make(map[string]struct{})
+	// Map all the sql stmts that are defined in specs.
+	for _, s := range specs {
+		sqlStmts[s.GetStatement()] = struct{}{}
+	}
+
+	file, err := os.Open(sqlGrammarFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	bnf, err := runBNF(sqlGrammarFile, bnfAPITimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	br := func() io.Reader {
+		return bytes.NewReader(bnf)
+	}
+
+	grammar, err := extract.ParseGrammar(br())
+	if err != nil {
+		return nil, err
+	}
+
+	stmtRegex := regexp.MustCompile(`%type\s*<tree.Statement>\s*(.*)$`)
+
+	scanner := bufio.NewScanner(file)
+	if err != nil {
+		return nil, err
+	}
+	for scanner.Scan() {
+		text := scanner.Text()
+		if matches := stmtRegex.FindAllStringSubmatch(text, -1); len(matches) > 0 {
+			for _, match := range matches {
+				// The second submatch does not include <tree.Statement>.
+				// We want to get only the stmt names.
+				stmts := strings.Split(match[1], " ")
+				for _, stmt := range stmts {
+					// If the statement does not appear in grammar, the statement
+					// has no branches that are required to be documented, we can
+					// skip it.
+					if _, ok := grammar[stmt]; !ok {
+						continue
+					}
+
+					// If the statement is not defined in specs, create an entry.
+					if _, found := sqlStmts[stmt]; !found {
+						specs = append(specs, stmtSpec{
+							name: stmt,
+						})
+						sqlStmts[stmt] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+
+	return specs, nil
 }
 
 // regList is a common regex used when removing loops from alter and drop

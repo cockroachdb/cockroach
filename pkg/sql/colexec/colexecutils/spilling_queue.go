@@ -81,6 +81,13 @@ type SpillingQueue struct {
 		maxNumBatchesEnqueuedInMemory int
 	}
 
+	// testingObservability stores some observability information about the
+	// state of the spilling queue when it was closed.
+	testingObservability struct {
+		spilled     bool
+		memoryUsage int64
+	}
+
 	diskAcc *mon.BoundAccount
 }
 
@@ -501,31 +508,52 @@ func (q *SpillingQueue) Empty() bool {
 	return q.numInMemoryItems == 0 && q.numOnDiskItems == 0
 }
 
-// Spilled returns whether the spilling queue has spilled to disk.
+// Spilled returns whether the spilling queue has spilled to disk. Note that if
+// the spilling queue has been closed, then it returns whether the queue spilled
+// before being closed.
 func (q *SpillingQueue) Spilled() bool {
+	if q.closed {
+		return q.testingObservability.spilled
+	}
 	return q.diskQueue != nil
 }
 
 // MemoryUsage reports the current memory usage of the spilling queue in bytes.
+// Note that if the spilling queue has been closed, then it returns the memory
+// usage of the queue before its closure.
 func (q *SpillingQueue) MemoryUsage() int64 {
+	if q.closed {
+		return q.testingObservability.memoryUsage
+	}
 	return q.unlimitedAllocator.Used()
 }
 
 // Close closes the spilling queue.
 func (q *SpillingQueue) Close(ctx context.Context) error {
-	if q.closed {
+	if q == nil || q.closed {
 		return nil
 	}
+	q.closed = true
+	q.testingObservability.spilled = q.diskQueue != nil
+	q.testingObservability.memoryUsage = q.unlimitedAllocator.Used()
+	q.unlimitedAllocator.ReleaseMemory(q.unlimitedAllocator.Used())
+	// Eagerly release references to the in-memory items and scratch batches.
+	// Note that we don't lose the reference to 'items' slice itself so that it
+	// can be reused in case Close() is called by Reset().
+	for i := range q.items {
+		q.items[i] = nil
+	}
+	q.diskQueueDeselectionScratch = nil
+	q.dequeueScratch = nil
 	if q.diskQueue != nil {
 		if err := q.diskQueue.Close(ctx); err != nil {
 			return err
 		}
+		q.diskQueue = nil
 		if q.fdSemaphore != nil {
 			q.fdSemaphore.Release(q.numFDsOpenAtAnyGivenTime())
 		}
 		q.maxMemoryLimit += int64(q.diskQueueCfg.BufferSizeBytes)
-		q.closed = true
-		return nil
 	}
 	return nil
 }
@@ -551,7 +579,6 @@ func (q *SpillingQueue) Reset(ctx context.Context) {
 	if err := q.Close(ctx); err != nil {
 		colexecerror.InternalError(err)
 	}
-	q.diskQueue = nil
 	q.closed = false
 	q.numInMemoryItems = 0
 	q.numOnDiskItems = 0

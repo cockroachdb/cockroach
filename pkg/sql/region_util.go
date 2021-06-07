@@ -814,7 +814,7 @@ func partitionByForRegionalByRow(
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
 func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 		p.EvalContext().Ctx(),
 		p.txn,
 		p.CurrentDatabase(),
@@ -905,7 +905,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 func (p *planner) CurrentDatabaseRegionConfig(
 	ctx context.Context,
 ) (tree.DatabaseRegionConfig, error) {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 		p.EvalContext().Ctx(),
 		p.txn,
 		p.CurrentDatabase(),
@@ -1112,7 +1112,7 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 	// Check if what we're altering is a multi-region entity.
 	if zs.Database != "" {
 		isDB = true
-		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+		dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 			ctx,
 			p.txn,
 			string(zs.Database),

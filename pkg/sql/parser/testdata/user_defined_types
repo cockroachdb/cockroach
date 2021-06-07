@@ -1,0 +1,156 @@
+parse
+CREATE TABLE t (x special.type)
+----
+CREATE TABLE t (x special.type)
+CREATE TABLE t (x special.type) -- fully parenthesized
+CREATE TABLE t (x special.type) -- literals removed
+CREATE TABLE _ (_ special.type) -- identifiers removed
+
+parse
+CREATE TABLE t (x int4.type)
+----
+CREATE TABLE t (x int4.type)
+CREATE TABLE t (x int4.type) -- fully parenthesized
+CREATE TABLE t (x int4.type) -- literals removed
+CREATE TABLE _ (_ int4.type) -- identifiers removed
+
+parse
+CREATE TABLE t (x notatype)
+----
+CREATE TABLE t (x notatype)
+CREATE TABLE t (x notatype) -- fully parenthesized
+CREATE TABLE t (x notatype) -- literals removed
+CREATE TABLE _ (_ notatype) -- identifiers removed
+
+parse
+SELECT 1 IS OF (my.type, int4.type)
+----
+SELECT 1 IS OF (my.type, int4.type)
+SELECT ((1) IS OF (my.type, int4.type)) -- fully parenthesized
+SELECT _ IS OF (my.type, int4.type) -- literals removed
+SELECT 1 IS OF (_._, _._) -- identifiers removed
+
+parse
+SELECT my.type ''
+----
+SELECT my.type ''
+SELECT (my.type ('')) -- fully parenthesized
+SELECT my.type _ -- literals removed
+SELECT my.type AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT _._ '' -- identifiers removed
+
+parse
+SELECT int4.type ''
+----
+SELECT int4.type ''
+SELECT (int4.type ('')) -- fully parenthesized
+SELECT int4.type _ -- literals removed
+SELECT int4.type AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT _._ '' -- identifiers removed
+
+parse
+SELECT foo ''
+----
+SELECT foo ''
+SELECT (foo ('')) -- fully parenthesized
+SELECT foo _ -- literals removed
+SELECT foo AS _ -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+SELECT _ '' -- identifiers removed
+
+parse
+SELECT CAST(1.2 + 2.3 AS notatype)
+----
+SELECT CAST(1.2 + 2.3 AS notatype)
+SELECT (CAST(((1.2) + (2.3)) AS notatype)) -- fully parenthesized
+SELECT CAST(_ + _ AS notatype) -- literals removed
+SELECT CAST(1.2 + 2.3 AS _) -- identifiers removed
+
+parse
+SELECT ANNOTATE_TYPE(1.2 + 2.3, notatype)
+----
+SELECT ANNOTATE_TYPE(1.2 + 2.3, notatype)
+SELECT (ANNOTATE_TYPE(((1.2) + (2.3)), notatype)) -- fully parenthesized
+SELECT ANNOTATE_TYPE(_ + _, notatype) -- literals removed
+SELECT ANNOTATE_TYPE(1.2 + 2.3, _) -- identifiers removed
+
+parse
+SELECT 'f'::blah
+----
+SELECT 'f'::blah
+SELECT (('f')::blah) -- fully parenthesized
+SELECT _::blah -- literals removed
+SELECT 'f'::_ -- identifiers removed
+
+## Test various cases of qualified and not statically known types.
+
+parse
+SELECT 1::notatype
+----
+SELECT 1::notatype
+SELECT ((1)::notatype) -- fully parenthesized
+SELECT _::notatype -- literals removed
+SELECT 1::_ -- identifiers removed
+
+parse
+SELECT 1::schem.typ
+----
+SELECT 1::schem.typ
+SELECT ((1)::schem.typ) -- fully parenthesized
+SELECT _::schem.typ -- literals removed
+SELECT 1::_._ -- identifiers removed
+
+parse
+SELECT 1::int4.typ
+----
+SELECT 1::int4.typ
+SELECT ((1)::int4.typ) -- fully parenthesized
+SELECT _::int4.typ -- literals removed
+SELECT 1::_._ -- identifiers removed
+
+parse
+SELECT 1::db.schem.typ
+----
+SELECT 1::db.schem.typ
+SELECT ((1)::db.schem.typ) -- fully parenthesized
+SELECT _::db.schem.typ -- literals removed
+SELECT 1::_._._ -- identifiers removed
+
+parse
+SELECT 1::db.int4.typ[]
+----
+SELECT 1::db.int4.typ[]
+SELECT ((1)::db.int4.typ[]) -- fully parenthesized
+SELECT _::db.int4.typ[] -- literals removed
+SELECT 1::_._._[] -- identifiers removed
+
+parse
+SELECT 1::db.int4.typ array [1]
+----
+SELECT 1::db.int4.typ[] -- normalized!
+SELECT ((1)::db.int4.typ[]) -- fully parenthesized
+SELECT _::db.int4.typ[] -- literals removed
+SELECT 1::_._._[] -- identifiers removed
+
+parse
+SELECT 1::int4.typ array [1]
+----
+SELECT 1::int4.typ[] -- normalized!
+SELECT ((1)::int4.typ[]) -- fully parenthesized
+SELECT _::int4.typ[] -- literals removed
+SELECT 1::_._[] -- identifiers removed
+
+parse
+SELECT 1::db.int4.typ array
+----
+SELECT 1::db.int4.typ[] -- normalized!
+SELECT ((1)::db.int4.typ[]) -- fully parenthesized
+SELECT _::db.int4.typ[] -- literals removed
+SELECT 1::_._._[] -- identifiers removed
+
+parse
+CREATE TABLE t (x int4.type array [1])
+----
+CREATE TABLE t (x int4.type[]) -- normalized!
+CREATE TABLE t (x int4.type[]) -- fully parenthesized
+CREATE TABLE t (x int4.type[]) -- literals removed
+CREATE TABLE _ (_ int4.type[]) -- identifiers removed

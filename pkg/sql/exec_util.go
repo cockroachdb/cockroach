@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -54,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -65,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -359,6 +362,13 @@ var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 ).WithPublic()
 
+var experimentalExpressionBasedIndexesMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_expression_based_indexes.enabled",
+	"default value for experimental_enable_expression_based_indexes session setting;"+
+		"disables expression-based indexes by default",
+	false,
+)
+
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
 var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting(
@@ -429,9 +439,10 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"default vectorize mode",
 	"on",
 	map[int64]string{
-		int64(sessiondatapb.VectorizeOff):                "off",
+		int64(sessiondatapb.VectorizeUnset):              "on",
 		int64(sessiondatapb.VectorizeOn):                 "on",
 		int64(sessiondatapb.VectorizeExperimentalAlways): "experimental_always",
+		int64(sessiondatapb.VectorizeOff):                "off",
 	},
 )
 
@@ -749,6 +760,36 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLStatsMemMaxBytes = metric.Metadata{
+		Name:        "sql.stats.mem.max",
+		Help:        "Memory usage for fingerprint storage",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	MetaSQLStatsMemCurBytes = metric.Metadata{
+		Name:        "sql.stats.mem.current",
+		Help:        "Current memory usage for fingerprint storage",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	MetaReportedSQLStatsMemMaxBytes = metric.Metadata{
+		Name:        "sql.stats.reported.mem.max",
+		Help:        "Memory usage for reported fingerprint storage",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	MetaReportedSQLStatsMemCurBytes = metric.Metadata{
+		Name:        "sql.stats.reported.mem.current",
+		Help:        "Current memory usage for reported fingerprint storage",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	MetaDiscardedSQLStats = metric.Metadata{
+		Name:        "sql.stats.discarded.current",
+		Help:        "Number of fingerprint statistics being discarded",
+		Measurement: "Discarded SQL Stats",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
@@ -787,6 +828,7 @@ type ExecutorConfig struct {
 	AmbientCtx        log.AmbientContext
 	DB                *kv.DB
 	Gossip            gossip.OptionalGossip
+	NodeLiveness      optionalnodeliveness.Container
 	SystemConfig      config.SystemConfigProvider
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
@@ -1824,6 +1866,16 @@ func (st *SessionTracing) TraceExecRowsResult(ctx context.Context, values tree.D
 	}
 }
 
+// TraceExecBatchResult conditionally emits a trace message for a single batch.
+func (st *SessionTracing) TraceExecBatchResult(ctx context.Context, batch coldata.Batch) {
+	if st.showResults {
+		outputRows := coldata.VecsToStringWithRowPrefix(batch.ColVecs(), batch.Length(), batch.Selection(), "output row: ")
+		for _, row := range outputRows {
+			log.VEventfDepth(ctx, 2, 1, "%s", row)
+		}
+	}
+}
+
 // TraceExecEnd conditionally emits a trace message at the moment
 // plan execution completes.
 func (st *SessionTracing) TraceExecEnd(ctx context.Context, err error, count int) {
@@ -2374,6 +2426,12 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
+// TODO(mgartner): remove this once expression-based indexes are fully
+// supported.
+func (m *sessionDataMutator) SetExpressionBasedIndexes(val bool) {
+	m.data.EnableExpressionBasedIndexes = val
+}
+
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
 func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
@@ -2417,21 +2475,21 @@ type sqlStatsCollector struct {
 	// into sqlStats set as the session's current app.
 	appStats *appStats
 	// phaseTimes tracks session-level phase times.
-	phaseTimes phaseTimes
+	phaseTimes *sessionphase.Times
 	// previousPhaseTimes tracks the session-level phase times for the previous
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
-	previousPhaseTimes phaseTimes
+	previousPhaseTimes *sessionphase.Times
 }
 
 // newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
-// phaseTimes is an array, not a slice, so this performs a copy-by-value.
+// phaseTimes is copied by value.
 func newSQLStatsCollector(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *sessionphase.Times,
 ) *sqlStatsCollector {
 	return &sqlStatsCollector{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		phaseTimes: phaseTimes.Clone(),
 	}
 }
 
@@ -2439,6 +2497,7 @@ func newSQLStatsCollector(
 // be nil, as these are only sampled periodically per unique fingerprint. It
 // returns the statement ID of the recorded statement.
 func (s *sqlStatsCollector) recordStatement(
+	ctx context.Context,
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
@@ -2451,9 +2510,9 @@ func (s *sqlStatsCollector) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
 	planner *planner,
-) roachpb.StmtID {
+) (roachpb.StmtID, error) {
 	return s.appStats.recordStatement(
-		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn, fullScan,
+		ctx, stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn, fullScan,
 		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
 		ovhLat, stats, planner,
 	)
@@ -2461,6 +2520,7 @@ func (s *sqlStatsCollector) recordStatement(
 
 // recordTransaction records statistics for one transaction.
 func (s *sqlStatsCollector) recordTransaction(
+	ctx context.Context,
 	key txnKey,
 	txnTimeSec float64,
 	ev txnEvent,
@@ -2475,20 +2535,22 @@ func (s *sqlStatsCollector) recordTransaction(
 	execStats execstats.QueryLevelStats,
 	rowsRead int64,
 	bytesRead int64,
-) {
+) error {
 	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
-	s.appStats.recordTransaction(
-		key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat,
+	return s.appStats.recordTransaction(
+		ctx, key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat,
 		numRows, collectedExecStats, execStats, rowsRead, bytesRead,
 	)
 }
 
-func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
-	previousPhaseTimes := &s.phaseTimes
+func (s *sqlStatsCollector) reset(
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *sessionphase.Times,
+) {
+	previousPhaseTimes := s.phaseTimes
 	*s = sqlStatsCollector{
 		sqlStats:           sqlStats,
 		appStats:           appStats,
-		previousPhaseTimes: *previousPhaseTimes,
-		phaseTimes:         *phaseTimes,
+		previousPhaseTimes: previousPhaseTimes,
+		phaseTimes:         phaseTimes.Clone(),
 	}
 }

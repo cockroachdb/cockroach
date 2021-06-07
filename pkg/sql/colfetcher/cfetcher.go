@@ -546,8 +546,8 @@ func (rf *cFetcher) Init(
 	// the value component. We process these separately, so we need to know
 	// what extra columns are composite or not.
 	if table.isSecondaryIndex && table.index.IsUnique() {
-		for i := 0; i < table.index.NumExtraColumns(); i++ {
-			id := table.index.GetExtraColumnID(i)
+		for i := 0; i < table.index.NumKeySuffixColumns(); i++ {
+			id := table.index.GetKeySuffixColumnID(i)
 			colIdx, ok := tableArgs.ColIdxMap.Get(id)
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
@@ -569,10 +569,13 @@ func (rf *cFetcher) Init(
 	}
 
 	if table.isSecondaryIndex {
+		colIDs := table.index.CollectKeyColumnIDs()
+		colIDs.UnionWith(table.index.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(table.index.CollectKeySuffixColumnIDs())
 		for i := range colDescriptors {
 			//gcassert:bce
 			id := colDescriptors[i].GetID()
-			if neededCols.Contains(int(id)) && !table.index.ContainsColumnID(id) {
+			if neededCols.Contains(int(id)) && !colIDs.Contains(id) {
 				return errors.Errorf("requested column %s not in index", colDescriptors[i].GetName())
 			}
 		}
@@ -582,16 +585,16 @@ func (rf *cFetcher) Init(
 	table.keyValTypes = colinfo.GetColumnTypesFromColDescs(
 		colDescriptors, indexColumnIDs, table.keyValTypes,
 	)
-	if table.index.NumExtraColumns() > 0 {
+	if table.index.NumKeySuffixColumns() > 0 {
 		// Unique secondary indexes have a value that is the
 		// primary index key.
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
 		table.extraTypes = colinfo.GetColumnTypesFromColDescs(
-			colDescriptors, table.index.IndexDesc().ExtraColumnIDs, table.extraTypes,
+			colDescriptors, table.index.IndexDesc().KeySuffixColumnIDs, table.extraTypes,
 		)
-		nExtraColumns := table.index.NumExtraColumns()
+		nExtraColumns := table.index.NumKeySuffixColumns()
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
 		} else {
@@ -609,7 +612,7 @@ func (rf *cFetcher) Init(
 		allExtraValColOrdinals := table.allExtraValColOrdinals
 		_ = allExtraValColOrdinals[nExtraColumns-1]
 		for i := 0; i < nExtraColumns; i++ {
-			id := table.index.GetExtraColumnID(i)
+			id := table.index.GetKeySuffixColumnID(i)
 			idx := tableArgs.ColIdxMap.GetDefault(id)
 			//gcassert:bce
 			allExtraValColOrdinals[i] = idx
@@ -938,7 +941,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				prefixLen := len(rf.machine.lastRowPrefix)
 				remainingBytes := rf.machine.nextKV.Key[prefixLen:]
 				origRemainingBytesLen := len(remainingBytes)
-				for i := 0; i < rf.table.index.NumExtraColumns(); i++ {
+				for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
 					remainingBytes, err = rowenc.SkipTableKey(remainingBytes)
@@ -1481,7 +1484,7 @@ func (rf *cFetcher) fillNulls() error {
 				return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 					"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
-					strings.Join(table.index.IndexDesc().ColumnNames, ","), strings.Join(indexColValues, ",")))
+					strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
 		}
 		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
@@ -1536,7 +1539,7 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if len(key) < rf.table.knownPrefixLength {
 		return nil, false
 	}
-	nIndexCols := rf.table.index.NumColumns() + rf.table.index.NumExtraColumns()
+	nIndexCols := rf.table.index.NumKeyColumns() + rf.table.index.NumKeySuffixColumns()
 	tableKeyVals := make([]rowenc.EncDatum, nIndexCols)
 	_, ok, _, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 		rf.table.desc,

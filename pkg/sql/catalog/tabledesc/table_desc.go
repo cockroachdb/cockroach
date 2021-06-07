@@ -163,7 +163,7 @@ func UpdateIndexPartitioning(
 ) bool {
 	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
 	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
-	numCols := len(idx.ColumnIDs)
+	numCols := len(idx.KeyColumnIDs)
 	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
 	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
 	newColumnNames := make([]string, len(newImplicitCols), newCap)
@@ -173,18 +173,18 @@ func UpdateIndexPartitioning(
 		newColumnNames[i] = col.GetName()
 		newColumnDirections[i] = descpb.IndexDescriptor_ASC
 		if isNoOp &&
-			(idx.ColumnIDs[i] != newColumnIDs[i] ||
-				idx.ColumnNames[i] != newColumnNames[i] ||
-				idx.ColumnDirections[i] != newColumnDirections[i]) {
+			(idx.KeyColumnIDs[i] != newColumnIDs[i] ||
+				idx.KeyColumnNames[i] != newColumnNames[i] ||
+				idx.KeyColumnDirections[i] != newColumnDirections[i]) {
 			isNoOp = false
 		}
 	}
 	if isNoOp {
 		return false
 	}
-	idx.ColumnIDs = append(newColumnIDs, idx.ColumnIDs[oldNumImplicitCols:]...)
-	idx.ColumnNames = append(newColumnNames, idx.ColumnNames[oldNumImplicitCols:]...)
-	idx.ColumnDirections = append(newColumnDirections, idx.ColumnDirections[oldNumImplicitCols:]...)
+	idx.KeyColumnIDs = append(newColumnIDs, idx.KeyColumnIDs[oldNumImplicitCols:]...)
+	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
+	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
 	idx.Partitioning = newPartitioning
 	return true
 }
@@ -402,7 +402,7 @@ func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error
 }
 
 // FindColumnWithName returns the first column found whose name matches the
-// provided target ID, in the canonical order.
+// provided target name, in the canonical order.
 // If no column is found then an error is also returned.
 func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) {
 	for _, col := range desc.AllColumns() {
@@ -411,6 +411,18 @@ func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) 
 		}
 	}
 	return nil, colinfo.NewUndefinedColumnError(string(name))
+}
+
+// FindVirtualColumnWithExpr returns the first virtual computed column whose
+// expression matches the provided target expression, in the canonical order. If
+// no column is found then ok=false is returned.
+func (desc *wrapper) FindVirtualColumnWithExpr(expr string) (_ catalog.Column, ok bool) {
+	for _, col := range desc.AllColumns() {
+		if col.IsVirtual() && col.GetComputeExpr() == expr {
+			return col, true
+		}
+	}
+	return nil, false
 }
 
 // getExistingOrNewMutationCache should be the only place where the

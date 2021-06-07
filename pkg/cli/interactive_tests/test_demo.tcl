@@ -78,8 +78,8 @@ start_test "Check that demo secure says hello properly"
 set ::env(COCKROACH_INSECURE) "false"
 spawn $argv demo --no-example-database
 eexpect "Welcome"
-eexpect "The user \"demo\" with password"
-eexpect "has been created."
+eexpect "Username: \"demo\", password"
+eexpect "Directory with certificate files"
 eexpect "defaultdb>"
 
 # Show the URLs.
@@ -104,8 +104,7 @@ eexpect eof
 set ::env(COCKROACH_INSECURE) "true"
 spawn $argv demo --insecure=false --no-example-database
 eexpect "Welcome"
-eexpect "The user \"demo\" with password"
-eexpect "has been created."
+eexpect "Username: \"demo\", password"
 eexpect "defaultdb>"
 
 # Show the URLs.

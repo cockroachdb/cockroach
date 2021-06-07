@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,7 +52,7 @@ func (p *planner) AlterDatabaseOwner(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -132,7 +133,7 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -235,6 +236,13 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		jobDesc,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			if n.n.IfNotExists {
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("region %q already exists; skipping", n.n.Region),
+				)
+				return nil
+			}
 			return pgerror.Newf(
 				pgcode.DuplicateObject,
 				"region %q already added to database",
@@ -284,13 +292,20 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
 
 	if !dbDesc.IsMultiRegion() {
+		if n.IfExists {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.Newf("region %q is not defined on the database; skipping", n.Region),
+			)
+			return &alterDatabaseDropRegionNode{}, nil
+		}
 		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
 	}
 
@@ -526,6 +541,9 @@ func removeLocalityConfigFromAllTablesInDB(
 }
 
 func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
+	if n.n == nil {
+		return nil
+	}
 	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 		params.ctx,
 		params.p.txn,
@@ -568,6 +586,20 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// ROW table is homed in that region. The type schema changer is responsible
 		// for all the requisite validation.
 		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+				if n.n.IfExists {
+					params.p.BufferClientNotice(
+						params.ctx,
+						pgnotice.Newf("region %q is not defined on the database; skipping", n.n.Region),
+					)
+					return nil
+				}
+				return pgerror.Newf(
+					pgcode.UndefinedObject,
+					"region %q has not been added to the database",
+					n.n.Region,
+				)
+			}
 			return err
 		}
 	}
@@ -611,7 +643,7 @@ func (p *planner) AlterDatabasePrimaryRegion(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
@@ -925,7 +957,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 		return nil, err
 	}
 
-	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {

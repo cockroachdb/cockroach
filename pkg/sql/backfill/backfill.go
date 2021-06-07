@@ -108,9 +108,13 @@ func (cb *ColumnBackfiller) init(
 		cb.updateExprs[j+len(cb.added)] = tree.DNull
 	}
 
-	// We need all the columns.
+	// We need all the non-virtual columns.
 	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(desc.PublicColumns())-1)
+	for i, c := range desc.PublicColumns() {
+		if !c.IsVirtual() {
+			valNeededForCol.Add(i)
+		}
+	}
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
@@ -683,14 +687,22 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 		}
 		if IndexMutationFilter(m) {
 			idx := m.AsIndex()
+			colIDs := idx.CollectKeyColumnIDs()
+			if idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
+				for _, col := range ib.cols {
+					if !col.IsVirtual() {
+						colIDs.Add(col.GetID())
+					}
+				}
+			} else {
+				colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+				colIDs.UnionWith(idx.CollectKeySuffixColumnIDs())
+			}
+
 			ib.added = append(ib.added, idx)
 			for i := range ib.cols {
 				id := ib.cols[i].GetID()
-				idxContainsColumn := idx.ContainsColumnID(id)
-				isPrimaryIndex := idx.GetEncodingType() == descpb.PrimaryIndexEncoding
-				if (idxContainsColumn || isPrimaryIndex) &&
-					!ib.cols[i].IsVirtual() &&
-					i < len(desc.PublicColumns()) {
+				if colIDs.Contains(id) && i < len(desc.PublicColumns()) {
 					valNeededForCol.Add(i)
 				}
 			}

@@ -1,0 +1,120 @@
+parse
+ALTER DATABASE a RENAME TO b
+----
+ALTER DATABASE a RENAME TO b
+ALTER DATABASE a RENAME TO b -- fully parenthesized
+ALTER DATABASE a RENAME TO b -- literals removed
+ALTER DATABASE _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER DATABASE a ADD REGION "us-west-1"
+----
+ALTER DATABASE a ADD REGION "us-west-1"
+ALTER DATABASE a ADD REGION "us-west-1" -- fully parenthesized
+ALTER DATABASE a ADD REGION "us-west-1" -- literals removed
+ALTER DATABASE _ ADD REGION _ -- identifiers removed
+
+parse
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1"
+----
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1"
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1" -- fully parenthesized
+ALTER DATABASE a ADD REGION IF NOT EXISTS "us-west-1" -- literals removed
+ALTER DATABASE _ ADD REGION IF NOT EXISTS _ -- identifiers removed
+
+parse
+ALTER DATABASE a DROP REGION "us-west-1"
+----
+ALTER DATABASE a DROP REGION "us-west-1"
+ALTER DATABASE a DROP REGION "us-west-1" -- fully parenthesized
+ALTER DATABASE a DROP REGION "us-west-1" -- literals removed
+ALTER DATABASE _ DROP REGION _ -- identifiers removed
+
+parse
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1"
+----
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1"
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1" -- fully parenthesized
+ALTER DATABASE a DROP REGION IF EXISTS "us-west-1" -- literals removed
+ALTER DATABASE _ DROP REGION IF EXISTS _ -- identifiers removed
+
+parse
+ALTER DATABASE a SURVIVE REGION FAILURE
+----
+ALTER DATABASE a SURVIVE REGION FAILURE
+ALTER DATABASE a SURVIVE REGION FAILURE -- fully parenthesized
+ALTER DATABASE a SURVIVE REGION FAILURE -- literals removed
+ALTER DATABASE _ SURVIVE REGION FAILURE -- identifiers removed
+
+parse
+ALTER DATABASE a PRIMARY REGION "us-west-3"
+----
+ALTER DATABASE a PRIMARY REGION "us-west-3"
+ALTER DATABASE a PRIMARY REGION "us-west-3" -- fully parenthesized
+ALTER DATABASE a PRIMARY REGION "us-west-3" -- literals removed
+ALTER DATABASE _ PRIMARY REGION _ -- identifiers removed
+
+parse
+EXPLAIN ALTER DATABASE a RENAME TO b
+----
+EXPLAIN ALTER DATABASE a RENAME TO b
+EXPLAIN ALTER DATABASE a RENAME TO b -- fully parenthesized
+EXPLAIN ALTER DATABASE a RENAME TO b -- literals removed
+EXPLAIN ALTER DATABASE _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER DATABASE a OWNER TO foo
+----
+ALTER DATABASE a OWNER TO foo
+ALTER DATABASE a OWNER TO foo -- fully parenthesized
+ALTER DATABASE a OWNER TO foo -- literals removed
+ALTER DATABASE _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER DATABASE db CONFIGURE ZONE = 'foo'
+----
+ALTER DATABASE db CONFIGURE ZONE = 'foo'
+ALTER DATABASE db CONFIGURE ZONE = ('foo') -- fully parenthesized
+ALTER DATABASE db CONFIGURE ZONE = _ -- literals removed
+ALTER DATABASE _ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+EXPLAIN ALTER DATABASE db CONFIGURE ZONE = 'foo'
+----
+EXPLAIN ALTER DATABASE db CONFIGURE ZONE = 'foo'
+EXPLAIN ALTER DATABASE db CONFIGURE ZONE = ('foo') -- fully parenthesized
+EXPLAIN ALTER DATABASE db CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER DATABASE _ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+ALTER DATABASE db CONFIGURE ZONE USING foo = bar, baz = yay
+----
+ALTER DATABASE db CONFIGURE ZONE USING foo = bar, baz = yay
+ALTER DATABASE db CONFIGURE ZONE USING foo = (bar), baz = (yay) -- fully parenthesized
+ALTER DATABASE db CONFIGURE ZONE USING foo = bar, baz = yay -- literals removed
+ALTER DATABASE _ CONFIGURE ZONE USING _ = _, _ = _ -- identifiers removed
+
+parse
+ALTER DATABASE db CONFIGURE ZONE USING foo.bar = yay
+----
+ALTER DATABASE db CONFIGURE ZONE USING "foo.bar" = yay -- normalized!
+ALTER DATABASE db CONFIGURE ZONE USING "foo.bar" = (yay) -- fully parenthesized
+ALTER DATABASE db CONFIGURE ZONE USING "foo.bar" = yay -- literals removed
+ALTER DATABASE _ CONFIGURE ZONE USING _ = _ -- identifiers removed
+
+parse
+ALTER DATABASE db CONFIGURE ZONE DISCARD
+----
+ALTER DATABASE db CONFIGURE ZONE DISCARD
+ALTER DATABASE db CONFIGURE ZONE DISCARD -- fully parenthesized
+ALTER DATABASE db CONFIGURE ZONE DISCARD -- literals removed
+ALTER DATABASE _ CONFIGURE ZONE DISCARD -- identifiers removed
+
+
+parse
+ALTER DATABASE db CONFIGURE ZONE USING DEFAULT
+----
+ALTER DATABASE db CONFIGURE ZONE USING DEFAULT
+ALTER DATABASE db CONFIGURE ZONE USING DEFAULT -- fully parenthesized
+ALTER DATABASE db CONFIGURE ZONE USING DEFAULT -- literals removed
+ALTER DATABASE _ CONFIGURE ZONE USING DEFAULT -- identifiers removed

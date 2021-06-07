@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -793,6 +795,7 @@ func (c *conn) handleSimpleQuery(
 func (c *conn) handleParse(
 	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
 ) error {
+	telemetry.Inc(sqltelemetry.ParseRequestCounter)
 	name, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -889,6 +892,7 @@ func (c *conn) handleParse(
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+	telemetry.Inc(sqltelemetry.DescribeRequestCounter)
 	typ, err := buf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -908,6 +912,7 @@ func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) e
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleClose(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+	telemetry.Inc(sqltelemetry.CloseRequestCounter)
 	typ, err := buf.GetPrepareType()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -933,6 +938,7 @@ var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+	telemetry.Inc(sqltelemetry.BindRequestCounter)
 	portalName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -1058,6 +1064,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 func (c *conn) handleExecute(
 	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
 ) error {
+	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -1074,6 +1081,7 @@ func (c *conn) handleExecute(
 }
 
 func (c *conn) handleFlush(ctx context.Context) error {
+	telemetry.Inc(sqltelemetry.FlushRequestCounter)
 	return c.stmtBuf.Push(ctx, sql.Flush{})
 }
 
@@ -1244,6 +1252,50 @@ func (c *conn) bufferRow(
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+	}
+}
+
+// bufferBatch serializes a batch and adds all the rows from it to the buffer.
+// It is a noop for zero-length batch.
+//
+// formatCodes describes the desired encoding for each column. It can be nil, in
+// which case all columns are encoded using the text encoding. Otherwise, it
+// needs to contain an entry for every column.
+func (c *conn) bufferBatch(
+	ctx context.Context,
+	batch coldata.Batch,
+	formatCodes []pgwirebase.FormatCode,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
+) {
+	sel := batch.Selection()
+	n := batch.Length()
+	vecs := batch.ColVecs()
+	width := int16(len(vecs))
+	for i := 0; i < n; i++ {
+		rowIdx := i
+		if sel != nil {
+			rowIdx = sel[rowIdx]
+		}
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
+		c.msgBuilder.putInt16(width)
+		for colIdx, col := range vecs {
+			fmtCode := pgwirebase.FormatText
+			if formatCodes != nil {
+				fmtCode = formatCodes[colIdx]
+			}
+			switch fmtCode {
+			case pgwirebase.FormatText:
+				c.msgBuilder.writeTextColumnarElement(ctx, col, rowIdx, conv, sessionLoc)
+			case pgwirebase.FormatBinary:
+				c.msgBuilder.writeBinaryColumnarElement(ctx, col, rowIdx, sessionLoc)
+			default:
+				c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
+			}
+		}
+		if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+			panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		}
 	}
 }
 

@@ -12,9 +12,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -108,9 +106,11 @@ type saramaConfig struct {
 		Frequency   jsonDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
 	}
+
+	Version string `json:",omitempty"`
 }
 
-var defaultSaramaConfig = func() *saramaConfig {
+func defaultSaramaConfig() *saramaConfig {
 	config := &saramaConfig{}
 
 	// When we emit messages to sarama, they're placed in a queue (as does any
@@ -149,7 +149,7 @@ var defaultSaramaConfig = func() *saramaConfig {
 	config.Flush.Frequency = jsonDuration(time.Hour)
 
 	return config
-}()
+}
 
 func (s *kafkaSink) start() {
 	s.stopWorkerCh = make(chan struct{})
@@ -424,19 +424,25 @@ func (j *jsonDuration) UnmarshalJSON(b []byte) error {
 }
 
 // Apply configures provided kafka configuration struct based on this config.
-func (c *saramaConfig) Apply(kafka *sarama.Config) {
+func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	kafka.Producer.Flush.Bytes = c.Flush.Bytes
 	kafka.Producer.Flush.Messages = c.Flush.Messages
 	kafka.Producer.Flush.Frequency = time.Duration(c.Flush.Frequency)
 	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
+	if c.Version != "" {
+		parsedVersion, err := sarama.ParseKafkaVersion(c.Version)
+		if err != nil {
+			return err
+		}
+		kafka.Version = parsedVersion
+	}
+	return nil
 }
 
 func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
+	config = defaultSaramaConfig()
 	if configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]; haveOverride {
-		config = &saramaConfig{}
 		err = json.Unmarshal([]byte(configStr), config)
-	} else {
-		config = defaultSaramaConfig
 	}
 	return
 }
@@ -457,12 +463,11 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 
 	consumeBool := func(param string, dest *bool) (wasSet bool, err error) {
 		if paramVal := u.consumeParam(param); paramVal != "" {
-			b, err := strconv.ParseBool(paramVal)
+			wasSet, err := strToBool(paramVal, dest)
 			if err != nil {
 				return false, errors.Wrapf(err, "param %s must be a bool", param)
 			}
-			*dest = b
-			return true, nil
+			return wasSet, err
 		}
 		return false, nil
 	}
@@ -474,14 +479,10 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		//  `_`. Consider always doing this for the user and accepting either
 		//  variant.
 		val := u.consumeParam(param)
-		if val == `` {
-			return nil
-		}
-		decoded, err := base64.StdEncoding.DecodeString(val)
+		err := decodeBase64FromString(val, dest)
 		if err != nil {
 			return errors.Wrapf(err, `param %s must be base 64 encoded`, param)
 		}
-		*dest = decoded
 		return nil
 	}
 
@@ -608,7 +609,9 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		return nil, errors.Wrapf(err,
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
-	saramaCfg.Apply(config)
+	if err := saramaCfg.Apply(config); err != nil {
+		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
+	}
 	return config, nil
 }
 

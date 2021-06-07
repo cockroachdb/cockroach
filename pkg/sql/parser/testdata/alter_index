@@ -1,0 +1,361 @@
+parse
+ALTER INDEX b RENAME TO b
+----
+ALTER INDEX b RENAME TO b
+ALTER INDEX b RENAME TO b -- fully parenthesized
+ALTER INDEX b RENAME TO b -- literals removed
+ALTER INDEX _ RENAME TO _ -- identifiers removed
+
+parse
+EXPLAIN ALTER INDEX b RENAME TO b
+----
+EXPLAIN ALTER INDEX b RENAME TO b
+EXPLAIN ALTER INDEX b RENAME TO b -- fully parenthesized
+EXPLAIN ALTER INDEX b RENAME TO b -- literals removed
+EXPLAIN ALTER INDEX _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER INDEX a@b RENAME TO b
+----
+ALTER INDEX a@b RENAME TO b
+ALTER INDEX a@b RENAME TO b -- fully parenthesized
+ALTER INDEX a@b RENAME TO b -- literals removed
+ALTER INDEX _@_ RENAME TO _ -- identifiers removed
+
+parse
+ALTER INDEX a@primary RENAME TO like
+----
+ALTER INDEX a@primary RENAME TO like
+ALTER INDEX a@primary RENAME TO like -- fully parenthesized
+ALTER INDEX a@primary RENAME TO like -- literals removed
+ALTER INDEX _@_ RENAME TO _ -- identifiers removed
+
+parse
+ALTER INDEX IF EXISTS b RENAME TO b
+----
+ALTER INDEX IF EXISTS b RENAME TO b
+ALTER INDEX IF EXISTS b RENAME TO b -- fully parenthesized
+ALTER INDEX IF EXISTS b RENAME TO b -- literals removed
+ALTER INDEX IF EXISTS _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER INDEX IF EXISTS a@b RENAME TO b
+----
+ALTER INDEX IF EXISTS a@b RENAME TO b
+ALTER INDEX IF EXISTS a@b RENAME TO b -- fully parenthesized
+ALTER INDEX IF EXISTS a@b RENAME TO b -- literals removed
+ALTER INDEX IF EXISTS _@_ RENAME TO _ -- identifiers removed
+
+parse
+ALTER INDEX IF EXISTS a@primary RENAME TO like
+----
+ALTER INDEX IF EXISTS a@primary RENAME TO like
+ALTER INDEX IF EXISTS a@primary RENAME TO like -- fully parenthesized
+ALTER INDEX IF EXISTS a@primary RENAME TO like -- literals removed
+ALTER INDEX IF EXISTS _@_ RENAME TO _ -- identifiers removed
+
+parse
+ALTER INDEX a@i SPLIT AT VALUES (1)
+----
+ALTER INDEX a@i SPLIT AT VALUES (1)
+ALTER INDEX a@i SPLIT AT VALUES ((1)) -- fully parenthesized
+ALTER INDEX a@i SPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _@_ SPLIT AT VALUES (1) -- identifiers removed
+
+parse
+ALTER INDEX d.a@i SPLIT AT VALUES (2)
+----
+ALTER INDEX d.a@i SPLIT AT VALUES (2)
+ALTER INDEX d.a@i SPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX d.a@i SPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _._@_ SPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX i SPLIT AT VALUES (1)
+----
+ALTER INDEX i SPLIT AT VALUES (1)
+ALTER INDEX i SPLIT AT VALUES ((1)) -- fully parenthesized
+ALTER INDEX i SPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _ SPLIT AT VALUES (1) -- identifiers removed
+
+parse
+ALTER INDEX d.i SPLIT AT VALUES (2)
+----
+ALTER INDEX d.i SPLIT AT VALUES (2)
+ALTER INDEX d.i SPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX d.i SPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _._ SPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX "primary" SPLIT AT VALUES (2)
+----
+ALTER INDEX "primary" SPLIT AT VALUES (2)
+ALTER INDEX "primary" SPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX "primary" SPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _ SPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX public.public."primary" SPLIT AT VALUES (2)
+----
+ALTER INDEX public.public."primary" SPLIT AT VALUES (2)
+ALTER INDEX public.public."primary" SPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX public.public."primary" SPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _._._ SPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX a@i UNSPLIT AT VALUES (1)
+----
+ALTER INDEX a@i UNSPLIT AT VALUES (1)
+ALTER INDEX a@i UNSPLIT AT VALUES ((1)) -- fully parenthesized
+ALTER INDEX a@i UNSPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _@_ UNSPLIT AT VALUES (1) -- identifiers removed
+
+parse
+ALTER INDEX d.a@i UNSPLIT AT VALUES (2)
+----
+ALTER INDEX d.a@i UNSPLIT AT VALUES (2)
+ALTER INDEX d.a@i UNSPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX d.a@i UNSPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _._@_ UNSPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX i UNSPLIT AT VALUES (1)
+----
+ALTER INDEX i UNSPLIT AT VALUES (1)
+ALTER INDEX i UNSPLIT AT VALUES ((1)) -- fully parenthesized
+ALTER INDEX i UNSPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _ UNSPLIT AT VALUES (1) -- identifiers removed
+
+parse
+ALTER INDEX d.i UNSPLIT AT VALUES (2)
+----
+ALTER INDEX d.i UNSPLIT AT VALUES (2)
+ALTER INDEX d.i UNSPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX d.i UNSPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _._ UNSPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX "primary" UNSPLIT AT VALUES (2)
+----
+ALTER INDEX "primary" UNSPLIT AT VALUES (2)
+ALTER INDEX "primary" UNSPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX "primary" UNSPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _ UNSPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX public.public."primary" UNSPLIT AT VALUES (2)
+----
+ALTER INDEX public.public."primary" UNSPLIT AT VALUES (2)
+ALTER INDEX public.public."primary" UNSPLIT AT VALUES ((2)) -- fully parenthesized
+ALTER INDEX public.public."primary" UNSPLIT AT VALUES (_) -- literals removed
+ALTER INDEX _._._ UNSPLIT AT VALUES (2) -- identifiers removed
+
+parse
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2)
+----
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1], 2) -- normalized!
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE VOTERS VALUES ((ARRAY[(1)]), (2)) -- fully parenthesized
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[_], _) -- literals removed
+ALTER INDEX _._ EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1], 2) -- identifiers removed
+
+parse
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE LEASE VALUES (1, 2)
+----
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE LEASE VALUES (1, 2)
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE LEASE VALUES ((1), (2)) -- fully parenthesized
+ALTER INDEX d.i EXPERIMENTAL_RELOCATE LEASE VALUES (_, _) -- literals removed
+ALTER INDEX _._ EXPERIMENTAL_RELOCATE LEASE VALUES (1, 2) -- identifiers removed
+
+parse
+ALTER INDEX d.i SCATTER FROM (1) TO (2)
+----
+ALTER INDEX d.i SCATTER FROM (1) TO (2)
+ALTER INDEX d.i SCATTER FROM ((1)) TO ((2)) -- fully parenthesized
+ALTER INDEX d.i SCATTER FROM (_) TO (_) -- literals removed
+ALTER INDEX _._ SCATTER FROM (1) TO (2) -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE = 'foo'
+----
+ALTER INDEX i CONFIGURE ZONE = 'foo'
+ALTER INDEX i CONFIGURE ZONE = ('foo') -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE = _ -- literals removed
+ALTER INDEX _ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+EXPLAIN ALTER INDEX i CONFIGURE ZONE = 'foo'
+----
+EXPLAIN ALTER INDEX i CONFIGURE ZONE = 'foo'
+EXPLAIN ALTER INDEX i CONFIGURE ZONE = ('foo') -- fully parenthesized
+EXPLAIN ALTER INDEX i CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER INDEX _ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+ALTER INDEX db.t@i CONFIGURE ZONE = 'foo'
+----
+ALTER INDEX db.t@i CONFIGURE ZONE = 'foo'
+ALTER INDEX db.t@i CONFIGURE ZONE = ('foo') -- fully parenthesized
+ALTER INDEX db.t@i CONFIGURE ZONE = _ -- literals removed
+ALTER INDEX _._@_ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+ALTER INDEX t@i CONFIGURE ZONE = 'foo'
+----
+ALTER INDEX t@i CONFIGURE ZONE = 'foo'
+ALTER INDEX t@i CONFIGURE ZONE = ('foo') -- fully parenthesized
+ALTER INDEX t@i CONFIGURE ZONE = _ -- literals removed
+ALTER INDEX _@_ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
+----
+ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
+ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = ('foo') -- fully parenthesized
+ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = _ -- literals removed
+ALTER PARTITION _ OF INDEX _._@_ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
+----
+EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = 'foo'
+EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = ('foo') -- fully parenthesized
+EXPLAIN ALTER PARTITION p OF INDEX db.t@idx CONFIGURE ZONE = _ -- literals removed
+EXPLAIN ALTER PARTITION _ OF INDEX _._@_ CONFIGURE ZONE = 'foo' -- identifiers removed
+
+parse
+ALTER INDEX db.t@i CONFIGURE ZONE USING foo = bar, baz = yay
+----
+ALTER INDEX db.t@i CONFIGURE ZONE USING foo = bar, baz = yay
+ALTER INDEX db.t@i CONFIGURE ZONE USING foo = (bar), baz = (yay) -- fully parenthesized
+ALTER INDEX db.t@i CONFIGURE ZONE USING foo = bar, baz = yay -- literals removed
+ALTER INDEX _._@_ CONFIGURE ZONE USING _ = _, _ = _ -- identifiers removed
+
+parse
+ALTER INDEX t@i CONFIGURE ZONE USING foo = bar, baz = yay
+----
+ALTER INDEX t@i CONFIGURE ZONE USING foo = bar, baz = yay
+ALTER INDEX t@i CONFIGURE ZONE USING foo = (bar), baz = (yay) -- fully parenthesized
+ALTER INDEX t@i CONFIGURE ZONE USING foo = bar, baz = yay -- literals removed
+ALTER INDEX _@_ CONFIGURE ZONE USING _ = _, _ = _ -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = yay
+----
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = yay
+ALTER INDEX i CONFIGURE ZONE USING foo = (bar), baz = (yay) -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = yay -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING _ = _, _ = _ -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT
+----
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING _ = COPY FROM PARENT -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT
+----
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING _ = COPY FROM PARENT -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = COPY FROM PARENT
+----
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = COPY FROM PARENT
+ALTER INDEX i CONFIGURE ZONE USING foo = (bar), baz = COPY FROM PARENT -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, baz = COPY FROM PARENT -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING _ = _, _ = COPY FROM PARENT -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT, baz = COPY FROM PARENT
+----
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT, baz = COPY FROM PARENT
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT, baz = COPY FROM PARENT -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING foo = COPY FROM PARENT, baz = COPY FROM PARENT -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING _ = COPY FROM PARENT, _ = COPY FROM PARENT -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, other = COPY FROM PARENT, baz = yay
+----
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, other = COPY FROM PARENT, baz = yay
+ALTER INDEX i CONFIGURE ZONE USING foo = (bar), other = COPY FROM PARENT, baz = (yay) -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING foo = bar, other = COPY FROM PARENT, baz = yay -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING _ = _, _ = COPY FROM PARENT, _ = _ -- identifiers removed
+
+parse
+ALTER INDEX db.t@i CONFIGURE ZONE USING foo.bar = yay
+----
+ALTER INDEX db.t@i CONFIGURE ZONE USING "foo.bar" = yay -- normalized!
+ALTER INDEX db.t@i CONFIGURE ZONE USING "foo.bar" = (yay) -- fully parenthesized
+ALTER INDEX db.t@i CONFIGURE ZONE USING "foo.bar" = yay -- literals removed
+ALTER INDEX _._@_ CONFIGURE ZONE USING _ = _ -- identifiers removed
+
+parse
+ALTER INDEX t@i CONFIGURE ZONE USING foo.bar = yay
+----
+ALTER INDEX t@i CONFIGURE ZONE USING "foo.bar" = yay -- normalized!
+ALTER INDEX t@i CONFIGURE ZONE USING "foo.bar" = (yay) -- fully parenthesized
+ALTER INDEX t@i CONFIGURE ZONE USING "foo.bar" = yay -- literals removed
+ALTER INDEX _@_ CONFIGURE ZONE USING _ = _ -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING foo.bar = yay
+----
+ALTER INDEX i CONFIGURE ZONE USING "foo.bar" = yay -- normalized!
+ALTER INDEX i CONFIGURE ZONE USING "foo.bar" = (yay) -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING "foo.bar" = yay -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING _ = _ -- identifiers removed
+
+
+parse
+ALTER INDEX db.t@i CONFIGURE ZONE DISCARD
+----
+ALTER INDEX db.t@i CONFIGURE ZONE DISCARD
+ALTER INDEX db.t@i CONFIGURE ZONE DISCARD -- fully parenthesized
+ALTER INDEX db.t@i CONFIGURE ZONE DISCARD -- literals removed
+ALTER INDEX _._@_ CONFIGURE ZONE DISCARD -- identifiers removed
+
+parse
+ALTER INDEX t@i CONFIGURE ZONE DISCARD
+----
+ALTER INDEX t@i CONFIGURE ZONE DISCARD
+ALTER INDEX t@i CONFIGURE ZONE DISCARD -- fully parenthesized
+ALTER INDEX t@i CONFIGURE ZONE DISCARD -- literals removed
+ALTER INDEX _@_ CONFIGURE ZONE DISCARD -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE DISCARD
+----
+ALTER INDEX i CONFIGURE ZONE DISCARD
+ALTER INDEX i CONFIGURE ZONE DISCARD -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE DISCARD -- literals removed
+ALTER INDEX _ CONFIGURE ZONE DISCARD -- identifiers removed
+
+
+parse
+ALTER INDEX db.t@i CONFIGURE ZONE USING DEFAULT
+----
+ALTER INDEX db.t@i CONFIGURE ZONE USING DEFAULT
+ALTER INDEX db.t@i CONFIGURE ZONE USING DEFAULT -- fully parenthesized
+ALTER INDEX db.t@i CONFIGURE ZONE USING DEFAULT -- literals removed
+ALTER INDEX _._@_ CONFIGURE ZONE USING DEFAULT -- identifiers removed
+
+parse
+ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT
+----
+ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT
+ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT -- fully parenthesized
+ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT -- literals removed
+ALTER INDEX _@_ CONFIGURE ZONE USING DEFAULT -- identifiers removed
+
+parse
+ALTER INDEX i CONFIGURE ZONE USING DEFAULT
+----
+ALTER INDEX i CONFIGURE ZONE USING DEFAULT
+ALTER INDEX i CONFIGURE ZONE USING DEFAULT -- fully parenthesized
+ALTER INDEX i CONFIGURE ZONE USING DEFAULT -- literals removed
+ALTER INDEX _ CONFIGURE ZONE USING DEFAULT -- identifiers removed

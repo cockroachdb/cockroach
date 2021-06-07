@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -86,7 +87,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		if err != nil {
 			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
-			return nil, MarkRetryableError(err)
+			return nil, changefeedbase.MarkRetryableError(err)
 		}
 		tableDesc = desc.Desc().(catalog.TableDescriptor)
 		// Immediately release the lease, since we only need it for the exact
@@ -110,7 +111,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			}); err != nil {
 				// Manager can return all kinds of errors during chaos, but based on
 				// its usage, none of them should ever be terminal.
-				return nil, MarkRetryableError(err)
+				return nil, changefeedbase.MarkRetryableError(err)
 			}
 			// Immediately release the lease, since we only need it for the exact
 			// timestamp requested.
@@ -118,7 +119,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		}
 
 		// Skip over the column data.
-		for ; skippedCols < tableDesc.GetPrimaryIndex().NumColumns(); skippedCols++ {
+		for ; skippedCols < tableDesc.GetPrimaryIndex().NumKeyColumns(); skippedCols++ {
 			l, err := encoding.PeekLength(remaining)
 			if err != nil {
 				return nil, err

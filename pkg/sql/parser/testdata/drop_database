@@ -1,0 +1,39 @@
+parse
+DROP DATABASE a
+----
+DROP DATABASE a
+DROP DATABASE a -- fully parenthesized
+DROP DATABASE a -- literals removed
+DROP DATABASE _ -- identifiers removed
+
+parse
+EXPLAIN DROP DATABASE a
+----
+EXPLAIN DROP DATABASE a
+EXPLAIN DROP DATABASE a -- fully parenthesized
+EXPLAIN DROP DATABASE a -- literals removed
+EXPLAIN DROP DATABASE _ -- identifiers removed
+
+parse
+DROP DATABASE IF EXISTS a
+----
+DROP DATABASE IF EXISTS a
+DROP DATABASE IF EXISTS a -- fully parenthesized
+DROP DATABASE IF EXISTS a -- literals removed
+DROP DATABASE IF EXISTS _ -- identifiers removed
+
+parse
+DROP DATABASE a CASCADE
+----
+DROP DATABASE a CASCADE
+DROP DATABASE a CASCADE -- fully parenthesized
+DROP DATABASE a CASCADE -- literals removed
+DROP DATABASE _ CASCADE -- identifiers removed
+
+parse
+DROP DATABASE a RESTRICT
+----
+DROP DATABASE a RESTRICT
+DROP DATABASE a RESTRICT -- fully parenthesized
+DROP DATABASE a RESTRICT -- literals removed
+DROP DATABASE _ RESTRICT -- identifiers removed

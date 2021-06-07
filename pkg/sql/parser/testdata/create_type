@@ -1,0 +1,47 @@
+parse
+CREATE TYPE a AS ENUM ()
+----
+CREATE TYPE a AS ENUM ()
+CREATE TYPE a AS ENUM () -- fully parenthesized
+CREATE TYPE a AS ENUM () -- literals removed
+CREATE TYPE _ AS ENUM () -- identifiers removed
+
+parse
+CREATE TYPE IF NOT EXISTS a AS ENUM ()
+----
+CREATE TYPE IF NOT EXISTS a AS ENUM ()
+CREATE TYPE IF NOT EXISTS a AS ENUM () -- fully parenthesized
+CREATE TYPE IF NOT EXISTS a AS ENUM () -- literals removed
+CREATE TYPE IF NOT EXISTS _ AS ENUM () -- identifiers removed
+
+parse
+CREATE TYPE a AS ENUM ('a')
+----
+CREATE TYPE a AS ENUM ('a')
+CREATE TYPE a AS ENUM ('a') -- fully parenthesized
+CREATE TYPE a AS ENUM ('a') -- literals removed
+CREATE TYPE _ AS ENUM (_) -- identifiers removed
+
+parse
+CREATE TYPE a AS ENUM ('a', 'b', 'c')
+----
+CREATE TYPE a AS ENUM ('a', 'b', 'c')
+CREATE TYPE a AS ENUM ('a', 'b', 'c') -- fully parenthesized
+CREATE TYPE a AS ENUM ('a', 'b', 'c') -- literals removed
+CREATE TYPE _ AS ENUM (_, _, _) -- identifiers removed
+
+parse
+CREATE TYPE a.b AS ENUM ('a', 'b', 'c')
+----
+CREATE TYPE a.b AS ENUM ('a', 'b', 'c')
+CREATE TYPE a.b AS ENUM ('a', 'b', 'c') -- fully parenthesized
+CREATE TYPE a.b AS ENUM ('a', 'b', 'c') -- literals removed
+CREATE TYPE _._ AS ENUM (_, _, _) -- identifiers removed
+
+parse
+CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c')
+----
+CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c')
+CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c') -- fully parenthesized
+CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c') -- literals removed
+CREATE TYPE _._._ AS ENUM (_, _, _) -- identifiers removed

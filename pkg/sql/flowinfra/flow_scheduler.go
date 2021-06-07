@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 const flowDoneChanSize = 8
@@ -51,6 +53,14 @@ type FlowScheduler struct {
 		numRunning      int32
 		maxRunningFlows int32
 	}
+
+	TestingKnobs struct {
+		// CancelDeadFlowsCallback, if set, will be called at the end of every
+		// CancelDeadFlows call with the number of flows that the call canceled.
+		//
+		// The callback must be concurrency-safe.
+		CancelDeadFlowsCallback func(numCanceled int)
+	}
 }
 
 // flowWithCtx stores a flow to run and a context to run it with.
@@ -77,7 +87,7 @@ func NewFlowScheduler(
 	}
 	fs.mu.queue = list.New()
 	fs.atomics.maxRunningFlows = int32(settingMaxRunningFlows.Get(&settings.SV))
-	settingMaxRunningFlows.SetOnChange(&settings.SV, func() {
+	settingMaxRunningFlows.SetOnChange(&settings.SV, func(ctx context.Context) {
 		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(settingMaxRunningFlows.Get(&settings.SV)))
 	})
 	return fs
@@ -141,6 +151,73 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 			return nil
 
 		})
+}
+
+// NumFlowsInQueue returns the number of flows currently in the queue to be
+// scheduled.
+func (fs *FlowScheduler) NumFlowsInQueue() int {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	return fs.mu.queue.Len()
+}
+
+// CancelDeadFlows cancels all flows mentioned in the request that haven't been
+// started yet (meaning they have been queued up).
+func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest) {
+	// Quick check whether the queue is empty. If it is, there is nothing to do.
+	fs.mu.Lock()
+	isEmpty := fs.mu.queue.Len() == 0
+	fs.mu.Unlock()
+	if isEmpty {
+		return
+	}
+
+	ctx := fs.AnnotateCtx(context.Background())
+	log.VEventf(ctx, 1, "flow scheduler will attempt to cancel %d dead flows", len(req.FlowIDs))
+	// We'll be holding the lock over the queue, so we'll speed up the process
+	// of looking up whether a particular queued flow needs to be canceled by
+	// building a map of those that do. This map shouldn't grow larger than
+	// thousands of UUIDs in size, so it is ok to not account for the memory
+	// under it.
+	toCancel := make(map[uuid.UUID]struct{}, len(req.FlowIDs))
+	for _, f := range req.FlowIDs {
+		toCancel[f.UUID] = struct{}{}
+	}
+	numCanceled := 0
+	defer func() {
+		log.VEventf(ctx, 1, "flow scheduler canceled %d dead flows", numCanceled)
+		if fs.TestingKnobs.CancelDeadFlowsCallback != nil {
+			fs.TestingKnobs.CancelDeadFlowsCallback(numCanceled)
+		}
+	}()
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	// Iterate over the whole queue and remove the dead flows.
+	var firstNotCanceled *flowWithCtx
+	// queueElement won't be nil because we know that the queue is not empty.
+	queueElement := fs.mu.queue.Front()
+	for {
+		f := queueElement.Value.(*flowWithCtx)
+		if f == firstNotCanceled {
+			// We have gone through the whole queue and got to its front, so
+			// we're done.
+			return
+		}
+		nextQueueElement := queueElement.Next()
+		if _, shouldCancel := toCancel[f.flow.GetID().UUID]; shouldCancel {
+			fs.mu.queue.Remove(queueElement)
+			fs.metrics.FlowsQueued.Dec(1)
+			numCanceled++
+			if fs.mu.queue.Len() == 0 {
+				// All scheduled flows turned out to be dead.
+				return
+			}
+		} else if firstNotCanceled == nil {
+			firstNotCanceled = f
+		}
+		queueElement = nextQueueElement
+	}
 }
 
 // Start launches the main loop of the scheduler.

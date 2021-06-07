@@ -1577,6 +1577,14 @@ alter_database_add_region_stmt:
       Region: tree.Name($6),
     }
   }
+| ALTER DATABASE database_name ADD REGION IF NOT EXISTS region_name
+  {
+    $$.val = &tree.AlterDatabaseAddRegion{
+      Name: tree.Name($3),
+      Region: tree.Name($9),
+      IfNotExists: true,
+    }
+  }
 
 alter_database_drop_region_stmt:
   ALTER DATABASE database_name DROP REGION region_name
@@ -1584,6 +1592,14 @@ alter_database_drop_region_stmt:
     $$.val = &tree.AlterDatabaseDropRegion{
       Name: tree.Name($3),
       Region: tree.Name($6),
+    }
+  }
+| ALTER DATABASE database_name DROP REGION IF EXISTS region_name
+  {
+    $$.val = &tree.AlterDatabaseDropRegion{
+      Name: tree.Name($3),
+      Region: tree.Name($8),
+      IfExists: true,
     }
   }
 
@@ -1606,7 +1622,6 @@ alter_database_primary_region_stmt:
   }
 | ALTER DATABASE database_name SET primary_region_clause
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterDatabasePrimaryRegion{
       Name: tree.Name($3),
       PrimaryRegion: tree.Name($5),
@@ -5043,9 +5058,9 @@ statements_or_queries:
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
 // %Text:
-// SHOW [AUTOMATIC] JOBS [select clause]
+// SHOW [AUTOMATIC | CHANGEFEED] JOBS [select clause]
 // SHOW JOBS FOR SCHEDULES [select clause]
-// SHOW JOB <jobid>
+// SHOW [CHANGEFEED] JOB <jobid>
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
   SHOW AUTOMATIC JOBS
@@ -5056,8 +5071,13 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowJobs{Automatic: false}
   }
+| SHOW CHANGEFEED JOBS
+  {
+    $$.val = &tree.ShowChangefeedJobs{}
+  }
 | SHOW AUTOMATIC JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS error // SHOW HELP: SHOW JOBS
+| SHOW CHANGEFEED JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS select_stmt
   {
     $$.val = &tree.ShowJobs{Jobs: $3.slct()}
@@ -5079,6 +5099,14 @@ show_jobs_stmt:
       },
     }
   }
+| SHOW CHANGEFEED JOB a_expr
+  {
+    $$.val = &tree.ShowChangefeedJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$4.expr()}}},
+      },
+    }
+  }
 | SHOW JOB WHEN COMPLETE a_expr
   {
     $$.val = &tree.ShowJobs{
@@ -5089,6 +5117,7 @@ show_jobs_stmt:
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
+| SHOW CHANGEFEED JOB error // SHOW HELP: SHOW JOBS
 
 // %Help: SHOW SCHEDULES - list periodic schedules
 // %Category: Misc

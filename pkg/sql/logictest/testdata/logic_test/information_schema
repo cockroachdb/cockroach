@@ -300,6 +300,7 @@ crdb_internal       index_columns
 crdb_internal       interleaved
 crdb_internal       invalid_objects
 crdb_internal       jobs
+crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
 crdb_internal       leases
@@ -504,6 +505,7 @@ index_columns
 interleaved
 invalid_objects
 jobs
+kv_node_liveness
 kv_node_status
 kv_store_status
 leases
@@ -727,6 +729,7 @@ system         crdb_internal       index_columns                          SYSTEM
 system         crdb_internal       interleaved                            SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_node_liveness                       SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                 SYSTEM VIEW  NO                  1
@@ -2044,6 +2047,7 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
@@ -2493,6 +2497,7 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
@@ -3698,6 +3703,7 @@ enable_insert_fast_path                               on
 enable_seqscan                                        on
 enable_zigzag_join                                    on
 escape_string_warning                                 on
+experimental_enable_expression_based_indexes          off
 experimental_enable_hash_sharded_indexes              off
 experimental_enable_implicit_column_partitioning      off
 experimental_enable_temp_tables                       off

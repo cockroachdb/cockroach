@@ -599,7 +599,7 @@ project
 # --------------------------------------------------
 # EliminateGroupByProject
 # --------------------------------------------------
-norm expect=EliminateGroupByProject
+norm expect=EliminateGroupByProject disable=ConvertUnionToDistinctUnionAll
 SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GROUP BY i
 ----
 project
@@ -627,7 +627,7 @@ project
                 └── s:16
 
 # ScalarGroupBy case.
-norm expect=EliminateGroupByProject
+norm expect=EliminateGroupByProject disable=ConvertUnionToDistinctUnionAll
 SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 scalar-group-by
@@ -653,7 +653,7 @@ scalar-group-by
            └── s:16
 
 # DistinctOn case.
-norm expect=EliminateGroupByProject
+norm expect=EliminateGroupByProject disable=ConvertUnionToDistinctUnionAll
 SELECT DISTINCT ON (i) s FROM (SELECT i, s, f FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 distinct-on

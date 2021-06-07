@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -398,8 +397,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		// Columns for each index.
 		columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-			for i := 0; i < index.NumColumns(); i++ {
-				colID := index.GetColumnID(i)
+			for i := 0; i < index.NumKeyColumns(); i++ {
+				colID := index.GetKeyColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
 				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
 				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
@@ -416,7 +415,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// TODO(someone): to populate this, we should split up the big PerformCast
-		// method in tree/eval.go into entries in a list. Then, this virtual table
+		// method in tree/eval.go into schemasByName in a list. Then, this virtual table
 		// can simply range over the list. This would probably be better for
 		// maintainability anyway.
 		return nil
@@ -613,7 +612,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				relPersistencePermanent,                  // relPersistence
 				tree.DBoolFalse,                          // relistemp
 				relKindIndex,                             // relkind
-				tree.NewDInt(tree.DInt(index.NumColumns())), // relnatts
+				tree.NewDInt(tree.DInt(index.NumKeyColumns())), // relnatts
 				zeroVal,         // relchecks
 				tree.DBoolFalse, // relhasoids
 				tree.DBoolFalse, // relhaspkey
@@ -752,7 +751,7 @@ func populateTableConstraints(
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 
 			var err error
-			if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+			if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
 				return err
 			}
 			condef = tree.NewDString(table.PrimaryKeyString())
@@ -809,7 +808,7 @@ func populateTableConstraints(
 				oid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
 				conindid = h.IndexOid(table.GetID(), con.Index.ID)
 				var err error
-				if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+				if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
 					return err
 				}
 				f.WriteString("UNIQUE (")
@@ -1008,7 +1007,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					if err != nil {
 						return false, err
 					}
-					if err := populateFromTable(ctx, p, h, db, sc.Name, table, scResolver,
+					if err := populateFromTable(ctx, p, h, db, sc.GetName(), table, scResolver,
 						addRow); err != nil {
 						return false, err
 					}
@@ -1460,9 +1459,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					collationOids := tree.NewDArray(types.Oid)
 					indoption := tree.NewDArray(types.Int)
 
-					colIDs := make([]descpb.ColumnID, 0, index.NumColumns())
-					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
-						columnID := index.GetColumnID(i)
+					colIDs := make([]descpb.ColumnID, 0, index.NumKeyColumns())
+					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumKeyColumns(); i++ {
+						columnID := index.GetKeyColumnID(i)
 						colIDs = append(colIDs, columnID)
 						col, err := table.FindColumnWithID(columnID)
 						if err != nil {
@@ -1474,7 +1473,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						// Currently, nulls always appear first if the order is ascending,
 						// and always appear last if the order is descending.
 						var thisIndOption tree.DInt
-						if index.GetColumnDirection(i) == descpb.IndexDescriptor_ASC {
+						if index.GetKeyColumnDirection(i) == descpb.IndexDescriptor_ASC {
 							thisIndOption = indoptionNullsFirst
 						} else {
 							thisIndOption = indoptionDesc
@@ -1485,7 +1484,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					}
 					// indnkeyatts is the number of attributes without INCLUDED columns.
 					indnkeyatts := len(colIDs)
-					for i := 0; i < index.NumStoredColumns(); i++ {
+					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 						colIDs = append(colIDs, index.GetStoredColumnID(i))
 					}
 					// indnatts is the number of attributes with INCLUDED columns.
@@ -1569,13 +1568,13 @@ func indexDefFromDescriptor(
 	index catalog.Index,
 	tableLookup tableLookupFn,
 ) (string, error) {
-	colNames := index.IndexDesc().ColumnNames[index.ExplicitColumnStartIdx():]
+	colNames := index.IndexDesc().KeyColumnNames[index.ExplicitColumnStartIdx():]
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.GetName()),
 		Table:    tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName())),
 		Unique:   index.IsUnique(),
 		Columns:  make(tree.IndexElemList, len(colNames)),
-		Storing:  make(tree.NameList, index.NumStoredColumns()),
+		Storing:  make(tree.NameList, index.NumSecondaryStoredColumns()),
 		Inverted: index.GetType() == descpb.IndexDescriptor_INVERTED,
 	}
 	for i, name := range colNames {
@@ -1583,12 +1582,12 @@ func indexDefFromDescriptor(
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
 		}
-		if index.GetColumnDirection(index.ExplicitColumnStartIdx()+i) == descpb.IndexDescriptor_DESC {
+		if index.GetKeyColumnDirection(index.ExplicitColumnStartIdx()+i) == descpb.IndexDescriptor_DESC {
 			elem.Direction = tree.Descending
 		}
 		indexDef.Columns[i] = elem
 	}
-	for i := 0; i < index.NumStoredColumns(); i++ {
+	for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 		name := index.GetStoredColumnName(i)
 		indexDef.Storing[i] = tree.Name(name)
 	}
@@ -1713,19 +1712,22 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					ownerOID := tree.DNull
-					if sc.Kind == catalog.SchemaUserDefined {
-						ownerOID = getOwnerOID(sc.Desc)
-					} else if sc.Kind == catalog.SchemaPublic {
+					if sc.SchemaKind() == catalog.SchemaUserDefined {
+						ownerOID = getOwnerOID(sc)
+					} else if sc.SchemaKind() == catalog.SchemaPublic {
 						// admin is the owner of the public schema.
+						//
+						// TODO(ajwerner): The public schema effectively carries the privileges
+						// of the database so consider using the database's owner for public.
 						ownerOID = h.UserOid(security.MakeSQLUsernameFromPreNormalizedString("admin"))
 					}
 					return addRow(
-						h.NamespaceOid(db.GetID(), sc.Name), // oid
-						tree.NewDString(sc.Name),            // nspname
-						ownerOID,                            // nspowner
-						tree.DNull,                          // nspacl
+						h.NamespaceOid(db.GetID(), sc.GetName()), // oid
+						tree.NewDString(sc.GetName()),            // nspname
+						ownerOID,                                 // nspowner
+						tree.DNull,                               // nspacl
 					)
 				})
 			})
@@ -2437,17 +2439,20 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return true, nil
 				}
 
-				// This oid is not a user-defined type and we didn't find it in the
-				// map of predefined types, return false. Note that in common usage we
-				// only really expect the value 0 here (which cockroach uses internally
-				// in the typelem field amongst others). Users, however, may join on
-				// this index with any value.
-				if ooid <= oidext.CockroachPredefinedOIDMax {
+				// Check if it is a user defined type.
+				if !types.IsOIDUserDefinedType(ooid) {
+					// This oid is not a user-defined type and we didn't find it in the
+					// map of predefined types, return false. Note that in common usage we
+					// only really expect the value 0 here (which cockroach uses internally
+					// in the typelem field amongst others). Users, however, may join on
+					// this index with any value.
 					return false, nil
 				}
 
-				// Check if it is a user defined type.
-				id := typedesc.UserDefinedTypeOIDToID(ooid)
+				id, err := typedesc.UserDefinedTypeOIDToID(ooid)
+				if err != nil {
+					return false, err
+				}
 				typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
 					if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -2463,7 +2468,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				if err != nil {
 					return false, err
 				}
-				nspOid = h.NamespaceOid(db.GetID(), sc.Name)
+				nspOid = h.NamespaceOid(db.GetID(), sc.GetName())
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 				if err != nil {
 					return false, err
@@ -2882,12 +2887,51 @@ var pgCatalogReplicationOriginStatusTable = virtualSchemaTable{
 }
 
 var pgCatalogSequencesTable = virtualSchemaTable{
-	comment: "pg_sequences was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogSequences,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	comment: `pg_sequences is very similar as pg_sequence.
+https://www.postgresql.org/docs/13/view-pg-sequences.html
+`,
+	schema: vtable.PgCatalogSequences,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+				if !table.IsSequence() {
+					return nil
+				}
+				opts := table.GetSequenceOpts()
+				lastValue := tree.DNull
+				sequenceValue, err := p.GetSequenceValue(ctx, p.execCfg.Codec, table)
+				if err != nil {
+					return err
+				}
+
+				// Before using for the first time, sequenceValue will be:
+				// opts.Start - opts.Increment.
+				if sequenceValue != opts.Start-opts.Increment {
+					lastValue = tree.NewDInt(tree.DInt(sequenceValue))
+				}
+
+				// sequenceowner refers to the username that owns the sequence which is
+				// available in the table descriptor that can be changed by ALTER
+				// SEQUENCE sequencename OWNER TO username. Sequence opts have a
+				// table.column owner which is the value that can be modifyied by ALTER
+				// SEQUENE sequencename OWNED BY table.column, This is not the expected
+				// value on sequenceowner.
+				return addRow(
+					tree.NewDString(scName),                 // schemaname
+					tree.NewDString(table.GetName()),        // sequencename
+					getOwnerName(table),                     // sequenceowner
+					tree.NewDOid(tree.DInt(oid.T_int8)),     // data_type
+					tree.NewDInt(tree.DInt(opts.Start)),     // start_value
+					tree.NewDInt(tree.DInt(opts.MinValue)),  // min_value
+					tree.NewDInt(tree.DInt(opts.MaxValue)),  // max_value
+					tree.NewDInt(tree.DInt(opts.Increment)), // increment_by
+					tree.DBoolFalse,                         // cycle
+					tree.NewDInt(tree.DInt(opts.CacheSize)), // cache_size
+					lastValue,                               // last_value
+				)
+			},
+		)
 	},
-	unimplemented: true,
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because

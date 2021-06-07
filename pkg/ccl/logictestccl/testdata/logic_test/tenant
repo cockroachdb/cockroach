@@ -44,4 +44,3 @@ SELECT * FROM crdb_internal.cluster_queries
 
 statement ok
 SELECT * FROM crdb_internal.cluster_contention_events
-

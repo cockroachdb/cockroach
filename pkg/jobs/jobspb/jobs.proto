@@ -557,11 +557,7 @@ message ResolvedSpan {
   roachpb.Span span = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 
-  // BoundaryReached indicates that this resolved timestamp
-  // corresponds to a schema change boundary. A schema change boundary is a
-  // timestamp at which a new version of a table has been committed that either
-  // indicates a logical backfill or a need for the changefeed to exit.
-  bool deprecated_boundary_reached = 3;
+  reserved 3;
 
   enum BoundaryType {
 
@@ -583,7 +579,7 @@ message ResolvedSpan {
     RESTART = 3;
   }
 
-  BoundaryType boundary_type = 4;
+  BoundaryType boundary_type = 4 ;
 }
 
 message ResolvedSpans {
@@ -699,6 +695,9 @@ message Payload {
     NewSchemaChangeDetails newSchemaChange = 24;
     MigrationDetails migration = 25;
   }
+  reserved 26;
+
+  // NEXT ID: 27.
 }
 
 message Progress {
@@ -722,6 +721,8 @@ message Progress {
     NewSchemaChangeProgress newSchemaChange = 19;
     MigrationProgress migration = 20;
   }
+
+  uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
 }
 
 enum Type {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -86,7 +87,22 @@ type Factory struct {
 
 	// See FoldingControl.
 	foldingControl FoldingControl
+
+	// constructorStackDepth tracks the call stack depth of factory constructor
+	// methods. It is incremented when a constructor function is called, and
+	// decremented when a constructor function returns.
+	constructorStackDepth int
 }
+
+// maxConstructorStackDepth is the maximum allowed depth of a constructor call
+// stack. Optgen generates factory code that refers to this constant.
+//
+// If constructorStackDepth exceeds this limit, a rule cycle likely exists that
+// will cause a stack overflow. To avoid a stack overflow, no further
+// normalization rules are applied when this limit is reached, and the
+// onMaxConstructorStackDepthExceeded method is called. This can result in an
+// expression that is not fully optimized.
+const maxConstructorStackDepth = 10000
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
@@ -261,6 +277,33 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
 
 	return nil
+}
+
+// CheckConstructorStackDepth panics in test builds if the constructor stack
+// depth is not zero. The stack depth should be 0 after a top-level constructor
+// function returns. It is used to verify that the stack depth is correctly
+// decremented for each constructor function.
+func (f *Factory) CheckConstructorStackDepth() {
+	if util.CrdbTestBuild && f.constructorStackDepth != 0 {
+		panic(errors.AssertionFailedf(
+			"expected constructor stack depth %v to be 0",
+			f.constructorStackDepth,
+		))
+	}
+}
+
+// onMaxConstructorStackDepthExceeded is called when constructorStackDepth
+// exceeds maxConstructorStackDepth. In test builds it panics. In release builds
+// it reports an error to Sentry to alert of a likely normalization rule cycle.
+func (f *Factory) onMaxConstructorStackDepthExceeded() {
+	err := errors.AssertionFailedf(
+		"optimizer factory constructor call stack exceeded max depth of %v",
+		maxConstructorStackDepth,
+	)
+	if util.CrdbTestBuild {
+		panic(err)
+	}
+	errorutil.SendReport(f.evalCtx.Ctx(), &f.evalCtx.Settings.SV, err)
 }
 
 // onConstructRelational is called as a final step by each factory method that

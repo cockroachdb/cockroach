@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -715,6 +716,18 @@ type RestrictedCommandResult interface {
 	// shallow copy if it needs to.
 	AddRow(ctx context.Context, row tree.Datums) error
 
+	// AddBatch accumulates a result batch.
+	//
+	// The implementation cannot hold on to the contents of the batch without
+	// deeply copying them. The memory in the input batch is safe to modify as
+	// soon as AddBatch returns.
+	AddBatch(ctx context.Context, batch coldata.Batch) error
+
+	// SupportsAddBatch returns whether this command result supports AddBatch
+	// method of adding the data. If false is returned, then the behavior of
+	// AddBatch is undefined.
+	SupportsAddBatch() bool
+
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
 	IncrementRowsAffected(ctx context.Context, n int)
@@ -737,8 +750,8 @@ type DescribeResult interface {
 
 	// SetInferredTypes tells the client about the inferred placeholder types.
 	SetInferredTypes([]oid.Oid)
-	// SetNoDataDescription is used to tell the client that the prepared statement
-	// or portal produces no rows.
+	// SetNoDataRowDescription is used to tell the client that the prepared
+	// statement or portal produces no rows.
 	SetNoDataRowDescription()
 	// SetPrepStmtOutput tells the client about the results schema of a prepared
 	// statement.
@@ -910,6 +923,17 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
 	return r.w.addResult(ctx, ieIteratorResult{row: rowCopy})
+}
+
+// AddBatch is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) AddBatch(context.Context, coldata.Batch) error {
+	// TODO(yuzefovich): implement this.
+	panic("unimplemented")
+}
+
+// SupportsAddBatch is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) SupportsAddBatch() bool {
+	return false
 }
 
 func (r *streamingCommandResult) DisableBuffering() {

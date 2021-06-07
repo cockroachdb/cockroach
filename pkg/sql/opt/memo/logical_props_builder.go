@@ -1079,11 +1079,10 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 
 	// Functional Dependencies
 	// -----------------------
-	// Inherit functional dependencies from input if limit is > 1, else just use
-	// single row dependencies.
-	if constLimit > 1 {
-		rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	} else {
+	// Inherit functional dependencies from input. If limit is <= 1, add a
+	// single row dependency.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	if constLimit <= 1 {
 		rel.FuncDeps.MakeMax1Row(rel.OutputCols)
 	}
 
@@ -2427,6 +2426,11 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 
 func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Relational) {
 	*rel = *fake.Props
+}
+
+func (b *logicalPropsBuilder) buildNormCycleTestRelProps(
+	nc *NormCycleTestRelExpr, rel *props.Relational,
+) {
 }
 
 // WithUses returns the WithUsesMap for the given expression.

@@ -1,0 +1,3 @@
+alter_sequence_options_stmt ::=
+	'ALTER' 'SEQUENCE' sequence_name sequence_option_list
+	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' sequence_name sequence_option_list

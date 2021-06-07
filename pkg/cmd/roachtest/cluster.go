@@ -1582,14 +1582,14 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 		}
 
 		if err := execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */); err != nil {
-			log.Infof(ctx, "failed to fetch logs: %v", err)
+			c.l.Printf("failed to fetch logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
 		}
 
 		if err := c.RunE(ctx, c.All(), "mkdir -p logs/redacted && ./cockroach debug merge-logs --redact logs/*.log > logs/redacted/combined.log"); err != nil {
-			log.Infof(ctx, "failed to redact logs: %v", err)
+			c.l.Printf("failed to redact logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
@@ -1654,6 +1654,27 @@ func (c *cluster) CopyRoachprodState(ctx context.Context) error {
 	return errors.Wrapf(err, "command %q failed: output: %v", cmd.Args, string(output))
 }
 
+// FetchTimeseriesData downloads the timeseries from the cluster using
+// the first available node. They can be visualized via:
+//
+// `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
+func (c *cluster) FetchTimeseriesData(ctx context.Context) error {
+	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
+		var err error
+		for i := 1; i <= c.spec.NodeCount; i++ {
+			err = c.RunE(ctx, c.Node(i), "./cockroach debug tsdump --insecure --format=raw > tsdump.gob")
+			if err == nil {
+				err = c.Get(ctx, c.l, "tsdump.gob", filepath.Join(c.t.ArtifactsDir(), "tsdump.gob"), c.Node(i))
+			}
+			if err == nil {
+				return nil
+			}
+			c.l.Printf("while fetching timeseries: %s", err)
+		}
+		return err
+	})
+}
+
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed in the test's artifacts dir.
 func (c *cluster) FetchDebugZip(ctx context.Context) error {
@@ -1677,9 +1698,12 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 		// waste our time.
 		for i := 1; i <= c.spec.NodeCount; i++ {
 			// `./cockroach debug zip` is noisy. Suppress the output unless it fails.
+			//
+			// Ignore the files in the the log directory; we pull the logs separately anyway
+			// so this would only cause duplication.
 			si := strconv.Itoa(i)
 			output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":"+si, "--",
-				"./cockroach", "debug", "zip", "--url", "{pgurl:"+si+"}", zipName)
+				"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:"+si+"}", zipName)
 			if err != nil {
 				c.l.Printf("./cockroach debug zip failed: %s", output)
 				if i < c.spec.NodeCount {

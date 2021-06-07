@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -107,7 +108,7 @@ type paramStatusUpdate struct {
 
 var _ sql.CommandResult = &commandResult{}
 
-// Close is part of the CommandResult interface.
+// Close is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
 	r.assertNotReleased()
 	defer r.release()
@@ -167,19 +168,19 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	}
 }
 
-// Discard is part of the CommandResult interface.
+// Discard is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Discard() {
 	r.assertNotReleased()
 	defer r.release()
 }
 
-// Err is part of the CommandResult interface.
+// Err is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Err() error {
 	r.assertNotReleased()
 	return r.err
 }
 
-// SetError is part of the CommandResult interface.
+// SetError is part of the sql.RestrictedCommandResult interface.
 //
 // We're not going to write any bytes to the buffer in order to support future
 // SetError() calls. The error will only be serialized at Close() time.
@@ -188,8 +189,9 @@ func (r *commandResult) SetError(err error) {
 	r.err = err
 }
 
-// AddRow is part of the CommandResult interface.
-func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+// addInternal is the skeleton of AddRow and AddBatch implementations.
+// bufferData should update rowsAffected and buffer the data accordingly.
+func (r *commandResult) addInternal(bufferData func()) error {
 	r.assertNotReleased()
 	if r.err != nil {
 		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
@@ -202,9 +204,9 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if r.err != nil {
 		panic("can't send row after error")
 	}
-	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
+	bufferData()
+
 	var err error
 	if r.bufferingDisabled {
 		err = r.conn.Flush(r.pos)
@@ -214,13 +216,34 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	return err
 }
 
-// DisableBuffering is part of the CommandResult interface.
+// AddRow is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	return r.addInternal(func() {
+		r.rowsAffected++
+		r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
+	})
+}
+
+// AddBatch is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	return r.addInternal(func() {
+		r.rowsAffected += batch.Length()
+		r.conn.bufferBatch(ctx, batch, r.formatCodes, r.conv, r.location)
+	})
+}
+
+// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SupportsAddBatch() bool {
+	return true
+}
+
+// DisableBuffering is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) DisableBuffering() {
 	r.assertNotReleased()
 	r.bufferingDisabled = true
 }
 
-// BufferParamStatusUpdate is part of the CommandResult interface.
+// BufferParamStatusUpdate is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) BufferParamStatusUpdate(param string, val string) {
 	r.buffer.paramStatusUpdates = append(
 		r.buffer.paramStatusUpdates,
@@ -228,12 +251,12 @@ func (r *commandResult) BufferParamStatusUpdate(param string, val string) {
 	)
 }
 
-// BufferNotice is part of the CommandResult interface.
+// BufferNotice is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) BufferNotice(notice pgnotice.Notice) {
 	r.buffer.notices = append(r.buffer.notices, notice)
 }
 
-// SetColumns is part of the CommandResult interface.
+// SetColumns is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
@@ -246,28 +269,28 @@ func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColum
 	}
 }
 
-// SetInferredTypes is part of the DescribeResult interface.
+// SetInferredTypes is part of the sql.DescribeResult interface.
 func (r *commandResult) SetInferredTypes(types []oid.Oid) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferParamDesc(types)
 }
 
-// SetNoDataRowDescription is part of the DescribeResult interface.
+// SetNoDataRowDescription is part of the sql.DescribeResult interface.
 func (r *commandResult) SetNoDataRowDescription() {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferNoDataMsg()
 }
 
-// SetPrepStmtOutput is part of the DescribeResult interface.
+// SetPrepStmtOutput is part of the sql.DescribeResult interface.
 func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols colinfo.ResultColumns) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, nil /* formatCodes */, &r.conn.writerState.buf)
 }
 
-// SetPortalOutput is part of the DescribeResult interface.
+// SetPortalOutput is part of the sql.DescribeResult interface.
 func (r *commandResult) SetPortalOutput(
 	ctx context.Context, cols colinfo.ResultColumns, formatCodes []pgwirebase.FormatCode,
 ) {
@@ -276,19 +299,19 @@ func (r *commandResult) SetPortalOutput(
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
-// IncrementRowsAffected is part of the CommandResult interface.
+// IncrementRowsAffected is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.assertNotReleased()
 	r.rowsAffected += n
 }
 
-// RowsAffected is part of the CommandResult interface.
+// RowsAffected is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) RowsAffected() int {
 	r.assertNotReleased()
 	return r.rowsAffected
 }
 
-// ResetStmtType is part of the CommandResult interface.
+// ResetStmtType is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.assertNotReleased()
 	r.stmtType = stmt.StatementReturnType()
@@ -398,7 +421,7 @@ type limitedCommandResult struct {
 	limit int
 }
 
-// AddRow is part of the CommandResult interface.
+// AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if err := r.commandResult.AddRow(ctx, row); err != nil {
 		return err
@@ -420,6 +443,12 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		return err
 	}
 	return nil
+}
+
+// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
+// TODO(yuzefovich): implement limiting behavior for AddBatch.
+func (r *limitedCommandResult) SupportsAddBatch() bool {
+	return false
 }
 
 // moreResultsNeeded is a restricted connection handler that waits for more

@@ -544,6 +544,9 @@ func parseDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration,
 			continue
 		}
 
+		if l.err != nil {
+			return d, l.err
+		}
 		if u != "" {
 			return d, pgerror.Newf(
 				pgcode.InvalidDatetimeFormat, "interval: unknown unit %q in duration %q", u, s)

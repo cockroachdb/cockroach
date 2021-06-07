@@ -335,6 +335,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if len(s.Nodes) > 0 {
 			e.ob.AddRedactableField(RedactNodes, "cluster nodes", strings.Join(s.Nodes, ", "))
 		}
+		if len(s.Regions) > 0 {
+			e.ob.AddRedactableField(RedactNodes, "cluster regions", strings.Join(s.Regions, ", "))
+		}
 		if s.RowCount.HasValue() {
 			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))
 		}
@@ -568,6 +571,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attr("equality cols are key", "")
 		}
 		ob.Expr("lookup condition", a.LookupExpr, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
+		ob.Expr("remote lookup condition", a.RemoteLookupExpr, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		e.emitLockingPolicy(a.Locking)
 

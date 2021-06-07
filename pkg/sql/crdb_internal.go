@@ -69,7 +69,7 @@ import (
 )
 
 // CrdbInternalName is the name of the crdb_internal schema.
-const CrdbInternalName = sessiondata.CRDBInternalSchemaName
+const CrdbInternalName = catconstants.CRDBInternalSchemaName
 
 // Naming convention:
 // - if the response is served from memory, prefix with node_
@@ -99,6 +99,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalFeatureUsageID:                   crdbInternalFeatureUsage,
 		catconstants.CrdbInternalForwardDependenciesTableID:       crdbInternalForwardDependenciesTable,
 		catconstants.CrdbInternalGossipNodesTableID:               crdbInternalGossipNodesTable,
+		catconstants.CrdbInternalKVNodeLivenessTableID:            crdbInternalKVNodeLivenessTable,
 		catconstants.CrdbInternalGossipAlertsTableID:              crdbInternalGossipAlertsTable,
 		catconstants.CrdbInternalGossipLivenessTableID:            crdbInternalGossipLivenessTable,
 		catconstants.CrdbInternalGossipNetworkTableID:             crdbInternalGossipNetworkTable,
@@ -312,7 +313,7 @@ CREATE TABLE crdb_internal.tables (
 			}
 			dbNames := make(map[descpb.ID]string)
 			scNames := make(map[descpb.ID]string)
-			scNames[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+			scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
 				if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
@@ -401,9 +402,9 @@ CREATE TABLE crdb_internal.tables (
 
 			// Also add all the virtual descriptors.
 			vt := p.getVirtualTabler()
-			vEntries := vt.getEntries()
+			vSchemas := vt.getSchemas()
 			for _, virtSchemaName := range vt.getSchemaNames() {
-				e := vEntries[virtSchemaName]
+				e := vSchemas[virtSchemaName]
 				for _, tName := range e.orderedDefNames {
 					vTableEntry := e.defs[tName]
 					if err := addDesc(vTableEntry.desc, tree.DNull, virtSchemaName); err != nil {
@@ -604,22 +605,23 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 var crdbInternalJobsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.jobs (
-	job_id             		INT,
-	job_type           		STRING,
-	description        		STRING,
-	statement          		STRING,
-	user_name          		STRING,
-	descriptor_ids     		INT[],
-	status             		STRING,
-	running_status     		STRING,
-	created            		TIMESTAMP,
-	started            		TIMESTAMP,
-	finished           		TIMESTAMP,
-	modified           		TIMESTAMP,
-	fraction_completed 		FLOAT,
-	high_water_timestamp	DECIMAL,
-	error              		STRING,
-	coordinator_id     		INT
+  job_id                INT,
+  job_type              STRING,
+  description           STRING,
+  statement             STRING,
+  user_name             STRING,
+  descriptor_ids        INT[],
+  status                STRING,
+  running_status        STRING,
+  created               TIMESTAMP,
+  started               TIMESTAMP,
+  finished              TIMESTAMP,
+  modified              TIMESTAMP,
+  fraction_completed    FLOAT,
+  high_water_timestamp  DECIMAL,
+  error                 STRING,
+  coordinator_id        INT,
+  trace_id              INT
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -671,9 +673,10 @@ CREATE TABLE crdb_internal.jobs (
 				id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
-					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
+					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode,
+					traceID = tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
+					tree.DNull
 
 				// Extract data from the payload.
 				payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -760,6 +763,7 @@ CREATE TABLE crdb_internal.jobs (
 								}
 							}
 						}
+						traceID = tree.NewDInt(tree.DInt(progress.TraceID))
 					}
 				}
 
@@ -781,6 +785,7 @@ CREATE TABLE crdb_internal.jobs (
 					highWaterTimestamp,
 					errorStr,
 					leaseNode,
+					traceID,
 				)
 				return container, nil
 			}
@@ -830,6 +835,16 @@ func execStatVar(count int64, n roachpb.NumericStat) tree.Datum {
 		return tree.DNull
 	}
 	return tree.NewDFloat(tree.DFloat(n.GetVariance(count)))
+}
+
+// getSQLStats retrieves a sqlStats object from the planner or returns an error
+// if not available. virtualTableName specifies the virtual table for which this
+// sqlStats object is needed.
+func getSQLStats(p *planner, virtualTableName string) (*sqlStats, error) {
+	if p.extendedEvalCtx.sqlStatsCollector == nil || p.extendedEvalCtx.sqlStatsCollector.sqlStats == nil {
+		return nil, errors.Newf("%s cannot be used in this context", virtualTableName)
+	}
+	return p.extendedEvalCtx.sqlStatsCollector.sqlStats, nil
 }
 
 var crdbInternalStmtStatsTable = virtualSchemaTable{
@@ -886,10 +901,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
 		}
 
-		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
-		if sqlStats == nil {
-			return errors.AssertionFailedf(
-				"cannot access sql statistics from this context")
+		sqlStats, err := getSQLStats(p, "crdb_internal.node_statement_statistics")
+		if err != nil {
+			return err
 		}
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
@@ -897,11 +911,11 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
 		var appNames []string
-		sqlStats.Lock()
-		for n := range sqlStats.apps {
+		sqlStats.mu.Lock()
+		for n := range sqlStats.mu.apps {
 			appNames = append(appNames, n)
 		}
-		sqlStats.Unlock()
+		sqlStats.mu.Unlock()
 		sort.Strings(appNames)
 
 		// Now retrieve the application stats proper.
@@ -927,7 +941,14 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				}
 
 				stmtID := constructStatementIDFromStmtKey(stmtKey)
-				s := appStats.getStatsForStmtWithKey(stmtKey, stmtID, true /* createIfNonexistent */)
+				s, _, _ := appStats.getStatsForStmtWithKey(stmtKey, stmtID, false /* createIfNonexistent */)
+
+				// If the key is not found (and we expected to find it), the table must
+				// have been cleared between now and the time we read all the keys. In
+				// that case we simply skip this key as there are no metrics to report.
+				if s == nil {
+					continue
+				}
 
 				s.mu.Lock()
 				errString := tree.DNull
@@ -1034,10 +1055,9 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
 		}
-		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
-		if sqlStats == nil {
-			return errors.AssertionFailedf(
-				"cannot access sql statistics from this context")
+		sqlStats, err := getSQLStats(p, "crdb_internal.node_transaction_statistics")
+		if err != nil {
+			return err
 		}
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
@@ -1045,12 +1065,12 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
 		var appNames []string
-		sqlStats.Lock()
+		sqlStats.mu.Lock()
 
-		for n := range sqlStats.apps {
+		for n := range sqlStats.mu.apps {
 			appNames = append(appNames, n)
 		}
-		sqlStats.Unlock()
+		sqlStats.mu.Unlock()
 		sort.Strings(appNames)
 
 		for _, appName := range appNames {
@@ -1071,7 +1091,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				// We don't want to create the key if it doesn't exist, so it's okay to
 				// pass nil for the statementIDs, as they are only set when a key is
 				// constructed.
-				s := appStats.getStatsForTxnWithKey(txnKey, nil, false /* createIfNonexistent */)
+				s, _, _ := appStats.getStatsForTxnWithKey(txnKey, nil, false /* createIfNonexistent */)
 				// If the key is not found (and we expected to find it), the table must
 				// have been cleared between now and the time we read all the keys. In
 				// that case we simply skip this key as there are no metrics to report.
@@ -1143,10 +1163,9 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
-		if sqlStats == nil {
-			return errors.AssertionFailedf(
-				"cannot access sql statistics from this context")
+		sqlStats, err := getSQLStats(p, "crdb_internal.node_txn_stats")
+		if err != nil {
+			return err
 		}
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
@@ -1154,11 +1173,11 @@ CREATE TABLE crdb_internal.node_txn_stats (
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
 		var appNames []string
-		sqlStats.Lock()
-		for n := range sqlStats.apps {
+		sqlStats.mu.Lock()
+		for n := range sqlStats.mu.apps {
 			appNames = append(appNames, n)
 		}
-		sqlStats.Unlock()
+		sqlStats.mu.Unlock()
 		sort.Strings(appNames)
 
 		for _, appName := range appNames {
@@ -2214,7 +2233,7 @@ func showCreateIndexWithInterleave(
 	// Get all of the columns and write them.
 	comma := ""
 	for i := 0; i < sharedPrefixLen; i++ {
-		name := idx.GetColumnName(i)
+		name := idx.GetKeyColumnName(i)
 		f.WriteString(comma)
 		f.FormatNameP(&name)
 		comma = ", "
@@ -2372,26 +2391,27 @@ CREATE TABLE crdb_internal.index_columns (
 					idxName := tree.NewDString(idx.GetName())
 
 					// Report the main (key) columns.
-					for i, c := range idx.IndexDesc().ColumnIDs {
+					for i := 0; i < idx.NumKeyColumns(); i++ {
+						c := idx.GetKeyColumnID(i)
 						colName := tree.DNull
 						colDir := tree.DNull
-						if i >= len(idx.IndexDesc().ColumnNames) {
+						if i >= len(idx.IndexDesc().KeyColumnNames) {
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
-								len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnNames))
+								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 						} else {
-							colName = tree.NewDString(idx.GetColumnName(i))
+							colName = tree.NewDString(idx.GetKeyColumnName(i))
 						}
-						if i >= len(idx.IndexDesc().ColumnDirections) {
+						if i >= len(idx.IndexDesc().KeyColumnDirections) {
 							// See comment above.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
-								len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnDirections))
+								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 						} else {
-							colDir = idxDirMap[idx.GetColumnDirection(i)]
+							colDir = idxDirMap[idx.GetKeyColumnDirection(i)]
 						}
 
 						if err := addRow(
@@ -2406,7 +2426,8 @@ CREATE TABLE crdb_internal.index_columns (
 					notImplicit := tree.DBoolFalse
 
 					// Report the stored columns.
-					for _, c := range idx.IndexDesc().StoreColumnIDs {
+					for i := 0; i < idx.NumSecondaryStoredColumns(); i++ {
+						c := idx.GetStoredColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2417,7 +2438,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the extra columns.
-					for _, c := range idx.IndexDesc().ExtraColumnIDs {
+					for i := 0; i < idx.NumKeySuffixColumns(); i++ {
+						c := idx.GetKeySuffixColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							extra, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2428,7 +2450,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the composite columns
-					for _, c := range idx.IndexDesc().CompositeColumnIDs {
+					for i := 0; i < idx.NumCompositeColumns(); i++ {
+						c := idx.GetCompositeColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							composite, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -3374,6 +3397,54 @@ CREATE TABLE crdb_internal.gossip_nodes (
 	},
 }
 
+// crdbInternalKVNodeLivenessTable exposes local information about the nodes'
+// liveness, reading directly from KV. It's guaranteed to be up-to-date.
+var crdbInternalKVNodeLivenessTable = virtualSchemaTable{
+	comment: "node liveness status, as seen by kv",
+	schema: `
+CREATE TABLE crdb_internal.kv_node_liveness (
+  node_id          INT NOT NULL,
+  epoch            INT NOT NULL,
+  expiration       STRING NOT NULL,
+  draining         BOOL NOT NULL,
+  membership       STRING NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_liveness"); err != nil {
+			return err
+		}
+
+		nl, err := p.ExecCfg().NodeLiveness.OptionalErr(47900)
+		if err != nil {
+			return err
+		}
+
+		livenesses, err := nl.GetLivenessesFromKV(ctx)
+		if err != nil {
+			return err
+		}
+
+		sort.Slice(livenesses, func(i, j int) bool {
+			return livenesses[i].NodeID < livenesses[j].NodeID
+		})
+
+		for i := range livenesses {
+			l := &livenesses[i]
+			if err := addRow(
+				tree.NewDInt(tree.DInt(l.NodeID)),
+				tree.NewDInt(tree.DInt(l.Epoch)),
+				tree.NewDString(l.Expiration.String()),
+				tree.MakeDBool(tree.DBool(l.Draining)),
+				tree.NewDString(l.Membership.String()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
 // crdbInternalGossipLivenessTable exposes local information about the nodes'
 // liveness. The data exposed in this table can be stale/incomplete because
 // gossip doesn't provide guarantees around freshness or consistency.
@@ -3598,7 +3669,7 @@ func addPartitioningRows(
 		if i != uint32(colOffset) {
 			buf.WriteString(`, `)
 		}
-		buf.WriteString(index.GetColumnName(int(i)))
+		buf.WriteString(index.GetKeyColumnName(int(i)))
 	}
 	colNames := tree.NewDString(buf.String())
 
@@ -4020,7 +4091,7 @@ CREATE TABLE crdb_internal.predefined_comments (
 	) error {
 		tableCommentKey := tree.NewDInt(keys.TableCommentType)
 		vt := p.getVirtualTabler()
-		vEntries := vt.getEntries()
+		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()
 
 		for _, virtSchemaName := range vSchemaNames {

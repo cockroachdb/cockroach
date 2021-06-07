@@ -17,33 +17,34 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
-// BackendDial is an example backend dialer that does a TCP/IP connection
-// to a backend, SSL and forwards the start message.
-func BackendDial(
+// backendDial is an example backend dialer that does a TCP/IP connection
+// to a backend, SSL and forwards the start message. It is defined as a variable
+// so it can be redirected for testing.
+var backendDial = func(
 	msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 ) (net.Conn, error) {
 	conn, err := net.Dial("tcp", outgoingAddress)
 	if err != nil {
-		return nil, NewErrorf(
-			CodeBackendDown, "unable to reach backend SQL server: %v", err,
+		return nil, newErrorf(
+			codeBackendDown, "unable to reach backend SQL server: %v", err,
 		)
 	}
-	conn, err = SSLOverlay(conn, tlsConfig)
+	conn, err = sslOverlay(conn, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
-	err = RelayStartupMsg(conn, msg)
+	err = relayStartupMsg(conn, msg)
 	if err != nil {
-		return nil, NewErrorf(
-			CodeBackendDown, "relaying StartupMessage to target server %v: %v",
+		return nil, newErrorf(
+			codeBackendDown, "relaying StartupMessage to target server %v: %v",
 			outgoingAddress, err)
 	}
 	return conn, nil
 }
 
-// SSLOverlay attempts to upgrade the PG connection to use SSL
+// sslOverlay attempts to upgrade the PG connection to use SSL
 // if a tls.Config is specified..
-func SSLOverlay(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
+func sslOverlay(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
 	if tlsConfig == nil {
 		return conn, nil
 	}
@@ -51,20 +52,20 @@ func SSLOverlay(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
 	var err error
 	// Send SSLRequest.
 	if err := binary.Write(conn, binary.BigEndian, pgSSLRequest); err != nil {
-		return nil, NewErrorf(
-			CodeBackendDown, "sending SSLRequest to target server: %v", err,
+		return nil, newErrorf(
+			codeBackendDown, "sending SSLRequest to target server: %v", err,
 		)
 	}
 
 	response := make([]byte, 1)
 	if _, err = io.ReadFull(conn, response); err != nil {
 		return nil,
-			NewErrorf(CodeBackendDown, "reading response to SSLRequest")
+			newErrorf(codeBackendDown, "reading response to SSLRequest")
 	}
 
 	if response[0] != pgAcceptSSLRequest {
-		return nil, NewErrorf(
-			CodeBackendRefusedTLS, "target server refused TLS connection",
+		return nil, newErrorf(
+			codeBackendRefusedTLS, "target server refused TLS connection",
 		)
 	}
 
@@ -72,8 +73,8 @@ func SSLOverlay(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
 	return tls.Client(conn, outCfg), nil
 }
 
-// RelayStartupMsg forwards the start message on the backend connection.
-func RelayStartupMsg(conn net.Conn, msg *pgproto3.StartupMessage) (err error) {
+// relayStartupMsg forwards the start message on the backend connection.
+func relayStartupMsg(conn net.Conn, msg *pgproto3.StartupMessage) (err error) {
 	_, err = conn.Write(msg.Encode(nil))
 	return
 }

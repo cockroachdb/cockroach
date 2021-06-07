@@ -202,7 +202,12 @@ func (n *dropIndexNode) maybeDropShardColumn(
 		return nil
 	}
 	if catalog.FindNonDropIndex(tableDesc, func(otherIdx catalog.Index) bool {
-		return otherIdx.ContainsColumnID(shardColDesc.GetID())
+		colIDs := otherIdx.CollectKeyColumnIDs()
+		if !otherIdx.Primary() {
+			colIDs.UnionWith(otherIdx.CollectSecondaryStoredColumnIDs())
+			colIDs.UnionWith(otherIdx.CollectKeySuffixColumnIDs())
+		}
+		return colIDs.Contains(shardColDesc.GetID())
 	}) != nil {
 		return nil
 	}
@@ -478,7 +483,8 @@ func (p *planner) dropIndexByName(
 	// the meta ranges directly.
 	if p.ExecCfg().Codec.ForSystemTenant() {
 		span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
+		txn := p.ExecCfg().DB.NewTxn(ctx, "scan-ranges-for-index-drop")
+		ranges, err := kvclient.ScanMetaKVs(ctx, txn, span)
 		if err != nil {
 			return err
 		}

@@ -102,11 +102,11 @@
     $aggregations
 )
 
-# GenerateStreamingGroupBy creates variants of a GroupBy, DistinctOn, or
-# UpsertDistinctOn which require more specific orderings on the grouping
-# columns, using the interesting orderings property. When we have orderings on
-# grouping columns, we can execute aggregations in a streaming fashion which is
-# more efficient.
+# GenerateStreamingGroupBy creates variants of a GroupBy, DistinctOn,
+# EnsureDistinctOn, UpsertDistinctOn, or EnsureUpsertDistinctOn that require
+# more specific orderings on the grouping columns, using the interesting
+# orderings property. When we have orderings on grouping columns, we can execute
+# aggregations in a streaming fashion, which is more efficient.
 [GenerateStreamingGroupBy, Explore]
 (GroupBy | DistinctOn | EnsureDistinctOn | UpsertDistinctOn
         | EnsureUpsertDistinctOn
@@ -116,3 +116,98 @@
 )
 =>
 (GenerateStreamingGroupBy (OpName) $input $aggs $private)
+
+# SplitGroupByScanIntoUnionScans splits a non-inverted scan under a GroupBy,
+# DistinctOn, or EnsureUpsertDistinctOn into a UnionAll of scans, where each
+# scan can provide an ordering on the grouping columns.
+#
+# This is useful because the GenerateStreamingGroupBy rule can then create a
+# streaming grouping operation, which is more efficient.
+# GenerateStreamingGroupBy will use the new interesting orderings provided by
+# the UnionAll of scans to build the streaming operation.
+#
+# Example:
+#
+#    CREATE TABLE tab (
+#      region STRING NOT NULL CHECK (region IN ('ASIA', 'EUROPE')),
+#      data INT NOT NULL,
+#      INDEX (region, data)
+#    );
+#
+#    SELECT DISTINCT data
+#    FROM tab;
+#
+#    =>
+#
+#    SELECT DISTINCT data
+#    FROM (SELECT * FROM tab WHERE region='ASIA')
+#    UNION ALL (SELECT * FROM tab WHERE region='EUROPE');
+#
+# TODO(rytaft): add support for ensure-distinct-on and upsert-distinct-on
+# if a use case is found.
+[SplitGroupByScanIntoUnionScans, Explore]
+(GroupBy | DistinctOn | EnsureUpsertDistinctOn
+    $scan:(Scan $scanPrivate:*) &
+        ^(ScanIsLimited $scanPrivate) &
+        ^(ScanIsInverted $scanPrivate)
+    $aggs:*
+    $private:* &
+        (IsCanonicalGroupBy $private) &
+        (Let
+            ($unionScans $ok):(SplitGroupByScanIntoUnionScans
+                $scan
+                $scanPrivate
+                $private
+            )
+            $ok
+        )
+)
+=>
+((OpName) $unionScans $aggs $private)
+
+# SplitGroupByFilteredScanIntoUnionScans is like SplitGroupByScanIntoUnionScans,
+# but the scan is wrapped in a Select.
+#
+# This transformation is important for ensuring that validation of the
+# unique constraint in an implicitly-partitioned unique index is efficient. The
+# validation query to verify that (a, b) is UNIQUE on table tbl looks like this:
+#
+#    SELECT a, b
+#    FROM tbl
+#    WHERE a IS NOT NULL AND b IS NOT NULL
+#    GROUP BY a, b
+#    HAVING count(*) > 1
+#    LIMIT 1;
+#
+# Without SplitGroupByFilteredScanIntoUnionScans, this query would require an
+# inefficient and memory-intensive hash group by operation. Note that the
+# previous rule, SplitGroupByScanIntoUnionScans, is also needed since it would
+# apply in cases where a and b are not nullable (the IS NOT NULL filters would
+# be eliminated during normalization).
+#
+# See the comment above SplitGroupByScanIntoUnionScans for additional details.
+#
+# TODO(rytaft): add support for ensure-distinct-on and upsert-distinct-on
+# if a use case is found.
+[SplitGroupByFilteredScanIntoUnionScans, Explore]
+(GroupBy | DistinctOn | EnsureUpsertDistinctOn
+    (Select
+        $scan:(Scan $scanPrivate:*) &
+            ^(ScanIsLimited $scanPrivate) &
+            ^(ScanIsInverted $scanPrivate)
+        $filters:*
+    )
+    $aggs:*
+    $private:* &
+        (IsCanonicalGroupBy $private) &
+        (Let
+            ($unionScans $ok):(SplitGroupByScanIntoUnionScans
+                $scan
+                $scanPrivate
+                $private
+            )
+            $ok
+        )
+)
+=>
+((OpName) (Select $unionScans $filters) $aggs $private)

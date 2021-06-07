@@ -291,7 +291,7 @@ func MakeServer(
 	server.mu.Unlock()
 
 	connAuthConf.SetOnChange(&st.SV,
-		func() {
+		func(ctx context.Context) {
 			loadLocalAuthConfigUponRemoteSettingChange(
 				ambientCtx.AnnotateCtx(context.Background()), server, st)
 		})
@@ -347,9 +347,11 @@ func (s *Server) Metrics() (res []interface{}) {
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
+		&s.SQLServer.Metrics.StatsMetrics,
 		&s.SQLServer.InternalMetrics.StartedStatementCounters,
 		&s.SQLServer.InternalMetrics.ExecutedStatementCounters,
 		&s.SQLServer.InternalMetrics.EngineMetrics,
+		&s.SQLServer.InternalMetrics.StatsMetrics,
 	}
 }
 

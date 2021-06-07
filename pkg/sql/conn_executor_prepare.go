@@ -161,7 +161,7 @@ func (ex *connExecutor) prepare(
 
 	var flags planFlags
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
-		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 		p := &ex.planner
 		if origin != PreparedStatementOriginSQL {
 			// If the PREPARE command was issued as a SQL statement, then we
@@ -411,6 +411,15 @@ func (ex *connExecutor) execBind(
 		for i := 0; i < numCols; i++ {
 			columnFormatCodes[i] = bindCmd.OutFormats[0]
 		}
+	}
+
+	// This is a huge kludge to deal with the fact that we're resolving types
+	// using a planner with a committed transaction. This ends up being almost
+	// okay because the execution is going to re-acquire leases on these types.
+	// Regardless, holding this lease is worse than not holding it. Users might
+	// expect to get type mismatch errors if a rename of the type occurred.
+	if ex.getTransactionState() == NoTxnStateStr {
+		ex.planner.Descriptors().ReleaseAll(ctx)
 	}
 
 	// Create the new PreparedPortal.

@@ -338,7 +338,7 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(r.Ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -351,12 +351,14 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *percentRankNoPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *percentRankNoPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -632,7 +634,7 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(r.Ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -645,15 +647,17 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *percentRankWithPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *percentRankWithPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(ctx); err != nil {
+	if err := r.partitionsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -914,7 +918,7 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(r.Ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -927,15 +931,17 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *cumeDistNoPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *cumeDistNoPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
+	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -1290,7 +1296,7 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(r.Ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -1303,18 +1309,20 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *cumeDistWithPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() {
+func (r *cumeDistWithPartitionOp) Close() error {
+	if !r.CloserHelper.Close() || r.Ctx == nil {
+		// Either Close() has already been called or Init() was never called. In
+		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
+	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(ctx); err != nil {
+	if err := r.partitionsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
+	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr

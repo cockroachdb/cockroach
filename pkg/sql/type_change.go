@@ -593,14 +593,6 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		return err
 	}
 
-	// Finally, make sure all of the leases are updated.
-	if err := WaitToUpdateLeases(ctx, t.execCfg.LeaseManager, t.typeID); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
-		}
-		return err
-	}
-
 	if regionChangeFinalizer != nil {
 		if err := regionChangeFinalizer.waitToUpdateLeases(ctx, t.execCfg.LeaseManager); err != nil {
 			return err
@@ -658,7 +650,10 @@ func findUsagesOfEnumValue(
 			if !ok {
 				return true, expr, nil
 			}
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+			id, err := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+			if err != nil {
+				return false, expr, err
+			}
 			if id != typeID {
 				return true, expr, nil
 			}
@@ -680,8 +675,12 @@ func findUsagesOfEnumValue(
 			if !ok {
 				return true, expr, nil
 			}
+			id, err := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+			if err != nil {
+				return false, expr, err
+			}
 			// -1 since the type of this CastExpr is the array type.
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID) - 1
+			id = id - 1
 			if id != typeID {
 				return true, expr, nil
 			}
@@ -726,7 +725,10 @@ func findUsagesOfEnumValueInViewQuery(
 		if !ok {
 			return true, expr, nil
 		}
-		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		id, err := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		if err != nil {
+			return false, expr, err
+		}
 		if id != typeID {
 			return true, expr, nil
 		}
@@ -816,22 +818,28 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				}
 			}
 
-			if typeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
-				if !firstClause {
-					query.WriteString(" OR")
+			if col.GetType().UserDefined() {
+				tid, terr := typedesc.GetUserDefinedTypeDescID(col.GetType())
+				if terr != nil {
+					return terr
 				}
-				sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
-				if err != nil {
-					return err
+				if typeDesc.ID == tid {
+					if !firstClause {
+						query.WriteString(" OR")
+					}
+					sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
+					if err != nil {
+						return err
+					}
+					colName := col.ColName()
+					query.WriteString(fmt.Sprintf(
+						" t.%s = %s",
+						colName.String(),
+						sqlPhysRep,
+					))
+					firstClause = false
+					validationQueryConstructed = true
 				}
-				colName := col.ColName()
-				query.WriteString(fmt.Sprintf(
-					" t.%s = %s",
-					colName.String(),
-					sqlPhysRep,
-				))
-				firstClause = false
-				validationQueryConstructed = true
 			}
 		}
 		query.WriteString(" LIMIT 1")
@@ -923,7 +931,14 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		//	) WHERE unnest = 'enum_value'
 		firstClause := true
 		for _, col := range desc.PublicColumns() {
-			if arrayTypeDesc.GetID() == typedesc.GetTypeDescID(col.GetType()) {
+			if !col.GetType().UserDefined() {
+				continue
+			}
+			tid, terr := typedesc.GetUserDefinedTypeDescID(col.GetType())
+			if terr != nil {
+				return terr
+			}
+			if arrayTypeDesc.GetID() == tid {
 				if !firstClause {
 					unionUnnests.WriteString(" UNION ")
 				}
@@ -978,8 +993,11 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			if err != nil {
 				return err
 			}
-			fqName := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(parentSchema.Name), tree.Name(desc.GetName()))
-
+			fqName := tree.MakeTableNameWithSchema(
+				tree.Name(dbDesc.GetName()),
+				tree.Name(parentSchema.GetName()),
+				tree.Name(desc.GetName()),
+			)
 			return pgerror.Newf(pgcode.DependentObjectsStillExist, "could not remove enum value %q as it is being used by table %q",
 				member.LogicalRepresentation, fqName.FQString(),
 			)
@@ -1039,7 +1057,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 				t.typeID,
 			)
 			return nil
-		case !isPermanentSchemaChangeError(tcErr):
+		case !IsPermanentSchemaChangeError(tcErr):
 			// If this isn't a permanent error, then retry.
 			log.Infof(ctx, "retrying type schema change due to retriable error %v", tcErr)
 		default:
@@ -1113,7 +1131,7 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
 				tc.typeID,
 			)
-		case !isPermanentSchemaChangeError(rollbackErr):
+		case !IsPermanentSchemaChangeError(rollbackErr):
 			return jobs.NewRetryJobError(rollbackErr.Error())
 		default:
 			return rollbackErr

@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -343,10 +342,11 @@ func createTestServerParams() base.TestServerArgs {
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	params := createTestServerParams()
+	ctx := context.Background()
 
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(&params.SV, 0)
+	lease.LeaseDuration.Override(ctx, &params.SV, 0)
 
 	removalTracker := lease.NewLeaseRemovalTracker()
 	params.Knobs = base.TestingKnobs{
@@ -1263,6 +1263,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // lease is renewed.
 func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
+	ctx := context.Background()
 
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
@@ -1289,13 +1290,12 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	}
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(&params.SV, 0)
+	lease.LeaseJitterFraction.Override(ctx, &params.SV, 0)
 	// The renewal timeout is set to be the duration, so background
 	// renewal should begin immediately after accessing a lease.
-	lease.LeaseRenewalDuration.Override(&params.SV,
+	lease.LeaseRenewalDuration.Override(ctx, &params.SV,
 		lease.LeaseDuration.Get(&params.SV))
 
-	ctx := context.Background()
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
@@ -1712,6 +1712,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 // TODO(vivek): remove once epoch based leases is implemented.
 func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
+	ctx := context.Background()
 
 	var mu syncutil.Mutex
 	releasedIDs := make(map[descpb.ID]struct{})
@@ -1750,14 +1751,13 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(&params.SV, 0)
+	lease.LeaseJitterFraction.Override(ctx, &params.SV, 0)
 	// Lease duration to something small.
-	lease.LeaseDuration.Override(&params.SV, 50*time.Millisecond)
+	lease.LeaseDuration.Override(ctx, &params.SV, 50*time.Millisecond)
 	// Renewal timeout to 0 saying that the lease will get renewed only
 	// after the lease expires when a request requests the descriptor.
-	lease.LeaseRenewalDuration.Override(&params.SV, 0)
+	lease.LeaseRenewalDuration.Override(ctx, &params.SV, 0)
 
-	ctx := context.Background()
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
@@ -2763,8 +2763,6 @@ CREATE TABLE d1.t2 (name int);
 `)
 	require.NoError(t, err)
 
-	tableID := descpb.InvalidID
-
 	// Force the table descriptor into a offline state
 	err = descs.Txn(ctx, s.ClusterSettings(), s.LeaseManager().(*lease.Manager), s.InternalExecutor().(sqlutil.InternalExecutor), s.DB(),
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
@@ -2777,12 +2775,8 @@ CREATE TABLE d1.t2 (name int);
 			if err != nil {
 				return err
 			}
-			tableID = tableDesc.ID
 			return nil
 		})
-	require.NoError(t, err)
-
-	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID, retry.Options{})
 	require.NoError(t, err)
 
 	go func() {
@@ -2866,7 +2860,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	params := createTestServerParams()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(&params.SV, 0)
+	lease.LeaseDuration.Override(ctx, &params.SV, 0)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
 			filterMu.Lock()

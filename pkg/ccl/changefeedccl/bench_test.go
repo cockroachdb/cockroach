@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -216,23 +217,25 @@ func createBenchmarkChangefeed(
 	}
 	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := kvfeed.Config{
-		Settings: settings,
-		DB:       s.DB(),
-		Clock:    feedClock,
-		Gossip:   gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
-		Spans:    spans,
-		Targets:  details.Targets,
-		Sink:     buf,
-		EventBufferFactory: func() kvfeed.EventBuffer {
-			return kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics)
-		},
+		Settings:         settings,
+		DB:               s.DB(),
+		Clock:            feedClock,
+		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
+		Spans:            spans,
+		Targets:          details.Targets,
+		Sink:             buf,
+		Metrics:          &metrics.KVFeedMetrics,
+		MM:               mm,
 		InitialHighWater: initialHighWater,
 		WithDiff:         withDiff,
 		NeedsInitialScan: needsInitialScan,
-		SchemaFeed:       doNothingSchemaFeed{},
+		SchemaFeed:       schemafeed.DoNothingSchemaFeed,
 	}
 
-	sf := span.MakeFrontier(spans...)
+	sf, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, nil, err
+	}
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
 		sink, encoder, details, TestingKnobs{})
@@ -258,7 +261,10 @@ func createBenchmarkChangefeed(
 	go func() {
 		defer wg.Done()
 		err := func() error {
-			sf := span.MakeFrontier(spans...)
+			sf, err := span.MakeFrontier(spans...)
+			if err != nil {
+				return err
+			}
 			for {
 				// This is basically the ChangeAggregator processor.
 				rs, err := tickFn(ctx)
@@ -268,7 +274,11 @@ func createBenchmarkChangefeed(
 				// This is basically the ChangeFrontier processor, the resolved
 				// spans are normally sent using distsql, so we're missing a bit
 				// of overhead here.
-				if sf.Forward(rs.Span, rs.Timestamp) {
+				advanced, err := sf.Forward(rs.Span, rs.Timestamp)
+				if err != nil {
+					return err
+				}
+				if advanced {
 					frontier := sf.Frontier()
 					if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
 						return err

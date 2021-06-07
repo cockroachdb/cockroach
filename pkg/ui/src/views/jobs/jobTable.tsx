@@ -9,10 +9,7 @@
 // licenses/APL.txt.
 
 import React, { MouseEvent } from "react";
-import {
-  ColumnDescriptor,
-  SortedTable,
-} from "src/views/shared/components/sortedtable";
+import _ from "lodash";
 import { cockroach } from "src/js/protos";
 import { TimestampToMoment } from "src/util/convert";
 import { DATE_FORMAT } from "src/util/format";
@@ -21,42 +18,52 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { isEqual, map } from "lodash";
 import { JobDescriptionCell } from "src/views/jobs/jobDescriptionCell";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/cluster-ui";
+import {
+  ColumnDescriptor,
+  Pagination,
+  ResultsPerPageLabel,
+} from "@cockroachlabs/cluster-ui";
 import { jobTable } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
 import { EmptyTable } from "@cockroachlabs/cluster-ui";
 import { Anchor } from "src/components";
 import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
 import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
+import { SortedTable } from "../shared/components/sortedtable";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
 const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
+    name: "description",
     title: "Description",
     className: "cl-table__col-query-text",
     cell: (job) => <JobDescriptionCell job={job} />,
-    sort: (job) => job.description,
+    sort: (job) => job.statement || job.description || job.type,
   },
   {
+    name: "jobId",
     title: "Job ID",
     titleAlign: "right",
     cell: (job) => String(job.id),
-    sort: (job) => job.id,
+    sort: (job) => job.id?.toNumber(),
   },
   {
+    name: "users",
     title: "Users",
     cell: (job) => job.username,
     sort: (job) => job.username,
   },
   {
+    name: "creationTime",
     title: "Creation Time",
-    cell: (job) => TimestampToMoment(job.created).format(DATE_FORMAT),
-    sort: (job) => TimestampToMoment(job.created).valueOf(),
+    cell: (job) => TimestampToMoment(job?.created).format(DATE_FORMAT),
+    sort: (job) => TimestampToMoment(job?.created).valueOf(),
   },
   {
+    name: "status",
     title: "Status",
     cell: (job) => <JobStatusCell job={job} compact />,
     sort: (job) => job.fraction_completed,

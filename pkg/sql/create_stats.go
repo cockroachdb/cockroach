@@ -362,9 +362,9 @@ func createStatsDefaultColumns(
 	}
 
 	// Add column stats for the primary key.
-	for i := 0; i < desc.GetPrimaryIndex().NumColumns(); i++ {
+	for i := 0; i < desc.GetPrimaryIndex().NumKeyColumns(); i++ {
 		// Generate stats for each column in the primary key.
-		addIndexColumnStatsIfNotExists(desc.GetPrimaryIndex().GetColumnID(i), false /* isInverted */)
+		addIndexColumnStatsIfNotExists(desc.GetPrimaryIndex().GetKeyColumnID(i), false /* isInverted */)
 
 		// Only collect multi-column stats if enabled.
 		if i == 0 || !multiColEnabled {
@@ -373,7 +373,7 @@ func createStatsDefaultColumns(
 
 		colIDs := make([]descpb.ColumnID, i+1)
 		for j := 0; j <= i; j++ {
-			colIDs[j] = desc.GetPrimaryIndex().GetColumnID(j)
+			colIDs[j] = desc.GetPrimaryIndex().GetKeyColumnID(j)
 		}
 
 		// Remember the requested stats so we don't request duplicates.
@@ -388,8 +388,8 @@ func createStatsDefaultColumns(
 
 	// Add column stats for each secondary index.
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
-		for j, n := 0, idx.NumColumns(); j < n; j++ {
-			colID := idx.GetColumnID(j)
+		for j, n := 0, idx.NumKeyColumns(); j < n; j++ {
+			colID := idx.GetKeyColumnID(j)
 			isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED && colID == idx.InvertedColumnID()
 
 			// Generate stats for each indexed column.
@@ -402,7 +402,7 @@ func createStatsDefaultColumns(
 
 			colIDs := make([]descpb.ColumnID, j+1)
 			for k := 0; k <= j; k++ {
-				colIDs[k] = idx.GetColumnID(k)
+				colIDs[k] = idx.GetKeyColumnID(k)
 			}
 
 			// Check for existing stats and remember the requested stats.
@@ -575,16 +575,22 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// CREATE STATISTICS statement.
 	// See: https://github.com/cockroachdb/cockroach/issues/57739
 	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return logEventInternalForSQLStatements(ctx, evalCtx.ExecCfg, txn,
-			descpb.IDs{details.Table.ID},
-			evalCtx.SessionData.User(),
-			evalCtx.SessionData.ApplicationName,
-			details.Statement,
-			"CREATE STATISTICS",
-			nil,  /* no placeholders known at this point */
-			true, /* writeToEventLog */
-			&eventpb.CreateStatistics{
-				TableName: details.FQTableName,
+		return logEventInternalForSQLStatements(ctx,
+			evalCtx.ExecCfg, txn,
+			0, /* depth: use event_log=2 for vmodule filtering */
+			eventLogOptions{dst: LogEverywhere},
+			sqlEventCommonExecPayload{
+				user:         evalCtx.SessionData.User(),
+				appName:      evalCtx.SessionData.ApplicationName,
+				stmt:         details.Statement,
+				stmtTag:      "CREATE STATISTICS",
+				placeholders: nil, /* no placeholders known at this point */
+			},
+			eventLogEntry{
+				targetID: int32(details.Table.ID),
+				event: &eventpb.CreateStatistics{
+					TableName: details.FQTableName,
+				},
 			},
 		)
 	})

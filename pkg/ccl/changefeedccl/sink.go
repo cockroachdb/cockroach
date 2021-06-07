@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -65,6 +66,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
 	acc mon.BoundAccount,
+	jobID jobspb.JobID,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -76,7 +78,7 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeBuffer:
 			return &bufferSink{}, nil
 		case u.Scheme == changefeedbase.SinkSchemeNull:
-			return &nullSink{}, nil
+			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, acc)
 		case isCloudStorageSink(u):
@@ -96,9 +98,11 @@ func getSink(
 		return nil, err
 	}
 
-	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.Dial != nil {
-		knobs.Dial(sink)
-	} else if err := sink.Dial(); err != nil {
+	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
+		sink = knobs.WrapSink(sink, jobID)
+	}
+
+	if err := sink.Dial(); err != nil {
 		return nil, err
 	}
 
@@ -150,7 +154,7 @@ func (s errorWrapperSink) EmitRow(
 	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitRow(ctx, topicDescr, key, value, updated); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
@@ -160,7 +164,7 @@ func (s errorWrapperSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	if err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
@@ -168,7 +172,7 @@ func (s errorWrapperSink) EmitResolvedTimestamp(
 // Flush implements Sink interface.
 func (s errorWrapperSink) Flush(ctx context.Context) error {
 	if err := s.wrapped.Flush(ctx); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
@@ -176,7 +180,7 @@ func (s errorWrapperSink) Flush(ctx context.Context) error {
 // Close implements Sink interface.
 func (s errorWrapperSink) Close() error {
 	if err := s.wrapped.Close(); err != nil {
-		return MarkRetryableError(err)
+		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
 }
@@ -265,15 +269,46 @@ func (s *bufferSink) Dial() error {
 	return nil
 }
 
-type nullSink struct{}
+type nullSink struct {
+	ticker *time.Ticker
+}
 
 var _ Sink = (*nullSink)(nil)
+
+func makeNullSink(u sinkURL) (Sink, error) {
+	var pacer *time.Ticker
+	if delay := u.consumeParam(`delay`); delay != "" {
+		pace, err := time.ParseDuration(delay)
+		if err != nil {
+			return nil, err
+		}
+		pacer = time.NewTicker(pace)
+	}
+	return &nullSink{ticker: pacer}, nil
+}
+
+func (n *nullSink) pace(ctx context.Context) error {
+	if n.ticker != nil {
+		select {
+		case <-n.ticker.C:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
 
 // EmitRow implements SInk interface.
 func (n *nullSink) EmitRow(
 	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
-	log.Dev.VInfof(ctx, 2, "emitting row %s@%s", key, updated.String())
+	if err := n.pace(ctx); err != nil {
+		return err
+	}
+	if log.V(2) {
+		log.Infof(ctx, "emitting row %s@%s", key, updated.String())
+	}
 	return nil
 }
 
@@ -281,6 +316,9 @@ func (n *nullSink) EmitRow(
 func (n *nullSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	if err := n.pace(ctx); err != nil {
+		return err
+	}
 	if log.V(2) {
 		log.Infof(ctx, "emitting resolved %s", resolved.String())
 	}

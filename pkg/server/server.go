@@ -79,7 +79,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -418,10 +420,29 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
+	gcoord, metrics := admission.NewGrantCoordinator(admission.Options{
+		MinCPUSlots:                    1,
+		MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
+		SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
+		SQLSQLResponseBurstTokens:      100000, /* arbitrary, and unused */
+		SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
+		SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
+		Settings:                       st,
+	})
+	for i := range metrics {
+		registry.AddMetricStruct(metrics[i])
+	}
+	cbID := goschedstats.RegisterRunnableCountCallback(gcoord.CPULoad)
+	stopper.AddCloser(stop.CloserFn(func() {
+		goschedstats.UnregisterRunnableCountCallback(cbID)
+	}))
+	stopper.AddCloser(gcoord)
+
 	dbCtx := kv.DefaultDBContext(stopper)
 	dbCtx.NodeID = idContainer
 	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
+	db.SQLKVResponseAdmissionQ = gcoord.GetWorkQueue(admission.SQLKVResponseWork)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	if knobs := cfg.TestingKnobs.NodeLiveness; knobs != nil {
@@ -596,6 +617,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID)
+	node.admissionQ = gcoord.GetWorkQueue(admission.KVWork)
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -898,7 +920,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 	forwardJumpCheckEnabled := make(chan bool, 1)
 	s.stopper.AddCloser(stop.CloserFn(func() { close(forwardJumpCheckEnabled) }))
 
-	forwardClockJumpCheckEnabled.SetOnChange(&s.st.SV, func() {
+	forwardClockJumpCheckEnabled.SetOnChange(&s.st.SV, func(context.Context) {
 		forwardJumpCheckEnabled <- forwardClockJumpCheckEnabled.Get(&s.st.SV)
 	})
 
@@ -1062,7 +1084,7 @@ func (s *Server) startPersistingHLCUpperBound(
 	tickerFn func(d time.Duration) *time.Ticker,
 ) error {
 	persistHLCUpperBoundIntervalCh := make(chan time.Duration, 1)
-	persistHLCUpperBoundInterval.SetOnChange(&s.st.SV, func() {
+	persistHLCUpperBoundInterval.SetOnChange(&s.st.SV, func(context.Context) {
 		persistHLCUpperBoundIntervalCh <- persistHLCUpperBoundInterval.Get(&s.st.SV)
 	})
 
@@ -1654,7 +1676,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	var graphiteOnce sync.Once
-	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
+	graphiteEndpoint.SetOnChange(&s.st.SV, func(context.Context) {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
 			graphiteOnce.Do(func() {
 				s.node.startGraphiteStatsExporter(s.st)
@@ -2346,10 +2368,10 @@ func (s *Server) Decommission(
 					ctx,
 					s.sqlServer.execCfg.InternalExecutor,
 					txn,
-					int32(nodeID), int32(s.NodeID()),
-					true, /* skipExternalLog - we already call log.StructuredEvent above */
+					int32(s.NodeID()), /* reporting ID: the node where the event is logged */
+					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* we already call log.StructuredEvent above */
+					int32(nodeID), /* target ID: the node that we wee a membership change for */
 					event,
-					false, /* onlyLog */
 				)
 			}); err != nil {
 				log.Ops.Errorf(ctx, "unable to record event: %+v: %+v", event, err)

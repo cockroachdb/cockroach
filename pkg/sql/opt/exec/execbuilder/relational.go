@@ -845,9 +845,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	rightProps := rightExpr.Relational()
 	filters := join.Child(2).(*memo.FiltersExpr)
 
-	if len(memo.WithUses(rightExpr)) != 0 {
-		return execPlan{}, fmt.Errorf("references to WITH expressions from correlated subqueries are unsupported")
-	}
+	// We will pre-populate the withExprs of the right-hand side execbuilder.
+	withExprs := make([]builtWithExpr, len(b.withExprs))
+	copy(withExprs, b.withExprs)
 
 	leftPlan, err := b.buildRelational(leftExpr)
 	if err != nil {
@@ -892,6 +892,19 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				if leftOrd, ok := leftBoundColMap.Get(int(t.Col)); ok {
 					return f.ConstructConstVal(leftRow[leftOrd], t.Typ)
 				}
+
+			case *memo.WithScanExpr:
+				// Allow referring to "outer" With expressions. The bound expressions
+				// are not part of this Memo but they are used only for their relational
+				// properties, which should be valid.
+				for i := range withExprs {
+					if withExprs[i].id == t.With {
+						memoExpr := b.mem.Metadata().WithBinding(t.With)
+						f.Metadata().AddWithBinding(t.With, memoExpr)
+						break
+					}
+				}
+				// Fall through.
 			}
 			return f.CopyAndReplaceDefault(e, replaceFn)
 		}
@@ -904,6 +917,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 
 		eb := New(ef, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
 		eb.disableTelemetry = true
+		eb.withExprs = withExprs
 		plan, err := eb.Build()
 		if err != nil {
 			if errors.IsAssertionFailure(err) {
@@ -1604,10 +1618,17 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
 		ivarMap: allCols,
 	}
-	var lookupExpr tree.TypedExpr
+	var lookupExpr, remoteLookupExpr tree.TypedExpr
 	if len(join.LookupExpr) > 0 {
 		var err error
 		lookupExpr, err = b.buildScalar(&ctx, &join.LookupExpr)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+	if len(join.RemoteLookupExpr) > 0 {
+		var err error
+		remoteLookupExpr, err = b.buildScalar(&ctx, &join.RemoteLookupExpr)
 		if err != nil {
 			return execPlan{}, err
 		}
@@ -1637,6 +1658,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		keyCols,
 		join.LookupColsAreTableKey,
 		lookupExpr,
+		remoteLookupExpr,
 		lookupOrdinals,
 		onExpr,
 		join.IsSecondJoinInPairedJoiner,

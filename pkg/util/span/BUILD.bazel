@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/sql/covering",
         "//pkg/util/hlc",
         "//pkg/util/interval",
     ],
@@ -22,7 +21,10 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "//pkg/util/interval",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],
 )

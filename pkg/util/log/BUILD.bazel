@@ -127,6 +127,7 @@ go_test(
         "file_test.go",
         "flags_test.go",
         "fluent_client_test.go",
+        "format_crdb_v1_test.go",
         "format_crdb_v2_test.go",
         "format_json_test.go",
         "helpers_test.go",
@@ -138,7 +139,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":log"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/settings/cluster",

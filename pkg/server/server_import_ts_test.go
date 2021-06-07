@@ -56,7 +56,7 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 	// ingest the dump we just wrote.
 	args := base.TestClusterArgs{}
 	args.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
-	ts.TimeseriesStorageEnabled.Override(&args.ServerArgs.Settings.SV, false)
+	ts.TimeseriesStorageEnabled.Override(ctx, &args.ServerArgs.Settings.SV, false)
 	args.ServerArgs.Knobs.Server = &server.TestingKnobs{
 		ImportTimeseriesFile: path,
 	}

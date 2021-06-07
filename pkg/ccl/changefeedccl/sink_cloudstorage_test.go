@@ -135,7 +135,8 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`golden`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(
@@ -160,6 +161,13 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, `{"resolved":"5.0000000000"}`, string(resolvedFile))
 	})
+
+	forwardFrontier := func(f *span.Frontier, s roachpb.Span, wall int64) bool {
+		forwarded, err := f.Forward(s, ts(wall))
+		require.NoError(t, err)
+		return forwarded
+	}
+
 	t.Run(`single-node`, func(t *testing.T) {
 		before := opts[changefeedbase.OptCompression]
 		// Compression codecs include buffering that interferes with other tests,
@@ -174,7 +182,8 @@ func TestCloudStorageSink(t *testing.T) {
 				t2 := makeTopic(`t2`)
 
 				testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-				sf := span.MakeFrontier(testSpan)
+				sf, err := span.MakeFrontier(testSpan)
+				require.NoError(t, err)
 				timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 				dir := `single-node` + compression
 				s, err := makeCloudStorageSink(
@@ -228,7 +237,7 @@ func TestCloudStorageSink(t *testing.T) {
 				// can guarantee that all rows in any given file have the same schema.
 				// We also advance `testSpan` and `Flush` to make sure these new rows are read
 				// after the rows emitted above.
-				require.True(t, sf.Forward(testSpan, ts(4)))
+				require.True(t, forwardFrontier(sf, testSpan, 4))
 				require.NoError(t, s.Flush(ctx))
 				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v4`), ts(4)))
 				t1.TableDesc().Version = 2
@@ -250,7 +259,8 @@ func TestCloudStorageSink(t *testing.T) {
 		t1 := makeTopic(`t1`)
 
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `multi-node`
 		s1, err := makeCloudStorageSink(
@@ -334,7 +344,8 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`zombie`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(
@@ -377,7 +388,8 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`bucketing`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `bucketing`
 		const targetMaxFileSize = 6
@@ -407,7 +419,8 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Forward the SpanFrontier here and trigger an empty flush to update
 		// the sink's `inclusiveLowerBoundTs`
-		sf.Forward(testSpan, ts(5))
+		_, err = sf.Forward(testSpan, ts(5))
+		require.NoError(t, err)
 		require.NoError(t, s.Flush(ctx))
 
 		// Some more data is written. Some of it flushed out because of the max
@@ -466,7 +479,8 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`file-ordering`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(
@@ -488,12 +502,12 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Forward the testSpan and trigger an empty `Flush` to have new rows
 		// be after the resolved timestamp emitted above.
-		require.True(t, sf.Forward(testSpan, ts(2)))
+		require.True(t, forwardFrontier(sf, testSpan, 2))
 		require.NoError(t, s.Flush(ctx))
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e2`), ts(2)))
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3prev`), ts(3).Prev()))
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3`), ts(3)))
-		require.True(t, sf.Forward(testSpan, ts(3)))
+		require.True(t, forwardFrontier(sf, testSpan, 3))
 		require.NoError(t, s.Flush(ctx))
 		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(3)))
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3next`), ts(3).Next()))
@@ -525,7 +539,8 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`ordering-among-schema-versions`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `ordering-among-schema-versions`
 		var targetMaxFileSize int64 = 10
@@ -573,7 +588,8 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`memory-limit`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := span.MakeFrontier(testSpan)
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		sinkDir := `memory-limit`
 		limitedMem, release := getBoundAccountWithBudget(100)
@@ -612,7 +628,8 @@ func TestCloudStorageSink(t *testing.T) {
 			t.Run("compress="+compression, func(t *testing.T) {
 				t1 := makeTopic(`t1`)
 				testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-				sf := span.MakeFrontier(testSpan)
+				sf, err := span.MakeFrontier(testSpan)
+				require.NoError(t, err)
 				timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 				sinkDir := `memory-accounting`
 				s, err := makeCloudStorageSink(

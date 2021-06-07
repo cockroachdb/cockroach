@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -85,7 +86,7 @@ func (ex *connExecutor) execStmt(
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := ast.(tree.ObserverStatement); ok {
-		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, ast, res)
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
@@ -351,12 +352,13 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutator.paramStatusUpdater = res
 	p.noticeSender = res
 	ih := &p.instrumentation
 
+	// Special top-level handling for EXPLAIN ANALYZE.
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {
 		case tree.ExplainDebug:
@@ -394,6 +396,40 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = nil
 	}
 
+	// Special top-level handling for EXECUTE. This must happen after the handling
+	// for EXPLAIN ANALYZE (in order to support EXPLAIN ANALYZE EXECUTE) but
+	// before setting up the instrumentation helper.
+	if e, ok := ast.(*tree.Execute); ok {
+		// Replace the `EXECUTE foo` statement with the prepared statement, and
+		// continue execution.
+		name := e.Name.String()
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		if !ok {
+			err := pgerror.Newf(
+				pgcode.InvalidSQLStatementName,
+				"prepared statement %q does not exist", name,
+			)
+			return makeErrEvent(err)
+		}
+		var err error
+		pinfo, err = fillInPlaceholders(ctx, ps, name, e.Params, ex.sessionData.SearchPath)
+		if err != nil {
+			return makeErrEvent(err)
+		}
+
+		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
+		stmt.Statement = ps.Statement
+		stmt.Prepared = ps
+		stmt.ExpectedTypes = ps.Columns
+		stmt.AnonymizedStr = ps.AnonymizedStr
+		res.ResetStmtType(ps.AST)
+
+		if e.DiscardRows {
+			ih.SetDiscardRows()
+		}
+		ast = stmt.Statement.AST
+	}
+
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
@@ -422,7 +458,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
 	if ex.sessionData.StmtTimeout > 0 && ast.StatementTag() != "SET" {
-		timerDuration := ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes[sessionQueryReceived])
+		timerDuration :=
+			ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
 		if timerDuration < 0 {
 			queryTimedOut = true
@@ -529,35 +566,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		return nil, nil, nil
-
-	case *tree.Execute:
-		// Replace the `EXECUTE foo` statement with the prepared statement, and
-		// continue execution below.
-		name := s.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
-		if !ok {
-			err := pgerror.Newf(
-				pgcode.InvalidSQLStatementName,
-				"prepared statement %q does not exist", name,
-			)
-			return makeErrEvent(err)
-		}
-		var err error
-		pinfo, err = fillInPlaceholders(ctx, ps, name, s.Params, ex.sessionData.SearchPath)
-		if err != nil {
-			return makeErrEvent(err)
-		}
-
-		stmt.Statement = ps.Statement
-		ast = stmt.AST
-		stmt.Prepared = ps
-		stmt.ExpectedTypes = ps.Columns
-		stmt.AnonymizedStr = ps.AnonymizedStr
-		res.ResetStmtType(ps.AST)
-
-		if s.DiscardRows {
-			ih.SetDiscardRows()
-		}
 	}
 
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
@@ -676,7 +684,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			stmtThresholdSpan.GetRecording(),
 			fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
 			stmtTraceThreshold,
-			timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
+			timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived)),
 		)
 	}
 
@@ -745,12 +753,12 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, ast tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	ex.phaseTimes[sessionStartTransactionCommit] = timeutil.Now()
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	err := ex.commitSQLTransactionInternal(ctx, ast)
 	if err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
-	ex.phaseTimes[sessionEndTransactionCommit] = timeutil.Now()
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndTransactionCommit, timeutil.Now())
 	return eventTxnFinishCommitted{}, nil
 }
 
@@ -806,7 +814,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 ) error {
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
-	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
 
 	// If adminAuditLogging is enabled, we want to check for HasAdminRole
 	// before the deferred maybeLogStatement.
@@ -849,12 +857,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),
 			res.Err(),
-			ex.statsCollector.phaseTimes[sessionQueryReceived],
+			ex.statsCollector.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 		)
 	}()
 
-	ex.statsCollector.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
 	ex.sessionTracing.TracePlanEnd(ctx, err)
 
 	// Finally, process the planning error from above.
@@ -882,7 +890,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
 	}
 
-	ex.statsCollector.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, timeutil.Now())
 
 	ex.mu.Lock()
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.QueryID]
@@ -924,7 +932,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
 	)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
-	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
 
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
@@ -1106,7 +1114,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
 		return rwMode, now, nil, nil
 	}
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 	p := &ex.planner
 
 	// NB: this use of p.txn is totally bogus. The planner's txn should
@@ -1331,11 +1339,14 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 ) error {
 	res.SetColumns(ctx, colinfo.ShowLastQueryStatisticsColumns)
 
-	phaseTimes := &ex.statsCollector.previousPhaseTimes
-	runLat := phaseTimes.getRunLatency().Seconds()
-	parseLat := phaseTimes.getParsingLatency().Seconds()
-	planLat := phaseTimes.getPlanningLatency().Seconds()
-	svcLat := phaseTimes.getServiceLatency().Seconds()
+	phaseTimes := ex.statsCollector.previousPhaseTimes
+	runLat := phaseTimes.GetRunLatency().Seconds()
+	parseLat := phaseTimes.GetParsingLatency().Seconds()
+	planLat := phaseTimes.GetPlanningLatency().Seconds()
+	// Since the last query has already finished, it is safe to retrieve its
+	// total service latency.
+	svcLat := phaseTimes.GetServiceLatencyTotal().Seconds()
+	postCommitJobsLat := phaseTimes.GetPostCommitJobsLatency().Seconds()
 
 	return res.AddRow(ctx,
 		tree.Datums{
@@ -1343,6 +1354,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 			tree.NewDInterval(duration.FromFloat64(planLat), types.DefaultIntervalTypeMetadata),
 			tree.NewDInterval(duration.FromFloat64(runLat), types.DefaultIntervalTypeMetadata),
 			tree.NewDInterval(duration.FromFloat64(svcLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(postCommitJobsLat), types.DefaultIntervalTypeMetadata),
 		})
 }
 
@@ -1420,7 +1432,7 @@ func (ex *connExecutor) addActiveQuery(
 	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
-		start:         ex.phaseTimes[sessionQueryReceived],
+		start:         ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 		rawStmt:       rawStmt,
 		phase:         preparing,
 		isDistributed: false,
@@ -1502,7 +1514,10 @@ func payloadHasError(payload fsm.EventPayload) bool {
 // recordTransactionStart records the start of the transaction and returns
 // closures to be called once the transaction finishes or if the transaction
 // restarts.
-func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), onTxnRestart func()) {
+func (ex *connExecutor) recordTransactionStart() (
+	onTxnFinish func(context.Context, txnEvent),
+	onTxnRestart func(),
+) {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
@@ -1510,9 +1525,11 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 
 	// Transaction received time is the time at which the statement that prompted
 	// the creation of this transaction was received.
-	ex.phaseTimes[sessionTransactionReceived] = ex.phaseTimes[sessionQueryReceived]
-	ex.phaseTimes[sessionFirstStartExecTransaction] = timeutil.Now()
-	ex.phaseTimes[sessionMostRecentStartExecTransaction] = ex.phaseTimes[sessionFirstStartExecTransaction]
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionTransactionReceived,
+		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction, timeutil.Now())
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction,
+		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction))
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
@@ -1526,12 +1543,18 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
 
-	onTxnFinish = func(ev txnEvent) {
-		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
-		ex.recordTransaction(ev, implicit, txnStart)
+	onTxnFinish = func(ctx context.Context, ev txnEvent) {
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
+		err := ex.recordTransaction(ctx, ev, implicit, txnStart)
+		if err != nil {
+			if log.V(1) {
+				log.Warningf(ctx, "failed to record transaction stats: %s", err)
+			}
+			ex.metrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+		}
 	}
 	onTxnRestart = func() {
-		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
 		ex.extraTxnState.transactionStatementIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
@@ -1544,17 +1567,20 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	return onTxnFinish, onTxnRestart
 }
 
-func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
+func (ex *connExecutor) recordTransaction(
+	ctx context.Context, ev txnEvent, implicit bool, txnStart time.Time,
+) error {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
-	txnServiceLat := ex.phaseTimes.getTransactionServiceLatency()
-	txnRetryLat := ex.phaseTimes.getTransactionRetryLatency()
-	commitLat := ex.phaseTimes.getCommitLatency()
+	txnServiceLat := ex.phaseTimes.GetTransactionServiceLatency()
+	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
+	commitLat := ex.phaseTimes.GetCommitLatency()
 
-	ex.statsCollector.recordTransaction(
+	return ex.statsCollector.recordTransaction(
+		ctx,
 		txnKey(ex.extraTxnState.transactionStatementsHash.Sum()),
 		txnTime.Seconds(),
 		ev,

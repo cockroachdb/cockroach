@@ -147,23 +147,26 @@ type Index interface {
 	NumInterleavedBy() int
 	GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference
 
-	NumColumns() int
-	GetColumnID(columnOrdinal int) descpb.ColumnID
-	GetColumnName(columnOrdinal int) string
-	GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
+	NumKeyColumns() int
+	GetKeyColumnID(columnOrdinal int) descpb.ColumnID
+	GetKeyColumnName(columnOrdinal int) string
+	GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
 
-	ForEachColumnID(func(id descpb.ColumnID) error) error
-	ContainsColumnID(colID descpb.ColumnID) bool
+	CollectKeyColumnIDs() TableColSet
+	CollectKeySuffixColumnIDs() TableColSet
+	CollectSecondaryStoredColumnIDs() TableColSet
+	CollectCompositeColumnIDs() TableColSet
+
 	InvertedColumnID() descpb.ColumnID
 	InvertedColumnName() string
 
-	NumStoredColumns() int
+	NumSecondaryStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
 	GetStoredColumnName(storedColumnOrdinal int) string
 	HasOldStoredColumns() bool
 
-	NumExtraColumns() int
-	GetExtraColumnID(extraColumnOrdinal int) descpb.ColumnID
+	NumKeySuffixColumns() int
+	GetKeySuffixColumnID(extraColumnOrdinal int) descpb.ColumnID
 
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
@@ -563,22 +566,22 @@ func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bo
 // stored (old STORING encoding)) column IDs for non-unique indexes. It also
 // returns the direction with which each column was encoded.
 func FullIndexColumnIDs(idx Index) ([]descpb.ColumnID, []descpb.IndexDescriptor_Direction) {
-	n := idx.NumColumns()
+	n := idx.NumKeyColumns()
 	if !idx.IsUnique() {
-		n += idx.NumExtraColumns()
+		n += idx.NumKeySuffixColumns()
 	}
 	ids := make([]descpb.ColumnID, 0, n)
 	dirs := make([]descpb.IndexDescriptor_Direction, 0, n)
-	for i := 0; i < idx.NumColumns(); i++ {
-		ids = append(ids, idx.GetColumnID(i))
-		dirs = append(dirs, idx.GetColumnDirection(i))
+	for i := 0; i < idx.NumKeyColumns(); i++ {
+		ids = append(ids, idx.GetKeyColumnID(i))
+		dirs = append(dirs, idx.GetKeyColumnDirection(i))
 	}
 	// Non-unique indexes have some of the primary-key columns appended to
 	// their key.
 	if !idx.IsUnique() {
-		for i := 0; i < idx.NumExtraColumns(); i++ {
+		for i := 0; i < idx.NumKeySuffixColumns(); i++ {
 			// Extra columns are encoded in ascending order.
-			ids = append(ids, idx.GetExtraColumnID(i))
+			ids = append(ids, idx.GetKeySuffixColumnID(i))
 			dirs = append(dirs, descpb.IndexDescriptor_ASC)
 		}
 	}

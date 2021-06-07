@@ -39,17 +39,30 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 46
+const Version execinfrapb.DistSQLVersion = 49
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 44
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 48
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 49 (MinAcceptedVersion: 48)
+  - A new field RemoteLookupExpr was added to JoinReaderSpec for supporting
+    locality optimized lookup joins.
+
+- Version: 48 (MinAcceptedVersion: 48)
+  - Zero value for VectorizeExecMode changed meaning from "off" to "on".
+
+- Version: 47 (MinAcceptedVersion: 47)
+  - A new synchronizer type (serial unordered) has been introduced explicitly.
+    MinAcceptedVersion needed to be bumped because if the older server receives
+    a SetupFlowRequest with the new synchronizer type, it might lead to an
+    undefined behavior.
 
 - Version: 46 (MinAcceptedVersion: 44)
   - A new field LookupExpr was added to JoinReaderSpec for supporting

@@ -1,0 +1,85 @@
+parse
+COPY t FROM STDIN
+----
+COPY t FROM STDIN
+COPY t FROM STDIN -- fully parenthesized
+COPY t FROM STDIN -- literals removed
+COPY _ FROM STDIN -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN
+----
+COPY t (a, b, c) FROM STDIN
+COPY t (a, b, c) FROM STDIN -- fully parenthesized
+COPY t (a, b, c) FROM STDIN -- literals removed
+COPY _ (_, _, _) FROM STDIN -- identifiers removed
+
+parse
+COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'
+----
+COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'
+COPY crdb_internal.file_upload FROM STDIN WITH destination = ('filename') -- fully parenthesized
+COPY crdb_internal.file_upload FROM STDIN WITH destination = _ -- literals removed
+COPY crdb_internal.file_upload FROM STDIN WITH destination = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+COPY _._ FROM STDIN WITH destination = 'filename' -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN WITH BINARY
+----
+COPY t (a, b, c) FROM STDIN WITH BINARY
+COPY t (a, b, c) FROM STDIN WITH BINARY -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH BINARY -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH BINARY -- identifiers removed
+
+parse
+COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = 'filename'
+----
+COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = 'filename'
+COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = ('filename') -- fully parenthesized
+COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = _ -- literals removed
+COPY crdb_internal.file_upload FROM STDIN WITH BINARY destination = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+COPY _._ FROM STDIN WITH BINARY destination = 'filename' -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' NULL 'NUL'
+----
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' NULL 'NUL'
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (',') NULL ('NUL') -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER _ NULL _ -- literals removed
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' NULL '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ',' NULL 'NUL' -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' destination = 'filename'
+----
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' destination = 'filename'
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (',') destination = ('filename') -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER _ destination = _ -- literals removed
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ',' destination = 'filename' -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN BINARY
+----
+COPY t (a, b, c) FROM STDIN WITH BINARY -- normalized!
+COPY t (a, b, c) FROM STDIN WITH BINARY -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH BINARY -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH BINARY -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN destination = 'filename' BINARY
+----
+COPY t (a, b, c) FROM STDIN WITH BINARY destination = 'filename' -- normalized!
+COPY t (a, b, c) FROM STDIN WITH BINARY destination = ('filename') -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH BINARY destination = _ -- literals removed
+COPY t (a, b, c) FROM STDIN WITH BINARY destination = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+COPY _ (_, _, _) FROM STDIN WITH BINARY destination = 'filename' -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN destination = 'filename' CSV DELIMITER ' '
+----
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' -- normalized!
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (' ') destination = ('filename') -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER _ destination = _ -- literals removed
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' -- identifiers removed

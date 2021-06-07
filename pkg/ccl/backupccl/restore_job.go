@@ -659,27 +659,6 @@ func restore(
 	}
 	mu.requestsCompleted = make([]bool, len(importSpans))
 
-	progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
-		func(progressedCtx context.Context, details jobspb.ProgressDetails) {
-			switch d := details.(type) {
-			case *jobspb.Progress_Restore:
-				if !dataToRestore.isMainBundle() {
-					// We only update the progress for the primary data bundle (of which there
-					// can only be one).
-					return
-				}
-				mu.Lock()
-				if mu.highWaterMark >= 0 {
-					d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
-				}
-				mu.Unlock()
-			default:
-				log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
-			}
-		})
-
-	g := ctxgroup.WithContext(restoreCtx)
-
 	// TODO(pbardea): This not super principled. I just wanted something that
 	// wasn't a constant and grew slower than linear with the length of
 	// importSpans. It seems to be working well for BenchmarkRestore2TB but
@@ -703,15 +682,39 @@ func restore(
 	}
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
-	g.GoCtx(func(ctx context.Context) error {
-		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
-		defer progressSpan.Finish()
-		return progressLogger.Loop(ctx, requestFinishedCh)
-	})
-
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
-	g.GoCtx(func(ctx context.Context) error {
+	// tasks are the concurrent tasks that are run during the restore.
+	var tasks []func(ctx context.Context) error
+	if dataToRestore.isMainBundle() {
+		// Only update the job progress on the main data bundle. This should account
+		// for the bulk of the data to restore. Other data (e.g. zone configs in
+		// cluster restores) may be restored first. When restoring that data, we
+		// don't want to update the high-water mark key, so instead progress is just
+		// defined on the main data bundle (of which there should only be one).
+		progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
+			func(progressedCtx context.Context, details jobspb.ProgressDetails) {
+				switch d := details.(type) {
+				case *jobspb.Progress_Restore:
+					mu.Lock()
+					if mu.highWaterMark >= 0 {
+						d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
+					}
+					mu.Unlock()
+				default:
+					log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
+				}
+			})
+
+		jobProgressLoop := func(ctx context.Context) error {
+			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
+			defer progressSpan.Finish()
+			return progressLogger.Loop(ctx, requestFinishedCh)
+		}
+		tasks = append(tasks, jobProgressLoop)
+	}
+
+	jobCheckpointLoop := func(ctx context.Context) error {
 		// When a processor is done importing a span, it will send a progress update
 		// to progCh.
 		for progress := range progCh {
@@ -742,23 +745,24 @@ func restore(
 			requestFinishedCh <- struct{}{}
 		}
 		return nil
-	})
-
-	// TODO(pbardea): Improve logging in processors.
-	if err := distRestore(
-		restoreCtx,
-		execCtx,
-		importSpanChunks,
-		dataToRestore.getPKIDs(),
-		encryption,
-		dataToRestore.getRekeys(),
-		endTime,
-		progCh,
-	); err != nil {
-		return emptyRowCount, err
 	}
+	tasks = append(tasks, jobCheckpointLoop)
 
-	if err := g.Wait(); err != nil {
+	runRestore := func(ctx context.Context) error {
+		return distRestore(
+			ctx,
+			execCtx,
+			importSpanChunks,
+			dataToRestore.getPKIDs(),
+			encryption,
+			dataToRestore.getRekeys(),
+			endTime,
+			progCh,
+		)
+	}
+	tasks = append(tasks, runRestore)
+
+	if err := ctxgroup.GoAndWait(restoreCtx, tasks...); err != nil {
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
@@ -1433,13 +1437,6 @@ func createImportingDescriptors(
 			})
 		if err != nil {
 			return nil, nil, err
-		}
-
-		// Wait for one version on any existing changed types.
-		for existing := range existingTypeIDs {
-			if err := sql.WaitToUpdateLeases(ctx, p.ExecCfg().LeaseManager, existing); err != nil {
-				return nil, nil, err
-			}
 		}
 	}
 
@@ -2156,6 +2153,7 @@ func (r *restoreResumer) dropDescriptors(
 			tableToDrop.Name,
 			false, /* kvTrace */
 		)
+		descsCol.AddDeletedDescriptor(tableToDrop)
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
 			return errors.Wrap(err, "writing dropping table to batch")
 		}
@@ -2191,6 +2189,7 @@ func (r *restoreResumer) dropDescriptors(
 		}
 		// Remove the system.descriptor entry.
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
+		descsCol.AddDeletedDescriptor(mutType)
 	}
 
 	// Queue a GC job.
@@ -2259,6 +2258,7 @@ func (r *restoreResumer) dropDescriptors(
 			false, /* kvTrace */
 		)
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.GetID()))
+		descsCol.AddDeletedDescriptor(sc)
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
@@ -2292,6 +2292,7 @@ func (r *restoreResumer) dropDescriptors(
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
 		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))
+		descsCol.AddDeletedDescriptor(db)
 		deletedDBs[db.GetID()] = struct{}{}
 	}
 

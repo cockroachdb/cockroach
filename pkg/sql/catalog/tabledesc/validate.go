@@ -47,7 +47,7 @@ func (desc *wrapper) ValidateTxnCommit(
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
@@ -69,7 +69,11 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
-		for id := range typedesc.GetTypeDescriptorClosure(col.GetType()) {
+		children, err := typedesc.GetTypeDescriptorClosure(col.GetType())
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		for id := range children {
 			ids.Add(id)
 		}
 		for i := 0; i < col.NumUsesSequences(); i++ {
@@ -89,7 +93,11 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	})
 	// Add collected Oids to return set.
 	for oid := range visitor.OIDs {
-		ids.Add(typedesc.UserDefinedTypeOIDToID(oid))
+		id, err := typedesc.UserDefinedTypeOIDToID(oid)
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		ids.Add(id)
 	}
 	// Add view dependencies.
 	for _, id := range desc.GetDependsOn() {
@@ -102,7 +110,7 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 		ids.Add(ref.ID)
 	}
 	// Add sequence dependencies
-	return ids
+	return ids, nil
 }
 
 // ValidateCrossReferences validates that each reference to another table is
@@ -406,8 +414,8 @@ func (desc *wrapper) validateInboundFK(
 }
 
 func (desc *wrapper) matchingPartitionbyAll(indexI catalog.Index) bool {
-	primaryIndexPartitioning := desc.PrimaryIndex.ColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
-	indexPartitioning := indexI.IndexDesc().ColumnIDs[:indexI.GetPartitioning().NumColumns()]
+	primaryIndexPartitioning := desc.PrimaryIndex.KeyColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
+	indexPartitioning := indexI.IndexDesc().KeyColumnIDs[:indexI.GetPartitioning().NumColumns()]
 	if len(primaryIndexPartitioning) != len(indexPartitioning) {
 		return false
 	}
@@ -879,7 +887,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
 func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID) error {
-	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
+	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
 
@@ -891,92 +899,91 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 	}
 
 	// Verify that the primary index columns are not virtual.
-	for i, col := range desc.PrimaryIndex.ColumnIDs {
+	for i, col := range desc.PrimaryIndex.KeyColumnIDs {
 		if virtualCols.Contains(col) {
-			return fmt.Errorf("primary index column %q cannot be virtual", desc.PrimaryIndex.ColumnNames[i])
+			return fmt.Errorf("primary index column %q cannot be virtual", desc.PrimaryIndex.KeyColumnNames[i])
 		}
 	}
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
-	for _, indexI := range desc.NonDropIndexes() {
-		index := indexI.IndexDesc()
-		if err := catalog.ValidateName(index.Name, "index"); err != nil {
+	for _, idx := range desc.NonDropIndexes() {
+		if err := catalog.ValidateName(idx.GetName(), "index"); err != nil {
 			return err
 		}
-		if index.ID == 0 {
-			return fmt.Errorf("invalid index ID %d", index.ID)
+		if idx.GetID() == 0 {
+			return fmt.Errorf("invalid index ID %d", idx.GetID())
 		}
 
-		if _, indexNameExists := indexNames[index.Name]; indexNameExists {
+		if _, indexNameExists := indexNames[idx.GetName()]; indexNameExists {
 			for i := range desc.Indexes {
-				if desc.Indexes[i].Name == index.Name {
+				if desc.Indexes[i].Name == idx.GetName() {
 					// This error should be caught in MakeIndexDescriptor or NewTableDesc.
-					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", index.Name))
+					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", idx.GetName()))
 				}
 			}
 			// This error should be caught in MakeIndexDescriptor.
 			return errors.HandleAsAssertionFailure(fmt.Errorf(
-				"duplicate: index %q in the middle of being added, not yet public", index.Name))
+				"duplicate: index %q in the middle of being added, not yet public", idx.GetName()))
 		}
-		indexNames[index.Name] = struct{}{}
+		indexNames[idx.GetName()] = struct{}{}
 
-		if other, ok := indexIDs[index.ID]; ok {
+		if other, ok := indexIDs[idx.GetID()]; ok {
 			return fmt.Errorf("index %q duplicate ID of index %q: %d",
-				index.Name, other, index.ID)
+				idx.GetName(), other, idx.GetID())
 		}
-		indexIDs[index.ID] = index.Name
+		indexIDs[idx.GetID()] = idx.GetName()
 
-		if index.ID >= desc.NextIndexID {
+		if idx.GetID() >= desc.NextIndexID {
 			return fmt.Errorf("index %q invalid index ID (%d) > next index ID (%d)",
-				index.Name, index.ID, desc.NextIndexID)
+				idx.GetName(), idx.GetID(), desc.NextIndexID)
 		}
 
-		if len(index.ColumnIDs) != len(index.ColumnNames) {
+		if len(idx.IndexDesc().KeyColumnIDs) != len(idx.IndexDesc().KeyColumnNames) {
 			return fmt.Errorf("mismatched column IDs (%d) and names (%d)",
-				len(index.ColumnIDs), len(index.ColumnNames))
+				len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 		}
-		if len(index.ColumnIDs) != len(index.ColumnDirections) {
+		if len(idx.IndexDesc().KeyColumnIDs) != len(idx.IndexDesc().KeyColumnDirections) {
 			return fmt.Errorf("mismatched column IDs (%d) and directions (%d)",
-				len(index.ColumnIDs), len(index.ColumnDirections))
+				len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 		}
 		// In the old STORING encoding, stored columns are in ExtraColumnIDs;
 		// tolerate a longer list of column names.
-		if len(index.StoreColumnIDs) > len(index.StoreColumnNames) {
+		if len(idx.IndexDesc().StoreColumnIDs) > len(idx.IndexDesc().StoreColumnNames) {
 			return fmt.Errorf("mismatched STORING column IDs (%d) and names (%d)",
-				len(index.StoreColumnIDs), len(index.StoreColumnNames))
+				len(idx.IndexDesc().StoreColumnIDs), len(idx.IndexDesc().StoreColumnNames))
 		}
 
-		if len(index.ColumnIDs) == 0 {
-			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
+		if len(idx.IndexDesc().KeyColumnIDs) == 0 {
+			return fmt.Errorf("index %q must contain at least 1 column", idx.GetName())
 		}
 
 		var validateIndexDup catalog.TableColSet
-		for i, name := range index.ColumnNames {
+		for i, name := range idx.IndexDesc().KeyColumnNames {
 			colID, ok := columnNames[name]
 			if !ok {
-				return fmt.Errorf("index %q contains unknown column %q", index.Name, name)
+				return fmt.Errorf("index %q contains unknown column %q", idx.GetName(), name)
 			}
-			if colID != index.ColumnIDs[i] {
+			if colID != idx.IndexDesc().KeyColumnIDs[i] {
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
-					index.Name, name, colID, index.ColumnIDs[i])
+					idx.GetName(), name, colID, idx.IndexDesc().KeyColumnIDs[i])
 			}
 			if validateIndexDup.Contains(colID) {
-				return fmt.Errorf("index %q contains duplicate column %q", index.Name, name)
+				return fmt.Errorf("index %q contains duplicate column %q", idx.GetName(), name)
 			}
 			validateIndexDup.Add(colID)
 		}
-		if index.IsSharded() {
-			if err := desc.ensureShardedIndexNotComputed(index); err != nil {
+		if idx.IsSharded() {
+			if err := desc.ensureShardedIndexNotComputed(idx.IndexDesc()); err != nil {
 				return err
 			}
-			if _, exists := columnNames[index.Sharded.Name]; !exists {
+			if _, exists := columnNames[idx.GetSharded().Name]; !exists {
 				return fmt.Errorf("index %q refers to non-existent shard column %q",
-					index.Name, index.Sharded.Name)
+					idx.GetName(), idx.GetSharded().Name)
 			}
 		}
-		if index.IsPartial() {
-			expr, err := parser.ParseExpr(index.Predicate)
+		if idx.IsPartial() {
+			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -986,22 +993,66 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 			if !valid {
 				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
-					index.Name, index.Predicate)
+					idx.GetName(), idx.GetPredicate())
 			}
 		}
 		// Ensure that indexes do not STORE virtual columns.
-		for _, col := range index.ExtraColumnIDs {
+		for _, col := range idx.IndexDesc().KeySuffixColumnIDs {
 			if virtualCols.Contains(col) {
-				return fmt.Errorf("index %q cannot store virtual column %d", index.Name, col)
+				return fmt.Errorf("index %q cannot store virtual column %d", idx.GetName(), col)
 			}
 		}
-		for i, col := range index.StoreColumnIDs {
+		for i, col := range idx.IndexDesc().StoreColumnIDs {
 			if virtualCols.Contains(col) {
-				return fmt.Errorf("index %q cannot store virtual column %q", index.Name, index.StoreColumnNames[i])
+				return fmt.Errorf("index %q cannot store virtual column %q",
+					idx.GetName(), idx.IndexDesc().StoreColumnNames[i])
+			}
+		}
+		// Ensure that index column ID subsets are well formed.
+		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
+			continue
+		}
+		slices := []struct {
+			name  string
+			slice []descpb.ColumnID
+		}{
+			{"KeyColumnIDs", idx.IndexDesc().KeyColumnIDs},
+			{"KeySuffixColumnIDs", idx.IndexDesc().KeySuffixColumnIDs},
+			{"StoreColumnIDs", idx.IndexDesc().StoreColumnIDs},
+		}
+		allIDs := catalog.MakeTableColSet()
+		sets := map[string]catalog.TableColSet{}
+		for _, s := range slices {
+			set := catalog.MakeTableColSet(s.slice...)
+			sets[s.name] = set
+			if set.Len() == 0 {
+				continue
+			}
+			if set.Ordered()[0] <= 0 {
+				return errors.AssertionFailedf("index %q contains invalid column ID value %d in %s",
+					idx.GetName(), set.Ordered()[0], s.name)
+			}
+			if set.Len() < len(s.slice) {
+				return errors.AssertionFailedf("index %q has duplicates in %s: %v",
+					idx.GetName(), s.name, s.slice)
+			}
+			allIDs.UnionWith(set)
+		}
+		foundIn := make([]string, 0, len(sets))
+		for _, colID := range allIDs.Ordered() {
+			foundIn = foundIn[:0]
+			for _, s := range slices {
+				set := sets[s.name]
+				if set.Contains(colID) {
+					foundIn = append(foundIn, s.name)
+				}
+			}
+			if len(foundIn) > 1 {
+				return errors.AssertionFailedf("index %q has column ID %d present in: %v",
+					idx.GetName(), colID, foundIn)
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -1081,10 +1132,10 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			// The partitioning descriptor may be invalid and refer to columns
 			// not stored in the index. In that case, skip this check as the
 			// validation will fail later.
-			if i >= idx.NumColumns() {
+			if i >= idx.NumKeyColumns() {
 				continue
 			}
-			col, err := desc.FindColumnWithID(idx.GetColumnID(i))
+			col, err := desc.FindColumnWithID(idx.GetKeyColumnID(i))
 			if err != nil {
 				return err
 			}

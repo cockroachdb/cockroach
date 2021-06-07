@@ -131,7 +131,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		enabledSeparated := rand.Intn(2) == 0
 		log.Infof(context.Background(),
 			"test Config is randomly setting enabledSeparated: %t", enabledSeparated)
-		storage.SeparatedIntentsEnabled.Override(&st.SV, enabledSeparated)
+		storage.SeparatedIntentsEnabled.Override(context.Background(), &st.SV, enabledSeparated)
 	}
 	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)
@@ -266,7 +266,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	// For test servers, leave interleaved tables enabled by default. We'll remove
 	// this when we remove interleaved tables altogether.
-	sql.InterleavedTablesEnabled.Override(&cfg.Settings.SV, true)
+	sql.InterleavedTablesEnabled.Override(context.Background(), &cfg.Settings.SV, true)
 
 	return cfg
 }
@@ -716,18 +716,20 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
-	rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-		ctx, "testserver-check-tenant-active", nil,
-		"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
-		params.TenantID.ToUint64(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	if rowCount == 0 {
-		return nil, errors.New("not found")
-	}
+	if !params.SkipTenantCheck {
+		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-check-tenant-active", nil,
+			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
+			params.TenantID.ToUint64(),
+		)
 
+		if err != nil {
+			return nil, err
+		}
+		if rowCount == 0 {
+			return nil, errors.New("not found")
+		}
+	}
 	st := params.Settings
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
@@ -1301,7 +1303,7 @@ func (ts *TestServer) GetRangeLease(
 	resp := leaseResp.(*roachpb.LeaseInfoResponse)
 	if queryPolicy == QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
 		// TODO(andrei): Figure out how to deal with nodes with multiple stores.
-		// This API API should permit addressing the query to a particular store.
+		// This API should permit addressing the query to a particular store.
 		return LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
 			"request not evaluated locally; evaluated by s%d instead of local s%d",
 			resp.EvaluatedBy, ts.GetFirstStoreID())

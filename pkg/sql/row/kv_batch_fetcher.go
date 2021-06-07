@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -100,6 +101,10 @@ type txnKVFetcher struct {
 
 	// If set, we will use the production value for kvBatchSize.
 	forceProductionKVBatchSize bool
+
+	// For request and response admission control.
+	requestAdmissionHeader roachpb.AdmissionHeader
+	responseAdmissionQ     *admission.WorkQueue
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -225,7 +230,8 @@ func makeKVBatchFetcher(
 	}
 	return makeKVBatchFetcherWithSendFunc(
 		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, mon, forceProductionKVBatchSize,
+		lockWaitPolicy, mon, forceProductionKVBatchSize, txn.AdmissionHeader(),
+		txn.DB().SQLKVResponseAdmissionQ,
 	)
 }
 
@@ -241,6 +247,8 @@ func makeKVBatchFetcherWithSendFunc(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
 	forceProductionKVBatchSize bool,
+	requestAdmissionHeader roachpb.AdmissionHeader,
+	responseAdmissionQ *admission.WorkQueue,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -309,6 +317,8 @@ func makeKVBatchFetcherWithSendFunc(
 		mon:                        mon,
 		acc:                        mon.MakeBoundAccount(),
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
+		requestAdmissionHeader:     requestAdmissionHeader,
+		responseAdmissionQ:         responseAdmissionQ,
 	}, nil
 }
 
@@ -331,6 +341,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// TargetBytes would interfere with.
 		ba.Header.TargetBytes = maxScanResponseBytes
 	}
+	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()
 
@@ -434,6 +445,16 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if f.responseAdmissionQ != nil {
+		responseAdmission := admission.WorkInfo{
+			TenantID:   roachpb.SystemTenantID,
+			Priority:   admission.WorkPriority(f.requestAdmissionHeader.Priority),
+			CreateTime: f.requestAdmissionHeader.CreateTime,
+		}
+		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			return err
+		}
+	}
 	if br != nil {
 		f.responses = br.Responses
 	} else {
@@ -495,35 +516,42 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
+// popBatch returns the 0th byte slice in a slice of byte slices, as well as
+// the rest of the slice of the byte slices. It nils the pointer to the 0th
+// element before reslicing the outer slice.
+func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
+	batch, remainingBatches = batches[0], batches[1:]
+	batches[0] = nil
+	return batch, remainingBatches
+}
+
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, ok is false.
 // origSpan returns the span that batch was fetched from, and bounds all of the
 // keys returned.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, origSpan roachpb.Span, err error) {
+) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, origSpan roachpb.Span, err error) {
 	if len(f.remainingBatches) > 0 {
-		batch := f.remainingBatches[0]
-		f.remainingBatches = f.remainingBatches[1:]
-		return true, nil, batch, f.origSpan, nil
+		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
+		return true, nil, batchResp, f.origSpan, nil
 	}
 	for len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
+		f.responses[0] = roachpb.ResponseUnion{}
 		f.responses = f.responses[1:]
 		origSpan := f.requestSpans[0]
+		f.requestSpans[0] = roachpb.Span{}
 		f.requestSpans = f.requestSpans[1:]
-		var batchResp []byte
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
 			if len(t.BatchResponses) > 0 {
-				batchResp = t.BatchResponses[0]
-				f.remainingBatches = t.BatchResponses[1:]
+				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
 			return true, t.Rows, batchResp, origSpan, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
-				batchResp = t.BatchResponses[0]
-				f.remainingBatches = t.BatchResponses[1:]
+				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
 			return true, t.Rows, batchResp, origSpan, nil
 		case *roachpb.GetResponse:
@@ -550,5 +578,7 @@ func (f *txnKVFetcher) nextBatch(
 
 // close releases the resources of this txnKVFetcher.
 func (f *txnKVFetcher) close(ctx context.Context) {
+	f.responses = nil
+	f.remainingBatches = nil
 	f.acc.Close(ctx)
 }

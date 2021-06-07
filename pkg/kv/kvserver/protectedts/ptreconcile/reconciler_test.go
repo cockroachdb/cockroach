@@ -88,7 +88,7 @@ func TestReconciler(t *testing.T) {
 	}))
 
 	t.Run("update settings", func(t *testing.T) {
-		ptreconcile.ReconcileInterval.Override(&settings.SV, time.Millisecond)
+		ptreconcile.ReconcileInterval.Override(ctx, &settings.SV, time.Millisecond)
 		testutils.SucceedsSoon(t, func() error {
 			require.Equal(t, int64(0), r.Metrics().RecordsRemoved.Count())
 			require.Equal(t, int64(0), r.Metrics().ReconciliationErrors.Count())
@@ -103,7 +103,7 @@ func TestReconciler(t *testing.T) {
 		state.toRemove[recMeta] = struct{}{}
 		state.mu.Unlock()
 
-		ptreconcile.ReconcileInterval.Override(&settings.SV, time.Millisecond)
+		ptreconcile.ReconcileInterval.Override(ctx, &settings.SV, time.Millisecond)
 		testutils.SucceedsSoon(t, func() error {
 			require.Equal(t, int64(0), r.Metrics().ReconciliationErrors.Count())
 			if removed := r.Metrics().RecordsRemoved.Count(); removed != 1 {

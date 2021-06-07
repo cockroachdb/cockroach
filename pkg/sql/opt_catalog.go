@@ -93,18 +93,18 @@ type optSchema struct {
 	planner *planner
 
 	database catalog.DatabaseDescriptor
-	schema   catalog.ResolvedSchema
+	schema   catalog.SchemaDescriptor
 
 	name cat.SchemaName
 }
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
-	switch os.schema.Kind {
+	switch os.schema.SchemaKind() {
 	case catalog.SchemaUserDefined, catalog.SchemaTemporary:
 		// User defined schemas and the temporary schema have real ID's, so use
 		// them here.
-		return cat.StableID(os.schema.ID)
+		return cat.StableID(os.schema.GetID())
 	default:
 		// Virtual schemas and the public schema don't, so just fall back to the
 		// parent database's ID.
@@ -145,8 +145,8 @@ func (os *optSchema) GetDataSourceNames(
 
 func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	// If the schema is backed by a descriptor, then return it.
-	if os.schema.Kind == catalog.SchemaUserDefined {
-		return os.schema.Desc
+	if os.schema.SchemaKind() == catalog.SchemaUserDefined {
+		return os.schema
 	}
 	// Otherwise, just return the database descriptor.
 	return os.database
@@ -797,7 +797,7 @@ func newOptTable(
 			// index; in fact the key contains values *derived* from that
 			// column. In the catalog, we refer to this key as a separate,
 			// virtual column.
-			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idx.GetColumnID(idx.NumColumns() - 1))
+			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idx.GetKeyColumnID(idx.NumKeyColumns() - 1))
 
 			// Add a virtual column that refers to the inverted index key.
 			virtualCol, virtualColOrd := newColumn()
@@ -821,7 +821,7 @@ func newOptTable(
 			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
 				name:         idx.GetName(),
 				table:        ot.ID(),
-				columns:      idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
+				columns:      idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
 				withoutIndex: true,
 				predicate:    idx.GetPredicate(),
 				// TODO(rytaft): will we ever support an unvalidated unique constraint
@@ -1182,14 +1182,14 @@ func (oi *optIndex) init(
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
 	oi.invertedVirtualColOrd = invertedVirtualColOrd
-	if idx.IndexDesc() == tab.desc.GetPrimaryIndex().IndexDesc() {
+	if idx.Primary() {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
-		oi.storedCols = make([]descpb.ColumnID, 0, tab.ColumnCount()-idx.NumColumns())
+		oi.storedCols = make([]descpb.ColumnID, 0, tab.ColumnCount()-idx.NumKeyColumns())
 		var pkCols util.FastIntSet
-		for i := 0; i < idx.NumColumns(); i++ {
-			id := idx.GetColumnID(i)
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			id := idx.GetKeyColumnID(i)
 			pkCols.Add(int(id))
 		}
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
@@ -1199,10 +1199,10 @@ func (oi *optIndex) init(
 				}
 			}
 		}
-		oi.numCols = idx.NumColumns() + len(oi.storedCols)
+		oi.numCols = idx.NumKeyColumns() + len(oi.storedCols)
 	} else {
 		oi.storedCols = idx.IndexDesc().StoreColumnIDs
-		oi.numCols = idx.NumColumns() + idx.NumExtraColumns() + idx.NumStoredColumns()
+		oi.numCols = idx.NumKeyColumns() + idx.NumKeySuffixColumns() + idx.NumSecondaryStoredColumns()
 	}
 
 	// Collect information about the partitions.
@@ -1243,8 +1243,8 @@ func (oi *optIndex) init(
 
 	if idx.IsUnique() {
 		notNull := true
-		for i := 0; i < idx.NumColumns(); i++ {
-			id := idx.GetColumnID(i)
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			id := idx.GetKeyColumnID(i)
 			ord, _ := tab.lookupColumnOrdinal(id)
 			if tab.Column(ord).IsNullable() {
 				notNull = false
@@ -1256,19 +1256,19 @@ func (oi *optIndex) init(
 			// Unique index with no null columns: columns from index are sufficient
 			// to form a key without needing extra primary key columns. There is no
 			// separate lax key.
-			oi.numLaxKeyCols = idx.NumColumns()
+			oi.numLaxKeyCols = idx.NumKeyColumns()
 			oi.numKeyCols = oi.numLaxKeyCols
 		} else {
 			// Unique index with at least one nullable column: extra primary key
 			// columns will be added to the row key when one of the unique index
 			// columns has a NULL value.
-			oi.numLaxKeyCols = idx.NumColumns()
-			oi.numKeyCols = oi.numLaxKeyCols + idx.NumExtraColumns()
+			oi.numLaxKeyCols = idx.NumKeyColumns()
+			oi.numKeyCols = oi.numLaxKeyCols + idx.NumKeySuffixColumns()
 		}
 	} else {
 		// Non-unique index: extra primary key columns are always added to the row
 		// key. There is no separate lax key.
-		oi.numLaxKeyCols = idx.NumColumns() + idx.NumExtraColumns()
+		oi.numLaxKeyCols = idx.NumKeyColumns() + idx.NumKeySuffixColumns()
 		oi.numKeyCols = oi.numLaxKeyCols
 	}
 }
@@ -1313,29 +1313,29 @@ func (oi *optIndex) NonInvertedPrefixColumnCount() int {
 	if !oi.IsInverted() {
 		panic("non-inverted indexes do not have inverted prefix columns")
 	}
-	return oi.idx.NumColumns() - 1
+	return oi.idx.NumKeyColumns() - 1
 }
 
 // Column is part of the cat.Index interface.
 func (oi *optIndex) Column(i int) cat.IndexColumn {
-	length := oi.idx.NumColumns()
+	length := oi.idx.NumKeyColumns()
 	if i < length {
 		ord := 0
 		if oi.IsInverted() && i == length-1 {
 			ord = oi.invertedVirtualColOrd
 		} else {
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetColumnID(i))
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		}
 		return cat.IndexColumn{
 			Column:     oi.tab.Column(ord),
-			Descending: oi.idx.GetColumnDirection(i) == descpb.IndexDescriptor_DESC,
+			Descending: oi.idx.GetKeyColumnDirection(i) == descpb.IndexDescriptor_DESC,
 		}
 	}
 
 	i -= length
-	length = oi.idx.NumExtraColumns()
+	length = oi.idx.NumKeySuffixColumns()
 	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetExtraColumnID(i))
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i))
 		return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
 	}
 
@@ -1349,7 +1349,7 @@ func (oi *optIndex) VirtualInvertedColumn() cat.IndexColumn {
 	if !oi.IsInverted() {
 		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted virtual columns"))
 	}
-	ord := oi.idx.NumColumns() - 1
+	ord := oi.idx.NumKeyColumns() - 1
 	return oi.Column(ord)
 }
 
@@ -1841,7 +1841,7 @@ func newOptVirtualTable(
 	}
 
 	for _, idx := range ot.desc.PublicNonPrimaryIndexes() {
-		if idx.NumColumns() > 1 {
+		if idx.NumKeyColumns() > 1 {
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
@@ -2102,9 +2102,9 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 		// Dummy PK index columns.
 		return cat.IndexColumn{Column: oi.tab.Column(i)}
 	}
-	length := oi.idx.NumColumns()
+	length := oi.idx.NumKeyColumns()
 	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetColumnID(i))
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		return cat.IndexColumn{
 			Column: oi.tab.Column(ord),
 		}
@@ -2274,7 +2274,11 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 
 	ids := make(descpb.IDs, 0, len(visitor.OIDs))
 	for collectedOid := range visitor.OIDs {
-		ids = append(ids, typedesc.UserDefinedTypeOIDToID(collectedOid))
+		id, err := typedesc.UserDefinedTypeOIDToID(collectedOid)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
 	}
 	return ids, nil
 }

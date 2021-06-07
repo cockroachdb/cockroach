@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_containerd_containerd//platforms",
         "@com_github_docker_distribution//reference",
         "@com_github_docker_docker//api/types",
         "@com_github_docker_docker//api/types/container",
@@ -39,6 +40,7 @@ go_library(
         "@com_github_docker_docker//pkg/stdcopy",
         "@com_github_docker_go_connections//nat",
         "@com_github_mattn_go_isatty//:go-isatty",
+        "@com_github_opencontainers_image_spec//specs-go/v1:specs-go",
     ],
 )
 

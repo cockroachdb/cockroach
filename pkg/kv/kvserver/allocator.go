@@ -730,7 +730,14 @@ func (a *Allocator) allocateTarget(
 		existingVoters,
 		existingNonVoters,
 		a.scorerOptions(),
-		targetType)
+		// When allocating a *new* replica, we explicitly disregard nodes with any
+		// existing replicas. This is important for multi-store scenarios as
+		// otherwise, stores on the nodes that have existing replicas are simply
+		// discouraged via the diversity heuristic. We want to entirely avoid
+		// allocating multiple replicas onto different stores of the same node.
+		false, /* allowMultipleReplsPerNode */
+		targetType,
+	)
 	if target != nil {
 		return target, details, nil
 	}
@@ -754,7 +761,7 @@ func (a *Allocator) allocateTarget(
 
 // AllocateVoter returns a suitable store for a new allocation of a voting
 // replica with the required attributes. Nodes already accommodating existing
-// replicas are ruled out as targets.
+// voting replicas are ruled out as targets.
 func (a *Allocator) AllocateVoter(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
@@ -780,6 +787,7 @@ func (a *Allocator) allocateTargetFromList(
 	zone *zonepb.ZoneConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	options scorerOptions,
+	allowMultipleReplsPerNode bool,
 	targetType targetReplicaType,
 ) (*roachpb.StoreDescriptor, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
@@ -814,8 +822,10 @@ func (a *Allocator) allocateTargetFromList(
 		constraintsChecker,
 		existingReplicaSet,
 		a.storePool.getLocalitiesByStore(existingReplicaSet),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
-		options)
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
+		allowMultipleReplsPerNode,
+		options,
+	)
 
 	log.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -1041,7 +1051,7 @@ func (a Allocator) rebalanceTarget(
 		replicaSetToRebalance,
 		replicasWithExcludedStores,
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
 		options,
 	)
 
@@ -1243,7 +1253,7 @@ func (a *Allocator) TransferLeaseTarget(
 	checkCandidateFullness bool,
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 	sl = sl.filter(zone.VoterConstraints)
 	// The only thing we use the storeList for is for the lease mean across the
@@ -1388,7 +1398,7 @@ func (a *Allocator) ShouldTransferLease(
 		}
 	}
 
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 	sl = sl.filter(zone.VoterConstraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)

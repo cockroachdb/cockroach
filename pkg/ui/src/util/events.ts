@@ -23,6 +23,7 @@ export function getEventDescription(e: Event$Properties): string {
     ? JSON.parse(e.info)
     : {};
   let privs = "";
+  let comment = "";
 
   switch (e.event_type) {
     case eventTypes.CREATE_DATABASE:
@@ -35,6 +36,36 @@ export function getEventDescription(e: Event$Properties): string {
       return `Database Renamed: User ${info.User} renamed database ${info.DatabaseName} to ${info.NewDatabaseName}`;
     case eventTypes.ALTER_DATABASE_OWNER:
       return `Database Owner Altered: User ${info.User} altered the owner of database ${info.DatabaseName} to ${info.Owner}`;
+    case eventTypes.ALTER_TABLE_OWNER:
+      return `Table Owner Altered: User ${info.User} altered the owner of the table ${info.TableName} to ${info.Owner}`;
+    case eventTypes.COMMENT_ON_DATABASE:
+      if (info.NullComment) {
+        comment += " removed the comment ";
+      } else {
+        comment += ' commented "' + info.Comment + '" ';
+      }
+      return `Comment: User ${info.User}${comment} on database ${info.DatabaseName}`;
+    case eventTypes.COMMENT_ON_TABLE:
+      if (info.NullComment) {
+        comment += " removed the comment ";
+      } else {
+        comment += ' commented "' + info.Comment + '" ';
+      }
+      return `Comment: User ${info.User}${comment} on table ${info.TableName}`;
+    case eventTypes.COMMENT_ON_INDEX:
+      if (info.NullComment) {
+        comment += " removed the comment ";
+      } else {
+        comment += ' commented "' + info.Comment + '" ';
+      }
+      return `Comment: User ${info.User}${comment} on index ${info.IndexName} of table ${info.TableName}`;
+    case eventTypes.COMMENT_ON_COLUMN:
+      if (info.NullComment) {
+        comment += " removed the comment ";
+      } else {
+        comment += ' commented "' + info.Comment + '" ';
+      }
+      return `Comment: User ${info.User}${comment} on column ${info.ColumnName} of table ${info.TableName}`;
     case eventTypes.CREATE_TABLE:
       return `Table Created: User ${info.User} created table ${info.TableName}`;
     case eventTypes.DROP_TABLE:
@@ -59,8 +90,12 @@ export function getEventDescription(e: Event$Properties): string {
       return `Type Created: User ${info.User} created type ${info.TypeName}`;
     case eventTypes.ALTER_TYPE:
       return `Type Altered: User ${info.User} altered type ${info.TypeName}`;
+    case eventTypes.ALTER_TYPE_OWNER:
+      return `Type Owner Altered: User ${info.User} altered the owner of the type ${info.TypeName} to ${info.Owner}`;
     case eventTypes.DROP_TYPE:
       return `Type Dropped: User ${info.User} dropped type ${info.TypeName}`;
+    case eventTypes.RENAME_TYPE:
+      return `Type Renamed: User ${info.User} renamed type ${info.TypeName} to ${info.NewTypeName}`;
     case eventTypes.CREATE_SEQUENCE:
       return `Sequence Created: User ${info.User} created sequence ${info.SequenceName}`;
     case eventTypes.ALTER_SEQUENCE:
@@ -82,7 +117,7 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.NODE_RECOMMISSIONED:
       return `Node Recommissioned: Node ${info.TargetNodeID} was recommissioned`;
     case eventTypes.NODE_RESTART:
-      return `Node Rejoined: Node ${info.TargetNodeID} rejoined the cluster`;
+      return `Node Rejoined: Node ${info.NodeID} rejoined the cluster`;
     case eventTypes.SET_CLUSTER_SETTING:
       if (info.Value && info.Value.length > 0) {
         return `Cluster Setting Changed: User ${info.User} set ${info.SettingName} to ${info.Value}`;
@@ -126,6 +161,8 @@ export function getEventDescription(e: Event$Properties): string {
         privs += " revoked " + info.GrantedPrivileges;
       }
       return `Privilege change: User ${info.User}${privs} to ${info.Grantee} on type ${info.TypeName}`;
+    case eventTypes.SET_SCHEMA:
+      return `Schema Change: User ${info.User} set the schema of ${info.DescriptorType} ${info.DescriptorName} to ${info.NewDescriptorName}`;
     case eventTypes.CREATE_SCHEMA:
       return `Schema Created: User ${info.User} created schema ${info.SchemaName} with owner ${info.Owner}`;
     case eventTypes.DROP_SCHEMA:
@@ -154,8 +191,15 @@ export function getEventDescription(e: Event$Properties): string {
       return `Primary Region Changed: User ${info.User} changed primary region of database ${info.DatabaseName} to ${info.PrimaryRegionName}`;
     case eventTypes.ALTER_DATABASE_SURVIVAL_GOAL:
       return `Survival Goal Changed: User ${info.User} changed survival goal of database ${info.DatabaseName} to ${info.SurvivalGoal}`;
+    case (eventTypes.UNSAFE_UPSERT_NAMESPACE_ENTRY,
+    eventTypes.UNSAFE_DELETE_NAMESPACE_ENTRY,
+    eventTypes.UNSAFE_UPSERT_DESCRIPTOR,
+    eventTypes.UNSAFE_DELETE_DESCRIPTOR):
+      return `Unsafe: User ${info.User} executed crdb_internal.${
+        e.event_type
+      }, Info: ${JSON.stringify(info, null, 2)}`;
     default:
-      return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
+      return `Event: ${e.event_type}, content: ${JSON.stringify(
         info,
         null,
         2,
@@ -169,17 +213,23 @@ export interface EventInfo {
   CascadeDroppedViews?: string[];
   Config?: string;
   DatabaseName?: string;
+  DescriptorType?: string;
+  DescriptorName?: string;
+  NewDescriptorName?: string;
   DescriptorID?: string;
   Grantee?: string;
   GrantedPrivileges?: string[];
   IndexName?: string;
   MutationID?: string;
   NewDatabaseName?: string;
+  NewTypeName?: string;
   NewSchemaName?: string;
   NewTableName?: string;
   NodeID?: string;
   Options?: string[];
   Owner?: string;
+  Comment?: string;
+  NullComment?: string;
   RevokedPrivileges?: string[];
   RoleName?: string;
   SchemaName?: string;
@@ -187,6 +237,7 @@ export interface EventInfo {
   SettingName?: string;
   Statement?: string;
   TableName?: string;
+  ColumnName?: string;
   Target?: string;
   TargetNodeID?: string;
   TypeName?: string;
@@ -205,6 +256,13 @@ export interface EventInfo {
   RegionName?: string;
   PrimaryRegionName?: string;
   SurvivalGoal?: string;
+  ParentID?: string;
+  ParentSchemaID?: string;
+  Name?: string;
+  Force?: string;
+  ForceNotice?: string;
+  PreviousDescriptor?: string;
+  NewDescriptor?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {

@@ -64,33 +64,6 @@ func ValidateComputedColumnExpression(
 		return "", err
 	}
 
-	// TODO(justin,bram): allow depending on columns like this. We disallow it
-	// for now because cascading changes must hook into the computed column
-	// update path.
-	if err := desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		for _, id := range fk.OriginColumnIDs {
-			if !depColIDs.Contains(id) {
-				// We don't depend on this column.
-				return nil
-			}
-			for _, action := range []descpb.ForeignKeyReference_Action{
-				fk.OnDelete,
-				fk.OnUpdate,
-			} {
-				switch action {
-				case descpb.ForeignKeyReference_CASCADE,
-					descpb.ForeignKeyReference_SET_NULL,
-					descpb.ForeignKeyReference_SET_DEFAULT:
-					return pgerror.New(pgcode.InvalidTableDefinition,
-						"computed columns cannot reference non-restricted FK columns")
-				}
-			}
-		}
-		return nil
-	}); err != nil {
-		return "", err
-	}
-
 	// Resolve the type of the computed column expression.
 	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
@@ -101,7 +74,7 @@ func ValidateComputedColumnExpression(
 	// are no variable expressions (besides dummyColumnItems) and no impure
 	// functions. In order to safely serialize user defined types and their
 	// members, we need to serialize the typed expression here.
-	expr, _, err := DequalifyAndValidateExpr(
+	expr, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		desc,
 		d.Computed.Expr,

@@ -93,6 +93,11 @@ type DistSQLPlanner struct {
 	// pool of workers.
 	runnerChan chan runnerRequest
 
+	// cancelFlowsCoordinator is responsible for batching up the requests to
+	// cancel remote flows initiated on the behalf of the current node when the
+	// local flows errored out.
+	cancelFlowsCoordinator cancelFlowsCoordinator
+
 	// gossip handle used to check node version compatibility.
 	gossip gossip.OptionalGossip
 
@@ -161,6 +166,7 @@ func NewDistSQLPlanner(
 	}
 
 	dsp.initRunners(ctx)
+	dsp.initCancelingWorkers(ctx)
 	return dsp
 }
 
@@ -438,6 +444,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 
 		if err := checkExpr(n.lookupExpr); err != nil {
+			return cannotDistribute, err
+		}
+		if err := checkExpr(n.remoteLookupExpr); err != nil {
 			return cannotDistribute, err
 		}
 		if err := checkExpr(n.onCond); err != nil {
@@ -2146,6 +2155,18 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 			return nil, err
 		}
 	}
+	if n.remoteLookupExpr != nil {
+		if n.lookupExpr == nil {
+			return nil, errors.AssertionFailedf("remoteLookupExpr is set but lookupExpr is not")
+		}
+		var err error
+		joinReaderSpec.RemoteLookupExpr, err = physicalplan.MakeExpression(
+			n.remoteLookupExpr, planCtx, indexVarMap,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// Set the ON condition.
 	if n.onCond != nil {
@@ -2933,7 +2954,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	if firstNotWrapped != nil {
 		// We found a DistSQL-plannable subtree - create an input spec for it.
 		input = []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_UNORDERED,
+			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 			ColumnTypes: p.GetResultTypes(),
 		}}
 	}
@@ -3600,7 +3621,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 					Node: nodeID,
 					Spec: execinfrapb.ProcessorSpec{
 						Input: []execinfrapb.InputSyncSpec{{
-							Type:        execinfrapb.InputSyncSpec_UNORDERED,
+							Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 							ColumnTypes: prevStageResultTypes,
 						}},
 						Core: execinfrapb.ProcessorCoreUnion{Windower: &windowerSpec},

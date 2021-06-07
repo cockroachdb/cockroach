@@ -33,7 +33,7 @@ import (
 // TestParseDataDriven verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.
 func TestParseDatadriven(t *testing.T) {
-	datadriven.Walk(t, "testdata/parse", func(t *testing.T, path string) {
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
@@ -55,7 +55,7 @@ func TestParseDatadriven(t *testing.T) {
 				// Check roundtrip and formatting with flags.
 				var buf bytes.Buffer
 				fmt.Fprintf(&buf, "%s%s\n", ref, note)
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthetized")
+				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthesized")
 				constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
 				fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
 
@@ -82,6 +82,21 @@ func TestParseDatadriven(t *testing.T) {
 				}
 
 				return buf.String()
+
+			case "error":
+				_, err := parser.Parse(d.Input)
+				if err == nil {
+					return ""
+				}
+				pgerr := pgerror.Flatten(err)
+				msg := pgerr.Message
+				if pgerr.Detail != "" {
+					msg += "\nDETAIL: " + pgerr.Detail
+				}
+				if pgerr.Hint != "" {
+					msg += "\nHINT: " + pgerr.Hint
+				}
+				return msg
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""
@@ -143,29 +158,6 @@ func TestParseSyntax(t *testing.T) {
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
 		})
 	}
-}
-
-func TestParseErrors(t *testing.T) {
-	datadriven.RunTest(t, "testdata/errors", func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "error":
-			_, err := parser.Parse(d.Input)
-			if err == nil {
-				return ""
-			}
-			pgerr := pgerror.Flatten(err)
-			msg := pgerr.Message
-			if pgerr.Detail != "" {
-				msg += "\nDETAIL: " + pgerr.Detail
-			}
-			if pgerr.Hint != "" {
-				msg += "\nHINT: " + pgerr.Hint
-			}
-			return msg
-		}
-		d.Fatalf(t, "unsupported command: %s", d.Cmd)
-		return ""
-	})
 }
 
 func TestParsePanic(t *testing.T) {

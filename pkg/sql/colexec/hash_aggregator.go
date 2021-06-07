@@ -530,24 +530,22 @@ func (op *hashAggregator) Reset(ctx context.Context) {
 	op.buckets = op.buckets[:0]
 	op.ht.Reset(ctx)
 	if op.inputTrackingState.tuples != nil {
-		if err := op.inputTrackingState.tuples.Close(ctx); err != nil {
-			colexecerror.InternalError(err)
-		}
+		op.inputTrackingState.tuples.Reset(ctx)
 		op.inputTrackingState.zeroBatchEnqueued = false
 	}
 	op.curOutputBucketIdx = 0
 	op.state = hashAggregatorBuffering
 }
 
-func (op *hashAggregator) Close(ctx context.Context) error {
+func (op *hashAggregator) Close() error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
-		retErr = op.inputTrackingState.tuples.Close(ctx)
+		retErr = op.inputTrackingState.tuples.Close(op.EnsureCtx())
 	}
-	if err := op.toClose.Close(ctx); err != nil {
+	if err := op.toClose.Close(); err != nil {
 		retErr = err
 	}
 	return retErr

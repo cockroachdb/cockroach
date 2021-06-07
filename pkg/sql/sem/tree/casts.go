@@ -1302,7 +1302,11 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		ret := &DOid{semanticType: t, DInt: v}
 		if typ, ok := types.OidToType[oid.Oid(v)]; ok {
 			ret.name = typ.PGName()
-		} else if typ, err := ctx.Planner.ResolveTypeByOID(ctx.Context, oid.Oid(v)); err == nil {
+		} else if types.IsOIDUserDefinedType(oid.Oid(v)) {
+			typ, err := ctx.Planner.ResolveTypeByOID(ctx.Context, oid.Oid(v))
+			if err != nil {
+				return nil, err
+			}
 			ret.name = typ.PGName()
 		}
 		return ret, nil
@@ -1318,7 +1322,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		return ret, nil
 
 	default:
-		oid, err := queryOid(ctx, t, NewDOid(v))
+		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, NewDOid(v))
 		if err != nil {
 			oid = NewDOid(v)
 			oid.semanticType = t

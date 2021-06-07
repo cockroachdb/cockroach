@@ -123,7 +123,7 @@ func MakeClusterSettings() *Settings {
 
 	sv := &s.SV
 	s.Version = clusterversion.MakeVersionHandle(&s.SV)
-	sv.Init(s.Version)
+	sv.Init(context.TODO(), s.Version)
 
 	s.Tracer = tracing.NewTracer()
 	isActive := int32(0) // atomic
@@ -140,7 +140,7 @@ func MakeClusterSettings() *Settings {
 		}
 		return false
 	}
-	s.Tracer.Configure(sv)
+	s.Tracer.Configure(context.TODO(), sv)
 
 	return s
 }
@@ -171,10 +171,10 @@ func MakeTestingClusterSettingsWithVersions(
 	sv := &s.SV
 	s.Version = clusterversion.MakeVersionHandleWithOverride(
 		&s.SV, binaryVersion, binaryMinSupportedVersion)
-	sv.Init(s.Version)
+	sv.Init(context.TODO(), s.Version)
 
 	s.Tracer = tracing.NewTracer()
-	s.Tracer.Configure(sv)
+	s.Tracer.Configure(context.TODO(), sv)
 
 	if initializeVersion {
 		// Initialize cluster version to specified binaryVersion.

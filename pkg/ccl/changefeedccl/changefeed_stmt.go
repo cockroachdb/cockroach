@@ -267,7 +267,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
+		if _, err := getEncoder(ctx, details.Opts, details.Targets); err != nil {
 			return err
 		}
 		if isCloudStorageSink(parsedSink) {
@@ -293,7 +293,7 @@ func changefeedPlanHook(
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
 			}
-			return MaybeStripRetryableErrorMarker(err)
+			return changefeedbase.MaybeStripRetryableErrorMarker(err)
 		}
 
 		// Changefeeds are based on the Rangefeed abstraction, which requires the
@@ -319,9 +319,10 @@ func changefeedPlanHook(
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
 				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle, p.User(), mon.BoundAccount{},
+				jobspb.InvalidJobID,
 			)
 			if err != nil {
-				return MaybeStripRetryableErrorMarker(err)
+				return changefeedbase.MaybeStripRetryableErrorMarker(err)
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
@@ -606,7 +607,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 		}
 
-		if !IsRetryableError(err) {
+		if !changefeedbase.IsRetryableError(err) {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

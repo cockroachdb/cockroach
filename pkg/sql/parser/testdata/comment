@@ -1,0 +1,86 @@
+
+parse
+COMMENT ON COLUMN a.b IS 'a'
+----
+COMMENT ON COLUMN a.b IS 'a'
+(COMMENT ON COLUMN (a.b) IS 'a') -- fully parenthesized
+COMMENT ON COLUMN a.b IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON COLUMN _._ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON COLUMN a.b IS NULL
+----
+COMMENT ON COLUMN a.b IS NULL
+(COMMENT ON COLUMN (a.b) IS NULL) -- fully parenthesized
+COMMENT ON COLUMN a.b IS NULL -- literals removed
+COMMENT ON COLUMN _._ IS NULL -- identifiers removed
+
+parse
+COMMENT ON COLUMN a.b.c IS 'a'
+----
+COMMENT ON COLUMN a.b.c IS 'a'
+(COMMENT ON COLUMN (a.b.c) IS 'a') -- fully parenthesized
+COMMENT ON COLUMN a.b.c IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON COLUMN _._._ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON COLUMN a.b.c.d IS 'a'
+----
+COMMENT ON COLUMN a.b.c.d IS 'a'
+(COMMENT ON COLUMN (a.b.c.d) IS 'a') -- fully parenthesized
+COMMENT ON COLUMN a.b.c.d IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON COLUMN _._._._ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON DATABASE foo IS 'a'
+----
+COMMENT ON DATABASE foo IS 'a'
+COMMENT ON DATABASE foo IS 'a' -- fully parenthesized
+COMMENT ON DATABASE foo IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON DATABASE _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON DATABASE foo IS NULL
+----
+COMMENT ON DATABASE foo IS NULL
+COMMENT ON DATABASE foo IS NULL -- fully parenthesized
+COMMENT ON DATABASE foo IS NULL -- literals removed
+COMMENT ON DATABASE _ IS NULL -- identifiers removed
+
+parse
+COMMENT ON INDEX foo IS 'a'
+----
+COMMENT ON INDEX foo IS 'a'
+COMMENT ON INDEX foo IS 'a' -- fully parenthesized
+COMMENT ON INDEX foo IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON INDEX _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON INDEX foo IS NULL
+----
+COMMENT ON INDEX foo IS NULL
+COMMENT ON INDEX foo IS NULL -- fully parenthesized
+COMMENT ON INDEX foo IS NULL -- literals removed
+COMMENT ON INDEX _ IS NULL -- identifiers removed
+
+parse
+COMMENT ON TABLE foo IS 'a'
+----
+COMMENT ON TABLE foo IS 'a'
+COMMENT ON TABLE foo IS 'a' -- fully parenthesized
+COMMENT ON TABLE foo IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+COMMENT ON TABLE _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON TABLE foo IS NULL
+----
+COMMENT ON TABLE foo IS NULL
+COMMENT ON TABLE foo IS NULL -- fully parenthesized
+COMMENT ON TABLE foo IS NULL -- literals removed
+COMMENT ON TABLE _ IS NULL -- identifiers removed

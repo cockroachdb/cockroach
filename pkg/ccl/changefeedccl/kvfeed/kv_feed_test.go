@@ -98,7 +98,7 @@ func TestKVFeed(t *testing.T) {
 		)
 		metrics := MakeMetrics(time.Minute)
 		bufferFactory := func() EventBuffer {
-			return MakeMemBuffer(mm.MakeBoundAccount(), &metrics)
+			return makeMemBuffer(mm.MakeBoundAccount(), &metrics)
 		}
 		scans := make(chan physicalConfig)
 		sf := scannerFunc(func(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error {
@@ -268,7 +268,9 @@ type rawTableFeed struct {
 	events []schemafeed.TableEvent
 }
 
-func newRawTableFeed(descs []catalog.TableDescriptor, initialHighWater hlc.Timestamp) SchemaFeed {
+func newRawTableFeed(
+	descs []catalog.TableDescriptor, initialHighWater hlc.Timestamp,
+) schemafeed.SchemaFeed {
 	sort.Slice(descs, func(i, j int) bool {
 		if descs[i].GetID() != descs[j].GetID() {
 			return descs[i].GetID() < descs[j].GetID()
@@ -357,7 +359,7 @@ func (f rawEventFeed) run(
 	return nil
 }
 
-var _ SchemaFeed = (*rawTableFeed)(nil)
+var _ schemafeed.SchemaFeed = (*rawTableFeed)(nil)
 
 func tableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{
