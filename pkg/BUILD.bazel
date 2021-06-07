@@ -10,6 +10,8 @@ ALL_TESTS = [
     "//pkg/ccl/backupccl/backupresolver:backupresolver_test",
     "//pkg/ccl/backupccl:backupccl_test",
     "//pkg/ccl/baseccl:baseccl_test",
+    "//pkg/ccl/benchccl/ddl_analysis:ddl_analysis_test",
+    "//pkg/ccl/benchccl/ddl_analysis:ddl_analysisccl_test",
     "//pkg/ccl/changefeedccl/cdctest:cdctest_test",
     "//pkg/ccl/changefeedccl/kvfeed:kvfeed_test",
     "//pkg/ccl/changefeedccl/schemafeed:schemafeed_test",

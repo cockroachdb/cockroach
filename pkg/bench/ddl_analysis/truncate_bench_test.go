@@ -15,40 +15,40 @@ import "testing"
 func BenchmarkTruncate(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name:  "truncate 1 column 0 rows",
-			setup: "CREATE TABLE t(x INT);",
-			stmt:  "TRUNCATE t",
+			Name:  "truncate 1 column 0 rows",
+			Setup: "CREATE TABLE t(x INT);",
+			Stmt:  "TRUNCATE t",
 		},
 		{
-			name: "truncate 1 column 1 row",
-			setup: `CREATE TABLE t(x INT); 
+			Name: "truncate 1 column 1 row",
+			Setup: `CREATE TABLE t(x INT); 
 INSERT INTO t (x) VALUES (1);`,
-			stmt: "TRUNCATE t",
+			Stmt: "TRUNCATE t",
 		},
 		{
-			name: "truncate 1 column 2 rows",
-			setup: `CREATE TABLE t(x INT); 
+			Name: "truncate 1 column 2 rows",
+			Setup: `CREATE TABLE t(x INT); 
 INSERT INTO t (x) VALUES (1);
 INSERT INTO t (x) VALUES (2);`,
-			stmt: "TRUNCATE t",
+			Stmt: "TRUNCATE t",
 		},
 		{
-			name:  "truncate 2 column 0 rows",
-			setup: `CREATE TABLE t(x INT, y INT);`,
-			stmt:  "TRUNCATE t",
+			Name:  "truncate 2 column 0 rows",
+			Setup: `CREATE TABLE t(x INT, y INT);`,
+			Stmt:  "TRUNCATE t",
 		},
 		{
-			name: "truncate 2 column 1 rows",
-			setup: `CREATE TABLE t(x INT, y INT); 
+			Name: "truncate 2 column 1 rows",
+			Setup: `CREATE TABLE t(x INT, y INT); 
 INSERT INTO t (x, y) VALUES (1, 1);`,
-			stmt: "TRUNCATE t",
+			Stmt: "TRUNCATE t",
 		},
 		{
-			name: "truncate 2 column 2 rows",
-			setup: `CREATE TABLE t(x INT, y INT); 
+			Name: "truncate 2 column 2 rows",
+			Setup: `CREATE TABLE t(x INT, y INT); 
 INSERT INTO t (x, y) VALUES (1, 1);
 INSERT INTO t (x,y) VALUES (2, 2);`,
-			stmt: "TRUNCATE t",
+			Stmt: "TRUNCATE t",
 		},
 	}
 
