@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // FmtFlags carries options for the pretty-printer.
@@ -138,6 +139,10 @@ const (
 	// rather than string literals. For example, the bytes \x40ab will be formatted
 	// as x'40ab' rather than '\x40ab'.
 	fmtFormatByteLiterals
+
+	// FmtMarkRedactionNode instructs the pretty printer to redact datums,
+	// constants, and simples names (i.e. Name, UnrestrictedName) from statements.
+	FmtMarkRedactionNode
 )
 
 // PasswordSubstitution is the string that replaces
@@ -387,7 +392,13 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	if f.HasFlags(FmtShowTypes) {
 		if te, ok := n.(TypedExpr); ok {
 			ctx.WriteByte('(')
-			ctx.formatNodeOrHideConstants(n)
+
+			if f.HasFlags(FmtMarkRedactionNode) {
+				ctx.formatNodeMaybeMarkRedaction(n)
+			} else {
+				ctx.formatNodeOrHideConstants(n)
+			}
+
 			ctx.WriteString(")[")
 			if rt := te.ResolvedType(); rt == nil {
 				// An attempt is made to pretty-print an expression that was
@@ -407,7 +418,13 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteByte('(')
 		}
 	}
-	ctx.formatNodeOrHideConstants(n)
+
+	if f.HasFlags(FmtMarkRedactionNode) {
+		ctx.formatNodeMaybeMarkRedaction(n)
+	} else {
+		ctx.formatNodeOrHideConstants(n)
+	}
+
 	if f.HasFlags(FmtAlwaysGroupExprs) {
 		if _, ok := n.(Expr); ok {
 			ctx.WriteByte(')')
@@ -504,4 +521,23 @@ func (ctx *FmtCtx) CloseAndGetString() string {
 
 func (ctx *FmtCtx) alwaysFormatTablePrefix() bool {
 	return ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
+}
+
+// formatNodeMaybeMarkRedaction marks sensitive information from statements
+// with redaction markers. Redaction markers are placed around datums,
+// constants, and simple names (i.e. Name, UnrestrictedName).
+func (ctx *FmtCtx) formatNodeMaybeMarkRedaction(n NodeFormatter) {
+	if ctx.flags.HasFlags(FmtMarkRedactionNode) {
+		switch v := n.(type) {
+		case *Placeholder:
+			// Placeholders should be printed as placeholder markers.
+			// Deliberately empty so we format as normal.
+		case Datum, Constant, *Name, *UnrestrictedName:
+			ctx.WriteString(string(redact.StartMarker()))
+			v.Format(ctx)
+			ctx.WriteString(string(redact.EndMarker()))
+			return
+		}
+		n.Format(ctx)
+	}
 }
