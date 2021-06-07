@@ -171,16 +171,16 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		err             string
 	}{
 		{"", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
-		{"", "DATABASE system, noexist", nil, nil, `unknown database "noexist"`},
+		{"", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
 		{"", "DATABASE system, system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
 		{"", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
 		{"", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, []string{"data", "system"}, ``},
-		{"", "DATABASE system, data, noexist", nil, nil, `unknown database "noexist"`},
+		{"", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
 		{"system", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
-		{"system", "DATABASE system, noexist", nil, nil, `unknown database "noexist"`},
+		{"system", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
 		{"system", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
 		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, []string{"data", "system"}, ``},
-		{"system", "DATABASE system, data, noexist", nil, nil, `unknown database "noexist"`},
+		{"system", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
 
 		{"", "TABLE foo", nil, nil, `table "foo" does not exist`},
 		{"system", "TABLE foo", []string{"system", "foo"}, nil, ``},
@@ -256,7 +256,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			targets := stmt.AST.(*tree.Grant).Targets
 
 			matched, err := DescriptorsMatchingTargets(context.Background(),
-				test.sessionDatabase, searchPath, descriptors, targets)
+				test.sessionDatabase, searchPath, descriptors, targets, hlc.Timestamp{})
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)

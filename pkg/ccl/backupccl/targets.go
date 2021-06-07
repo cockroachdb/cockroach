@@ -468,7 +468,7 @@ func selectTargets(
 	}
 
 	matched, err := backupresolver.DescriptorsMatchingTargets(ctx,
-		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets)
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets, asOf)
 	if err != nil {
 		return nil, nil, nil, err
 	}
