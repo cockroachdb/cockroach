@@ -2085,7 +2085,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErr(
 		t, `client has run out of available brokers`,
-		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100}}'`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
 	// The avro format doesn't support key_in_value yet.
 	sqlDB.ExpectErr(
