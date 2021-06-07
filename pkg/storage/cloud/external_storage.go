@@ -26,6 +26,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// NoDelimiter can be passed to ListFiles when not requesting any grouping.
+const NoDelimiter = ""
+
 // This file is for interfaces only and should not contain any implementation
 // code. All concrete implementations should be added to pkg/storage/cloudimpl.
 
@@ -75,9 +78,9 @@ type ExternalStorage interface {
 	Writer(ctx context.Context, basename string) (io.WriteCloser, error)
 
 	// ListFiles returns files that match a globs-style pattern. The returned
-	// results are usually relative to the base path, meaning an ExternalStorage
-	// instance can be initialized with some base path, used to query for files,
-	// then pass those results to its other methods.
+	// results are sorted and usually relative to the base path, meaning an
+	// ExternalStorage instance can be initialized with some base path, used to
+	// query for files, then pass those results to its other methods.
 	//
 	// As a special-case, if the passed patternSuffix is empty, the base path used
 	// to initialize the storage connection is treated as a pattern. In this case,
@@ -85,7 +88,17 @@ type ExternalStorage interface {
 	// and there is no clear definition of what it would mean to be relative to
 	// that, the results are fully-qualified absolute URIs. The base URI is *only*
 	// allowed to contain globs-patterns when the explicit patternSuffix is "".
-	ListFiles(ctx context.Context, patternSuffix string) ([]string, error)
+	//
+	// The delimiter string, if non-empty, is used to group results that have a
+	// common prefix prior to delimiter into a single result, w.r.t the part of
+	// their name that followed the listed prefix, e.g. if the ExternalStorage has
+	// files /a/b1/x, /a/b1/y, and /a/b2/z, and is configured with prefix "/a" and
+	// then lists "b*" with delimiter "/", the constant prefix listed is "/a/b" so
+	// the remaining suffix of each result -- 1/x, 1/y, and 2/z -- is then grouped
+	// until the delimiter into results "/a/b1" and "/a/b2", which are as usual
+	// returned without the configured prefix, resulting in "b1" and "b2". See:
+	// https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-prefixes.html.
+	ListFiles(ctx context.Context, patternSuffix, delimiter string) ([]string, error)
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error

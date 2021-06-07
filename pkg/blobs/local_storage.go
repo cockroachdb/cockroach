@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
@@ -178,6 +179,7 @@ func (l *LocalStorage) List(pattern string) ([]string, error) {
 	for _, file := range matches {
 		fileList = append(fileList, strings.TrimPrefix(file, l.externalIODir))
 	}
+	sort.Strings(fileList)
 	return fileList, nil
 }
 
