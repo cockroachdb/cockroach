@@ -8,26 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bench
+package rttanalysis
 
 import "testing"
 
 func BenchmarkGrantRole(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name: "grant 1 role",
-			setup: `CREATE ROLE a;
+			Name: "grant 1 role",
+			Setup: `CREATE ROLE a;
 CREATE ROLE b;`,
-			stmt:  "GRANT a TO b",
-			reset: "DROP ROLE a,b",
+			Stmt:  "GRANT a TO b",
+			Reset: "DROP ROLE a,b",
 		},
 		{
-			name: "grant 2 roles",
-			setup: `CREATE ROLE a;
+			Name: "grant 2 roles",
+			Setup: `CREATE ROLE a;
 CREATE ROLE b;
 CREATE ROLE c;`,
-			stmt:  "GRANT a,b TO c",
-			reset: "DROP ROLE a,b,c",
+			Stmt:  "GRANT a,b TO c",
+			Reset: "DROP ROLE a,b,c",
 		},
 	}
 
@@ -37,21 +37,21 @@ CREATE ROLE c;`,
 func BenchmarkRevokeRole(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
 		{
-			name: "revoke 1 role",
-			setup: `CREATE ROLE a;
+			Name: "revoke 1 role",
+			Setup: `CREATE ROLE a;
 CREATE ROLE b;
 GRANT a TO b`,
-			stmt:  "REVOKE a FROM b",
-			reset: "DROP ROLE a,b",
+			Stmt:  "REVOKE a FROM b",
+			Reset: "DROP ROLE a,b",
 		},
 		{
-			name: "revoke 2 roles",
-			setup: `CREATE ROLE a;
+			Name: "revoke 2 roles",
+			Setup: `CREATE ROLE a;
 CREATE ROLE b;
 CREATE ROLE c;
 GRANT a,b TO c;`,
-			stmt:  "REVOKE a,b FROM c",
-			reset: "DROP ROLE a,b,c",
+			Stmt:  "REVOKE a,b FROM c",
+			Reset: "DROP ROLE a,b,c",
 		},
 	}
 

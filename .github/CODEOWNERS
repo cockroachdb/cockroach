@@ -87,7 +87,7 @@
 /pkg/acceptance/             @cockroachdb/sql-experience
 /pkg/base/                   @cockroachdb/server-prs
 /pkg/bench/                  @cockroachdb/sql-queries
-/pkg/bench/ddl_analysis      @cockroachdb/sql-experience
+/pkg/bench/rttanalysis       @cockroachdb/sql-experience
 /pkg/blobs/                  @cockroachdb/bulk-prs
 /pkg/build/                  @cockroachdb/dev-inf
 /pkg/ccl/baseccl/            @cockroachdb/cli-prs
@@ -107,6 +107,7 @@
 /pkg/ccl/testutilsccl/       @cockroachdb/test-eng
 /pkg/ccl/utilccl/            @cockroachdb/server-prs
 /pkg/ccl/workloadccl/        @cockroachdb/sql-experience
+/pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-experience
 /pkg/clusterversion/         @cockroachdb/kv
 /pkg/cmd/allocsim/           @cockroachdb/kv
 /pkg/cmd/bazci/              @cockroachdb/dev-inf
