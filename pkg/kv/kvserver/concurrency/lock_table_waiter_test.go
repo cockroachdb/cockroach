@@ -174,6 +174,10 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 				testWaitNoopUntilDone(t, waitSelf, makeReq)
 			})
 
+			t.Run("waitQueueMaxLengthExceeded", func(t *testing.T) {
+				testErrorWaitPush(t, waitQueueMaxLengthExceeded, makeReq, dontExpectPush)
+			})
+
 			t.Run("doneWaiting", func(t *testing.T) {
 				w, _, g := setupLockTableWaiterTest()
 				defer w.stopper.Stop(ctx)
@@ -244,6 +248,10 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 
 		t.Run("waitSelf", func(t *testing.T) {
 			t.Log("waitSelf is not possible for non-transactional request")
+		})
+
+		t.Run("waitQueueMaxLengthExceeded", func(t *testing.T) {
+			testErrorWaitPush(t, waitQueueMaxLengthExceeded, makeReq, dontExpectPush)
 		})
 
 		t.Run("doneWaiting", func(t *testing.T) {
@@ -439,6 +447,10 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 			testWaitNoopUntilDone(t, waitSelf, makeReq)
 		})
 
+		t.Run("waitQueueMaxLengthExceeded", func(t *testing.T) {
+			testErrorWaitPush(t, waitQueueMaxLengthExceeded, makeReq, dontExpectPush)
+		})
+
 		t.Run("doneWaiting", func(t *testing.T) {
 			w, _, g := setupLockTableWaiterTest()
 			defer w.stopper.Stop(ctx)
@@ -451,6 +463,8 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 		})
 	})
 }
+
+var dontExpectPush = hlc.Timestamp{}
 
 func testErrorWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hlc.Timestamp) {
 	ctx := context.Background()
@@ -470,9 +484,10 @@ func testErrorWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPush
 		}
 		g.notify()
 
-		// If the lock is not held, expect an error immediately. The one
-		// exception to this is waitElsewhere, which expects no error.
-		if !lockHeld {
+		// If the lock is not held or expPushTS is empty, expect an error
+		// immediately. The one exception to this is waitElsewhere, which
+		// expects no error.
+		if !lockHeld || expPushTS == dontExpectPush {
 			err := w.WaitOn(ctx, req, g)
 			if k == waitElsewhere {
 				require.Nil(t, err)
