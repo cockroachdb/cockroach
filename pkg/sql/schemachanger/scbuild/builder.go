@@ -137,6 +137,8 @@ func (b *buildContext) build(
 		}
 	}()
 	switch n := n.(type) {
+	case *tree.DropTable:
+		b.dropTable(ctx, n)
 	case *tree.DropView:
 		b.dropView(ctx, n)
 	case *tree.DropSequence:

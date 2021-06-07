@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -41,6 +42,7 @@ type Executor struct {
 	jobTracker      JobProgressTracker
 	testingKnobs    *NewSchemaChangerTestingKnobs
 	jobRegistry     *jobs.Registry
+	executor        sqlutil.InternalExecutor
 }
 
 // NewExecutor creates a new Executor.
@@ -52,6 +54,7 @@ func NewExecutor(
 	tracker JobProgressTracker,
 	testingKnobs *NewSchemaChangerTestingKnobs,
 	jobRegistry *jobs.Registry,
+	executor sqlutil.InternalExecutor,
 ) *Executor {
 	return &Executor{
 		txn:             txn,
@@ -61,6 +64,7 @@ func NewExecutor(
 		jobTracker:      tracker,
 		testingKnobs:    testingKnobs,
 		jobRegistry:     jobRegistry,
+		executor:        executor,
 	}
 }
 
@@ -212,7 +216,7 @@ func (ex *Executor) maybeSplitIndexSpans(ctx context.Context, span roachpb.Span)
 }
 
 func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, ops []scop.Op) error {
-	dg := newMutationDescGetter(ex.descsCollection, ex.txn)
+	dg := newMutationDescGetter(ex.descsCollection, ex.txn, ex.executor)
 	mj := &mutationJobs{jobRegistry: ex.jobRegistry}
 	v := scmutationexec.NewMutationVisitor(dg, mj)
 	for _, op := range ops {

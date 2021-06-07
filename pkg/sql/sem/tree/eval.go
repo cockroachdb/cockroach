@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -3062,6 +3063,28 @@ type EvalDatabase interface {
 	IsTypeVisible(
 		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 	) (isVisible bool, exists bool, err error)
+
+	// HasPrivilege returns whether the current user has privilege to access
+	// the given object.
+	HasPrivilege(
+		ctx context.Context,
+		specifier HasPrivilegeSpecifier,
+		user security.SQLUsername,
+		kind privilege.Kind,
+		withGrantOpt bool,
+	) (bool, error)
+}
+
+// HasPrivilegeSpecifier specifies an object to lookup privilege for.
+type HasPrivilegeSpecifier struct {
+	// Only one of these is filled.
+	TableName *string
+	TableOID  *oid.Oid
+
+	// Only one of these is filled.
+	// Only used if TableName or TableOID is specified.
+	ColumnName   *Name
+	ColumnAttNum *uint32
 }
 
 // TypeResolver is an interface for resolving types and type OIDs.

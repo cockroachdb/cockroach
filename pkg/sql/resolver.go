@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -315,6 +317,160 @@ func (p *planner) IsTypeVisible(
 		}
 	}
 	return false, true, nil
+}
+
+// HasPrivilege is part of the tree.EvalDatabase interface.
+func (p *planner) HasPrivilege(
+	ctx context.Context,
+	specifier tree.HasPrivilegeSpecifier,
+	user security.SQLUsername,
+	kind privilege.Kind,
+	withGrantOpt bool,
+) (bool, error) {
+	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
+		ctx,
+		specifier,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	// hasPrivilegeFunc checks whether any role has the given privilege.
+	hasPrivilegeFunc := func(priv privilege.Kind) (bool, error) {
+		err := p.CheckPrivilegeForUser(ctx, desc, priv, user)
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+				return false, nil
+			}
+			return false, err
+		}
+		return true, nil
+	}
+
+	hasPrivilege, err := hasPrivilegeFunc(privilege.ALL)
+	if err != nil {
+		return false, err
+	}
+	if hasPrivilege {
+		return true, nil
+	}
+	// For WITH GRANT OPTION, check the roles also has the GRANT privilege.
+	if withGrantOpt {
+		hasPrivilege, err := hasPrivilegeFunc(privilege.GRANT)
+		if err != nil {
+			return false, err
+		}
+		if !hasPrivilege {
+			return false, nil
+		}
+	}
+	return hasPrivilegeFunc(kind)
+}
+
+// ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
+// and returns the descriptor for the given object.
+func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
+	ctx context.Context, specifier tree.HasPrivilegeSpecifier,
+) (catalog.Descriptor, error) {
+	if specifier.TableName != nil {
+		tn, err := parser.ParseQualifiedTableName(*specifier.TableName)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.ResolveTableName(ctx, tn); err != nil {
+			return nil, err
+		}
+
+		if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
+			// Postgres does not allow cross-database references in these
+			// functions, so we don't either.
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"cross-database references are not implemented: %s", tn)
+		}
+
+		table, err := p.getVirtualTabler().getVirtualTableDesc(tn)
+		if err != nil {
+			return nil, err
+		}
+		if table == nil {
+			_, table, err = p.Descriptors().GetImmutableTableByName(
+				ctx,
+				p.txn,
+				tn,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if err := validateColumnForHasPrivilegeSpecifier(
+			table,
+			specifier,
+		); err != nil {
+			return nil, err
+		}
+		return table, nil
+	}
+	if specifier.TableOID == nil {
+		return nil, errors.AssertionFailedf("no table name or oid found")
+	}
+	virtualDesc, err := p.getVirtualTabler().getVirtualTableEntryByID(descpb.ID(*specifier.TableOID))
+	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
+		return nil, err
+	}
+	var table catalog.TableDescriptor
+	if virtualDesc != nil {
+		table = virtualDesc.desc
+	} else {
+		table, err = p.Descriptors().GetImmutableTableByID(
+			ctx,
+			p.txn,
+			descpb.ID(*specifier.TableOID),
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required: true,
+				},
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := validateColumnForHasPrivilegeSpecifier(
+		table,
+		specifier,
+	); err != nil {
+		return nil, err
+	}
+	return table, nil
+}
+
+func validateColumnForHasPrivilegeSpecifier(
+	table catalog.TableDescriptor, specifier tree.HasPrivilegeSpecifier,
+) error {
+	if specifier.ColumnName != nil {
+		_, err := table.FindColumnWithName(*specifier.ColumnName)
+		return err
+	}
+	if specifier.ColumnAttNum != nil {
+		for _, col := range table.PublicColumns() {
+			if col.GetPGAttributeNum() == *specifier.ColumnAttNum {
+				return nil
+			}
+		}
+		return pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %d of relation %s does not exist",
+			*specifier.ColumnAttNum,
+			tree.Name(table.GetName()),
+		)
+
+	}
+	return nil
 }
 
 // GetTypeDescriptor implements the descpb.TypeDescriptorResolver interface.

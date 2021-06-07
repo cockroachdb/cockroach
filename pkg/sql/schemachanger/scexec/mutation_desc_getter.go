@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -23,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 type mutationDescGetter struct {
@@ -30,13 +33,17 @@ type mutationDescGetter struct {
 	txn          *kv.Txn
 	retrieved    catalog.DescriptorIDSet
 	drainedNames map[descpb.ID][]descpb.NameInfo
+	executor     sqlutil.InternalExecutor
 }
 
-func newMutationDescGetter(descs *descs.Collection, txn *kv.Txn) *mutationDescGetter {
+func newMutationDescGetter(
+	descs *descs.Collection, txn *kv.Txn, executor sqlutil.InternalExecutor,
+) *mutationDescGetter {
 	return &mutationDescGetter{
 		descs:        descs,
 		txn:          txn,
 		drainedNames: make(map[descpb.ID][]descpb.NameInfo),
+		executor:     executor,
 	}
 }
 
@@ -91,4 +98,18 @@ func (m *mutationDescGetter) SubmitDrainedNames(
 	return nil
 }
 
-var _ scmutationexec.MutableDescGetter = (*mutationDescGetter)(nil)
+func (m *mutationDescGetter) RemoveObjectComments(ctx context.Context, id descpb.ID) error {
+	_, err := m.executor.ExecEx(
+		ctx,
+		"delete-table-comments",
+		m.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		"DELETE FROM system.comments WHERE object_id=$1",
+		id)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+var _ scmutationexec.Catalog = (*mutationDescGetter)(nil)

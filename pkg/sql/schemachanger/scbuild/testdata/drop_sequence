@@ -8,8 +8,8 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - target:
     direction: DROP
     elementProto:
-      table:
-        tableId: 52
+      sequence:
+        sequenceId: 52
   state: PUBLIC
 
 create-table
@@ -44,6 +44,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - target:
     direction: DROP
     elementProto:
-      table:
-        tableId: 52
+      sequence:
+        sequenceId: 52
   state: PUBLIC

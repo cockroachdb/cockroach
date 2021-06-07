@@ -42,10 +42,13 @@ func (b *buildContext) removeTypeBackRefDeps(
 	}
 	// Drop all references to this table/view/sequence
 	for _, typeID := range typeIDs {
-		b.addNode(scpb.Target_DROP,
-			&scpb.TypeReference{
-				TypeID: typeID,
-				DescID: tableDesc.GetID(),
-			})
+		typeRef := &scpb.TypeReference{
+			TypeID: typeID,
+			DescID: tableDesc.GetID(),
+		}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
+			b.addNode(scpb.Target_DROP,
+				typeRef)
+		}
 	}
 }

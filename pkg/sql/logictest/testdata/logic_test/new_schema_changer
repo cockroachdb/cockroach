@@ -410,3 +410,75 @@ DROP VIEW mv
 
 statement ok
 DROP MATERIALIZED VIEW mv
+
+statement ok
+CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
+
+statement ok
+CREATE TABLE IF NOT EXISTS defaultdb.orders (
+    id INT PRIMARY KEY,
+    customer INT UNIQUE NOT NULL REFERENCES defaultdb.customers (id),
+    orderTotal DECIMAL(9,2),
+    INDEX (customer)
+  );
+
+statement ok
+CREATE SEQUENCE defaultdb.SQ2;
+
+statement ok
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    rand_col INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES defaultdb.customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
+ );
+
+statement error "fk_customer_ref_customers" is referenced by foreign key from table "orders"
+DROP TABLE defaultdb.customers;
+
+statement ok
+CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier;
+
+statement error cannot drop table sq1 because other objects depend on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+CREATE VIEW defaultdb.v1 as (select customer_id, carrier from defaultdb.shipments);
+
+statement error pq: cannot drop table "shipments" because view "v1" depends on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+DROP TABLE defaultdb.shipments CASCADE;
+
+statement ok
+CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
+
+statement ok
+CREATE TABLE p1_0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1),
+  FAMILY (i, s1, s2),
+  FAMILY (d)
+) INTERLEAVE IN PARENT p2 (i)
+
+statement ok
+SET experimental_use_new_schema_changer = 'unsafe_always'
+
+# No fallback code path
+statement error pq: \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
+DROP TABLE p2
+
+# Fall back code path works
+statement error pq: \*tree.DropTable not implemented in the new schema changer: drop on interleaved table
+DROP TABLE p1_0
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+

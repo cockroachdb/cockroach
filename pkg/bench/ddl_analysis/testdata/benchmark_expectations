@@ -56,6 +56,10 @@ exp,benchmark
 2,ORMQueries/django_table_introspection_1_table
 2,ORMQueries/django_table_introspection_4_tables
 2,ORMQueries/django_table_introspection_8_tables
+2,ORMQueries/has_column_privilege_using_attnum
+2,ORMQueries/has_column_privilege_using_column_name
+2,ORMQueries/has_table_privilege_real_table
+2,ORMQueries/has_table_privilege_virtual_table
 2,ORMQueries/pg_attribute
 2,ORMQueries/pg_class
 2,ORMQueries/pg_namespace

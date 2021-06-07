@@ -16,8 +16,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -31,37 +29,54 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// MutableDescGetter encapsulates the logic to retrieve descriptors.
-// All retrieved descriptors are modified.
-type MutableDescGetter interface {
+// DescriptorReader encapsulates logic used to retrieve
+// and track modified descriptors.
+type DescriptorReader interface {
 	GetMutableTypeByID(ctx context.Context, id descpb.ID) (*typedesc.Mutable, error)
 	GetImmutableDatabaseByID(ctx context.Context, id descpb.ID) (catalog.DatabaseDescriptor, error)
 	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
+}
+
+// NamespaceWriter encapsulates operations used to manipulate
+// namespaces.
+type NamespaceWriter interface {
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
-	SubmitDrainedNames(ctx context.Context, codec keys.SQLCodec, ba *kv.Batch) error
+}
+
+// CommentWriter encapsulates operations used to manipulate
+// object comments.
+type CommentWriter interface {
+	RemoveObjectComments(ctx context.Context, id descpb.ID) error
+}
+
+// Catalog encapsulates the logic to modify descriptors,
+// namespaces, comments to help support schema changer mutations.
+type Catalog interface {
+	DescriptorReader
+	NamespaceWriter
+	CommentWriter
 }
 
 // MutationJobs encapsulates the logic to create different types
 // of jobs.
 type MutationJobs interface {
 	AddNewGCJob(job jobspb.SchemaChangeGCDetails, description string)
-	SubmitAllJobs(ctx context.Context, txn *kv.Txn) (bool, error)
 }
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
-func NewMutationVisitor(descs MutableDescGetter, jobs MutationJobs) scop.MutationVisitor {
-	return &visitor{descs: descs, jobs: jobs}
+func NewMutationVisitor(catalog Catalog, jobs MutationJobs) scop.MutationVisitor {
+	return &visitor{catalog: catalog, jobs: jobs}
 }
 
 type visitor struct {
-	descs MutableDescGetter
-	jobs  MutationJobs
+	catalog Catalog
+	jobs    MutationJobs
 }
 
 func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteAndWriteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -76,7 +91,7 @@ func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 
 func (m *visitor) UpdateRelationDeps(ctx context.Context, op scop.UpdateRelationDeps) error {
 	// TODO(fqazi): Only implemented for sequences.
-	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -123,7 +138,7 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	ctx context.Context, op scop.RemoveColumnDefaultExpression,
 ) error {
 	// Remove the descriptors namespaces as the last stage
-	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -138,8 +153,35 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	return nil
 }
 
+func (m *visitor) RemoveRelationDependedOnBy(
+	ctx context.Context, op scop.RemoveRelationDependedOnBy,
+) error {
+	// Remove the descriptors namespaces as the last stage
+	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	for depIdx, dependedOnBy := range tableDesc.DependedOnBy {
+		if dependedOnBy.ID == op.DependedOnBy {
+			tableDesc.DependedOnBy = append(tableDesc.DependedOnBy[:depIdx], tableDesc.DependedOnBy[depIdx+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+func (m *visitor) RemoveSequenceOwnedBy(ctx context.Context, op scop.RemoveSequenceOwnedBy) error {
+	mutDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	mutDesc.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
+	mutDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
+	return nil
+}
+
 func (m *visitor) RemoveTypeBackRef(ctx context.Context, op scop.RemoveTypeBackRef) error {
-	mutDesc, err := m.descs.GetMutableTypeByID(ctx, op.TypeID)
+	mutDesc, err := m.catalog.GetMutableTypeByID(ctx, op.TypeID)
 	if err != nil {
 		return err
 	}
@@ -166,7 +208,7 @@ func (m *visitor) CreateGcJobForDescriptor(
 func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
-	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -176,22 +218,22 @@ func (m *visitor) MarkDescriptorAsDropped(
 }
 
 func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
-	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	// Queue up name for draining.
+	// Queue up names for draining.
 	parentSchemaID := tableDesc.GetParentSchemaID()
 	nameDetails := descpb.NameInfo{
 		ParentID:       tableDesc.ParentID,
 		ParentSchemaID: parentSchemaID,
 		Name:           tableDesc.Name}
-	m.descs.AddDrainedName(tableDesc.GetID(), nameDetails)
+	m.catalog.AddDrainedName(tableDesc.GetID(), nameDetails)
 	return nil
 }
 
 func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -215,7 +257,7 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -238,7 +280,7 @@ func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedColumnDeleteAndWriteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -261,7 +303,7 @@ func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 func (m *visitor) MakeDroppedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeDroppedColumnDeleteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -275,7 +317,7 @@ func (m *visitor) MakeDroppedColumnDeleteOnly(
 }
 
 func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -296,7 +338,7 @@ func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent
 func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteAndWriteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -312,7 +354,7 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 func (m *visitor) MakeAddedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -352,7 +394,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 func (m *visitor) MakeDroppedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeDroppedIndexDeleteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -368,7 +410,7 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -387,7 +429,7 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
 ) error {
 
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -404,7 +446,7 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 }
 
 func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstraint) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -426,7 +468,7 @@ func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstr
 func (m *visitor) MakeAddedPrimaryIndexPublic(
 	ctx context.Context, op scop.MakeAddedPrimaryIndexPublic,
 ) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -443,7 +485,7 @@ func (m *visitor) MakeAddedPrimaryIndexPublic(
 }
 
 func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -456,13 +498,40 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 }
 
 func (m *visitor) AddColumnFamily(ctx context.Context, op scop.AddColumnFamily) error {
-	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	table.AddFamily(op.Family)
 	if op.Family.ID >= table.NextFamilyID {
 		table.NextFamilyID = op.Family.ID + 1
+	}
+	return nil
+}
+
+func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyRef) error {
+	table, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	fks := table.TableDesc().OutboundFKs
+	if !op.Outbound {
+		fks = table.TableDesc().InboundFKs
+	}
+	newFks := make([]descpb.ForeignKeyConstraint, 0, len(fks)-1)
+	for _, fk := range fks {
+		if op.Outbound && fk.OriginTableID != op.TableID ||
+			op.Name != fk.Name {
+			newFks = append(newFks, fk)
+		} else if fk.ReferencedTableID != op.TableID ||
+			op.Name != fk.Name {
+			newFks = append(newFks, fk)
+		}
+	}
+	if op.Outbound {
+		table.TableDesc().OutboundFKs = newFks
+	} else {
+		table.TableDesc().InboundFKs = newFks
 	}
 	return nil
 }
