@@ -325,7 +325,17 @@ func (s *crdbSpan) record(msg string) {
 }
 
 func (s *crdbSpan) recordStructured(item Structured) {
-	s.recordInternal(item, &s.mu.recording.structured)
+	p, err := types.MarshalAny(item)
+	if err != nil {
+		// An error here is an error from Marshal; these
+		// are unlikely to happen.
+		return
+	}
+	sr := &tracingpb.StructuredRecord{
+		Time:    time.Now(),
+		Payload: p,
+	}
+	s.recordInternal(sr, &s.mu.recording.structured)
 }
 
 // sizable is a subset for protoutil.Message, for payloads (log records and
@@ -439,16 +449,16 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 	}
 
 	if numEvents := s.mu.recording.structured.Len(); numEvents != 0 {
-		rs.InternalStructured = make([]*types.Any, 0, numEvents)
+		// TODO(adityamaru): Stop writing to DeprecatedInternalStructured in 22.1.
+		rs.DeprecatedInternalStructured = make([]*types.Any, numEvents)
+		rs.StructuredRecords = make([]tracingpb.StructuredRecord, numEvents)
 		for i := 0; i < numEvents; i++ {
-			event := s.mu.recording.structured.Get(i).(Structured)
-			item, err := types.MarshalAny(event)
-			if err != nil {
-				// An error here is an error from Marshal; these
-				// are unlikely to happen.
-				continue
-			}
-			rs.InternalStructured = append(rs.InternalStructured, item)
+			event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
+			rs.StructuredRecords[i] = *event
+			// Write the Structured payload stored in the StructuredRecord, since
+			// nodes older than 21.2 expect a Structured event when they fetch
+			// recordings.
+			rs.DeprecatedInternalStructured[i] = event.Payload
 		}
 	}
 
