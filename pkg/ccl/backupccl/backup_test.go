@@ -492,7 +492,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	hasSSTs := func(location string) bool {
 		sstMatcher := regexp.MustCompile(`\d+\.sst`)
-		subDir := locationToDir(location)
+		subDir := filepath.Join(locationToDir(location), "data")
 		files, err := ioutil.ReadDir(subDir)
 		if err != nil {
 			t.Fatal(err)
