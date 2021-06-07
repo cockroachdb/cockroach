@@ -559,6 +559,8 @@ func (m execNodeTraceMetadata) annotateExplain(
 					break
 				}
 				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
+				nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
+				nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
 				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
 				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)

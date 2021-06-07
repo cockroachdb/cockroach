@@ -53,6 +53,8 @@ cluster regions: <hidden>
         │ cluster nodes: <hidden>
         │ cluster regions: <hidden>
         │ actual row count: 2
+        │ KV time: 0µs
+        │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ table: geo_table@primary
@@ -68,6 +70,8 @@ cluster regions: <hidden>
                   cluster nodes: <hidden>
                   cluster regions: <hidden>
                   actual row count: 4
+                  KV time: 0µs
+                  KV contention time: 0µs
                   KV rows read: 4
                   KV bytes read: 32 B
                   missing stats
@@ -135,6 +139,8 @@ cluster regions: <hidden>
         │ cluster nodes: <hidden>
         │ cluster regions: <hidden>
         │ actual row count: 2
+        │ KV time: 0µs
+        │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ table: geo_table@primary
@@ -150,6 +156,8 @@ cluster regions: <hidden>
                   cluster nodes: <hidden>
                   cluster regions: <hidden>
                   actual row count: 2
+                  KV time: 0µs
+                  KV contention time: 0µs
                   KV rows read: 2
                   KV bytes read: 16 B
                   missing stats
@@ -193,6 +201,8 @@ cluster regions: <hidden>
         │ cluster nodes: <hidden>
         │ cluster regions: <hidden>
         │ actual row count: 2
+        │ KV time: 0µs
+        │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ table: geo_table@primary
@@ -208,6 +218,8 @@ cluster regions: <hidden>
                   cluster nodes: <hidden>
                   cluster regions: <hidden>
                   actual row count: 2
+                  KV time: 0µs
+                  KV contention time: 0µs
                   KV rows read: 2
                   KV bytes read: 16 B
                   missing stats

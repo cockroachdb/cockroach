@@ -347,6 +347,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				e.ob.AddField("vectorized batch count", humanizeutil.Count(s.VectorizedBatchCount.Value()))
 			}
 		}
+		if s.KVTime.HasValue() {
+			e.ob.AddField("KV time", humanizeutil.Duration(s.KVTime.Value()))
+		}
+		if s.KVContentionTime.HasValue() {
+			e.ob.AddField("KV contention time", humanizeutil.Duration(s.KVContentionTime.Value()))
+		}
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows read", humanizeutil.Count(s.KVRowsRead.Value()))
 		}

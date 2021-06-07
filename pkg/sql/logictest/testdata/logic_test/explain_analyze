@@ -24,6 +24,8 @@ cluster regions: <hidden>
   cluster nodes: <hidden>
   cluster regions: <hidden>
   actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
   KV rows read: 0
   KV bytes read: 0 B
   missing stats
@@ -49,6 +51,8 @@ cluster regions: <hidden>
   cluster nodes: <hidden>
   cluster regions: <hidden>
   actual row count: 3
+  KV time: 0µs
+  KV contention time: 0µs
   KV rows read: 3
   KV bytes read: 24 B
   missing stats
@@ -87,6 +91,8 @@ cluster regions: <hidden>
 │     cluster regions: <hidden>
 │     actual row count: 4
 │     vectorized batch count: 0
+│     KV time: 0µs
+│     KV contention time: 0µs
 │     KV rows read: 4
 │     KV bytes read: 32 B
 │     estimated row count: 1,000 (missing stats)
@@ -99,6 +105,8 @@ cluster regions: <hidden>
       cluster regions: <hidden>
       actual row count: 3
       vectorized batch count: 0
+      KV time: 0µs
+      KV contention time: 0µs
       KV rows read: 3
       KV bytes read: 24 B
       estimated row count: 1,000 (missing stats)
