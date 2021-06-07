@@ -326,7 +326,7 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 		fc.BufferedWrites = &bf
 		fc.Criticality = &bt
 		if *fc.Format == "crdb-v1" {
-			s := "`crdb-v1-count"
+			s := "crdb-v1-count"
 			fc.Format = &s
 		}
 	}

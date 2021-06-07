@@ -127,6 +127,7 @@ go_test(
         "file_test.go",
         "flags_test.go",
         "fluent_client_test.go",
+        "format_crdb_v1_test.go",
         "format_crdb_v2_test.go",
         "format_json_test.go",
         "helpers_test.go",
