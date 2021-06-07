@@ -27,6 +27,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// joinTokenVersion is used to version the encoding of join tokens, and is the
+// first byte in the marshaled token.
+type joinTokenVersion byte
+
+const (
+	// V0 is the initial version of join token encoding.
+	joinTokenV0 joinTokenVersion = '0'
+)
+
+var errInvalidJoinToken = errors.New("invalid join token")
+
 const (
 	// Length of the join token shared secret.
 	joinTokenSecretLen = 16
@@ -74,36 +85,43 @@ func (j *JoinToken) VerifySignature(caCert []byte) bool {
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
-//
-// The format of the text (after base64-decoding) is:
-// <TokenID:uuid.Size><SharedSecret:joinTokenSecretLen><fingerprint:variable><crc:4>
 func (j *JoinToken) UnmarshalText(text []byte) error {
-	decoder := base64.NewDecoder(base64.URLEncoding, bytes.NewReader(text))
-	decoded, err := ioutil.ReadAll(decoder)
-	if err != nil {
-		return err
+	// First byte will be the join token version.
+	switch v := joinTokenVersion(text[0]); v {
+	case joinTokenV0:
+		decoder := base64.NewDecoder(base64.URLEncoding, bytes.NewReader(text[1:]))
+		decoded, err := ioutil.ReadAll(decoder)
+		if err != nil {
+			return err
+		}
+		if len(decoded) <= uuid.Size+joinTokenSecretLen+4 {
+			return errInvalidJoinToken
+		}
+		expectedCSum := crc32.ChecksumIEEE(decoded[:len(decoded)-4])
+		_, cSum, err := encoding.DecodeUint32Ascending(decoded[len(decoded)-4:])
+		if err != nil {
+			return err
+		}
+		if cSum != expectedCSum {
+			return errInvalidJoinToken
+		}
+		if err := j.TokenID.UnmarshalBinary(decoded[:uuid.Size]); err != nil {
+			return err
+		}
+		decoded = decoded[uuid.Size:]
+		j.SharedSecret = decoded[:joinTokenSecretLen]
+		j.fingerprint = decoded[joinTokenSecretLen : len(decoded)-4]
+	default:
+		return errInvalidJoinToken
 	}
-	if len(decoded) <= uuid.Size+joinTokenSecretLen+4 {
-		return errors.New("invalid join token")
-	}
-	expectedCSum := crc32.ChecksumIEEE(decoded[:len(decoded)-4])
-	_, cSum, err := encoding.DecodeUint32Ascending(decoded[len(decoded)-4:])
-	if err != nil {
-		return err
-	}
-	if cSum != expectedCSum {
-		return errors.New("invalid join token")
-	}
-	if err := j.TokenID.UnmarshalBinary(decoded[:uuid.Size]); err != nil {
-		return err
-	}
-	decoded = decoded[uuid.Size:]
-	j.SharedSecret = decoded[:joinTokenSecretLen]
-	j.fingerprint = decoded[joinTokenSecretLen : len(decoded)-4]
+
 	return nil
 }
 
 // MarshalText implements the encoding.TextMarshaler interface.
+//
+// The format of the text is:
+// <version:1>base64(<TokenID:uuid.Size><SharedSecret:joinTokenSecretLen><fingerprint:variable><crc:4>)
 func (j *JoinToken) MarshalText() ([]byte, error) {
 	tokenID, err := j.TokenID.MarshalBinary()
 	if err != nil {
@@ -113,6 +131,8 @@ func (j *JoinToken) MarshalText() ([]byte, error) {
 	if len(j.SharedSecret) != joinTokenSecretLen {
 		return nil, errors.New("join token shared secret not of the right size")
 	}
+
+	var b bytes.Buffer
 	token := make([]byte, 0, len(tokenID)+len(j.SharedSecret)+len(j.fingerprint)+4)
 	token = append(token, tokenID...)
 	token = append(token, j.SharedSecret...)
@@ -120,8 +140,6 @@ func (j *JoinToken) MarshalText() ([]byte, error) {
 	// Checksum.
 	cSum := crc32.ChecksumIEEE(token)
 	token = encoding.EncodeUint32Ascending(token, cSum)
-
-	var b bytes.Buffer
 	encoder := base64.NewEncoder(base64.URLEncoding, &b)
 	if _, err := encoder.Write(token); err != nil {
 		return nil, err
@@ -129,5 +147,10 @@ func (j *JoinToken) MarshalText() ([]byte, error) {
 	if err := encoder.Close(); err != nil {
 		return nil, err
 	}
-	return b.Bytes(), nil
+
+	// Prefix the encoded token with version number.
+	versionedToken := make([]byte, 0, len(b.Bytes())+1)
+	versionedToken = append(versionedToken, byte(joinTokenV0))
+	versionedToken = append(versionedToken, b.Bytes()...)
+	return versionedToken, nil
 }
