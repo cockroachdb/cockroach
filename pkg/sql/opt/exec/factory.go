@@ -315,8 +315,10 @@ type ExecutionStats struct {
 	// operator.
 	VectorizedBatchCount optional.Uint
 
-	KVBytesRead optional.Uint
-	KVRowsRead  optional.Uint
+	KVTime           optional.Duration
+	KVContentionTime optional.Duration
+	KVBytesRead      optional.Uint
+	KVRowsRead       optional.Uint
 
 	// Nodes on which this operator was executed.
 	Nodes []string
