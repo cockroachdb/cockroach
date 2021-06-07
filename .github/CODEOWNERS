@@ -73,6 +73,7 @@
 /pkg/kv/                     @cockroachdb/kv
 
 /pkg/storage/                @cockroachdb/storage
+/pkg/storage/cloud           @cockroachdb/bulk-prs
 
 /pkg/ui/                     @cockroachdb/cluster-ui-prs
 /pkg/ui/embedded.go          @cockroachdb/cluster-ui-prs
