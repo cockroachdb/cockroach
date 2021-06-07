@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -371,7 +370,7 @@ func runBackupProcessor(
 						if !writeSSTsInProcessor {
 							return errors.New("ExportRequest returned unexpected file payload")
 						}
-						file.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(flowCtx.EvalCtx.NodeID.SQLInstanceID()))
+						file.Path = storageccl.GenerateUniqueSSTName(flowCtx.EvalCtx.NodeID.SQLInstanceID())
 						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV, spec.Encryption); err != nil {
 							return err
 						}

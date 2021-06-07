@@ -869,31 +869,13 @@ var specs = []stmtSpec{
 		inline: []string{"name_list"},
 	},
 	{
-		name:   "grant_privileges",
-		stmt:   "grant_stmt",
-		inline: []string{"privileges", "privilege_list", "privilege", "table_pattern_list", "name_list"},
-		replace: map[string]string{
-			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
-			"table_pattern":                     "table_name",
-			"'TO' ( ( name ) ( ( ',' name ) )*": "'TO' ( ( user_name ) ( ( ',' user_name ) )*",
-			"| 'GRANT' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'TO' ( ( user_name ) ( ( ',' user_name ) )* )": "",
-			"'WITH' 'ADMIN' 'OPTION'": "",
-			"targets":                 "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-		},
-		unlink:  []string{"table_name", "database_name", "user_name"},
-		nosplit: true,
-	},
-	{
-		name: "grant_roles",
-		stmt: "grant_stmt",
+		name:   "grant_stmt",
+		inline: []string{"privileges", "opt_privileges_clause"},
 		exclude: []*regexp.Regexp{
-			// Ignore other grant statements that are granting privileges.
-			regexp.MustCompile("'GRANT' privileges"),
-		}, replace: map[string]string{
-			"'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'": "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )* 'WITH' 'ADMIN' 'OPTION'",
-			"| 'GRANT' privilege_list 'TO' name_list":                       "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )*",
+			regexp.MustCompile("'TYPE' target_types"),
+			regexp.MustCompile("'SCHEMA' schema_name_list"),
 		},
-		unlink: []string{"role_name", "user_name"},
+		unlink: []string{"targets"},
 	},
 	{
 		name: "foreign_key_column_level",
@@ -1100,33 +1082,13 @@ var specs = []stmtSpec{
 		unlink:  []string{"schedule_id"},
 	},
 	{
-		name:   "revoke_privileges",
-		stmt:   "revoke_stmt",
-		inline: []string{"privileges", "privilege_list", "privilege", "name_list"},
-		replace: map[string]string{
-			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
-			"targets":                             "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"'FROM' ( ( name ) ( ( ',' name ) )*": "'FROM' ( ( user_name ) ( ( ',' user_name ) )*",
-			"| 'REVOKE' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )":  "",
-			"| 'REVOKE'  ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )": "",
-			"'ADMIN' 'OPTION' 'FOR'": "",
-		},
-		unlink:  []string{"table_name", "database_name", "user_name"},
-		nosplit: true,
-	},
-	{
-		name: "revoke_roles",
-		stmt: "revoke_stmt",
+		name:   "revoke_stmt",
+		inline: []string{"privileges", "opt_privileges_clause"},
 		exclude: []*regexp.Regexp{
-			// Ignore other grant statements that are granting privileges.
-			regexp.MustCompile("'REVOKE' privileges"),
+			regexp.MustCompile("'TYPE' target_types"),
+			regexp.MustCompile("'SCHEMA' schema_name_list"),
 		},
-		replace: map[string]string{
-			"'REVOKE' privileges 'ON' targets 'FROM' name_list":               "",
-			"'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list": "'REVOKE' 'ADMIN' 'OPTION' 'FOR' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",
-			"| 'REVOKE' privilege_list 'FROM' name_list":                      "'REVOKE' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",
-		},
-		unlink: []string{"role_name", "user_name"},
+		unlink: []string{"targets"},
 	},
 	{
 		name:    "rollback_transaction",
