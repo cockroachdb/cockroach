@@ -80,7 +80,7 @@ func (n *nullSinkStorage) Writer(_ context.Context, _ string) (io.WriteCloser, e
 	return nullWriter{}, nil
 }
 
-func (n *nullSinkStorage) ListFiles(_ context.Context, _ string) ([]string, error) {
+func (n *nullSinkStorage) ListFiles(_ context.Context, _, _ string) ([]string, error) {
 	return nil, nil
 }
 

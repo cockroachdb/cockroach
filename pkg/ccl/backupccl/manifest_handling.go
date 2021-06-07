@@ -593,11 +593,13 @@ func getLocalityInfo(
 
 const incBackupSubdirGlob = "[0-9]*/[0-9]*.[0-9][0-9]/"
 
+const sstPrefix = "data"
+
 // findPriorBackupNames finds "appended" incremental backups, as done by
 // findPriorBackupLocations and appends the backup manifest file name to
 // the URI.
 func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestName)
+	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestName, sstPrefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
@@ -612,7 +614,7 @@ func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]s
 // said list.
 func FindPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
 	backupManifestSuffix := backupManifestName
-	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
+	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix, sstPrefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
@@ -621,7 +623,7 @@ func FindPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) 
 		// 20.1 nodes and earlier will have an oldBackupManifestName so we check for
 		// that too.
 		backupManifestSuffix = backupOldManifestName
-		prev, err = store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
+		prev, err = store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix, sstPrefix)
 		if err != nil {
 			return nil, errors.Wrap(err, "reading previous backup layers")
 		}
@@ -1016,7 +1018,7 @@ func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 func ListFullBackupsInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) ([]string, error) {
-	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
+	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName, sstPrefix)
 	if err != nil {
 		return nil, err
 	}

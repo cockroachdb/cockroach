@@ -506,7 +506,7 @@ func CheckListFilesCanonical(
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				s := storeFromURI(ctx, t, tc.URI, clientFactory, user, ie, kvDB, testSettings)
-				filesList, err := s.ListFiles(ctx, tc.suffix)
+				filesList, err := s.ListFiles(ctx, tc.suffix, cloud.NoDlimiter)
 				require.NoError(t, err)
 				require.Equal(t, filesList, tc.resultList)
 			})

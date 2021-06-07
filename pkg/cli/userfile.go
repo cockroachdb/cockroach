@@ -192,7 +192,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) error {
 	}
 	defer f.Close()
 
-	files, err := f.ListFiles(ctx, glob)
+	files, err := f.ListFiles(ctx, glob, cloud.NoDlimiter)
 	if err != nil {
 		return err
 	}
@@ -388,7 +388,7 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, er
 	}
 	defer f.Close()
 
-	return f.ListFiles(ctx, prefix)
+	return f.ListFiles(ctx, prefix, cloud.NoDlimiter)
 }
 
 func downloadUserfile(
@@ -453,7 +453,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 		return nil, err
 	}
 
-	files, err := f.ListFiles(ctx, userfileParsedURL.Path)
+	files, err := f.ListFiles(ctx, userfileParsedURL.Path, cloud.NoDlimiter)
 	if err != nil {
 		return nil, err
 	}

@@ -155,7 +155,9 @@ func (l *localFileStorage) ReadFileAt(
 	return reader, size, nil
 }
 
-func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
+func (l *localFileStorage) ListFiles(
+	ctx context.Context, patternSuffix, delimiter string,
+) ([]string, error) {
 
 	pattern := l.base
 	if patternSuffix != "" {
@@ -165,13 +167,27 @@ func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) 
 		pattern = joinRelativePath(pattern, patternSuffix)
 	}
 
+	// TODO(dt): push dlimiter down.
 	var fileList []string
 	matches, err := l.blobClient.List(ctx, pattern)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to match pattern provided")
 	}
 
+	constPrefix := cloud.GetPrefixBeforeWildcard(pattern)
+	var prevGroup string
+
 	for _, fileName := range matches {
+		if delimiter != "" {
+			suffix := strings.TrimPrefix(fileName, constPrefix)
+			if idx := strings.Index(suffix, delimiter); idx != -1 {
+				if prevGroup == suffix[0:idx] {
+					continue
+				}
+				prevGroup = suffix[0:idx]
+				fileName = constPrefix + suffix[0:idx]
+			}
+		}
 		if patternSuffix != "" {
 			if !strings.HasPrefix(fileName, l.base) {
 				// TODO(dt): return a nice rel-path instead of erroring out.

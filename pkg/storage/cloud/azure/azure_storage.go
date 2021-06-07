@@ -175,7 +175,9 @@ func (s *azureStorage) ReadFileAt(
 	return reader, size, nil
 }
 
-func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
+func (s *azureStorage) ListFiles(
+	ctx context.Context, patternSuffix, delimiter string,
+) ([]string, error) {
 	pattern := s.prefix
 	if patternSuffix != "" {
 		if cloud.ContainsGlob(s.prefix) {
@@ -184,38 +186,67 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 		pattern = path.Join(pattern, patternSuffix)
 	}
 	var fileList []string
-	response, err := s.container.ListBlobsFlatSegment(ctx,
-		azblob.Marker{},
-		azblob.ListBlobsSegmentOptions{Prefix: cloud.GetPrefixBeforeWildcard(s.prefix)},
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to list files for specified blob")
-	}
-
-	for _, blob := range response.Segment.BlobItems {
-		matches, err := path.Match(pattern, blob.Name)
+	acc := func(key string) error {
+		matches, err := path.Match(pattern, key)
 		if err != nil {
-			continue
+			return err
 		}
 		if matches {
 			if patternSuffix != "" {
-				if !strings.HasPrefix(blob.Name, s.prefix) {
+				if !strings.HasPrefix(key, s.prefix) {
 					// TODO(dt): return a nice rel-path instead of erroring out.
-					return nil, errors.New("pattern matched file outside of path")
+					return errors.New("pattern matched file outside of path")
 				}
-				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(blob.Name, s.prefix), "/"))
+				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(key, s.prefix), "/"))
 			} else {
 				azureURL := url.URL{
 					Scheme:   "azure",
 					Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
-					Path:     blob.Name,
+					Path:     key,
 					RawQuery: azureQueryParams(s.conf),
 				}
 				fileList = append(fileList, azureURL.String())
 			}
 		}
+		return nil
 	}
 
+	if delimiter != "" {
+		response, err := s.container.ListBlobsHierarchySegment(ctx,
+			azblob.Marker{},
+			delimiter,
+			azblob.ListBlobsSegmentOptions{Prefix: cloud.GetPrefixBeforeWildcard(s.prefix)},
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to list files for specified blob")
+		}
+
+		for _, blob := range response.Segment.BlobPrefixes {
+			if err := acc(blob.Name); err != nil {
+				return nil, err
+			}
+		}
+		for _, blob := range response.Segment.BlobItems {
+			if err := acc(blob.Name); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		response, err := s.container.ListBlobsHierarchySegment(ctx,
+			azblob.Marker{},
+			delimiter,
+			azblob.ListBlobsSegmentOptions{Prefix: cloud.GetPrefixBeforeWildcard(s.prefix)},
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to list files for specified blob")
+		}
+
+		for _, blob := range response.Segment.BlobItems {
+			if err := acc(blob.Name); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return fileList, nil
 }
 

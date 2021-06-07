@@ -382,7 +382,7 @@ func importPlanHook(
 					if err != nil {
 						return err
 					}
-					expandedFiles, err := s.ListFiles(ctx, "")
+					expandedFiles, err := s.ListFiles(ctx, "", cloud.NoDlimiter)
 					if err != nil {
 						return err
 					}

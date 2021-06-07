@@ -67,10 +67,10 @@ func TestLocalIOLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err = e.ListFiles(ctx, ""); !testutils.IsError(err, expected) {
+		if _, err = e.ListFiles(ctx, "", cloud.NoDlimiter); !testutils.IsError(err, expected) {
 			t.Fatal(err)
 		}
-		if _, err = baseDir.ListFiles(ctx, dest); !testutils.IsError(err, expected) {
+		if _, err = baseDir.ListFiles(ctx, dest, cloud.NoDlimiter); !testutils.IsError(err, expected) {
 			t.Fatal(err)
 		}
 	}

@@ -26,6 +26,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// NoDlimiter can be passed to ListFiles.
+const NoDlimiter = ""
+
 // This file is for interfaces only and should not contain any implementation
 // code. All concrete implementations should be added to pkg/storage/cloudimpl.
 
@@ -85,7 +88,7 @@ type ExternalStorage interface {
 	// and there is no clear definition of what it would mean to be relative to
 	// that, the results are fully-qualified absolute URIs. The base URI is *only*
 	// allowed to contain globs-patterns when the explicit patternSuffix is "".
-	ListFiles(ctx context.Context, patternSuffix string) ([]string, error)
+	ListFiles(ctx context.Context, patternSuffix, delimiter string) ([]string, error)
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
