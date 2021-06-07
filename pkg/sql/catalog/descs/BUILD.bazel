@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "collection.go",
         "dist_sql_type_resolver.go",
+        "kv_descriptors.go",
         "leased_descriptors.go",
         "synthetic_descriptors.go",
         "txn.go",
