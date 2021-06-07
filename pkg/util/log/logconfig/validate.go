@@ -13,9 +13,11 @@ package logconfig
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -42,24 +44,15 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	if err := normalizeDir(&c.FileDefaults.Dir); err != nil {
 		fmt.Fprintf(&errBuf, "file-defaults: %v\n", err)
 	}
-	// No severity -> default INFO.
-	if c.FileDefaults.Filter == logpb.Severity_UNKNOWN {
-		c.FileDefaults.Filter = logpb.Severity_INFO
-	}
-	if c.FluentDefaults.Filter == logpb.Severity_UNKNOWN {
-		c.FluentDefaults.Filter = logpb.Severity_INFO
-	}
-	// Sinks are not auditable by default.
-	if c.FileDefaults.Auditable == nil {
-		c.FileDefaults.Auditable = &bf
-	}
-	if c.FluentDefaults.Auditable == nil {
-		c.FluentDefaults.Auditable = &bf
+	// No criticality -> default true for files, false otherwise.
+	if c.FileDefaults.Criticality == nil {
+		c.FileDefaults.Criticality = &bt
 	}
 	// File sinks are buffered by default.
 	if c.FileDefaults.BufferedWrites == nil {
 		c.FileDefaults.BufferedWrites = &bt
 	}
+
 	// No format -> populate defaults.
 	if c.FileDefaults.Format == nil {
 		s := DefaultFileFormat
@@ -69,27 +62,32 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		s := DefaultFluentFormat
 		c.FluentDefaults.Format = &s
 	}
-	// No redaction markers -> default keep them.
-	if c.FileDefaults.Redactable == nil {
-		c.FileDefaults.Redactable = &bt
+	if c.HTTPDefaults.Format == nil {
+		s := DefaultHTTPFormat
+		c.HTTPDefaults.Format = &s
 	}
-	if c.FluentDefaults.Redactable == nil {
-		c.FluentDefaults.Redactable = &bt
+
+	if c.HTTPDefaults.UnsafeTLS == nil {
+		c.HTTPDefaults.UnsafeTLS = &bf
 	}
-	// No redaction specification -> default false.
-	if c.FileDefaults.Redact == nil {
-		c.FileDefaults.Redact = &bf
+	if c.HTTPDefaults.Method == nil {
+		s := HTTPSinkMethod(http.MethodPost)
+		c.HTTPDefaults.Method = &s
 	}
-	if c.FluentDefaults.Redact == nil {
-		c.FluentDefaults.Redact = &bf
+	if c.HTTPDefaults.Timeout == nil {
+		s := 0 * time.Second
+		c.HTTPDefaults.Timeout = &s
 	}
-	// No criticality -> default true for files, false for fluent.
-	if c.FileDefaults.Criticality == nil {
-		c.FileDefaults.Criticality = &bt
-	}
-	if c.FluentDefaults.Criticality == nil {
-		c.FluentDefaults.Criticality = &bf
-	}
+
+	baseDefaults := CommonSinkConfig{
+		Filter:      logpb.Severity_INFO,
+		Auditable:   &bf,
+		Redactable:  &bt,
+		Redact:      &bf,
+		Criticality: &bf}
+	inheritCommonDefaults(&c.FileDefaults.CommonSinkConfig, baseDefaults)
+	inheritCommonDefaults(&c.FluentDefaults.CommonSinkConfig, baseDefaults)
+	inheritCommonDefaults(&c.HTTPDefaults.CommonSinkConfig, baseDefaults)
 
 	// Validate and fill in defaults for file sinks.
 	for prefix, fc := range c.Sinks.FileGroups {
@@ -115,8 +113,19 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		}
 	}
 
+	for sinkName, fc := range c.Sinks.HTTPServers {
+		if fc == nil {
+			fc = &HTTPSinkConfig{}
+			c.Sinks.HTTPServers[sinkName] = fc
+		}
+		// fc.serverName = serverName
+		if err := c.validateHTTPSinkConfig(fc); err != nil {
+			fmt.Fprintf(&errBuf, "http server %q: %v\n", *fc.Address, err)
+		}
+	}
+
 	// Defaults for stderr.
-	c.inheritCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
+	inheritCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
 	if c.Sinks.Stderr.Filter == logpb.Severity_UNKNOWN {
 		c.Sinks.Stderr.Filter = logpb.Severity_NONE
 	}
@@ -136,6 +145,8 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	fileSinks := make(map[logpb.Channel]*FileSinkConfig)
 	// fluentSinks maps channels to fluent servers.
 	fluentSinks := make(map[logpb.Channel]*FluentSinkConfig)
+	// httpSinks maps channels to http servers.
+	httpSinks := make(map[logpb.Channel]*HTTPSinkConfig)
 
 	// Check that no channel is listed by more than one file sink,
 	// and every file has at least one channel.
@@ -171,6 +182,21 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					fc.serverName, ch, prev.serverName)
 			} else {
 				fluentSinks[ch] = fc
+			}
+		}
+	}
+
+	for _, fc := range c.Sinks.HTTPServers {
+		if len(fc.Channels.Channels) == 0 {
+			fmt.Fprintf(&errBuf, "http server %q: no channel selected\n", *fc.Address)
+		}
+		fc.Channels.Sort()
+		for _, ch := range fc.Channels.Channels {
+			if prev := httpSinks[ch]; prev != nil {
+				fmt.Fprintf(&errBuf, "http server %q: channel %s already captured by server %q\n",
+					*fc.Address, ch, *prev.Address)
+			} else {
+				httpSinks[ch] = fc
 			}
 		}
 	}
@@ -267,7 +293,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	return nil
 }
 
-func (c *Config) inheritCommonDefaults(fc, defaults *CommonSinkConfig) {
+func inheritCommonDefaults(fc *CommonSinkConfig, defaults CommonSinkConfig) {
 	if fc.Filter == logpb.Severity_UNKNOWN {
 		fc.Filter = defaults.Filter
 	}
@@ -289,7 +315,7 @@ func (c *Config) inheritCommonDefaults(fc, defaults *CommonSinkConfig) {
 }
 
 func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
-	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
+	inheritCommonDefaults(&fc.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
 
 	// Inherit file-specific defaults.
 	if fc.MaxFileSize == nil {
@@ -336,7 +362,7 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 }
 
 func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
-	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FluentDefaults.CommonSinkConfig)
+	inheritCommonDefaults(&fc.CommonSinkConfig, c.FluentDefaults.CommonSinkConfig)
 
 	fc.Net = strings.ToLower(strings.TrimSpace(fc.Net))
 	switch fc.Net {
@@ -359,6 +385,31 @@ func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
 		fc.Criticality = &bt
 	}
 	fc.Auditable = nil
+
+	return nil
+}
+
+func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
+	inheritCommonDefaults(&hsc.CommonSinkConfig, c.HTTPDefaults.CommonSinkConfig)
+
+	if hsc.Address == nil {
+		hsc.Address = c.HTTPDefaults.Address
+	}
+	if hsc.Address == nil || len(*hsc.Address) == 0 {
+		return errors.New("address cannot be empty")
+	}
+
+	if hsc.UnsafeTLS == nil {
+		hsc.UnsafeTLS = c.HTTPDefaults.UnsafeTLS
+	}
+
+	if hsc.Method == nil {
+		hsc.Method = c.HTTPDefaults.Method
+	}
+
+	if hsc.Timeout == nil {
+		hsc.Timeout = c.HTTPDefaults.Timeout
+	}
 
 	return nil
 }
