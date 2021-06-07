@@ -484,6 +484,7 @@ go_test(
         "sort_test.go",
         "span_builder_test.go",
         "split_test.go",
+        "statement_mark_redaction_test.go",
         "table_ref_test.go",
         "table_test.go",
         "telemetry_test.go",

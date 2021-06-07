@@ -100,20 +100,20 @@ flush_server_logs
 # previous statement is also in the log file after this check
 # succeeds.
 system "for i in `seq 1 3`; do
-  grep 'SELECT 660' $logfile && exit 0;
+  grep 'SELECT ..*660..* +' $logfile && exit 0;
   echo still waiting;
   sleep 1;
 done;
 echo 'not finding two separate txn counter values?';
-grep 'SELECT 660' $logfile;
+grep 'SELECT ..*660..* +' $logfile;
 exit 1;"
 
 # Two separate single-stmt txns.
-system "n=`grep 'SELECT 660' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
 # Same txns.
-system "n=`grep 'SELECT 770' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT 880' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT 990' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*770..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*880..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep 'SELECT ..*990..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\)/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
 
 end_test
 
