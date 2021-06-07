@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 var parallelCommitsEnabled = settings.RegisterBoolSetting(
@@ -126,6 +127,10 @@ func (tc *txnCommitter) SendLocked(
 		return tc.wrapped.SendLocked(ctx, ba)
 	}
 	et := rArgs.(*roachpb.EndTxnRequest)
+
+	if err := tc.validateEndTxnBatch(ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// Determine whether we can elide the EndTxn entirely. We can do so if the
 	// transaction is read-only, which we determine based on whether the EndTxn
@@ -253,6 +258,28 @@ func (tc *txnCommitter) SendLocked(
 	// transaction proto in the STAGING state.
 	br.Txn = cloneWithStatus(br.Txn, roachpb.COMMITTED)
 	return br, nil
+}
+
+// validateEndTxnBatch runs sanity checks on a commit or rollback request.
+func (tc *txnCommitter) validateEndTxnBatch(ba roachpb.BatchRequest) error {
+	// Check that we don't combine a limited DeleteRange with a commit. We cannot
+	// attempt to run such a batch as a 1PC because, if it gets split and thus
+	// doesn't run as a 1PC, resolving the intents will be very expensive.
+	// Resolving the intents would require scanning the whole key span, which
+	// might be much larger than the span of keys deleted before the limit was
+	// hit. Requests that actually run as 1PC don't have this problem, as they
+	// don't write and resolve intents. So, we make an exception and allow batches
+	// that set Require1PC - those are guaranteed to either execute as 1PC or
+	// fail. See also #37457.
+	if ba.Header.MaxSpanRequestKeys == 0 {
+		return nil
+	}
+	e, endTxn := ba.GetArg(roachpb.EndTxn)
+	_, delRange := ba.GetArg(roachpb.DeleteRange)
+	if delRange && endTxn && !e.(*roachpb.EndTxnRequest).Require1PC {
+		return errors.Errorf("possible 1PC batch cannot contain EndTxn without setting Require1PC")
+	}
+	return nil
 }
 
 // sendLockedWithElidedEndTxn sends the provided batch without its EndTxn
