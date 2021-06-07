@@ -325,7 +325,17 @@ func (s *crdbSpan) record(msg string) {
 }
 
 func (s *crdbSpan) recordStructured(item Structured) {
-	s.recordInternal(item, &s.mu.recording.structured)
+	p, err := types.MarshalAny(item)
+	if err != nil {
+		// An error here is an error from Marshal; these
+		// are unlikely to happen.
+		return
+	}
+	sr := &tracingpb.StructuredRecord{
+		Time:    time.Now(),
+		Payload: p,
+	}
+	s.recordInternal(sr, &s.mu.recording.structured)
 }
 
 // sizable is a subset for protoutil.Message, for payloads (log records and
@@ -441,7 +451,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 	if numEvents := s.mu.recording.structured.Len(); numEvents != 0 {
 		rs.InternalStructured = make([]*types.Any, 0, numEvents)
 		for i := 0; i < numEvents; i++ {
-			event := s.mu.recording.structured.Get(i).(Structured)
+			event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
 			item, err := types.MarshalAny(event)
 			if err != nil {
 				// An error here is an error from Marshal; these

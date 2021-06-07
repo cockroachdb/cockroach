@@ -319,7 +319,7 @@ func (a *appStats) recordStatement(
 	if planner.instrumentation.sp != nil {
 		trace := planner.instrumentation.sp.GetRecording()
 		// ForEach returns nodes in order.
-		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
+		execinfrapb.ExtractNodesFromSpans(ctx, trace).ForEach(func(i int) {
 			nodes = append(nodes, int64(i))
 		})
 	}

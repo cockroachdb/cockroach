@@ -1526,7 +1526,7 @@ func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Next implements the tree.ValueGenerator interface.
-func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
+func (p *payloadsForSpanGenerator) Next(ctx context.Context) (bool, error) {
 	p.payloadIndex++
 
 	// If payloadIndex is within payloads and there are some payloads, then we
@@ -1548,7 +1548,7 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 			return false, nil
 		}
 		currRecording := p.span.GetRecording()[p.recordingIndex]
-		currRecording.Structured(func(item *pbtypes.Any) {
+		if err := currRecording.Structured(func(item *pbtypes.Any, _ time.Time) {
 			payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
 			if err != nil {
 				return
@@ -1556,7 +1556,9 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 			if payload != nil {
 				p.payloads = append(p.payloads, payload)
 			}
-		})
+		}); err != nil {
+			return false, err
+		}
 	}
 
 	p.payloadIndex = 0
@@ -1566,7 +1568,11 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 // Values implements the tree.ValueGenerator interface.
 func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 	payload := p.payloads[p.payloadIndex]
-	payloadTypeAsJSON, err := payload.FetchValKey("@type")
+	payloadJSON, err := payload.FetchValKey("payload")
+	if err != nil {
+		return nil, err
+	}
+	payloadTypeAsJSON, err := payloadJSON.FetchValKey("@type")
 	if err != nil {
 		return nil, err
 	}
@@ -1575,9 +1581,11 @@ func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 	// leftover from JSON value conversion.
 	payloadTypeAsString := strings.TrimSuffix(
 		strings.TrimPrefix(
-			payloadTypeAsJSON.String(),
-			"\"type.googleapis.com/cockroach.",
-		),
+			strings.TrimPrefix(
+				payloadTypeAsJSON.String(),
+				"\"type.googleapis.com/",
+			),
+			"cockroach."),
 		"\"",
 	)
 

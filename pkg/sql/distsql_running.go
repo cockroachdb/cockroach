@@ -854,7 +854,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		}
 		var ev roachpb.ContentionEvent
 		for i := range meta.TraceData {
-			meta.TraceData[i].Structured(func(any *pbtypes.Any) {
+			if err := meta.TraceData[i].Structured(func(any *pbtypes.Any, _ time.Time) {
 				if !pbtypes.Is(any, &ev) {
 					return
 				}
@@ -868,7 +868,9 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 					r.contendedQueryMetric = nil
 				}
 				r.contentionRegistry.AddContentionEvent(ev)
-			})
+			}); err != nil {
+				r.SetError(err)
+			}
 		}
 	}
 	if meta.Metrics != nil {

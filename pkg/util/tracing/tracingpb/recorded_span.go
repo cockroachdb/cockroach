@@ -33,10 +33,15 @@ func (s *RecordedSpan) String() string {
 
 // Structured visits the data passed to RecordStructured for the Span from which
 // the RecordedSpan was created.
-func (s *RecordedSpan) Structured(visit func(*types.Any)) {
+func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) error {
 	for _, item := range s.InternalStructured {
-		visit(item)
+		sr := &StructuredRecord{}
+		if err := types.UnmarshalAny(item, sr); err != nil {
+			return err
+		}
+		visit(sr.Payload, sr.Time)
 	}
+	return nil
 }
 
 // Msg extracts the message of the LogRecord, which is either in an "event" or
