@@ -13,6 +13,7 @@ package scbuild
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -21,6 +22,59 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
+
+// dropSequenceDesc builds targets and transformations using a descriptor.
+func (b *buildContext) dropSequenceDesc(
+	ctx context.Context, seq catalog.TableDescriptor, cascade tree.DropBehavior,
+) {
+	// Check if there are dependencies.
+	err := seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+		if cascade != tree.DropCascade {
+			return pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop sequence %s because other objects depend on it",
+				seq.GetName(),
+			)
+		}
+		desc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		for _, col := range desc.PublicColumns() {
+			for _, id := range dep.ColumnIDs {
+				if col.GetID() != id {
+					continue
+				}
+				defaultExpr := &scpb.DefaultExpression{
+					TableID:         dep.ID,
+					ColumnID:        col.GetID(),
+					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
+					DefaultExpr:     ""}
+				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
+					b.addNode(scpb.Target_DROP, defaultExpr)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// Add a node to drop the sequence
+	sequenceNode := &scpb.Sequence{SequenceID: seq.GetID()}
+	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceNode); !exists {
+		b.addNode(scpb.Target_DROP, sequenceNode)
+	}
+	if seq.GetSequenceOpts().SequenceOwner.OwnerTableID != descpb.InvalidID {
+		sequenceOwnedBy := &scpb.SequenceOwnedBy{
+			SequenceID:   seq.GetID(),
+			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceOwnedBy); !exists {
+			b.addNode(scpb.Target_DROP, sequenceOwnedBy)
+		}
+	}
+}
 
 // dropSequence builds targets and transforms the provided schema change nodes
 // accordingly, given an DROP SEQUENCE statement.
@@ -40,43 +94,9 @@ func (b *buildContext) dropSequence(ctx context.Context, n *tree.DropSequence) {
 				name.FQString()))
 		}
 
-		// Check if there are dependencies.
-		err = table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-			if n.DropBehavior != tree.DropCascade {
-				return pgerror.Newf(
-					pgcode.DependentObjectsStillExist,
-					"cannot drop sequence %s because other objects depend on it",
-					table.GetName(),
-				)
-			}
-			desc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				return err
-			}
-			for _, col := range desc.PublicColumns() {
-				for _, id := range dep.ColumnIDs {
-					if col.GetID() != id {
-						continue
-					}
-					defaultExpr := &scpb.DefaultExpression{
-						TableID:         dep.ID,
-						ColumnID:        col.GetID(),
-						UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-						DefaultExpr:     "",
-					}
-					if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
-						b.addNode(scpb.Target_DROP, defaultExpr)
-					}
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			panic(err)
+		if table.Dropped() {
+			return
 		}
-
-		// Add a node to drop the sequence
-		b.addNode(scpb.Target_DROP,
-			&scpb.Sequence{TableID: table.GetID()})
+		b.dropSequenceDesc(ctx, table, n.DropBehavior)
 	}
 }

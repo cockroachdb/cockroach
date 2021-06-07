@@ -2686,7 +2686,8 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	}
 	executor := scexec.NewExecutor(
 		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
-		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs, ex.server.cfg.JobRegistry,
+		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
+		ex.server.cfg.JobRegistry, ex.planner.execCfg.InternalExecutor,
 	)
 	after, err := runNewSchemaChanger(
 		ctx,
@@ -2711,7 +2712,11 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	for i := range scs.nodes {
 		targetSlice[i] = scs.nodes[i].Target
 		states[i] = scs.nodes[i].State
-		descIDSet.Add(scs.nodes[i].Element().DescriptorID())
+		// Depending on the element type either a single descriptor ID
+		// will exist or multiple (i.e. foreign keys).
+		if scs.nodes[i].Element().DescriptorID() != descpb.InvalidID {
+			descIDSet.Add(scs.nodes[i].Element().DescriptorID())
+		}
 	}
 	descIDs := descIDSet.Ordered()
 	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{

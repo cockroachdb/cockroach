@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -89,6 +90,17 @@ func (so *DummySequenceOperators) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errEvalPlanner)
+}
+
+// HasPrivilege is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) HasPrivilege(
+	ctx context.Context,
+	specifier tree.HasPrivilegeSpecifier,
+	user security.SQLUsername,
+	kind privilege.Kind,
+	withGrantOpt bool,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
 }
 
 // IncrementSequence is part of the tree.SequenceOperators interface.
@@ -243,6 +255,17 @@ func (ep *DummyEvalPlanner) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errEvalPlanner)
+}
+
+// HasPrivilege is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) HasPrivilege(
+	ctx context.Context,
+	specifier tree.HasPrivilegeSpecifier,
+	user security.SQLUsername,
+	kind privilege.Kind,
+	withGrantOpt bool,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
 }
 
 // ResolveTableName is part of the tree.EvalDatabase interface.

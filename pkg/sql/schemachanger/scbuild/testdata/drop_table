@@ -1,0 +1,133 @@
+create-table
+CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
+----
+
+create-table
+CREATE TABLE IF NOT EXISTS defaultdb.orders (
+    id INT PRIMARY KEY,
+    customer INT UNIQUE NOT NULL REFERENCES customers (id),
+    orderTotal DECIMAL(9,2),
+    INDEX (customer)
+  );
+----
+
+create-sequence
+CREATE SEQUENCE defaultdb.SQ2;
+----
+
+create-table
+CREATE TABLE defaultdb.shipments (
+    tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    carrier STRING,
+    status STRING,
+    customer_id INT,
+    randcol INT DEFAULT nextval('defaultdb.sq2'),
+    CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES customers(id),
+    CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES orders(customer)
+  );
+----
+
+create-sequence
+CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier
+----
+
+create-view
+CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
+----
+
+build
+DROP TABLE defaultdb.shipments CASCADE;
+----
+- target:
+    direction: DROP
+    elementProto:
+      view:
+        dependedOnBy: []
+        dependsOn:
+        - 55
+        tableId: 57
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      outForeignKey:
+        name: fk_customers
+        originColumns:
+        - 4
+        originId: 55
+        referenceColumns:
+        - 1
+        referenceId: 52
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      inForeignKey:
+        name: fk_customers
+        originColumns:
+        - 1
+        originId: 52
+        referenceColumns:
+        - 4
+        referenceId: 55
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      outForeignKey:
+        name: fk_orders
+        originColumns:
+        - 4
+        originId: 55
+        referenceColumns:
+        - 2
+        referenceId: 53
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      inForeignKey:
+        name: fk_orders
+        originColumns:
+        - 2
+        originId: 53
+        referenceColumns:
+        - 4
+        referenceId: 55
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      sequence:
+        sequenceId: 56
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      sequenceOwner:
+        ownerTableId: 55
+        sequenceId: 56
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      defaultExpression:
+        columnId: 5
+        defaultExpr: nextval(54:::REGCLASS)
+        tableId: 55
+        usesSequenceIDs:
+        - 54
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      relationDependedOnBy:
+        dependedOn: 55
+        tableId: 54
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      table:
+        tableId: 55
+  state: PUBLIC

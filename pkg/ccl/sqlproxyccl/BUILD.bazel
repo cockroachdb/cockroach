@@ -60,6 +60,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/ccl/sqlproxyccl/denylist",
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",

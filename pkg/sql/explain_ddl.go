@@ -70,7 +70,7 @@ func (n *explainDDLNode) startExec(params runParams) error {
 		// TODO(ajwerner): Populate created descriptors.
 	})
 	if err != nil {
-		return pgerror.Wrap(err, pgcode.FeatureNotSupported, "New schema changer failed executing this operation.")
+		return pgerror.Wrap(err, pgcode.FeatureNotSupported, "new schema changer failed executing this operation.")
 	}
 	var out string
 	if n.options.Flags[tree.ExplainFlagDeps] {
