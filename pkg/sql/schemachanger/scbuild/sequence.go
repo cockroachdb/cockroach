@@ -25,15 +25,15 @@ import (
 
 // dropSequenceDesc builds targets and transformations using a descriptor.
 func (b *buildContext) dropSequenceDesc(
-	ctx context.Context, table catalog.TableDescriptor, cascade tree.DropBehavior,
+	ctx context.Context, seq catalog.TableDescriptor, cascade tree.DropBehavior,
 ) {
 	// Check if there are dependencies.
-	err := table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+	err := seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		if cascade != tree.DropCascade {
 			return pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"cannot drop sequence %s because other objects depend on it",
-				table.GetName(),
+				seq.GetName(),
 			)
 		}
 		desc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
@@ -62,15 +62,17 @@ func (b *buildContext) dropSequenceDesc(
 	}
 
 	// Add a node to drop the sequence
-	sequenceNode := &scpb.Sequence{TableID: table.GetID()}
+	sequenceNode := &scpb.Sequence{SequenceID: seq.GetID()}
 	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceNode); !exists {
 		b.addNode(scpb.Target_DROP, sequenceNode)
 	}
-	sequenceOwnedBy := &scpb.SequenceOwnedBy{
-		TableID:      table.GetID(),
-		OwnerTableID: table.GetSequenceOpts().SequenceOwner.OwnerTableID}
-	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceOwnedBy); !exists {
-		b.addNode(scpb.Target_DROP, sequenceOwnedBy)
+	if seq.GetSequenceOpts().SequenceOwner.OwnerTableID != descpb.InvalidID {
+		sequenceOwnedBy := &scpb.SequenceOwnedBy{
+			SequenceID:   seq.GetID(),
+			OwnerTableID: seq.GetSequenceOpts().SequenceOwner.OwnerTableID}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, sequenceOwnedBy); !exists {
+			b.addNode(scpb.Target_DROP, sequenceOwnedBy)
+		}
 	}
 }
 

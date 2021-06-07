@@ -16,8 +16,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -43,7 +41,6 @@ type DescriptorReader interface {
 // namespaces.
 type NamespaceWriter interface {
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
-	SubmitDrainedNames(ctx context.Context, codec keys.SQLCodec, ba *kv.Batch) error
 }
 
 // CommentWriter encapsulates operations used to manipulate
@@ -64,7 +61,6 @@ type Catalog interface {
 // of jobs.
 type MutationJobs interface {
 	AddNewGCJob(job jobspb.SchemaChangeGCDetails, description string)
-	SubmitAllJobs(ctx context.Context, txn *kv.Txn) (bool, error)
 }
 
 // NewMutationVisitor creates a new scop.MutationVisitor.

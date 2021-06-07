@@ -99,14 +99,14 @@ DROP TABLE defaultdb.shipments CASCADE;
     direction: DROP
     elementProto:
       sequence:
-        tableId: 56
+        sequenceId: 56
   state: PUBLIC
 - target:
     direction: DROP
     elementProto:
       sequenceOwner:
         ownerTableId: 55
-        tableId: 56
+        sequenceId: 56
   state: PUBLIC
 - target:
     direction: DROP

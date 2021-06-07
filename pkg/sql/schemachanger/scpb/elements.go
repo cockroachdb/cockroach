@@ -160,13 +160,13 @@ func (e *CheckConstraint) GetAttributes() Attributes {
 }
 
 // DescriptorID implements the Element interface.
-func (e *Sequence) DescriptorID() descpb.ID { return e.TableID }
+func (e *Sequence) DescriptorID() descpb.ID { return e.SequenceID }
 
 // GetAttributes implements the Element interface
 func (e *Sequence) GetAttributes() Attributes {
 	return makeAttributes([]attributeValue{
 		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
+		{key: AttributeDescID, value: DescID(e.SequenceID)},
 	})
 }
 
@@ -258,10 +258,10 @@ func (e *RelationDependedOnBy) DescriptorID() descpb.ID { return e.TableID }
 func (e *SequenceOwnedBy) GetAttributes() Attributes {
 	return makeAttributes([]attributeValue{
 		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
+		{key: AttributeDescID, value: DescID(e.SequenceID)},
 		{key: AttributeDepID, value: DescID(e.OwnerTableID)},
 	})
 }
 
 // DescriptorID implements the Element interface.
-func (e *SequenceOwnedBy) DescriptorID() descpb.ID { return e.TableID }
+func (e *SequenceOwnedBy) DescriptorID() descpb.ID { return e.SequenceID }
