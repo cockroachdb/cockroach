@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // FmtFlags carries options for the pretty-printer.
@@ -137,6 +138,8 @@ const (
 	// rather than string literals. For example, the bytes \x40ab will be formatted
 	// as x'40ab' rather than '\x40ab'.
 	fmtFormatByteLiterals
+
+	FmtRedactNode
 )
 
 // PasswordSubstitution is the string that replaces
@@ -352,7 +355,13 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	if f.HasFlags(FmtShowTypes) {
 		if te, ok := n.(TypedExpr); ok {
 			ctx.WriteByte('(')
-			ctx.formatNodeOrHideConstants(n)
+
+			if f.HasFlags(FmtRedactNode) {
+				ctx.formatNodeMaybeRedact(n)
+			} else {
+				ctx.formatNodeOrHideConstants(n)
+			}
+
 			ctx.WriteString(")[")
 			if rt := te.ResolvedType(); rt == nil {
 				// An attempt is made to pretty-print an expression that was
@@ -372,7 +381,13 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteByte('(')
 		}
 	}
-	ctx.formatNodeOrHideConstants(n)
+
+	if f.HasFlags(FmtRedactNode) {
+		ctx.formatNodeMaybeRedact(n)
+	} else {
+		ctx.formatNodeOrHideConstants(n)
+	}
+
 	if f.HasFlags(FmtAlwaysGroupExprs) {
 		if _, ok := n.(Expr); ok {
 			ctx.WriteByte(')')
@@ -416,6 +431,12 @@ func AsStringWithFQNames(n NodeFormatter, ann *Annotations) string {
 	ctx := NewFmtCtxEx(FmtAlwaysQualifyTableNames, ann)
 	ctx.FormatNode(n)
 	return ctx.CloseAndGetString()
+}
+
+func AsRedactableStringWithFQNames(n NodeFormatter, ann *Annotations) redact.RedactableString {
+	ctx := NewFmtCtxEx(FmtAlwaysQualifyTableNames|FmtRedactNode, ann)
+	ctx.FormatNode(n)
+	return ctx.CloseAndGetRedactableString()
 }
 
 // AsString pretty prints a node to a string.
@@ -467,4 +488,58 @@ func (ctx *FmtCtx) CloseAndGetString() string {
 
 func (ctx *FmtCtx) alwaysFormatTablePrefix() bool {
 	return ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
+}
+
+// Eventually need to move this somewhere else...
+func (ctx *FmtCtx) formatNodeMaybeRedact(n NodeFormatter) {
+	if ctx.flags.HasFlags(FmtRedactNode) {
+		switch v := n.(type) {
+		case *ObjectNamePrefix:
+
+			// Don't want to redact when schema is "public"
+			// Not sure about the case when schema is ""
+			if v.SchemaName == "public" {
+				v.Format(ctx)
+				return
+			}
+
+			// We don't want to redact virtual schemas/tables
+			// but I can't seem to be able to use VirtualTabler here
+			// (undefined type, can't import it)
+			// If that's the case (and I'm not just making some silly implementation error)
+			// then we need to check for virtual schemas/tables earlier
+			// (maybe at logEventsWithSystemEventLogOption?)
+
+			// virtual, err := vt.getVirtualSchemaEntry(v.SchemaName)
+			// if err == nil && virtual != nil {
+			// 	v.Format(ctx)
+			// 	return
+			// }
+
+			// virtual, err = vt.getVirtualTableEntry(v.CatalogName)
+			// if err == nil && virtual != nil {
+			// 	v.Format(ctx)
+			// 	return
+			// }
+
+			ctx.WriteString(string(redact.StartMarker()))
+			v.Format(ctx)
+			ctx.WriteString(string(redact.EndMarker()))
+			return
+
+		case Datum, Constant, *Name:
+			ctx.WriteString(string(redact.StartMarker()))
+			v.Format(ctx)
+			ctx.WriteString(string(redact.EndMarker()))
+			return
+
+		}
+		n.Format(ctx)
+	}
+}
+
+func (ctx *FmtCtx) CloseAndGetRedactableString() redact.RedactableString {
+	redactableString := redact.RedactableString(ctx.String())
+	ctx.Close()
+	return redactableString
 }

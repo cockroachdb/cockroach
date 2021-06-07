@@ -11,6 +11,7 @@
 package log
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"time"
@@ -33,6 +34,11 @@ const (
 	withKeepMarkers = 2
 	withRedaction   = 4
 
+	// withPartialRedaction is a redaction flag that only redacts the sensitive
+	// part(s) of the SQL statement, in contrast with withRedaction, which redacts
+	// the entirety of the SQL statement
+	withPartialRedaction = 8
+
 	// WithFlattenedSensitiveData is the log including sensitive data,
 	// but markers stripped.
 	WithFlattenedSensitiveData EditSensitiveData = confValid
@@ -44,6 +50,10 @@ const (
 	// WithoutSensitiveData is the log with the sensitive data redacted,
 	// but markers included.
 	WithoutSensitiveData EditSensitiveData = confValid | withKeepMarkers | withRedaction
+
+	WithoutSensitiveDataOnlyNorMarkers EditSensitiveData = confValid | withPartialRedaction
+
+	WithoutSensitiveDataOnly EditSensitiveData = confValid | withKeepMarkers | withPartialRedaction
 )
 
 // KeepRedactable can be used as an argument to SelectEditMode to indicate that
@@ -59,7 +69,8 @@ const KeepRedactable = true
 func SelectEditMode(redact, keepRedactable bool) EditSensitiveData {
 	var editMode EditSensitiveData
 	if redact {
-		editMode = editMode | withRedaction
+		// editMode = editMode | withRedaction
+		editMode = editMode | withPartialRedaction
 	}
 	if keepRedactable {
 		editMode = editMode | withKeepMarkers
@@ -71,8 +82,10 @@ func SelectEditMode(redact, keepRedactable bool) EditSensitiveData {
 type redactEditor func(redactablePackage) redactablePackage
 
 func getEditor(editMode EditSensitiveData) redactEditor {
+	//fmt.Println(editMode)
 	switch editMode {
 	case WithMarkedSensitiveData:
+		fmt.Println("WithMarkedSensitiveData")
 		return func(r redactablePackage) redactablePackage {
 			if !r.redactable {
 				r.msg = []byte(redact.EscapeBytes(r.msg))
@@ -81,6 +94,7 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 			return r
 		}
 	case WithFlattenedSensitiveData:
+		fmt.Println("WithFlattenedSensitiveData")
 		return func(r redactablePackage) redactablePackage {
 			if r.redactable {
 				r.msg = redact.RedactableBytes(r.msg).StripMarkers()
@@ -89,6 +103,7 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 			return r
 		}
 	case WithoutSensitiveData:
+		fmt.Println("WithoutSensitiveData")
 		return func(r redactablePackage) redactablePackage {
 			if r.redactable {
 				r.msg = []byte(redact.RedactableBytes(r.msg).Redact())
@@ -99,12 +114,29 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 			return r
 		}
 	case WithoutSensitiveDataNorMarkers:
+		fmt.Println("WithoutSensitiveDataNorMarkers")
 		return func(r redactablePackage) redactablePackage {
 			if r.redactable {
 				r.msg = redact.RedactableBytes(r.msg).Redact().StripMarkers()
 				r.redactable = false
 			} else {
 				r.msg = strippedMarker
+			}
+			return r
+		}
+	case WithoutSensitiveDataOnlyNorMarkers:
+		fmt.Println("WithoutSensitiveDataOnlyNorMarkers")
+		return func(r redactablePackage) redactablePackage {
+			if r.redactable {
+				r.msg = []byte(redact.RedactableBytes(r.msg).Redact())
+			}
+			return r
+		}
+	case WithoutSensitiveDataOnly:
+		fmt.Println("WithoutSensitiveDataOnly")
+		return func(r redactablePackage) redactablePackage {
+			if r.redactable {
+				r.msg = []byte(redact.RedactableBytes(r.msg).Redact())
 			}
 			return r
 		}

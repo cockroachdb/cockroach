@@ -174,13 +174,18 @@ type eventLogOptions struct {
 func (p *planner) logEventsWithOptions(
 	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
+
 	commonPayload := sqlEventCommonExecPayload{
 		user:         p.User(),
-		stmt:         tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations),
+		//stmt:         tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations),
+		stmt: string(tree.AsRedactableStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)),
 		stmtTag:      p.stmt.AST.StatementTag(),
 		placeholders: p.extendedEvalCtx.EvalContext.Placeholders.Values,
 		appName:      p.SessionData().ApplicationName,
 	}
+
+	fmt.Println(commonPayload.stmt)
+
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
 		1+depth,
