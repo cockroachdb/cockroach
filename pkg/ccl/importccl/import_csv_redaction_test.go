@@ -1,0 +1,47 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package importccl
+
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+)
+
+// TestRedactCCLStatement verifies that CCL statements are redacted
+// correctly
+func TestRedactCCLStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCases := []struct {
+		query    string
+		expected string
+	}{
+		{
+			"IMPORT CSV 'file' WITH delimiter = 'foo'",
+			"IMPORT CSV ‹'file'› WITH delimiter = ‹'foo'›",
+		},
+	}
+
+	for _, test := range testCases {
+		stmt, err := parser.ParseOne(test.query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		annotations := tree.MakeAnnotations(stmt.NumAnnotations)
+		f := tree.NewFmtCtxEx(tree.FmtAlwaysQualifyTableNames|tree.FmtRedactNode, &annotations)
+		f.FormatNode(stmt.AST)
+		redactedString := f.CloseAndGetString()
+		require.Equal(t, test.expected, redactedString)
+	}
+}

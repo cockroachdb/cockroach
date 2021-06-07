@@ -1460,9 +1460,11 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 		typ = funcTypeName[node.Type] + " "
 	}
 
-	// We need to remove name anonymization for the function name in
+	// We need to remove name anonymization/redaction for the function name in
 	// particular. Do this by overriding the flags.
-	ctx.WithFlags(ctx.flags&^FmtAnonymize, func() {
+	// TODO(thomas): when function names are correctly typed as FunctionDefinition
+	// remove FmtRedactNode from being overridden.
+	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtRedactNode, func() {
 		ctx.FormatNode(&node.Func)
 	})
 
