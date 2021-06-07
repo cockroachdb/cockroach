@@ -231,7 +231,7 @@ func (so *importSequenceOperators) ValidateAllMultiRegionZoneConfigsInCurrentDat
 	return errors.WithStack(errSequenceOperators)
 }
 
-// Implements the tree.EvalDatabase interface.
+// ParseQualifiedTableName implements the tree.EvalDatabase interface.
 func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := parser.ParseTableName(sql)
 	if err != nil {
@@ -241,14 +241,14 @@ func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.Ta
 	return &tn, nil
 }
 
-// Implements the tree.EvalDatabase interface.
+// ResolveTableName implements the tree.EvalDatabase interface.
 func (so *importSequenceOperators) ResolveTableName(
 	ctx context.Context, tn *tree.TableName,
 ) (tree.ID, error) {
 	return 0, errSequenceOperators
 }
 
-// Implements the tree.EvalDatabase interface.
+// SchemaExists implements the tree.EvalDatabase interface.
 func (so *importSequenceOperators) SchemaExists(
 	ctx context.Context, dbName, scName string,
 ) (bool, error) {
@@ -280,42 +280,42 @@ func (so *importSequenceOperators) HasPrivilege(
 	return false, errors.WithStack(errSequenceOperators)
 }
 
-// Implements the tree.SequenceOperators interface.
+// IncrementSequence implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) IncrementSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
 	return 0, errSequenceOperators
 }
 
-// Implements the tree.SequenceOperators interface.
+// IncrementSequenceByID implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) IncrementSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
 	return 0, errSequenceOperators
 }
 
-// Implements the tree.SequenceOperators interface.
+// GetLatestValueInSessionForSequence implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
 	return 0, errSequenceOperators
 }
 
-// Implements the tree.SequenceOperators interface.
+// GetLatestValueInSessionForSequenceByID implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
 	return 0, errSequenceOperators
 }
 
-// Implements the tree.SequenceOperators interface.
+// SetSequenceValue implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
 ) error {
 	return errSequenceOperators
 }
 
-// Implements the tree.SequenceOperators interface.
+// SetSequenceValueByID implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) SetSequenceValueByID(
 	ctx context.Context, seqID int64, newVal int64, isCalled bool,
 ) error {
@@ -329,39 +329,39 @@ type fkResolver struct {
 
 var _ resolver.SchemaResolver = &fkResolver{}
 
-// Implements the sql.SchemaResolver interface.
+// Txn implements the resolver.SchemaResolver interface.
 func (r *fkResolver) Txn() *kv.Txn {
 	return nil
 }
 
-// Implements the sql.SchemaResolver interface.
+// Accessor implements the resolver.SchemaResolver interface.
 func (r *fkResolver) Accessor() catalog.Accessor {
 	return nil
 }
 
-// Implements the sql.SchemaResolver interface.
+// CurrentDatabase implements the resolver.SchemaResolver interface.
 func (r *fkResolver) CurrentDatabase() string {
 	return ""
 }
 
-// Implements the sql.SchemaResolver interface.
+// CurrentSearchPath implements the resolver.SchemaResolver interface.
 func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sessiondata.SearchPath{}
 }
 
-// Implements the sql.SchemaResolver interface.
+// CommonLookupFlags implements the resolver.SchemaResolver interface.
 func (r *fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{}
 }
 
-// Implements the sql.SchemaResolver interface.
+// ObjectLookupFlags implements the resolver.SchemaResolver interface.
 func (r *fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags {
 	return tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: requireMutable},
 	}
 }
 
-// Implements the tree.ObjectNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkResolver) LookupObject(
 	_ context.Context, _ tree.ObjectLookupFlags, catalogName, scName, obName string,
 ) (found bool, objMeta catalog.Descriptor, err error) {
@@ -398,26 +398,26 @@ func (r fkResolver) LookupSchema(
 	return false, scMeta, errSchemaResolver
 }
 
-// LookupTableByID implements the sql.SchemaResolver interface.
+// LookupTableByID implements the resolver.SchemaResolver interface.
 func (r fkResolver) LookupTableByID(
 	ctx context.Context, id descpb.ID,
 ) (catalog.TableDescriptor, error) {
 	return nil, errSchemaResolver
 }
 
-// Implements the sql.SchemaResolver interface.
+// ResolveTypeByOID implements the resolver.SchemaResolver interface.
 func (r fkResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	return nil, errSchemaResolver
 }
 
-// Implements the sql.SchemaResolver interface.
+// ResolveType implements the resolver.SchemaResolver interface.
 func (r fkResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	return nil, errSchemaResolver
 }
 
-// Implements the sql.SchemaResolver interface.
+// GetQualifiedTableNameByID implements the resolver.SchemaResolver interface.
 func (r fkResolver) GetQualifiedTableNameByID(
 	ctx context.Context, id int64, requiredType tree.RequiredTableKind,
 ) (*tree.TableName, error) {
