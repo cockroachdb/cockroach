@@ -70,15 +70,9 @@ type ObjectNameExistingResolver interface {
 // LookupSchema to return an object consisting of the parent database and
 // resolved target schema.
 type ObjectNameTargetResolver interface {
-	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
-}
-
-// SchemaMeta is an opaque reference returned by LookupSchema().
-//
-// TODO(ajwerner): Remove this.
-type SchemaMeta interface {
-	// SchemaMeta is the interface anchor.
-	SchemaMeta()
+	LookupSchema(
+		ctx context.Context, dbName, scName string,
+	) (found bool, scMeta catalog.ResolvedObjectPrefix, err error)
 }
 
 // ErrNoPrimaryKey is returned when resolving a table object and the
@@ -244,24 +238,24 @@ func ResolveExistingObject(
 // prefix for the input object.
 func ResolveTargetObject(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName,
-) (*catalog.ResolvedObjectPrefix, tree.ObjectNamePrefix, error) {
-	found, prefix, scMeta, err := ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+) (catalog.ResolvedObjectPrefix, tree.ObjectNamePrefix, error) {
+	found, prefix, scInfo, err := ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
-		return nil, prefix, err
+		return catalog.ResolvedObjectPrefix{}, prefix, err
 	}
 	if !found {
 		if !un.HasExplicitSchema() && !un.HasExplicitCatalog() {
-			return nil, prefix, pgerror.New(pgcode.InvalidName, "no database specified")
+			return catalog.ResolvedObjectPrefix{}, prefix,
+				pgerror.New(pgcode.InvalidName, "no database specified")
 		}
 		err = pgerror.Newf(pgcode.InvalidSchemaName,
 			"cannot create %q because the target database or schema does not exist",
 			tree.ErrString(un))
 		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
-		return nil, prefix, err
+		return catalog.ResolvedObjectPrefix{}, prefix, err
 	}
-	scInfo := scMeta.(*catalog.ResolvedObjectPrefix)
 	if scInfo.Schema.SchemaKind() == catalog.SchemaVirtual {
-		return nil, prefix, pgerror.Newf(pgcode.InsufficientPrivilege,
+		return catalog.ResolvedObjectPrefix{}, prefix, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
 	return scInfo, prefix, nil
@@ -415,7 +409,7 @@ func ResolveTarget(
 	r ObjectNameTargetResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
-) (found bool, namePrefix tree.ObjectNamePrefix, scMeta SchemaMeta, err error) {
+) (found bool, namePrefix tree.ObjectNamePrefix, scMeta catalog.ResolvedObjectPrefix, err error) {
 	namePrefix = tree.ObjectNamePrefix{
 		SchemaName:      tree.Name(u.Schema()),
 		ExplicitSchema:  u.HasExplicitSchema(),
@@ -428,7 +422,7 @@ func ResolveTarget(
 		// resolution only succeeds if the session already has a temporary schema.
 		scName, err := searchPath.MaybeResolveTemporarySchema(u.Schema())
 		if err != nil {
-			return false, namePrefix, nil, err
+			return false, namePrefix, scMeta, err
 		}
 		if u.HasExplicitCatalog() {
 			// Already 3 parts: nothing to do.
@@ -456,7 +450,7 @@ func ResolveTarget(
 			return found, namePrefix, scMeta, err
 		}
 		// Welp, really haven't found anything.
-		return false, namePrefix, nil, nil
+		return false, namePrefix, catalog.ResolvedObjectPrefix{}, nil
 	}
 
 	// This is a naked table name. Use the current schema = the first
@@ -482,14 +476,14 @@ func ResolveObjectNamePrefix(
 	curDb string,
 	searchPath sessiondata.SearchPath,
 	tp *tree.ObjectNamePrefix,
-) (found bool, scMeta SchemaMeta, err error) {
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	if tp.ExplicitSchema {
 		// pg_temp can be used as an alias for the current sessions temporary schema.
 		// We must perform this resolution before looking up the object. This
 		// resolution only succeeds if the session already has a temporary schema.
 		scName, err := searchPath.MaybeResolveTemporarySchema(tp.Schema())
 		if err != nil {
-			return false, nil, err
+			return false, catalog.ResolvedObjectPrefix{}, err
 		}
 		if tp.ExplicitCatalog {
 			// Catalog name is explicit; nothing to do.
@@ -516,7 +510,7 @@ func ResolveObjectNamePrefix(
 			return found, scMeta, err
 		}
 		// No luck.
-		return false, nil, nil
+		return false, catalog.ResolvedObjectPrefix{}, nil
 	}
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.

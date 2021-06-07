@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/resolver",
+        "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",

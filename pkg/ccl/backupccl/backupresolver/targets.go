@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -74,21 +75,27 @@ type DescriptorResolver struct {
 
 // LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (r *DescriptorResolver) LookupSchema(
-	_ context.Context, dbName, scName string,
-) (bool, resolver.SchemaMeta, error) {
+	ctx context.Context, dbName, scName string,
+) (bool, catalog.ResolvedObjectPrefix, error) {
 	dbID, ok := r.DbsByName[dbName]
 	if !ok {
-		return false, nil, nil
+		return false, catalog.ResolvedObjectPrefix{}, nil
 	}
-	schemas := r.ObjsByName[dbID]
-	if _, ok := schemas[scName]; ok {
-		// TODO (rohany): Not sure if we want to change this to also
-		//  use the resolved schema struct.
-		if dbDesc, ok := r.DescByID[dbID].(catalog.DatabaseDescriptor); ok {
-			return true, dbDesc, nil
+	schemas := r.SchemasByName[dbID]
+	if scID, ok := schemas[scName]; ok {
+		dbDesc, dbOk := r.DescByID[dbID].(catalog.DatabaseDescriptor)
+		scDesc, scOk := r.DescByID[scID].(catalog.SchemaDescriptor)
+		if !scOk && scID == keys.PublicSchemaID {
+			scDesc, scOk = schemadesc.GetPublicSchema(), true
+		}
+		if dbOk && scOk {
+			return true, catalog.ResolvedObjectPrefix{
+				Database: dbDesc,
+				Schema:   scDesc,
+			}, nil
 		}
 	}
-	return false, nil, nil
+	return false, catalog.ResolvedObjectPrefix{}, nil
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
@@ -402,26 +409,25 @@ func DescriptorsMatchingTargets(
 			}
 
 		case *tree.AllTablesSelector:
-			found, descI, err := resolver.ResolveObjectNamePrefix(ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix)
+			found, prefix, err := resolver.ResolveObjectNamePrefix(ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix)
 			if err != nil {
 				return ret, err
 			}
 			if !found {
 				return ret, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
 			}
-			desc := descI.(catalog.DatabaseDescriptor)
 
 			// If the database is not requested already, request it now.
-			dbID := desc.GetID()
+			dbID := prefix.Database.GetID()
 			if _, ok := alreadyRequestedDBs[dbID]; !ok {
-				ret.Descs = append(ret.Descs, desc)
+				ret.Descs = append(ret.Descs, prefix.Database)
 				alreadyRequestedDBs[dbID] = struct{}{}
 			}
 
 			// Then request the expansion.
-			if _, ok := alreadyExpandedDBs[desc.GetID()]; !ok {
-				ret.ExpandedDB = append(ret.ExpandedDB, desc.GetID())
-				alreadyExpandedDBs[desc.GetID()] = struct{}{}
+			if _, ok := alreadyExpandedDBs[prefix.Database.GetID()]; !ok {
+				ret.ExpandedDB = append(ret.ExpandedDB, prefix.Database.GetID())
+				alreadyExpandedDBs[prefix.Database.GetID()] = struct{}{}
 			}
 
 		default:
