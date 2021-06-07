@@ -22,10 +22,10 @@ let $corrupt_id
 SELECT id FROM system.namespace WHERE name = 'corruptdesc';
 
 let $parentID
-select pid from system.namespace2 as n(pid,psid,name,id) where id=$t_id;
+SELECT pid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
 
 let $parentSchemaID
-select psid from system.namespace2 as n(pid,psid,name,id)  where id=$t_id;
+SELECT psid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
 
 query I
 SELECT * FROM crdb_internal.lost_descriptors_with_data;
@@ -153,10 +153,10 @@ SELECT * FROM forcedeletemydata ORDER BY v ASC
 7
 
 let $parentID
-select pid from system.namespace2 as n(pid,psid,name,id) where id=$t_id;
+SELECT pid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
 
 let $parentSchemaID
-select psid from system.namespace2 as n(pid,psid,name,id)  where id=$t_id;
+SELECT psid FROM system.namespace AS n(pid,psid,name,id) WHERE id = $t_id;
 
 let $json
 WITH descs AS (
