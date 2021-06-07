@@ -574,6 +574,173 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) bool 
 	return v.IsActive(minVersion)
 }
 
+func (b *buildContext) maybeCleanTableSequenceRefs(
+	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
+) {
+	// Setup nodes for dropping sequences
+	// and cleaning up default expressions.
+	for _, col := range table.PublicColumns() {
+		// Loop over owned sequences
+		for seqIdx := 0; seqIdx < col.NumOwnsSequences(); seqIdx++ {
+			seqID := col.GetOwnsSequenceID(seqIdx)
+			table, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, seqID, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc))
+			if err != nil {
+				panic(err)
+			}
+			if behavior != tree.DropCascade {
+				panic(pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"cannot drop table %s because other objects depend on it",
+					table.GetName(),
+				))
+			}
+			err = b.AuthAccessor.CheckPrivilege(ctx, table, privilege.DROP)
+			if err != nil {
+				panic(err)
+			}
+			b.dropSequenceDesc(ctx, table, tree.DropCascade)
+		}
+		// Setup logic to clean up the default expression,
+		// only if sequences are depending on it.
+		if col.NumUsesSequences() > 0 {
+			b.addNode(scpb.Target_DROP,
+				&scpb.DefaultExpression{
+					DefaultExpr:     col.GetDefaultExpr(),
+					TableID:         table.GetID(),
+					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
+					ColumnID:        col.GetID()})
+			// Drop the depends on within the sequence side.
+			for seqOrd := 0; seqOrd < col.NumUsesSequences(); seqOrd++ {
+				seqID := col.GetUsesSequenceID(seqOrd)
+				// Remove dependencies to this sequences.
+				dropDep := &scpb.RelationDependedOnBy{TableID: seqID,
+					DependedOnBy: table.GetID()}
+				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, dropDep); !exists {
+					b.addNode(scpb.Target_DROP, dropDep)
+				}
+			}
+		}
+	}
+}
+
+func (b *buildContext) maybeCleanTableFKs(
+	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
+) {
+	// Loop through and update inbound and outbound
+	// foreign key references.
+	for _, fk := range table.GetInboundFKs() {
+		dependentTable, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, fk.OriginTableID, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			panic(err)
+		}
+		if behavior != tree.DropCascade {
+			panic(pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
+		}
+		err = b.AuthAccessor.CheckPrivilege(ctx, dependentTable, privilege.DROP)
+		if err != nil {
+			panic(err)
+		}
+		outFkNode := &scpb.OutboundForeignKey{
+			OriginID:         fk.OriginTableID,
+			OriginColumns:    fk.OriginColumnIDs,
+			ReferenceID:      fk.ReferencedTableID,
+			ReferenceColumns: fk.ReferencedColumnIDs,
+			Name:             fk.Name,
+		}
+		inFkNode := &scpb.InboundForeignKey{
+			OriginID:         fk.ReferencedTableID,
+			OriginColumns:    fk.ReferencedColumnIDs,
+			ReferenceID:      fk.OriginTableID,
+			ReferenceColumns: fk.OriginColumnIDs,
+			Name:             fk.Name,
+		}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
+			b.addNode(scpb.Target_DROP,
+				outFkNode)
+		}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
+			b.addNode(scpb.Target_DROP,
+				inFkNode)
+		}
+	}
+
+	for _, fk := range table.GetOutboundFKs() {
+		outFkNode := &scpb.OutboundForeignKey{
+			OriginID:         fk.OriginTableID,
+			OriginColumns:    fk.OriginColumnIDs,
+			ReferenceID:      fk.ReferencedTableID,
+			ReferenceColumns: fk.ReferencedColumnIDs,
+			Name:             fk.Name,
+		}
+		inFkNode := &scpb.InboundForeignKey{
+			OriginID:         fk.ReferencedTableID,
+			OriginColumns:    fk.ReferencedColumnIDs,
+			ReferenceID:      fk.OriginTableID,
+			ReferenceColumns: fk.OriginColumnIDs,
+			Name:             fk.Name,
+		}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
+			b.addNode(scpb.Target_DROP,
+				outFkNode)
+		}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
+			b.addNode(scpb.Target_DROP,
+				inFkNode)
+		}
+	}
+}
+
+func (b *buildContext) dropTableDesc(
+	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
+) {
+	// Interleaved tables not supported in new schema changer.
+	if table.IsInterleaved() {
+		panic(&notImplementedError{
+			n: &tree.DropTable{
+				Names: []tree.TableName{
+					tree.MakeUnqualifiedTableName(tree.Name(table.GetName())),
+				},
+			},
+			detail: "drop on interleaved table"})
+	}
+
+	// Drop dependent views
+	err := table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+		dependentDesc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			panic(err)
+		}
+		if behavior != tree.DropCascade {
+			return pgerror.Newf(
+				pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
+				table.GetName(), dependentDesc.GetName())
+		}
+		err = b.AuthAccessor.CheckPrivilege(ctx, dependentDesc, privilege.DROP)
+		if err != nil {
+			panic(err)
+		}
+		b.maybeDropViewAndDependents(ctx, dependentDesc, behavior)
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// Clean up foreign key references (both inbound
+	// and out bound).
+	b.maybeCleanTableFKs(ctx, table, behavior)
+
+	// Clean up sequence references and ownerships.
+	b.maybeCleanTableSequenceRefs(ctx, table, behavior)
+
+	// Clean up type back references
+	b.removeTypeBackRefDeps(ctx, table)
+	b.addNode(scpb.Target_DROP,
+		&scpb.Table{TableID: table.GetID()})
+}
+
 func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 	// Find the table first.
 	for _, name := range n.Names {
@@ -589,145 +756,6 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 			panic(errors.AssertionFailedf("Unable to resolve table %s",
 				name.FQString()))
 		}
-		// Interleaved tables not supported in new schema changer.
-		if table.IsInterleaved() {
-			panic(&notImplementedError{n: n, detail: "drop on interleaved table"})
-		}
-
-		// Drop dependent views
-		err = table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-			dependentDesc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				panic(err)
-			}
-			if n.DropBehavior != tree.DropCascade {
-				return pgerror.Newf(
-					pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
-					table.GetName(), dependentDesc.GetName())
-			}
-			err = b.AuthAccessor.CheckPrivilege(ctx, dependentDesc, privilege.DROP)
-			if err != nil {
-				panic(err)
-			}
-			b.maybeDropViewAndDependents(ctx, dependentDesc, n.DropBehavior)
-			return nil
-		})
-		if err != nil {
-			panic(err)
-		}
-
-		// Loop through and update inbound and outbound
-		// foreign key references.
-		for _, fk := range table.GetInboundFKs() {
-			dependentTable, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, fk.OriginTableID, tree.ObjectLookupFlagsWithRequired())
-			if err != nil {
-				panic(err)
-			}
-			if n.DropBehavior != tree.DropCascade {
-				panic(pgerror.Newf(
-					pgcode.DependentObjectsStillExist,
-					"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
-			}
-			err = b.AuthAccessor.CheckPrivilege(ctx, dependentTable, privilege.DROP)
-			if err != nil {
-				panic(err)
-			}
-			outFkNode := &scpb.OutboundForeignKey{
-				OriginID:         fk.OriginTableID,
-				OriginColumns:    fk.OriginColumnIDs,
-				ReferenceID:      fk.ReferencedTableID,
-				ReferenceColumns: fk.ReferencedColumnIDs,
-				Name:             fk.Name,
-			}
-			inFkNode := &scpb.InboundForeignKey{
-				OriginID:         fk.ReferencedTableID,
-				OriginColumns:    fk.ReferencedColumnIDs,
-				ReferenceID:      fk.OriginTableID,
-				ReferenceColumns: fk.OriginColumnIDs,
-				Name:             fk.Name,
-			}
-			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
-				b.addNode(scpb.Target_DROP,
-					outFkNode)
-			}
-			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
-				b.addNode(scpb.Target_DROP,
-					inFkNode)
-			}
-		}
-
-		for _, fk := range table.GetOutboundFKs() {
-			outFkNode := &scpb.OutboundForeignKey{
-				OriginID:         fk.OriginTableID,
-				OriginColumns:    fk.OriginColumnIDs,
-				ReferenceID:      fk.ReferencedTableID,
-				ReferenceColumns: fk.ReferencedColumnIDs,
-				Name:             fk.Name,
-			}
-			inFkNode := &scpb.InboundForeignKey{
-				OriginID:         fk.ReferencedTableID,
-				OriginColumns:    fk.ReferencedColumnIDs,
-				ReferenceID:      fk.OriginTableID,
-				ReferenceColumns: fk.OriginColumnIDs,
-				Name:             fk.Name,
-			}
-			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
-				b.addNode(scpb.Target_DROP,
-					outFkNode)
-			}
-			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
-				b.addNode(scpb.Target_DROP,
-					inFkNode)
-			}
-		}
-		// Setup nodes for dropping sequences
-		// and cleaning up default expressions.
-		for _, col := range table.PublicColumns() {
-			// Loop over owned sequences
-			for seqIdx := 0; seqIdx < col.NumOwnsSequences(); seqIdx++ {
-				seqID := col.GetOwnsSequenceID(seqIdx)
-				table, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, seqID, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc))
-				if err != nil {
-					panic(err)
-				}
-				if n.DropBehavior != tree.DropCascade {
-					panic(pgerror.Newf(
-						pgcode.DependentObjectsStillExist,
-						"cannot drop table %s because other objects depend on it",
-						table.GetName(),
-					))
-				}
-				err = b.AuthAccessor.CheckPrivilege(ctx, table, privilege.DROP)
-				if err != nil {
-					panic(err)
-				}
-				b.dropSequenceDesc(ctx, table, tree.DropCascade)
-			}
-			// Setup logic to clean up the default expression,
-			// only if sequences are depending on it.
-			if col.NumUsesSequences() > 0 {
-				b.addNode(scpb.Target_DROP,
-					&scpb.DefaultExpression{
-						DefaultExpr:     col.GetDefaultExpr(),
-						TableID:         table.GetID(),
-						UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-						ColumnID:        col.GetID()})
-				// Drop the depends on within the sequence side.
-				for seqOrd := 0; seqOrd < col.NumUsesSequences(); seqOrd++ {
-					seqID := col.GetUsesSequenceID(seqOrd)
-					// Remove dependencies to this sequences.
-					dropDep := &scpb.RelationDependedOnBy{TableID: seqID,
-						DependedOnBy: table.GetID()}
-					if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, dropDep); !exists {
-						b.addNode(scpb.Target_DROP, dropDep)
-					}
-				}
-			}
-		}
-
-		// Clean up type back references
-		b.removeTypeBackRefDeps(ctx, table)
-		b.addNode(scpb.Target_DROP,
-			&scpb.Table{TableID: table.GetID()})
+		b.dropTableDesc(ctx, table, n.DropBehavior)
 	}
 }

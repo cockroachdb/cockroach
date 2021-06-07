@@ -79,7 +79,7 @@ func seqOwnedByReferencesTable(this *scpb.Table, that *scpb.SequenceOwnedBy) boo
 }
 
 func seqOwnedByReferencesSeq(this *scpb.SequenceOwnedBy, that *scpb.Sequence) bool {
-	return this.TableID == that.TableID
+	return this.SequenceID == that.SequenceID
 }
 
 func tableReferencesDefaultExpression(this *scpb.Table, that *scpb.DefaultExpression) bool {
@@ -92,7 +92,7 @@ func tableReferencedByDependedOnBy(this *scpb.Table, that *scpb.RelationDepended
 
 func defaultExprReferencesColumn(this *scpb.Sequence, that *scpb.DefaultExpression) bool {
 	for _, seq := range that.UsesSequenceIDs {
-		if seq == this.TableID {
+		if seq == this.SequenceID {
 			return true
 		}
 	}
@@ -136,14 +136,14 @@ var rules = map[scpb.Element]targetRules{
 				{
 					predicate: func(this *scpb.SequenceOwnedBy, flags Params) bool {
 						return flags.ExecutionPhase == StatementPhase &&
-							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
 					},
 				},
 				{
 					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.SequenceOwnedBy) scop.Op {
 						return &scop.RemoveSequenceOwnedBy{
-							TableID: this.TableID,
+							TableID: this.SequenceID,
 						}
 					},
 				},
@@ -242,7 +242,7 @@ var rules = map[scpb.Element]targetRules{
 				{
 					predicate: func(this *scpb.Sequence, flags Params) bool {
 						return flags.ExecutionPhase == StatementPhase &&
-							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
 					},
 				},
 				{
@@ -250,10 +250,10 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.Sequence) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
-								TableID: this.TableID,
+								TableID: this.SequenceID,
 							},
 							&scop.CreateGcJobForDescriptor{
-								DescID: this.TableID,
+								DescID: this.SequenceID,
 							},
 						}
 						return ops
@@ -264,7 +264,7 @@ var rules = map[scpb.Element]targetRules{
 				{
 					predicate: func(this *scpb.Sequence, flags Params) bool {
 						return flags.ExecutionPhase == StatementPhase &&
-							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
 					},
 				},
 				{
@@ -272,9 +272,9 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.Sequence) []scop.Op {
 						ops := []scop.Op{
 							&scop.CreateGcJobForDescriptor{
-								DescID: this.TableID,
+								DescID: this.SequenceID,
 							},
-							&scop.DrainDescriptorName{TableID: this.TableID},
+							&scop.DrainDescriptorName{TableID: this.SequenceID},
 						}
 						return ops
 					},
