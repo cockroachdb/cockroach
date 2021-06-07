@@ -103,6 +103,20 @@ func IsAuthError(err error) bool {
 	return false
 }
 
+// IsFailedPreconditionError returns true if err's Cause is an error produced by
+// gRPC due to failed precondition. This error is used internally to shortcut
+// known unavailable nodes and is used by kv retry loop. When outside loop its
+// meaning is largely equal to auth error and should not be retried.
+func IsFailedPreconditionError(err error) bool {
+	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
+		switch s.Code() {
+		case codes.FailedPrecondition:
+			return true
+		}
+	}
+	return false
+}
+
 // RequestDidNotStart returns true if the given error from gRPC
 // means that the request definitely could not have started on the
 // remote server.

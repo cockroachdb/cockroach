@@ -1916,7 +1916,7 @@ func (ds *DistSender) sendToReplicas(
 			// evaluating twice, overwriting another unrelated write that fell
 			// in-between.
 			//
-			if withCommit && !grpcutil.RequestDidNotStart(err) {
+			if withCommit && !grpcutil.RequestDidNotStart(err) && !grpcutil.IsFailedPreconditionError(err) {
 				ambiguousError = err
 			}
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)

@@ -283,7 +283,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	stopper.AddCloser(&engines)
 
 	nodeTombStorage := &nodeTombstoneStorage{engs: engines}
-	checkPingFor := func(ctx context.Context, nodeID roachpb.NodeID) error {
+	checkPingFor := func(ctx context.Context, nodeID roachpb.NodeID, c codes.Code) error {
 		ts, err := nodeTombStorage.IsDecommissioned(ctx, nodeID)
 		if err != nil {
 			// An error here means something very basic is not working. Better to terminate
@@ -292,7 +292,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 		if !ts.IsZero() {
 			// The node was decommissioned.
-			return grpcstatus.Errorf(codes.PermissionDenied,
+			return grpcstatus.Errorf(c,
 				"n%d was permanently removed from the cluster at %s; it is not allowed to rejoin the cluster",
 				nodeID, ts,
 			)
@@ -309,10 +309,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
 		OnOutgoingPing: func(req *rpc.PingRequest) error {
-			return checkPingFor(ctx, req.TargetNodeID)
+			return checkPingFor(ctx, req.TargetNodeID, codes.FailedPrecondition)
 		},
 		OnIncomingPing: func(req *rpc.PingRequest) error {
-			return checkPingFor(ctx, req.OriginNodeID)
+			return checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
 		}}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
