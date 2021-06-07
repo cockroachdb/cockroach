@@ -74,11 +74,12 @@ var retiredSettings = map[string]struct{}{
 	"sql.parallel_scans.enabled":                                       {},
 	"backup.table_statistics.enabled":                                  {},
 	// removed as of 21.1.
-	"sql.distsql.interleaved_joins.enabled": {},
-	"sql.testing.vectorize.batch_size":      {},
-	"sql.testing.mutations.max_batch_size":  {},
-	"sql.testing.mock_contention.enabled":   {},
-	"kv.atomic_replication_changes.enabled": {},
+	"sql.distsql.interleaved_joins.enabled":    {},
+	"sql.testing.vectorize.batch_size":         {},
+	"sql.testing.mutations.max_batch_size":     {},
+	"sql.testing.mock_contention.enabled":      {},
+	"kv.atomic_replication_changes.enabled":    {},
+	"storage.sst_export.max_intents_per_error": {},
 }
 
 // register adds a setting to the registry.
