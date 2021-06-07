@@ -6,6 +6,7 @@ go_library(
         "collection.go",
         "dist_sql_type_resolver.go",
         "leased_descriptors.go",
+        "synthetic_descriptors.go",
         "txn.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descs",
