@@ -130,9 +130,6 @@ func indentText(input string, tab string) string {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) == 0 {
-			continue
-		}
 		result.WriteString(tab)
 		result.WriteString(line)
 		result.WriteString("\n")
