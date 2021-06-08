@@ -43,7 +43,8 @@ message CommonSQLEventDetails {
   string tag = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
   // The user account that triggered the event.
-  string user = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // The special usernames `root` and `node` are not considered sensitive.
+  string user = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:root|node\""];
 
   // The primary object descriptor affected by the operation. Set to zero for operations
   // that don't affect descriptors.
@@ -52,7 +53,8 @@ message CommonSQLEventDetails {
   // The application name for the session where the event was emitted.
   // This is included in the event to ease filtering of logging output
   // by application.
-  string application_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Application names starting with a dollar sign (`$`) are not considered sensitive.
+  string application_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:\\$.*\""];
 
   // The mapping of SQL placeholders to their values, for prepared statements.
   repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];
