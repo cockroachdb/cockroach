@@ -264,6 +264,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/scheduledjobs",
         "//pkg/security",
+        "//pkg/server/pgurl",
         "//pkg/server/serverpb",
         "//pkg/server/status/statuspb:statuspb_go_proto",
         "//pkg/server/telemetry",

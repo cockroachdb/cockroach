@@ -277,9 +277,9 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			url, err := c.getNetworkURLForServer(tc.nodeIdx, nil /* gen */, true /* includeAppName */)
+			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx, true /* includeAppName */)
 			require.NoError(t, err)
-			conn := makeSQLConn(url)
+			conn := makeSQLConn(url.ToPQ().String())
 			defer conn.Close()
 			// Find the maximum latency in the cluster from the current node.
 			var maxLatency time.Duration

@@ -103,14 +103,14 @@ set mywd [pwd]
 
 start_test "Check that socket-based login works."
 
-send "$argv sql --url 'postgres://eisen@?host=$mywd&port=26257&sslmode=require'\r"
+send "$argv sql --url 'postgres://eisen@?host=$mywd&port=26257'\r"
 eexpect "Enter password:"
 send "hunter2\r"
 eexpect "eisen@"
 interrupt
 eexpect $prompt
 
-send "$argv sql --url 'postgres://eisen:hunter2@?host=$mywd&port=26257&sslmode=require'\r"
+send "$argv sql --url 'postgres://eisen:hunter2@?host=$mywd&port=26257'\r"
 eexpect "eisen@"
 interrupt
 eexpect $prompt
