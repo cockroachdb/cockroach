@@ -14,6 +14,7 @@ import (
 	"context"
 	"net/http"
 	"os/exec"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -42,6 +43,8 @@ func runBuildInfo(ctx context.Context, t *test, c *cluster) {
 			t.Fatalf("build info not set for \"%s\"", key)
 		}
 	}
+	time.Sleep(time.Minute)
+	t.Fatal("boom")
 }
 
 // runBuildAnalyze performs static analysis on the built binary to
