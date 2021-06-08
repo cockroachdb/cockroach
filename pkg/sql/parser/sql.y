@@ -5090,6 +5090,10 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowJobs{Schedules: $3.slct()}
   }
+| SHOW CHANGEFEED JOBS select_stmt
+  {
+    $$.val = &tree.ShowChangefeedJobs{Jobs: $4.slct()}
+  }
 | SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
 | SHOW JOB a_expr
   {
