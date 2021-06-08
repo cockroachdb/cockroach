@@ -371,14 +371,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 	spanBuilder.SetNeededColumns(neededRightCols)
 
 	var generator joinReaderSpanGenerator
-	var keyToInputRowIndices map[string][]int
-	if readerType != indexJoinReaderType {
-		keyToInputRowIndices = make(map[string][]int)
-	}
-	// Else: see the comment in defaultSpanGenerator on why we don't need
-	// this map for index joins.
 
 	if jr.lookupExpr.Expr == nil {
+		// See the comment in defaultSpanGenerator on why we don't need
+		// this map for index joins.
+		var keyToInputRowIndices map[string][]int
+		if readerType != indexJoinReaderType {
+			keyToInputRowIndices = make(map[string][]int)
+		}
 		generator = &defaultSpanGenerator{
 			spanBuilder:          spanBuilder,
 			keyToInputRowIndices: keyToInputRowIndices,
@@ -404,7 +404,6 @@ func (jr *joinReader) initJoinReaderStrategy(
 				spanBuilder,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
-				keyToInputRowIndices,
 				&jr.lookupExpr,
 				tableOrdToIndexOrd,
 			); err != nil {
@@ -417,7 +416,6 @@ func (jr *joinReader) initJoinReaderStrategy(
 				spanBuilder,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
-				keyToInputRowIndices,
 				&jr.lookupExpr,
 				&jr.remoteLookupExpr,
 				tableOrdToIndexOrd,

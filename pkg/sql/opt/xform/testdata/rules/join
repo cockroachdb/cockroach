@@ -2997,7 +2997,7 @@ left-join (lookup lookup_expr [as=t])
  │    │    └── filters
  │    │         ├── column2:2 = v:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
  │    │         ├── r:3 IN ('east', 'west') [outer=(3), constraints=(/3: [/'east' - /'east'] [/'west' - /'west']; tight)]
- │    │         ├── u:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
+ │    │         ├── (u:5 = 1) OR (u:5 = 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
  │    │         ├── y:9 IN (10, 20) [outer=(9), constraints=(/9: [/10 - /10] [/20 - /20]; tight)]
  │    │         └── z:10 = 5 [outer=(10), constraints=(/10: [/5 - /5]; tight), fd=()-->(10)]
  │    ├── cardinality: [3 - ]
@@ -3008,8 +3008,7 @@ left-join (lookup lookup_expr [as=t])
  │    │    ├── (1, 10)
  │    │    ├── (2, 20)
  │    │    └── (3, NULL)
- │    └── filters
- │         └── (u:5 = 1) OR (u:5 = 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
+ │    └── filters (true)
  └── filters (true)
 
 # We can't build a lookup join with any of the indexes.
@@ -3082,12 +3081,14 @@ SELECT a,b,n,m FROM small JOIN abcd ON a=m AND b>1
 ----
 inner-join (lookup abcd@secondary)
  ├── columns: a:6!null b:7!null n:2 m:1!null
- ├── key columns: [1] = [6]
+ ├── lookup expression
+ │    └── filters
+ │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  ├── fd: (1)==(6), (6)==(1)
  ├── scan small
  │    └── columns: m:1 n:2
- └── filters
-      └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ └── filters (true)
 
 # Covering case, left-join.
 opt expect=GenerateLookupJoinsWithFilter
@@ -3095,11 +3096,13 @@ SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>1
 ----
 left-join (lookup abcd@secondary)
  ├── columns: a:6 b:7 n:2 m:1
- ├── key columns: [1] = [6]
+ ├── lookup expression
+ │    └── filters
+ │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  ├── scan small
  │    └── columns: m:1 n:2
- └── filters
-      └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ └── filters (true)
 
 # Non-covering case.
 opt expect=GenerateLookupJoinsWithFilter
@@ -3112,12 +3115,14 @@ inner-join (lookup abcd)
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
- │    └── filters
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    └── filters (true)
  └── filters (true)
 
 # Non-covering case, left join.
@@ -3130,12 +3135,14 @@ left-join (lookup abcd)
  ├── lookup columns are key
  ├── left-join (lookup abcd@secondary)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  │    ├── fd: (9)-->(6,7)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
- │    └── filters
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    └── filters (true)
  └── filters (true)
 
 # Non-covering case, extra filter bound by index.
@@ -3149,13 +3156,15 @@ inner-join (lookup abcd)
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1!null n:2!null a:6!null b:7!null abcd.rowid:9!null
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         ├── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  └── filters (true)
 
 # Non-covering case, extra filter bound by index, left join.
@@ -3168,13 +3177,15 @@ left-join (lookup abcd)
  ├── lookup columns are key
  ├── left-join (lookup abcd@secondary)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  │    ├── fd: (9)-->(6,7)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         ├── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │         └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  └── filters (true)
 
 # Non-covering case, extra filter not bound by index.
@@ -3188,12 +3199,14 @@ inner-join (lookup abcd)
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
- │    └── filters
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    └── filters (true)
  └── filters
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
@@ -3448,12 +3461,14 @@ inner-join (lookup abcde)
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcde@secondary)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
- │    ├── key columns: [1] = [6]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 < 10 [outer=(7), constraints=(/7: (/NULL - /9]; tight)]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
- │    └── filters
- │         └── b:7 < 10 [outer=(7), constraints=(/7: (/NULL - /9]; tight)]
+ │    └── filters (true)
  └── filters (true)
 
 # Lookup Joiner uses the constant equality columns at the same time as the explicit
@@ -8469,4 +8484,176 @@ anti-join (lookup abc_part)
  │    │         ├── key: ()
  │    │         └── fd: ()-->(19-22)
  │    └── filters (true)
+ └── filters (true)
+
+# illustrative examples from GH #51576
+exec-ddl
+CREATE TABLE metrics (
+  id   SERIAL PRIMARY KEY,
+  name STRING,
+  INDEX name_index (name)
+)
+----
+
+exec-ddl
+CREATE TABLE metric_values (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time)
+)
+----
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+----
+inner-join (lookup metric_values)
+ ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── metric_id:1 = id:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ ├── key: (2,6)
+ ├── fd: ()-->(7), (1,2)-->(3), (1)==(6), (6)==(1)
+ ├── scan metrics@name_index
+ │    ├── columns: id:6!null name:7!null
+ │    ├── constraint: /7/6: [/'cpu' - /'cpu']
+ │    ├── key: (6)
+ │    └── fd: ()-->(7)
+ └── filters (true)
+
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name IN ('cpu','mem')
+----
+inner-join (lookup metric_values)
+ ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── metric_id:1 = id:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ ├── key: (2,6)
+ ├── fd: (1,2)-->(3), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan metrics@name_index
+ │    ├── columns: id:6!null name:7!null
+ │    ├── constraint: /7/6
+ │    │    ├── [/'cpu' - /'cpu']
+ │    │    └── [/'mem' - /'mem']
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters (true)
+
+# we don't support turning LIKE into scans yet, test that we fall back to filters
+opt expect-not=GenerateLookupJoins
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time::STRING LIKE '202%' AND
+  name='cpu'
+----
+inner-join (lookup metric_values)
+ ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
+ ├── key columns: [6] = [1]
+ ├── stable
+ ├── key: (2,6)
+ ├── fd: ()-->(7), (1,2)-->(3), (1)==(6), (6)==(1)
+ ├── scan metrics@name_index
+ │    ├── columns: id:6!null name:7!null
+ │    ├── constraint: /7/6: [/'cpu' - /'cpu']
+ │    ├── key: (6)
+ │    └── fd: ()-->(7)
+ └── filters
+      └── time:2::STRING LIKE '202%' [outer=(2), stable]
+
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT *
+FROM metric_values
+LEFT JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+----
+inner-join (lookup metric_values)
+ ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── metric_id:1 = id:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ ├── key: (2,6)
+ ├── fd: ()-->(7), (1,2)-->(3), (1)==(6), (6)==(1)
+ ├── scan metrics@name_index
+ │    ├── columns: id:6!null name:7!null
+ │    ├── constraint: /7/6: [/'cpu' - /'cpu']
+ │    ├── key: (6)
+ │    └── fd: ()-->(7)
+ └── filters (true)
+
+
+opt
+SELECT *
+FROM metric_values
+LEFT JOIN metrics m
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu' AND
+  m.id IS NULL
+----
+inner-join (merge)
+ ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── key: (2)
+ ├── fd: ()-->(1,6,7), (2)-->(3), (1)==(6), (6)==(1)
+ ├── scan metric_values
+ │    ├── columns: metric_id:1!null time:2!null value:3
+ │    ├── constraint: contradiction
+ │    ├── key: (2)
+ │    └── fd: ()-->(1), (2)-->(3)
+ ├── scan metrics [as=m]
+ │    ├── columns: id:6!null name:7!null
+ │    ├── constraint: contradiction
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(6,7)
+ └── filters (true)
+
+
+opt
+SELECT *
+FROM metric_values mv
+WHERE
+  mv.metric_id IN (SELECT id FROM metrics)
+----
+semi-join (merge)
+ ├── columns: metric_id:1!null time:2!null value:3
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── scan metric_values [as=mv]
+ │    ├── columns: metric_id:1!null time:2!null value:3
+ │    ├── key: (1,2)
+ │    ├── fd: (1,2)-->(3)
+ │    └── ordering: +1
+ ├── scan metrics
+ │    ├── columns: id:6!null
+ │    ├── key: (6)
+ │    └── ordering: +6
  └── filters (true)

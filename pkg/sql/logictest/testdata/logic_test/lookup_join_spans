@@ -1,0 +1,267 @@
+statement ok
+CREATE TABLE metrics (
+  id   SERIAL PRIMARY KEY,
+  name STRING,
+  INDEX name_index (name)
+)
+
+statement ok
+insert into metrics (id,name) values (1,'cpu'), (2,'cpu'), (3,'mem'), (4,'disk')
+
+statement ok
+CREATE TABLE metric_values (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time)
+)
+
+statement ok
+insert into metric_values (metric_id, time, value) values
+ (1,'2020-01-01 00:00:00+00:00',0),
+ (1,'2020-01-01 00:00:01+00:00',1),
+ (2,'2020-01-01 00:00:00+00:00',2),
+ (2,'2020-01-01 00:00:01+00:00',3),
+ (3,'2020-01-01 00:01:00+00:00',4),
+ (3,'2020-01-01 00:01:01+00:00',5)
+
+statement ok
+CREATE TABLE metric_valuesd (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time DESC)
+)
+
+statement ok
+insert into metric_valuesd select * from metric_values
+
+query ITIIT
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time > '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_valuesd
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time > '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time >= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_valuesd
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time >= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+----
+
+query ITIIT
+SELECT *
+FROM metric_valuesd
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+----
+
+query ITIIT
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time <= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_valuesd
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time <= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time in ('2020-01-01 00:00:00+00:00','2020-01-01 00:00:01+00:00') AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_valuesd
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time in ('2020-01-01 00:00:00+00:00','2020-01-01 00:00:01+00:00') AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:10+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_valuesd
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:10+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_valuesd
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_values
+LEFT JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+----
+1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
+1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
+2  2020-01-01 00:00:00 +0000 UTC  2  2  cpu
+2  2020-01-01 00:00:01 +0000 UTC  3  2  cpu
+
+query ITIIT
+SELECT *
+FROM metric_values
+LEFT JOIN metrics m
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu' AND
+  m.id IS NULL
+----
+
+query ITI
+SELECT *
+FROM metric_values mv
+WHERE
+  mv.metric_id IN (SELECT id FROM metrics)
+----
+1  2020-01-01 00:00:00 +0000 UTC  0
+1  2020-01-01 00:00:01 +0000 UTC  1
+2  2020-01-01 00:00:00 +0000 UTC  2
+2  2020-01-01 00:00:01 +0000 UTC  3
+3  2020-01-01 00:01:00 +0000 UTC  4
+3  2020-01-01 00:01:01 +0000 UTC  5
