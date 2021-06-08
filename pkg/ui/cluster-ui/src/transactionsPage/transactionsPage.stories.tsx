@@ -10,18 +10,18 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import { MemoryRouter } from "react-router-dom";
 import { cloneDeep, noop, extend } from "lodash";
 import { data, routeProps } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
 import { RequestError } from "../util";
+import { TestStoreProvider } from "../test-utils";
 
 const getEmptyData = () =>
   extend({}, data, { transactions: [], statements: [] });
 
 storiesOf("Transactions Page", module)
-  .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
+  .addDecorator(storyFn => <TestStoreProvider>{storyFn()}</TestStoreProvider>)
   .addDecorator(storyFn => (
     <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
   ))
