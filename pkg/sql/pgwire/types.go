@@ -98,10 +98,10 @@ func writeTextFloat64(b *writeBuffer, fl float64, conv sessiondatapb.DataConvers
 	b.write(s)
 }
 
-func writeTextBytes(b *writeBuffer, v string, conv sessiondatapb.DataConversionConfig) {
+func writeTextBytes(b *writeBuffer, v []byte, conv sessiondatapb.DataConversionConfig) {
 	result := lex.EncodeByteArrayToRawBytes(v, conv.BytesEncodeFormat, false /* skipHexPrefix */)
 	b.putInt32(int32(len(result)))
-	b.write([]byte(result))
+	b.write(result)
 }
 
 func writeTextUUID(b *writeBuffer, v uuid.UUID) {
@@ -112,8 +112,8 @@ func writeTextUUID(b *writeBuffer, v uuid.UUID) {
 	b.write(s)
 }
 
-func writeTextString(b *writeBuffer, v string, t *types.T) {
-	b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v, t))
+func writeTextString(b *writeBuffer, v []byte, t *types.T) {
+	b.writeLengthPrefixedByteSlice(tree.ResolveBlankPaddedChar(v, t))
 }
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
@@ -181,7 +181,7 @@ func writeTextDatumNotNull(
 		b.writeLengthPrefixedDatum(v)
 
 	case *tree.DBytes:
-		writeTextBytes(b, string(*v), conv)
+		writeTextBytes(b, []byte(*v), conv)
 
 	case *tree.DUuid:
 		writeTextUUID(b, v.UUID)
@@ -190,10 +190,10 @@ func writeTextDatumNotNull(
 		b.writeLengthPrefixedString(v.IPAddr.String())
 
 	case *tree.DString:
-		writeTextString(b, string(*v), t)
+		writeTextString(b, []byte(*v), t)
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
+		b.writeLengthPrefixedByteSlice(tree.ResolveBlankPaddedChar([]byte(v.Contents), t))
 
 	case *tree.DDate:
 		b.textFormatter.FormatNode(v)
@@ -306,7 +306,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		b.writeLengthPrefixedString(d.String())
 
 	case types.BytesFamily:
-		writeTextBytes(b, string(vec.Bytes().Get(idx)), conv)
+		writeTextBytes(b, vec.Bytes().Get(idx), conv)
 
 	case types.UuidFamily:
 		id, err := uuid.FromBytes(vec.Bytes().Get(idx))
@@ -316,7 +316,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		writeTextUUID(b, id)
 
 	case types.StringFamily:
-		writeTextString(b, string(vec.Bytes().Get(idx)), vec.Type())
+		writeTextString(b, vec.Bytes().Get(idx), vec.Type())
 
 	case types.DateFamily:
 		tree.FormatDate(pgdate.MakeCompatibleDateFromDisk(vec.Int64().Get(idx)), b.textFormatter)
@@ -474,8 +474,8 @@ func writeBinaryBytes(b *writeBuffer, v []byte) {
 	b.write(v)
 }
 
-func writeBinaryString(b *writeBuffer, v string, t *types.T) {
-	b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v, t))
+func writeBinaryString(b *writeBuffer, v []byte, t *types.T) {
+	b.writeLengthPrefixedByteSlice(tree.ResolveBlankPaddedChar(v, t))
 }
 
 func writeBinaryTimestamp(b *writeBuffer, v time.Time) {
@@ -621,10 +621,10 @@ func writeBinaryDatumNotNull(
 		b.writeLengthPrefixedString(v.LogicalRep)
 
 	case *tree.DString:
-		writeBinaryString(b, string(*v), t)
+		writeBinaryString(b, []byte(*v), t)
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
+		b.writeLengthPrefixedByteSlice(tree.ResolveBlankPaddedChar([]byte(v.Contents), t))
 
 	case *tree.DTimestamp:
 		writeBinaryTimestamp(b, v.Time)
@@ -751,7 +751,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		writeBinaryBytes(b, vec.Bytes().Get(idx))
 
 	case types.StringFamily:
-		writeBinaryString(b, string(vec.Bytes().Get(idx)), vec.Type())
+		writeBinaryString(b, vec.Bytes().Get(idx), vec.Type())
 
 	case types.TimestampFamily:
 		writeBinaryTimestamp(b, vec.Timestamp().Get(idx))

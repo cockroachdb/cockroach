@@ -206,8 +206,8 @@ func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 // prefix the output with "\x". This is suitable e.g. for the encode()
 // built-in.
 func EncodeByteArrayToRawBytes(
-	data string, be sessiondatapb.BytesEncodeFormat, skipHexPrefix bool,
-) string {
+	data []byte, be sessiondatapb.BytesEncodeFormat, skipHexPrefix bool,
+) []byte {
 	switch be {
 	case sessiondatapb.BytesEncodeHex:
 		head := 2
@@ -219,8 +219,8 @@ func EncodeByteArrayToRawBytes(
 			res[0] = '\\'
 			res[1] = 'x'
 		}
-		hex.Encode(res[head:], []byte(data))
-		return string(res)
+		hex.Encode(res[head:], data)
+		return res
 
 	case sessiondatapb.BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
@@ -228,7 +228,7 @@ func EncodeByteArrayToRawBytes(
 		// backslash itself.
 		// See https://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
 		res := make([]byte, 0, len(data))
-		for _, c := range []byte(data) {
+		for _, c := range data {
 			if c == '\\' {
 				res = append(res, '\\', '\\')
 			} else if c < 32 || c >= 127 {
@@ -242,10 +242,12 @@ func EncodeByteArrayToRawBytes(
 				res = append(res, c)
 			}
 		}
-		return string(res)
+		return res
 
 	case sessiondatapb.BytesEncodeBase64:
-		return base64.StdEncoding.EncodeToString([]byte(data))
+		res := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
+		base64.StdEncoding.Encode(res, data)
+		return res
 
 	default:
 		panic(errors.AssertionFailedf("unhandled format: %s", be))
@@ -257,10 +259,14 @@ func EncodeByteArrayToRawBytes(
 // When using the Hex format, the caller is responsible for skipping the
 // "\x" prefix, if any. See DecodeRawBytesToByteArrayAuto() below for
 // an alternative.
-func DecodeRawBytesToByteArray(data string, be sessiondatapb.BytesEncodeFormat) ([]byte, error) {
+func DecodeRawBytesToByteArray(data []byte, be sessiondatapb.BytesEncodeFormat) ([]byte, error) {
 	switch be {
 	case sessiondatapb.BytesEncodeHex:
-		return hex.DecodeString(data)
+		// We can use the source slice itself as the destination because the
+		// decode loop increments by one and then the 'seen' byte is not used
+		// anymore.
+		n, err := hex.Decode(data, data)
+		return data[:n], err
 
 	case sessiondatapb.BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
@@ -302,7 +308,9 @@ func DecodeRawBytesToByteArray(data string, be sessiondatapb.BytesEncodeFormat) 
 		return res, nil
 
 	case sessiondatapb.BytesEncodeBase64:
-		return base64.StdEncoding.DecodeString(data)
+		res := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+		n, err := base64.StdEncoding.Decode(res, data)
+		return res[:n], err
 
 	default:
 		return nil, errors.AssertionFailedf("unhandled format: %s", be)
@@ -314,7 +322,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondatapb.BytesEncodeFormat) 
 // and escape.
 func DecodeRawBytesToByteArrayAuto(data []byte) ([]byte, error) {
 	if len(data) >= 2 && data[0] == '\\' && (data[1] == 'x' || data[1] == 'X') {
-		return DecodeRawBytesToByteArray(string(data[2:]), sessiondatapb.BytesEncodeHex)
+		return DecodeRawBytesToByteArray(data[2:], sessiondatapb.BytesEncodeHex)
 	}
-	return DecodeRawBytesToByteArray(string(data), sessiondatapb.BytesEncodeEscape)
+	return DecodeRawBytesToByteArray(data, sessiondatapb.BytesEncodeEscape)
 }

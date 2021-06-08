@@ -880,11 +880,11 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 		case *DCollatedString:
 			s = t.Contents
 		case *DBytes:
-			s = lex.EncodeByteArrayToRawBytes(
-				string(*t),
+			s = string(lex.EncodeByteArrayToRawBytes(
+				[]byte(*t),
 				ctx.SessionData.DataConversionConfig.BytesEncodeFormat,
 				false, /* skipHexPrefix */
-			)
+			))
 		case *DOid:
 			s = t.String()
 		case *DJSON:
