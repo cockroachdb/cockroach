@@ -280,12 +280,13 @@ message JoinReaderSpec {
   // more complicated than a simple equality between input columns and index
   // columns. In this case, LookupExpr specifies the expression that will be
   // used to construct the spans for each lookup. Currently, the only
-  // expressions supported are conjunctions (AND expressions) of equality and
-  // IN expressions, specifically:
+  // expressions supported are conjunctions (AND expressions) of equality, IN
+  // expressions, and simple inequalities, specifically:
   //  1. equalities between two variables (one from the input and one from the
   //     index) representing the equi-join condition(s),
   //  2. equalities between an index column and a constant, and
   //  3. IN expressions between an index column and a tuple of constants.
+  //  4. LT,GT,GE,LE between an index var and a constant.
   //
   // Variables in this expression are assigned in the same way as the ON
   // condition below. Assuming that the left stream has N columns and the right
