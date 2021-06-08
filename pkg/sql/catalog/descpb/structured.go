@@ -356,3 +356,18 @@ func (u *UniqueWithoutIndexConstraint) GetName() string {
 func (u *UniqueWithoutIndexConstraint) IsPartial() bool {
 	return u.Predicate != ""
 }
+
+// GetParentID implements the catalog.NameKeyHaver interface.
+func (ni NameInfo) GetParentID() ID {
+	return ni.ParentID
+}
+
+// GetParentSchemaID implements the catalog.NameKeyHaver interface.
+func (ni NameInfo) GetParentSchemaID() ID {
+	return ni.ParentSchemaID
+}
+
+// GetName implements the catalog.NameKeyHaver interface.
+func (ni NameInfo) GetName() string {
+	return ni.Name
+}

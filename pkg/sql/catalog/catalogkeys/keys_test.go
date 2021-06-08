@@ -27,16 +27,16 @@ func TestKeyAddress(t *testing.T) {
 	}{
 		{MakeDescMetadataKey(tenSysCodec, 123)},
 		{MakeDescMetadataKey(tenSysCodec, 124)},
-		{NewPublicTableKey(0, "BAR").Key(tenSysCodec)},
-		{NewPublicTableKey(1, "BAR").Key(tenSysCodec)},
-		{NewPublicTableKey(1, "foo").Key(tenSysCodec)},
-		{NewPublicTableKey(2, "foo").Key(tenSysCodec)},
+		{MakePublicObjectNameKey(tenSysCodec, 0, "BAR")},
+		{MakePublicObjectNameKey(tenSysCodec, 1, "BAR")},
+		{MakePublicObjectNameKey(tenSysCodec, 1, "foo")},
+		{MakePublicObjectNameKey(tenSysCodec, 2, "foo")},
 		{MakeDescMetadataKey(ten5Codec, 123)},
 		{MakeDescMetadataKey(ten5Codec, 124)},
-		{NewPublicTableKey(0, "BAR").Key(ten5Codec)},
-		{NewPublicTableKey(1, "BAR").Key(ten5Codec)},
-		{NewPublicTableKey(1, "foo").Key(ten5Codec)},
-		{NewPublicTableKey(2, "foo").Key(ten5Codec)},
+		{MakePublicObjectNameKey(ten5Codec, 0, "BAR")},
+		{MakePublicObjectNameKey(ten5Codec, 1, "BAR")},
+		{MakePublicObjectNameKey(ten5Codec, 1, "foo")},
+		{MakePublicObjectNameKey(ten5Codec, 2, "foo")},
 	}
 	var lastKey roachpb.Key
 	for i, test := range testCases {

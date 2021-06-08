@@ -125,8 +125,7 @@ func (t *oneLevelUncachedDescGetter) GetNamespaceEntries(
 			// Ignore nameless requests.
 			continue
 		}
-		key := catalogkeys.MakeNameMetadataKey(t.codec, r.ParentID, r.ParentSchemaID, r.Name)
-		b.Get(key)
+		b.Get(catalogkeys.EncodeNameKey(t.codec, r))
 		isBatchEmpty = false
 	}
 	ret := make([]descpb.ID, len(requests))

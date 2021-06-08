@@ -51,8 +51,10 @@ func TestDeleteDeprecatedNamespaceDescriptorMigration(t *testing.T) {
 		descProto := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &deprecated}}
 		b := txn.NewBatch()
 		b.Put(catalogkeys.MakeDescMetadataKey(codec, keys.DeprecatedNamespaceTableID), descProto)
-		b.Put(catalogkeys.NewPublicTableKey(keys.SystemDatabaseID, `namespace`).Key(codec), keys.DeprecatedNamespaceTableID)
-		b.Put(catalogkeys.NewPublicTableKey(keys.SystemDatabaseID, `namespace2`).Key(codec), keys.NamespaceTableID)
+		namespaceKey := catalogkeys.MakePublicObjectNameKey(codec, keys.SystemDatabaseID, `namespace`)
+		b.Put(namespaceKey, keys.DeprecatedNamespaceTableID)
+		namespace2Key := catalogkeys.MakePublicObjectNameKey(codec, keys.SystemDatabaseID, `namespace2`)
+		b.Put(namespace2Key, keys.NamespaceTableID)
 		return txn.Run(ctx, b)
 	})
 	require.NoError(t, err)
@@ -90,8 +92,8 @@ func TestDeleteDeprecatedNamespaceDescriptorMigrationOnlyNamespace2(t *testing.T
 		descProto := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &deprecated}}
 		b := txn.NewBatch()
 		b.Put(catalogkeys.MakeDescMetadataKey(codec, keys.DeprecatedNamespaceTableID), descProto)
-		b.Del(catalogkeys.NewPublicTableKey(keys.SystemDatabaseID, `namespace`).Key(codec))
-		b.Put(catalogkeys.NewPublicTableKey(keys.SystemDatabaseID, `namespace2`).Key(codec), keys.NamespaceTableID)
+		b.Del(catalogkeys.MakePublicObjectNameKey(codec, keys.SystemDatabaseID, `namespace`))
+		b.Put(catalogkeys.MakePublicObjectNameKey(codec, keys.SystemDatabaseID, `namespace2`), keys.NamespaceTableID)
 		return txn.Run(ctx, b)
 	})
 	require.NoError(t, err)

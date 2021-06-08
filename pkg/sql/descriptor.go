@@ -64,7 +64,7 @@ func (p *planner) createDatabase(
 ) (*dbdesc.Mutable, bool, error) {
 
 	dbName := string(database.Name)
-	dKey := catalogkeys.NewDatabaseKey(dbName)
+	dKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, dbName)
 
 	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
 		if database.IfNotExists {
@@ -117,7 +117,7 @@ func (p *planner) createDatabase(
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
 	)
 
-	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
+	if err := p.createDescriptorWithID(ctx, dKey, id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
 
@@ -129,8 +129,8 @@ func (p *planner) createDatabase(
 	}
 
 	// Every database must be initialized with the public schema.
-	if err := p.CreateSchemaNamespaceEntry(ctx,
-		catalogkeys.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
+	key := catalogkeys.MakePublicSchemaNameKey(p.ExecCfg().Codec, id)
+	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
 		return nil, true, err
 	}
 

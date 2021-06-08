@@ -539,10 +539,7 @@ var informationSchemaEnabledRoles = virtualSchemaTable{
 	comment: `roles for the current user
 ` + docs.URL("information-schema.html#enabled_roles") + `
 https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
-	schema: `
-CREATE TABLE information_schema.enabled_roles (
-	ROLE_NAME STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaEnabledRoles,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User()
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
@@ -672,16 +669,7 @@ func datetimePrecision(colType *types.T) tree.Datum {
 var informationSchemaConstraintColumnUsageTable = virtualSchemaTable{
 	comment: `columns usage by constraints
 https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
-	schema: `
-CREATE TABLE information_schema.constraint_column_usage (
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	COLUMN_NAME        STRING NOT NULL,
-	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA  STRING NOT NULL,
-	CONSTRAINT_NAME    STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaConstraintColumnUsage,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db catalog.DatabaseDescriptor,
@@ -735,18 +723,7 @@ var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	comment: `column usage by indexes and key constraints
 ` + docs.URL("information-schema.html#key_column_usage") + `
 https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
-	schema: `
-CREATE TABLE information_schema.key_column_usage (
-	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA  STRING NOT NULL,
-	CONSTRAINT_NAME    STRING NOT NULL,
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	COLUMN_NAME        STRING NOT NULL,
-	ORDINAL_POSITION   INT NOT NULL,
-	POSITION_IN_UNIQUE_CONSTRAINT INT
-)`,
+	schema: vtable.InformationSchemaKeyColumnUsage,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db catalog.DatabaseDescriptor,
@@ -804,41 +781,7 @@ CREATE TABLE information_schema.key_column_usage (
 var informationSchemaParametersTable = virtualSchemaTable{
 	comment: `built-in function parameters (empty - introspection not yet supported)
 https://www.postgresql.org/docs/9.5/infoschema-parameters.html`,
-	schema: `
-CREATE TABLE information_schema.parameters (
-	SPECIFIC_CATALOG STRING,
-	SPECIFIC_SCHEMA STRING,
-	SPECIFIC_NAME STRING,
-	ORDINAL_POSITION INT,
-	PARAMETER_MODE STRING,
-	IS_RESULT STRING,
-	AS_LOCATOR STRING,
-	PARAMETER_NAME STRING,
-	DATA_TYPE STRING,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	COLLATION_CATALOG STRING,
-	COLLATION_SCHEMA STRING,
-	COLLATION_NAME STRING,
-	NUMERIC_PRECISION INT,
-	NUMERIC_PRECISION_RADIX INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	INTERVAL_TYPE STRING,
-	INTERVAL_PRECISION INT,
-	UDT_CATALOG STRING,
-	UDT_SCHEMA STRING,
-	UDT_NAME STRING,
-	SCOPE_CATALOG STRING,
-	SCOPE_SCHEMA STRING,
-	SCOPE_NAME STRING,
-	MAXIMUM_CARDINALITY INT,
-	DTD_IDENTIFIER STRING,
-	PARAMETER_DEFAULT STRING
-)`,
+	schema: vtable.InformationSchemaParameters,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -884,20 +827,7 @@ var informationSchemaReferentialConstraintsTable = virtualSchemaTable{
 	comment: `foreign key constraints
 ` + docs.URL("information-schema.html#referential_constraints") + `
 https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
-	schema: `
-CREATE TABLE information_schema.referential_constraints (
-	CONSTRAINT_CATALOG        STRING NOT NULL,
-	CONSTRAINT_SCHEMA         STRING NOT NULL,
-	CONSTRAINT_NAME           STRING NOT NULL,
-	UNIQUE_CONSTRAINT_CATALOG STRING NOT NULL,
-	UNIQUE_CONSTRAINT_SCHEMA  STRING NOT NULL,
-	UNIQUE_CONSTRAINT_NAME    STRING,
-	MATCH_OPTION              STRING NOT NULL,
-	UPDATE_RULE               STRING NOT NULL,
-	DELETE_RULE               STRING NOT NULL,
-	TABLE_NAME                STRING NOT NULL,
-	REFERENCED_TABLE_NAME     STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaReferentialConstraints,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db catalog.DatabaseDescriptor,
@@ -947,17 +877,7 @@ var informationSchemaRoleTableGrants = virtualSchemaTable{
 	comment: `privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
 ` + docs.URL("information-schema.html#role_table_grants") + `
 https://www.postgresql.org/docs/9.5/infoschema-role-table-grants.html`,
-	schema: `
-CREATE TABLE information_schema.role_table_grants (
-	GRANTOR        STRING,
-	GRANTEE        STRING NOT NULL,
-	TABLE_CATALOG  STRING NOT NULL,
-	TABLE_SCHEMA   STRING NOT NULL,
-	TABLE_NAME     STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE   STRING,
-	WITH_HIERARCHY STRING
-)`,
+	schema: vtable.InformationSchemaRoleTableGrants,
 	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
 	// not show tables with grants provided through PUBLIC, but table_privileges does.
 	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
@@ -968,90 +888,7 @@ CREATE TABLE information_schema.role_table_grants (
 var informationSchemaRoutineTable = virtualSchemaTable{
 	comment: `built-in functions (empty - introspection not yet supported)
 https://www.postgresql.org/docs/9.5/infoschema-routines.html`,
-	schema: `
-CREATE TABLE information_schema.routines (
-	SPECIFIC_CATALOG STRING,
-	SPECIFIC_SCHEMA STRING,
-	SPECIFIC_NAME STRING,
-	ROUTINE_CATALOG STRING,
-	ROUTINE_SCHEMA STRING,
-	ROUTINE_NAME STRING,
-	ROUTINE_TYPE STRING,
-	MODULE_CATALOG STRING,
-	MODULE_SCHEMA STRING,
-	MODULE_NAME STRING,
-	UDT_CATALOG STRING,
-	UDT_SCHEMA STRING,
-	UDT_NAME STRING,
-	DATA_TYPE STRING,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	COLLATION_CATALOG STRING,
-	COLLATION_SCHEMA STRING,
-	COLLATION_NAME STRING,
-	NUMERIC_PRECISION INT,
-	NUMERIC_PRECISION_RADIX INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	INTERVAL_TYPE STRING,
-	INTERVAL_PRECISION STRING,
-	TYPE_UDT_CATALOG STRING,
-	TYPE_UDT_SCHEMA STRING,
-	TYPE_UDT_NAME STRING,
-	SCOPE_CATALOG STRING,
-	SCOPE_NAME STRING,
-	MAXIMUM_CARDINALITY INT,
-	DTD_IDENTIFIER STRING,
-	ROUTINE_BODY STRING,
-	ROUTINE_DEFINITION STRING,
-	EXTERNAL_NAME STRING,
-	EXTERNAL_LANGUAGE STRING,
-	PARAMETER_STYLE STRING,
-	IS_DETERMINISTIC STRING,
-	SQL_DATA_ACCESS STRING,
-	IS_NULL_CALL STRING,
-	SQL_PATH STRING,
-	SCHEMA_LEVEL_ROUTINE STRING,
-	MAX_DYNAMIC_RESULT_SETS INT,
-	IS_USER_DEFINED_CAST STRING,
-	IS_IMPLICITLY_INVOCABLE STRING,
-	SECURITY_TYPE STRING,
-	TO_SQL_SPECIFIC_CATALOG STRING,
-	TO_SQL_SPECIFIC_SCHEMA STRING,
-	TO_SQL_SPECIFIC_NAME STRING,
-	AS_LOCATOR STRING,
-	CREATED  TIMESTAMPTZ,
-	LAST_ALTERED TIMESTAMPTZ,
-	NEW_SAVEPOINT_LEVEL  STRING,
-	IS_UDT_DEPENDENT STRING,
-	RESULT_CAST_FROM_DATA_TYPE STRING,
-	RESULT_CAST_AS_LOCATOR STRING,
-	RESULT_CAST_CHAR_MAX_LENGTH  INT,
-	RESULT_CAST_CHAR_OCTET_LENGTH STRING,
-	RESULT_CAST_CHAR_SET_CATALOG STRING,
-	RESULT_CAST_CHAR_SET_SCHEMA  STRING,
-	RESULT_CAST_CHAR_SET_NAME STRING,
-	RESULT_CAST_COLLATION_CATALOG STRING,
-	RESULT_CAST_COLLATION_SCHEMA STRING,
-	RESULT_CAST_COLLATION_NAME STRING,
-	RESULT_CAST_NUMERIC_PRECISION INT,
-	RESULT_CAST_NUMERIC_PRECISION_RADIX INT,
-	RESULT_CAST_NUMERIC_SCALE INT,
-	RESULT_CAST_DATETIME_PRECISION STRING,
-	RESULT_CAST_INTERVAL_TYPE STRING,
-	RESULT_CAST_INTERVAL_PRECISION INT,
-	RESULT_CAST_TYPE_UDT_CATALOG STRING,
-	RESULT_CAST_TYPE_UDT_SCHEMA  STRING,
-	RESULT_CAST_TYPE_UDT_NAME STRING,
-	RESULT_CAST_SCOPE_CATALOG STRING,
-	RESULT_CAST_SCOPE_SCHEMA STRING,
-	RESULT_CAST_SCOPE_NAME STRING,
-	RESULT_CAST_MAXIMUM_CARDINALITY INT,
-	RESULT_CAST_DTD_IDENTIFIER STRING
-)`,
+	schema: vtable.InformationSchemaRoutines,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1086,14 +923,7 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 	comment: `type privileges (incomplete; may contain excess users or roles)
 ` + docs.URL("information-schema.html#type_privileges"),
-	schema: `
-CREATE TABLE information_schema.type_privileges (
-	GRANTEE         STRING NOT NULL,
-	TYPE_CATALOG    STRING NOT NULL,
-	TYPE_SCHEMA     STRING NOT NULL,
-	TYPE_NAME       STRING NOT NULL,
-	PRIVILEGE_TYPE  STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaTypePrivileges,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
@@ -1154,14 +984,7 @@ CREATE TABLE information_schema.type_privileges (
 var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	comment: `schema privileges (incomplete; may contain excess users or roles)
 ` + docs.URL("information-schema.html#schema_privileges"),
-	schema: `
-CREATE TABLE information_schema.schema_privileges (
-	GRANTEE         STRING NOT NULL,
-	TABLE_CATALOG   STRING NOT NULL,
-	TABLE_SCHEMA    STRING NOT NULL,
-	PRIVILEGE_TYPE  STRING NOT NULL,
-	IS_GRANTABLE    STRING
-)`,
+	schema: vtable.InformationSchemaSchemaPrivileges,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
@@ -1232,21 +1055,7 @@ var informationSchemaSequences = virtualSchemaTable{
 	comment: `sequences
 ` + docs.URL("information-schema.html#sequences") + `
 https://www.postgresql.org/docs/9.5/infoschema-sequences.html`,
-	schema: `
-CREATE TABLE information_schema.sequences (
-    SEQUENCE_CATALOG         STRING NOT NULL,
-    SEQUENCE_SCHEMA          STRING NOT NULL,
-    SEQUENCE_NAME            STRING NOT NULL,
-    DATA_TYPE                STRING NOT NULL,
-    NUMERIC_PRECISION        INT NOT NULL,
-    NUMERIC_PRECISION_RADIX  INT NOT NULL,
-    NUMERIC_SCALE            INT NOT NULL,
-    START_VALUE              STRING NOT NULL,
-    MINIMUM_VALUE            STRING NOT NULL,
-    MAXIMUM_VALUE            STRING NOT NULL,
-    INCREMENT                STRING NOT NULL,
-    CYCLE_OPTION             STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaSequences,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
 			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
@@ -1276,22 +1085,7 @@ CREATE TABLE information_schema.sequences (
 var informationSchemaStatisticsTable = virtualSchemaTable{
 	comment: `index metadata and statistics (incomplete)
 ` + docs.URL("information-schema.html#statistics"),
-	schema: `
-CREATE TABLE information_schema.statistics (
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA  STRING NOT NULL,
-	TABLE_NAME    STRING NOT NULL,
-	NON_UNIQUE    STRING NOT NULL,
-	INDEX_SCHEMA  STRING NOT NULL,
-	INDEX_NAME    STRING NOT NULL,
-	SEQ_IN_INDEX  INT NOT NULL,
-	COLUMN_NAME   STRING NOT NULL,
-	"COLLATION"   STRING,
-	CARDINALITY   INT,
-	DIRECTION     STRING NOT NULL,
-	STORING       STRING NOT NULL,
-	IMPLICIT      STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaStatistics,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
 			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
@@ -1398,18 +1192,7 @@ var informationSchemaTableConstraintTable = virtualSchemaTable{
 	comment: `table constraints
 ` + docs.URL("information-schema.html#table_constraints") + `
 https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
-	schema: `
-CREATE TABLE information_schema.table_constraints (
-	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA  STRING NOT NULL,
-	CONSTRAINT_NAME    STRING NOT NULL,
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	CONSTRAINT_TYPE    STRING NOT NULL,
-	IS_DEFERRABLE      STRING NOT NULL,
-	INITIALLY_DEFERRED STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaTableConstraint,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
@@ -1480,13 +1263,7 @@ CREATE TABLE information_schema.table_constraints (
 // TODO(knz): this introspection facility is of dubious utility.
 var informationSchemaUserPrivileges = virtualSchemaTable{
 	comment: `grantable privileges (incomplete)`,
-	schema: `
-CREATE TABLE information_schema.user_privileges (
-	GRANTEE        STRING NOT NULL,
-	TABLE_CATALOG  STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE   STRING
-)`,
+	schema:  vtable.InformationSchemaUserPrivileges,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(dbDesc catalog.DatabaseDescriptor) error {
@@ -1514,17 +1291,7 @@ var informationSchemaTablePrivileges = virtualSchemaTable{
 	comment: `privileges granted on table or views (incomplete; may contain excess users or roles)
 ` + docs.URL("information-schema.html#table_privileges") + `
 https://www.postgresql.org/docs/9.5/infoschema-table-privileges.html`,
-	schema: `
-CREATE TABLE information_schema.table_privileges (
-	GRANTOR        STRING,
-	GRANTEE        STRING NOT NULL,
-	TABLE_CATALOG  STRING NOT NULL,
-	TABLE_SCHEMA   STRING NOT NULL,
-	TABLE_NAME     STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE   STRING,
-	WITH_HIERARCHY STRING NOT NULL
-)`,
+	schema:   vtable.InformationSchemaTablePrivileges,
 	populate: populateTablePrivileges,
 }
 
@@ -1621,19 +1388,7 @@ var informationSchemaViewsTable = virtualSchemaTable{
 	comment: `views (incomplete)
 ` + docs.URL("information-schema.html#views") + `
 https://www.postgresql.org/docs/9.5/infoschema-views.html`,
-	schema: `
-CREATE TABLE information_schema.views (
-    TABLE_CATALOG              STRING NOT NULL,
-    TABLE_SCHEMA               STRING NOT NULL,
-    TABLE_NAME                 STRING NOT NULL,
-    VIEW_DEFINITION            STRING NOT NULL,
-    CHECK_OPTION               STRING,
-    IS_UPDATABLE               STRING NOT NULL,
-    IS_INSERTABLE_INTO         STRING NOT NULL,
-    IS_TRIGGER_UPDATABLE       STRING NOT NULL,
-    IS_TRIGGER_DELETABLE       STRING NOT NULL,
-    IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL
-)`,
+	schema: vtable.InformationSchemaViews,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
 			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {

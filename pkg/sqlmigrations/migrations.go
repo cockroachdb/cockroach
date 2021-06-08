@@ -327,7 +327,7 @@ func databaseIDs(
 	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
 		var ids []descpb.ID
 		for _, name := range names {
-			kv, err := db.Get(ctx, catalogkeys.NewDatabaseKey(name).Key(codec))
+			kv, err := db.Get(ctx, catalogkeys.MakeDatabaseNameKey(codec, name))
 			if err != nil {
 				return nil, err
 			}
@@ -715,8 +715,8 @@ func CreateSystemTable(
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		tKey := catalogkeys.NewPublicTableKey(desc.GetParentID(), desc.GetName())
-		b.CPut(tKey.Key(codec), desc.GetID(), nil)
+		tKey := catalogkeys.MakePublicObjectNameKey(codec, desc.GetParentID(), desc.GetName())
+		b.CPut(tKey, desc.GetID(), nil)
 		b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
 		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 			return err

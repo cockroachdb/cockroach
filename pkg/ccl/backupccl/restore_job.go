@@ -334,11 +334,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			// Depending on which cluster version we are restoring to, we decide which
-			// namespace table to write the descriptor into. This may cause wrong
-			// behavior if the cluster version is bumped DURING a restore.
-			dKey := catalogkeys.NewDatabaseKey(desc.GetName())
-			b.CPut(dKey.Key(codec), desc.GetID(), nil)
+			b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
 		}
 
 		// Write namespace and descriptor entries for each schema.
@@ -361,8 +357,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			skey := catalogkeys.NewSchemaKey(sc.GetParentID(), sc.GetName())
-			b.CPut(skey.Key(codec), sc.GetID(), nil)
+			b.CPut(catalogkeys.EncodeNameKey(codec, sc), sc.GetID(), nil)
 		}
 
 		for i := range tables {
@@ -415,11 +410,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			// Depending on which cluster version we are restoring to, we decide which
-			// namespace table to write the descriptor into. This may cause wrong
-			// behavior if the cluster version is bumped DURING a restore.
-			tkey := catalogkv.MakeObjectNameKey(table.GetParentID(), table.GetParentSchemaID(), table.GetName())
-			b.CPut(tkey.Key(codec), table.GetID(), nil)
+			b.CPut(catalogkeys.EncodeNameKey(codec, table), table.GetID(), nil)
 		}
 
 		// Write all type descriptors -- create namespace entries and write to
@@ -443,8 +434,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			tkey := catalogkv.MakeObjectNameKey(typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
-			b.CPut(tkey.Key(codec), typ.GetID(), nil)
+			b.CPut(catalogkeys.EncodeNameKey(codec, typ), typ.GetID(), nil)
 		}
 
 		for _, kv := range extra {
@@ -2138,15 +2128,7 @@ func (r *restoreResumer) dropDescriptors(
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		tableToDrop.SetDropped()
-		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-			ctx,
-			b,
-			codec,
-			tableToDrop.ParentID,
-			tableToDrop.GetParentSchemaID(),
-			tableToDrop.Name,
-			false, /* kvTrace */
-		)
+		b.Del(catalogkeys.EncodeNameKey(codec, tableToDrop))
 		descsCol.AddDeletedDescriptor(tableToDrop)
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
 			return errors.Wrap(err, "writing dropping table to batch")
@@ -2168,15 +2150,7 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 
-		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-			ctx,
-			b,
-			codec,
-			typDesc.ParentID,
-			typDesc.ParentSchemaID,
-			typDesc.Name,
-			false, /* kvTrace */
-		)
+		b.Del(catalogkeys.EncodeNameKey(codec, typDesc))
 		mutType.SetDropped()
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutType, b); err != nil {
 			return errors.Wrap(err, "writing dropping type to batch")
@@ -2242,15 +2216,8 @@ func (r *restoreResumer) dropDescriptors(
 			log.Warningf(ctx, "preserving schema %s on restore failure because it contains new child objects", sc.GetName())
 			continue
 		}
-		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-			ctx,
-			b,
-			codec,
-			sc.GetParentID(),
-			keys.RootNamespaceID,
-			sc.GetName(),
-			false, /* kvTrace */
-		)
+
+		b.Del(catalogkeys.EncodeNameKey(codec, sc))
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.GetID()))
 		descsCol.AddDeletedDescriptor(sc)
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
@@ -2285,7 +2252,8 @@ func (r *restoreResumer) dropDescriptors(
 
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
-		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))
+		nameKey := catalogkeys.MakeDatabaseNameKey(codec, db.GetName())
+		b.Del(nameKey)
 		descsCol.AddDeletedDescriptor(db)
 		deletedDBs[db.GetID()] = struct{}{}
 	}

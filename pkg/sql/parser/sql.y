@@ -1057,7 +1057,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
-%type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
@@ -5346,10 +5346,10 @@ show_transaction_stmt:
   }
 | SHOW TRANSACTION error // SHOW HELP: SHOW TRANSACTION
 
-// %Help: SHOW CREATE - display the CREATE statement for a table, sequence or view
+// %Help: SHOW CREATE - display the CREATE statement for a table, sequence, view, or database
 // %Category: DDL
 // %Text:
-// SHOW CREATE [ TABLE | SEQUENCE | VIEW ] <tablename>
+// SHOW CREATE [ TABLE | SEQUENCE | VIEW | DATABASE ] <object_name>
 // SHOW CREATE ALL TABLES
 // %SeeAlso: WEBDOCS/show-create-table.html
 show_create_stmt:
@@ -5357,21 +5357,31 @@ show_create_stmt:
   {
     $$.val = &tree.ShowCreate{Name: $3.unresolvedObjectName()}
   }
-| SHOW CREATE create_kw table_name
-  {
+| SHOW CREATE TABLE table_name
+	{
     /* SKIP DOC */
-    $$.val = &tree.ShowCreate{Name: $4.unresolvedObjectName()}
-  }
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeTable, Name: $4.unresolvedObjectName()}
+	}
+| SHOW CREATE VIEW table_name
+	{
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeView, Name: $4.unresolvedObjectName()}
+	}
+| SHOW CREATE SEQUENCE table_name
+	{
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSequence, Name: $4.unresolvedObjectName()}
+	}
+| SHOW CREATE DATABASE db_name
+	{
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeDatabase, Name: $4.unresolvedObjectName()}
+	}
 | SHOW CREATE ALL TABLES
   {
     $$.val = &tree.ShowCreateAllTables{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
-
-create_kw:
-  TABLE
-| VIEW
-| SEQUENCE
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv
@@ -12313,6 +12323,8 @@ opt_schema_name:
 	}
 
 table_name:            db_object_name
+
+db_name:               db_object_name
 
 standalone_index_name: db_object_name
 

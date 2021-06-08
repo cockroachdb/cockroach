@@ -10,4 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
 )
 
-exports_files(["pg_catalog.go"])
+exports_files([
+    "pg_catalog.go",
+    "information_schema.go",
+])

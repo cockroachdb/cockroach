@@ -1,18 +1,13 @@
 {
   "pgVersion": "13.2",
   "diffSummary": {
-    "TotalTables": 65,
+    "TotalTables": 60,
     "TotalColumns": 294,
-    "MissingTables": 43,
+    "MissingTables": 38,
     "MissingColumns": 12,
     "DatatypeMismatches": 3
   },
   "pgMetadata": {
-    "_pg_foreign_data_wrappers": {},
-    "_pg_foreign_servers": {},
-    "_pg_foreign_table_columns": {},
-    "_pg_foreign_tables": {},
-    "_pg_user_mappings": {},
     "attributes": {},
     "check_constraint_routine_usage": {},
     "column_column_usage": {},

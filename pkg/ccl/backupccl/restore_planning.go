@@ -267,20 +267,20 @@ func synthesizePGTempSchema(
 			return err
 		}
 
-		sKey := catalogkeys.NewSchemaKey(defaultDBID, schemaName)
+		sKey := catalogkeys.NewNameKeyComponents(defaultDBID, keys.RootNamespaceID, schemaName)
 		schemaID, err := catalogkv.GetDescriptorID(ctx, txn, p.ExecCfg().Codec, sKey)
 		if err != nil {
 			return err
 		}
 		if schemaID != descpb.InvalidID {
 			return errors.Newf("attempted to synthesize temp schema during RESTORE but found"+
-				" another schema already using the same schema key %s", sKey.Name())
+				" another schema already using the same schema key %s", sKey.GetName())
 		}
 		synthesizedSchemaID, err = catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return err
 		}
-		return p.CreateSchemaNamespaceEntry(ctx, sKey.Key(p.ExecCfg().Codec), synthesizedSchemaID)
+		return p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), synthesizedSchemaID)
 	})
 
 	return synthesizedSchemaID, defaultDBID, err

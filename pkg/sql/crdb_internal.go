@@ -239,7 +239,8 @@ CREATE TABLE crdb_internal.databases (
 	owner NAME NOT NULL,
 	primary_region STRING,
 	regions STRING[],
-	survival_goal STRING
+	survival_goal STRING,
+	create_statement STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
@@ -247,25 +248,38 @@ CREATE TABLE crdb_internal.databases (
 				var survivalGoal tree.Datum = tree.DNull
 				var primaryRegion tree.Datum = tree.DNull
 				regions := tree.NewDArray(types.String)
+
+				createNode := tree.CreateDatabase{}
+				createNode.ConnectionLimit = -1
+				createNode.Name = tree.Name(db.GetName())
 				if db.IsMultiRegion() {
-					switch db.GetRegionConfig().SurvivalGoal {
-					case descpb.SurvivalGoal_ZONE_FAILURE:
-						survivalGoal = tree.NewDString("zone")
-					case descpb.SurvivalGoal_REGION_FAILURE:
-						survivalGoal = tree.NewDString("region")
-					default:
-						return errors.Newf("unknown survival goal: %d", db.GetRegionConfig().SurvivalGoal)
-					}
 					primaryRegion = tree.NewDString(string(db.GetRegionConfig().PrimaryRegion))
+
+					createNode.PrimaryRegion = tree.Name(db.GetRegionConfig().PrimaryRegion)
 
 					regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db.GetID(), p.Descriptors())
 					if err != nil {
 						return err
 					}
-					for _, region := range regionConfig.Regions() {
+
+					createNode.Regions = make(tree.NameList, len(regionConfig.Regions()))
+					for i, region := range regionConfig.Regions() {
 						if err := regions.Append(tree.NewDString(string(region))); err != nil {
 							return err
 						}
+						createNode.Regions[i] = tree.Name(region)
+					}
+
+					createNode.SurvivalGoal = tree.SurvivalGoalDefault
+					switch db.GetRegionConfig().SurvivalGoal {
+					case descpb.SurvivalGoal_ZONE_FAILURE:
+						survivalGoal = tree.NewDString("zone")
+						createNode.SurvivalGoal = tree.SurvivalGoalZoneFailure
+					case descpb.SurvivalGoal_REGION_FAILURE:
+						survivalGoal = tree.NewDString("region")
+						createNode.SurvivalGoal = tree.SurvivalGoalRegionFailure
+					default:
+						return errors.Newf("unknown survival goal: %d", db.GetRegionConfig().SurvivalGoal)
 					}
 				}
 
@@ -273,9 +287,10 @@ CREATE TABLE crdb_internal.databases (
 					tree.NewDInt(tree.DInt(db.GetID())),            // id
 					tree.NewDString(db.GetName()),                  // name
 					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
-					primaryRegion, // primary_region
-					regions,       // regions
-					survivalGoal,  // survival_goal
+					primaryRegion,                        // primary_region
+					regions,                              // regions
+					survivalGoal,                         // survival_goal
+					tree.NewDString(createNode.String()), // create_statement
 				)
 			})
 	},
@@ -846,6 +861,28 @@ func getSQLStats(p *planner, virtualTableName string) (*sqlStats, error) {
 	return p.extendedEvalCtx.sqlStatsCollector.sqlStats, nil
 }
 
+// ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
+func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
+
+	// Create a new json.ObjectBuilder with key-value pairs for the node's name (1),
+	// node's attributes (len(node.Attrs)), and the node's children (1).
+	nodePlan := json.NewObjectBuilder(len(node.Attrs) + 2 /* numAddsHint */)
+	nodeChildren := json.NewArrayBuilder(len(node.Children))
+
+	nodePlan.Add("Name", json.FromString(node.Name))
+
+	for _, attr := range node.Attrs {
+		nodePlan.Add(strings.Title(attr.Key), json.FromString(attr.Value))
+	}
+
+	for _, childNode := range node.Children {
+		nodeChildren.Add(ExplainTreePlanNodeToJSON(childNode))
+	}
+
+	nodePlan.Add("Children", nodeChildren.Build())
+	return nodePlan.Build()
+}
+
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -888,7 +925,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   contention_time_avg FLOAT,
   contention_time_var FLOAT,
   implicit_txn        BOOL NOT NULL,
-  full_scan           BOOL NOT NULL
+  full_scan           BOOL NOT NULL,
+  sample_plan         JSONB,
+  database_name       STRING NOT NULL,
+  exec_node_ids       INT[] NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
@@ -961,6 +1001,16 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if stmtKey.failed {
 					flags = "!" + flags
 				}
+
+				samplePlan := ExplainTreePlanNodeToJSON(&s.mu.data.SensitiveInfo.MostRecentPlanDescription)
+
+				execNodeIDs := tree.NewDArray(types.Int)
+				for _, nodeID := range s.mu.data.Nodes {
+					if err := execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
+						return err
+					}
+				}
+
 				err := addRow(
 					tree.NewDInt(tree.DInt(nodeID)),                         // node_id
 					tree.NewDString(appName),                                // application_name
@@ -1000,6 +1050,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_var
 					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),                                 // implicit_txn
 					tree.MakeDBool(tree.DBool(s.mu.fullScan)),                                       // full_scan
+					tree.NewDJSON(samplePlan),         // sample_plan
+					tree.NewDString(stmtKey.database), // database_name
+					execNodeIDs,                       // exec_node_ids
 				)
 				s.mu.Unlock()
 				if err != nil {
@@ -2960,25 +3013,18 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	},
 }
 
-// NamespaceKey represents a key from the namespace table.
-type NamespaceKey struct {
-	ParentID descpb.ID
-	// ParentSchemaID is not populated for rows under system.deprecated_namespace.
-	// This table will no longer exist on 20.2 or later.
-	ParentSchemaID descpb.ID
-	Name           string
-}
-
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
-func (p *planner) getAllNames(ctx context.Context) (map[descpb.ID]NamespaceKey, error) {
+func (p *planner) getAllNames(
+	ctx context.Context,
+) (map[descpb.ID]catalog.NameKeyComponents, error) {
 	return getAllNames(ctx, p.txn, p.ExtendedEvalContext().ExecCfg.InternalExecutor)
 }
 
 // TestingGetAllNames is a wrapper for getAllNames.
 func TestingGetAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]NamespaceKey, error) {
+) (map[descpb.ID]catalog.NameKeyComponents, error) {
 	return getAllNames(ctx, txn, executor)
 }
 
@@ -2986,8 +3032,8 @@ func TestingGetAllNames(
 // It is public so that it can be tested outside the sql package.
 func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]NamespaceKey, error) {
-	namespace := map[descpb.ID]NamespaceKey{}
+) (map[descpb.ID]catalog.NameKeyComponents, error) {
+	namespace := map[descpb.ID]catalog.NameKeyComponents{}
 	it, err := executor.QueryIterator(
 		ctx, "get-all-names", txn,
 		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
@@ -2999,7 +3045,7 @@ func getAllNames(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		r := it.Cur()
 		id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
-		namespace[descpb.ID(id)] = NamespaceKey{
+		namespace[descpb.ID(id)] = descpb.NameInfo{
 			ParentID:       descpb.ID(parentID),
 			ParentSchemaID: descpb.ID(parentSchemaID),
 			Name:           string(name),
@@ -3053,7 +3099,7 @@ CREATE TABLE crdb_internal.zones (
 				return 0, 0, string(tree.PublicSchemaName), nil
 			}
 			if entry, ok := namespace[descpb.ID(id)]; ok {
-				return uint32(entry.ParentID), uint32(entry.ParentSchemaID), entry.Name, nil
+				return uint32(entry.GetParentID()), uint32(entry.GetParentSchemaID()), entry.GetName(), nil
 			}
 			return 0, 0, "", errors.AssertionFailedf(
 				"object with ID %d does not exist", errors.Safe(id))
