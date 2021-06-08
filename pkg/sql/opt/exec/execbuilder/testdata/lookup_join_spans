@@ -1,0 +1,469 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE metrics (
+  id   SERIAL PRIMARY KEY,
+  name STRING,
+  INDEX name_index (name)
+)
+
+statement ok
+insert into metrics (id,name) values (1,'cpu'), (2,'cpu'), (3,'mem'), (4,'disk')
+
+statement ok
+CREATE TABLE metric_values (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time)
+)
+
+statement ok
+insert into metric_values (metric_id, time, value) values
+ (1,'2020-01-01 00:00:00+00:00',0),
+ (1,'2020-01-01 00:00:01+00:00',1),
+ (2,'2020-01-01 00:00:00+00:00',2),
+ (2,'2020-01-01 00:00:01+00:00',3),
+ (3,'2020-01-01 00:01:00+00:00',4),
+ (3,'2020-01-01 00:01:01+00:00',5)
+
+statement ok
+CREATE TABLE metric_values_desc (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time DESC)
+)
+
+statement ok
+insert into metric_values_desc select * from metric_values
+
+query T 
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time > '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" > '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time > '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" > '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time >= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" >= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time >= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" >= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: metric_values@primary
+│ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:00+00:00')
+│
+└── • scan
+      missing stats
+      table: metrics@name_index
+      spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: metric_values_desc@primary
+│ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:00+00:00')
+│
+└── • scan
+      missing stats
+      table: metrics@name_index
+      spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time <= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" <= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time <= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" <= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time in ('2020-01-01 00:00:00+00:00','2020-01-01 00:00:01+00:00') AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values@primary
+    │ equality: (id, lookup_join_const_col_@2) = (metric_id,time)
+    │ equality cols are key
+    │
+    └── • cross join
+        │
+        ├── • scan
+        │     missing stats
+        │     table: metrics@name_index
+        │     spans: [/'cpu' - /'cpu']
+        │
+        └── • values
+              size: 1 column, 2 rows
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time in ('2020-01-01 00:00:00+00:00','2020-01-01 00:00:01+00:00') AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ equality: (id, lookup_join_const_col_@2) = (metric_id,time)
+    │ equality cols are key
+    │
+    └── • cross join
+        │
+        ├── • scan
+        │     missing stats
+        │     table: metrics@name_index
+        │     spans: [/'cpu' - /'cpu']
+        │
+        └── • values
+              size: 1 column, 2 rows
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:10+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:10+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:10+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:10+00:00')
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+LEFT JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+    │
+    └── • scan
+          missing stats
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+LEFT JOIN metrics m
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu' AND
+  m.id IS NOT NULL
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: metric_values@primary
+│ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+│
+└── • scan
+      missing stats
+      table: metrics@name_index
+      spans: [/'cpu' - /'cpu']
+
+# This isn't necessarily using/testing lookup exprs but its more for completeness in types of joins.
+# TODO(tpr): can we manipulate stats to get a lookup join?
+query T
+EXPLAIN SELECT *
+FROM metric_values mv
+WHERE
+  mv.metric_id IN (SELECT id FROM metrics)
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • merge join (semi)
+    │ equality: (metric_id) = (id)
+    │ right cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: metric_values@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: metrics@primary
+          spans: FULL SCAN
