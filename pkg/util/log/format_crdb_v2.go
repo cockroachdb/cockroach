@@ -11,6 +11,7 @@
 package log
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"regexp"
@@ -457,7 +458,7 @@ var markersStartWithMultiByteRune = startRedactionMarker[0] >= utf8.RuneSelf && 
 // We don't include a capture group for the log message here, just for the
 // preamble, because a capture group that handles multiline messages is very
 // slow when running on the large buffers passed to EntryDecoder.split.
-var entryREV2 = regexp.MustCompile(
+var entryRE = regexp.MustCompile(
 	`(?m)^` +
 		/* Severity									*/ `([IWEF])` +
 		/* Date and time    				*/ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
@@ -473,22 +474,36 @@ var entryREV2 = regexp.MustCompile(
 		/* Message                  */ `(.*)$`,
 )
 
-// EntryDecoderV2 reads successive encoded log entries from the data.
-type EntryDecoderV2 struct {
+// EntryDecoder reads successive encoded log entries from the data.
+type EntryDecoder struct {
 	re   *regexp.Regexp
 	data []byte
+	scanner            *bufio.Scanner
+	sensitiveEditor    redactEditor
+	truncatedLastEntry bool
 }
 
-// NewEntryDecoderV2 creates a new instance of EntryDecoderV2.
-func NewEntryDecoderV2(data []byte) *EntryDecoderV2 {
-	return &EntryDecoderV2{
-		re:   entryREV2,
-		data: data,
+// NewEntryDecoder creates a new instance of EntryDecoder.
+func NewEntryDecoder(data []byte, in io.Reader, editMode EditSensitiveData, legacyFormatted bool) *EntryDecoder {
+	var d *EntryDecoder
+	if !legacyFormatted {
+		d = &EntryDecoder{
+			re:   entryRE,
+			data: data,
+		}
+	} else {
+		d = &EntryDecoder{
+			re:              entryREV1,
+			scanner:         bufio.NewScanner(in),
+			sensitiveEditor: getEditor(editMode),
+		}
+		d.scanner.Split(d.split)
 	}
+	return d
 }
 
 // DecodeV2 decodes the next log entry into the provided protobuf message.
-func (d *EntryDecoderV2) DecodeV2(entry *logpb.Entry) error {
+func (d *EntryDecoder) DecodeV2(entry *logpb.Entry) error {
 	m := d.re.FindSubmatch(d.data)
 	if m == nil {
 		return io.EOF
@@ -595,8 +610,24 @@ linesLoop:
 	return nil
 }
 
-// ConvertToFormatLegacy converts the log output format to the legacy file format used from CockroachDB v1.0.
-func ConvertToFormatLegacy(entry *logpb.Entry) error {
-	/* TODO */
-	return nil
-}
+//// GetFormatLegacy converts the log format to the legacy file format and returns the legacy formatted data.
+//func GetFormatLegacy(data []byte) bytes.Buffer {
+//
+//	// [WIP]
+//
+//	var out bytes.Buffer
+//
+//	// d := NewEntryDecoder(data)
+//	var entry logpb.Entry
+//	if err := d.DecodeV2(&entry); err != nil {
+//		panic(err)
+//	}
+//
+//	// Write the severity.
+//	fmt.Fprintf(&out, string(severityChar[int(entry.Severity)]))
+//
+//	// Write the timestamp.
+//	// fmt.Fprintf(&out, entry.Time)
+//
+//	return out
+//}

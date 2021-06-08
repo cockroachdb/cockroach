@@ -16,6 +16,7 @@ import (
 	"container/heap"
 	"context"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -170,6 +171,7 @@ func newMergedStreamFromPatterns(
 	filePattern, programFilter *regexp.Regexp,
 	from, to time.Time,
 	editMode log.EditSensitiveData,
+	legacyFormatted	bool,
 ) (logStream, error) {
 	paths, err := expandPatterns(patterns)
 	if err != nil {
@@ -180,7 +182,7 @@ func newMergedStreamFromPatterns(
 	if err != nil {
 		return nil, err
 	}
-	return newMergedStream(ctx, files, from, to, editMode)
+	return newMergedStream(ctx, files, from, to, editMode, legacyFormatted)
 }
 
 func groupIndex(re *regexp.Regexp, groupName string) int {
@@ -193,7 +195,7 @@ func groupIndex(re *regexp.Regexp, groupName string) int {
 }
 
 func newMergedStream(
-	ctx context.Context, files []fileInfo, from, to time.Time, editMode log.EditSensitiveData,
+	ctx context.Context, files []fileInfo, from, to time.Time, editMode log.EditSensitiveData, legacyFormatted bool,
 ) (*mergedStream, error) {
 	// TODO(ajwerner): think about clock movement and PID
 	const maxConcurrentFiles = 256 // should be far less than the FD limit
@@ -204,7 +206,7 @@ func newMergedStream(
 		return func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			s, err := newFileLogStream(files[i], from, to, editMode)
+			s, err := newFileLogStream(files[i], from, to, editMode, legacyFormatted)
 			if s != nil {
 				res[i] = s
 			}
@@ -435,16 +437,17 @@ func (bs *bufferedLogStream) pop() (logpb.Entry, bool) {
 
 // fileLogStream represents a logStream from a single file.
 type fileLogStream struct {
-	from, to time.Time
-	prevTime int64
-	fi       fileInfo
-	f        *os.File
-	d        *log.EntryDecoder
-	read     bool
-	editMode log.EditSensitiveData
+	from, to 				time.Time
+	prevTime 				int64
+	fi       				fileInfo
+	f        				*os.File
+	d        				*log.EntryDecoder
+	read     				bool
+	editMode 				log.EditSensitiveData
+	legacyFormatted	bool
 
-	e   logpb.Entry
-	err error
+	e   						logpb.Entry
+	err 						error
 }
 
 // newFileLogStream constructs a *fileLogStream and then peeks at the file to
@@ -454,13 +457,14 @@ type fileLogStream struct {
 // file is always closed before returning from this constructor so the initial
 // peek does not consume resources.
 func newFileLogStream(
-	fi fileInfo, from, to time.Time, editMode log.EditSensitiveData,
+	fi fileInfo, from, to time.Time, editMode log.EditSensitiveData, legacyFormatted bool,
 ) (logStream, error) {
 	s := &fileLogStream{
 		fi:       fi,
 		from:     from,
 		to:       to,
 		editMode: editMode,
+		legacyFormatted: legacyFormatted,
 	}
 	if _, ok := s.peek(); !ok {
 		if err := s.error(); err != io.EOF {
@@ -483,10 +487,14 @@ func (s *fileLogStream) open() bool {
 	if s.f, s.err = os.Open(s.fi.path); s.err != nil {
 		return false
 	}
-	if s.err = seekToFirstAfterFrom(s.f, s.from, s.editMode); s.err != nil {
+	if s.err = seekToFirstAfterFrom(s.f, s.from, s.editMode, s.legacyFormatted); s.err != nil {
 		return false
 	}
-	s.d = log.NewEntryDecoder(bufio.NewReaderSize(s.f, readBufSize), s.editMode)
+	data, err := ioutil.ReadAll(s.f)
+	if err != nil {
+		panic(err)
+	}
+	s.d = log.NewEntryDecoder(data, bufio.NewReaderSize(s.f, readBufSize), s.editMode, s.legacyFormatted)
 	return true
 }
 
@@ -541,7 +549,7 @@ func (s *fileLogStream) error() error        { return s.err }
 
 // seekToFirstAfterFrom uses binary search to seek to an offset after all
 // entries which occur before from.
-func seekToFirstAfterFrom(f *os.File, from time.Time, editMode log.EditSensitiveData) (err error) {
+func seekToFirstAfterFrom(f *os.File, from time.Time, editMode log.EditSensitiveData, legacyFormatted bool) (err error) {
 	if from.IsZero() {
 		return nil
 	}
@@ -559,8 +567,12 @@ func seekToFirstAfterFrom(f *os.File, from time.Time, editMode log.EditSensitive
 		if _, err := f.Seek(int64(i), io.SeekStart); err != nil {
 			panic(err)
 		}
+		data, err := ioutil.ReadAll(f)
+		if err != nil {
+			panic(err)
+		}
 		var e logpb.Entry
-		err := log.NewEntryDecoder(f, editMode).Decode(&e)
+		err = log.NewEntryDecoder(data, f, editMode, legacyFormatted).Decode(&e)
 		if err != nil {
 			if err == io.EOF {
 				return true
@@ -572,8 +584,12 @@ func seekToFirstAfterFrom(f *os.File, from time.Time, editMode log.EditSensitive
 	if _, err := f.Seek(int64(offset), io.SeekStart); err != nil {
 		return err
 	}
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		panic(err)
+	}
 	var e logpb.Entry
-	if err := log.NewEntryDecoder(f, editMode).Decode(&e); err != nil {
+	if err := log.NewEntryDecoder(data, f, editMode, legacyFormatted).Decode(&e); err != nil {
 		return err
 	}
 	_, err = f.Seek(int64(offset), io.SeekStart)

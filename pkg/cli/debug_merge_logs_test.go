@@ -156,16 +156,16 @@ var cases = []testCase{
 
 func (c testCase) run(t *testing.T) {
 	outBuf := bytes.Buffer{}
-	debugMergeLogsCommand.Flags().Visit(func(f *pflag.Flag) {
+	debugMergeLogsCmd.Flags().Visit(func(f *pflag.Flag) {
 		if err := f.Value.Set(f.DefValue); err != nil {
 			t.Fatalf("Failed to set flag to default: %v", err)
 		}
 	})
-	debugMergeLogsCommand.SetOutput(&outBuf)
-	if err := debugMergeLogsCommand.ParseFlags(c.flags); err != nil {
+	debugMergeLogsCmd.SetOutput(&outBuf)
+	if err := debugMergeLogsCmd.ParseFlags(c.flags); err != nil {
 		t.Fatalf("Failed to set flags: %v", err)
 	}
-	if err := debugMergeLogsCommand.RunE(debugMergeLogsCommand, c.args); err != nil {
+	if err := debugMergeLogsCmd.RunE(debugMergeLogsCmd, c.args); err != nil {
 		t.Fatalf("Failed to run command: %v", err)
 	}
 	// The expected output lives in filepath.Join(testdataPath, "results", testCase.name)

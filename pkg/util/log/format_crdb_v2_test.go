@@ -188,7 +188,7 @@ func TestFormatCrdbV2Decode(t *testing.T) {
 			switch td.Cmd {
 			case "log":
 				var out strings.Builder
-				d := NewEntryDecoderV2([]byte(td.Input))
+				d := NewEntryDecoder([]byte(td.Input))
 				for {
 					var e logpb.Entry
 					if err := d.DecodeV2(&e); err != nil {

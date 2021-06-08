@@ -348,7 +348,7 @@ func formatLogEntryInternalV1(
 // We don't include a capture group for the log message here, just for the
 // preamble, because a capture group that handles multiline messages is very
 // slow when running on the large buffers passed to EntryDecoder.split.
-var entryRE = regexp.MustCompile(
+var entryREV1 = regexp.MustCompile(
 	`(?m)^` +
 		/* Severity         */ `([IWEF])` +
 		/* Date and time    */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
@@ -357,27 +357,6 @@ var entryRE = regexp.MustCompile(
 		/* Redactable flag  */ `((?:` + redactableIndicator + `)?) ` +
 		/* Context tags     */ `(?:\[((?:[^]]|\][^ ])+)\] )?`,
 )
-
-// EntryDecoder reads successive encoded log entries from the input
-// buffer. Each entry is preceded by a single big-ending uint32
-// describing the next entry's length.
-type EntryDecoder struct {
-	re                 *regexp.Regexp
-	scanner            *bufio.Scanner
-	sensitiveEditor    redactEditor
-	truncatedLastEntry bool
-}
-
-// NewEntryDecoder creates a new instance of EntryDecoder.
-func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) *EntryDecoder {
-	d := &EntryDecoder{
-		re:              entryRE,
-		scanner:         bufio.NewScanner(in),
-		sensitiveEditor: getEditor(editMode),
-	}
-	d.scanner.Split(d.split)
-	return d
-}
 
 // MessageTimeFormat is the format of the timestamp in log message headers as
 // used in time.Parse and time.Format.
