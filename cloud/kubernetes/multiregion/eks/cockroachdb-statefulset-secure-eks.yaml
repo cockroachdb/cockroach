@@ -190,13 +190,13 @@ spec:
         # the resources that can be allocated on each of your Kubernetes nodes by running:
         #   kubectl describe nodes
         # Note that requests and limits should have identical values.
-        # resources:
-        #   requests:
-        #     cpu: "16"
-        #     memory: "8Gi"
-        #   limits:
-        #     cpu: "16"
-        #     memory: "8Gi" 
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+          limits:
+            cpu: "2"
+            memory: "8Gi" 
         ports:
         - containerPort: 26257
           name: grpc
