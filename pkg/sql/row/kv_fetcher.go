@@ -117,6 +117,11 @@ func (f *KVFetcher) NextKV(
 			if err != nil {
 				return false, kv, false, err
 			}
+			// If we're finished decoding the batch response, nil our reference to it
+			// so that the garbage collector can reclaim the backing memory.
+			if len(f.batchResponse) == 0 {
+				f.batchResponse = nil
+			}
 			return true, roachpb.KeyValue{
 				Key: key,
 				Value: roachpb.Value{
