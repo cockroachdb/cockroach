@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -66,7 +65,7 @@ func MakeCollection(
 		sessionData:    sessionData,
 		hydratedTables: hydratedTables,
 		virtualSchemas: virtualSchemas,
-		leased:         makeLeasedDescriptors(),
+		leased:         makeLeasedDescriptors(leaseMgr),
 		synthetic:      makeSyntheticDescriptors(),
 		kv:             makeReadDescriptors(codec),
 	}
@@ -133,109 +132,11 @@ type Collection struct {
 
 var _ catalog.Accessor = (*Collection)(nil)
 
-// getLeasedDescriptorByName return a leased descriptor valid for the
-// transaction, acquiring one if necessary. Due to a bug in lease acquisition
-// for dropped descriptors, the descriptor may have to be read from the store,
-// in which case shouldReadFromStore will be true.
-func (tc *Collection) getLeasedDescriptorByName(
-	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
-) (desc catalog.Descriptor, shouldReadFromStore bool, err error) {
-	// First, look to see if we already have the descriptor.
-	// This ensures that, once a SQL transaction resolved name N to id X, it will
-	// continue to use N to refer to X even if N is renamed during the
-	// transaction.
-	if desc = tc.leased.getByName(parentID, parentSchemaID, name); desc != nil {
-		if log.V(2) {
-			log.Eventf(ctx, "found descriptor in collection for '%s'", name)
-		}
-		return desc, false, nil
-	}
-
-	readTimestamp := txn.ReadTimestamp()
-	ldesc, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
-	if err != nil {
-		// Read the descriptor from the store in the face of some specific errors
-		// because of a known limitation of AcquireByName. See the known
-		// limitations of AcquireByName for details.
-		if (catalog.HasInactiveDescriptorError(err) && errors.Is(err, catalog.ErrDescriptorDropped)) ||
-			errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, true, nil
-		}
-		// Lease acquisition failed with some other error. This we don't
-		// know how to deal with, so propagate the error.
-		return nil, false, err
-	}
-
-	expiration := ldesc.Expiration()
-	if expiration.LessEq(readTimestamp) {
-		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
-	}
-
-	tc.leased.add(ldesc)
-	if log.V(2) {
-		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", name, ldesc.Underlying())
-	}
-
-	// If the descriptor we just acquired expires before the txn's deadline,
-	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-	// timestamp, so we need to set a deadline on the transaction to prevent it
-	// from committing beyond the version's expiration time.
-	err = tc.MaybeUpdateDeadline(ctx, txn)
-	if err != nil {
-		return nil, false, err
-	}
-	return ldesc.Underlying(), false, nil
-}
-
-// Deadline returns the latest expiration from our leased
-// descriptors which should b e the transactions deadline.
-func (tc *Collection) Deadline() (deadline hlc.Timestamp, haveDeadline bool) {
-	return tc.leased.getDeadline()
-}
-
 // MaybeUpdateDeadline updates the deadline in a given transaction
 // based on the leased descriptors in this collection. This update is
 // only done when a deadline exists.
 func (tc *Collection) MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error) {
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err = txn.UpdateDeadline(ctx, deadline)
-	}
-	return err
-}
-
-// getLeasedDescriptorByID return a leased descriptor valid for the transaction,
-// acquiring one if necessary.
-// We set a deadline on the transaction based on the lease expiration, which is
-// the usual case, unless setTxnDeadline is false.
-func (tc *Collection) getLeasedDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, setTxnDeadline bool,
-) (catalog.Descriptor, error) {
-	// First, look to see if we already have the table in the shared cache.
-	if desc := tc.leased.getByID(id); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor %d in cache", id)
-		return desc, nil
-	}
-
-	readTimestamp := txn.ReadTimestamp()
-	desc, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
-	if err != nil {
-		return nil, err
-	}
-	expiration := desc.Expiration()
-	if expiration.LessEq(readTimestamp) {
-		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
-	}
-
-	tc.leased.add(desc)
-	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.Underlying().GetName())
-
-	if setTxnDeadline {
-		err := tc.MaybeUpdateDeadline(ctx, txn)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return desc.Underlying(), nil
+	return tc.leased.maybeUpdateDeadline(ctx, txn)
 }
 
 // GetMutableDatabaseByName returns a mutable database descriptor with
@@ -303,7 +204,7 @@ func (tc *Collection) getDatabaseByName(
 			)
 		}
 
-		desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
+		desc, shouldReadFromStore, err := tc.leased.getByName(
 			ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
 		if err != nil {
 			return false, nil, err
@@ -474,7 +375,7 @@ func (tc *Collection) getObjectByName(
 		)
 	}
 
-	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
+	desc, shouldReadFromStore, err := tc.leased.getByName(
 		ctx, txn, dbID, schemaID, objectName)
 	if err != nil {
 		return false, nil, err
@@ -964,12 +865,12 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			return nil, catalog.ErrDescriptorNotFound
 		}
 
-		desc, err := tc.getLeasedDescriptorByID(ctx, txn, id, setTxnDeadline)
+		desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id, setTxnDeadline)
 		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) || catalog.HasInactiveDescriptorError(err) {
-				return tc.kv.getByID(ctx, txn, id, flags.RequireMutable)
-			}
 			return nil, err
+		}
+		if shouldReadFromStore {
+			return tc.kv.getByID(ctx, txn, id, flags.RequireMutable)
 		}
 		return desc, nil
 	}
