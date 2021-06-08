@@ -44,7 +44,6 @@ type tableSSTable struct {
 }
 
 func BenchmarkImportWorkload(b *testing.B) {
-	skip.WithIssue(b, 41932, "broken due to adding keys out-of-order to an sstable")
 	skip.UnderShort(b, "skipping long benchmark")
 
 	dir, cleanup := testutils.TempDir(b)
@@ -178,7 +177,10 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			defer close(kvCh)
 			wc := importccl.NewWorkloadKVConverter(
 				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
-			evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
+			evalCtx := &tree.EvalContext{
+				SessionData: &sessiondata.SessionData{},
+				Codec:       keys.SystemSQLCodec,
+			}
 			return wc.Worker(ctx, evalCtx)
 		})
 		for kvBatch := range kvCh {
@@ -197,7 +199,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 
 func BenchmarkConvertToSSTable(b *testing.B) {
 	skip.UnderShort(b, "skipping long benchmark")
-
+	//
 	tpccGen := tpcc.FromWarehouses(1)
 	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
 		benchmarkConvertToSSTable(b, tpccGen)
