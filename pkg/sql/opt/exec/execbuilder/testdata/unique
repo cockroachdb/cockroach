@@ -1348,35 +1348,44 @@ vectorized: true
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 1
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@13", column1, column2, column3, column4)
-                    │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@13, column3) = (r,b)
-                    │ pred: (column1 != r) OR (column2 != a)
+                └── • distinct
+                    │ columns: (column1, column2, column3, column4, rownum)
+                    │ estimated row count: 1
+                    │ distinct on: rownum
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@13", column1, column2, column3, column4)
-                        │ estimated row count: 6
+                    └── • project
+                        │ columns: (column1, column2, column3, column4, rownum)
                         │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@13")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • filter
-                            │ columns: (column1, column2, column3, column4)
-                            │ estimated row count: 2
-                            │ filter: column4 IN ('bar', 'baz', 'foo')
+                        └── • lookup join (inner)
+                            │ columns: (column1, column2, column3, column4, rownum, r, a, b, c)
+                            │ estimated row count: 1
+                            │ table: uniq_partial_enum@primary
+                            │ equality: (r, a) = (r,a)
+                            │ equality cols are key
                             │
-                            └── • project
-                                │ columns: (column1, column2, column3, column4)
-                                │ estimated row count: 2
+                            └── • lookup join (inner)
+                                │ columns: (column1, column2, column3, column4, rownum, r, a, b)
+                                │ estimated row count: 0
+                                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                                │ pred: (column1 != r) OR (column2 != a)
                                 │
-                                └── • scan buffer
-                                      columns: (column1, column2, column3, column4, check1, partial_index_put1)
-                                      label: buffer 1
+                                └── • ordinality
+                                    │ columns: (column1, column2, column3, column4, rownum)
+                                    │ estimated row count: 2
+                                    │
+                                    └── • filter
+                                        │ columns: (column1, column2, column3, column4)
+                                        │ estimated row count: 2
+                                        │ filter: column4 IN ('bar', 'baz', 'foo')
+                                        │
+                                        └── • project
+                                            │ columns: (column1, column2, column3, column4)
+                                            │ estimated row count: 2
+                                            │
+                                            └── • scan buffer
+                                                  columns: (column1, column2, column3, column4, check1, partial_index_put1)
+                                                  label: buffer 1
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
 # CONFLICT DO NOTHING rows before inserting.
@@ -2521,39 +2530,40 @@ vectorized: true
             │ columns: (b_new)
             │ estimated row count: 0
             │
-            └── • project
+            └── • distinct
                 │ columns: (r, a, b_new, c)
                 │ estimated row count: 0
+                │ distinct on: r
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@16", r, a, b_new, c)
-                    │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@16, b_new) = (r,b)
-                    │ pred: (r != r) OR (a != a)
+                └── • project
+                    │ columns: (r, a, b_new, c)
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@16", r, a, b_new, c)
-                        │ estimated row count: 3
+                    └── • lookup join (inner)
+                        │ columns: (r, a, b_new, c, r, a, b, c)
+                        │ estimated row count: 0
+                        │ table: uniq_partial_enum@primary
+                        │ equality: (r, a) = (r,a)
+                        │ equality cols are key
                         │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@16")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • filter
-                            │ columns: (r, a, b_new, c)
-                            │ estimated row count: 1
-                            │ filter: c IN ('bar', 'baz', 'foo')
+                        └── • lookup join (inner)
+                            │ columns: (r, a, b_new, c, r, a, b)
+                            │ estimated row count: 0
+                            │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                            │ lookup condition: (b_new = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                            │ pred: (r != r) OR (a != a)
                             │
-                            └── • project
+                            └── • filter
                                 │ columns: (r, a, b_new, c)
                                 │ estimated row count: 1
+                                │ filter: c IN ('bar', 'baz', 'foo')
                                 │
-                                └── • scan buffer
-                                      columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
-                                      label: buffer 1
+                                └── • project
+                                    │ columns: (r, a, b_new, c)
+                                    │ estimated row count: 1
+                                    │
+                                    └── • scan buffer
+                                          columns: (r, a, b, b_new, partial_index_put1, partial_index_put1, c)
+                                          label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
 # but we do for UUID columns set to other values.
@@ -4101,35 +4111,44 @@ vectorized: true
                 │ columns: (upsert_r, upsert_a, column3, column4)
                 │ estimated row count: 1
                 │
-                └── • lookup join (semi)
-                    │ columns: ("lookup_join_const_col_@22", upsert_r, upsert_a, column3, column4)
-                    │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                    │ equality: (lookup_join_const_col_@22, column3) = (r,b)
-                    │ pred: (upsert_r != r) OR (upsert_a != a)
+                └── • distinct
+                    │ columns: (upsert_r, upsert_a, column3, column4, rownum)
+                    │ estimated row count: 1
+                    │ distinct on: rownum
                     │
-                    └── • cross join (inner)
-                        │ columns: ("lookup_join_const_col_@22", upsert_r, upsert_a, column3, column4)
-                        │ estimated row count: 6
+                    └── • project
+                        │ columns: (upsert_r, upsert_a, column3, column4, rownum)
                         │
-                        ├── • values
-                        │     columns: ("lookup_join_const_col_@22")
-                        │     size: 1 column, 3 rows
-                        │     row 0, expr 0: 'us-east'
-                        │     row 1, expr 0: 'us-west'
-                        │     row 2, expr 0: 'eu-west'
-                        │
-                        └── • filter
-                            │ columns: (upsert_r, upsert_a, column3, column4)
-                            │ estimated row count: 2
-                            │ filter: column4 IN ('bar', 'baz', 'foo')
+                        └── • lookup join (inner)
+                            │ columns: (upsert_r, upsert_a, column3, column4, rownum, r, a, b, c)
+                            │ estimated row count: 1
+                            │ table: uniq_partial_enum@primary
+                            │ equality: (r, a) = (r,a)
+                            │ equality cols are key
                             │
-                            └── • project
-                                │ columns: (upsert_r, upsert_a, column3, column4)
-                                │ estimated row count: 2
+                            └── • lookup join (inner)
+                                │ columns: (upsert_r, upsert_a, column3, column4, rownum, r, a, b)
+                                │ estimated row count: 0
+                                │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
+                                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                                │ pred: (upsert_r != r) OR (upsert_a != a)
                                 │
-                                └── • scan buffer
-                                      columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
-                                      label: buffer 1
+                                └── • ordinality
+                                    │ columns: (upsert_r, upsert_a, column3, column4, rownum)
+                                    │ estimated row count: 2
+                                    │
+                                    └── • filter
+                                        │ columns: (upsert_r, upsert_a, column3, column4)
+                                        │ estimated row count: 2
+                                        │ filter: column4 IN ('bar', 'baz', 'foo')
+                                        │
+                                        └── • project
+                                            │ columns: (upsert_r, upsert_a, column3, column4)
+                                            │ estimated row count: 2
+                                            │
+                                            └── • scan buffer
+                                                  columns: (column1, column2, column3, column4, r, a, b, c, column3, column4, r, check1, partial_index_put1, partial_index_del1, upsert_r, upsert_a)
+                                                  label: buffer 1
 
 # Test that we use the partial index when available for de-duplicating INSERT ON
 # CONFLICT DO UPDATE rows before inserting.

@@ -333,6 +333,15 @@ func (s *Set) HasSingleColumnConstValues(
 	return c.Columns.Get(0).ID(), constValues, true
 }
 
+// HasRangeConstraint returns column id if it has at least one span.
+func (s *Set) HasRangeConstraint(evalCtx *tree.EvalContext) (col opt.ColumnID, ok bool) {
+	c := s.Constraint(0)
+	if c.Spans.Count() > 0 {
+		return c.Columns.Get(0).ID(), true
+	}
+	return 0, false
+}
+
 // allocConstraint allocates space for a new constraint in the set and returns
 // a pointer to it. The first constraint is stored inline, and subsequent
 // constraints are stored in the otherConstraints slice.

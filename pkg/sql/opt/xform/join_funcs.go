@@ -257,7 +257,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// an equality with another column or a constant.
 		numIndexKeyCols := index.LaxKeyColumnCount()
 
-		var constFilters memo.FiltersExpr
+		var lookupFilters memo.FiltersExpr
 		allFilters := append(onFilters, optionalFilters...)
 
 		// Check if the first column in the index has an equality constraint, or if
@@ -297,12 +297,17 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// join implements logic equivalent to simple equality between
 			// columns (where NULL never equals anything).
 			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, idxCol)
+			var foundRange bool = false
 			if !ok {
-				break
+				// Allow a range condition to occur after any constant filters.
+				allIdx, foundRange = c.findJoinFilterRange(allFilters, idxCol)
+				if !foundRange {
+					break
+				}
 			}
 
-			if len(foundVals) > 1 {
-				if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
+			if len(foundVals) > 1 || foundRange {
+				if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp || joinType == opt.InnerJoinOp || foundRange {
 					// We cannot use the method constructJoinWithConstants to create a cross
 					// join for left or anti joins, because constructing a cross join with
 					// foundVals will increase the size of the input. As a result,
@@ -323,8 +328,8 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 			// We will join these constant values with the input to make
 			// equality columns for the lookup join.
-			if constFilters == nil {
-				constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
+			if lookupFilters == nil {
+				lookupFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 			}
 
 			idxColType := c.e.f.Metadata().ColumnMeta(idxCol).Type
@@ -339,15 +344,17 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			lookupJoin.Input = join
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, allFilters[allIdx])
+			lookupFilters = append(lookupFilters, allFilters[allIdx])
 		}
 
 		if shouldBuildMultiSpanLookupJoin {
-			// Some of the index columns were constrained to multiple constant values,
-			// and we did not use the method constructJoinWithConstants to create a
-			// cross join as the input (either because it would have been incorrect or
-			// because it would have eliminated the opportunity to apply other
-			// optimizations such as locality optimized search; see above).
+
+			// Some of the index columns were constrained to multiple constant values
+			// or a range expression, and we did not use the method
+			// constructJoinWithConstants to create a cross join as the input (either
+			// because it would have been incorrect or because it would have
+			// eliminated the opportunity to apply other optimizations such as
+			// locality optimized search; see above).
 			//
 			// As an alternative, we store all the filters needed for the lookup in
 			// LookupExpr, which will be used to construct spans at execution time.
@@ -363,10 +370,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 					leftCol, rightCol, inputProps.OutputCols, scanPrivate.Cols, on,
 				)
 			}
-			eqFilters, constFilters, rightSideCols = c.findFiltersForIndexLookup(
+			eqFilters, lookupFilters, rightSideCols = c.findFiltersForIndexLookup(
 				allFilters, scanPrivate.Table, index, leftEq, rightEq, extractEqualityFilter,
 			)
-			lookupJoin.LookupExpr = append(eqFilters, constFilters...)
+			lookupJoin.LookupExpr = append(eqFilters, lookupFilters...)
 
 			// Reset KeyCols since we're not using it anymore.
 			lookupJoin.KeyCols = opt.ColList{}
@@ -389,8 +396,8 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			lookupJoin.On = memo.ExtractRemainingJoinFilters(lookupJoin.On, lookupJoin.KeyCols, rightSideCols)
 		}
 		lookupJoin.On = lookupJoin.On.Difference(lookupJoin.LookupExpr)
-		lookupJoin.On = lookupJoin.On.Difference(constFilters)
-		lookupJoin.ConstFilters = constFilters
+		lookupJoin.On = lookupJoin.On.Difference(lookupFilters)
+		lookupJoin.ConstFilters = lookupFilters
 
 		// Add input columns and lookup expression columns, since these will be
 		// needed for all join types and cases.
@@ -566,27 +573,31 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 			continue
 		}
 
+		var foundRange bool = false
 		// Try to find a filter that constrains this column to non-NULL
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
-		values, allIdx, ok := c.findJoinFilterConstants(filters, idxCol)
+		_, allIdx, ok := c.findJoinFilterConstants(filters, idxCol)
 		if !ok {
-			break
+			// If there's no const filters look for an inequality range.
+			allIdx, foundRange = c.findJoinFilterRange(filters, idxCol)
+			if !foundRange {
+				break
+			}
 		}
 
 		if constFilters == nil {
 			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 		}
 
-		// Ensure that the constant filter is either an equality or an IN expression.
-		// These are the only two types of expressions currently supported by the
-		// lookupJoiner for building lookup spans.
 		constFilter := filters[allIdx]
-		if !c.isCanonicalConstFilter(constFilter) {
-			constFilter = c.makeConstFilter(idxCol, values)
-		}
 		constFilters = append(constFilters, constFilter)
+
+		//RFC: should we break if we found range?  Only makes sense on end right?
+		if foundRange {
+			break
+		}
 	}
 
 	if len(eqFilters) == 0 {
@@ -595,26 +606,6 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 	}
 
 	return eqFilters, constFilters, rightSideCols
-}
-
-// isCanonicalConstFilter checks that the given filter is a constant filter in
-// one of two possible canonical formats:
-//  1. It is an equality between a variable and a constant.
-//  2. It is an IN expression between a variable and a tuple of constants.
-// Returns true if the filter matches one of these two formats. Otherwise
-// returns false.
-func (c *CustomFuncs) isCanonicalConstFilter(filter memo.FiltersItem) bool {
-	switch t := filter.Condition.(type) {
-	case *memo.EqExpr:
-		if t.Left.Op() == opt.VariableOp && opt.IsConstValueOp(t.Right) {
-			return true
-		}
-	case *memo.InExpr:
-		if t.Left.Op() == opt.VariableOp && memo.CanExtractConstTuple(t.Right) {
-			return true
-		}
-	}
-	return false
 }
 
 // makeConstFilter builds a filter that constrains the given column to the given
@@ -973,6 +964,47 @@ func (c *CustomFuncs) findJoinFilterConstants(
 		return nil, -1, false
 	}
 	return bestValues, bestFilterIdx, true
+}
+
+// See if there exists an inequality range for this column.  Currently we
+// only support <,>,<=,>=.
+func (c *CustomFuncs) findJoinFilterRange(
+	filters memo.FiltersExpr, col opt.ColumnID,
+) (filterIdx int, ok bool) {
+	for filterIdx := range filters {
+		props := filters[filterIdx].ScalarProps()
+		if props.TightConstraints {
+			constraintCol, ok := props.Constraints.HasRangeConstraint(c.e.evalCtx)
+			if !ok || constraintCol != col {
+				continue
+			}
+			// Make sure we support the expression type
+			var checkExpr func(expr opt.Expr) bool
+			checkExpr = func(expr opt.Expr) bool {
+				switch t := expr.(type) {
+				case *memo.RangeExpr:
+					return checkExpr(t.And)
+				case *memo.AndExpr:
+					return checkExpr(t.Left) && checkExpr(t.Right)
+				case *memo.GeExpr:
+					return checkExpr(t.Left) && checkExpr(t.Right)
+				case *memo.GtExpr:
+					return checkExpr(t.Left) && checkExpr(t.Right)
+				case *memo.LeExpr:
+					return checkExpr(t.Left) && checkExpr(t.Right)
+				case *memo.LtExpr:
+					return checkExpr(t.Left) && checkExpr(t.Right)
+				case *memo.VariableExpr, *memo.ConstExpr:
+					return true
+				}
+				return false
+			}
+			if checkExpr(filters[filterIdx].Condition) {
+				return filterIdx, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // constructJoinWithConstants constructs a cross join that joins every row in

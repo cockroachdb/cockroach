@@ -85,16 +85,20 @@ inner-join (lookup abcd)
  ├── interesting orderings: (+5,+6)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int!null) abcd.rowid:8(int!null)
- │    ├── key columns: [1] = [5]
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │    │         │    ├── variable: a:5 [type=int]
+ │    │         │    └── variable: m:1 [type=int]
+ │    │         └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ │    │              ├── variable: b:6 [type=int]
+ │    │              └── const: 2 [type=int]
  │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
  │    │    └── unfiltered-cols: (1-4)
- │    └── filters
- │         └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
- │              ├── variable: b:6 [type=int]
- │              └── const: 2 [type=int]
+ │    └── filters (true)
  └── filters (true)
 
 # Filter that can only be applied after the primary index join.
