@@ -21,16 +21,19 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,6 +70,35 @@ type s3Storage struct {
 	prefix   string
 	opts     session.Options
 	settings *cluster.Settings
+	cached   *s3Client
+}
+
+// s3Client wraps an SDK client and uploader for a given session.
+type s3Client struct {
+	client   *s3.S3
+	uploader *s3manager.Uploader
+}
+
+var reuseSession = settings.RegisterBoolSetting(
+	"cloudstorage.s3.session_reuse.enabled",
+	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
+	true,
+)
+
+// s3clientCacheKey is the immutable config used to initialize an s3 session,
+// which is essentially the ExternalStorage_S3 with a few fields that are only
+// ever used at request time (i.e. are not captured by the session) blanked so
+// that they do not affect comparisons.
+type s3clientCacheKey struct {
+	conf    roachpb.ExternalStorage_S3
+	verbose bool // log.V(2) decides session init params so include it in key.
+}
+
+var s3ClientCache struct {
+	syncutil.Mutex
+	// TODO(dt): make this an >1 item cache e.g. add a FIFO ring.
+	key    s3clientCacheKey
+	client *s3Client
 }
 
 var _ cloud.ExternalStorage = &s3Storage{}
@@ -142,28 +174,14 @@ func MakeS3Storage(
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
-	config := conf.Keys()
+
 	if conf.Endpoint != "" {
 		if args.IOConf.DisableHTTP {
 			return nil, errors.New(
 				"custom endpoints disallowed for s3 due to --external-io-disable-http flag")
 		}
-		config.Endpoint = &conf.Endpoint
-		if conf.Region == "" {
-			conf.Region = "default-region"
-		}
-		client, err := cloud.MakeHTTPClient(args.Settings)
-		if err != nil {
-			return nil, err
-		}
-		config.HTTPClient = client
 	}
 
-	// "specified": use credentials provided in URI params; error if not present.
-	// "implicit": enable SharedConfig, which loads in credentials from environment.
-	//             Detailed in https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
-	// "": default to `specified`.
-	opts := session.Options{}
 	switch conf.Auth {
 	case "", cloud.AuthParamSpecified:
 		if conf.AccessKey == "" {
@@ -182,29 +200,13 @@ func MakeS3Storage(
 				AWSSecretParam,
 			)
 		}
-		opts.Config.MergeIn(config)
 	case cloud.AuthParamImplicit:
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
-		opts.SharedConfigState = session.SharedConfigEnable
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
-	}
-
-	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
-	maxRetries := 10
-	opts.Config.MaxRetries = &maxRetries
-
-	if conf.Endpoint != "" {
-		opts.Config.S3ForcePathStyle = aws.Bool(true)
-	}
-
-	opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
-
-	if log.V(2) {
-		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
 	}
 
 	// Ensure that a KMS ID is specified if server side encryption is set to use
@@ -223,14 +225,77 @@ func MakeS3Storage(
 		}
 	}
 
-	return &s3Storage{
+	s := &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,
 		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
-		opts:     opts,
 		settings: args.Settings,
-	}, nil
+	}
+
+	reuse := reuseSession.Get(&args.Settings.SV)
+
+	var cacheKey s3clientCacheKey
+	if reuse {
+		cacheKey = s3clientCacheKey{conf: *conf, verbose: log.V(2)}
+		// Blank the fields only used as arguments when making requests that do not
+		// go into configuring the client.
+		cacheKey.conf.Prefix = ""
+		cacheKey.conf.ServerEncMode = ""
+		cacheKey.conf.ServerKMSID = ""
+
+		s3ClientCache.Lock()
+		if s3ClientCache.key == cacheKey {
+			s.cached = s3ClientCache.client
+		}
+		s3ClientCache.Unlock()
+
+		if s.cached != nil {
+			return s, nil
+		}
+	}
+
+	if conf.Endpoint != "" {
+		s.opts.Config.Endpoint = &conf.Endpoint
+		s.opts.Config.S3ForcePathStyle = aws.Bool(true)
+
+		if conf.Region == "" {
+			conf.Region = "default-region"
+		}
+		client, err := cloud.MakeHTTPClient(args.Settings)
+		if err != nil {
+			return nil, err
+		}
+		s.opts.Config.HTTPClient = client
+	}
+	switch conf.Auth {
+	case "", cloud.AuthParamSpecified:
+		s.opts.Config.WithCredentials(credentials.NewStaticCredentials(conf.AccessKey, conf.Secret, conf.TempToken))
+	case cloud.AuthParamImplicit:
+		s.opts.SharedConfigState = session.SharedConfigEnable
+	}
+	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
+	maxRetries := 10
+	s.opts.Config.MaxRetries = &maxRetries
+
+	s.opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
+	if log.V(2) {
+		s.opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+	}
+
+	if reuse {
+		client, err := s.newClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s3ClientCache.Lock()
+		s3ClientCache.key = cacheKey
+		s3ClientCache.client = client
+		s3ClientCache.Unlock()
+		s.cached = client
+	}
+
+	return s, nil
 }
 
 func s3ErrDelay(err error) time.Duration {
@@ -246,7 +311,7 @@ func s3ErrDelay(err error) time.Duration {
 	return 0
 }
 
-func (s *s3Storage) newSession(ctx context.Context) (*session.Session, error) {
+func (s *s3Storage) newClient(ctx context.Context) (*s3Client, error) {
 	sess, err := session.NewSessionWithOptions(s.opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
@@ -261,15 +326,32 @@ func (s *s3Storage) newSession(ctx context.Context) (*session.Session, error) {
 		}
 	}
 	sess.Config.Region = aws.String(s.conf.Region)
-	return sess, err
+
+	c := s3.New(sess)
+	u := s3manager.NewUploader(sess)
+	return &s3Client{client: c, uploader: u}, nil
 }
 
-func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
-	sess, err := s.newSession(ctx)
+func (s *s3Storage) getClient(ctx context.Context) (*s3.S3, error) {
+	if s.cached != nil {
+		return s.cached.client, nil
+	}
+	client, err := s.newClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s3.New(sess), nil
+	return client.client, nil
+}
+
+func (s *s3Storage) getUploader(ctx context.Context) (*s3manager.Uploader, error) {
+	if s.cached != nil {
+		return s.cached.uploader, nil
+	}
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.uploader, nil
 }
 
 func (s *s3Storage) Conf() roachpb.ExternalStorage {
@@ -288,11 +370,10 @@ func (s *s3Storage) Settings() *cluster.Settings {
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	sess, err := s.newSession(ctx)
+	uploader, err := s.getUploader(ctx)
 	if err != nil {
 		return nil, err
 	}
-	uploader := s3manager.NewUploader(sess)
 
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		// Upload the file to S3.
@@ -311,7 +392,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 func (s *s3Storage) openStreamAt(
 	ctx context.Context, basename string, pos int64,
 ) (*s3.GetObjectOutput, error) {
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +470,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +517,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 }
 
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -452,7 +533,7 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 }
 
 func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return 0, err
 	}
