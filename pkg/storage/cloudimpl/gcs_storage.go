@@ -199,7 +199,7 @@ func (g *gcsStorage) ReadFileAt(
 		}
 		return nil, 0, err
 	}
-	return r.reader, r.reader.(*gcs.Reader).Attrs.Size, nil
+	return r, r.reader.(*gcs.Reader).Attrs.Size, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
