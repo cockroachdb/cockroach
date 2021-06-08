@@ -65,6 +65,11 @@ func scanBool(tx *pgx.Tx, query string, args ...interface{}) (b bool, err error)
 	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
 }
 
+func scanString(tx *pgx.Tx, query string, args ...interface{}) (s string, err error) {
+	err = tx.QueryRow(query, args...).Scan(&s)
+	return s, errors.Wrapf(err, "scanString: %q %q", query, args)
+}
+
 func schemaExists(tx *pgx.Tx, schemaName string) (bool, error) {
 	return scanBool(tx, `SELECT EXISTS (
 	SELECT schema_name
@@ -834,6 +839,53 @@ SELECT
 	)
 }
 
+// getRegionColumn returns the column used for partitioning a REGIONAL BY ROW
+// table. This column is either the tree.RegionalByRowRegionDefaultCol column,
+// or the column specified in the AS clause. This function asserts if the
+// supplied table is not REGIONAL BY ROW.
+func getRegionColumn(tx *pgx.Tx, tableName *tree.TableName) (string, error) {
+	isTableRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !isTableRegionalByRow {
+		return "", errors.AssertionFailedf(
+			"invalid call to get region column of table %s which is not a REGIONAL BY ROW table",
+			tableName.String())
+	}
+
+	regionCol, err := scanString(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	COALESCE (d->'localityConfig'->'regionalByRow'->>'as', $2)
+FROM
+	descriptors;
+`,
+		tableName.String(),
+		tree.RegionalByRowRegionDefaultCol,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return regionCol, nil
+}
+
 // tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
 func tableIsRegionalByRow(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
 	return scanBool(
@@ -902,7 +954,7 @@ SELECT EXISTS (
 	)
 }
 
-// databaseHasOngoingAlterPKChanges checks whether a given database has any tables
+// databaseHasRegionalByRowChange checks whether a given database has any tables
 // which are currently undergoing a change to or from REGIONAL BY ROW, or
 // REGIONAL BY ROW tables with schema changes on it.
 func databaseHasRegionalByRowChange(tx *pgx.Tx) (bool, error) {

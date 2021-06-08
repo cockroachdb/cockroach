@@ -181,6 +181,7 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c Cluster, maxOps, 
 // saveArtifacts saves important test artifacts in the artifacts directory.
 func saveArtifacts(ctx context.Context, t *test, c Cluster, storeDirectory string) {
 	db := c.Conn(ctx, 1)
+	defer db.Close()
 
 	// Save a backup file called schemachange to the store directory.
 	_, err := db.Exec("BACKUP DATABASE schemachange to 'nodelocal://1/schemachange'")
