@@ -56,14 +56,14 @@ message SketchSpec {
 // returns a sample (random subset) of the input columns and computes
 // cardinality estimation sketches on sets of columns.
 //
-// The sampler is configured with a sample size and sets of columns
-// for the sketches. It produces one row with global statistics, one
-// row with sketch information for each sketch plus at most
+// The sampler is configured with a sample size and sets of columns for the
+// sketches. It produces one row with global statistics, one row with sketch
+// information for each sketch plus at least min_sample_size and at most
 // sample_size sampled rows.
 //
 // For each column with an inverted index, a sketch and sample reservoir are
-// created. Each of these produces one sketch row and at most sample_size
-// sampled rows from the inverted index keys.
+// created. Each of these produces one sketch row and at least min_sample_size
+// and at most sample_size sampled rows from the inverted index keys.
 //
 // The following method is used to do reservoir sampling: we generate a
 // "rank" for each row, which is just a random, uniformly distributed
@@ -90,17 +90,18 @@ message SketchSpec {
 //       - a BYTE column of the inverted index key.
 //
 // There are four row types produced:
-//   1. sample rows, using column group #1.
+//   1. sample rows, using column group #1 and the numRows column from #2.
 //   2. sketch rows, using column group #2.
-//   3. inverted sample rows, using column group #3 and the rank column from #1.
+//   3. inverted sample rows, using column group #3, the rank column from #1,
+//      and numRows column from #2.
 //   4. inverted sketch rows, using column group #2 and first column from #3.
 //
-// Rows have NULLs on either all the sampled row columns or on all the
-// sketch columns.
+// Rows have NULLs on all columns they do not use.
 message SamplerSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   repeated SketchSpec inverted_sketches = 4 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+  optional uint32 min_sample_size = 5 [(gogoproto.nullable) = false];
 
   // Setting this value enables throttling; this is the fraction of time that
   // the sampler processors will be idle when the recent CPU usage is high. The
@@ -134,10 +135,11 @@ message SampleAggregatorSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   repeated SketchSpec inverted_sketches = 8 [(gogoproto.nullable) = false];
 
-  // The processor merges reservoir sample sets into a single
-  // sample set of this size. This must match the sample size
-  // used for each Sampler.
+  // The processor merges reservoir sample sets into a single sample set of
+  // this size. (If this size is larger than the size of any sampler, it will
+  // shrink dynamically.)
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+  optional uint32 min_sample_size = 9 [(gogoproto.nullable) = false];
 
   // The i-th value indicates the ColumnID of the i-th sampled row column.
   // These are necessary for writing out the statistic data.
