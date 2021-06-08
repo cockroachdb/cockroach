@@ -3796,3 +3796,148 @@ func TestChangefeedPrimaryKeyChangeMixedVersion(t *testing.T) {
 	t.Run("cloudstorage", cloudStorageTestWithServerArg(setMixedVersion, testFn))
 	t.Run("kafka", kafkaTestWithServerArgs(setMixedVersion, testFn))
 }
+
+// TestChangefeedCheckpointSchemaChange tests to make sure that writes that
+// occur in the same transaction that performs an immediately visible schema
+// change, like drop column, observe the schema change. Also, this tests that
+// resuming from that cursor from the same timestamp as the schema change
+// only includes later updates (thus validating the cursor semantics as they
+// pertain to schema changes). It also does that test using an initial
+// backfill, which makes the cursor, more or less, inclusive rather than
+// exclusive.
+func TestChangefeedCheckpointSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO bar VALUES (0, 'initial')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH resolved = '100ms', updated`)
+
+		// Sketch of the test is as follows:
+		//
+		//  1) Write some rows into two tables, foo and bar.
+		//  2) In a transaction, write to and update both tables,
+		//     and drop a column on foo.
+		//  3) Ensure that the messages are the 3 writes to foo, 2
+		//     writes to bar and then the 3 values of foo being
+		//     rewritten. Also note that none of the foo values are
+		//     under the old schema.
+		//  4) Extract the timestamp from the initial messages.
+		//  5) Run a cursor-based changefeed from that timestamp with
+		//     no initial_scan. See only the 3 touch writes.
+		//  6) Run a cursor-based changefeed from that timestamp with
+		//     with initial_scan. See all 8 writes at the same timestamps.
+		//
+		assertPayloadsStripTs(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+			`bar: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		})
+
+		require.NoError(t, crdb.ExecuteTx(context.Background(), db, nil, func(tx *gosql.Tx) error {
+			for _, stmt := range []string{
+				`CREATE TABLE baz ()`,
+				`INSERT INTO foo VALUES (2, 'initial')`,
+				`INSERT INTO foo VALUES (1, 'initial')`,
+				`UPSERT INTO foo VALUES (0, 'updated')`,
+				`ALTER TABLE foo DROP COLUMN b`,
+				`UPSERT INTO bar VALUES (0, 'updated')`,
+				`UPSERT INTO bar VALUES (1, 'initial')`,
+			} {
+				if _, err := tx.Exec(stmt); err != nil {
+					return err
+				}
+			}
+			return nil
+		}))
+
+		expected := []string{
+			`bar: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`bar: [1]->{"after": {"a": 1, "b": "initial"}}`,
+			`foo: [0]->{"after": {"a": 0}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			// Touch writes due to column backfill.
+			`foo: [0]->{"after": {"a": 0}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+		}
+		msgs, err := readNextMessages(foo, len(expected), false)
+		require.NoError(t, err)
+
+		// Sort the messages by their timestamp.
+		re := regexp.MustCompile(`.*(, "updated": "(\d+\.\d+)")}.*`)
+		getHLC := func(i int) string { return re.FindStringSubmatch(msgs[i])[2] }
+		trimHlC := func(s string) string {
+			indexes := re.FindStringSubmatchIndex(s)
+			return s[:indexes[2]] + s[indexes[3]:]
+		}
+		sort.Slice(msgs, func(i, j int) bool {
+			a, b := getHLC(i), getHLC(j)
+			if a == b {
+				return msgs[i] < msgs[j]
+			}
+			return a < b
+		})
+		schemaChangeTS := getHLC(0)
+		stripped := make([]string, len(msgs))
+		for i, m := range msgs {
+			stripped[i] = trimHlC(m)
+		}
+		require.Equal(t, expected, stripped)
+		// Make sure there are no more messages.
+		{
+			next, err := foo.Next()
+			require.NoError(t, err)
+			require.NotNil(t, next.Resolved)
+		}
+		closeFeed(t, foo)
+
+		t.Run("cursor, no backfill", func(t *testing.T) {
+			// Resume at exactly the timestamp of the schema change, observe only
+			// events after it.
+			foo = feed(t, f,
+				"CREATE CHANGEFEED FOR foo, bar WITH"+
+					" resolved = '100ms', updated, cursor = $1",
+				schemaChangeTS)
+			defer closeFeed(t, foo)
+			// Observe only the touch writes.
+			assertPayloads(t, foo, msgs[5:])
+			// Make sure there are no more messages.
+			{
+				next, err := foo.Next()
+				require.NoError(t, err)
+				require.NotNil(t, next.Resolved)
+			}
+		})
+
+		t.Run("cursor, with backfill", func(t *testing.T) {
+			// Resume at exactly the timestamp of the schema change, observe the
+			// writes at that timestamp exactly, but with the new schema change.
+			foo = feed(t, f,
+				"CREATE CHANGEFEED FOR foo, bar WITH"+
+					" resolved = '100ms', updated, cursor = $1, initial_scan",
+				schemaChangeTS)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, msgs)
+			// Make sure there are no more messages.
+			{
+				next, err := foo.Next()
+				require.NoError(t, err)
+				require.NotNil(t, next.Resolved)
+			}
+		})
+
+	}
+
+	t.Run("enterprise", enterpriseTest(testFn))
+	t.Run("cloudstorage", cloudStorageTest(testFn))
+	t.Run("kafka", kafkaTest(testFn))
+}
