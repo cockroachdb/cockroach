@@ -1,4 +1,4 @@
-BAZEL_IMAGE=cockroachdb/bazel:20210528-135020
+BAZEL_IMAGE=cockroachdb/bazel:20210608-131711
 
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
 # container with the `cockroachdb/bazel` image running the given script.
@@ -17,7 +17,9 @@ run_bazel() {
     cp $root/.bazelrc.ci $root/.bazelrc.user
 
     # Set up volumes.
-    vols="--volume /home/agent/.bazelcache:/root/.cache/bazel"
+    cache=/home/agent/.bzlhome
+    mkdir -p $cache
+    vols="--volume ${cache}:/home/roach"
 
     workspace_vol="--volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     if [ -z "${TEAMCITY_BAZEL_SUPPORT_LINT:-}" ]
@@ -32,6 +34,7 @@ run_bazel() {
     fi
 
     docker run -i ${tty-} --rm --init \
+        -u "$(id -u):$(id -g)" \
         --workdir="/go/src/github.com/cockroachdb/cockroach" \
         ${vols} \
         $BAZEL_IMAGE "$@"

@@ -142,7 +142,7 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 			{path.Join(relDir, "test.xml"), mungeTestXML},
 			{path.Join(relDir, "*", "test.xml"), mungeTestXML},
 		} {
-			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0666, phase,
+			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0644, phase,
 				tup.stagefn)
 			if err != nil {
 				return err
@@ -197,7 +197,7 @@ func (w watcher) stageBinaryArtifacts() error {
 		head := strings.ReplaceAll(strings.TrimPrefix(bin, "//"), ":", "/")
 		components := strings.Split(bin, ":")
 		relBinPath := path.Join(head+"_", components[len(components)-1])
-		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0777, finalizePhase,
+		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0755, finalizePhase,
 			copyContentTo)
 		if err != nil {
 			return err
@@ -269,7 +269,7 @@ func (w *cancelableWriter) Write(p []byte) (n int, err error) {
 
 func (w *cancelableWriter) Close() error {
 	if !w.Canceled {
-		err := os.MkdirAll(path.Dir(w.filename), 0777)
+		err := os.MkdirAll(path.Dir(w.filename), 0755)
 		if err != nil {
 			return err
 		}
@@ -315,7 +315,7 @@ func (w *cancelableWriter) Close() error {
 //
 // For example, one might stage a set of log files with a call like:
 // w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/*/test.log",
-//                      0666, incrementalUpdatePhase, copycontentTo)
+//                      0644, incrementalUpdatePhase, copycontentTo)
 func (w watcher) maybeStageArtifact(
 	root SourceDir,
 	pattern string,

@@ -60,6 +60,6 @@ RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/bazel-4.0.0 /usr/bin/bazel
 
-COPY entrypoint.sh /usr/bin
-ENTRYPOINT ["/usr/bin/entrypoint.sh"]
-CMD ["/usr/bin/bash"]
+RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz \
+    | tar xz -C / --strip-components 1
+ENTRYPOINT ["autouseradd", "--user", "roach", "--no-create-home"]
