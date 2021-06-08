@@ -1,0 +1,65 @@
+# illustrative examples from GH #51576, see rules/join for normative tests
+exec-ddl
+CREATE TABLE metrics (
+  id   SERIAL PRIMARY KEY,
+  name STRING,
+  INDEX name_index (name)
+)
+----
+
+exec-ddl
+CREATE TABLE metric_values (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time)
+)
+----
+
+opt expect=GenerateLookupJoins
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+----
+inner-join (lookup metric_values)
+ ├── columns: metric_id:1!null time:2!null value:3 id:5!null name:6!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── metric_id:1 = id:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         └── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ ├── key: (2,5)
+ ├── fd: ()-->(6), (1,2)-->(3), (1)==(5), (5)==(1)
+ ├── scan metrics@name_index
+ │    ├── columns: id:5!null name:6!null
+ │    ├── constraint: /6/5: [/'cpu' - /'cpu']
+ │    ├── key: (5)
+ │    └── fd: ()-->(6)
+ └── filters (true)
+
+# we don't support turning LIKE into scans yet, test that we fall back to filters
+ opt not-expect=GenerateLookupJoins
+ SELECT *
+ FROM metric_values
+ INNER JOIN metrics
+ ON metric_id=id
+ WHERE
+   time::STRING LIKE '202%' AND
+   name='cpu'
+----
+inner-join (lookup metric_values)
+ ├── columns: metric_id:1!null time:2!null value:3 id:5!null name:6!null
+ ├── key columns: [5] = [1]
+ ├── stable
+ ├── key: (2,5)
+ ├── fd: ()-->(6), (1,2)-->(3), (1)==(5), (5)==(1)
+ ├── scan metrics@name_index
+ │    ├── columns: id:5!null name:6!null
+ │    ├── constraint: /6/5: [/'cpu' - /'cpu']
+ │    ├── key: (5)
+ │    └── fd: ()-->(6)
+ └── filters
+      └── time:2::STRING LIKE '202%' [outer=(2), stable]
