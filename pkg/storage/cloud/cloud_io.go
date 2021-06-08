@@ -66,22 +66,10 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 		}
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
-	// Copy the defaults from http.DefaultTransport. We cannot just copy the
-	// entire struct because it has a sync Mutex. This has the unfortunate problem
-	// that if Go adds fields to DefaultTransport they won't be copied here,
-	// but this is ok for now.
-	t := http.DefaultTransport.(*http.Transport)
-	return &http.Client{Transport: &http.Transport{
-		Proxy:                 t.Proxy,
-		DialContext:           t.DialContext,
-		MaxIdleConns:          t.MaxIdleConns,
-		IdleConnTimeout:       t.IdleConnTimeout,
-		TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
-		ExpectContinueTimeout: t.ExpectContinueTimeout,
-
-		// Add our custom CA.
-		TLSClientConfig: tlsConf,
-	}}, nil
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	// Add our custom CA.
+	t.TLSClientConfig = tlsConf
+	return &http.Client{Transport: t}, nil
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
