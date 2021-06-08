@@ -253,14 +253,16 @@ CREATE TABLE crdb_internal.databases (
    owner NAME NOT NULL,
    primary_region STRING NULL,
    regions STRING[] NULL,
-   survival_goal STRING NULL
+   survival_goal STRING NULL,
+   create_statement STRING NOT NULL
 )  CREATE TABLE crdb_internal.databases (
    id INT8 NOT NULL,
    name STRING NOT NULL,
    owner NAME NOT NULL,
    primary_region STRING NULL,
    regions STRING[] NULL,
-   survival_goal STRING NULL
+   survival_goal STRING NULL,
+   create_statement STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.feature_usage (
    feature_name STRING NOT NULL,
@@ -710,7 +712,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    contention_time_avg FLOAT8 NULL,
    contention_time_var FLOAT8 NULL,
    implicit_txn BOOL NOT NULL,
-   full_scan BOOL NOT NULL
+   full_scan BOOL NOT NULL,
+   sample_plan         JSONB NULL,
+   database_name       STRING NOT NULL,
+   exec_node_ids       INT8[] NOT NULL
 )  CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
@@ -749,7 +754,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    contention_time_avg FLOAT8 NULL,
    contention_time_var FLOAT8 NULL,
    implicit_txn BOOL NOT NULL,
-   full_scan BOOL NOT NULL
+   full_scan BOOL NOT NULL,
+   sample_plan         JSONB NULL,
+   database_name       STRING NOT NULL,
+   exec_node_ids       INT8[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_transaction_statistics (
    node_id INT8 NOT NULL,

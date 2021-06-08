@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -56,8 +57,8 @@ func TestGetAllNamesInternal(t *testing.T) {
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
-		batch.Put(catalogkeys.NewTableKey(999, 444, "bob").Key(keys.SystemSQLCodec), 9999)
-		batch.Put(catalogkeys.NewPublicTableKey(1000, "alice").Key(keys.SystemSQLCodec), 10000)
+		batch.Put(catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, 999, 444, "bob"), 9999)
+		batch.Put(catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, 1000, "alice"), 10000)
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)
@@ -65,8 +66,8 @@ func TestGetAllNamesInternal(t *testing.T) {
 	names, err := sql.TestingGetAllNames(ctx, nil, s.InternalExecutor().(*sql.InternalExecutor))
 	require.NoError(t, err)
 
-	assert.Equal(t, sql.NamespaceKey{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])
-	assert.Equal(t, sql.NamespaceKey{ParentID: 1000, ParentSchemaID: 29, Name: "alice"}, names[10000])
+	assert.Equal(t, descpb.NameInfo{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])
+	assert.Equal(t, descpb.NameInfo{ParentID: 1000, ParentSchemaID: 29, Name: "alice"}, names[10000])
 }
 
 // TestRangeLocalityBasedOnNodeIDs tests that the replica_localities shown in crdb_internal.ranges
@@ -484,4 +485,129 @@ UPDATE system.namespace SET id = 12345 WHERE id = 53;
 	require.Equal(t, `mutation job 123456: job not found`, errStr)
 
 	require.False(t, rows.Next())
+}
+
+// TestExplainTreePlanNodeToJSON tests whether the ExplainTreePlanNode function
+// correctly builds a JSON object from an ExplainTreePlanNode.
+func TestExplainTreePlanNodeToJSON(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testDataArr := []struct {
+		explainTree roachpb.ExplainTreePlanNode
+		expected    string
+	}{
+		// Test data using a node with multiple inner children.
+		{
+			roachpb.ExplainTreePlanNode{
+				Name: "root",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "rootKey",
+						Value: "rootValue",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "child",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "childKey",
+								Value: "childValue",
+							},
+						},
+						Children: []*roachpb.ExplainTreePlanNode{
+							{
+								Name: "innerChild",
+								Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+									{
+										Key:   "innerChildKey",
+										Value: "innerChildValue",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			`{"Children": [{"ChildKey": "childValue", "Children": [{"Children": [], "InnerChildKey": "innerChildValue", "Name": "innerChild"}], "Name": "child"}], "Name": "root", "RootKey": "rootValue"}`,
+		},
+		// Test using a node with multiple attributes.
+		{
+			roachpb.ExplainTreePlanNode{
+				Name: "root",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "rootFirstKey",
+						Value: "rootFirstValue",
+					},
+					{
+						Key:   "rootSecondKey",
+						Value: "rootSecondValue",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "child",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "childKey",
+								Value: "childValue",
+							},
+						},
+					},
+				},
+			},
+			`{"Children": [{"ChildKey": "childValue", "Children": [], "Name": "child"}], "Name": "root", "RootFirstKey": "rootFirstValue", "RootSecondKey": "rootSecondValue"}`,
+		},
+		// Test using a node with multiple children and multiple inner children.
+		{
+			roachpb.ExplainTreePlanNode{
+				Name: "root",
+				Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+					{
+						Key:   "rootKey",
+						Value: "rootValue",
+					},
+				},
+				Children: []*roachpb.ExplainTreePlanNode{
+					{
+						Name: "firstChild",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "firstChildKey",
+								Value: "firstChildValue",
+							},
+						},
+						Children: []*roachpb.ExplainTreePlanNode{
+							{
+								Name: "innerChild",
+								Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+									{
+										Key:   "innerChildKey",
+										Value: "innerChildValue",
+									},
+								},
+							},
+						},
+					},
+					{
+						Name: "secondChild",
+						Attrs: []*roachpb.ExplainTreePlanNode_Attr{
+							{
+								Key:   "secondChildKey",
+								Value: "secondChildValue",
+							},
+						},
+					},
+				},
+			},
+			`{"Children": [{"Children": [{"Children": [], "InnerChildKey": "innerChildValue", "Name": "innerChild"}], "FirstChildKey": "firstChildValue", "Name": "firstChild"}, {"Children": [], "Name": "secondChild", "SecondChildKey": "secondChildValue"}], "Name": "root", "RootKey": "rootValue"}`,
+		},
+	}
+
+	for _, testData := range testDataArr {
+		explainTreeJSON := sql.ExplainTreePlanNodeToJSON(&testData.explainTree)
+		require.Equal(t, testData.expected, explainTreeJSON.String())
+	}
+
 }

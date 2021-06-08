@@ -1,0 +1,49 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+statement ok
+CREATE DATABASE test_local_db
+
+query TT colnames
+SHOW CREATE DATABASE test_local_db
+----
+database_name                create_statement
+test_local_db                CREATE DATABASE test_local_db
+
+statement ok
+CREATE DATABASE """test_escaping""""''b""";
+
+query TT colnames
+SHOW CREATE DATABASE """test_escaping""""''b""";
+----
+database_name                create_statement
+"test_escaping""''b"         CREATE DATABASE """test_escaping""""''b"""
+
+statement ok
+CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2"
+
+query TT colnames
+SHOW CREATE DATABASE region_test_db
+----
+database_name              create_statement
+region_test_db             CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2" REGIONS = "ap-southeast-2" SURVIVE ZONE FAILURE
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+query TT colnames
+SHOW CREATE DATABASE multi_region_test_db
+----
+database_name              create_statement
+multi_region_test_db       CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS = "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+CREATE DATABASE multi_region_test_explicit_primary_region_db PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE REGION FAILURE
+
+query TT colnames
+SHOW CREATE DATABASE multi_region_test_explicit_primary_region_db
+----
+database_name                                     create_statement
+multi_region_test_explicit_primary_region_db      CREATE DATABASE multi_region_test_explicit_primary_region_db PRIMARY REGION "ap-southeast-2" REGIONS = "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE REGION FAILURE
+
+statement error target database or schema does not exist
+SHOW CREATE DATABASE foo

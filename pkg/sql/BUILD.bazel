@@ -502,7 +502,9 @@ go_test(
     ],
     data = glob(["testdata/**"]) + [
         "@cockroach//c-deps:libgeos",
+        "//pkg/sql:information_schema.go",
         "//pkg/sql:pg_catalog.go",
+        "//pkg/sql/vtable:information_schema.go",
         "//pkg/sql/vtable:pg_catalog.go",
     ],
     embed = [":sql"],

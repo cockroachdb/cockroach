@@ -143,7 +143,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	if err := p.createDescriptorWithID(
 		ctx,
-		catalogkeys.NewSchemaKey(n.newParent.ID, schema.GetName()).Key(p.ExecCfg().Codec),
+		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.newParent.ID, schema.GetName()),
 		id,
 		schema,
 		params.ExecCfg().Settings,
@@ -225,8 +225,8 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			})
 			tbl.ParentID = n.newParent.ID
 			tbl.UnexposedParentSchemaID = schema.GetID()
-			objKey := catalogkv.MakeObjectNameKey(tbl.ParentID, tbl.GetParentSchemaID(), tbl.Name).Key(codec)
-			b.CPut(objKey, tbl.ID, nil /* expected */)
+			objKey := catalogkeys.EncodeNameKey(codec, tbl)
+			b.CPut(objKey, tbl.GetID(), nil /* expected */)
 			if err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
 				return err
 			}
@@ -265,7 +265,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			})
 			typ.ParentID = n.newParent.ID
 			typ.ParentSchemaID = schema.GetID()
-			objKey := catalogkv.MakeObjectNameKey(typ.ParentID, typ.ParentSchemaID, typ.Name).Key(codec)
+			objKey := catalogkeys.EncodeNameKey(codec, typ)
 			b.CPut(objKey, typ.ID, nil /* expected */)
 			if err := p.writeTypeSchemaChange(ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
 				return err
@@ -275,7 +275,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	// Delete the public schema namespace entry for this database. Per our check
 	// during initialization, this is the only schema present under n.db.
-	b.Del(catalogkv.MakeObjectNameKey(n.db.ID, keys.RootNamespaceID, tree.PublicSchema).Key(codec))
+	b.Del(catalogkeys.MakePublicSchemaNameKey(codec, n.db.ID))
 
 	// This command can only be run when database leasing is supported, so we don't
 	// have to handle the case where it isn't.

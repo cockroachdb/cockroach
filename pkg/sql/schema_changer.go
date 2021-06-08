@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -437,9 +436,7 @@ func drainNamesForDescriptor(
 
 		// Reclaim all old names.
 		for _, drain := range namesToReclaim {
-			catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-				ctx, b, codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
-			)
+			b.Del(catalogkeys.EncodeNameKey(codec, drain))
 		}
 
 		// If the descriptor to drain is a schema, then we need to delete the
@@ -854,15 +851,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
 			return err
 		}
-		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-			ctx,
-			b,
-			sc.execCfg.Codec,
-			scTable.GetParentID(),
-			scTable.GetParentSchemaID(),
-			scTable.GetName(),
-			false, /* kvTrace */
-		)
+		b.Del(catalogkeys.EncodeNameKey(sc.execCfg.Codec, scTable))
 
 		// Queue a GC job.
 		jobRecord := CreateGCJobRecord(

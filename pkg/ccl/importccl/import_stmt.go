@@ -1463,8 +1463,8 @@ func (r *importResumer) prepareSchemasForIngestion(
 
 	// Finally create the schemas on disk.
 	for i, mutDesc := range mutableSchemaDescs {
-		err = createSchemaDescriptorWithID(ctx, catalogkeys.NewSchemaKey(dbDesc.ID,
-			mutDesc.GetName()).Key(p.ExecCfg().Codec), mutDesc.ID, mutDesc, p, descsCol, txn)
+		nameKey := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbDesc.ID, mutDesc.GetName())
+		err = createSchemaDescriptorWithID(ctx, nameKey, mutDesc.ID, mutDesc, p, descsCol, txn)
 		if err != nil {
 			return nil, err
 		}
@@ -2535,15 +2535,7 @@ func (r *importResumer) dropTables(
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			newTableDesc.DropTime = dropTime
-			catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
-				ctx,
-				b,
-				execCfg.Codec,
-				newTableDesc.ParentID,
-				newTableDesc.GetParentSchemaID(),
-				newTableDesc.Name,
-				false, /* kvTrace */
-			)
+			b.Del(catalogkeys.EncodeNameKey(execCfg.Codec, newTableDesc))
 			tablesToGC = append(tablesToGC, newTableDesc.ID)
 			descsCol.AddDeletedDescriptor(newTableDesc)
 		} else {
