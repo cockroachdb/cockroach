@@ -75,8 +75,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@primary
-│ equality: (b) = (f)
-│ pred: e > 1
+│ lookup condition: (f = b) AND (e > 1)
 │
 └── • scan
       columns: (a, b, c)
