@@ -118,12 +118,14 @@ vectorized: <hidden>
 rows read from KV: 1 (8 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • scan
-  cluster nodes: <hidden>
-  cluster regions: <hidden>
+  nodes: <hidden>
+  regions: <hidden>
   actual row count: 1
+  KV time: 0µs
+  KV contention time: 0µs
   KV rows read: 1
   KV bytes read: 8 B
   estimated row count: 0
@@ -139,12 +141,14 @@ distribution: <hidden>
 vectorized: <hidden>
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • scan
-  cluster nodes: <hidden>
-  cluster regions: <hidden>
+  nodes: <hidden>
+  regions: <hidden>
   actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
   KV rows read: 0
   KV bytes read: 0 B
   estimated row count: 0

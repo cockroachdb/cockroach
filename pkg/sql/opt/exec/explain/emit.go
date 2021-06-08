@@ -333,10 +333,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "cluster nodes", strings.Join(s.Nodes, ", "))
+			e.ob.AddRedactableField(RedactNodes, "nodes", strings.Join(s.Nodes, ", "))
 		}
 		if len(s.Regions) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "cluster regions", strings.Join(s.Regions, ", "))
+			e.ob.AddRedactableField(RedactNodes, "regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
 			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))
@@ -346,6 +346,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			if s.VectorizedBatchCount.HasValue() {
 				e.ob.AddField("vectorized batch count", humanizeutil.Count(s.VectorizedBatchCount.Value()))
 			}
+		}
+		if s.KVTime.HasValue() {
+			e.ob.AddField("KV time", humanizeutil.Duration(s.KVTime.Value()))
+		}
+		if s.KVContentionTime.HasValue() {
+			e.ob.AddField("KV contention time", humanizeutil.Duration(s.KVContentionTime.Value()))
 		}
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows read", humanizeutil.Count(s.KVRowsRead.Value()))

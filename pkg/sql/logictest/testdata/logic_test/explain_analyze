@@ -18,12 +18,14 @@ distribution: <hidden>
 vectorized: <hidden>
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • scan
-  cluster nodes: <hidden>
-  cluster regions: <hidden>
+  nodes: <hidden>
+  regions: <hidden>
   actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
   KV rows read: 0
   KV bytes read: 0 B
   missing stats
@@ -43,12 +45,14 @@ vectorized: <hidden>
 rows read from KV: 3 (24 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • scan
-  cluster nodes: <hidden>
-  cluster regions: <hidden>
+  nodes: <hidden>
+  regions: <hidden>
   actual row count: 3
+  KV time: 0µs
+  KV contention time: 0µs
   KV rows read: 3
   KV bytes read: 24 B
   missing stats
@@ -69,12 +73,12 @@ vectorized: <hidden>
 rows read from KV: 7 (56 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • hash join (inner)
 │ columns: (k, v, a, b)
-│ cluster nodes: <hidden>
-│ cluster regions: <hidden>
+│ nodes: <hidden>
+│ regions: <hidden>
 │ actual row count: 2
 │ vectorized batch count: 0
 │ estimated row count: 990 (missing stats)
@@ -83,10 +87,12 @@ cluster regions: <hidden>
 │
 ├── • scan
 │     columns: (k, v)
-│     cluster nodes: <hidden>
-│     cluster regions: <hidden>
+│     nodes: <hidden>
+│     regions: <hidden>
 │     actual row count: 4
 │     vectorized batch count: 0
+│     KV time: 0µs
+│     KV contention time: 0µs
 │     KV rows read: 4
 │     KV bytes read: 32 B
 │     estimated row count: 1,000 (missing stats)
@@ -95,10 +101,12 @@ cluster regions: <hidden>
 │
 └── • scan
       columns: (a, b)
-      cluster nodes: <hidden>
-      cluster regions: <hidden>
+      nodes: <hidden>
+      regions: <hidden>
       actual row count: 3
       vectorized batch count: 0
+      KV time: 0µs
+      KV contention time: 0µs
       KV rows read: 3
       KV bytes read: 24 B
       estimated row count: 1,000 (missing stats)

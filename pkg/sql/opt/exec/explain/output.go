@@ -415,7 +415,7 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 	ob.AddRedactableTopLevelField(
 		RedactNodes,
-		"cluster regions",
+		"regions",
 		strings.Join(regions, ", "),
 	)
 }

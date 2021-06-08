@@ -67,27 +67,29 @@ vectorized: <hidden>
 rows read from KV: 10 (80 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • group
-│ cluster nodes: <hidden>
-│ cluster regions: <hidden>
+│ nodes: <hidden>
+│ regions: <hidden>
 │ actual row count: 5
 │ group by: k
 │ ordered: +k
 │
 └── • merge join
-    │ cluster nodes: <hidden>
-    │ cluster regions: <hidden>
+    │ nodes: <hidden>
+    │ regions: <hidden>
     │ actual row count: 5
     │ equality: (k) = (k)
     │ left cols are key
     │ right cols are key
     │
     ├── • scan
-    │     cluster nodes: <hidden>
-    │     cluster regions: <hidden>
+    │     nodes: <hidden>
+    │     regions: <hidden>
     │     actual row count: 5
+    │     KV time: 0µs
+    │     KV contention time: 0µs
     │     KV rows read: 5
     │     KV bytes read: 40 B
     │     missing stats
@@ -95,9 +97,11 @@ cluster regions: <hidden>
     │     spans: FULL SCAN
     │
     └── • scan
-          cluster nodes: <hidden>
-          cluster regions: <hidden>
+          nodes: <hidden>
+          regions: <hidden>
           actual row count: 5
+          KV time: 0µs
+          KV contention time: 0µs
           KV rows read: 5
           KV bytes read: 40 B
           missing stats
@@ -117,31 +121,33 @@ vectorized: <hidden>
 rows read from KV: 10 (80 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • sort
-│ cluster nodes: <hidden>
-│ cluster regions: <hidden>
+│ nodes: <hidden>
+│ regions: <hidden>
 │ actual row count: 5
 │ order: +w
 │
 └── • distinct
-    │ cluster nodes: <hidden>
-    │ cluster regions: <hidden>
+    │ nodes: <hidden>
+    │ regions: <hidden>
     │ actual row count: 5
     │ distinct on: w
     │
     └── • hash join
-        │ cluster nodes: <hidden>
-        │ cluster regions: <hidden>
+        │ nodes: <hidden>
+        │ regions: <hidden>
         │ actual row count: 5
         │ equality: (k) = (w)
         │ left cols are key
         │
         ├── • scan
-        │     cluster nodes: <hidden>
-        │     cluster regions: <hidden>
+        │     nodes: <hidden>
+        │     regions: <hidden>
         │     actual row count: 5
+        │     KV time: 0µs
+        │     KV contention time: 0µs
         │     KV rows read: 5
         │     KV bytes read: 40 B
         │     missing stats
@@ -149,9 +155,11 @@ cluster regions: <hidden>
         │     spans: FULL SCAN
         │
         └── • scan
-              cluster nodes: <hidden>
-              cluster regions: <hidden>
+              nodes: <hidden>
+              regions: <hidden>
               actual row count: 5
+              KV time: 0µs
+              KV contention time: 0µs
               KV rows read: 5
               KV bytes read: 40 B
               missing stats
@@ -171,22 +179,24 @@ vectorized: <hidden>
 rows read from KV: 10 (80 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • cross join
-│ cluster nodes: <hidden>
-│ cluster regions: <hidden>
+│ nodes: <hidden>
+│ regions: <hidden>
 │ actual row count: 25
 │
 ├── • ordinality
-│   │ cluster nodes: <hidden>
-│   │ cluster regions: <hidden>
+│   │ nodes: <hidden>
+│   │ regions: <hidden>
 │   │ actual row count: 5
 │   │
 │   └── • scan
-│         cluster nodes: <hidden>
-│         cluster regions: <hidden>
+│         nodes: <hidden>
+│         regions: <hidden>
 │         actual row count: 5
+│         KV time: 0µs
+│         KV contention time: 0µs
 │         KV rows read: 5
 │         KV bytes read: 40 B
 │         missing stats
@@ -194,14 +204,16 @@ cluster regions: <hidden>
 │         spans: FULL SCAN
 │
 └── • ordinality
-    │ cluster nodes: <hidden>
-    │ cluster regions: <hidden>
+    │ nodes: <hidden>
+    │ regions: <hidden>
     │ actual row count: 5
     │
     └── • scan
-          cluster nodes: <hidden>
-          cluster regions: <hidden>
+          nodes: <hidden>
+          regions: <hidden>
           actual row count: 5
+          KV time: 0µs
+          KV contention time: 0µs
           KV rows read: 5
           KV bytes read: 40 B
           missing stats
@@ -242,17 +254,19 @@ vectorized: <hidden>
 rows read from KV: 5 (40 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • window
-│ cluster nodes: <hidden>
-│ cluster regions: <hidden>
+│ nodes: <hidden>
+│ regions: <hidden>
 │ actual row count: 5
 │
 └── • scan
-      cluster nodes: <hidden>
-      cluster regions: <hidden>
+      nodes: <hidden>
+      regions: <hidden>
       actual row count: 5
+      KV time: 0µs
+      KV contention time: 0µs
       KV rows read: 5
       KV bytes read: 40 B
       missing stats
@@ -272,12 +286,14 @@ distribution: <hidden>
 vectorized: <hidden>
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • scan
-  cluster nodes: <hidden>
-  cluster regions: <hidden>
+  nodes: <hidden>
+  regions: <hidden>
   actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
   KV rows read: 0
   KV bytes read: 0 B
   missing stats
@@ -302,13 +318,13 @@ vectorized: <hidden>
 rows read from KV: 2 (16 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • root
 │
 ├── • insert
-│   │ cluster nodes: <hidden>
-│   │ cluster regions: <hidden>
+│   │ nodes: <hidden>
+│   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ into: child(c, p)
 │   │
@@ -324,14 +340,16 @@ cluster regions: <hidden>
 │   │ exec mode: one row
 │   │
 │   └── • group (scalar)
-│       │ cluster nodes: <hidden>
-│       │ cluster regions: <hidden>
+│       │ nodes: <hidden>
+│       │ regions: <hidden>
 │       │ actual row count: 1
 │       │
 │       └── • scan
-│             cluster nodes: <hidden>
-│             cluster regions: <hidden>
+│             nodes: <hidden>
+│             regions: <hidden>
 │             actual row count: 1
+│             KV time: 0µs
+│             KV contention time: 0µs
 │             KV rows read: 1
 │             KV bytes read: 8 B
 │             missing stats
@@ -342,14 +360,16 @@ cluster regions: <hidden>
 └── • constraint-check
     │
     └── • error if rows
-        │ cluster nodes: <hidden>
-        │ cluster regions: <hidden>
+        │ nodes: <hidden>
+        │ regions: <hidden>
         │ actual row count: 0
         │
         └── • lookup join (anti)
-            │ cluster nodes: <hidden>
-            │ cluster regions: <hidden>
+            │ nodes: <hidden>
+            │ regions: <hidden>
             │ actual row count: 0
+            │ KV time: 0µs
+            │ KV contention time: 0µs
             │ KV rows read: 1
             │ KV bytes read: 8 B
             │ table: parent@primary
@@ -357,15 +377,15 @@ cluster regions: <hidden>
             │ equality cols are key
             │
             └── • filter
-                │ cluster nodes: <hidden>
-                │ cluster regions: <hidden>
+                │ nodes: <hidden>
+                │ regions: <hidden>
                 │ actual row count: 1
                 │ estimated row count: 1
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer
-                      cluster nodes: <hidden>
-                      cluster regions: <hidden>
+                      nodes: <hidden>
+                      regions: <hidden>
                       actual row count: 1
                       label: buffer 1
 ·
