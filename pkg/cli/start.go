@@ -486,7 +486,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 				return
 			}
 
-			if err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644); err != nil {
+			if err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
 				log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
 			}
 		}
@@ -649,7 +649,8 @@ If problems persist, please see %s.`
 				log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
 				return err
 			}
-			buf.Printf("sql:\t%s\n", pgURL)
+			buf.Printf("sql:\t%s\n", pgURL.ToPQ())
+			buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())
 
 			buf.Printf("RPC client flags:\t%s\n", clientFlagsRPC())
 			if len(serverCfg.SocketFile) != 0 {

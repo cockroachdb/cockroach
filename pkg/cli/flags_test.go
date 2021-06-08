@@ -252,7 +252,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		reparseErr string
 	}{
 		// Check individual URL components.
-		{anyCmd, []string{"--url=http://foo"}, nil, `URL scheme must be "postgresql"`, ""},
+		{anyCmd, []string{"--url=http://foo"}, nil, `unrecognized URL scheme: http`, ""},
 		{anyCmd, []string{"--url=postgresql:foo/bar"}, nil, `unknown URL format`, ""},
 
 		{anyCmd, []string{"--url=postgresql://foo"}, []string{"--host=foo"}, "", ""},
@@ -272,7 +272,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyNonSQL, []string{"--url=postgresql://b:12345"}, []string{"--host=b", "--port=12345"}, "", ""},
 		{anyNonSQL, []string{"--url=postgresql://b:c"}, nil, `invalid port ":c" after host`, ""},
 
-		{anyNonSQL, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo"}, "", ""},
 		{anySQL, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo"}, "", ""},
 
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
@@ -375,7 +375,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				resultURL := connURL.String()
+				resultURL := connURL.ToPQ().String()
 
 				// Parse using the discrete flags.
 				// We use this to generate the reference parameter values for the comparison below.
@@ -389,7 +389,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defaultURL := connURL.String()
+				defaultURL := connURL.ToPQ().String()
 
 				// Verify that parsing the URL produces the same parameters as parsing the discrete flags.
 				if urlParams != discreteParams {
@@ -1141,6 +1141,7 @@ Available Commands:
   userfile          upload, list and delete user scoped files
   import            import a db or table from a local PGDUMP or MYSQLDUMP file
   demo              open a demo sql shell
+  convert-url       convert a SQL connection string for use with various client drivers
   gen               generate auxiliary files
   version           output version information
   debug             debugging commands
