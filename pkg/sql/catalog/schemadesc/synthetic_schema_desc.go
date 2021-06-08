@@ -33,7 +33,6 @@ type syntheticBase interface {
 	kind() catalog.ResolvedSchemaKind
 }
 
-func (p synthetic) NameResolutionResult() {}
 func (p synthetic) GetParentSchemaID() descpb.ID {
 	return descpb.InvalidID
 }

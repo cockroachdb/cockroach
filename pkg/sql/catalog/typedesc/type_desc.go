@@ -55,9 +55,6 @@ func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) catalog.TypeDescrip
 	}).BuildImmutableType()
 }
 
-// NameResolutionResult implements the NameResolutionResult interface.
-func (desc *immutable) NameResolutionResult() {}
-
 // Mutable is a custom type for TypeDescriptors undergoing
 // any types of modifications.
 type Mutable struct {

@@ -95,9 +95,6 @@ func (desc *immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
-// NameResolutionResult implements the Descriptor interface.
-func (desc *immutable) NameResolutionResult() {}
-
 // GetAuditMode is part of the DescriptorProto interface.
 // This is a stub until per-database auditing is enabled.
 func (desc *immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
@@ -289,14 +286,6 @@ func (desc *immutable) ValidateTxnCommit(
 		}
 	}
 }
-
-// SchemaMeta implements the tree.SchemaMeta interface.
-// TODO (rohany): I don't want to keep this here, but it seems to be used
-//  by backup only for the fake resolution that occurs in backup. Is it possible
-//  to have this implementation only visible there? Maybe by creating a type
-//  alias for database descriptor in the backupccl package, and then defining
-//  SchemaMeta on it?
-func (desc *immutable) SchemaMeta() {}
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {

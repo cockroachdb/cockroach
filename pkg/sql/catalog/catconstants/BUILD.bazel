@@ -4,6 +4,7 @@ go_library(
     name = "catconstants",
     srcs = [
         "constants.go",
+        "namespace.go",
         "schemas.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants",

@@ -381,6 +381,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}))
 
+	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating virtual schema holder")
+	}
+
 	hydratedTablesCache := hydratedtables.NewCache(cfg.Settings)
 	cfg.registry.AddMetricStruct(hydratedTablesCache.Metrics())
 
@@ -450,6 +455,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		RangeCache:     cfg.distSender.RangeDescriptorCache(),
 		HydratedTables: hydratedTablesCache,
+		VirtualSchemas: virtualSchemas,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
@@ -460,11 +466,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	distSQLServer := distsql.NewServer(ctx, distSQLCfg)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
-
-	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating virtual schema holder")
-	}
 
 	// Set up Executor
 

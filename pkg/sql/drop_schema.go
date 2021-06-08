@@ -69,7 +69,12 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			return nil, err
 		}
 
-		sc, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, scName, false /* required */)
+		sc, err := p.Descriptors().GetSchemaByName(
+			ctx, p.txn, db.ID, scName, tree.SchemaLookupFlags{
+				Required:       false,
+				RequireMutable: true,
+			},
+		)
 		if err != nil {
 			return nil, err
 		}

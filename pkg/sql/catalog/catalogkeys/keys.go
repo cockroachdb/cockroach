@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -239,12 +239,12 @@ func (sk SchemaKey) Name() string {
 func MakeNameMetadataKey(
 	codec keys.SQLCodec, parentID, parentSchemaID descpb.ID, name string,
 ) roachpb.Key {
-	k := codec.IndexPrefix(uint32(systemschema.NamespaceTable.GetID()), uint32(systemschema.NamespaceTable.GetPrimaryIndexID()))
+	k := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.NamespaceTable.PublicColumns()[3].GetID()))
+		k = keys.MakeFamilyKey(k, catconstants.NamespaceTableFamilyID)
 	}
 	return k
 }
@@ -264,8 +264,9 @@ func DecodeNameMetadataKey(
 	if err != nil {
 		return 0, 0, "", err
 	}
-	if buf != uint64(systemschema.NamespaceTable.GetPrimaryIndexID()) {
-		return 0, 0, "", errors.Newf("tried get table %d, but got %d", systemschema.NamespaceTable.GetPrimaryIndexID(), buf)
+	if buf != uint64(catconstants.NamespaceTablePrimaryIndexID) {
+		return 0, 0, "", errors.Newf(
+			"tried get table %d, but got %d", catconstants.NamespaceTablePrimaryIndexID, buf)
 	}
 
 	k, buf, err = encoding.DecodeUvarintAscending(k)
