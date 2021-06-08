@@ -491,7 +491,6 @@ KRB5_SRC_DIR     := $(C_DEPS_DIR)/krb5
 
 # Derived build variants.
 use-stdmalloc          := $(findstring stdmalloc,$(TAGS))
-use-msan               := $(findstring msan,$(GOFLAGS))
 
 # User-requested build variants.
 ENABLE_LIBROACH_ASSERTIONS ?=
@@ -507,13 +506,13 @@ ifdef host-is-mingw
 BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
-JEMALLOC_DIR := $(BUILD_DIR)/jemalloc$(if $(use-msan),_msan)
-PROTOBUF_DIR := $(BUILD_DIR)/protobuf$(if $(use-msan),_msan)
-GEOS_DIR     := $(BUILD_DIR)/geos$(if $(use-msan),_msan)
-PROJ_DIR     := $(BUILD_DIR)/proj$(if $(use-msan),_msan)
-LIBEDIT_DIR  := $(BUILD_DIR)/libedit$(if $(use-msan),_msan)
-LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(use-msan),_msan)$(if $(ENABLE_LIBROACH_ASSERTIONS),_assert)
-KRB5_DIR     := $(BUILD_DIR)/krb5$(if $(use-msan),_msan)
+JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
+PROTOBUF_DIR := $(BUILD_DIR)/protobuf
+GEOS_DIR     := $(BUILD_DIR)/geos
+PROJ_DIR     := $(BUILD_DIR)/proj
+LIBEDIT_DIR  := $(BUILD_DIR)/libedit
+LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(ENABLE_LIBROACH_ASSERTIONS),_assert)
+KRB5_DIR     := $(BUILD_DIR)/krb5
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 
@@ -555,7 +554,7 @@ override TAGS += gss
 endif
 
 # Go does not permit dashes in build tags. This is undocumented.
-native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)$(if $(use-msan),_msan)
+native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)
 
 # In each package that uses cgo, we inject include and library search paths into
 # files named zcgo_flags_{native-tag}.go. The logic for this is complicated so
