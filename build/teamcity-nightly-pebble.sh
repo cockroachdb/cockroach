@@ -61,6 +61,10 @@ if ! timeout -s INT $((1000*60)) bin/roachtest run \
   exit_status=$?
 fi
 
+# Each roachtest's artifacts are zip'd. Unzip them all and remove the .zips.
+find $artifacts -name '*.zip' -execdir unzip {} \;
+find $artifacts -name '*.zip' -execdir rm {} \;
+
 # mkbench expects artifacts to be gzip compressed.
 find $artifacts -name '*.log' | xargs gzip -9
 
