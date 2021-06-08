@@ -203,9 +203,6 @@ func (desc *immutable) ValidateTxnCommit(
 	// No-op.
 }
 
-// NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *immutable) NameResolutionResult() {}
-
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.

@@ -10,6 +10,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",

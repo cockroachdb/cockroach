@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -71,29 +73,35 @@ type DescriptorResolver struct {
 	ObjsByName map[descpb.ID]map[string]map[string]descpb.ID
 }
 
-// LookupSchema implements the tree.ObjectNameTargetResolver interface.
+// LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (r *DescriptorResolver) LookupSchema(
-	_ context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
+	ctx context.Context, dbName, scName string,
+) (bool, catalog.ResolvedObjectPrefix, error) {
 	dbID, ok := r.DbsByName[dbName]
 	if !ok {
-		return false, nil, nil
+		return false, catalog.ResolvedObjectPrefix{}, nil
 	}
-	schemas := r.ObjsByName[dbID]
-	if _, ok := schemas[scName]; ok {
-		// TODO (rohany): Not sure if we want to change this to also
-		//  use the resolved schema struct.
-		if dbDesc, ok := r.DescByID[dbID].(catalog.DatabaseDescriptor); ok {
-			return true, dbDesc, nil
+	schemas := r.SchemasByName[dbID]
+	if scID, ok := schemas[scName]; ok {
+		dbDesc, dbOk := r.DescByID[dbID].(catalog.DatabaseDescriptor)
+		scDesc, scOk := r.DescByID[scID].(catalog.SchemaDescriptor)
+		if !scOk && scID == keys.PublicSchemaID {
+			scDesc, scOk = schemadesc.GetPublicSchema(), true
+		}
+		if dbOk && scOk {
+			return true, catalog.ResolvedObjectPrefix{
+				Database: dbDesc,
+				Schema:   scDesc,
+			}, nil
 		}
 	}
-	return false, nil, nil
+	return false, catalog.ResolvedObjectPrefix{}, nil
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *DescriptorResolver) LookupObject(
 	_ context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
-) (bool, tree.NameResolutionResult, error) {
+) (bool, catalog.Descriptor, error) {
 	if flags.RequireMutable {
 		panic("did not expect request for mutable descriptor")
 	}
@@ -252,7 +260,7 @@ func DescriptorsMatchingTargets(
 ) (DescriptorsMatched, error) {
 	ret := DescriptorsMatched{}
 
-	resolver, err := NewDescriptorResolver(descriptors)
+	r, err := NewDescriptorResolver(descriptors)
 	if err != nil {
 		return ret, err
 	}
@@ -262,7 +270,7 @@ func DescriptorsMatchingTargets(
 	invalidRestoreTsErr := errors.Errorf("supplied backups do not cover requested time")
 	// Process all the DATABASE requests.
 	for _, d := range targets.Databases {
-		dbID, ok := resolver.DbsByName[string(d)]
+		dbID, ok := r.DbsByName[string(d)]
 		if !ok {
 			if asOf.IsEmpty() {
 				return ret, errors.Errorf("database %q does not exist", d)
@@ -270,7 +278,7 @@ func DescriptorsMatchingTargets(
 			return ret, errors.Wrapf(invalidRestoreTsErr, "database %q does not exist, or invalid RESTORE timestamp", d)
 		}
 		if _, ok := alreadyRequestedDBs[dbID]; !ok {
-			desc := resolver.DescByID[dbID]
+			desc := r.DescByID[dbID]
 			ret.Descs = append(ret.Descs, desc)
 			ret.RequestedDBs = append(ret.RequestedDBs,
 				desc.(catalog.DatabaseDescriptor))
@@ -287,7 +295,7 @@ func DescriptorsMatchingTargets(
 			return nil
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
-			schemaDesc := resolver.DescByID[id]
+			schemaDesc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
 				schemaDesc, tree.CommonLookupFlags{},
 			); err != nil {
@@ -299,13 +307,13 @@ func DescriptorsMatchingTargets(
 				return nil
 			}
 			alreadyRequestedSchemas[id] = struct{}{}
-			ret.Descs = append(ret.Descs, resolver.DescByID[id])
+			ret.Descs = append(ret.Descs, r.DescByID[id])
 		}
 
 		return nil
 	}
 	getSchemaIDByName := func(scName string, dbID descpb.ID) (descpb.ID, error) {
-		schemas, ok := resolver.SchemasByName[dbID]
+		schemas, ok := r.SchemasByName[dbID]
 		if !ok {
 			return 0, errors.Newf("database with ID %d not found", dbID)
 		}
@@ -323,11 +331,11 @@ func DescriptorsMatchingTargets(
 			// need to request the parent database because it has already been
 			// requested by the table that holds this type.
 			alreadyRequestedTypes[id] = struct{}{}
-			ret.Descs = append(ret.Descs, resolver.DescByID[id])
+			ret.Descs = append(ret.Descs, r.DescByID[id])
 		}
 	}
 	getTypeByID := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-		desc, ok := resolver.DescByID[id]
+		desc, ok := r.DescByID[id]
 		if !ok {
 			return nil, errors.Newf("type with ID %d not found", id)
 		}
@@ -353,7 +361,7 @@ func DescriptorsMatchingTargets(
 			// TODO: As part of work for #34240, this should not be a TableName.
 			//  Instead, it should be an UnresolvedObjectName.
 			un := p.ToUnresolvedObjectName()
-			found, prefix, descI, err := tree.ResolveExisting(ctx, un, resolver, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
+			found, prefix, descI, err := resolver.ResolveExisting(ctx, un, r, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}
@@ -383,7 +391,7 @@ func DescriptorsMatchingTargets(
 			// If the parent database is not requested already, request it now.
 			parentID := tableDesc.GetParentID()
 			if _, ok := alreadyRequestedDBs[parentID]; !ok {
-				parentDesc := resolver.DescByID[parentID]
+				parentDesc := r.DescByID[parentID]
 				ret.Descs = append(ret.Descs, parentDesc)
 				alreadyRequestedDBs[parentID] = struct{}{}
 			}
@@ -398,7 +406,7 @@ func DescriptorsMatchingTargets(
 				return ret, err
 			}
 			// Get all the types used by this table.
-			desc := resolver.DescByID[tableDesc.GetParentID()]
+			desc := r.DescByID[tableDesc.GetParentID()]
 			dbDesc := desc.(catalog.DatabaseDescriptor)
 			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 			if err != nil {
@@ -409,26 +417,25 @@ func DescriptorsMatchingTargets(
 			}
 
 		case *tree.AllTablesSelector:
-			found, descI, err := p.ObjectNamePrefix.Resolve(ctx, resolver, currentDatabase, searchPath)
+			found, prefix, err := resolver.ResolveObjectNamePrefix(ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix)
 			if err != nil {
 				return ret, err
 			}
 			if !found {
 				return ret, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
 			}
-			desc := descI.(catalog.DatabaseDescriptor)
 
 			// If the database is not requested already, request it now.
-			dbID := desc.GetID()
+			dbID := prefix.Database.GetID()
 			if _, ok := alreadyRequestedDBs[dbID]; !ok {
-				ret.Descs = append(ret.Descs, desc)
+				ret.Descs = append(ret.Descs, prefix.Database)
 				alreadyRequestedDBs[dbID] = struct{}{}
 			}
 
 			// Then request the expansion.
-			if _, ok := alreadyExpandedDBs[desc.GetID()]; !ok {
-				ret.ExpandedDB = append(ret.ExpandedDB, desc.GetID())
-				alreadyExpandedDBs[desc.GetID()] = struct{}{}
+			if _, ok := alreadyExpandedDBs[prefix.Database.GetID()]; !ok {
+				ret.ExpandedDB = append(ret.ExpandedDB, prefix.Database.GetID())
+				alreadyExpandedDBs[prefix.Database.GetID()] = struct{}{}
 			}
 
 		default:
@@ -438,7 +445,7 @@ func DescriptorsMatchingTargets(
 
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
-		for schemaName, schemas := range resolver.ObjsByName[dbID] {
+		for schemaName, schemas := range r.ObjsByName[dbID] {
 			schemaID, err := getSchemaIDByName(schemaName, dbID)
 			if err != nil {
 				return ret, err
@@ -448,7 +455,7 @@ func DescriptorsMatchingTargets(
 			}
 
 			for _, id := range schemas {
-				desc := resolver.DescByID[id]
+				desc := r.DescByID[id]
 				switch desc := desc.(type) {
 				case catalog.TableDescriptor:
 					if err := catalog.FilterDescriptorState(
@@ -473,7 +480,7 @@ func DescriptorsMatchingTargets(
 						}
 					}
 					// Get all the types used by this table.
-					dbRaw := resolver.DescByID[desc.GetParentID()]
+					dbRaw := r.DescByID[desc.GetParentID()]
 					dbDesc := dbRaw.(catalog.DatabaseDescriptor)
 					typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 					if err != nil {
