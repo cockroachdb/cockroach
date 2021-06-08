@@ -112,8 +112,8 @@ func TestShowChangefeedJobs(t *testing.T) {
 	var changefeedID jobspb.JobID
 
 	// Cannot use kafka for tests right now because of leaked goroutine issue
-	query = `CREATE CHANGEFEED FOR TABLE foo, bar INTO 
-		'experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
+	query = `CREATE CHANGEFEED FOR TABLE foo, bar INTO
+		'experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
 	sqlDB.QueryRow(t, query).Scan(&changefeedID)
 
 	var out row
@@ -122,7 +122,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 	sqlDB.QueryRow(t, query, changefeedID).Scan(&out.id, &out.SinkURI, &out.FulLTableNames, &out.format)
 
 	require.Equal(t, changefeedID, out.id, "Expected id:%d but found id:%d", changefeedID, out.id)
-	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
+	require.Equal(t, "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 
@@ -143,7 +143,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 	}
 
 	require.Equal(t, changefeedID, out.id, "Expected id:%d but found id:%d", changefeedID, out.id)
-	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
+	require.Equal(t, "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 
@@ -185,8 +185,8 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 
 	var changefeedID jobspb.JobID
 
-	query = `CREATE CHANGEFEED FOR TABLE foo INTO 
-		'experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
+	query = `CREATE CHANGEFEED FOR TABLE foo INTO
+		'experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
 	sqlDB.QueryRow(t, query).Scan(&changefeedID)
 
 	waitForJobStatus(sqlDB, t, changefeedID, "running")
