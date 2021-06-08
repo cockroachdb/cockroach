@@ -15,6 +15,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -150,8 +151,9 @@ type WorkQueue struct {
 		// All tenants, including those without waiting work. Periodically cleaned.
 		tenants map[uint64]*tenantInfo
 	}
-	metrics  WorkQueueMetrics
-	gcStopCh chan struct{}
+	metrics       WorkQueueMetrics
+	admittedCount uint64
+	gcStopCh      chan struct{}
 }
 
 var _ requester = &WorkQueue{}
@@ -222,6 +224,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.admitMu.Unlock()
 		q.granter.tookWithoutPermission()
 		q.metrics.Admitted.Inc(1)
+		atomic.AddUint64(&q.admittedCount, 1)
 		return true, nil
 	}
 
@@ -233,6 +236,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if q.granter.tryGet() {
 			q.admitMu.Unlock()
 			q.metrics.Admitted.Inc(1)
+			atomic.AddUint64(&q.admittedCount, 1)
 			return true, nil
 		}
 		// Did not get token/slot.
@@ -317,6 +321,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			panic(errors.AssertionFailedf("channel should not be closed"))
 		}
 		q.metrics.Admitted.Inc(1)
+		atomic.AddUint64(&q.admittedCount, 1)
 		waitDur := timeutil.Since(startTime)
 		q.metrics.WaitDurationSum.Inc(waitDur.Microseconds())
 		q.metrics.WaitDurations.RecordValue(waitDur.Nanoseconds())
@@ -348,6 +353,10 @@ func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID) {
 	}
 	q.mu.Unlock()
 	q.granter.returnGrant()
+}
+
+func (q *WorkQueue) getAdmittedCount() uint64 {
+	return atomic.LoadUint64(&q.admittedCount)
 }
 
 func (q *WorkQueue) hasWaitingRequests() bool {

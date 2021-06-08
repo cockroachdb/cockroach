@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -681,6 +682,17 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 		}
 		return nil
 	})
+}
+
+// GetPebbleMetrics implements admission.PebbleMetricsProvider.
+func (n *Node) GetPebbleMetrics() []*pebble.Metrics {
+	var metrics []*pebble.Metrics
+	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+		m := store.Engine().GetMetrics()
+		metrics = append(metrics, m.Metrics)
+		return nil
+	})
+	return metrics
 }
 
 func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {

@@ -175,6 +175,8 @@ type Server struct {
 	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
 	externalStorageBuilder *externalStorageBuilder
 
+	gcoord *admission.GrantCoordinator
+
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
 }
@@ -762,6 +764,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsReconciler:  protectedtsReconciler,
 		sqlServer:              sqlServer,
 		externalStorageBuilder: externalStorageBuilder,
+		gcoord:                 gcoord,
 	}
 	return lateBoundServer, err
 }
@@ -1629,6 +1632,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+	// Stores have been initialized, so Node can now provide Pebble metrics.
+	s.gcoord.SetPebbleMetricsProvider(s.node)
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
