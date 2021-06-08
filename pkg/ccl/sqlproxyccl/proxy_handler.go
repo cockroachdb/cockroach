@@ -343,7 +343,7 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 
 	select {
 	case err := <-errConnectionCopy:
-		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+		handler.metrics.updateForError(err)
 		return err
 	case err := <-errExpired:
 		if err != nil {
@@ -351,7 +351,7 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 			codeErr := newErrorf(
 				codeExpiredClientConnection, "expired client conn: %v", err,
 			)
-			updateMetricsAndSendErrToClient(codeErr, conn, handler.metrics)
+			handler.metrics.updateForError(codeErr)
 			return codeErr
 		}
 		return nil
