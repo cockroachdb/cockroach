@@ -11,11 +11,13 @@
 package scbuild_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	gojson "encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -117,29 +119,46 @@ func TestBuilderAlterTable(t *testing.T) {
 	})
 }
 
+// indentText indents text for formatting out marshaled data.
+func indentText(input string, tab string) string {
+	result := strings.Builder{}
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
+		result.WriteString(tab)
+		result.WriteString(line)
+		result.WriteString("\n")
+	}
+	return result.String()
+}
+
 // marshalNodes marshals a []*scpb.Node to YAML.
 func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
-	type mapNode struct {
-		Target map[string]interface{}
-		State  string
-	}
-	mapNodes := make([]mapNode, 0, len(nodes))
+	result := strings.Builder{}
 	for _, node := range nodes {
 		var buf bytes.Buffer
-		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target))
+		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.Element()))
 
 		target := make(map[string]interface{})
 		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
 
-		mapNodes = append(mapNodes, mapNode{
-			Target: target,
-			State:  node.State.String(),
-		})
+		result.WriteString("- ")
+		result.WriteString(node.Target.Direction.String())
+		result.WriteString(" ")
+		result.WriteString(node.Element().GetAttributes().String())
+		result.WriteString("\n")
+		result.WriteString(indentText(fmt.Sprintf("state: %s\n", node.State.String()), "  "))
+		result.WriteString(indentText("details:\n", "  "))
+		out, err := yaml.Marshal(target)
+		require.NoError(t, err)
+		result.WriteString(indentText(string(out), "    "))
 	}
 
-	out, err := yaml.Marshal(mapNodes)
-	require.NoError(t, err)
-	return string(out)
+	return result.String()
 }
 
 func newTestingBuilderDeps(s serverutils.TestServerInterface) (*scbuild.Dependencies, func()) {

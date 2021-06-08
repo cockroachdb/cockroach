@@ -11,6 +11,7 @@
 package scplan_test
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -129,18 +130,20 @@ func TestPlanAlterTable(t *testing.T) {
 }
 
 // indentText indents text for formatting out marshaled data.
-func indentText(input string, tab string) (final string) {
-	split := strings.Split(input, "\n")
-	for idx, line := range split {
+func indentText(input string, tab string) string {
+	result := strings.Builder{}
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		line := scanner.Text()
 		if len(line) == 0 {
 			continue
 		}
-		final += tab + line
-		if idx != len(split)-1 {
-			final = final + "\n"
-		}
+		result.WriteString(tab)
+		result.WriteString(line)
+		result.WriteString("\n")
 	}
-	return final
+	return result.String()
 }
 
 // marshalDeps marshals dependencies in scplan.Plan to a string.
