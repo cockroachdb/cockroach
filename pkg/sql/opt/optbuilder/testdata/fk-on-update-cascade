@@ -79,7 +79,7 @@ CREATE TABLE child_multi (
   c INT PRIMARY KEY,
   p INT, q INT,
   UNIQUE (c, q),
-  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi(p, q) ON UPDATE CASCADE 
+  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi(p, q) ON UPDATE CASCADE
 )
 ----
 
