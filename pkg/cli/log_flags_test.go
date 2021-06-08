@@ -186,3 +186,23 @@ func TestLogFlagCombinations(t *testing.T) {
 		}
 	}
 }
+
+func Example_logging() {
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	c.RunWithArgs([]string{`sql`, `--logtostderr=false`, `-e`, `select 1 as "1"`})
+	c.RunWithArgs([]string{`sql`, `--logtostderr=true`, `-e`, `select 1 as "1"`})
+	c.RunWithArgs([]string{`sql`, `--vmodule=foo=1`, `-e`, `select 1 as "1"`})
+
+	// Output:
+	// sql --logtostderr=false -e select 1 as "1"
+	// 1
+	// 1
+	// sql --logtostderr=true -e select 1 as "1"
+	// 1
+	// 1
+	// sql --vmodule=foo=1 -e select 1 as "1"
+	// 1
+	// 1
+}
