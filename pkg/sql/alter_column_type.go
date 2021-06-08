@@ -45,9 +45,9 @@ var colWithConstraintNotSupportedErr = unimplemented.NewWithIssuef(
 		"is currently not supported")
 
 // AlterColTypeInTxnNotSupportedErr is returned when an ALTER COLUMN TYPE
-// is tried in an explicit transaction.
-var AlterColTypeInTxnNotSupportedErr = unimplemented.NewWithIssuef(
-	49351, "ALTER COLUMN TYPE is not supported inside a transaction")
+// is tried in an explicit transaction. This is tracked with issue 49351.
+var AlterColTypeInTxnNotSupportedErr = pgerror.Newf(pgcode.FeatureNotSupported,
+	"ALTER COLUMN TYPE is not supported inside a transaction")
 
 var alterColTypeInCombinationNotSupportedErr = unimplemented.NewWithIssuef(
 	49351, "ALTER COLUMN TYPE cannot be used in combination "+

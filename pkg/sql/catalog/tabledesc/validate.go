@@ -596,13 +596,13 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		// m we are considering right now is invalid.
 		if foundAlterPK {
 			if alterPKMutation == m.MutationID {
-				vea.Report(unimplemented.NewWithIssue(
-					45615,
+				// Tracked with issue 45615.
+				vea.Report(pgerror.Newf(pgcode.FeatureNotSupported,
 					"cannot perform other schema changes in the same transaction as a primary key change",
 				))
 			} else {
-				vea.Report(unimplemented.NewWithIssue(
-					45615,
+				// Tracked with issue 45615.
+				vea.Report(pgerror.Newf(pgcode.FeatureNotSupported,
 					"cannot perform a schema change operation while a primary key change is in progress",
 				))
 			}
@@ -969,7 +969,7 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 					idx.GetName(), name, colID, idx.IndexDesc().KeyColumnIDs[i])
 			}
 			if validateIndexDup.Contains(colID) {
-				return fmt.Errorf("index %q contains duplicate column %q", idx.GetName(), name)
+				return pgerror.Newf(pgcode.FeatureNotSupported, "index %q contains duplicate column %q", idx.GetName(), name)
 			}
 			validateIndexDup.Add(colID)
 		}
