@@ -433,7 +433,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	// Verify that at least one SST exists in each backup destination.
 	sstMatcher := regexp.MustCompile(`\d+\.sst`)
 	for i := 1; i <= 3; i++ {
-		subDir := fmt.Sprintf("%s/foo/%d", dir, i)
+		subDir := fmt.Sprintf("%s/foo/%d/data", dir, i)
 		files, err := ioutil.ReadDir(subDir)
 		if err != nil {
 			t.Fatal(err)
