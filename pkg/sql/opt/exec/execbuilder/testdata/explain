@@ -1582,10 +1582,10 @@ distribution: <hidden>
 vectorized: <hidden>
 maximum memory usage: <hidden>
 network usage: <hidden>
-cluster regions: <hidden>
+regions: <hidden>
 ·
 • values
-  cluster nodes: <hidden>
-  cluster regions: <hidden>
+  nodes: <hidden>
+  regions: <hidden>
   actual row count: 1
   size: 1 column, 1 row

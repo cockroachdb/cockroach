@@ -136,6 +136,10 @@ type TestServerInterface interface {
 	// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
 	HeartbeatNodeLiveness() error
 
+	// NodeDialer exposes the NodeDialer instance used by the TestServer as an
+	// interface{}.
+	NodeDialer() interface{}
+
 	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
 	// server's executor. The argument must be a physicalplan.SpanResolver
 	// instance.

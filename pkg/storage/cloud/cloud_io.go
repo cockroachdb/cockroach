@@ -108,7 +108,7 @@ func DelayedRetry(
 	})
 }
 
-// isResumableHTTPError returns true if we can
+// IsResumableHTTPError returns true if we can
 // resume download after receiving an error 'err'.
 // We can attempt to resume download if the error is ErrUnexpectedEOF.
 // In particular, we should not worry about a case when error is io.EOF.
@@ -123,7 +123,7 @@ func DelayedRetry(
 // In addition, we treat connection reset by peer errors (which can
 // happen if we didn't read from the connection too long due to e.g. load),
 // the same as unexpected eof errors.
-func isResumableHTTPError(err error) bool {
+func IsResumableHTTPError(err error) bool {
 	return errors.Is(err, io.ErrUnexpectedEOF) ||
 		sysutil.IsErrConnectionReset(err) ||
 		sysutil.IsErrConnectionRefused(err)
@@ -139,14 +139,39 @@ type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, error)
 
 // ResumingReader is a reader which retries reads in case of a transient errors.
 type ResumingReader struct {
-	Ctx    context.Context           // Reader context
-	Opener ReaderOpenerAt            // Get additional content
-	Reader io.ReadCloser             // Currently opened reader
-	Pos    int64                     // How much data was received so far
-	ErrFn  func(error) time.Duration // custom error delay picker
+	Ctx          context.Context           // Reader context
+	Opener       ReaderOpenerAt            // Get additional content
+	Reader       io.ReadCloser             // Currently opened reader
+	Pos          int64                     // How much data was received so far
+	RetryOnErrFn func(error) bool          // custom retry-on-error function
+	ErrFn        func(error) time.Duration // custom error delay picker
 }
 
 var _ io.ReadCloser = &ResumingReader{}
+
+// NewResumingReader returns a ResumingReader instance.
+func NewResumingReader(
+	ctx context.Context,
+	opener ReaderOpenerAt,
+	reader io.ReadCloser,
+	pos int64,
+	retryOnErrFn func(error) bool,
+	errFn func(error) time.Duration,
+) *ResumingReader {
+	r := &ResumingReader{
+		Ctx:          ctx,
+		Opener:       opener,
+		Reader:       reader,
+		Pos:          pos,
+		RetryOnErrFn: retryOnErrFn,
+		ErrFn:        errFn,
+	}
+	if r.RetryOnErrFn == nil {
+		log.Warning(ctx, "no RetryOnErrFn specified when configuring ResumingReader, setting to default value")
+		r.RetryOnErrFn = sysutil.IsErrConnectionReset
+	}
+	return r
+}
 
 // Open opens the reader at its current offset.
 func (r *ResumingReader) Open() error {
@@ -178,7 +203,8 @@ func (r *ResumingReader) Read(p []byte) (int, error) {
 			log.Errorf(r.Ctx, "Read err: %s", lastErr)
 		}
 
-		if isResumableHTTPError(lastErr) {
+		// Use the configured retry-on-error decider to check for a resumable error.
+		if r.RetryOnErrFn(lastErr) {
 			if retries >= maxNoProgressReads {
 				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
 			}

@@ -344,6 +344,13 @@ func DefaultPebbleOptions() *pebble.Options {
 	// SSDs, that kick off an expensive GC if a lot of files are deleted at
 	// once.
 	opts.Experimental.MinDeletionRate = 128 << 20 // 128 MB
+	// Disable read sampling and by extension read-triggered compactions. Read-
+	// triggered compactions are known to cause excessively high write
+	// amplification on some read heavy workloads. See:
+	// https://github.com/cockroachdb/pebble/issues/1143
+	//
+	// TODO(bilal): Remove this line when the above issue is addressed.
+	opts.Experimental.ReadSamplingMultiplier = -1
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
