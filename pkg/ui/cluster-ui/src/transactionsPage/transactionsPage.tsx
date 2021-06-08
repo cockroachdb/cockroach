@@ -60,17 +60,25 @@ interface TState {
   transactionStats: TransactionStats | null;
 }
 
-interface TransactionsPageProps {
+export interface TransactionsPageStateProps {
   data: IStatementsResponse;
   nodeRegions: { [nodeId: string]: string };
-  refreshData: () => void;
-  resetSQLStats: () => void;
   error?: Error | null;
   pageSize?: number;
 }
 
+export interface TransactionsPageDispatchProps {
+  refreshData: () => void;
+  resetSQLStats: () => void;
+}
+
+export type TransactionsPageProps = TransactionsPageStateProps &
+  TransactionsPageDispatchProps &
+  RouteComponentProps;
+
 export class TransactionsPage extends React.Component<
-  RouteComponentProps & TransactionsPageProps
+  TransactionsPageProps,
+  TState
 > {
   trxSearchParams = getSearchParams(this.props.history.location.search);
   filters = getFiltersFromQueryString(this.props.history.location.search);

@@ -859,25 +859,37 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			v.Disk = p.opts.DefaultEBSVolume.Disk
 			p.opts.EBSVolumes = append(p.opts.EBSVolumes, v)
 		}
-
-		mapping, err := json.Marshal(p.opts.EBSVolumes)
-		if err != nil {
-			return err
-		}
-
-		deviceMapping, err := ioutil.TempFile("", "aws-block-device-mapping")
-		if err != nil {
-			return err
-		}
-		defer deviceMapping.Close()
-		if _, err := deviceMapping.Write(mapping); err != nil {
-			return err
-		}
-		args = append(args,
-			"--block-device-mapping",
-			"file://"+deviceMapping.Name(),
-		)
 	}
+
+	osDiskVolume := &ebsVolume{
+		DeviceName: "/dev/sda1",
+		Disk: ebsDisk{
+			VolumeType:          defaultEBSVolumeType,
+			VolumeSize:          opts.OsVolumeSize,
+			DeleteOnTermination: true,
+		},
+	}
+
+	p.opts.EBSVolumes = append(p.opts.EBSVolumes, osDiskVolume)
+
+	mapping, err := json.Marshal(p.opts.EBSVolumes)
+	if err != nil {
+		return err
+	}
+
+	deviceMapping, err := ioutil.TempFile("", "aws-block-device-mapping")
+	if err != nil {
+		return err
+	}
+	defer deviceMapping.Close()
+	if _, err := deviceMapping.Write(mapping); err != nil {
+		return err
+	}
+	args = append(args,
+		"--block-device-mapping",
+		"file://"+deviceMapping.Name(),
+	)
+
 	return p.runJSONCommand(args, &data)
 }
 
