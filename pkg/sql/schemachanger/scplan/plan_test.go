@@ -129,18 +129,20 @@ func TestPlanAlterTable(t *testing.T) {
 }
 
 // indentText indents text for formatting out marshaled data.
-func indentText(input string, tab string) (final string) {
+func indentText(input string, tab string) string {
+	result := strings.Builder{}
 	split := strings.Split(input, "\n")
 	for idx, line := range split {
 		if len(line) == 0 {
 			continue
 		}
-		final += tab + line
+		result.WriteString(tab)
+		result.WriteString(line)
 		if idx != len(split)-1 {
-			final = final + "\n"
+			result.WriteString("\n")
 		}
 	}
-	return final
+	return result.String()
 }
 
 // marshalDeps marshals dependencies in scplan.Plan to a string.
