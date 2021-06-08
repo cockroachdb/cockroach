@@ -498,6 +498,11 @@ func (p *Provider) createVM(
 	tags[tagLifetime] = to.StringPtr(opts.Lifetime.String())
 	tags[tagRoachprod] = to.StringPtr("true")
 
+	osVolumeSize := int32(opts.OsVolumeSize)
+	if osVolumeSize < 32 {
+		log.Print("WARNING: increasing the OS volume size to minimally allowed 32GB")
+		osVolumeSize = 32
+	}
 	// Derived from
 	// https://github.com/Azure-Samples/azure-sdk-for-go-samples/blob/79e3f3af791c3873d810efe094f9d61e93a6ccaa/compute/vm.go#L41
 	vm = compute.VirtualMachine{
@@ -520,6 +525,7 @@ func (p *Provider) createVM(
 					ManagedDisk: &compute.ManagedDiskParameters{
 						StorageAccountType: compute.StorageAccountTypesStandardSSDLRS,
 					},
+					DiskSizeGB: to.Int32Ptr(osVolumeSize),
 				},
 			},
 			OsProfile: &compute.OSProfile{
