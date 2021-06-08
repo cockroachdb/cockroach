@@ -1,0 +1,459 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE metrics (
+  id   SERIAL PRIMARY KEY,
+  name STRING,
+  INDEX name_index (name)
+)
+
+statement ok
+insert into metrics (id,name) values (1,'cpu'), (2,'cpu'), (3,'mem'), (4,'disk')
+
+statement ok
+CREATE TABLE metric_values (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time)
+)
+
+statement ok
+insert into metric_values (metric_id, time, value) values
+ (1,'2020-01-01 00:00:00+00:00',0),
+ (1,'2020-01-01 00:00:01+00:00',1),
+ (2,'2020-01-01 00:00:00+00:00',2),
+ (2,'2020-01-01 00:00:01+00:00',3),
+ (3,'2020-01-01 00:01:00+00:00',4),
+ (3,'2020-01-01 00:01:01+00:00',5)
+
+# metric_values_desc is a descending time version of metric_values.
+statement ok
+CREATE TABLE metric_values_desc (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  value     INT8,
+  PRIMARY KEY (metric_id, time DESC)
+)
+
+statement ok
+insert into metric_values_desc select * from metric_values
+
+# The final statements below need some stats to chose the lookup join.
+statement ok
+ALTER TABLE metric_values INJECT STATISTICS
+'[
+ {
+   "columns": ["metric_id"],
+   "created_at": "2018-01-01 1:00:00.00000+00:00",
+   "row_count": 1000,
+   "distinct_count": 10
+ },
+ {
+   "columns": ["time"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 1000,
+   "distinct_count": 1000
+ },
+ {
+    "columns": ["value"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+
+statement ok
+ALTER TABLE metrics INJECT STATISTICS
+'[
+ {
+   "columns": ["id"],
+   "created_at": "2018-01-01 1:00:00.00000+00:00",
+   "row_count": 10,
+   "distinct_count": 10
+ },
+ {
+   "columns": ["name"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 10,
+   "distinct_count": 10
+ }
+]'
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time > '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 33
+│ order: +value
+│
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" > '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time > '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" > '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time >= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 33
+│ order: +value
+│
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" >= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time >= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" >= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ estimated row count: 33
+│ table: metric_values@primary
+│ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:00+00:00')
+│
+└── • scan
+      estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+      table: metrics@name_index
+      spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: metric_values_desc@primary
+│ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:00+00:00')
+│
+└── • scan
+      estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+      table: metrics@name_index
+      spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time <= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 33
+│ order: +value
+│
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" <= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time <= '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" <= '2020-01-01 00:00:00+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:10+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 33
+│ order: +value
+│
+└── • lookup join
+    │ estimated row count: 33
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:10+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:10+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:10+00:00')
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 11
+│ order: +value
+│
+└── • lookup join
+    │ estimated row count: 11
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +value
+│
+└── • lookup join
+    │ table: metric_values_desc@primary
+    │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+LEFT JOIN metrics
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 11
+│ order: +value
+│
+└── • lookup join
+    │ estimated row count: 11
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+    │
+    └── • scan
+          estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+          table: metrics@name_index
+          spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values
+LEFT JOIN metrics m
+ON metric_id=id
+WHERE
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
+  name='cpu' AND
+  m.id IS NOT NULL
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ estimated row count: 11
+│ table: metric_values@primary
+│ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+│
+└── • scan
+      estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+      table: metrics@name_index
+      spans: [/'cpu' - /'cpu']
+
+query T
+EXPLAIN SELECT *
+FROM metric_values mv
+WHERE
+  mv.metric_id IN (SELECT id FROM metrics) AND
+  time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00'
+ORDER BY value
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 111
+│ order: +value
+│
+└── • lookup join
+    │ estimated row count: 111
+    │ table: metric_values@primary
+    │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
+    │
+    └── • scan
+          estimated row count: 10 (100% of the table; stats collected <hidden> ago)
+          table: metrics@primary
+          spans: FULL SCAN
