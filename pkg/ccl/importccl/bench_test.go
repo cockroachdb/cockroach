@@ -196,31 +196,3 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 	b.StopTimer()
 	b.SetBytes(bytes)
 }
-
-func BenchmarkConvertToSSTable(b *testing.B) {
-	skip.UnderShort(b, "skipping long benchmark")
-	//
-	tpccGen := tpcc.FromWarehouses(1)
-	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
-		benchmarkConvertToSSTable(b, tpccGen)
-	})
-}
-
-func benchmarkConvertToSSTable(b *testing.B, g workload.Generator) {
-	const tableID = descpb.ID(keys.MinUserDescID)
-	now := timeutil.Now()
-
-	var totalBytes int64
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for _, table := range g.Tables() {
-			sst, err := format.ToSSTable(table, tableID, now)
-			if err != nil {
-				b.Fatal(err)
-			}
-			totalBytes += int64(len(sst))
-		}
-	}
-	b.StopTimer()
-	b.SetBytes(totalBytes / int64(b.N))
-}
