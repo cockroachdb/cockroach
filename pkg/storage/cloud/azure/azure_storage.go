@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 )
 
 const (
@@ -126,6 +128,11 @@ func (s *azureStorage) Settings() *cluster.Settings {
 }
 
 func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
+	defer sp.Finish()
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.Writer: %s",
+		path.Join(s.prefix, basename))})
+
 	blob := s.getBlob(basename)
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		_, err := azblob.UploadStreamToBlockBlob(
@@ -146,6 +153,11 @@ func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCl
 func (s *azureStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
+	defer sp.Finish()
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.ReadFileAt: %s",
+		path.Join(s.prefix, basename))})
+
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	blob := s.getBlob(basename)
 	get, err := blob.Download(ctx, offset, azblob.CountToEnd, azblob.BlobAccessConditions{},
@@ -183,6 +195,11 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
+
+	ctx, sp := tracing.ChildSpan(ctx, "azure.ListFiles")
+	defer sp.Finish()
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.ListFiles: %s", pattern)})
+
 	var fileList []string
 	response, err := s.container.ListBlobsFlatSegment(ctx,
 		azblob.Marker{},
