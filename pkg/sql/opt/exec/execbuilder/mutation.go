@@ -222,10 +222,11 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 			// the FK reference and the index we're looking up. We have to reshuffle
 			// the values to fix that.
 			fkVals := make(tree.Datums, len(values))
-			for i, ordinal := range out.InsertCols {
-				for j := range out.InsertCols {
-					if fk.OriginColumnOrdinal(tab, j) == int(ordinal) {
-						fkVals[j] = values[i]
+			for i := range fkVals {
+				parentOrd := fk.ReferencedColumnOrdinal(out.ReferencedTable, i)
+				for j := 0; j < out.ReferencedIndex.KeyColumnCount(); j++ {
+					if out.ReferencedIndex.Column(j).Ordinal() == parentOrd {
+						fkVals[i] = values[j]
 						break
 					}
 				}
