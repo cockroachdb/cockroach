@@ -627,30 +627,43 @@ func (p *planner) shouldCreateIndexes(
 // * The table has a primary key (no DROP PRIMARY KEY statements have
 //   been executed).
 // * The primary key is not the default rowid primary key.
-// * The new primary key isn't the same hash sharded old primary key with a
-//   different bucket count.
+// * The new primary key isn't the same set of columns and directions
+//   other than hash sharding.
 // * There is no partitioning change.
 func shouldCopyPrimaryKey(
 	desc *tabledesc.Mutable,
 	newPK *descpb.IndexDescriptor,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) bool {
-	if alterPrimaryKeyLocalitySwap != nil {
-		return false
-	}
-	oldPK := desc.GetPrimaryIndex()
-	if !desc.HasPrimaryKey() {
-		return false
-	}
-	if desc.IsPrimaryIndexDefaultRowID() {
-		return false
-	}
-	// The first column in the columnIDs is the shard column, which will be different.
-	// Slice it out to see what the actual index columns are.
-	if oldPK.IsSharded() && newPK.IsSharded() &&
-		descpb.ColumnIDs(oldPK.IndexDesc().KeyColumnIDs[1:]).Equals(newPK.KeyColumnIDs[1:]) {
-		return false
-	}
 
-	return true
+	columnIDsAndDirsWithoutSharded := func(idx *descpb.IndexDescriptor) (
+		columnIDs descpb.ColumnIDs,
+		columnDirs []descpb.IndexDescriptor_Direction,
+	) {
+		for i, colName := range idx.KeyColumnNames {
+			if colName != idx.Sharded.Name {
+				columnIDs = append(columnIDs, idx.KeyColumnIDs[i])
+				columnDirs = append(columnDirs, idx.KeyColumnDirections[i])
+			}
+		}
+		return columnIDs, columnDirs
+	}
+	idsAndDirsMatch := func(old, new *descpb.IndexDescriptor) bool {
+		oldIDs, oldDirs := columnIDsAndDirsWithoutSharded(old)
+		newIDs, newDirs := columnIDsAndDirsWithoutSharded(new)
+		if !oldIDs.Equals(newIDs) {
+			return false
+		}
+		for i := range oldDirs {
+			if oldDirs[i] != newDirs[i] {
+				return false
+			}
+		}
+		return true
+	}
+	oldPK := desc.GetPrimaryIndex().IndexDesc()
+	return alterPrimaryKeyLocalitySwap == nil &&
+		desc.HasPrimaryKey() &&
+		!desc.IsPrimaryIndexDefaultRowID() &&
+		!idsAndDirsMatch(oldPK, newPK)
 }

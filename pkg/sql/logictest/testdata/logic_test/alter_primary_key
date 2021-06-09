@@ -732,7 +732,6 @@ t2  CREATE TABLE public.t2 (
     x INT8 NOT NULL,
     y INT8 NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
-    UNIQUE INDEX t2_x_y_key (x ASC, y ASC),
     FAMILY fam_0_x_y (x, y)
 )
 
@@ -1427,8 +1426,6 @@ child3_x_key      y  ASC
 child3_x_y_z_key  x  ASC
 child3_x_y_z_key  y  ASC
 child3_x_y_z_key  z  ASC
-child3_x_y_key    x  ASC
-child3_x_y_key    y  ASC
 
 statement ok
 drop table t1;
@@ -1459,3 +1456,66 @@ table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
                          UNIQUE INDEX table_with_virtual_cols_id_key (id ASC),
                          FAMILY fam_0_id_new_pk (id, new_pk)
 )
+
+# Test that we do not create new indexes for the old primary key when going
+# from sharded to non-sharded and back.
+subtest toggle_sharded_no_new_index
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (i INT PRIMARY KEY)
+
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
+----
+primary  i  ASC
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH BUCKET_COUNT = 2
+
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
+----
+primary  crdb_internal_i_shard_2  ASC
+primary  i                        ASC
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i);
+
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
+----
+primary  i  ASC
+
+# Test that we do not create new indexes for the old primary key when going
+# from interleaved to non-interleaved and back.
+subtest toggle_interleaved_no_new_index
+
+statement ok
+DROP TABLE IF EXISTS parent, child;
+CREATE TABLE parent (i INT PRIMARY KEY);
+CREATE TABLE child (i INT REFERENCES "parent" (i), j INT, PRIMARY KEY (i, j))
+
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM child]
+----
+primary  i  ASC
+primary  j  ASC
+
+statement ok
+ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (i, j) INTERLEAVE IN PARENT "parent" (i)
+
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM child]
+----
+primary  i  ASC
+primary  j  ASC
+
+statement ok
+ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (i, j);
+
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM child]
+----
+primary  i  ASC
+primary  j  ASC
