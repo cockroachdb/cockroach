@@ -66,6 +66,9 @@ import {
   TimeScale,
 } from "src/redux/timewindow";
 
+import classNames from "classnames/bind";
+import styles from "./nodeGraphs.module.styl";
+const cx = classNames.bind(styles);
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -247,7 +250,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
     });
 
     return (
-      <div>
+      <div className={cx("metricsPage")}>
         <Helmet title={title} />
         <section className="section">
           <h1 className="base-heading">{title}</h1>
