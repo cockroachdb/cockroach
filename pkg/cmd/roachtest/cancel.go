@@ -119,9 +119,16 @@ func registerCancel(r *testRegistry) {
 	// Choose several longer running TPCH queries (each is taking at least 3s to
 	// complete).
 	tpchQueriesToRun := []int{7, 9, 20, 21}
+	var queries string
+	for i, q := range tpchQueriesToRun {
+		if i > 0 {
+			queries += ","
+		}
+		queries += fmt.Sprintf("%d", q)
+	}
 
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%v,nodes=%d", tpchQueriesToRun, numNodes),
+		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%s,nodes=%d", queries, numNodes),
 		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -130,7 +137,7 @@ func registerCancel(r *testRegistry) {
 	})
 
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cancel/tpch/local/queries=%v,nodes=%d", tpchQueriesToRun, numNodes),
+		Name:    fmt.Sprintf("cancel/tpch/local/queries=%s,nodes=%d", queries, numNodes),
 		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
