@@ -72,7 +72,8 @@ func ToSSTable(t workload.Table, tableID descpb.ID, ts time.Time) ([]byte, error
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
 		evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
-		return wc.Worker(ctx, evalCtx)
+		semaCtx := tree.MakeSemaContext()
+		return wc.Worker(ctx, evalCtx, &semaCtx)
 	})
 	var sst []byte
 	g.GoCtx(func(ctx context.Context) error {

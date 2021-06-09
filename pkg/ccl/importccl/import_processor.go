@@ -217,6 +217,7 @@ func makeInputConverter(
 	ctx context.Context,
 	spec *execinfrapb.ReadImportDataSpec,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	seqChunkProvider *row.SeqChunkProvider,
 ) (inputConverter, error) {
@@ -271,27 +272,28 @@ func makeInputConverter(
 			}
 		}
 		if isWorkload {
-			return newWorkloadReader(kvCh, singleTable, evalCtx), nil
+			return newWorkloadReader(kvCh, singleTable, evalCtx, semaCtx), nil
 		}
 		return newCSVInputReader(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
-			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider), nil
+			singleTable, singleTableTargetCols, evalCtx, semaCtx, seqChunkProvider), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, semaCtx)
 	case roachpb.IOFileFormat_Mysqldump:
-		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx, spec.Format.MysqlDump)
+		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables,
+			evalCtx, semaCtx, spec.Format.MysqlDump)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, semaCtx)
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
-			spec.WalltimeNanos, spec.Tables, evalCtx)
+			spec.WalltimeNanos, spec.Tables, evalCtx, semaCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), evalCtx)
+			int(spec.ReaderParallelism), evalCtx, semaCtx)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)

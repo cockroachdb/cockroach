@@ -309,6 +309,9 @@ func (txn *Txn) String() string {
 // committing so this is not guaranteed to be the commit timestamp.
 // Use CommitTimestamp() when needed.
 func (txn *Txn) ReadTimestamp() hlc.Timestamp {
+	if txn == nil {
+		panic("txn nil at txn.go ReadTimestamp()")
+	}
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.readTimestampLocked()

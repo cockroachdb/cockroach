@@ -42,6 +42,7 @@ func newCSVInputReader(
 	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	seqChunkProvider *row.SeqChunkProvider,
 ) *csvInputReader {
 	numExpectedDataCols := len(targetCols)
@@ -54,6 +55,7 @@ func newCSVInputReader(
 			walltime:         walltime,
 			numWorkers:       parallelism,
 			evalCtx:          evalCtx,
+			semaCtx:          semaCtx,
 			tableDesc:        tableDesc,
 			targetCols:       targetCols,
 			kvCh:             kvCh,

@@ -41,12 +41,14 @@ func newMysqloutfileReader(
 	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 ) (*mysqloutfileReader, error) {
 	return &mysqloutfileReader{
 		importCtx: &parallelImportContext{
 			walltime:   walltime,
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,
+			semaCtx:    semaCtx,
 			tableDesc:  tableDesc,
 			targetCols: targetCols,
 			kvCh:       kvCh,

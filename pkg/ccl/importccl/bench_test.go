@@ -179,7 +179,8 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			wc := importccl.NewWorkloadKVConverter(
 				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
 			evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
-			return wc.Worker(ctx, evalCtx)
+			semaCtx := tree.MakeSemaContext()
+			return wc.Worker(ctx, evalCtx, &semaCtx)
 		})
 		for kvBatch := range kvCh {
 			for i := range kvBatch.KVs {

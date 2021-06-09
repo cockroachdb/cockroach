@@ -51,6 +51,10 @@ func runImport(
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
 
+	if flowCtx.Cfg.DB == nil {
+		panic("flowCtx.Cfg.DB is nil in read_import_base.go in runImport()")
+	}
+
 	// Install type metadata in all of the import tables. The DB is nil in some
 	// tests, so check first here.
 	if flowCtx.Cfg.DB != nil {
@@ -73,7 +77,8 @@ func runImport(
 	// TODO(adityamaru): Should we just plumb the flowCtx instead of this
 	// assignment.
 	evalCtx.DB = flowCtx.Cfg.DB
-	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh, seqChunkProvider)
+	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
+	conv, err := makeInputConverter(ctx, spec, evalCtx, semaCtx, kvCh, seqChunkProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -415,6 +420,7 @@ type parallelImportContext struct {
 	numWorkers       int                     // Parallelism.
 	batchSize        int                     // Number of records to batch.
 	evalCtx          *tree.EvalContext       // Evaluation context.
+	semaCtx          *tree.SemaContext       // Semantic analysis context.
 	tableDesc        catalog.TableDescriptor // Table descriptor we're importing into.
 	targetCols       tree.NameList           // List of columns to import.  nil if importing all columns.
 	kvCh             chan row.KVBatch        // Channel for sending KV batches.
@@ -446,8 +452,8 @@ func makeDatumConverter(
 	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
-		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.kvCh,
-		importCtx.seqChunkProvider)
+		ctx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx, importCtx.semaCtx,
+		importCtx.kvCh, importCtx.seqChunkProvider)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}

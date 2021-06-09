@@ -298,6 +298,7 @@ func NewDatumRowConverter(
 	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
 ) (*DatumRowConverter, error) {
@@ -328,12 +329,11 @@ func NewDatumRowConverter(
 	}
 
 	var txCtx transform.ExprTransformContext
-	semaCtx := tree.MakeSemaContext()
 	relevantColumns := func(col catalog.Column) bool {
 		return col.HasDefault() || col.IsComputed()
 	}
 	cols := schemaexpr.ProcessColumnSet(targetCols, tableDesc, relevantColumns)
-	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
 	}
@@ -439,7 +439,7 @@ func NewDatumRowConverter(
 		c.tableDesc,
 		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
-		&semaCtx)
+		semaCtx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
 	}
