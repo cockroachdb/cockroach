@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1501,7 +1502,7 @@ func TestStatusAPITransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Construct a map of all the statement IDs.
+	// Construct a map of all the statement fingerprint IDs.
 	statementFingerprintIDs := make(map[roachpb.StmtFingerprintID]bool, len(resp.Statements))
 	for _, respStatement := range resp.Statements {
 		statementFingerprintIDs[respStatement.ID] = true
@@ -1569,7 +1570,7 @@ func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	thirdServerSQL.Exec(t, `CREATE DATABASE db; CREATE TABLE db.t();`)
 	thirdServerSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, testingApp))
 
-	maxStmtFingerprintIDsLen := int(sql.TxnStatsNumStmtFingerprintIDsToRecord.Get(
+	maxStmtFingerprintIDsLen := int(sqlstats.TxnStatsNumStmtFingerprintIDsToRecord.Get(
 		&firstServerProto.ExecutorConfig().(sql.ExecutorConfig).Settings.SV))
 
 	// Construct 2 transaction queries that include an absurd number of statements.
