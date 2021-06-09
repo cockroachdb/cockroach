@@ -1464,7 +1464,12 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn *os.File) (exitErr error
 			}
 			if len(sqlCtx.execStmts) > 0 {
 				// Single-line sql; run as simple as possible, without noise on stdout.
-				return c.runStatements(sqlCtx.execStmts)
+				if err := c.runStatements(sqlCtx.execStmts); err != nil {
+					return err
+				}
+				if sqlCtx.quitAfterExecStmts {
+					return nil
+				}
 			}
 
 			state = c.doStart(cliStartLine)
@@ -1603,13 +1608,18 @@ func (c *cliState) configurePreShellDefaults(cmdIn *os.File) (cleanupFn func(), 
 		}
 	}
 
-	// After all the local options have been computed/initialized above,
-	// process any overrides from the command line.
-	for i := range sqlCtx.setStmts {
-		if c.handleSet(sqlCtx.setStmts[i:i+1], cliStart, cliStop) == cliStop {
-			return cleanupFn, c.exitErr
+	// If any --set flags were set through the command line,
+	// synthetize '-e set=xxx' statements for them at the beginning.
+	sqlCtx.quitAfterExecStmts = len(sqlCtx.execStmts) > 0
+	if len(sqlCtx.setStmts) > 0 {
+		setStmts := make([]string, 0, len(sqlCtx.setStmts)+len(sqlCtx.execStmts))
+		for _, s := range sqlCtx.setStmts {
+			setStmts = append(setStmts, `\set `+s)
 		}
+		sqlCtx.setStmts = nil
+		sqlCtx.execStmts = append(setStmts, sqlCtx.execStmts...)
 	}
+
 	return cleanupFn, nil
 }
 
@@ -1622,7 +1632,17 @@ func (c *cliState) runStatements(stmts []string) error {
 			// because we need a different error handling mechanism:
 			// the error, if any, must not be printed to stderr if
 			// we are returning directly.
-			c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
+			if strings.HasPrefix(stmt, `\`) {
+				// doHandleCliCmd takes its input from c.lastInputLine.
+				c.lastInputLine = stmt
+				if nextState := c.doHandleCliCmd(cliRunStatement, cliStop); nextState == cliStop && c.exitErr == nil {
+					// The client-side command failed with an error, but
+					// did not populate c.exitErr itself. Do it here.
+					c.exitErr = errors.New("error in client-side command")
+				}
+			} else {
+				c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(stmt))
+			}
 			if c.exitErr != nil {
 				if !sqlCtx.errExit && i < len(stmts)-1 {
 					// Print the error now because we don't get a chance later.

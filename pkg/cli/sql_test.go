@@ -47,11 +47,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `-d`, `nonexistent`, `-e`, `create database nonexistent; create table foo(x int); select * from foo`})
 	// COPY should return an intelligible error message.
 	c.RunWithArgs([]string{`sql`, `-e`, `copy t.f from stdin`})
-	// --set changes client-side variables before executing commands.
-	c.RunWithArgs([]string{`sql`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`})
-	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
-	c.RunWithArgs([]string{`sql`, `--set`, `unknownoption`, `-e`, `select 123 as "123"`})
-	c.RunWithArgs([]string{`sql`, `--set`, `display_format=invalidvalue`, `-e`, `select 123 as "123"`})
+
 	// Check that partial results + error get reported together. The query will
 	// run via the vectorized execution engine which operates on the batches of
 	// growing capacity starting at 1 (the batch sizes will be 1, 2, 4, ...),
@@ -104,21 +100,6 @@ func Example_sql() {
 	// x
 	// sql -e copy t.f from stdin
 	// ERROR: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
-	// sql --set=errexit=0 -e select nonexistent -e select 123 as "123"
-	// ERROR: column "nonexistent" does not exist
-	// SQLSTATE: 42703
-	// 123
-	// 123
-	// sql --set echo=true -e select 123 as "123"
-	// > select 123 as "123"
-	// 123
-	// 123
-	// sql --set unknownoption -e select 123 as "123"
-	// invalid syntax: \set unknownoption. Try \? for help.
-	// ERROR: invalid syntax
-	// sql --set display_format=invalidvalue -e select 123 as "123"
-	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
-	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
 	// -1
@@ -128,6 +109,56 @@ func Example_sql() {
 	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
 	// regression_65066
 	// 20:01:02+03:04:05
+}
+
+func Example_sql_config() {
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	// --set changes client-side variables before executing commands.
+	c.RunWithArgs([]string{`sql`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`})
+	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
+	// --set options are processed before -e options.
+	c.RunWithArgs([]string{`sql`, `-e`, `select 123`, `--set`, `display_format=raw`})
+	// Possible to run client-side commands with -e.
+	c.RunWithArgs([]string{`sql`, `-e`, `\set display_format=raw`, `-e`, `select 123 as "123"`})
+	// A failure in a client-side command prevents subsequent statements from executing.
+	c.RunWithArgs([]string{`sql`, `--set`, `unknownoption`, `-e`, `select 123 as "123"`})
+	c.RunWithArgs([]string{`sql`, `--set`, `display_format=invalidvalue`, `-e`, `select 123 as "123"`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\set display_format=invalidvalue`, `-e`, `select 123 as "123"`})
+
+	// Output:
+	// sql --set=errexit=0 -e select nonexistent -e select 123 as "123"
+	// ERROR: column "nonexistent" does not exist
+	// SQLSTATE: 42703
+	// 123
+	// 123
+	// sql --set echo=true -e select 123 as "123"
+	// > select 123 as "123"
+	// 123
+	// 123
+	// sql -e select 123 --set display_format=raw
+	// # 1 column
+	// # row 1
+	// ## 3
+	// 123
+	// # 1 row
+	// sql -e \set display_format=raw -e select 123 as "123"
+	// # 1 column
+	// # row 1
+	// ## 3
+	// 123
+	// # 1 row
+	// sql --set unknownoption -e select 123 as "123"
+	// invalid syntax: \set unknownoption. Try \? for help.
+	// ERROR: invalid syntax
+	// sql --set display_format=invalidvalue -e select 123 as "123"
+	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// sql -e \set display_format=invalidvalue -e select 123 as "123"
+	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+
 }
 
 func Example_sql_watch() {
