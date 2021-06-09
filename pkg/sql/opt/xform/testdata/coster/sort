@@ -162,3 +162,145 @@ sort (segmented)
       │    └── ordering: +1
       └── filters
            └── a:1 = b:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+# As the rows increase, the sort should become more expensive according
+# to a logistic function.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+----
+
+opt
+SELECT * FROM a ORDER BY s
+----
+sort
+ ├── columns: k:1!null f:2!null z:3 s:4!null
+ ├── stats: [rows=1000]
+ ├── cost: 1354.13569
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── ordering: +4
+ └── scan a
+      ├── columns: k:1!null f:2!null z:3 s:4!null
+      ├── stats: [rows=1000]
+      ├── cost: 1094.81
+      ├── key: (1,2)
+      └── fd: (1,2)-->(3,4)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 50000,
+    "distinct_count": 50000
+  }
+]'
+----
+
+opt
+SELECT * FROM a ORDER BY s
+----
+sort
+ ├── columns: k:1!null f:2!null z:3 s:4!null
+ ├── stats: [rows=50000]
+ ├── cost: 72624.4605
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── ordering: +4
+ └── scan a
+      ├── columns: k:1!null f:2!null z:3 s:4!null
+      ├── stats: [rows=50000]
+      ├── cost: 54014.81
+      ├── key: (1,2)
+      └── fd: (1,2)-->(3,4)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+opt
+SELECT * FROM a ORDER BY s
+----
+sort
+ ├── columns: k:1!null f:2!null z:3 s:4!null
+ ├── stats: [rows=100000]
+ ├── cost: 197234.101
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── ordering: +4
+ └── scan a
+      ├── columns: k:1!null f:2!null z:3 s:4!null
+      ├── stats: [rows=100000]
+      ├── cost: 108014.81
+      ├── key: (1,2)
+      └── fd: (1,2)-->(3,4)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  }
+]'
+----
+
+opt
+SELECT * FROM a ORDER BY s
+----
+sort
+ ├── columns: k:1!null f:2!null z:3 s:4!null
+ ├── stats: [rows=150000]
+ ├── cost: 372598.629
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── ordering: +4
+ └── scan a
+      ├── columns: k:1!null f:2!null z:3 s:4!null
+      ├── stats: [rows=150000]
+      ├── cost: 162014.81
+      ├── key: (1,2)
+      └── fd: (1,2)-->(3,4)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  }
+]'
+----
+
+opt
+SELECT * FROM a ORDER BY s
+----
+sort
+ ├── columns: k:1!null f:2!null z:3 s:4!null
+ ├── stats: [rows=200000]
+ ├── cost: 498453.382
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── ordering: +4
+ └── scan a
+      ├── columns: k:1!null f:2!null z:3 s:4!null
+      ├── stats: [rows=200000]
+      ├── cost: 216014.81
+      ├── key: (1,2)
+      └── fd: (1,2)-->(3,4)

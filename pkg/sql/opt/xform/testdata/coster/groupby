@@ -23,3 +23,137 @@ group-by
       │    └── k:1
       └── min [as=min:8, outer=(1)]
            └── k:1
+
+# As the rows increase, the hash groupby should become more expensive according
+# to a logistic function.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 50000,
+    "distinct_count": 50000
+  }
+]'
+----
+
+opt
+SELECT max(k), min(k), i, s FROM a GROUP BY i, s
+----
+group-by
+ ├── columns: max:7!null min:8!null i:2 s:3
+ ├── grouping columns: i:2 s:3
+ ├── stats: [rows=50000, distinct(2,3)=50000, null(2,3)=1]
+ ├── cost: 56514.73
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(7,8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── stats: [rows=50000, distinct(2,3)=50000, null(2,3)=5]
+ │    ├── cost: 53514.71
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations
+      ├── max [as=max:7, outer=(1)]
+      │    └── k:1
+      └── min [as=min:8, outer=(1)]
+           └── k:1
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+opt
+SELECT max(k), min(k), i, s FROM a GROUP BY i, s
+----
+group-by
+ ├── columns: max:7!null min:8!null i:2 s:3
+ ├── grouping columns: i:2 s:3
+ ├── stats: [rows=100000, distinct(2,3)=100000, null(2,3)=1]
+ ├── cost: 163014.73
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(7,8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── stats: [rows=100000, distinct(2,3)=100000, null(2,3)=10]
+ │    ├── cost: 107014.71
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations
+      ├── max [as=max:7, outer=(1)]
+      │    └── k:1
+      └── min [as=min:8, outer=(1)]
+           └── k:1
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 150000,
+    "distinct_count": 150000
+  }
+]'
+----
+
+opt
+SELECT max(k), min(k), i, s FROM a GROUP BY i, s
+----
+group-by
+ ├── columns: max:7!null min:8!null i:2 s:3
+ ├── grouping columns: i:2 s:3
+ ├── stats: [rows=150000, distinct(2,3)=150000, null(2,3)=1]
+ ├── cost: 319514.73
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(7,8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── stats: [rows=150000, distinct(2,3)=150000, null(2,3)=15]
+ │    ├── cost: 160514.71
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations
+      ├── max [as=max:7, outer=(1)]
+      │    └── k:1
+      └── min [as=min:8, outer=(1)]
+           └── k:1
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  }
+]'
+----
+
+opt
+SELECT max(k), min(k), i, s FROM a GROUP BY i, s
+----
+group-by
+ ├── columns: max:7!null min:8!null i:2 s:3
+ ├── grouping columns: i:2 s:3
+ ├── stats: [rows=200000, distinct(2,3)=200000, null(2,3)=1]
+ ├── cost: 426014.73
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(7,8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 s:3
+ │    ├── stats: [rows=200000, distinct(2,3)=200000, null(2,3)=20]
+ │    ├── cost: 214014.71
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations
+      ├── max [as=max:7, outer=(1)]
+      │    └── k:1
+      └── min [as=min:8, outer=(1)]
+           └── k:1
