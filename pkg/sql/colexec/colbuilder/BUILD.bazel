@@ -20,7 +20,7 @@ go_library(
         "//pkg/sql/colexec/colexecproj",
         "//pkg/sql/colexec/colexecsel",
         "//pkg/sql/colexec/colexecutils",
-        "//pkg/sql/colexec/colexecwindow",  # keep
+        "//pkg/sql/colexec/colexecwindow",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colfetcher",
