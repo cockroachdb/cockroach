@@ -702,7 +702,7 @@ DROP TABLE parent CASCADE
 statement ok
 INSERT INTO child VALUES (2, 2)
 
-statement error pgcode 23503 foreign key 
+statement error pgcode 23503 foreign key
 INSERT INTO grandchild VALUES (1, 1)
 
 statement ok
@@ -3671,3 +3671,64 @@ ALTER TABLE child_59582 ADD FOREIGN KEY (i) REFERENCES child_59582(rowid)
 
 statement ok
 DROP TABLE parent_59582, child_59582
+
+# Regression test for #65890. Duplicate column IDs in the input of an insert
+# fast path should not cause internal errors when shuffling columns during FK
+# violations.
+subtest 65890
+
+statement ok
+SET enable_insert_fast_path = true
+
+# TODO(mgartner): We can remove ab_idx once we lift the restriction that FK
+# column ordering must match the column ordering of a UNIQUE constraint in the
+# reference table.
+statement ok
+CREATE TABLE t65890_p (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE (a),
+  UNIQUE INDEX ba_idx (b, a),
+  UNIQUE INDEX ab_idx (a, b),
+  FAMILY (k, a, b)
+)
+
+statement ok
+CREATE TABLE t65890_c (
+  k INT PRIMARY KEY,
+  b INT,
+  a INT,
+  FAMILY (k, b, a)
+)
+
+statement ok
+ALTER TABLE t65890_c ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES t65890_p(a)
+
+statement error insert on table "t65890_c" violates foreign key constraint "fk"\nDETAIL: Key \(a\)=\(1\) is not present in table "t65890_p"\.
+INSERT INTO t65890_c SELECT 1, 1, 1
+
+statement ok
+ALTER TABLE t65890_c DROP CONSTRAINT fk
+
+statement ok
+ALTER TABLE t65890_c ADD CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES t65890_p(a, b)
+
+# Ensure that a fast path on ba_idx is used.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
+----
+• insert fast path
+  into: t65890_c(k, b, a)
+  auto commit
+  FK check: t65890_p@ba_idx
+  size: 3 columns, 1 row
+
+statement error insert on table "t65890_c" violates foreign key constraint "fk"\nDETAIL: Key \(a, b\)=\(3, 2\) is not present in table "t65890_p"\.
+INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)
+
+statement error insert on table "t65890_c" violates foreign key constraint "fk"\nDETAIL: Key \(a, b\)=\(2, 2\) is not present in table "t65890_p"\.
+INSERT INTO t65890_c SELECT 1, 2, 2
+
+statement ok
+SET enable_insert_fast_path = $enable_insert_fast_path
