@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -114,7 +115,7 @@ type benchQuery struct {
 	args  []interface{}
 }
 
-var schemas = [...]string{
+var schemas = []string{
 	`CREATE TABLE kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`,
 	`
 	CREATE TABLE customer
@@ -197,11 +198,11 @@ var schemas = [...]string{
 	`
 	CREATE TABLE j
 	(
-	  a INT PRIMARY KEY,
-	  b INT,
-	  INDEX (b)
+		a INT PRIMARY KEY,
+		b INT,
+		INDEX (b)
 	)
-  `,
+	`,
 }
 
 var queries = [...]benchQuery{
@@ -268,12 +269,50 @@ var queries = [...]benchQuery{
 		`,
 		args: []interface{}{10, 100, 1000, 15},
 	},
+
+	// 1. Table with more than 15 columns (triggers slow path for FastIntMap).
+	// 2. Table with many indexes.
+	// 3. Query with a single fixed column that can't use any of the indexes.
+	{
+		name: "many-columns-and-indexes-a",
+		query: `
+			SELECT id FROM k
+			WHERE x = $1
+		`,
+		args: []interface{}{1},
+	},
+
+	// 1. Table with more than 15 columns (triggers slow path for FastIntMap).
+	// 2. Table with many indexes.
+	// 3. Query that can't use any of the indexes with a more complex filter.
+	{
+		name: "many-columns-and-indexes-b",
+		query: `
+			SELECT id FROM k
+			WHERE x = $1 AND y = $2 AND z = $3
+		`,
+		args: []interface{}{1, 2, 3},
+	},
 }
 
 func init() {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+
+	// Add a table with many columns and many indexes.
+	var indexes strings.Builder
+	for i := 0; i < 250; i++ {
+		indexes.WriteString(",\nINDEX (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w)")
+	}
+	tableK := fmt.Sprintf(`CREATE TABLE k (
+		id INT PRIMARY KEY,
+		a INT, b INT, c INT, d INT, e INT, f INT, g INT, h INT, i INT, j INT,
+		k INT, l INT, m INT, n INT, o INT, p INT, q INT, r INT, s INT, t INT,
+		u INT, v INT, w INT, x INT, y INT, z INT
+		%s
+	)`, indexes.String())
+	schemas = append(schemas, tableK)
 }
 
 // BenchmarkPhases measures the time that each of the optimization phases takes
