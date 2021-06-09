@@ -260,18 +260,21 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	init(s.ClusterSettings())
 
 	evalCtx := tree.EvalContext{Settings: s.ClusterSettings()}
-	flowCtx := execinfra.FlowCtx{Cfg: &execinfra.ServerConfig{DB: kvDB,
-		ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-			return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-				s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			DB: kvDB,
+			ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
+					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+			},
+			Settings: s.ClusterSettings(),
+			Codec:    keys.SystemSQLCodec,
 		},
-		Settings: s.ClusterSettings(),
-		Codec:    keys.SystemSQLCodec,
-	},
 		EvalCtx: &tree.EvalContext{
 			Codec:    keys.SystemSQLCodec,
 			Settings: s.ClusterSettings(),
-		}}
+		},
+	}
 
 	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUserName())
 	if err != nil {
@@ -427,9 +430,11 @@ func newTestingRestoreDataProcessor(
 			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
 				Ctx:     ctx,
 				EvalCtx: evalCtx,
-			}},
+			},
+		},
 		flowCtx: flowCtx,
 		spec:    spec,
+		db:      flowCtx.Cfg.DB,
 	}
 	var err error
 	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
