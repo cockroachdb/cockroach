@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -149,6 +150,9 @@ var tpccMeta = workload.Meta{
 		` using a rich schema of multiple tables`,
 	Version:      `2.2.0`,
 	PublicFacing: true,
+	PrometheusGatherer: func() prometheus.Gatherer {
+		return prometheusRegistry
+	},
 	New: func() workload.Generator {
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)

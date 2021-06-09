@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 )
 
@@ -135,6 +136,10 @@ type Meta struct {
 	// avoid confusion. Workloads setting this to true should pay added attention
 	// to their documentation and help-text.
 	PublicFacing bool
+	// PrometheusGatherer is called to expose the prometheus gatherer
+	// to a HTTP endpoint.
+	// This is only set if there is a gatherer.
+	PrometheusGatherer func() prometheus.Gatherer
 	// New returns an unconfigured instance of this generator.
 	New func() Generator
 }
