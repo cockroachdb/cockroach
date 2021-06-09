@@ -30,6 +30,9 @@ SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  backward_dependencies        table  NULL  NULL  NULL
 crdb_internal  builtin_functions            table  NULL  NULL  NULL
+crdb_internal  cluster_contended_indexes    view   NULL  NULL  NULL
+crdb_internal  cluster_contended_keys       view   NULL  NULL  NULL
+crdb_internal  cluster_contended_tables     view   NULL  NULL  NULL
 crdb_internal  cluster_contention_events    table  NULL  NULL  NULL
 crdb_internal  cluster_database_privileges  table  NULL  NULL  NULL
 crdb_internal  cluster_distsql_flows        table  NULL  NULL  NULL

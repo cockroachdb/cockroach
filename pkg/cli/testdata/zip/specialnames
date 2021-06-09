@@ -1,5 +1,6 @@
 zip
 ----
+[cluster] retrieving SQL data for crdb_internal.cluster_contended_tables... writing output: debug/crdb_internal.cluster_contended_tables.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
 [cluster] requesting list of SQL databases... received response... done
 [cluster] 8 databases found
