@@ -486,6 +486,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 	// Gather all inner edges that connect the left and right relation sets.
 	var innerJoinFilters memo.FiltersExpr
 	var addInnerJoin bool
+	var joinIsRedundant bool
 	for i, ok := jb.innerEdges.Next(0); ok; i, ok = jb.innerEdges.Next(i + 1) {
 		e := &jb.edges[i]
 
@@ -495,6 +496,11 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			if areFiltersRedundant(&fds, e.filters) {
 				// Avoid adding redundant filters.
 				continue
+			}
+			if !joinIsRedundant {
+				// If this edge was originally part of a join between relation sets s1 and
+				// s2, any other edges that apply will also be part of that original join.
+				joinIsRedundant = e.joinIsRedundant(s1, s2)
 			}
 			getEquivFDs(&fds, e.filters)
 			innerJoinFilters = append(innerJoinFilters, e.filters...)
@@ -513,7 +519,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// Construct a non-inner join. If any inner join filters also apply to the
 			// pair of relationSets, construct a select on top of the join with the
 			// inner join filters.
-			jb.addJoin(e.op.joinType, s1, s2, e.filters, innerJoinFilters)
+			jb.addJoin(e.op.joinType, s1, s2, e.filters, innerJoinFilters, e.joinIsRedundant(s1, s2))
 			return
 		}
 		if e.checkNonInnerJoin(s2, s1) {
@@ -539,7 +545,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// 010 on the right. 101 is larger than 111 / 2, so we will not enumerate
 			// this plan unless we consider a join with s2 on the left and s1 on the
 			// right.
-			jb.addJoin(e.op.joinType, s2, s1, e.filters, innerJoinFilters)
+			jb.addJoin(e.op.joinType, s2, s1, e.filters, innerJoinFilters, e.joinIsRedundant(s2, s1))
 			return
 		}
 	}
@@ -549,7 +555,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		// already been constructed, because doing so can lead to a case where a
 		// non-inner join operator 'disappears' because an inner join has replaced
 		// it.
-		jb.addJoin(opt.InnerJoinOp, s1, s2, innerJoinFilters, nil /* selectFilters */)
+		jb.addJoin(opt.InnerJoinOp, s1, s2, innerJoinFilters, nil /* selectFilters */, joinIsRedundant)
 	}
 }
 
@@ -648,9 +654,13 @@ func (jb *JoinOrderBuilder) hasEqEdge(leftCol, rightCol opt.ColumnID) bool {
 // the given set of edges. If the group containing joins between this set of
 // relations is already contained in the plans field, the new join is added to
 // the memo group. Otherwise, the join is memoized (possibly constructing a new
-// group).
+// group). If the join being considered existed in the originally matched join
+// tree, no join is added (though its commuted version may be).
 func (jb *JoinOrderBuilder) addJoin(
-	op opt.Operator, s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr,
+	op opt.Operator,
+	s1, s2 vertexSet,
+	joinFilters, selectFilters memo.FiltersExpr,
+	joinIsRedundant bool,
 ) {
 	if s1.intersects(s2) {
 		panic(errors.AssertionFailedf("sets are not disjoint"))
@@ -663,14 +673,22 @@ func (jb *JoinOrderBuilder) addJoin(
 	left := jb.plans[s1]
 	right := jb.plans[s2]
 	union := s1.union(s2)
-	if jb.plans[union] != nil {
-		jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
-	} else {
-		jb.plans[union] = jb.memoize(op, left, right, joinFilters, selectFilters)
+	if !joinIsRedundant {
+		if jb.plans[union] != nil {
+			jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
+		} else {
+			jb.plans[union] = jb.memoize(op, left, right, joinFilters, selectFilters)
+		}
 	}
 
 	if commute(op) {
-		// Also add the commuted version of the join to the memo.
+		// Also add the commuted version of the join to the memo. Note that if the
+		// join is redundant (a join between base relation sets s1 and s2 existed in
+		// the matched join tree) then jb.plans[union] will already have the
+		// original join group.
+		if jb.plans[union] == nil {
+			panic(errors.AssertionFailedf("expected existing join plan"))
+		}
 		jb.addToGroup(op, right, left, joinFilters, selectFilters, jb.plans[union])
 
 		if jb.onAddJoinFunc != nil {
@@ -1276,6 +1294,13 @@ func (e *edge) checkRules(s1, s2 vertexSet) bool {
 		}
 	}
 	return true
+}
+
+// joinIsRedundant returns true if a join between the two sets of base relations
+// was already present in the original join tree. If so, enumerating this join
+// would be redundant, so it should be skipped.
+func (e *edge) joinIsRedundant(s1, s2 vertexSet) bool {
+	return e.op.leftVertexes == s1 && e.op.rightVertexes == s2
 }
 
 // commute returns true if the given join operator type is commutable.
