@@ -1267,6 +1267,7 @@ enum ExternalStorageProvider {
   reserved 6;
   userfile = 7;
   null = 8;
+  mem = 9;
 }
 
 message ExternalStorage {
