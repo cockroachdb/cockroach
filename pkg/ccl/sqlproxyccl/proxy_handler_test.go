@@ -610,11 +610,12 @@ func TestDenylistUpdate(t *testing.T) {
 		t,
 		func() bool {
 			_, err = conn.Exec(context.Background(), "SELECT 1")
-			return err != nil && strings.Contains(err.Error(), "expired")
+			return err != nil
 		},
 		time.Second, 5*time.Millisecond,
-		"unexpected error received: %v", err,
+		"Expected the connection to eventually fail",
 	)
+	require.EqualError(t, err, "unexpected EOF")
 }
 
 func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
@@ -668,7 +669,8 @@ func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
 
 	time.Sleep(idleTimeout * 2)
 	err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
-	require.EqualError(t, err, "FATAL: terminating connection due to idle timeout (SQLSTATE 57P01)")
+	require.EqualError(t, err, "unexpected EOF")
+	require.Equal(t, int64(1), s.metrics.IdleDisconnectCount.Count())
 }
 
 func newDirectoryServer(

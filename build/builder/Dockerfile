@@ -10,7 +10,7 @@ FROM ubuntu:focal-20210119
 # autopoint - sed build
 # bison - CRDB build system
 # clang-10 - compiler
-# cmake - msan / c-deps: libroach, protobuf, et al.
+# cmake - c-deps: libroach, protobuf, et al.
 # gcc/g++ - host builds
 # gettext - sed build
 # gnupg2 - for apt
@@ -48,8 +48,6 @@ RUN apt-get update \
 
 RUN curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/20210601-231954/aarch64-unknown-linux-gnu.tar.gz -o aarch64-unknown-linux-gnu.tar.gz \
  && echo 'ed7ebe618794c0a64aec742d1bf9274302f86a8a81505758c97dc99dab5fd6ab aarch64-unknown-linux-gnu.tar.gz' | sha256sum -c - \
- && curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/20210601-231954/libcxx_msan.tar.gz -o libcxx_msan.tar.gz \
- && echo '6a0991c6ed14315fdc525226e96d5908cf8d75177144d600bb6fdac0fd4110f4 libcxx_msan.tar.gz' | sha256sum -c - \
  && curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/20210601-231954/s390x-ibm-linux-gnu.tar.gz -o s390x-ibm-linux-gnu.tar.gz \
  && echo '93c34d3111e38882fd88f38df33243c52466f703d78e7dd8ac0260c9e1ca35c6 s390x-ibm-linux-gnu.tar.gz' | sha256sum -c - \
  && curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/20210601-231954/x86_64-apple-darwin19.tar.gz -o x86_64-apple-darwin19.tar.gz \
@@ -200,10 +198,12 @@ RUN apt-get purge -y \
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease \
-    && ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
+  && ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
 
-RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz \
-    | tar xz -C / --strip-components 1
+RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz -o autouseradd.tar.gz \
+  && echo 'f7b0cf67564044c31ffc5e84c961726098b88b0296a57c84421659d56434a365 autouseradd.tar.gz' | sha256sum -c - \
+  && tar xzf autouseradd.tar.gz --strip-components 1 \
+  && rm autouseradd.tar.gz
 
 COPY entrypoint.sh /usr/local/bin
 

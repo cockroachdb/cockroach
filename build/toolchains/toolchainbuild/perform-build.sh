@@ -101,15 +101,6 @@ apt-get update \
   && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
 
-# Build an msan-enabled build of libc++, following instructions from
-# https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
-mkdir llvm \
- && curl -sfSL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/llvm-10.0.0.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
- && mkdir libcxx    && curl -sfSL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/libcxx-10.0.0.src.tar.xz    | tar --strip-components=1 -C libcxx -xJ \
- && mkdir libcxxabi && curl -sfSL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/libcxxabi-10.0.0.src.tar.xz | tar --strip-components=1 -C libcxxabi -xJ \
- && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi" && make cxx -j$(nproc)) \
- && rm -rf llvm libcxx libcxxabi
-
 # libtapi is required for later versions of MacOSX.
 git clone https://github.com/tpoechtrager/apple-libtapi.git \
     && cd apple-libtapi \
@@ -150,4 +141,3 @@ bundle /x-tools/aarch64-unknown-linux-gnu
 bundle /x-tools/s390x-ibm-linux-gnu
 bundle /x-tools/x86_64-w64-mingw32
 bundle /x-tools/x86_64-apple-darwin19
-bundle /libcxx_msan
