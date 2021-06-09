@@ -275,7 +275,21 @@ func (p *asciiTableReporter) describe(w io.Writer, cols []string) error {
 		p.table = tablewriter.NewWriter(w)
 		p.table.SetAutoFormatHeaders(false)
 		p.table.SetAutoWrapText(false)
-		p.table.SetBorder(false)
+		var outsideBorders, insideLines bool
+		// The following table border modes are taken from psql.
+		// https://www.postgresql.org/docs/12/app-psql.html
+		switch cliCtx.tableBorderMode {
+		case 0:
+			outsideBorders, insideLines = false, false
+		case 1:
+			outsideBorders, insideLines = false, true
+		case 2:
+			outsideBorders, insideLines = true, false
+		case 3:
+			outsideBorders, insideLines = true, true
+		}
+		p.table.SetBorder(outsideBorders)
+		p.table.SetRowLine(insideLines)
 		p.table.SetReflowDuringAutoWrap(false)
 		p.table.SetHeader(expandedCols)
 		p.table.SetTrimWhiteSpaceAtEOL(true)

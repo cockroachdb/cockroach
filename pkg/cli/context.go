@@ -145,6 +145,11 @@ type cliContext struct {
 	// tableDisplayFormat indicates how to format result tables.
 	tableDisplayFormat tableDisplayFormat
 
+	// tableBorderMode indicates how to format tables when the display
+	// format is 'table'. This exists for compatibility
+	// with psql: https://www.postgresql.org/docs/12/app-psql.html
+	tableBorderMode int
+
 	// cmdTimeout sets the maximum run time for the command.
 	// Commands that wish to use this must use cmdTimeoutContext().
 	cmdTimeout time.Duration
@@ -211,6 +216,7 @@ func setCliContextDefaults() {
 	// See also setCLIDefaultForTests() in cli_test.go.
 	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
 	cliCtx.tableDisplayFormat = tableDisplayTSV
+	cliCtx.tableBorderMode = 0 /* no outer lines + no inside row lines */
 	if cliCtx.terminalOutput {
 		// See also setCLIDefaultForTests() in cli_test.go.
 		cliCtx.tableDisplayFormat = tableDisplayTable
