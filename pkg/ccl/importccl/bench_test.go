@@ -43,6 +43,8 @@ type tableSSTable struct {
 	sstData []byte
 }
 
+//BenchmarkImportWorkload/tpcc/warehouses=1/WriteAndLink-8         18        74032204 ns/op     324.94 MB/s
+//BenchmarkImportWorkload/tpcc/warehouses=1/AddSStable-8           1       2230451598 ns/op      10.79 MB/s
 func BenchmarkImportWorkload(b *testing.B) {
 	skip.UnderShort(b, "skipping long benchmark")
 
@@ -149,6 +151,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 	b.SetBytes(totalBytes / int64(b.N))
 }
 
+//BenchmarkConvertToKVs/tpcc/warehouses=1-8         1        3558824936 ns/op          22.46 MB/s
 func BenchmarkConvertToKVs(b *testing.B) {
 	skip.UnderShort(b, "skipping long benchmark")
 
