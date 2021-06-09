@@ -337,6 +337,23 @@ var options = map[string]struct {
 			return sqlCtx.autoTrace
 		},
 	},
+	`border`: {
+		description:               "the border style for the display format 'table'",
+		isBoolean:                 false,
+		validDuringMultilineEntry: true,
+		set: func(val string) error {
+			v, err := strconv.Atoi(val)
+			if err != nil {
+				return err
+			}
+			if v < 0 || v > 4 {
+				return errors.New("only values between 0 and 4 are supported")
+			}
+			cliCtx.tableBorderMode = v
+			return nil
+		},
+		display: func() string { return strconv.Itoa(cliCtx.tableBorderMode) },
+	},
 	`display_format`: {
 		description:               "the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
 		isBoolean:                 false,
