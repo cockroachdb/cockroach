@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -44,6 +45,7 @@ type restoreDataProcessor struct {
 	output  execinfra.RowReceiver
 
 	kr *KeyRewriter
+	db bulk.SSTSender
 
 	// concurrentWorkerLimit is a semaphore that can change capacity, which controls
 	// the number of active restore worker threads.
@@ -104,6 +106,7 @@ func newRestoreDataProcessor(
 			"restore worker concurrency",
 			uint64(numRestoreWorkers.Get(sv)),
 		),
+		db: flowCtx.Cfg.DB,
 	}
 
 	numRestoreWorkers.SetOnChange(sv, func(_ context.Context) {
@@ -161,6 +164,8 @@ func inputReader(
 	metaCh chan *execinfrapb.ProducerMetadata,
 ) error {
 	var alloc rowenc.DatumAlloc
+	ctx, span := tracing.ChildSpan(ctx, "input reader")
+	defer span.Finish()
 
 	for {
 		// We read rows from the SplitAndScatter processor. We expect each row to
@@ -211,6 +216,8 @@ func inputReader(
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.RestoreSpanEntry) error {
+	_, span := tracing.ChildSpan(rd.Ctx, "running restore workers")
+	defer span.Finish()
 	return ctxgroup.GroupWorkers(rd.Ctx, maxConcurrentRestoreWorkers, func(ctx context.Context, n int) error {
 		for {
 			done, err := func() (done bool, _ error) {
@@ -254,8 +261,8 @@ func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.Resto
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	entry execinfrapb.RestoreSpanEntry,
 ) (roachpb.BulkOpSummary, error) {
-	db := rd.flowCtx.Cfg.DB
-	ctx := rd.Ctx
+	ctx, span := tracing.ChildSpan(rd.Ctx, "processing restore span entry")
+	defer span.Finish()
 	evalCtx := rd.EvalCtx
 	var summary roachpb.BulkOpSummary
 
@@ -285,7 +292,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		iters = append(iters, iter)
 	}
 
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
+	batcher, err := bulk.MakeSSTBatcher(ctx, rd.db, evalCtx.Settings,
 		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
 	if err != nil {
 		return summary, err
@@ -344,6 +351,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			continue
 		}
 
+		// TODO: If re-keying was a noop, no need to init checksum.
 		// Rewriting the key means the checksum needs to be updated.
 		value.ClearChecksum()
 		value.InitChecksum(key.Key)
@@ -422,4 +430,19 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 
 func init() {
 	rowexec.NewRestoreDataProcessor = newRestoreDataProcessor
+}
+
+func NewTestingRestoreDataProcessor(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	flowCtx *execinfra.FlowCtx,
+	input execinfra.RowSource,
+	spec execinfrapb.RestoreDataSpec,
+	sender bulk.SSTSender,
+) (execinfra.RowSource, *execinfra.ProcessorBaseNoHelper, error) {
+	post := execinfrapb.PostProcessSpec{}
+	proc, err := newRestoreDataProcessor(flowCtx, 0, spec, &post, input, nil /* output */)
+	rd := proc.(*restoreDataProcessor)
+	rd.db = sender
+	return rd, &rd.ProcessorBaseNoHelper, err
 }
