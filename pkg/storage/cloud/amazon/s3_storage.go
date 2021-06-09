@@ -21,16 +21,20 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,9 +68,54 @@ type s3Storage struct {
 	bucket   *string
 	conf     *roachpb.ExternalStorage_S3
 	ioConf   base.ExternalIODirConfig
-	prefix   string
-	opts     session.Options
 	settings *cluster.Settings
+	prefix   string
+
+	opts   s3ClientConfig
+	cached *s3Client
+}
+
+// s3Client wraps an SDK client and uploader for a given session.
+type s3Client struct {
+	client   *s3.S3
+	uploader *s3manager.Uploader
+}
+
+var reuseSession = settings.RegisterBoolSetting(
+	"cloudstorage.s3.session_reuse.enabled",
+	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
+	true,
+)
+
+// s3ClientConfig is the immutable config used to initialize an s3 session.
+// It contains values copied from corresponding fields in ExternalStorage_S3
+// which are used by the session (but not those that are only used by individual
+// requests).
+type s3ClientConfig struct {
+	// copied from ExternalStorage_S3.
+	endpoint, region, bucket, accessKey, secret, tempToken, auth string
+	// log.V(2) decides session init params so include it in key.
+	verbose bool
+}
+
+func clientConfig(conf *roachpb.ExternalStorage_S3) s3ClientConfig {
+	return s3ClientConfig{
+		endpoint:  conf.Endpoint,
+		region:    conf.Region,
+		bucket:    conf.Bucket,
+		accessKey: conf.AccessKey,
+		secret:    conf.Secret,
+		tempToken: conf.TempToken,
+		auth:      conf.Auth,
+		verbose:   log.V(2),
+	}
+}
+
+var s3ClientCache struct {
+	syncutil.Mutex
+	// TODO(dt): make this an >1 item cache e.g. add a FIFO ring.
+	key    s3ClientConfig
+	client *s3Client
 }
 
 var _ cloud.ExternalStorage = &s3Storage{}
@@ -142,28 +191,14 @@ func MakeS3Storage(
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
-	config := conf.Keys()
+
 	if conf.Endpoint != "" {
 		if args.IOConf.DisableHTTP {
 			return nil, errors.New(
 				"custom endpoints disallowed for s3 due to --external-io-disable-http flag")
 		}
-		config.Endpoint = &conf.Endpoint
-		if conf.Region == "" {
-			conf.Region = "default-region"
-		}
-		client, err := cloud.MakeHTTPClient(args.Settings)
-		if err != nil {
-			return nil, err
-		}
-		config.HTTPClient = client
 	}
 
-	// "specified": use credentials provided in URI params; error if not present.
-	// "implicit": enable SharedConfig, which loads in credentials from environment.
-	//             Detailed in https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
-	// "": default to `specified`.
-	opts := session.Options{}
 	switch conf.Auth {
 	case "", cloud.AuthParamSpecified:
 		if conf.AccessKey == "" {
@@ -182,29 +217,13 @@ func MakeS3Storage(
 				AWSSecretParam,
 			)
 		}
-		opts.Config.MergeIn(config)
 	case cloud.AuthParamImplicit:
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
-		opts.SharedConfigState = session.SharedConfigEnable
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
-	}
-
-	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
-	maxRetries := 10
-	opts.Config.MaxRetries = &maxRetries
-
-	if conf.Endpoint != "" {
-		opts.Config.S3ForcePathStyle = aws.Bool(true)
-	}
-
-	opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
-
-	if log.V(2) {
-		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
 	}
 
 	// Ensure that a KMS ID is specified if server side encryption is set to use
@@ -223,53 +242,137 @@ func MakeS3Storage(
 		}
 	}
 
-	return &s3Storage{
+	s := &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,
 		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
-		opts:     opts,
 		settings: args.Settings,
-	}, nil
-}
-
-func s3ErrDelay(err error) time.Duration {
-	var s3err s3.RequestFailure
-	if errors.As(err, &s3err) {
-		// A 503 error could mean we need to reduce our request rate. Impose an
-		// arbitrary slowdown in that case.
-		// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
-		if s3err.StatusCode() == 503 {
-			return time.Second * 5
-		}
+		opts:     clientConfig(conf),
 	}
-	return 0
-}
 
-func (s *s3Storage) newSession(ctx context.Context) (*session.Session, error) {
-	sess, err := session.NewSessionWithOptions(s.opts)
-	if err != nil {
-		return nil, errors.Wrap(err, "new aws session")
+	reuse := reuseSession.Get(&args.Settings.SV)
+	if !reuse {
+		return s, nil
 	}
-	if s.conf.Region == "" {
-		if err := cloud.DelayedRetry(ctx, s3ErrDelay, func() error {
-			var err error
-			s.conf.Region, err = s3manager.GetBucketRegion(ctx, sess, s.conf.Bucket, "us-east-1")
-			return err
-		}); err != nil {
-			return nil, errors.Wrap(err, "could not find s3 bucket's region")
-		}
-	}
-	sess.Config.Region = aws.String(s.conf.Region)
-	return sess, err
-}
 
-func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
-	sess, err := s.newSession(ctx)
+	s3ClientCache.Lock()
+	defer s3ClientCache.Unlock()
+
+	if s3ClientCache.key == s.opts {
+		s.cached = s3ClientCache.client
+		return s, nil
+	}
+
+	// Make the client and cache it *while holding the lock*. We want to keep
+	// other callers from making clients in the meantime, not just to avoid making
+	// duplicate clients in a race but also because making clients concurrently
+	// can fail if the AWS metadata server hits its rate limit.
+	client, _, err := newClient(ctx, s.opts, s.settings)
 	if err != nil {
 		return nil, err
 	}
-	return s3.New(sess), nil
+	s.cached = &client
+	s3ClientCache.key = s.opts
+	s3ClientCache.client = &client
+	return s, nil
+}
+
+// newClient creates a client from the passed s3ClientConfig and if the passed
+// config's region is empty, used the passed bucket to determine a region and
+// configures the client with it as well as returning it (so the caller can
+// remember it for future calls).
+func newClient(
+	ctx context.Context, conf s3ClientConfig, settings *cluster.Settings,
+) (s3Client, string, error) {
+
+	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
+	if conf.region == "" || conf.auth == cloud.AuthParamImplicit {
+		var sp *tracing.Span
+		ctx, sp = tracing.ChildSpan(ctx, "open s3 client")
+		defer sp.Finish()
+	}
+
+	opts := session.Options{}
+
+	if conf.endpoint != "" {
+		opts.Config.Endpoint = aws.String(conf.endpoint)
+		opts.Config.S3ForcePathStyle = aws.Bool(true)
+
+		if conf.region == "" {
+			conf.region = "default-region"
+		}
+
+		client, err := cloud.MakeHTTPClient(settings)
+		if err != nil {
+			return s3Client{}, "", err
+		}
+		opts.Config.HTTPClient = client
+	}
+
+	switch conf.auth {
+	case "", cloud.AuthParamSpecified:
+		opts.Config.WithCredentials(credentials.NewStaticCredentials(conf.accessKey, conf.secret, conf.tempToken))
+	case cloud.AuthParamImplicit:
+		opts.SharedConfigState = session.SharedConfigEnable
+	}
+
+	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
+	opts.Config.MaxRetries = aws.Int(10)
+
+	opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
+
+	if conf.verbose {
+		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+	}
+
+	sess, err := session.NewSessionWithOptions(opts)
+	if err != nil {
+		return s3Client{}, "", errors.Wrap(err, "new aws session")
+	}
+
+	region := conf.region
+	if region == "" {
+		if err := cloud.DelayedRetry(ctx, s3ErrDelay, func() error {
+			region, err = s3manager.GetBucketRegion(ctx, sess, conf.bucket, "us-east-1")
+			return nil
+		}); err != nil {
+			return s3Client{}, "", errors.Wrap(err, "could not find s3 bucket's region")
+		}
+	}
+	sess.Config.Region = aws.String(region)
+
+	c := s3.New(sess)
+	u := s3manager.NewUploader(sess)
+	return s3Client{client: c, uploader: u}, region, nil
+}
+
+func (s *s3Storage) getClient(ctx context.Context) (*s3.S3, error) {
+	if s.cached != nil {
+		return s.cached.client, nil
+	}
+	client, region, err := newClient(ctx, s.opts, s.settings)
+	if err != nil {
+		return nil, err
+	}
+	if s.opts.region == "" {
+		s.opts.region = region
+	}
+	return client.client, nil
+}
+
+func (s *s3Storage) getUploader(ctx context.Context) (*s3manager.Uploader, error) {
+	if s.cached != nil {
+		return s.cached.uploader, nil
+	}
+	client, region, err := newClient(ctx, s.opts, s.settings)
+	if err != nil {
+		return nil, err
+	}
+	if s.opts.region == "" {
+		s.opts.region = region
+	}
+	return client.uploader, nil
 }
 
 func (s *s3Storage) Conf() roachpb.ExternalStorage {
@@ -288,11 +391,10 @@ func (s *s3Storage) Settings() *cluster.Settings {
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	sess, err := s.newSession(ctx)
+	uploader, err := s.getUploader(ctx)
 	if err != nil {
 		return nil, err
 	}
-	uploader := s3manager.NewUploader(sess)
 
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		// Upload the file to S3.
@@ -311,7 +413,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 func (s *s3Storage) openStreamAt(
 	ctx context.Context, basename string, pos int64,
 ) (*s3.GetObjectOutput, error) {
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +486,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +533,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 }
 
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -447,7 +549,7 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 }
 
 func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
-	client, err := s.newS3Client(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -477,6 +579,19 @@ func nilIfEmpty(s string) *string {
 		return nil
 	}
 	return aws.String(s)
+}
+
+func s3ErrDelay(err error) time.Duration {
+	var s3err s3.RequestFailure
+	if errors.As(err, &s3err) {
+		// A 503 error could mean we need to reduce our request rate. Impose an
+		// arbitrary slowdown in that case.
+		// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+		if s3err.StatusCode() == 503 {
+			return time.Second * 5
+		}
+	}
+	return 0
 }
 
 func init() {
