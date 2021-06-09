@@ -2606,6 +2606,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		s.cfg.ClosedTimestamp.Tracker.FailedCloseAttempts(),
 	)
 
+	s.metrics.RaftEnqueuedPending.Update(s.cfg.Transport.queuedMessageCount())
+
 	return nil
 }
 
