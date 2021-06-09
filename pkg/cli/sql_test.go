@@ -51,6 +51,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `unknownoption`, `-e`, `select 123 as "123"`})
+	c.RunWithArgs([]string{`sql`, `--set`, `display_format=invalidvalue`, `-e`, `select 123 as "123"`})
 	// Check that partial results + error get reported together. The query will
 	// run via the vectorized execution engine which operates on the batches of
 	// growing capacity starting at 1 (the batch sizes will be 1, 2, 4, ...),
@@ -115,6 +116,9 @@ func Example_sql() {
 	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
 	// ERROR: invalid syntax
+	// sql --set display_format=invalidvalue -e select 123 as "123"
+	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
 	// -1

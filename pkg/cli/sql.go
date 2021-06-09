@@ -291,7 +291,8 @@ func (c *cliState) invalidOptSet(nextState cliStateEnum, args []string) cliState
 }
 
 func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
-	fmt.Fprintf(stderr, "cannot change option during multi-line editing: %s\n", opt)
+	c.exitErr = errors.Newf("cannot change option during multi-line editing: %s\n", opt)
+	fmt.Fprintln(stderr, c.exitErr)
 	return nextState
 }
 
@@ -496,6 +497,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 
 	if err != nil {
 		fmt.Fprintf(stderr, "\\set %s: %v\n", strings.Join(args, " "), err)
+		c.exitErr = err
 		return errState
 	}
 
@@ -516,6 +518,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	}
 	if err := opt.reset(); err != nil {
 		fmt.Fprintf(stderr, "\\unset %s: %v\n", args[0], err)
+		c.exitErr = err
 		return errState
 	}
 	return nextState
@@ -630,6 +633,7 @@ func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cl
 		} else {
 			fmt.Fprintf(stderr,
 				"no help available for %q.\nTry \\h with no argument to see available help.\n", cmdrest)
+			c.exitErr = errors.New("no help available")
 			return errState
 		}
 	}
@@ -651,6 +655,7 @@ func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliState
 		} else {
 			fmt.Fprintf(stderr,
 				"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
+			c.exitErr = errors.New("no help available")
 			return errState
 		}
 	}
