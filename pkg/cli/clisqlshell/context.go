@@ -35,6 +35,13 @@ type Context struct {
 	// DemoCluster is the interface to the in-memory cluster for the
 	// `demo` command, if that is the command being run.
 	DemoCluster democlusterapi.DemoCluster
+
+	// ParseURL is a custom URL parser.
+	//
+	// When left undefined, the code defaults to pgurl.Parse.
+	// CockroachDB's own CLI package has a more advanced URL
+	// parser that is used instead.
+	ParseURL URLParser
 }
 
 // internalContext represents the internal configuration state of the
@@ -61,4 +68,7 @@ type internalContext struct {
 
 	// The string used to produce the value of fullPrompt.
 	customPromptPattern string
+
+	// current database name, if known. This is maintained on a best-effort basis.
+	dbName string
 }
