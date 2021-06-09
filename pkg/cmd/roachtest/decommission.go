@@ -311,6 +311,10 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 		Multiplier:     2,
 	}
 
+	warningFilter := []string{
+		"^warning: node [0-9]+ is already decommissioning or decommissioned$",
+	}
+
 	// Partially decommission then recommission n1, from another
 	// random node. Run a couple of status checks while doing so.
 	// We hard-code n1 to guard against the hypothetical case in which
@@ -334,7 +338,6 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 		if err := cli.MatchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
-
 		// Check that `node status` reflects an ongoing decommissioning status
 		// for the second node.
 		{
@@ -420,7 +423,6 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				t.Fatal(err)
 			}
 		}
-
 		// Check that `node status` reflects an ongoing decommissioning status for
 		// all nodes.
 		{
@@ -531,11 +533,11 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 
 			exp := [][]string{
 				decommissionHeader,
-				{strconv.Itoa(targetNodeA), "true", "0", "true", "decommissioned", "false"},
-				{strconv.Itoa(targetNodeB), "true", "0", "true", "decommissioned", "false"},
+				{strconv.Itoa(targetNodeA), "true|false", "0", "true", "decommissioned", "false"},
+				{strconv.Itoa(targetNodeB), "true|false", "0", "true", "decommissioned", "false"},
 				decommissionFooter,
 			}
-			return cli.MatchCSV(o, exp)
+			return cli.MatchCSV(cli.RemoveMatchingLines(o, warningFilter), exp)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -566,16 +568,17 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 
 		// Ditto for `node status`.
 		{
-			runNode = h.getRandNode()
-			t.l.Printf("checking that `node status` (from n%d) shows only live nodes\n", runNode)
-			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv")
-			if err != nil {
-				t.Fatalf("node-status failed: %v", err)
-			}
-
-			numCols, err := cli.GetCsvNumCols(o)
-			require.NoError(t, err)
 			if err := retry.WithMaxAttempts(ctx, retry.Options{}, 50, func() error {
+				runNode = h.getRandNode()
+				t.l.Printf("checking that `node status` (from n%d) shows only live nodes\n", runNode)
+				o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv")
+				if err != nil {
+					t.Fatalf("node-status failed: %v", err)
+				}
+
+				numCols, err := cli.GetCsvNumCols(o)
+				require.NoError(t, err)
+
 				colRegex := []string{}
 				for i := 1; i <= c.spec.NodeCount; i++ {
 					if _, ok := h.randNodeBlocklist[i]; ok {
@@ -621,7 +624,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				{strconv.Itoa(targetNodeB), "false", "0", "true", "decommissioned", "false"},
 				decommissionFooter,
 			}
-			if err := cli.MatchCSV(o, exp); err != nil {
+			if err := cli.MatchCSV(cli.RemoveMatchingLines(o, warningFilter), exp); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -712,7 +715,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			{strconv.Itoa(targetNode), "true|false", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
-		if err := cli.MatchCSV(o, exp); err != nil {
+		if err := cli.MatchCSV(cli.RemoveMatchingLines(o, warningFilter), exp); err != nil {
 			t.Fatal(err)
 		}
 
