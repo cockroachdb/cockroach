@@ -1531,7 +1531,7 @@ func (ex *connExecutor) recordTransactionStart() (
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction,
 		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction))
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
-	ex.extraTxnState.transactionStatementIDs = nil
+	ex.extraTxnState.transactionStatementFingerprintIDs = nil
 	ex.extraTxnState.numRows = 0
 	ex.extraTxnState.shouldCollectTxnExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
@@ -1555,7 +1555,7 @@ func (ex *connExecutor) recordTransactionStart() (
 	}
 	onTxnRestart = func() {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
-		ex.extraTxnState.transactionStatementIDs = nil
+		ex.extraTxnState.transactionStatementFingerprintIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
 		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
@@ -1586,7 +1586,7 @@ func (ex *connExecutor) recordTransaction(
 		ev,
 		implicit,
 		ex.extraTxnState.autoRetryCounter,
-		ex.extraTxnState.transactionStatementIDs,
+		ex.extraTxnState.transactionStatementFingerprintIDs,
 		txnServiceLat,
 		txnRetryLat,
 		commitLat,
