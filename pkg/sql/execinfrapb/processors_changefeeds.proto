@@ -33,6 +33,16 @@ message ChangeAggregatorSpec {
   }
   repeated Watch watches = 1 [(gogoproto.nullable) = false];
 
+  // Checkpoint enables change aggregators to resume faster on restart.
+  message Checkpoint {
+    // The checkpoint is currently applicable only to the spans which have
+    // already been backfilled.
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Change aggregator checkpoint
+  optional Checkpoint checkpoint = 5 [(gogoproto.nullable) = false];
+
   // Feed is the specification for this changefeed.
   optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
 

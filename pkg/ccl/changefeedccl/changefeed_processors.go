@@ -345,6 +345,7 @@ func makeKVFeedCfg(
 		Clock:              cfg.DB.Clock(),
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
+		BackfillCheckpoint: spec.Checkpoint.Spans,
 		Targets:            spec.Feed.Targets,
 		Metrics:            &metrics.KVFeedMetrics,
 		MM:                 mm,
