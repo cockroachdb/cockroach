@@ -177,7 +177,7 @@ func (t *leaseTest) mustRelease(
 ) {
 	var tracker lease.RemovalTracker
 	if leaseRemovalTracker != nil {
-		tracker = leaseRemovalTracker.TrackRemoval(desc.Desc())
+		tracker = leaseRemovalTracker.TrackRemoval(desc.Underlying())
 	}
 	desc.Release(context.Background())
 	if leaseRemovalTracker != nil {
@@ -258,7 +258,7 @@ func TestLeaseManager(testingT *testing.T) {
 	// table and expiration.
 	l1 := t.mustAcquire(1, descID)
 	l2 := t.mustAcquire(1, descID)
-	if l1.Desc().GetID() != l2.Desc().GetID() {
+	if l1.Underlying().GetID() != l2.Underlying().GetID() {
 		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
 	} else if e1, e2 := l1.Expiration(), l2.Expiration(); e1 != e2 {
 		t.Fatalf("expected same lease timestamps, but found %v != %v", e1, e2)
@@ -366,10 +366,10 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	e1 := l1.Expiration()
 
 	// Another lease acquisition from the same node will result in a new lease.
-	rt := removalTracker.TrackRemoval(l1.Desc())
+	rt := removalTracker.TrackRemoval(l1.Underlying())
 	l3 := t.mustAcquire(1, descID)
 	e3 := l3.Expiration()
-	if l1.Desc().GetID() == l3.Desc().GetID() && e3.WallTime == e1.WallTime {
+	if l1.Underlying().GetID() == l3.Underlying().GetID() && e3.WallTime == e1.WallTime {
 		t.Fatalf("expected different leases, but found %v", l1)
 	}
 	if e3.WallTime < e1.WallTime {
@@ -498,7 +498,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 
 		// Removal tracker to track for node 1's lease removal once the node
 		// starts draining.
-		l1RemovalTracker := leaseRemovalTracker.TrackRemoval(l1.Desc())
+		l1RemovalTracker := leaseRemovalTracker.TrackRemoval(l1.Underlying())
 
 		t.nodes[1].SetDraining(true, nil /* reporter */)
 		t.nodes[2].SetDraining(true, nil /* reporter */)

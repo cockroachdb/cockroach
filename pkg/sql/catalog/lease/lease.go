@@ -130,7 +130,7 @@ func (s *descriptorVersionState) Release(ctx context.Context) {
 	s.t.release(ctx, s)
 }
 
-func (s *descriptorVersionState) Desc() catalog.Descriptor {
+func (s *descriptorVersionState) Underlying() catalog.Descriptor {
 	return s.Descriptor
 }
 
@@ -1499,9 +1499,9 @@ func (m *Manager) AcquireByName(
 	// This logic will release the lease (the lease manager will still
 	// cache it), and generate the offline descriptor error.
 	validateDescriptorForReturn := func(desc LeasedDescriptor) (LeasedDescriptor, error) {
-		if desc.Desc().Offline() {
+		if desc.Underlying().Offline() {
 			if err := catalog.FilterDescriptorState(
-				desc.Desc(), tree.CommonLookupFlags{},
+				desc.Underlying(), tree.CommonLookupFlags{},
 			); err != nil {
 				desc.Release(ctx)
 				return nil, err
@@ -1550,7 +1550,7 @@ func (m *Manager) AcquireByName(
 	if err != nil {
 		return nil, err
 	}
-	if !NameMatchesDescriptor(desc.Desc(), parentID, parentSchemaID, name) {
+	if !NameMatchesDescriptor(desc.Underlying(), parentID, parentSchemaID, name) {
 		// We resolved name `name`, but the lease has a different name in it.
 		// That can mean two things. Assume the descriptor is being renamed from A to B.
 		// a) `name` is A. The transaction doing the RENAME committed (so the
@@ -1592,7 +1592,7 @@ func (m *Manager) AcquireByName(
 		if err != nil {
 			return nil, err
 		}
-		if !NameMatchesDescriptor(desc.Desc(), parentID, parentSchemaID, name) {
+		if !NameMatchesDescriptor(desc.Underlying(), parentID, parentSchemaID, name) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			desc.Release(ctx)
@@ -1645,8 +1645,19 @@ func (m *Manager) resolveName(
 // LeasedDescriptor tracks and manages leasing related
 // information for a descriptor.
 type LeasedDescriptor interface {
-	Desc() catalog.Descriptor
+	catalog.Descriptor
+
+	// Underlying returns the underlying descriptor which has been leased.
+	// The implementation of the methods on this object delegate to
+	// that object.
+	Underlying() catalog.Descriptor
+
+	// Expiration returns the current expiration. Subsequent calls may return a
+	// later timestamp but will never return an earlier one.
 	Expiration() hlc.Timestamp
+
+	// Release releases the reference to this leased descriptor. The descriptor
+	// should not be used after the lease has been released.
 	Release(ctx context.Context)
 }
 
