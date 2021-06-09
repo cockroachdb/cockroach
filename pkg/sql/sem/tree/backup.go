@@ -41,6 +41,7 @@ type BackupOptions struct {
 	Detached                     bool
 	EncryptionKMSURI             StringOrPlaceholderOptList
 	IncludeDeprecatedInterleaves bool
+	MinReadDelaySeconds          int64
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -237,6 +238,11 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("include_deprecated_interleaves")
 	}
+
+	if o.MinReadDelaySeconds > 0 {
+		maybeAddSep()
+		ctx.Printf("min_read_delay_seconds = %d", o.MinReadDelaySeconds)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -278,6 +284,14 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.IncludeDeprecatedInterleaves = other.IncludeDeprecatedInterleaves
 	}
 
+	if o.MinReadDelaySeconds > 0 {
+		if other.MinReadDelaySeconds > 0 {
+			return errors.New("min_read_delay_seconds specified multiple times")
+		}
+	} else {
+		o.MinReadDelaySeconds = other.MinReadDelaySeconds
+	}
+
 	return nil
 }
 
@@ -286,7 +300,7 @@ func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
 		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
-		o.EncryptionPassphrase == options.EncryptionPassphrase
+		o.EncryptionPassphrase == options.EncryptionPassphrase && o.MinReadDelaySeconds == options.MinReadDelaySeconds
 }
 
 // Format implements the NodeFormatter interface.

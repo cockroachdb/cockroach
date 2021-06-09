@@ -130,6 +130,12 @@ message BackupDetails {
   // written, i.e. the URI the user provided before a chosen suffix was appended
   // to its path.
   string collection_URI = 8 [(gogoproto.customname) = "CollectionURI"];
+
+  // MinReadDelaySeconds specifies a minimum amount by which EndTime must be in
+  // the past before bulk reads should start, to avoid transaction contention.
+  int64 min_read_delay_seconds = 10;
+
+  // NEXT ID: 11.
 }
 
 message BackupProgress {

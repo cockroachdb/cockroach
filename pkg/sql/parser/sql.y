@@ -717,7 +717,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH
+%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MIN_READ_DELAY_SECONDS MINUTE MODIFYCLUSTERSETTING MONTH
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -2437,6 +2437,7 @@ opt_clear_data:
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
 //    include_deprecated_interleaves: allow backing up interleaved tables, even if future versions will be unable to restore.
+//    min_read_delay_seconds: wait to start until the backup read-time (specified by AS OF SYSTEM TIME or chosen automatically) is in the past
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2545,6 +2546,10 @@ backup_options:
 | INCLUDE_DEPRECATED_INTERLEAVES
   {
     $$.val = &tree.BackupOptions{IncludeDeprecatedInterleaves: true}
+  }
+| MIN_READ_DELAY_SECONDS '=' iconst64
+  {
+    $$.val = &tree.BackupOptions{MinReadDelaySeconds: $3.int64()}
   }
 
 
@@ -12667,6 +12672,7 @@ unreserved_keyword:
 | MAXVALUE
 | MERGE
 | METHOD
+| MIN_READ_DELAY_SECONDS
 | MINUTE
 | MINVALUE
 | MODIFYCLUSTERSETTING

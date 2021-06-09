@@ -944,6 +944,7 @@ unreserved_keyword ::=
 	| 'MAXVALUE'
 	| 'MERGE'
 	| 'METHOD'
+	| 'MIN_READ_DELAY_SECONDS'
 	| 'MINUTE'
 	| 'MINVALUE'
 	| 'MODIFYCLUSTERSETTING'
@@ -1786,6 +1787,7 @@ backup_options ::=
 	| 'DETACHED'
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCLUDE_DEPRECATED_INTERLEAVES'
+	| 'MIN_READ_DELAY_SECONDS' '=' iconst64
 
 c_expr ::=
 	d_expr
