@@ -41,6 +41,7 @@ type Config struct {
 	Clock              *hlc.Clock
 	Gossip             gossip.OptionalGossip
 	Spans              []roachpb.Span
+	BackfillCheckpoint []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
 	Sink               EventBufferWriter
 	Metrics            *Metrics
@@ -85,7 +86,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	f := newKVFeed(
-		cfg.Sink, cfg.Spans,
+		cfg.Sink, cfg.Spans, cfg.BackfillCheckpoint,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
@@ -131,6 +132,7 @@ func (e unsupportedSchemaChangeDetected) Error() string {
 
 type kvFeed struct {
 	spans               []roachpb.Span
+	checkpoint          []roachpb.Span
 	withDiff            bool
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
@@ -147,9 +149,11 @@ type kvFeed struct {
 	physicalFeed  physicalFeedFactory
 }
 
+// TODO(yevgeniy): This method is a kitchen sink. Refactor.
 func newKVFeed(
 	sink EventBufferWriter,
 	spans []roachpb.Span,
+	checkpoint []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff bool,
@@ -163,6 +167,7 @@ func newKVFeed(
 	return &kvFeed{
 		sink:                sink,
 		spans:               spans,
+		checkpoint:          checkpoint,
 		withInitialBackfill: withInitialBackfill,
 		withDiff:            withDiff,
 		initialHighWater:    initialHighWater,
@@ -185,6 +190,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if err = f.scanIfShould(ctx, initialScan, highWater); err != nil {
 			return err
 		}
+
+		// TODO(yevgeniy): Consider using checkpoint here as well.
 		highWater, err = f.runUntilTableEvent(ctx, highWater)
 		if err != nil {
 			return err
@@ -212,8 +219,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		// we should do so.
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||
 			boundaryType == jobspb.ResolvedSpan_RESTART {
-			for _, span := range f.spans {
-				if err := f.sink.AddResolved(ctx, span, highWater, boundaryType); err != nil {
+			for _, sp := range f.spans {
+				if err := f.sink.AddResolved(ctx, sp, highWater, boundaryType); err != nil {
 					return err
 				}
 			}
@@ -241,6 +248,35 @@ func isRegionalByRowChange(events []schemafeed.TableEvent) bool {
 		}
 	}
 	return false
+}
+
+// filterCheckpointSpans filters spans which have already been completed,
+// and returns the list of spans that still need to be done.
+func filterCheckpointSpans(spans []roachpb.Span, completed []roachpb.Span) ([]roachpb.Span, error) {
+	// Create frontier to help filtering out completed spans.
+	frontier, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Advance completed spans forward a bit.
+	cutoff := hlc.Timestamp{}.Next()
+	for _, sp := range completed {
+		if _, err := frontier.Forward(sp, cutoff); err != nil {
+			return nil, err
+		}
+	}
+
+	var filtered []roachpb.Span
+	for _, sp := range spans {
+		frontier.SpanEntries(sp, func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			if ts.Less(cutoff) {
+				filtered = append(filtered, s)
+			}
+			return span.ContinueMatch
+		})
+	}
+	return filtered, nil
 }
 
 func (f *kvFeed) scanIfShould(
@@ -294,6 +330,16 @@ func (f *kvFeed) scanIfShould(
 	// Consume the events up to scanTime.
 	if _, err := f.tableFeed.Pop(ctx, scanTime); err != nil {
 		return err
+	}
+
+	// If we have initial checkpoint information specified, filter out
+	// spans which we no longer need to scan.
+	if initialScan {
+		filtered, err := filterCheckpointSpans(spansToBackfill, f.checkpoint)
+		if err != nil {
+			return err
+		}
+		spansToBackfill = filtered
 	}
 
 	if (!isInitialScan && f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyNoBackfill) ||

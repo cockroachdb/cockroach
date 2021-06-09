@@ -40,14 +40,16 @@ func TestKVFeed(t *testing.T) {
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
-	kv := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
+
+	mkKey := func(tableID uint32, k string) roachpb.Key {
 		vDatum := tree.DString(k)
 		key, err := rowenc.EncodeTableKey(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
-		if err != nil {
-			panic(err)
-		}
+		require.NoError(t, err)
+		return key
+	}
+	kv := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
 		return roachpb.KeyValue{
-			Key: key,
+			Key: mkKey(tableID, k),
 			Value: roachpb.Value{
 				RawBytes:  []byte(v),
 				Timestamp: ts,
@@ -81,6 +83,7 @@ func TestKVFeed(t *testing.T) {
 		schemaChangePolicy changefeedbase.SchemaChangePolicy
 		initialHighWater   hlc.Timestamp
 		spans              []roachpb.Span
+		checkpoint         []roachpb.Span
 		events             []roachpb.RangeFeedEvent
 
 		descs []catalog.TableDescriptor
@@ -111,7 +114,7 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
-		f := newKVFeed(buf, tc.spans,
+		f := newKVFeed(buf, tc.spans, tc.checkpoint,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater,
@@ -122,12 +125,15 @@ func TestKVFeed(t *testing.T) {
 		g.GoCtx(func(ctx context.Context) error {
 			return f.run(ctx)
 		})
+		spansToScan, err := filterCheckpointSpans(tc.spans, tc.checkpoint)
+		require.NoError(t, err)
 		testG := ctxgroup.WithContext(ctx)
 		testG.GoCtx(func(ctx context.Context) error {
 			for expScans := tc.expScans; len(expScans) > 0; expScans = expScans[1:] {
 				scan := <-scans
 				assert.Equal(t, expScans[0], scan.Timestamp)
 				assert.Equal(t, tc.withDiff, scan.WithDiff)
+				assert.Equal(t, spansToScan, scan.Spans)
 			}
 			return nil
 		})
@@ -155,6 +161,13 @@ func TestKVFeed(t *testing.T) {
 	}
 	makeTableDesc := schematestutils.MakeTableDesc
 	addColumnDropBackfillMutation := schematestutils.AddColumnDropBackfillMutation
+
+	makeSpan := func(tableID uint32, start, end string) (s roachpb.Span) {
+		s.Key = mkKey(tableID, start)
+		s.EndKey = mkKey(tableID, end)
+		return s
+	}
+
 	for _, tc := range []testCase{
 		{
 			name:               "no events - backfill",
@@ -167,6 +180,45 @@ func TestKVFeed(t *testing.T) {
 			},
 			events: []roachpb.RangeFeedEvent{
 				kvEvent(42, "a", "b", ts(3)),
+			},
+			expScans: []hlc.Timestamp{
+				ts(2),
+			},
+			expEvents: 1,
+		},
+		{
+			name:               "no events -  full checkpoint",
+			schemaChangeEvents: changefeedbase.OptSchemaChangeEventClassDefault,
+			schemaChangePolicy: changefeedbase.OptSchemaChangePolicyBackfill,
+			needsInitialScan:   true,
+			initialHighWater:   ts(2),
+			spans: []roachpb.Span{
+				tableSpan(42),
+			},
+			checkpoint: []roachpb.Span{
+				tableSpan(42),
+			},
+			events: []roachpb.RangeFeedEvent{
+				kvEvent(42, "a", "b", ts(3)),
+			},
+			expScans:  []hlc.Timestamp{},
+			expEvents: 1,
+		},
+		{
+			name:               "no events - partial backfill",
+			schemaChangeEvents: changefeedbase.OptSchemaChangeEventClassDefault,
+			schemaChangePolicy: changefeedbase.OptSchemaChangePolicyBackfill,
+			needsInitialScan:   true,
+			initialHighWater:   ts(2),
+			spans: []roachpb.Span{
+				tableSpan(42),
+			},
+			checkpoint: []roachpb.Span{
+				makeSpan(42, "a", "q"),
+			},
+			events: []roachpb.RangeFeedEvent{
+				kvEvent(42, "a", "val", ts(3)),
+				kvEvent(42, "d", "val", ts(3)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
