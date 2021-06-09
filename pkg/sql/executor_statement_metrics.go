@@ -124,7 +124,7 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 	}
 
-	stmtID, err := ex.statsCollector.recordStatement(
+	stmtFingerprintID, err := ex.statsCollector.recordStatement(
 		ctx, stmt, planner.instrumentation.PlanForStats(ctx),
 		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn),
@@ -143,18 +143,18 @@ func (ex *connExecutor) recordStatementSummary(
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
 
-	// We limit the number of statementIDs stored for a transaction, as dictated
-	// by the TxnStatsNumStmtIDsToRecord cluster setting.
-	maxStmtIDsLen := TxnStatsNumStmtIDsToRecord.Get(&ex.server.cfg.Settings.SV)
-	if int64(len(ex.extraTxnState.transactionStatementIDs)) < maxStmtIDsLen {
-		ex.extraTxnState.transactionStatementIDs = append(
-			ex.extraTxnState.transactionStatementIDs, stmtID)
+	// We limit the number of statementFingerprintIDs stored for a transaction, as dictated
+	// by the TxnStatsNumStmtFingerprintIDsToRecord cluster setting.
+	maxStmtFingerprintIDsLen := TxnStatsNumStmtFingerprintIDsToRecord.Get(&ex.server.cfg.Settings.SV)
+	if int64(len(ex.extraTxnState.transactionStatementFingerprintIDs)) < maxStmtFingerprintIDsLen {
+		ex.extraTxnState.transactionStatementFingerprintIDs = append(
+			ex.extraTxnState.transactionStatementFingerprintIDs, stmtFingerprintID)
 	}
 	// Add the current statement's ID to the hash. We don't track queries issued
 	// by the internal executor, in which case the hash is uninitialized, and
 	// can therefore be safely ignored.
 	if ex.extraTxnState.transactionStatementsHash.IsInitialized() {
-		ex.extraTxnState.transactionStatementsHash.Add(uint64(stmtID))
+		ex.extraTxnState.transactionStatementsHash.Add(uint64(stmtFingerprintID))
 	}
 	ex.extraTxnState.numRows += rowsAffected
 
