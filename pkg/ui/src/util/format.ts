@@ -152,3 +152,8 @@ export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
 };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] h:mm A";
+
+/**
+ * Alternate 24 hour UTC format
+ */
+export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] HH:mm UTC";
