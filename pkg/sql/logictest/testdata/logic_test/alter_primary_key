@@ -725,6 +725,17 @@ CREATE TABLE t2 (x INT, y INT, PRIMARY KEY (x, y), FAMILY (x, y)) INTERLEAVE IN 
 ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (x, y);
 DROP TABLE t1
 
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE public.t2 (
+    x INT8 NOT NULL,
+    y INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+    UNIQUE INDEX t2_x_y_key (x ASC, y ASC),
+    FAMILY fam_0_x_y (x, y)
+)
+
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT NOT NULL);
@@ -1312,10 +1323,10 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id  DESC
-t1_id_id2_key  id  ASC
+primary        id   DESC
+t1_id_id2_key  id   ASC
 t1_id_id2_key  id2  ASC
-t1_id_key id  ASC
+t1_id_key      id   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1323,10 +1334,10 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id  DESC
-t1_id_id2_key  id  ASC
+primary        id   DESC
+t1_id_id2_key  id   ASC
 t1_id_id2_key  id2  ASC
-t1_id_key id  ASC
+t1_id_key      id   ASC
 
 statement ok
 alter table t1 alter primary key using columns(id) USING HASH WITH BUCKET_COUNT = 10
@@ -1349,6 +1360,11 @@ CREATE TABLE parent3 (x INT, y INT, PRIMARY KEY (x, y), FAMILY (x, y));
 
 statement ok
 CREATE TABLE child3 (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y, z));
+
+query TTT
+select index_name,column_name,direction from [show indexes from child3];
+----
+primary  x  ASC
 
 statement ok
 INSERT INTO parent3 VALUES (1, 2), (4, 5);
@@ -1395,6 +1411,24 @@ child3_x_key      y  ASC
 child3_x_y_z_key  x  ASC
 child3_x_y_z_key  y  ASC
 child3_x_y_z_key  z  ASC
+
+# De-interleave the table and show that the indexes are dropped.
+
+statement ok
+ALTER TABLE child3 ALTER PRIMARY KEY USING COLUMNS (x, y)
+
+query TTT
+select index_name,column_name,direction from [show indexes from child3];
+----
+primary           x  ASC
+primary           y  ASC
+child3_x_key      x  ASC
+child3_x_key      y  ASC
+child3_x_y_z_key  x  ASC
+child3_x_y_z_key  y  ASC
+child3_x_y_z_key  z  ASC
+child3_x_y_key    x  ASC
+child3_x_y_key    y  ASC
 
 statement ok
 drop table t1;
