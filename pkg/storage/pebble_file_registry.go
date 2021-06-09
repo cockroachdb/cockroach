@@ -101,6 +101,12 @@ func (r *PebbleFileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 
 // SetFileEntry sets filename => entry in the registry map and persists the registry.
 func (r *PebbleFileRegistry) SetFileEntry(filename string, entry *enginepb.FileEntry) error {
+	// We choose not to store an entry for unencrypted files since the absence of
+	// a file in the file registry implies that it is unencrypted.
+	if entry != nil && entry.EnvType == enginepb.EnvType_Plaintext {
+		return r.MaybeDeleteEntry(filename)
+	}
+
 	filename = r.tryMakeRelativePath(filename)
 	newProto := &enginepb.FileRegistry{}
 
