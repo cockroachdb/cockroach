@@ -195,11 +195,9 @@ vectorized: true
     │ columns: (a, b, c)
     │ estimated row count: 1,000 (missing stats)
     │ distinct on: a, c
-    │ order key: a
     │
     └── • scan
           columns: (a, b, c)
-          ordering: +a
           estimated row count: 1,000 (missing stats)
           table: abc@primary
           spans: FULL SCAN
@@ -214,11 +212,9 @@ vectorized: true
 │ columns: (b, c, a)
 │ estimated row count: 1,000 (missing stats)
 │ distinct on: a, c
-│ order key: a
 │
 └── • scan
       columns: (a, b, c)
-      ordering: +a
       estimated row count: 1,000 (missing stats)
       table: abc@primary
       spans: FULL SCAN
@@ -313,18 +309,16 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 distribution: local
 vectorized: true
 ·
-• distinct
+• sort
 │ columns: (y, z, x)
 │ ordering: +z
 │ estimated row count: 1,000 (missing stats)
-│ distinct on: x, z
-│ order key: z
+│ order: +z
 │
-└── • sort
+└── • distinct
     │ columns: (x, y, z)
-    │ ordering: +z
     │ estimated row count: 1,000 (missing stats)
-    │ order: +z
+    │ distinct on: x, z
     │
     └── • scan
           columns: (x, y, z)
@@ -610,18 +604,16 @@ vectorized: true
 • project
 │ columns: (pk1)
 │
-└── • distinct
+└── • sort
     │ columns: (x, y, z, pk1)
     │ ordering: +x
     │ estimated row count: 1,000 (missing stats)
-    │ distinct on: x, y, z
-    │ order key: x
+    │ order: +x
     │
-    └── • sort
+    └── • distinct
         │ columns: (x, y, z, pk1)
-        │ ordering: +x
         │ estimated row count: 1,000 (missing stats)
-        │ order: +x
+        │ distinct on: x, y, z
         │
         └── • scan
               columns: (x, y, z, pk1)

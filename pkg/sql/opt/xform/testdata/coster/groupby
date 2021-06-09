@@ -9,7 +9,7 @@ group-by
  ├── columns: max:7!null min:8!null i:2 s:3
  ├── grouping columns: i:2 s:3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- ├── cost: 1144.73
+ ├── cost: 1144.87625
  ├── key: (2,3)
  ├── fd: (2,3)-->(7,8)
  ├── scan a
