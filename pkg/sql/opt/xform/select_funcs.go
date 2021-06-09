@@ -916,8 +916,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 
 	fixedCols := memo.ExtractConstColumns(filters, c.e.evalCtx)
 
-	if fixedCols.Len() == 0 {
-		// Zigzagging isn't helpful in the absence of fixed columns.
+	if fixedCols.Len() < 2 {
+		// Zigzagging requires at least 2 columns to have fixed values.
 		return
 	}
 
