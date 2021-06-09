@@ -934,6 +934,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecwindow/rank.eg.go \
   pkg/sql/colexec/colexecwindow/relative_rank.eg.go \
   pkg/sql/colexec/colexecwindow/row_number.eg.go \
+  pkg/sql/colexec/colexecwindow/window_framer.eg.go \
   pkg/sql/colexec/colexecwindow/window_peer_grouper.eg.go
 
 OPTGEN_TARGETS = \
