@@ -749,26 +749,37 @@ func init() {
 		// commands, ensure the isSQLCommand() predicate is updated accordingly.
 		boolFlag(f, &sqlConnCtx.Echo, cliflags.EchoSQL)
 
-		if cmd != demoCmd {
-			varFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
-			stringFlag(f, &cliCtx.sqlConnUser, cliflags.User)
-
-			// Even though SQL commands take their connection parameters via
-			// --url / --user (see above), the urlParser{} struct internally
-			// needs the ClientHost and ClientPort flags to be defined -
-			// even if they are invisible - due to the way initialization from
-			// env vars is implemented.
-			//
-			// TODO(knz): if/when env var option initialization is deferred
-			// to parse time, this can be removed.
-			varFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
-			_ = f.MarkHidden(cliflags.ClientHost.Name)
-			stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
-			_ = f.MarkHidden(cliflags.ClientPort.Name)
+		varFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
+		stringFlag(f, &cliCtx.sqlConnUser, cliflags.User)
+		if cmd == demoCmd {
+			// The 'demo' command does not really support --url or --user.
+			// However, we create the pflag instance so that the user
+			// can use \connect inside the shell session.
+			_ = f.MarkHidden(cliflags.URL.Name)
+			_ = f.MarkHidden(cliflags.User.Name)
 		}
 
-		if cmd == sqlShellCmd {
+		// Even though SQL commands take their connection parameters via
+		// --url / --user (see above), the urlParser{} struct internally
+		// needs the ClientHost and ClientPort flags to be defined -
+		// even if they are invisible - due to the way initialization from
+		// env vars is implemented.
+		//
+		// TODO(knz): if/when env var option initialization is deferred
+		// to parse time, this can be removed.
+		varFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
+		_ = f.MarkHidden(cliflags.ClientHost.Name)
+		stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
+		_ = f.MarkHidden(cliflags.ClientPort.Name)
+
+		if cmd == sqlShellCmd || cmd == demoCmd {
 			stringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database)
+			if cmd == demoCmd {
+				// As above, 'demo' does not really support --database.
+				// However, we create the pflag instance so that
+				// the user can use \connect inside the shell.
+				_ = f.MarkHidden(cliflags.Database.Name)
+			}
 		}
 	}
 
