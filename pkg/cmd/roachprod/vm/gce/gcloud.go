@@ -277,7 +277,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Image to use to create the vm, "+
 			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
 
-	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 0,
+	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
 	flags.StringVar(&o.PDVolumeType, ProviderName+"-pd-volume-type", "pd-ssd",
 		"Type of the persistent disk volume, only used if local-ssd=false")
