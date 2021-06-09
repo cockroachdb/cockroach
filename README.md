@@ -9,7 +9,7 @@ scale, and manage modern, data-intensive applications.
 
 - [What is CockroachDB?](#what-is-cockroachdb)
 - [Docs](#docs)
-- [Starting with Cockroach Cloud](#starting-with-cockroach-cloud)
+- [Starting with Cockroach Cloud](#starting-with-cockroachcloud)
 - [Starting with CockroachDB](#starting-with-cockroachdb)
 - [Client Drivers](#client-drivers)
 - [Deployment](#deployment)
