@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -68,7 +69,9 @@ Query Buffer
   \| CMD            run an external command and run its output as SQL statements.
 
 Connection
-  \c, \connect [DB] connect to a new database
+  \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
+                    connect to a server or print the current connection URL.
+                    (Omitted values reuse previous parameters. Use '-' to skip a field.)
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
@@ -132,6 +135,8 @@ Open a sql shell running against a cockroach database.
 // across multiple instances of cliState (e.g. across file inclusion
 // with \i).
 type cliState struct {
+	cmd *cobra.Command
+
 	conn *sqlConn
 	// ins is used to read lines if isInteractive is true.
 	ins readline.EditLine
@@ -1156,12 +1161,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 
 	case `\connect`, `\c`:
-		if len(cmd) == 2 {
-			c.concatLines = `USE ` + cmd[1]
-			return cliRunStatement
-
-		}
-		return c.invalidSyntax(errState, `%s. Try \? for help`, c.lastInputLine)
+		return c.handleConnect(cmd[1:], loopState, errState)
 
 	case `\x`:
 		format := tableDisplayRecords
@@ -1197,6 +1197,114 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	}
 
 	return loopState
+}
+
+func (c *cliState) handleConnect(
+	cmd []string, loopState, errState cliStateEnum,
+) (resState cliStateEnum) {
+	firstArgIsURL := len(cmd) > 0 &&
+		(strings.HasPrefix(cmd[0], "postgres://") ||
+			strings.HasPrefix(cmd[0], "postgresql://"))
+	if len(cmd) == 1 && !firstArgIsURL {
+		// Special case; handled entirely locally.
+		c.concatLines = `USE ` + cmd[0]
+		return cliRunStatement
+	}
+
+	if err := c.handleConnectInternal(cmd, firstArgIsURL); err != nil {
+		fmt.Fprintln(stderr, err)
+		c.exitErr = err
+		return errState
+	}
+	return loopState
+}
+
+func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error {
+	if len(cmd) == 1 && firstArgIsURL {
+		// Special case: a URL provides all the details.
+		// Parse it as if --url was specified.
+		up := urlParser{cmd: c.cmd, cliCtx: &cliCtx}
+		if err := up.setInternal(cmd[0], false /* warn */); err != nil {
+			return err
+		}
+		return c.switchToURL(cliCtx.sqlConnURL)
+	}
+
+	// currURL is the previous connection URL up to this point.
+	currURL, err := pgurl.Parse(c.conn.url)
+	if err != nil {
+		return errors.Wrap(err, "parsing current connection URL")
+	}
+
+	// newURL will be our new connection URL past this point.
+	newURL := pgurl.New()
+	// Populate the main fields from the current URL.
+	_, prevhost, prevport := currURL.GetNetworking()
+	newURL.
+		WithDefaultHost(prevhost).
+		WithDefaultPort(prevport).
+		WithDefaultDatabase(currURL.GetDatabase()).
+		WithDefaultUsername(currURL.GetUsername())
+
+	// Parse the arguments to \connect:
+	// it accepts newdb, user, host, port in that order.
+	// Each field can be marked as "-" to reuse the current defaults.
+	switch len(cmd) {
+	case 4:
+		if cmd[3] != "-" {
+			if err := newURL.SetOption("port", cmd[3]); err != nil {
+				return err
+			}
+		}
+		fallthrough
+	case 3:
+		if cmd[2] != "-" {
+			if err := newURL.SetOption("host", cmd[2]); err != nil {
+				return err
+			}
+		}
+		fallthrough
+	case 2:
+		if cmd[1] != "-" {
+			if err := newURL.SetOption("user", cmd[1]); err != nil {
+				return err
+			}
+		}
+		fallthrough
+	case 1:
+		if cmd[0] != "-" {
+			if err := newURL.SetOption("database", cmd[0]); err != nil {
+				return err
+			}
+		}
+	case 0:
+		// Just print the current connection settings.
+		fmt.Printf("Connection string: %s\n", currURL.ToPQ())
+		fmt.Printf("You are connected to database %q as user %q.\n", currURL.GetDatabase(), currURL.GetUsername())
+		return nil
+
+	default:
+		return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
+	}
+
+	if err := newURL.Validate(); err != nil {
+		return errors.Wrap(err, "validating the new URL")
+	}
+
+	fmt.Println("using new connection URL:", newURL)
+
+	return c.switchToURL(newURL)
+}
+
+func (c *cliState) switchToURL(newURL *pgurl.URL) error {
+	// Ensure the new connection will prompt for a password if the
+	// server requires one.
+	usePw, pwdSet, _ := newURL.GetAuthnPassword()
+	c.conn.passwordMissing = !usePw || !pwdSet
+
+	c.conn.Close()
+	c.conn.url = newURL.ToPQ().String()
+	return nil
 }
 
 const maxRecursionLevels = 10
@@ -1241,6 +1349,7 @@ func (c *cliState) runInclude(
 	}()
 
 	newState := cliState{
+		cmd:        c.cmd,
 		conn:       c.conn,
 		includeDir: filepath.Dir(filename),
 		ins:        noLineEditor,
@@ -1437,8 +1546,9 @@ func (c *cliState) doDecidePath() cliStateEnum {
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(conn *sqlConn, cmdIn *os.File) (exitErr error) {
+func runInteractive(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) (exitErr error) {
 	c := cliState{
+		cmd:        cmd,
 		conn:       conn,
 		includeDir: ".",
 	}
@@ -1707,7 +1817,7 @@ func runClient(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) error {
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	return runInteractive(conn, cmdIn)
+	return runInteractive(cmd, conn, cmdIn)
 }
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is
