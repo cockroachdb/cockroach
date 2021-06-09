@@ -587,7 +587,10 @@ func readPostgresStmt(
 			PartitionByIndex: stmt.PartitionByIndex,
 		}
 		if stmt.Unique {
-			idx = &tree.UniqueConstraintTableDef{IndexTableDef: *idx.(*tree.IndexTableDef)}
+			idx = &tree.UniqueConstraintTableDef{
+				IndexTableDef: *idx.(*tree.IndexTableDef),
+				ExplicitIndex: true,
+			}
 		}
 		create.Defs = append(create.Defs, idx)
 	case *tree.AlterSchema:

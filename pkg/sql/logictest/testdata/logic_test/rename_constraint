@@ -16,9 +16,9 @@ CREATE TABLE public.t (
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    CONSTRAINT cf FOREIGN KEY (x) REFERENCES public.t(x),
-   UNIQUE INDEX cu (x ASC),
    FAMILY "primary" (x, y, rowid),
-   CONSTRAINT cc CHECK (x > 10:::INT8)
+   CONSTRAINT cc CHECK (x > 10:::INT8),
+   CONSTRAINT cu UNIQUE (x)
 )
 
 query TT
@@ -44,9 +44,9 @@ CREATE TABLE public.t (
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    CONSTRAINT cf2 FOREIGN KEY (x) REFERENCES public.t(x),
-   UNIQUE INDEX cu2 (x ASC),
    FAMILY "primary" (x, y, rowid),
-   CONSTRAINT cc2 CHECK (x > 10:::INT8)
+   CONSTRAINT cc2 CHECK (x > 10:::INT8),
+   CONSTRAINT cu2 UNIQUE (x)
 )
 
 query TT
@@ -96,9 +96,9 @@ CREATE TABLE public.t (
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    CONSTRAINT cf4 FOREIGN KEY (x) REFERENCES public.t(x),
-   UNIQUE INDEX cu4 (x ASC),
    FAMILY "primary" (x, y, rowid),
-   CONSTRAINT cc4 CHECK (x > 10:::INT8)
+   CONSTRAINT cc4 CHECK (x > 10:::INT8),
+   CONSTRAINT cu4 UNIQUE (x)
 )
 
 query TT

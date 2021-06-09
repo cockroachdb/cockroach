@@ -142,7 +142,7 @@ func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
 	segments := make([]string, 0, len(idx.KeyColumnNames)+2)
 	segments = append(segments, tableDesc.Name)
 	segments = append(segments, idx.KeyColumnNames[idx.ExplicitColumnStartIdx():]...)
-	if idx.Unique {
+	if idx.Unique && !idx.CreatedExplicitly {
 		segments = append(segments, "key")
 	} else {
 		segments = append(segments, "idx")
@@ -275,8 +275,8 @@ func (desc *wrapper) ForeachDependedOnBy(
 	return nil
 }
 
-// ForeachOutboundFK calls f for every outbound foreign key in desc until an
-// error is returned.
+// ForeachOutboundFK calls f for every public outbound foreign key in desc
+// until an error is returned.
 func (desc *wrapper) ForeachOutboundFK(
 	f func(constraint *descpb.ForeignKeyConstraint) error,
 ) error {

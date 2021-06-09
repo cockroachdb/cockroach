@@ -130,10 +130,12 @@ CREATE TABLE like_table (
   k INT UNIQUE WITHOUT INDEX,
   PRIMARY KEY (a, b),
   UNIQUE INDEX foo (b DESC, c),
+  UNIQUE INDEX (b, c DESC NULLS LAST),
   INDEX (c) STORING (j),
   INVERTED INDEX (j),
   UNIQUE WITHOUT INDEX (h),
-  UNIQUE WITHOUT INDEX (h) WHERE h > 0
+  UNIQUE WITHOUT INDEX (h) WHERE h > 0,
+  UNIQUE (h, b)
 )
 
 statement ok
@@ -191,9 +193,11 @@ like_indexes  CREATE TABLE public.like_indexes (
               k INT8 NULL,
               CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
+              UNIQUE INDEX like_table_b_c_idx (b ASC, c DESC),
               INDEX like_table_c_idx (c ASC) STORING (j),
               INVERTED INDEX like_table_j_idx (j),
-              FAMILY "primary" (a, b, c, h, j, k)
+              FAMILY "primary" (a, b, c, h, j, k),
+              CONSTRAINT like_table_h_b_key UNIQUE (h, b)
 )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -248,10 +252,12 @@ like_all  CREATE TABLE public.like_all (
           k INT8 NULL,
           CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
           UNIQUE INDEX foo (b DESC, c ASC),
+          UNIQUE INDEX like_table_b_c_idx (b ASC, c DESC),
           INDEX like_table_c_idx (c ASC) STORING (j),
           INVERTED INDEX like_table_j_idx (j),
           FAMILY "primary" (a, b, c, h, j, k),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
+          CONSTRAINT like_table_h_b_key UNIQUE (h, b),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
           CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
           CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8
@@ -274,9 +280,11 @@ like_mixed  CREATE TABLE public.like_mixed (
             k INT8 NULL,
             CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
+            UNIQUE INDEX like_table_b_c_idx (b ASC, c DESC),
             INDEX like_table_c_idx (c ASC) STORING (j),
             INVERTED INDEX like_table_j_idx (j),
-            FAMILY "primary" (a, b, c, h, j, k)
+            FAMILY "primary" (a, b, c, h, j, k),
+            CONSTRAINT like_table_h_b_key UNIQUE (h, b)
 )
 
 statement ok
@@ -395,16 +403,22 @@ CREATE TABLE error (a INT UNIQUE WITHOUT INDEX, CONSTRAINT unique_a UNIQUE WITHO
 statement error pgcode 42710 duplicate constraint name: \"check_a\"
 CREATE TABLE error (a INT CHECK (a > 5), CONSTRAINT check_a CHECK (a > 5))
 
-statement error pgcode 0A000 unique constraints without an index cannot store columns
+statement error pgcode 42601 HINT: UNIQUE constraint cannot contain a STORING clause, consider using UNIQUE INDEX
 CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) STORING (b))
 
-statement error pgcode 0A000 interleaved unique constraints without an index are not supported
+statement error pgcode 42601 HINT: UNIQUE constraint cannot contain a INTERLEAVE clause, consider using UNIQUE INDEX
 CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) INTERLEAVE IN PARENT foo (b))
 
-statement error pgcode 0A000 partitioned unique constraints without an index are not supported
+statement error pgcode 42601 HINT: UNIQUE constraint cannot contain a PARTITION BY clause, consider using UNIQUE INDEX
 CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) PARTITION BY LIST (b) (
   PARTITION p1 VALUES IN (1)
 ))
+
+statement error pgcode 42601 HINT: UNIQUE constraint column a DESC contains illegal direction specification, consider using UNIQUE INDEX
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a DESC))
+
+statement error pgcode 42601 HINT: UNIQUE constraint column a NULLS FIRST contains illegal nulls order specification, consider using UNIQUE INDEX
+CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a NULLS FIRST))
 
 # The unique constraint predicate must be valid. It cannot reference
 # non-existent columns.
@@ -442,3 +456,26 @@ CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_transaction_statistics);
 
 query error crdb_internal.node_txn_stats cannot be used in this context
 CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);
+
+
+# Test that it is illegal to mark a PRIMARY KEY or UNIQUE clause as NOT VALID,
+# but is legal to mark a UNIQUE WITHOUT INDEX clause as NOT VALID.
+subtest unique_not_valid
+
+statement ok
+DROP TABLE IF EXISTS t CASCADE;
+
+statement error pgcode 42601 UNIQUE constraints cannot be marked NOT VALID
+CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE (j) NOT VALID)
+
+statement error pgcode 42601 PRIMARY KEY constraints cannot be marked NOT VALID
+CREATE TABLE t (i INT, j INT, PRIMARY KEY (i, j) NOT VALID)
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE WITHOUT INDEX (j) NOT VALID);
+
+statement error pgcode 23505 duplicate key value violates unique constraint "unique_j"
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement ok
+DROP TABLE t;

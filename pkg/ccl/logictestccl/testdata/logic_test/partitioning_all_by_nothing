@@ -7,7 +7,7 @@ statement error cannot define PARTITION BY on an unique constraint if the table 
 CREATE TABLE partition_all_by_nothing_with_partition (
   pk INT PRIMARY KEY,
   a INT,
-  UNIQUE(b) PARTITION BY NOTHING,
+  UNIQUE INDEX(b) PARTITION BY NOTHING,
   b INT,
   INDEX(b) PARTITION BY LIST(b) (PARTITION one VALUES IN (1)),
   FAMILY (pk, a, b)
@@ -17,7 +17,7 @@ statement ok
 CREATE TABLE partition_all_by_nothing (
   pk INT PRIMARY KEY,
   a INT,
-  UNIQUE(b),
+  UNIQUE INDEX(b),
   b INT,
   INDEX(b),
   c INT UNIQUE,
@@ -33,10 +33,10 @@ CREATE TABLE public.partition_all_by_nothing (
                             b INT8 NULL,
                             c INT8 NULL,
                             CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-                            UNIQUE INDEX partition_all_by_nothing_c_key (c ASC),
                             UNIQUE INDEX partition_all_by_nothing_b_key (b ASC),
                             INDEX partition_all_by_nothing_b_idx (b ASC),
-                            FAMILY fam_0_pk_a_b_c (pk, a, b, c)
+                            FAMILY fam_0_pk_a_b_c (pk, a, b, c),
+                            CONSTRAINT partition_all_by_nothing_c_key UNIQUE (c)
 ) PARTITION ALL BY NOTHING
 
 statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
@@ -54,9 +54,9 @@ CREATE TABLE public.partition_all_by_nothing (
                             b INT8 NULL,
                             c INT8 NULL,
                             CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-                            UNIQUE INDEX partition_all_by_nothing_c_key (c ASC),
                             UNIQUE INDEX partition_all_by_nothing_b_key (b ASC),
                             INDEX partition_all_by_nothing_b_idx (b ASC),
                             INDEX idx (pk ASC),
-                            FAMILY fam_0_pk_a_b_c (pk, a, b, c)
+                            FAMILY fam_0_pk_a_b_c (pk, a, b, c),
+                            CONSTRAINT partition_all_by_nothing_c_key UNIQUE (c)
 ) PARTITION ALL BY NOTHING

@@ -59,7 +59,7 @@ CREATE TABLE tab42147 (
   id INT8 NOT NULL,
   locality STRING,
   CONSTRAINT pk PRIMARY KEY (locality ASC, id ASC),
-  CONSTRAINT id UNIQUE (id ASC)
+  CONSTRAINT id UNIQUE (id)
 )
   PARTITION BY LIST (locality)
     (

@@ -154,15 +154,16 @@ func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
 }
 
 // PurposelyUnimplemented wraps Error, setting lastUnimplementedError.
-func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
+func (l *lexer) PurposelyUnimplemented(feature string, reasonFormat string, args ...interface{}) {
 	// We purposely do not use unimp here, as it appends hints to suggest that
 	// the error may be actively tracked as a bug.
-	l.lastError = errors.WithHint(
+	l.lastError = errors.WithHintf(
 		errors.WithTelemetry(
 			pgerror.Newf(pgcode.Syntax, "unimplemented: this syntax"),
 			fmt.Sprintf("sql.purposely_unimplemented.%s", feature),
 		),
-		reason,
+		reasonFormat,
+		args...,
 	)
 	l.populateErrorDetails()
 	l.lastError = &tree.UnsupportedError{

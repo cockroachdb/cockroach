@@ -558,6 +558,12 @@ func showConstraintClause(
 		if e.Hidden {
 			continue
 		}
+		// Do not display constraints currently being added but not
+		// yet validated.
+		if e.Validity != descpb.ConstraintValidity_Validated &&
+			e.Validity != descpb.ConstraintValidity_Unvalidated {
+			continue
+		}
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
 			f.WriteString("CONSTRAINT ")
@@ -571,11 +577,45 @@ func showConstraintClause(
 		}
 		f.WriteString(expr)
 		f.WriteString(")")
-		if e.Validity != descpb.ConstraintValidity_Validated {
+		switch e.Validity {
+		case descpb.ConstraintValidity_Unvalidated:
 			f.WriteString(" NOT VALID")
+		case descpb.ConstraintValidity_Validated:
+			// Fully added constraint
+		default:
+			// Constraint is in the process of being added.
+			continue
 		}
 	}
+	for _, idx := range desc.ActiveIndexes() {
+		if !idx.IsUnique() || idx.IsCreatedExplicitly() || idx.Primary() {
+			continue
+		}
+		f.WriteString(",\n\t")
+		if len(idx.GetName()) > 0 {
+			f.WriteString("CONSTRAINT ")
+			formatQuoteNames(&f.Buffer, idx.GetName())
+			f.WriteString(" ")
+		}
+		f.WriteString("UNIQUE ")
+		f.WriteString("(")
+		startIdx := idx.ExplicitColumnStartIdx()
+		for i := idx.ExplicitColumnStartIdx(); i < idx.NumKeyColumns(); i++ {
+			if i > startIdx {
+				f.WriteString(", ")
+			}
+			n := idx.GetKeyColumnName(i)
+			f.FormatNameP(&n)
+		}
+		f.WriteString(")")
+	}
 	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+		// Do not display constraints currently being added but not
+		// yet validated.
+		if c.Validity != descpb.ConstraintValidity_Validated &&
+			c.Validity != descpb.ConstraintValidity_Unvalidated {
+			continue
+		}
 		f.WriteString(",\n\t")
 		if len(c.Name) > 0 {
 			f.WriteString("CONSTRAINT ")
@@ -597,7 +637,7 @@ func showConstraintClause(
 			}
 			f.WriteString(pred)
 		}
-		if c.Validity != descpb.ConstraintValidity_Validated {
+		if c.Validity == descpb.ConstraintValidity_Unvalidated {
 			f.WriteString(" NOT VALID")
 		}
 	}

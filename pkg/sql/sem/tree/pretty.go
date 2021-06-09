@@ -1730,19 +1730,28 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//
 	clauses := make([]pretty.Doc, 0, 5)
 	var title pretty.Doc
-	if node.PrimaryKey {
-		title = pretty.Keyword("PRIMARY KEY")
+	if node.ExplicitIndex {
+		title = pretty.Keyword("UNIQUE INDEX")
+		if node.Name != "" {
+			title = pretty.ConcatSpace(title, p.Doc(&node.Name))
+		}
+		title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
 	} else {
-		title = pretty.Keyword("UNIQUE")
-		if node.WithoutIndex {
-			title = pretty.ConcatSpace(title, pretty.Keyword("WITHOUT INDEX"))
+		if node.PrimaryKey {
+			title = pretty.Keyword("PRIMARY KEY")
+		} else {
+			title = pretty.Keyword("UNIQUE")
+			if node.WithoutIndex {
+				title = pretty.ConcatSpace(title, pretty.Keyword("WITHOUT INDEX"))
+			}
+		}
+		title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
+		if node.Name != "" {
+			clauses = append(clauses, title)
+			title = pretty.ConcatSpace(pretty.Keyword("CONSTRAINT"), p.Doc(&node.Name))
 		}
 	}
-	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
-	if node.Name != "" {
-		clauses = append(clauses, title)
-		title = pretty.ConcatSpace(pretty.Keyword("CONSTRAINT"), p.Doc(&node.Name))
-	}
+
 	if node.Sharded != nil {
 		clauses = append(clauses, p.Doc(node.Sharded))
 	}

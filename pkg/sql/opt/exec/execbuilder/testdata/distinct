@@ -208,7 +208,7 @@ vectorized: true
       columns: (b, d)
       ordering: +d,+b
       estimated row count: 1,000 (missing stats)
-      table: abcd@abcd_d_b_key
+      table: abcd@abcd_d_b_idx
       spans: FULL SCAN
 
 query T

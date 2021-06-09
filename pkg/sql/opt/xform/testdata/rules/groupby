@@ -1927,7 +1927,7 @@ CREATE TABLE regional (
   c FLOAT,
   d INT,
   e INT,
-  UNIQUE (r, a, b) STORING (c),
+  UNIQUE INDEX (r, a, b) STORING (c),
   UNIQUE (r, d, e)
 )
 ----

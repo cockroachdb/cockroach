@@ -1190,7 +1190,7 @@ statement ok
 CREATE TABLE partition_by_nothing (
   pk INT PRIMARY KEY,
   a INT,
-  UNIQUE(b) PARTITION BY NOTHING,
+  UNIQUE INDEX(b) PARTITION BY NOTHING,
   b INT,
   INDEX(b) PARTITION BY NOTHING,
   FAMILY (pk, a, b)

@@ -226,9 +226,9 @@ all_interleaves                         CREATE TABLE public.all_interleaves (
                                         d INT8 NULL,
                                         CONSTRAINT "primary" PRIMARY KEY (b ASC),
                                         INDEX all_interleaves_c_idx (c ASC),
-                                        UNIQUE INDEX all_interleaves_d_key (d ASC),
+                                        UNIQUE INDEX all_interleaves_d_idx (d ASC),
                                         INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT public.p1_1 (c),
-                                        UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT public.p1_1 (d),
+                                        UNIQUE INDEX all_interleaves_d_c_idx (d ASC, c ASC) INTERLEAVE IN PARENT public.p1_1 (d),
                                         FAMILY "primary" (b, c, d)
 ) INTERLEAVE IN PARENT public.p1_1 (b)
 
@@ -516,7 +516,7 @@ select * from "".crdb_internal.interleaved;
 test  public        p1_1                      p1_id                    test   public  p1_1
 test  public        all_interleaves           primary                  test   public  p1_1
 test  public        all_interleaves           all_interleaves_c_d_idx  test   public  p1_1
-test  public        all_interleaves           all_interleaves_d_c_key  test   public  p1_1
+test  public        all_interleaves           all_interleaves_d_c_idx  test   public  p1_1
 test  public        orders                    primary                  test   public  customers
 test  public        interdb                   primary                  other  public  foo
 test  public        c20067                    primary                  test   public  p20067

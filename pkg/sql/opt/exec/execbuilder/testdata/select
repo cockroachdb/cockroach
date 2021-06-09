@@ -1025,7 +1025,7 @@ vectorized: true
 • scan
   columns: (f float)
   estimated row count: 1 (missing stats)
-  table: flt@flt_f_key
+  table: flt@flt_f_idx
   spans: /NaN-/NaN/PrefixEnd
 
 query T
@@ -1037,7 +1037,7 @@ vectorized: true
 • scan
   columns: (f float)
   estimated row count: 1 (missing stats)
-  table: flt@flt_f_key
+  table: flt@flt_f_idx
   spans: /NaN-/NaN/PrefixEnd
 
 query T
@@ -1086,7 +1086,7 @@ vectorized: true
 • scan
   columns: (i int)
   estimated row count: 1 (missing stats)
-  table: num@num_i_key
+  table: num@num_i_idx
   spans: /-1-/0
 
 query T
@@ -1098,7 +1098,7 @@ vectorized: true
 • scan
   columns: (f float)
   estimated row count: 1 (missing stats)
-  table: num@num_f_key
+  table: num@num_f_idx
   spans: /-1-/-1/PrefixEnd
 
 query T
@@ -1110,7 +1110,7 @@ vectorized: true
 • scan
   columns: (d decimal)
   estimated row count: 1 (missing stats)
-  table: num@num_d_key
+  table: num@num_d_idx
   spans: /-1-/-1/PrefixEnd
 
 query T
@@ -1122,7 +1122,7 @@ vectorized: true
 • scan
   columns: (n interval)
   estimated row count: 1 (missing stats)
-  table: num@num_n_key
+  table: num@num_n_idx
   spans: /-01:00:00-/1 day -25:00:00
 
 statement ok
@@ -1687,7 +1687,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: b@b_c_key
+  table: b@b_c_idx
   spans: [/10 - /10] [/20 - /20]
 
 query T
@@ -1698,7 +1698,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: b@b_c_key
+  table: b@b_c_idx
   spans: (/NULL - /1] [/10 - /10]
 
 statement ok
@@ -1714,7 +1714,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: b@b_d_key
+  table: b@b_d_idx
   spans: [/10 - /10] [/1 - /NULL)
 
 statement ok
@@ -1730,7 +1730,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: b@b_c_d_key
+  table: b@b_c_d_idx
   spans: [/NULL/1 - /NULL/1] [/10/10 - /10/10]
 
 statement ok
@@ -1748,7 +1748,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: b@b_b_key
+  table: b@b_b_idx
   spans: [/10 - /10] [/20 - /20]
 
 statement ok

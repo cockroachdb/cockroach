@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE INDEX (s DESC, d))
 ----
 
 exec-ddl
@@ -331,8 +331,8 @@ CREATE TABLE c (
     x INT NOT NULL,
     y INT,
     s STRING,
-    UNIQUE (x) WHERE s = 'foo',
-    UNIQUE (y) WHERE s = 'bar'
+    UNIQUE INDEX (x) WHERE s = 'foo',
+    UNIQUE INDEX (y) WHERE s = 'bar'
 )
 ----
 

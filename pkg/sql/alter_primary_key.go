@@ -367,6 +367,7 @@ func (p *planner) AlterPrimaryKey(
 		// Make the copy of the old primary index not-interleaved. This decision
 		// can be revisited based on user experience.
 		oldPrimaryIndexCopy.Interleave = descpb.InterleaveDescriptor{}
+		oldPrimaryIndexCopy.CreatedExplicitly = true
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
 			return err
 		}

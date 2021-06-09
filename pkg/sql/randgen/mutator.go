@@ -558,6 +558,9 @@ func foreignKeyMutator(
 				IndexTableDef: tree.IndexTableDef{
 					Columns: refColumns,
 				},
+				// Flip a coin to decide whether this is a unique index or
+				// a unique constraint.
+				ExplicitIndex: rng.Intn(2) == 1,
 			})
 
 			match := tree.MatchSimple
@@ -1021,7 +1024,7 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				case *tree.IndexTableDef:
 					idx = defType
 				case *tree.UniqueConstraintTableDef:
-					if !defType.PrimaryKey && !defType.WithoutIndex {
+					if !defType.PrimaryKey && !defType.WithoutIndex && defType.ExplicitIndex {
 						idx = &defType.IndexTableDef
 					}
 				}
@@ -1078,7 +1081,7 @@ func partialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				case *tree.IndexTableDef:
 					idx = defType
 				case *tree.UniqueConstraintTableDef:
-					if !defType.PrimaryKey && !defType.WithoutIndex {
+					if !defType.PrimaryKey && !defType.WithoutIndex && defType.ExplicitIndex {
 						idx = &defType.IndexTableDef
 					}
 				}

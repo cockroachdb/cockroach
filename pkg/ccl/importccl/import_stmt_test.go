@@ -5666,6 +5666,12 @@ func TestImportPgDump(t *testing.T) {
 						}
 					}
 				}
+				// Ensure that the unique index is not marked as a unique constraint
+				// by trying to drop it as a constraint.
+				sqlDB.ExpectErr(t,
+					"unimplemented: cannot drop UNIQUE constraint \"simple_b_s_idx\" "+
+						"using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
+					`ALTER TABLE simple DROP CONSTRAINT simple_b_s_idx`)
 			}
 
 			if c.expected == expectSecond || c.expected == expectAll {

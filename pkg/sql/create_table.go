@@ -641,21 +641,6 @@ func addUniqueWithoutIndexTableDef(
 			"unique constraints without an index are not yet supported",
 		)
 	}
-	if len(d.Storing) > 0 {
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"unique constraints without an index cannot store columns",
-		)
-	}
-	if d.Interleave != nil {
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"interleaved unique constraints without an index are not supported",
-		)
-	}
-	if d.PartitionByIndex.ContainsPartitions() {
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"partitioned unique constraints without an index are not supported",
-		)
-	}
 
 	// If there is a predicate, validate it.
 	var predicate string
@@ -1968,10 +1953,11 @@ func NewTableDesc(
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 			}
 			idx := descpb.IndexDescriptor{
-				Name:             string(d.Name),
-				Unique:           true,
-				StoreColumnNames: d.Storing.ToStrings(),
-				Version:          indexEncodingVersion,
+				Name:              string(d.Name),
+				Unique:            true,
+				StoreColumnNames:  d.Storing.ToStrings(),
+				Version:           indexEncodingVersion,
+				CreatedExplicitly: d.ExplicitIndex,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2609,6 +2595,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					def = &tree.UniqueConstraintTableDef{
 						IndexTableDef: indexDef,
 						PrimaryKey:    idx.Primary(),
+						ExplicitIndex: idx.IsCreatedExplicitly(),
 					}
 				}
 				if idx.IsPartial() {

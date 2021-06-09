@@ -410,7 +410,7 @@ CREATE TABLE public.t (
   pk int PRIMARY KEY,
   partition_by int,
   a int,
-  UNIQUE(a) PARTITION BY LIST (partition_by) (
+  UNIQUE INDEX (a) PARTITION BY LIST (partition_by) (
     PARTITION one VALUES IN (1)
   )
 ) PARTITION ALL BY LIST (partition_by) (
@@ -475,15 +475,15 @@ CREATE TABLE public.t (
   u STRING NULL,
   e INT8 NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-  UNIQUE INDEX t_u_key (u ASC),
   INDEX t_a_idx (a ASC),
-  UNIQUE INDEX t_b_key (b ASC),
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
-  UNIQUE INDEX t_e_key (e ASC),
-  UNIQUE INDEX unique_c_d (c ASC, d ASC),
-  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e),
+  CONSTRAINT t_u_key UNIQUE (u),
+  CONSTRAINT t_b_key UNIQUE (b),
+  CONSTRAINT t_e_key UNIQUE (e),
+  CONSTRAINT unique_c_d UNIQUE (c, d)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
@@ -567,15 +567,15 @@ CREATE TABLE public.t (
   e INT8 NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
   UNIQUE INDEX t_pk_key (pk ASC),
-  UNIQUE INDEX t_u_key (u ASC),
   INDEX t_a_idx (a ASC),
-  UNIQUE INDEX t_b_key (b ASC),
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
-  UNIQUE INDEX t_e_key (e ASC),
-  UNIQUE INDEX unique_c_d (c ASC, d ASC),
-  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e),
+  CONSTRAINT t_u_key UNIQUE (u),
+  CONSTRAINT t_b_key UNIQUE (b),
+  CONSTRAINT t_e_key UNIQUE (e),
+  CONSTRAINT unique_c_d UNIQUE (c, d)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
@@ -625,7 +625,7 @@ CREATE TABLE public.t (
   d int,
   INDEX (a),
   UNIQUE (b),
-  UNIQUE (c) WHERE d > 100,
+  UNIQUE INDEX (c) WHERE d > 100,
   INDEX (partition_by, c),
   FAMILY (pk, pk2, partition_by, a, b, c, d)
 ) PARTITION ALL BY RANGE (partition_by) (
@@ -673,11 +673,11 @@ CREATE TABLE public.t (
   d INT8 NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
   INDEX t_a_idx (a ASC),
-  UNIQUE INDEX t_b_key (b ASC),
   UNIQUE INDEX t_c_key (c ASC) WHERE d > 100:::INT8,
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   INDEX created_idx (c ASC),
-  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d (pk, pk2, partition_by, a, b, c, d)
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d (pk, pk2, partition_by, a, b, c, d),
+  CONSTRAINT t_b_key UNIQUE (b)
 ) PARTITION ALL BY RANGE (partition_by) (
   PARTITION one VALUES FROM (MINVALUE) TO (2),
   PARTITION two VALUES FROM (2) TO (MAXVALUE)
