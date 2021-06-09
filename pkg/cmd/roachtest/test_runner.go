@@ -636,53 +636,7 @@ func (r *testRunner) runTest(
 			}
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
-			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
-			if issues.DefaultOptionsFromEnv().CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				teams, err := team.DefaultLoadTeams()
-				if err != nil {
-					t.Fatalf("could not load teams: %v", err)
-				}
-				alias := ownerToAlias(t.spec.Owner)
-				owner := teams[ownerToAlias(t.spec.Owner)]
-
-				branch := "<unknown branch>"
-				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
-					branch = b
-				}
-				msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
-					branch, cloud, output)
-				artifacts := fmt.Sprintf("/%s", t.Name())
-
-				// Issues posted from roachtest are identifiable as such and
-				// they are also release blockers (this label may be removed
-				// by a human upon closer investigation).
-				labels := []string{"O-roachtest"}
-				if !t.spec.NonReleaseBlocker {
-					labels = append(labels, "release-blocker")
-				}
-
-				req := issues.PostRequest{
-					AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
-					Mention:         []string{string(alias)},
-					ProjectColumnID: owner.TriageColumnID,
-					PackageName:     "roachtest",
-					TestName:        t.Name(),
-					Message:         msg,
-					Artifacts:       artifacts,
-					ExtraLabels:     labels,
-					ReproductionCommand: fmt.Sprintf(
-						`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
-caffeinate ./roachstress.sh %s
-`, t.Name()),
-				}
-				if err := issues.Post(
-					context.Background(),
-					issues.UnitTestFormatter,
-					req,
-				); err != nil {
-					shout(ctx, l, stdout, "failed to post issue: %s", err)
-				}
-			}
+			r.maybePostGithubIssue(ctx, l, t, stdout, output)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", t.Name(), durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -874,6 +828,65 @@ caffeinate ./roachstress.sh %s
 		return false, nil
 	}
 	return true, nil
+}
+
+func (r *testRunner) shouldPostGithubIssue(t *test) bool {
+	// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
+	opts := issues.DefaultOptionsFromEnv()
+	return opts.CanPost() && opts.IsReleaseBranch() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0
+}
+
+func (r *testRunner) maybePostGithubIssue(
+	ctx context.Context, l *logger, t *test, stdout io.Writer, output string,
+) {
+	if !r.shouldPostGithubIssue(t) {
+		return
+	}
+
+	teams, err := team.DefaultLoadTeams()
+	if err != nil {
+		t.Fatalf("could not load teams: %v", err)
+	}
+	alias := ownerToAlias(t.spec.Owner)
+	owner := teams[ownerToAlias(t.spec.Owner)]
+
+	branch := "<unknown branch>"
+	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+		branch = b
+	}
+	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
+		branch, cloud, output)
+	artifacts := fmt.Sprintf("/%s", t.Name())
+
+	// Issues posted from roachtest are identifiable as such and
+	// they are also release blockers (this label may be removed
+	// by a human upon closer investigation).
+	labels := []string{"O-roachtest"}
+	if !t.spec.NonReleaseBlocker {
+		labels = append(labels, "release-blocker")
+	}
+
+	req := issues.PostRequest{
+		AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
+		Mention:         []string{"@" + string(alias)},
+		ProjectColumnID: owner.TriageColumnID,
+		PackageName:     "roachtest",
+		TestName:        t.Name(),
+		Message:         msg,
+		Artifacts:       artifacts,
+		ExtraLabels:     labels,
+		ReproductionCommand: fmt.Sprintf(
+			`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
+caffeinate ./roachstress.sh %s
+`, t.Name()),
+	}
+	if err := issues.Post(
+		context.Background(),
+		issues.UnitTestFormatter,
+		req,
+	); err != nil {
+		shout(ctx, l, stdout, "failed to post issue: %s", err)
+	}
 }
 
 func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
