@@ -1332,11 +1332,7 @@ func (r *Replica) sendRaftMessageRequest(ctx context.Context, req *RaftMessageRe
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
-	ok := r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
-	// TODO(peter): Looping over all of the outgoing Raft message queues to
-	// update this stat on every send is a bit expensive.
-	r.store.metrics.RaftEnqueuedPending.Update(r.store.cfg.Transport.queuedMessageCount())
-	return ok
+	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
 }
 
 func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {
