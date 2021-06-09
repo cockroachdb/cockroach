@@ -696,7 +696,7 @@ memo (optimized, ~55KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
  ├── G17: (inner-join G2 G15 G4) (inner-join G15 G2 G4) (inner-join G5 G13 G7) (inner-join G13 G5 G7) (inner-join G8 G10 G7) (inner-join G10 G8 G7)
  │    ├── [ordering: +(2|6|10)]
  │    │    ├── best: (sort G17)
- │    │    └── cost: 44312.20
+ │    │    └── cost: 49046.78
  │    └── []
  │         ├── best: (inner-join G15 G2 G4)
  │         └── cost: 4401.57
