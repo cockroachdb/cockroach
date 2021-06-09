@@ -814,6 +814,32 @@ const (
 	GROUPS
 )
 
+// Name returns a string representation of the window frame mode to be used in
+// struct names for generated code.
+func (m WindowFrameMode) Name() string {
+	switch m {
+	case RANGE:
+		return "Range"
+	case ROWS:
+		return "Rows"
+	case GROUPS:
+		return "Groups"
+	}
+	return ""
+}
+
+func (m WindowFrameMode) String() string {
+	switch m {
+	case RANGE:
+		return "RANGE"
+	case ROWS:
+		return "ROWS"
+	case GROUPS:
+		return "GROUPS"
+	}
+	return ""
+}
+
 // OverrideWindowDef implements the logic to have a base window definition which
 // then gets augmented by a different window definition.
 func OverrideWindowDef(base *WindowDef, override WindowDef) (WindowDef, error) {
@@ -857,6 +883,40 @@ const (
 // IsOffset returns true if the WindowFrameBoundType is an offset.
 func (ft WindowFrameBoundType) IsOffset() bool {
 	return ft == OffsetPreceding || ft == OffsetFollowing
+}
+
+// Name returns a string representation of the bound type to be used in struct
+// names for generated code.
+func (ft WindowFrameBoundType) Name() string {
+	switch ft {
+	case UnboundedPreceding:
+		return "UnboundedPreceding"
+	case OffsetPreceding:
+		return "OffsetPreceding"
+	case CurrentRow:
+		return "CurrentRow"
+	case OffsetFollowing:
+		return "OffsetFollowing"
+	case UnboundedFollowing:
+		return "UnboundedFollowing"
+	}
+	return ""
+}
+
+func (ft WindowFrameBoundType) String() string {
+	switch ft {
+	case UnboundedPreceding:
+		return "UNBOUNDED PRECEDING"
+	case OffsetPreceding:
+		return "OFFSET PRECEDING"
+	case CurrentRow:
+		return "CURRENT ROW"
+	case OffsetFollowing:
+		return "OFFSET FOLLOWING"
+	case UnboundedFollowing:
+		return "UNBOUNDED FOLLOWING"
+	}
+	return ""
 }
 
 // WindowFrameBound specifies the offset and the type of boundary.
