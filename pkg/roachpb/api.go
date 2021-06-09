@@ -13,8 +13,6 @@ package roachpb
 import (
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1290,13 +1288,6 @@ func (*RangeStatsRequest) flags() int { return isRead }
 // parallel commits.
 func (etr *EndTxnRequest) IsParallelCommit() bool {
 	return etr.Commit && len(etr.InFlightWrites) > 0
-}
-
-// Keys returns credentials in an aws.Config.
-func (b *ExternalStorage_S3) Keys() *aws.Config {
-	return &aws.Config{
-		Credentials: credentials.NewStaticCredentials(b.AccessKey, b.Secret, b.TempToken),
-	}
 }
 
 const (
