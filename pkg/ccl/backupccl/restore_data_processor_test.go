@@ -46,25 +46,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMaxImportBatchSize(t *testing.T) {
+func TestMaxIngestBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	testCases := []struct {
-		importBatchSize int64
+		ingestBatchSize int64
 		maxCommandSize  int64
 		expected        int64
 	}{
-		{importBatchSize: 2 << 20, maxCommandSize: 64 << 20, expected: 2 << 20},
-		{importBatchSize: 128 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-		{importBatchSize: 64 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-		{importBatchSize: 63 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
+		{ingestBatchSize: 2 << 20, maxCommandSize: 64 << 20, expected: 2 << 20},
+		{ingestBatchSize: 128 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
+		{ingestBatchSize: 64 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
+		{ingestBatchSize: 63 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
 	}
 	for i, testCase := range testCases {
 		st := cluster.MakeTestingClusterSettings()
-		storageccl.ImportBatchSize.Override(ctx, &st.SV, testCase.importBatchSize)
+		storageccl.IngestBatchSize.Override(ctx, &st.SV, testCase.ingestBatchSize)
 		kvserver.MaxCommandSize.Override(ctx, &st.SV, testCase.maxCommandSize)
-		if e, a := storageccl.MaxImportBatchSize(st), testCase.expected; e != a {
+		if e, a := storageccl.MaxIngestBatchSize(st), testCase.expected; e != a {
 			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
 		}
 	}
@@ -162,23 +162,23 @@ func clientKVsToEngineKVs(kvs []kv.KeyValue) []storage.MVCCKeyValue {
 	return ret
 }
 
-func TestImport(t *testing.T) {
+func TestIngest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	t.Run("batch=default", func(t *testing.T) {
-		runTestImport(t, func(_ *cluster.Settings) {})
+		runTestIngest(t, func(_ *cluster.Settings) {})
 	})
 	t.Run("batch=1", func(t *testing.T) {
 		// The test normally doesn't trigger the batching behavior, so lower
 		// the threshold to force it.
 		init := func(st *cluster.Settings) {
-			storageccl.ImportBatchSize.Override(ctx, &st.SV, 1)
+			storageccl.IngestBatchSize.Override(ctx, &st.SV, 1)
 		}
-		runTestImport(t, init)
+		runTestIngest(t, init)
 	})
 }
 
-func runTestImport(t *testing.T, init func(*cluster.Settings)) {
+func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	defer leaktest.AfterTest(t)()
 
 	dir, dirCleanupFn := testutils.TempDir(t)
