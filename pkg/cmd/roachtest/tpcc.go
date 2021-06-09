@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -41,6 +42,12 @@ const (
 	usingExistingData // skips import
 )
 
+// testClusterHealth is final number of health metrics that test
+// collects and writes at the end of the run to preserve for analysis.
+type testClusterHealth struct {
+	Intents int64
+}
+
 type tpccOptions struct {
 	Warehouses     int
 	ExtraRunArgs   string
@@ -57,6 +64,59 @@ type tpccOptions struct {
 	// also be doing a rolling-restart into the new binary while the cluster
 	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, *test, *cluster)
+}
+
+func writeHealthReport(health testClusterHealth) (string, error) {
+	statsFile := perfArtifactsDir + "/health.json"
+	err := os.MkdirAll(filepath.Dir(statsFile), 0755)
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to create local perf artifacts directory for %s", statsFile)
+	}
+	jsonF, err := os.Create(statsFile)
+	defer jsonF.Close()
+
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to created stats file %s", statsFile)
+	}
+	jsonEnc := json.NewEncoder(jsonF)
+	err = jsonEnc.Encode(health)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to encode health info json %+v to file %s", health, statsFile)
+	}
+	return statsFile, nil
+}
+
+func createHealthReport(ctx context.Context, c *cluster, workloadNode nodeListOption) error {
+	intents, err := queryRemainingIntentCount(ctx, c)
+	if err != nil {
+		return err
+	}
+	reportPath, err := writeHealthReport(testClusterHealth{Intents: intents})
+	if err != nil {
+		return err
+	}
+	if err := c.PutE(ctx, c.l, reportPath, perfArtifactsDir, workloadNode); err != nil {
+		return errors.Wrapf(err, "failed to upload health report to workload node")
+	}
+	return nil
+}
+
+func queryRemainingIntentCount(ctx context.Context, c *cluster) (int64, error) {
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	rows, err := db.Query("select sum(cast(crdb_internal.range_stats(start_key)->'intent_count' as numeric)) as intent_count from crdb_internal.ranges")
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to query cluster for intent counts")
+	}
+	if !rows.Next() {
+		return 0, errors.New("intent sum query returned no rows")
+	}
+	var totalIntents int64
+	if err := rows.Scan(&totalIntents); err != nil {
+		return 0, errors.Wrap(err, "failed to read intent count result set")
+	}
+	return totalIntents, nil
 }
 
 // tpccImportCmd generates the command string to load tpcc data for the
@@ -163,6 +223,11 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 
 	c.Run(ctx, workloadNode, fmt.Sprintf(
 		"./cockroach workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
+
+	err := createHealthReport(ctx, c, workloadNode)
+	if err != nil {
+		t.l.Errorf("Failed to read intent counters: %v", err)
+	}
 }
 
 // tpccSupportedWarehouses returns our claim for the maximum number of tpcc
@@ -220,12 +285,13 @@ func registerTPCC(r *testRegistry) {
 		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    headroomSpec,
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			// Primary working config which only runs 5 min
 			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.spec.Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.l.Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: headroomWarehouses,
-				Duration:   120 * time.Minute,
+				Duration:   5 * time.Minute,
 				SetupType:  usingImport,
 			})
 		},
@@ -847,6 +913,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		// passing warehouse count, making the line search sensitive to the choice
 		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
 		// to recover without failing the line search.
+
 		if err := c.Reset(ctx); err != nil {
 			// Reset() can flake sometimes, see for example:
 			// https://github.com/cockroachdb/cockroach/issues/61981#issuecomment-826838740
@@ -1044,6 +1111,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		ttycolor.Stdout(ttycolor.Green)
 		t.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
+		err := createHealthReport(ctx, c, loadNodes.randNode())
+		if err != nil {
+			t.l.Errorf("Failed to read intent counters: %v", err)
+		}
 	}
 }
 
