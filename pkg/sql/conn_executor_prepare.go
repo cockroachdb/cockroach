@@ -161,7 +161,7 @@ func (ex *connExecutor) prepare(
 
 	var flags planFlags
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
-		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+		ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
 		p := &ex.planner
 		if origin != PreparedStatementOriginSQL {
 			// If the PREPARE command was issued as a SQL statement, then we

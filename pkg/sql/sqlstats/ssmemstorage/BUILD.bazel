@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ssmemstorage",
+    srcs = [
+        "ss_mem_storage.go",
+        "ss_mem_writer.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/execstats",
+        "//pkg/sql/sqlstats",
+        "//pkg/util",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

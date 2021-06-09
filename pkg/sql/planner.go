@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -90,7 +91,7 @@ type extendedEvalContext struct {
 	// SchemaChangeJobCache refers to schemaChangeJobsCache in extraTxnState.
 	SchemaChangeJobCache map[descpb.ID]*jobs.Job
 
-	sqlStatsCollector *sqlStatsCollector
+	statsStorage sqlstats.Storage
 
 	SchemaChangerState *SchemaChangerState
 }

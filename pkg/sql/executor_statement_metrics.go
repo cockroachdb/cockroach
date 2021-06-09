@@ -13,7 +13,10 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -86,7 +89,7 @@ func (ex *connExecutor) recordStatementSummary(
 	stmtErr error,
 	stats topLevelQueryStats,
 ) {
-	phaseTimes := ex.statsCollector.phaseTimes
+	phaseTimes := ex.statsCollector.PhaseTimes()
 
 	// Collect the statistics.
 	runLatRaw := phaseTimes.GetRunLatency()
@@ -124,14 +127,34 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 	}
 
-	stmtFingerprintID, err := ex.statsCollector.recordStatement(
-		ctx, stmt, planner.instrumentation.PlanForStats(ctx),
-		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
-		flags.IsSet(planFlagImplicitTxn),
-		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
-		automaticRetryCount, rowsAffected, stmtErr,
-		parseLat, planLat, runLat, svcLat, execOverhead, stats, planner,
-	)
+	recordedStmtStatsKey := roachpb.StatementStatisticsKey{
+		Query:       stmt.AnonymizedStr,
+		DistSQL:     flags.IsDistributed(),
+		Vec:         flags.IsSet(planFlagVectorized),
+		ImplicitTxn: flags.IsSet(planFlagImplicitTxn),
+		FullScan:    flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
+		Failed:      stmtErr != nil,
+		Database:    planner.SessionData().Database,
+	}
+
+	recordedStmtStats := sqlstats.RecordedStmtStats{
+		AutoRetryCount:  automaticRetryCount,
+		RowsAffected:    rowsAffected,
+		ParseLatency:    parseLat,
+		PlanLatency:     planLat,
+		RunLatency:      runLat,
+		ServiceLatency:  svcLat,
+		OverheadLatency: execOverhead,
+		BytesRead:       stats.bytesRead,
+		RowsRead:        stats.rowsRead,
+		Nodes:           getNodesFromPlanner(planner),
+		StatementType:   stmt.AST.StatementType(),
+		Plan:            planner.instrumentation.PlanForStats(ctx),
+		StatementError:  stmtErr,
+	}
+
+	stmtFingerprintID, err :=
+		ex.statsCollector.RecordStatement(ctx, recordedStmtStatsKey, recordedStmtStats)
 
 	if err != nil {
 		if log.V(1) {
@@ -145,11 +168,12 @@ func (ex *connExecutor) recordStatementSummary(
 
 	// We limit the number of statementFingerprintIDs stored for a transaction, as dictated
 	// by the TxnStatsNumStmtFingerprintIDsToRecord cluster setting.
-	maxStmtFingerprintIDsLen := TxnStatsNumStmtFingerprintIDsToRecord.Get(&ex.server.cfg.Settings.SV)
+	maxStmtFingerprintIDsLen := sqlstats.TxnStatsNumStmtFingerprintIDsToRecord.Get(&ex.server.cfg.Settings.SV)
 	if int64(len(ex.extraTxnState.transactionStatementFingerprintIDs)) < maxStmtFingerprintIDsLen {
 		ex.extraTxnState.transactionStatementFingerprintIDs = append(
 			ex.extraTxnState.transactionStatementFingerprintIDs, stmtFingerprintID)
 	}
+
 	// Add the current statement's ID to the hash. We don't track queries issued
 	// by the internal executor, in which case the hash is uninitialized, and
 	// can therefore be safely ignored.
@@ -192,4 +216,18 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 // We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
 func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
 	return stmt.AST.StatementType() == tree.TypeDML
+}
+
+func getNodesFromPlanner(planner *planner) []int64 {
+	// Retrieve the list of all nodes which the statement was executed on.
+	var nodes []int64
+	if planner.instrumentation.sp != nil {
+		trace := planner.instrumentation.sp.GetRecording()
+		// ForEach returns nodes in order.
+		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
+			nodes = append(nodes, int64(i))
+		})
+	}
+
+	return nodes
 }

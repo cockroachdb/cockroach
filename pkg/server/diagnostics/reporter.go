@@ -251,7 +251,13 @@ func (r *Reporter) CreateReport(
 		}
 	}
 
-	info.SqlStats = r.SQLServer.GetScrubbedReportingStats()
+	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx)
+	if err != nil {
+		if log.V(2 /* level */) {
+			log.Warningf(ctx, "unexpected error encountered when getting scrubbed reporting stats: %s", err)
+		}
+	}
+
 	return &info
 }
 

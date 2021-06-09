@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -48,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -254,12 +256,12 @@ type Server struct {
 
 	// sqlStats tracks per-application statistics for all applications on each
 	// node. Newly collected statistics flow into sqlStats.
-	sqlStats *sqlStats
+	sqlStats sqlstats.Provider
 
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
-	reportedStats *sqlStats
+	reportedStats sqlstats.Provider
 
 	reCache *tree.RegexpCache
 
@@ -272,8 +274,6 @@ type Server struct {
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
 }
-
-var _ tree.SQLStatsResetter = &Server{}
 
 // Metrics collects timeseries data about SQL activity.
 type Metrics struct {
@@ -299,28 +299,34 @@ type Metrics struct {
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(cfg, false /* internal */)
+	reportedSQLStats := sslocal.New(
+		cfg.Settings,
+		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
+		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
+		metrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
+		metrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
+		pool,
+		nil, /* resetInterval */
+		nil, /* reportedProvider */
+	)
+	sqlStats := sslocal.New(
+		cfg.Settings,
+		sqlstats.MaxMemSQLStatsStmtFingerprints,
+		sqlstats.MaxMemSQLStatsTxnFingerprints,
+		metrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
+		metrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
+		pool,
+		sqlstats.SQLStatReset,
+		reportedSQLStats,
+	)
 	return &Server{
 		cfg:             cfg,
 		Metrics:         metrics,
 		InternalMetrics: makeMetrics(cfg, true /* internal */),
 		pool:            pool,
-		sqlStats: newSQLStats(
-			cfg.Settings,
-			maxMemSQLStatsStmtFingerprints,
-			maxMemSQLStatsTxnFingerprints,
-			metrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
-			metrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
-			pool,
-		),
-		reportedStats: newSQLStats(
-			cfg.Settings,
-			maxMemReportedSQLStatsStmtFingerprints,
-			maxMemReportedSQLStatsTxnFingerprints,
-			metrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
-			metrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
-			pool,
-		),
-		reCache: tree.NewRegexpCache(512),
+		sqlStats:        sqlStats,
+		reportedStats:   reportedSQLStats,
+		reCache:         tree.NewRegexpCache(512),
 	}
 }
 
@@ -379,18 +385,17 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// continually allocating space for the SQL stats. Additionally, spawn
 	// a loop to clear the reported stats at the same large interval just
 	// in case the telemetry worker fails.
-	s.PeriodicallyClearSQLStats(ctx, stopper, MaxSQLStatReset, s.sqlStats, s.ResetSQLStats)
-	s.PeriodicallyClearSQLStats(ctx, stopper, MaxSQLStatReset, s.reportedStats, s.ResetReportedStats)
-	// Start a second loop to clear SQL stats at the requested interval.
-	s.PeriodicallyClearSQLStats(ctx, stopper, SQLStatReset, s.sqlStats, s.ResetSQLStats)
+	s.sqlStats.Start(ctx, stopper)
+	s.reportedStats.Start(ctx, stopper)
 }
 
 // ResetSQLStats resets the executor's collected sql statistics.
-// TODO(azhng): now that since ResetSQLStats can potentially return an error, we
-//  need to update the RPC endpoint to handle this.
+// TODO(azhng): after refactoring of sqlstats package is completed, we want to
+//  remove the following functions below that's related to fetching SQL stats
+//  and expose the provider interfaces instead. This will decouple other
+//  subsystems from directly consuming the SQLServer methods.
 func (s *Server) ResetSQLStats(ctx context.Context) {
-	// Dump the SQL stats into the reported stats before clearing the SQL stats.
-	err := s.sqlStats.resetAndMaybeDumpStats(ctx, s.reportedStats)
+	err := s.sqlStats.Reset(ctx)
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "reported SQL stats memory limit has been exceeded, some fingerprints stats are discarded: %s", err)
@@ -400,7 +405,7 @@ func (s *Server) ResetSQLStats(ctx context.Context) {
 
 // ResetReportedStats resets the executor's collected reported stats.
 func (s *Server) ResetReportedStats(ctx context.Context) {
-	err := s.reportedStats.resetAndMaybeDumpStats(ctx, nil /* target */)
+	err := s.reportedStats.Reset(ctx)
 	if err != nil {
 		if log.V(1) {
 			log.Errorf(ctx, "failed to reset reported stats: %s", err)
@@ -411,8 +416,10 @@ func (s *Server) ResetReportedStats(ctx context.Context) {
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
-func (s *Server) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
-	return s.sqlStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
+func (s *Server) GetScrubbedStmtStats(
+	ctx context.Context,
+) ([]roachpb.CollectedStatementStatistics, error) {
+	return s.getScrubbedStmtStats(ctx, s.sqlStats)
 }
 
 // Avoid lint errors.
@@ -420,26 +427,98 @@ var _ = (*Server).GetScrubbedStmtStats
 
 // GetUnscrubbedStmtStats returns the same thing as GetScrubbedStmtStats, except
 // identifiers (e.g. table and column names) aren't scrubbed from the statements.
-func (s *Server) GetUnscrubbedStmtStats() []roachpb.CollectedStatementStatistics {
-	return s.sqlStats.getUnscrubbedStmtStats(s.cfg.VirtualSchemas)
+func (s *Server) GetUnscrubbedStmtStats(
+	ctx context.Context,
+) ([]roachpb.CollectedStatementStatistics, error) {
+	var stmtStats []roachpb.CollectedStatementStatistics
+	stmtStatsVisitor := func(stat *roachpb.CollectedStatementStatistics) error {
+		stmtStats = append(stmtStats, *stat)
+		return nil
+	}
+	err :=
+		s.sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
+
+	if err != nil {
+		return nil, errors.Errorf("failed to fetch statement stats: %s", err)
+	}
+
+	return stmtStats, nil
 }
 
 // GetUnscrubbedTxnStats returns the same transaction statistics by app.
 // Identifiers (e.g. table and column names) aren't scrubbed from the statements.
-func (s *Server) GetUnscrubbedTxnStats() []roachpb.CollectedTransactionStatistics {
-	return s.sqlStats.getUnscrubbedTxnStats()
+func (s *Server) GetUnscrubbedTxnStats(
+	ctx context.Context,
+) ([]roachpb.CollectedTransactionStatistics, error) {
+	var txnStats []roachpb.CollectedTransactionStatistics
+	txnStatsVisitor := func(_ sqlstats.TransactionFingerprintID, stat *roachpb.CollectedTransactionStatistics) error {
+		txnStats = append(txnStats, *stat)
+		return nil
+	}
+	err :=
+		s.sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, txnStatsVisitor)
+
+	if err != nil {
+		return nil, errors.Errorf("failed to fetch statement stats: %s", err)
+	}
+
+	return txnStats, nil
 }
 
 // GetScrubbedReportingStats does the same thing as GetScrubbedStmtStats but
 // returns statistics from the reported stats pool.
-func (s *Server) GetScrubbedReportingStats() []roachpb.CollectedStatementStatistics {
-	return s.reportedStats.getScrubbedStmtStats(s.cfg.VirtualSchemas)
+func (s *Server) GetScrubbedReportingStats(
+	ctx context.Context,
+) ([]roachpb.CollectedStatementStatistics, error) {
+	return s.getScrubbedStmtStats(ctx, s.reportedStats)
+}
+
+func (s *Server) getScrubbedStmtStats(
+	ctx context.Context, statsProvider sqlstats.Provider,
+) ([]roachpb.CollectedStatementStatistics, error) {
+	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
+
+	var scrubbedStats []roachpb.CollectedStatementStatistics
+	stmtStatsVisitor := func(stat *roachpb.CollectedStatementStatistics) error {
+		// Scrub the statement itself.
+		scrubbedQueryStr, ok := scrubStmtStatKey(s.cfg.VirtualSchemas, stat.Key.Query)
+
+		// We don't want to report this stats if scrubbing has failed. We also don't
+		// wish to abort here because we want to try our best to report all the
+		// stats.
+		if !ok {
+			return nil
+		}
+
+		stat.Key.Query = scrubbedQueryStr
+
+		// Possibly scrub the app name.
+		if !strings.HasPrefix(stat.Key.App, catconstants.ReportableAppNamePrefix) {
+			stat.Key.App = HashForReporting(salt, stat.Key.App)
+		}
+
+		// Quantize the counts to avoid leaking information that way.
+		quantizeCounts(&stat.Stats)
+		stat.Stats.SensitiveInfo = stat.Stats.SensitiveInfo.GetScrubbedCopy()
+
+		scrubbedStats = append(scrubbedStats, *stat)
+		return nil
+	}
+
+	err :=
+		statsProvider.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
+
+	if err != nil {
+		return nil, errors.Errorf("failed to fetch scrubbed statement stats: %s", err)
+	}
+
+	return scrubbedStats, nil
 }
 
 // GetStmtStatsLastReset returns the time at which the statement statistics were
 // last cleared.
 func (s *Server) GetStmtStatsLastReset() time.Time {
-	return s.sqlStats.getLastReset()
+	return s.sqlStats.GetLastReset()
 }
 
 // GetExecutorConfig returns this server's executor config.
@@ -479,7 +558,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx, sd, args.SessionDefaults, stmtBuf, clientComm, memMetrics, &s.Metrics,
-		s.sqlStats.getStatsForApplication(sd.ApplicationName),
+		s.sqlStats.GetWriterForApplication(sd.ApplicationName),
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -590,7 +669,7 @@ func (s *Server) newConnExecutor(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
-	appStats *appStats,
+	statsWriter sqlstats.Writer,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -670,10 +749,11 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.applicationName.Store(ex.sessionData.ApplicationName)
-	ex.appStats = appStats
+	ex.statsWriter = statsWriter
+	ex.statsCollector = sslocal.NewStatsCollector(statsWriter, ex.phaseTimes)
 	sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
+		ex.statsWriter = ex.server.sqlStats.GetWriterForApplication(newName)
 	})
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
@@ -695,7 +775,6 @@ func (s *Server) newConnExecutor(
 
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
-	ex.statsCollector = ex.newStatsCollector()
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
@@ -725,9 +804,9 @@ func (s *Server) newConnExecutorWithTxn(
 	srvMetrics *Metrics,
 	txn *kv.Txn,
 	syntheticDescs []catalog.Descriptor,
-	appStats *appStats,
+	statsWriter sqlstats.Writer,
 ) *connExecutor {
-	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, appStats)
+	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, statsWriter)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
@@ -760,62 +839,6 @@ func (s *Server) newConnExecutorWithTxn(
 	// parent executor.
 	ex.extraTxnState.descCollection.SetSyntheticDescriptors(syntheticDescs)
 	return ex
-}
-
-// SQLStatReset is the cluster setting that controls at what interval SQL
-// statement statistics should be reset.
-var SQLStatReset = settings.RegisterDurationSetting(
-	"diagnostics.sql_stat_reset.interval",
-	"interval controlling how often SQL statement statistics should "+
-		"be reset (should be less than diagnostics.forced_sql_stat_reset.interval). It has a max value of 24H.",
-	time.Hour,
-	settings.NonNegativeDurationWithMaximum(time.Hour*24),
-).WithPublic()
-
-// MaxSQLStatReset is the cluster setting that controls at what interval SQL
-// statement statistics must be flushed within.
-var MaxSQLStatReset = settings.RegisterDurationSetting(
-	"diagnostics.forced_sql_stat_reset.interval",
-	"interval after which SQL statement statistics are refreshed even "+
-		"if not collected (should be more than diagnostics.sql_stat_reset.interval). It has a max value of 24H.",
-	time.Hour*2, // 2 x diagnostics.sql_stat_reset.interval
-	settings.NonNegativeDurationWithMaximum(time.Hour*24),
-).WithPublic()
-
-// PeriodicallyClearSQLStats spawns a loop to reset stats based on the setting
-// of a given duration settings variable. We take in a function to actually do
-// the resetting, as some stats have extra work that needs to be performed
-// during the reset. For example, the SQL stats need to dump into the parent
-// stats before clearing data fully.
-func (s *Server) PeriodicallyClearSQLStats(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	setting *settings.DurationSetting,
-	stats *sqlStats,
-	reset func(ctx context.Context),
-) {
-	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
-		var timer timeutil.Timer
-		for {
-			s.sqlStats.mu.Lock()
-			last := stats.mu.lastReset
-			s.sqlStats.mu.Unlock()
-
-			next := last.Add(setting.Get(&s.cfg.Settings.SV))
-			wait := next.Sub(timeutil.Now())
-			if wait < 0 {
-				reset(ctx)
-			} else {
-				timer.Reset(wait)
-				select {
-				case <-stopper.ShouldQuiesce():
-					return
-				case <-timer.C:
-					timer.Read = true
-				}
-			}
-		}
-	})
 }
 
 // ResetClusterSQLStats resets the collected cluster-wide SQL statistics by calling into the statusServer.
@@ -1168,10 +1191,16 @@ type connExecutor struct {
 	// dataMutator is nil for session-bound internal executors; we shouldn't issue
 	// statements that manipulate session state to an internal executor.
 	dataMutator *sessionDataMutator
-	// appStats tracks per-application SQL usage statistics. It is maintained to
-	// represent statistics for the application currently identified by
-	// sessiondata.ApplicationName.
-	appStats *appStats
+
+	// statsWriter is a writer interface for recording per-application SQL usage
+	// statistics. It is maintained to represent statistics for the application
+	// currently identified by sessiondata.ApplicationName.
+	statsWriter sqlstats.Writer
+
+	// statsCollector is used to collect statistics about SQL statements and
+	// transactions.
+	statsCollector sqlstats.StatsCollector
+
 	// applicationName is the same as sessionData.ApplicationName. It's copied
 	// here as an atomic so that it can be read concurrently by serialize().
 	applicationName atomic.Value
@@ -1199,10 +1228,6 @@ type connExecutor struct {
 	// copied-by-value when resetting statsCollector before executing each
 	// statement.
 	phaseTimes *sessionphase.Times
-
-	// statsCollector is used to collect statistics about SQL statements and
-	// transactions.
-	statsCollector *sqlStatsCollector
 
 	// rng is used to generate random numbers. An example usage is to determine
 	// whether to sample execution stats.
@@ -1578,13 +1603,13 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			ev, payload, err = ex.execStmt(ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes)
 			return err
 		}()
-		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
+		// Note: we write to ex.statsCollector.PhaseTimes, instead of ex.phaseTimes,
 		// because:
 		// - stats use ex.statsCollector, not ex.phaseTimes.
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
-		//   reset() method).
-		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
+		//   Reset() method).
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
 		}
@@ -1652,7 +1677,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   reset() method).
-		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
 		}
@@ -2009,8 +2034,7 @@ func (ex *connExecutor) execCopyIn(
 		// state machine, but the copyMachine manages its own transactions without
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
-		ex.statsCollector = ex.newStatsCollector()
-		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+		ex.statsCollector.Reset(ex.statsWriter, ex.phaseTimes)
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}
@@ -2269,7 +2293,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:       ex,
 		Jobs:                 &ex.extraTxnState.jobs,
 		SchemaChangeJobCache: ex.extraTxnState.schemaChangeJobsCache,
-		sqlStatsCollector:    ex.statsCollector,
+		statsStorage:         ex.server.sqlStats,
 	}
 }
 
@@ -2464,14 +2488,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
 
-		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
 			ex.extraTxnState.jobs); err != nil {
 			handleErr(err)
 		}
-		ex.statsCollector.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
 
 		fallthrough
 	case txnRestart, txnRollback:
@@ -2518,12 +2542,6 @@ func (ex *connExecutor) initStatementResult(
 		res.SetColumns(ctx, cols)
 	}
 	return nil
-}
-
-// newStatsCollector returns a sqlStatsCollector that will record stats in the
-// session's stats containers.
-func (ex *connExecutor) newStatsCollector() *sqlStatsCollector {
-	return newSQLStatsCollector(ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 }
 
 // cancelQuery is part of the registrySession interface.

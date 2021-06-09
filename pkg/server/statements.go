@@ -49,7 +49,7 @@ func (s *statusServer) Statements(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return statementsLocal(s.gossip.NodeID, s.admin.server.sqlServer)
+			return statementsLocal(ctx, s.gossip.NodeID, s.admin.server.sqlServer)
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {
@@ -89,10 +89,18 @@ func (s *statusServer) Statements(
 }
 
 func statementsLocal(
-	nodeID *base.NodeIDContainer, sqlServer *SQLServer,
+	ctx context.Context, nodeID *base.NodeIDContainer, sqlServer *SQLServer,
 ) (*serverpb.StatementsResponse, error) {
-	stmtStats := sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats()
-	txnStats := sqlServer.pgServer.SQLServer.GetUnscrubbedTxnStats()
+	stmtStats, err := sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	txnStats, err := sqlServer.pgServer.SQLServer.GetUnscrubbedTxnStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	lastReset := sqlServer.pgServer.SQLServer.GetStmtStatsLastReset()
 
 	resp := &serverpb.StatementsResponse{
