@@ -20,6 +20,8 @@ import statementStyles from "src/statementDetails/statementDetails.module.scss";
 import tableStatsStyles from "./tableStatistics.module.scss";
 import classNames from "classnames/bind";
 import { Icon } from "@cockroachlabs/ui-components";
+import { useSelector } from "react-redux";
+import { enableSqlStatsResetSelector } from "../store/uiConfig";
 
 const { statistic, countTitle, lastCleared } = statisticsClasses;
 const cxStmt = classNames.bind(statementStyles);
@@ -53,6 +55,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
   activeFilters,
   resetSQLStats,
 }) => {
+  const enableSqlStatsReset = useSelector(enableSqlStatsResetSelector);
   const resultsPerPageLabel = (
     <ResultsPerPageLabel
       pagination={{ ...pagination, total: totalCount }}
@@ -76,18 +79,22 @@ export const TableStatistics: React.FC<TableStatistics> = ({
       <h4 className={countTitle}>
         {activeFilters ? resultsCountAndClear : resultsPerPageLabel}
       </h4>
-      <div className={cxStats("flex-display")}>
-        <Tooltip content={toolTipText}>
-          <div className={cxStats("tooltip-hover-area")}>
-            <Icon iconName={"InfoCircle"} />
+      {enableSqlStatsReset ? (
+        <div className={cxStats("flex-display")}>
+          <Tooltip content={toolTipText}>
+            <div className={cxStats("tooltip-hover-area")}>
+              <Icon iconName={"InfoCircle"} />
+            </div>
+          </Tooltip>
+          <div className={lastCleared}>
+            {renderLastCleared(lastReset)}
+            {"  "}-{"  "}
+            <a onClick={resetSQLStats}>Clear SQL Stats</a>
           </div>
-        </Tooltip>
-        <div className={lastCleared}>
-          {renderLastCleared(lastReset)}
-          {"  "}-{"  "}
-          <a onClick={resetSQLStats}>Clear SQL Stats</a> {/*doesn't work!*/}
         </div>
-      </div>
+      ) : (
+        <h4 className={lastCleared}>{renderLastCleared(lastReset)}</h4>
+      )}
     </div>
   );
 };

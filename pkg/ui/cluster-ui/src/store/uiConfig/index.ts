@@ -9,3 +9,4 @@
 // licenses/APL.txt.
 
 export * from "./uiConfig.reducer";
+export * from "./uiConfig.selectors";

@@ -10,16 +10,16 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import { MemoryRouter } from "react-router-dom";
 import { cloneDeep } from "lodash";
 
 import { StatementsPage } from "./statementsPage";
 import statementsPagePropsFixture, {
   statementsPagePropsWithRequestError,
 } from "./statementsPage.fixture";
+import { TestStoreProvider } from "../test-utils";
 
 storiesOf("StatementsPage", module)
-  .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
+  .addDecorator(storyFn => <TestStoreProvider>{storyFn()}</TestStoreProvider>)
   .addDecorator(storyFn => (
     <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
   ))

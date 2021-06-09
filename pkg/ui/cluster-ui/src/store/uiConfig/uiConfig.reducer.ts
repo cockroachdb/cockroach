@@ -20,6 +20,9 @@ export type UIConfigState = {
     sessionDetails: {
       showGatewayNodeLink: boolean;
     };
+    statements?: {
+      enableSqlStatsReset?: boolean;
+    };
   };
 };
 
@@ -30,6 +33,9 @@ const initialState: UIConfigState = {
     },
     sessionDetails: {
       showGatewayNodeLink: false,
+    },
+    statements: {
+      enableSqlStatsReset: true,
     },
   },
 };

@@ -11,7 +11,6 @@
 import React from "react";
 import { assert } from "chai";
 import { ReactWrapper, mount } from "enzyme";
-import { MemoryRouter } from "react-router-dom";
 
 import {
   StatementsPage,
@@ -19,14 +18,15 @@ import {
   StatementsPageState,
 } from "src/statementsPage";
 import statementsPagePropsFixture from "./statementsPage.fixture";
+import { TestStoreProvider } from "../test-utils";
 
 describe("StatementsPage", () => {
   describe("Statements table", () => {
     it("sorts data by Execution Count DESC as default option", () => {
       const rootWrapper = mount(
-        <MemoryRouter>
+        <TestStoreProvider>
           <StatementsPage {...statementsPagePropsFixture} />
-        </MemoryRouter>,
+        </TestStoreProvider>,
       );
 
       const statementsPageWrapper: ReactWrapper<
