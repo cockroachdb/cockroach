@@ -60,9 +60,6 @@ RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/bazel-4.0.0 /usr/bin/bazel
 
-RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/autouseradd-1.2.0-amd64.tar.gz -o autouseradd.tar.gz \
-  && echo 'f7b0cf67564044c31ffc5e84c961726098b88b0296a57c84421659d56434a365 autouseradd.tar.gz' | sha256sum -c - \
-  && tar xzf autouseradd.tar.gz --strip-components 1 \
-  && rm autouseradd.tar.gz
-
-ENTRYPOINT ["autouseradd", "--user", "roach", "--no-create-home"]
+COPY entrypoint.sh /usr/bin
+ENTRYPOINT ["/usr/bin/entrypoint.sh"]
+CMD ["/usr/bin/bash"]
