@@ -13,7 +13,9 @@ package tabledesc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -203,6 +205,8 @@ func maybeFillInDescriptor(
 	fixedUsagePrivilege := descpb.MaybeFixUsagePrivForTablesAndDBs(&desc.Privileges)
 
 	changes.FixedPrivileges = changes.FixedPrivileges || fixedUsagePrivilege
+
+	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
 
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
@@ -487,5 +491,17 @@ func maybeUpgradeIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged boo
 		return false
 	}
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+	return true
+}
+
+// maybeUpgradeNamespaceName deals with upgrading the name field of the
+// namespace table (30) to be "namespace" rather than "namespace2". This
+// occurs in clusters which were bootstrapped before 21.2 and have not
+// run the corresponding migration.
+func maybeUpgradeNamespaceName(d *descpb.TableDescriptor) (hasChanged bool) {
+	if d.ID != keys.NamespaceTableID || d.Name != catconstants.PreMigrationNamespaceTableName {
+		return false
+	}
+	d.Name = catconstants.NamespaceTableName
 	return true
 }

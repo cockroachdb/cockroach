@@ -87,6 +87,10 @@ type PostDeserializationTableDescriptorChanges struct {
 	// UpgradedForeignKeyRepresentation indicates that the foreign key
 	// representation was upgraded.
 	UpgradedForeignKeyRepresentation bool
+
+	// UpgradedNamespaceName indicates that the table was system.namespace
+	// and it had its name upgraded from "namespace2".
+	UpgradedNamespaceName bool
 }
 
 // DescriptorType returns the type of this descriptor.
