@@ -972,8 +972,10 @@ func (txn *Txn) Send(
 	}
 
 	// Some callers have not initialized ba using a Batch constructed using
-	// Txn.NewBatch. So we fallback to initializing here.
+	// Txn.NewBatch. So we fallback to partially overwriting here.
+	noMem := ba.AdmissionHeader.NoMemoryReservedAtSource
 	ba.AdmissionHeader = txn.admissionHeader
+	ba.AdmissionHeader.NoMemoryReservedAtSource = noMem
 
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID

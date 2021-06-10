@@ -33,7 +33,8 @@ func TestGetResumeSpan(t *testing.T) {
 	defer db.Close()
 
 	_, err := Put(ctx, db, CommandArgs{
-		Header: roachpb.Header{TargetBytes: -1},
+		EvalCtx: (&MockEvalCtx{}).EvalContext(),
+		Header:  roachpb.Header{TargetBytes: -1},
 		Args: &roachpb.PutRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: key,
@@ -45,7 +46,8 @@ func TestGetResumeSpan(t *testing.T) {
 
 	// Case 1: Check that a negative TargetBytes causes a resume span.
 	_, err = Get(ctx, db, CommandArgs{
-		Header: roachpb.Header{TargetBytes: -1},
+		EvalCtx: (&MockEvalCtx{}).EvalContext(),
+		Header:  roachpb.Header{TargetBytes: -1},
 		Args: &roachpb.GetRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: key,
@@ -62,7 +64,8 @@ func TestGetResumeSpan(t *testing.T) {
 	resp = &roachpb.GetResponse{}
 	// Case 2: Check that a negative MaxSpanRequestKeys causes a resume span.
 	_, err = Get(ctx, db, CommandArgs{
-		Header: roachpb.Header{MaxSpanRequestKeys: -1},
+		EvalCtx: (&MockEvalCtx{}).EvalContext(),
+		Header:  roachpb.Header{MaxSpanRequestKeys: -1},
 		Args: &roachpb.GetRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: key,
@@ -79,7 +82,8 @@ func TestGetResumeSpan(t *testing.T) {
 	resp = &roachpb.GetResponse{}
 	// Case 3: Check that a positive limit causes a normal return.
 	_, err = Get(ctx, db, CommandArgs{
-		Header: roachpb.Header{MaxSpanRequestKeys: 10, TargetBytes: 100},
+		EvalCtx: (&MockEvalCtx{}).EvalContext(),
+		Header:  roachpb.Header{MaxSpanRequestKeys: 10, TargetBytes: 100},
 		Args: &roachpb.GetRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: key,

@@ -48,6 +48,7 @@ func Scan(
 		TargetBytes:           h.TargetBytes,
 		FailOnMoreRecent:      args.KeyLocking != lock.None,
 		Reverse:               false,
+		MemoryMonitor:         cArgs.EvalCtx.GetScannerMemoryMonitor(),
 	}
 
 	switch args.ScanFormat {
