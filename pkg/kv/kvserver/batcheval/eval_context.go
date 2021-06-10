@@ -131,6 +131,10 @@ type EvalContext interface {
 	// WatchForMerge arranges to block all requests until the in-progress merge
 	// completes. Returns an error if no in-progress merge is detected.
 	WatchForMerge(ctx context.Context) error
+
+	// GetScannerMemoryMonitor returns a memory monitor to be used by MVCC
+	// scans.
+	GetScannerMemoryMonitor() storage.ScannerMemoryMonitor
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -266,4 +270,7 @@ func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequen
 }
 func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
 	panic("unimplemented")
+}
+func (m *mockEvalCtxImpl) GetScannerMemoryMonitor() storage.ScannerMemoryMonitor {
+	return storage.ScannerMemoryMonitor{}
 }

@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"sort"
 	"sync"
@@ -45,7 +46,7 @@ func (p *pebbleResults) clear() {
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
 // <valueLen:Uint32><keyLen:Uint32><Key><Value>
 // This function adds to repr in that format.
-func (p *pebbleResults) put(key []byte, value []byte) {
+func (p *pebbleResults) put(key []byte, value []byte, monitor ScannerMemoryMonitor) error {
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	const kvLenSize = 8
 	const minSize = 16
@@ -76,6 +77,9 @@ func (p *pebbleResults) put(key []byte, value []byte) {
 		if len(p.repr) > 0 {
 			p.bufs = append(p.bufs, p.repr)
 		}
+		if err := monitor.Grow(context.TODO(), int64(newSize)); err != nil {
+			return err
+		}
 		p.repr = nonZeroingMakeByteSlice(newSize)[:0]
 	}
 
@@ -87,6 +91,7 @@ func (p *pebbleResults) put(key []byte, value []byte) {
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
 	p.bytes += int64(lenToAdd)
+	return nil
 }
 
 func (p *pebbleResults) finish() [][]byte {
@@ -100,9 +105,10 @@ func (p *pebbleResults) finish() [][]byte {
 // Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
 // one MVCCGet / MVCCScan call.
 type pebbleMVCCScanner struct {
-	parent  MVCCIterator
-	reverse bool
-	peeked  bool
+	parent     MVCCIterator
+	memMonitor ScannerMemoryMonitor
+	reverse    bool
+	peeked     bool
 	// Iteration bounds. Does not contain MVCC timestamp.
 	start, end roachpb.Key
 	// Timestamp with which MVCCScan/MVCCGet was called.
@@ -459,6 +465,14 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// that lie before the resume key.
 			return false
 		}
+		// p.intents is a pebble.Batch which grows its byte slice capacity in
+		// chunks to amortize allocations. The memMonitor is under-counting here
+		// by only accounting for the key and value bytes.
+		if p.err = p.memMonitor.Grow(
+			context.TODO(), int64(len(p.curRawKey)+len(p.curValue))); p.err != nil {
+			p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
+			return false
+		}
 		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
 		if p.err != nil {
 			return false
@@ -479,6 +493,15 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// Note that this will trigger an error higher up the stack. We
 		// continue scanning so that we can return all of the intents
 		// in the scan range.
+		//
+		// p.intents is a pebble.Batch which grows its byte slice capacity in
+		// chunks to amortize allocations. The memMonitor is under-counting here
+		// by only accounting for the key and value bytes.
+		if p.err = p.memMonitor.Grow(
+			context.TODO(), int64(len(p.curRawKey)+len(p.curValue))); p.err != nil {
+			p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
+			return false
+		}
 		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
 		if p.err != nil {
 			return false
@@ -673,7 +696,10 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		p.results.put(rawKey, val)
+		if err := p.results.put(rawKey, val, p.memMonitor); err != nil {
+			p.err = errors.Wrapf(err, "scan with start key %s", p.start)
+			return false
+		}
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
 			// When the target bytes are met or exceeded, stop producing more
 			// keys. We implement this by reducing maxKeys to the current

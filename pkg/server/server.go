@@ -88,6 +88,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -177,7 +178,8 @@ type Server struct {
 	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
 	externalStorageBuilder *externalStorageBuilder
 
-	gcoord *admission.GrantCoordinator
+	gcoord          *admission.GrantCoordinator
+	kvMemoryMonitor *mon.BytesMonitor
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
@@ -555,6 +557,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// ClosedTimestamp), but the Node needs a StoreConfig to be made.
 	var lateBoundNode *Node
 
+	// Break a circular dependency: we need the Server which implements
+	// MemoryMonitorForKVProvider in the StoreConfig.
+
+	lateBoundServer := &Server{}
 	storeCfg := kvserver.StoreConfig{
 		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
 		Settings:                st,
@@ -600,9 +606,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			Dialer: nodeDialer.CTDialer(),
 		}),
 
-		ExternalStorage:         externalStorage,
-		ExternalStorageFromURI:  externalStorageFromURI,
-		ProtectedTimestampCache: protectedtsProvider,
+		ExternalStorage:            externalStorage,
+		ExternalStorageFromURI:     externalStorageFromURI,
+		ProtectedTimestampCache:    protectedtsProvider,
+		MemoryMonitorForKVProvider: lateBoundServer,
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -654,7 +661,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(protectedtsReconciler.Metrics())
 
-	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	sAdmin := newAdminServer(lateBoundServer, internalExecutor)
 	sessionRegistry := sql.NewSessionRegistry()
@@ -746,6 +752,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
 	node.InitLogger(sqlServer.execCfg)
 
+	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		"kv-mem", 0 /* limit */, sqlServer.rootSQLMemoryMonitor)
+	kvMemoryMonitor.Start(ctx, sqlServer.rootSQLMemoryMonitor, mon.BoundAccount{})
+	stopper.AddCloser(stop.CloserFn(func() {
+		kvMemoryMonitor.Stop(ctx)
+	}))
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
 		cfg:                    cfg,
@@ -783,6 +795,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
 		gcoord:                 gcoord,
+		kvMemoryMonitor:        kvMemoryMonitor,
 	}
 	return lateBoundServer, err
 }
@@ -2749,4 +2762,9 @@ func (s *Server) RunLocalSQL(
 // Insecure returns true iff the server has security disabled.
 func (s *Server) Insecure() bool {
 	return s.cfg.Insecure
+}
+
+// GetRootMemoryMonitor implements MemoryMonitorForKVProvider.
+func (s *Server) GetRootMemoryMonitor() *mon.BytesMonitor {
+	return s.kvMemoryMonitor
 }

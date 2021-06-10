@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/kr/pretty"
 )
 
@@ -180,6 +181,15 @@ func (r *Replica) executeReadOnlyBatch(
 	return br, nil, pErr
 }
 
+type evalContextWithMonitor struct {
+	batcheval.EvalContext
+	memMonitor storage.ScannerMemoryMonitor
+}
+
+func (e evalContextWithMonitor) GetScannerMemoryMonitor() storage.ScannerMemoryMonitor {
+	return e.memMonitor
+}
+
 // executeReadOnlyBatchWithServersideRefreshes invokes evaluateBatch and retries
 // at a higher timestamp in the event of some retriable errors if allowed by the
 // batch/txn.
@@ -193,8 +203,40 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
+	var rootMonitor *mon.BytesMonitor
+	// Only do memory allocation accounting if the request did not originate
+	// locally, or for local request has reserved no memory. Local requests
+	// (typically DistSQL, though we may not have instrumented the source as SQL
+	// in all cases, so some may be flowing in as OTHER), do memory accounting
+	// before issuing the request. Even though the accounting for the first
+	// request in fetcher is small (the NoMemoryReservedAtSource=true case),
+	// subsequent ones use the size of the response for subsequent requests (see
+	// https://github.com/cockroachdb/cockroach/pull/52496). This scheme could
+	// be tightened.
+	if ba.AdmissionHeader.SourceLocation != roachpb.AdmissionHeader_LOCAL ||
+		ba.AdmissionHeader.NoMemoryReservedAtSource {
+		rootMonitor = r.store.getRootMemoryMonitorForKV()
+	}
+	var boundAccount mon.BoundAccount
+	if rootMonitor != nil {
+		boundAccount = rootMonitor.MakeBoundAccount()
+		// Memory is not actually released when this function returns, but at
+		// least the batch is fully evaluated. Ideally we would like to release
+		// after grpc has sent the response, but there are no interceptors at that
+		// stage. The interceptors execute before the response is marshaled in
+		// Server.processUnaryRPC by calling sendResponse.
+		// We are intentionally not using finalizers because they delay GC and
+		// because they have had bugs in the past (and can prevent GC of objects
+		// with cyclic references).
+		defer boundAccount.Close(ctx)
+		rec = evalContextWithMonitor{
+			EvalContext: rec, memMonitor: storage.ScannerMemoryMonitor{B: &boundAccount}}
+	}
+
 	for retries := 0; ; retries++ {
 		if retries > 0 {
+			// It is safe to call Clear on an uninitialized BoundAccount.
+			boundAccount.Clear(ctx)
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, lul, true /* readOnly */)

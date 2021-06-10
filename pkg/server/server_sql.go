@@ -134,6 +134,8 @@ type SQLServer struct {
 	// set to true when the server has started accepting client conns.
 	// Used by health checks.
 	acceptingClients syncutil.AtomicBool
+
+	rootSQLMemoryMonitor *mon.BytesMonitor
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -758,6 +760,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
 		settingsWatcher:         settingsWatcher,
+		rootSQLMemoryMonitor:    rootSQLMemoryMonitor,
 	}, nil
 }
 
