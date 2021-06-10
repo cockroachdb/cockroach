@@ -41,7 +41,7 @@ For guidance on installation, development, deployment, and administration, see o
 
 ## Starting with CockroachCloud
 
-We can run CockroachDB for you, so you don't have to run your own server.
+We can run CockroachDB for you, so you don't have to run your own cluster.
 
 See our online documentation: [Quickstart with CockroachCloud](https://www.cockroachlabs.com/docs/cockroachcloud/quickstart.html)
 
