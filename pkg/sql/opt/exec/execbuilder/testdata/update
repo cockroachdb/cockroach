@@ -550,7 +550,6 @@ vectorized: true
               missing stats
               table: kv2@primary
               spans: FULL SCAN
-              locking strength: for update
 
 query T
 EXPLAIN UPDATE kv3 SET v = (SELECT count(*) FROM kv3) WHERE k = 1
@@ -584,7 +583,6 @@ vectorized: true
               missing stats
               table: kv3@kv3_v_idx
               spans: FULL SCAN
-              locking strength: for update
 
 statement ok
 SET enable_implicit_select_for_update = false
