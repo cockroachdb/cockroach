@@ -52,6 +52,7 @@ func Get(
 		Txn:                   h.Txn,
 		FailOnMoreRecent:      args.KeyLocking != lock.None,
 		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
+		MemoryMonitor:         cArgs.EvalCtx.GetScannerMemoryMonitor(),
 	})
 	if err != nil {
 		return result.Result{}, err
