@@ -459,6 +459,9 @@ type internalClientAdapter struct {
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
+	// Mark this as originating locally, which is useful for the decision about
+	// memory allocation tracking.
+	ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
 	return a.InternalServer.Batch(ctx, ba)
 }
 
@@ -568,6 +571,8 @@ func (a internalClientAdapter) RangeFeed(
 		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
 
+	// Mark this as originating locally.
+	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
 	go func() {
 		defer cancel()
 		err := a.InternalServer.RangeFeed(args, rfAdapter)
