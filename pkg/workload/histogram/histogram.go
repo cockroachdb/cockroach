@@ -155,6 +155,11 @@ func (w *Registry) newHistogram() *hdrhistogram.Histogram {
 	return h
 }
 
+func makePrometheusLatencyHistogramBuckets() []float64 {
+	// This covers 0.5ms to 12 minutes at good resolution, using 150 buckets.
+	return prometheus.ExponentialBuckets(0.0005, 1.1, 150)
+}
+
 func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
 	w.prometheusMu.RLock()
 	ph, ok := w.prometheusMu.prometheusHistograms[name]
@@ -172,6 +177,7 @@ func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
 			Namespace: PrometheusNamespace,
 			Subsystem: w.workloadName,
 			Name:      name,
+			Buckets:   makePrometheusLatencyHistogramBuckets(),
 		})
 		w.prometheusMu.prometheusHistograms[name] = ph
 	}
