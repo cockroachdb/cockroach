@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -803,6 +804,8 @@ type MVCCGetOptions struct {
 	//
 	// The field is only set if Txn is also set.
 	LocalUncertaintyLimit hlc.Timestamp
+	// MemoryMonitor is used for tracking memory allocations.
+	MemoryMonitor ResponseMemoryAccount
 }
 
 func (opts *MVCCGetOptions) validate() error {
@@ -881,6 +884,7 @@ func mvccGet(
 	// key different than the start key. This is a bit of a hack.
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
+		memMonitor:       opts.MemoryMonitor,
 		start:            key,
 		ts:               timestamp,
 		maxKeys:          1,
@@ -891,7 +895,7 @@ func mvccGet(
 	}
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
-	mvccScanner.get()
+	mvccScanner.get(ctx)
 
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
@@ -2374,6 +2378,7 @@ func mvccScanToBytes(
 
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
+		memMonitor:       opts.MemoryMonitor,
 		reverse:          opts.Reverse,
 		start:            key,
 		end:              endKey,
@@ -2391,7 +2396,7 @@ func mvccScanToBytes(
 
 	var res MVCCScanResult
 	var err error
-	res.ResumeSpan, err = mvccScanner.scan()
+	res.ResumeSpan, err = mvccScanner.scan(ctx)
 
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -2471,6 +2476,42 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
+// ResponseMemoryAccount is used to track memory allocations when producing a
+// response from the MVCC layer. The Grow method is used to track memory added
+// to the response. The provider of this monitor knows when the memory is no
+// longer needed, as multiple responses are typically coalesced into a batch
+// response. So it is typical to not need to use Shrink, though it is provided
+// as a convenience.
+//
+// An empty initialized ResponseMemoryAccount is safe to use, and is utilized
+// when the call path does not wish to do memory accounting, or has not yet
+// been instrumented to do such accounting (so using
+// MVCCScanOptions.MemoryMonitor always "works"). This also avoids up to two
+// memory allocations on paths that don't do memory accounting -- to construct
+// a NewUnlimitedMonitor and a BoundAccount.
+type ResponseMemoryAccount struct {
+	B *mon.BoundAccount
+}
+
+// Grow grows the reserved memory by x bytes.
+func (b ResponseMemoryAccount) Grow(ctx context.Context, x int64) error {
+	if b.B == nil {
+		return nil
+	}
+	if err := b.B.Grow(ctx, x); err != nil {
+		return errors.Wrapf(err, "used bytes %d", b.B.Used())
+	}
+	return nil
+}
+
+// Shrink releases part of the cumulated allocations by the specified size.
+func (b ResponseMemoryAccount) Shrink(ctx context.Context, delta int64) {
+	if b.B == nil {
+		return
+	}
+	b.B.Shrink(ctx, delta)
+}
+
 // MVCCScanOptions bundles options for the MVCCScan family of functions.
 type MVCCScanOptions struct {
 	// See the documentation for MVCCScan for information on these parameters.
@@ -2523,6 +2564,8 @@ type MVCCScanOptions struct {
 	// Not used in inconsistent scans.
 	// The zero value indicates no limit.
 	MaxIntents int64
+	// MemoryMonitor is used for tracking memory allocations.
+	MemoryMonitor ResponseMemoryAccount
 }
 
 func (opts *MVCCScanOptions) validate() error {
