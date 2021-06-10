@@ -36,6 +36,17 @@ func main() {
 	}
 }
 
+type reInfos struct {
+	reCnt    int
+	infos    []reInfo
+	reToName map[string]string
+}
+
+type reInfo struct {
+	ReName string
+	ReDef  string
+}
+
 type catInfo struct {
 	Title      string
 	Comment    string
@@ -67,12 +78,13 @@ type eventInfo struct {
 }
 
 type fieldInfo struct {
-	Comment       string
-	FieldType     string
-	FieldName     string
-	ReportingSafe bool
-	Inherited     bool
-	IsEnum        bool
+	Comment             string
+	FieldType           string
+	FieldName           string
+	AlwaysReportingSafe bool
+	ReportingSafeRe     string
+	Inherited           bool
+	IsEnum              bool
 }
 
 func run() error {
@@ -114,8 +126,9 @@ func run() error {
 	info := map[string]*eventInfo{}
 	enums := map[string]*enumInfo{}
 	cats := map[string]*catInfo{}
+	regexps := reInfos{reToName: map[string]string{}}
 	for i := 2; i < len(os.Args); i++ {
-		if err := readInput(enums, info, cats, os.Args[i]); err != nil {
+		if err := readInput(&regexps, enums, info, cats, os.Args[i]); err != nil {
 			return err
 		}
 	}
@@ -161,11 +174,12 @@ func run() error {
 	// Render the template.
 	var src bytes.Buffer
 	if err := tmpl.Execute(&src, struct {
+		AllRegexps []reInfo
 		Categories []*catInfo
 		Events     []*eventInfo
 		AllEvents  []*eventInfo
 		Enums      []*enumInfo
-	}{sortedCats, sortedInfos, allSortedInfos, allSortedEnums}); err != nil {
+	}{regexps.infos, sortedCats, sortedInfos, allSortedInfos, allSortedEnums}); err != nil {
 		return err
 	}
 
@@ -188,6 +202,7 @@ func run() error {
 }
 
 func readInput(
+	regexps *reInfos,
 	enums map[string]*enumInfo,
 	infos map[string]*eventInfo,
 	cats map[string]*catInfo,
@@ -351,22 +366,51 @@ func readInput(
 				_, isEnum := enums[typ]
 
 				name := snakeToCamel(fieldDefRe.ReplaceAllString(line, "$name"))
-				safe := false
+				alwayssafe := false
 				if nameOverride := fieldDefRe.ReplaceAllString(line, "$noverride"); nameOverride != "" {
 					name = nameOverride
 				}
+				// redact:"nonsensitive" - always safe for reporting.
 				if reportingSafe := fieldDefRe.ReplaceAllString(line, "$reportingsafe"); reportingSafe != "" {
-					safe = true
+					alwayssafe = true
 				}
-				if !safe && isSafeType(typ) {
-					safe = true
+				// Certain types are also always safe for reporting.
+				if !alwayssafe && isSafeType(typ) {
+					alwayssafe = true
+				}
+				// redact:"safeif:<regexp>" - safe for reporting if the string matches the regexp.
+				safeReName := ""
+				if re := fieldDefRe.ReplaceAllString(line, "$safeif"); re != "" {
+					// We're reading the regular expression from the .proto source, so we must
+					// take care of string un-escaping ourselves. If this code ever improves
+					// to apply as a protobuf plugin, this step can be removed.
+					re, err := strconv.Unquote(`"` + re + `"`)
+					if err != nil {
+						return errors.Wrapf(err, "error while unquoting regexp at %q", line)
+					}
+					safeRe := "^" + re + "$"
+					// Syntax check on regexp.
+					_, err = regexp.Compile(safeRe)
+					if err != nil {
+						return errors.Wrapf(err, "regexp %s is invalid (%q)", re, line)
+					}
+					// We want to reuse the regexp variables across fields if the regexps are the same.
+					if n, ok := regexps.reToName[safeRe]; ok {
+						safeReName = n
+					} else {
+						regexps.reCnt++
+						safeReName = fmt.Sprintf("safeRe%d", regexps.reCnt)
+						regexps.reToName[safeRe] = safeReName
+						regexps.infos = append(regexps.infos, reInfo{ReName: safeReName, ReDef: safeRe})
+					}
 				}
 				fi := fieldInfo{
-					Comment:       comment,
-					FieldType:     typ,
-					FieldName:     name,
-					ReportingSafe: safe,
-					IsEnum:        isEnum,
+					Comment:             comment,
+					FieldType:           typ,
+					FieldName:           name,
+					AlwaysReportingSafe: alwayssafe,
+					ReportingSafeRe:     safeReName,
+					IsEnum:              isEnum,
 				}
 				curMsg.Fields = append(curMsg.Fields, fi)
 				curMsg.AllFields = append(curMsg.AllFields, fi)
@@ -392,7 +436,8 @@ var fieldDefRe = regexp.MustCompile(`\s*(?P<typ>[a-z._A-Z0-9]+)` +
 	`\s+(?P<name>[a-z_]+)` +
 	`(;|` +
 	`\s+(.*customname\) = "(?P<noverride>[A-Za-z]+)")?` +
-	`(.*(?P<reportingsafe>redact:."nonsensitive."))?` +
+	`(.*"redact:\\"(?P<reportingsafe>nonsensitive)\\"")?` +
+	`(.*"redact:\\"safeif:(?P<safeif>([^\\]|\\[^"])+)\\"")?` +
 	`).*$`)
 
 func camelToSnake(typeName string) string {
@@ -430,10 +475,15 @@ package eventpb
 
 import (
   "strconv"
+  "regexp"
 
   "github.com/cockroachdb/redact"
   "github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 )
+
+{{range .AllRegexps}}
+var {{ .ReName }} = regexp.MustCompile(` + "`{{ .ReDef }}`" + `)
+{{end}}
 
 {{range .AllEvents}}
 // AppendJSONFields implements the EventPayload interface.
@@ -445,8 +495,16 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
    if m.{{.FieldName}} != "" {
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":\""...)
-     {{ if .ReportingSafe -}}
+     {{ if .AlwaysReportingSafe -}}
      b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.{{.FieldName}}))
+     {{- else if ne .ReportingSafeRe "" }}
+     if {{ .ReportingSafeRe }}.MatchString(m.{{.FieldName}}) {
+       b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.{{.FieldName}})))))
+     } else {
+       b = append(b, redact.StartMarker()...)
+       b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.{{.FieldName}})))))
+       b = append(b, redact.EndMarker()...)
+     }
      {{- else -}}
      b = append(b, redact.StartMarker()...)
      b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.{{.FieldName}})))))
@@ -461,8 +519,16 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      for i, v := range m.{{.FieldName}} {
        if i > 0 { b = append(b, ',') }
        b = append(b, '"')
-       {{ if .ReportingSafe -}}
+       {{ if .AlwaysReportingSafe -}}
        b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), v))
+       {{- else if ne .ReportingSafeRe "" }}
+       if {{ .ReportingSafeRe }}.MatchString(v) {
+         b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(v)))))
+       } else {
+         b = append(b, redact.StartMarker()...)
+         b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(v)))))
+         b = append(b, redact.EndMarker()...)
+       }
        {{- else -}}
        b = append(b, redact.StartMarker()...)
        b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(v)))))
@@ -579,7 +645,7 @@ Events in this category are logged to the ` + "`" + `{{.LogChannel}}` + "`" + ` 
 | Field | Description | Sensitive |
 |--|--|--|
 {{range .Fields -}}
-| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }}{{- if .IsEnum }} See below for possible values for type ` + "`" + `{{- .FieldType -}}` + "`" + `.{{- end }} | {{ if .ReportingSafe }}no{{else}}yes{{end}} |
+| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }}{{- if .IsEnum }} See below for possible values for type ` + "`" + `{{- .FieldType -}}` + "`" + `.{{- end }} | {{ if .AlwaysReportingSafe }}no{{else if ne .ReportingSafeRe "" }}depends{{else}}yes{{end}} |
 {{end}}
 {{- end}}
 
@@ -589,7 +655,7 @@ Events in this category are logged to the ` + "`" + `{{.LogChannel}}` + "`" + ` 
 | Field | Description | Sensitive |
 |--|--|--|
 {{range .InheritedFields -}}
-| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }} | {{ if .ReportingSafe }}no{{else}}yes{{end}} |
+| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }} | {{ if .AlwaysReportingSafe }}no{{else if ne .ReportingSafeRe "" }}depends{{else}}yes{{end}} |
 {{end}}
 {{- end}}
 

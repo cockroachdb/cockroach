@@ -13,6 +13,7 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -656,6 +657,53 @@ func Example_sql_table() {
 	// ## 4
 	// tabs
 	// # 9 rows
+}
+
+func Example_sql_table_border() {
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	for i := 0; i < 4; i++ {
+		c.RunWithArgs([]string{`sql`, `--format=table`, `--set`, `border=` + strconv.Itoa(i),
+			`-e`, `values (123, '123'), (456, e'456\nfoobar')`})
+	}
+
+	// Output:
+	// sql --format=table --set border=0 -e values (123, '123'), (456, e'456\nfoobar')
+	//   column1 | column2
+	// ----------+----------
+	//       123 | 123
+	//       456 | 456
+	//           | foobar
+	// (2 rows)
+	// sql --format=table --set border=1 -e values (123, '123'), (456, e'456\nfoobar')
+	//   column1 | column2
+	// ----------+----------
+	//       123 | 123
+	// ----------+----------
+	//       456 | 456
+	//           | foobar
+	// ----------+----------
+	// (2 rows)
+	// sql --format=table --set border=2 -e values (123, '123'), (456, e'456\nfoobar')
+	// +---------+---------+
+	// | column1 | column2 |
+	// +---------+---------+
+	// |     123 | 123     |
+	// |     456 | 456     |
+	// |         | foobar  |
+	// +---------+---------+
+	// (2 rows)
+	// sql --format=table --set border=3 -e values (123, '123'), (456, e'456\nfoobar')
+	// +---------+---------+
+	// | column1 | column2 |
+	// +---------+---------+
+	// |     123 | 123     |
+	// +---------+---------+
+	// |     456 | 456     |
+	// |         | foobar  |
+	// +---------+---------+
+	// (2 rows)
 }
 
 func TestRenderHTML(t *testing.T) {

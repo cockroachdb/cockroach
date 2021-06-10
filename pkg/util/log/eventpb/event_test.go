@@ -27,8 +27,8 @@ func TestEventJSON(t *testing.T) {
 		{&CreateDatabase{DatabaseName: "he‹llo"}, `"DatabaseName":"‹he?llo›"`},
 
 		// Check that strings in arrays are redactable too.
-		{&DropDatabase{DatabaseName: "hello", DroppedSchemaObjects: []string{"world", "universe"}},
-			`"DatabaseName":"‹hello›","DroppedSchemaObjects":["‹world›","‹universe›"]`},
+		{&DropDatabase{DatabaseName: "hello", DroppedSchemaObjects: []string{"world", "uni‹verse"}},
+			`"DatabaseName":"‹hello›","DroppedSchemaObjects":["‹world›","‹uni?verse›"]`},
 
 		// Check that non-sensitive fields are not redacted.
 		{&ReverseSchemaChange{SQLSTATE: "XXUUU"}, `"SQLSTATE":"XXUUU"`},
@@ -37,6 +37,12 @@ func TestEventJSON(t *testing.T) {
 		{&ChangeDatabasePrivilege{CommonSQLPrivilegeEventDetails: CommonSQLPrivilegeEventDetails{
 			GrantedPrivileges: []string{"INSERT", "CREATE"},
 		}}, `"GrantedPrivileges":["INSERT","CREATE"]`},
+
+		// Check that conditional-sensitive fields are redacted conditionally.
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{User: "root"}}, `"User":"root"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{User: "someother"}}, `"User":"‹someother›"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "$ inte‹rnal"}}, `"ApplicationName":"$ inte?rnal"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "myapp"}}, `"ApplicationName":"‹myapp›"`},
 
 		// Integer and boolean fields are not redactable in any case.
 		{&UnsafeDeleteDescriptor{ParentID: 123, Force: true}, `"ParentID":123,"Force":true`},

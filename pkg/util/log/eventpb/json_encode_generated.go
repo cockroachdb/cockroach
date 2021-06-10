@@ -3,11 +3,16 @@
 package eventpb
 
 import (
+	"regexp"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/redact"
 )
+
+var safeRe1 = regexp.MustCompile(`^root|node$`)
+
+var safeRe2 = regexp.MustCompile(`^\$.*$`)
 
 // AppendJSONFields implements the EventPayload interface.
 func (m *AdminQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
@@ -1158,9 +1163,14 @@ func (m *CommonSQLEventDetails) AppendJSONFields(printComma bool, b redact.Redac
 		}
 		printComma = true
 		b = append(b, "\"User\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
-		b = append(b, redact.EndMarker()...)
+
+		if safeRe1.MatchString(m.User) {
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+		} else {
+			b = append(b, redact.StartMarker()...)
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+			b = append(b, redact.EndMarker()...)
+		}
 		b = append(b, '"')
 	}
 
@@ -1179,9 +1189,14 @@ func (m *CommonSQLEventDetails) AppendJSONFields(printComma bool, b redact.Redac
 		}
 		printComma = true
 		b = append(b, "\"ApplicationName\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ApplicationName)))))
-		b = append(b, redact.EndMarker()...)
+
+		if safeRe2.MatchString(m.ApplicationName) {
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ApplicationName)))))
+		} else {
+			b = append(b, redact.StartMarker()...)
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ApplicationName)))))
+			b = append(b, redact.EndMarker()...)
+		}
 		b = append(b, '"')
 	}
 
