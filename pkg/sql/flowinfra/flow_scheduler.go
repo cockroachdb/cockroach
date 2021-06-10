@@ -194,29 +194,17 @@ func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	// Iterate over the whole queue and remove the dead flows.
-	var firstNotCanceled *flowWithCtx
-	// queueElement won't be nil because we know that the queue is not empty.
-	queueElement := fs.mu.queue.Front()
-	for {
-		f := queueElement.Value.(*flowWithCtx)
-		if f == firstNotCanceled {
-			// We have gone through the whole queue and got to its front, so
-			// we're done.
-			return
-		}
-		nextQueueElement := queueElement.Next()
+	var next *list.Element
+	for e := fs.mu.queue.Front(); e != nil; e = next {
+		// We need to call Next() before Remove() below because the latter
+		// zeroes out the links between elements.
+		next = e.Next()
+		f := e.Value.(*flowWithCtx)
 		if _, shouldCancel := toCancel[f.flow.GetID().UUID]; shouldCancel {
-			fs.mu.queue.Remove(queueElement)
+			fs.mu.queue.Remove(e)
 			fs.metrics.FlowsQueued.Dec(1)
 			numCanceled++
-			if fs.mu.queue.Len() == 0 {
-				// All scheduled flows turned out to be dead.
-				return
-			}
-		} else if firstNotCanceled == nil {
-			firstNotCanceled = f
 		}
-		queueElement = nextQueueElement
 	}
 }
 

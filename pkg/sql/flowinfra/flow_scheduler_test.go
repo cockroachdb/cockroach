@@ -207,4 +207,22 @@ func TestFlowScheduler(t *testing.T) {
 			return nil
 		})
 	})
+
+	t.Run("attempt to cancel non-existent dead flows", func(t *testing.T) {
+		scheduler.atomics.maxRunningFlows = 0
+
+		actualFlowID := uuid.FastMakeV4()
+		flow := newMockFlow(actualFlowID, nil /* waitCb*/)
+		require.NoError(t, scheduler.ScheduleFlow(ctx, flow))
+
+		// Attempt to cancel a non-existent flow.
+		req := &execinfrapb.CancelDeadFlowsRequest{
+			FlowIDs: []execinfrapb.FlowID{{UUID: uuid.FastMakeV4()}},
+		}
+		scheduler.CancelDeadFlows(req)
+
+		// Cancel the actual flow.
+		req.FlowIDs[0].UUID = actualFlowID
+		scheduler.CancelDeadFlows(req)
+	})
 }
