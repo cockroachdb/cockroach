@@ -871,29 +871,44 @@ except-all
 # Regression test for #35715.
 opt colstat=(5,2)
 SELECT * FROM
-((VALUES (NULL, true) EXCEPT (VALUES (1, NULL)))) AS t(a, b)
+(((VALUES (NULL, true), (2, true)) EXCEPT (VALUES (1, NULL), (1, NULL)))) AS t(a, b)
 WHERE a IS NULL and b
 ----
 except
- ├── columns: a:5(int) b:2(bool!null)
- ├── left columns: column1:5(int) column2:2(bool!null)
+ ├── columns: a:1(int) b:2(bool!null)
+ ├── left columns: column1:1(int) column2:2(bool!null)
  ├── right columns: column1:3(int) column2:4(bool)
- ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(2,5)=1, null(2,5)=0]
- ├── key: (2,5)
- ├── values
- │    ├── columns: column2:2(bool!null) column1:5(int)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(2,5)=1, null(2,5)=0]
- │    ├── key: ()
- │    ├── fd: ()-->(2,5)
- │    └── (true, NULL) [type=tuple{bool, int}]
- └── values
+ ├── cardinality: [0 - 2]
+ ├── stats: [rows=1, distinct(1,2)=1, null(1,2)=0, distinct(2,5)=1, null(2,5)=0]
+ ├── key: (1,2)
+ ├── select
+ │    ├── columns: column1:1(int) column2:2(bool!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ │    ├── fd: ()-->(1,2)
+ │    ├── values
+ │    │    ├── columns: column1:1(int) column2:2(bool!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── stats: [rows=2, distinct(1)=2, null(1)=1, distinct(2)=1, null(2)=0, distinct(1,2)=2, null(1,2)=0]
+ │    │    ├── (NULL, true) [type=tuple{int, bool}]
+ │    │    └── (2, true) [type=tuple{int, bool}]
+ │    └── filters
+ │         ├── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ │         └── column2:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ └── select
       ├── columns: column1:3(int!null) column2:4(bool!null)
-      ├── cardinality: [0 - 0]
-      ├── stats: [rows=0, distinct(3,4)=0, null(3,4)=0]
-      ├── key: ()
-      └── fd: ()-->(3,4)
+      ├── cardinality: [0 - 2]
+      ├── stats: [rows=2e-10, distinct(3)=2e-10, null(3)=0, distinct(4)=2e-10, null(4)=0, distinct(3,4)=2e-10, null(3,4)=0]
+      ├── fd: ()-->(3,4)
+      ├── values
+      │    ├── columns: column1:3(int!null) column2:4(bool)
+      │    ├── cardinality: [2 - 2]
+      │    ├── stats: [rows=2, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=2, distinct(3,4)=1, null(3,4)=0]
+      │    ├── (1, NULL) [type=tuple{int, bool}]
+      │    └── (1, NULL) [type=tuple{int, bool}]
+      └── filters
+           ├── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+           └── column2:4 [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
 
 # Regression test for #36147 and #36157.
 opt
@@ -938,28 +953,32 @@ except
            └── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
 
 # Make sure that we estimate at least 1 row for the intersect.
-opt
-VALUES (1) INTERSECT VALUES (NULL) ORDER BY 1
+opt disable=SimplifyIntersectRight
+VALUES (1), (2) INTERSECT VALUES (NULL) ORDER BY 1
 ----
-intersect
+sort
  ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
- ├── right columns: column1:2(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: (1)
  ├── ordering: +1
- ├── values
- │    ├── columns: column1:1(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- │    ├── key: ()
- │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
- └── values
-      ├── columns: column1:2(int)
-      ├── cardinality: [1 - 1]
-      ├── stats: [rows=1, distinct(2)=1, null(2)=1]
-      ├── key: ()
-      ├── fd: ()-->(2)
-      └── (NULL,) [type=tuple{int}]
+ └── intersect
+      ├── columns: column1:1(int)
+      ├── left columns: column1:1(int)
+      ├── right columns: column1:2(int)
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      ├── key: (1)
+      ├── values
+      │    ├── columns: column1:1(int!null)
+      │    ├── cardinality: [2 - 2]
+      │    ├── stats: [rows=2, distinct(1)=2, null(1)=0]
+      │    ├── (1,) [type=tuple{int}]
+      │    └── (2,) [type=tuple{int}]
+      └── values
+           ├── columns: column1:2(int)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1, distinct(2)=1, null(2)=1]
+           ├── key: ()
+           ├── fd: ()-->(2)
+           └── (NULL,) [type=tuple{int}]
