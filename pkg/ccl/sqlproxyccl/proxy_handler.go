@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -117,8 +116,8 @@ type proxyHandler struct {
 	// which clients connect.
 	incomingCert certmgr.Cert
 
-	// denyListService provides access control.
-	denyListService denylist.Service
+	// denyListWatcher provides access control.
+	denyListWatcher *denylist.Watcher
 
 	// throttleService will do throttling of incoming connection requests.
 	throttleService throttler.Service
@@ -155,8 +154,10 @@ func newProxyHandler(
 
 	// If denylist functionality is requested, create the denylist service.
 	if options.Denylist != "" {
-		handler.denyListService = denylist.NewDenylistWithFile(ctx, options.Denylist,
+		handler.denyListWatcher = denylist.WatcherFromFile(ctx, options.Denylist,
 			denylist.WithPollingInterval(options.PollConfigInterval))
+	} else {
+		handler.denyListWatcher = denylist.NilWatcher()
 	}
 
 	handler.throttleService = throttler.NewLocalService(throttler.WithBaseDelay(options.RatelimitBaseDelay))
@@ -218,7 +219,27 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		return clientErr
 	}
 
-	if err = handler.validateAccessAndThrottle(ctx, tenID, ipAddr); err != nil {
+	errConnection := make(chan error, 1)
+
+	removeListener, err := handler.denyListWatcher.ListenForDenied(
+		denylist.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
+		func(err error) {
+			err = newErrorf(codeExpiredClientConnection, "connection added to deny list: %v", err)
+			select {
+			case errConnection <- err: /* error reported */
+			default: /* the channel already contains an error */
+			}
+		},
+	)
+	if err != nil {
+		log.Errorf(ctx, "connection matched denylist: %v", err)
+		err = newErrorf(codeProxyRefusedConnection, "connection refused")
+		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+		return err
+	}
+	defer removeListener()
+
+	if err = handler.throttle(ctx, tenID, ipAddr); err != nil {
 		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
 		return err
 	}
@@ -333,34 +354,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		&cache.ConnKey{IPAddress: ipAddr, TenantID: tenID},
 	)
 
-	errConnectionCopy := make(chan error, 1)
-	errExpired := make(chan error, 1)
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	// TODO(darinpp): starting a new go routine for every connection here is
-	// inefficient. Change to maintain a map of connections by IP/tenant and
-	// have single go routine that closes connections that are blocklisted.
-	go func() {
-		errExpired <- func(ctx context.Context) error {
-			t := timeutil.NewTimer()
-			defer t.Stop()
-			t.Reset(0)
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-t.C:
-					t.Read = true
-					if err := handler.validateAccess(ctx, tenID, ipAddr); err != nil {
-						return err
-					}
-				}
-				t.Reset(util.Jitter(handler.ValidateAccessInterval, 0.15))
-			}
-		}(ctx)
-	}()
 
 	log.Infof(ctx, "new connection")
 	connBegin := timeutil.Now()
@@ -372,14 +367,18 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	// encounter an error or shutdown signal.
 	go func() {
 		err := connectionCopy(crdbConn, conn)
-		errConnectionCopy <- err
+		select {
+		case errConnection <- err: /* error reported */
+		default: /* the channel already contains an error */
+		}
 	}()
 
 	select {
-	case err := <-errConnectionCopy:
+	case err := <-errConnection:
 		handler.metrics.updateForError(err)
 		return err
-	case err := <-errExpired:
+	case <-ctx.Done():
+		err := ctx.Err()
 		if err != nil {
 			// The client connection expired.
 			codeErr := newErrorf(
@@ -425,13 +424,9 @@ func (handler *proxyHandler) outgoingAddress(
 	return addr, nil
 }
 
-func (handler *proxyHandler) validateAccessAndThrottle(
+func (handler *proxyHandler) throttle(
 	ctx context.Context, tenID roachpb.TenantID, ipAddr string,
 ) error {
-	if err := handler.validateAccess(ctx, tenID, ipAddr); err != nil {
-		return err
-	}
-
 	// Admit the connection
 	connKey := cache.ConnKey{IPAddress: ipAddr, TenantID: tenID}
 	if !handler.connCache.Exists(&connKey) {
@@ -441,34 +436,6 @@ func (handler *proxyHandler) validateAccessAndThrottle(
 			log.Errorf(ctx, "throttler refused connection: %v", err.Error())
 			return newErrorf(codeProxyRefusedConnection, "connection attempt throttled")
 		}
-	}
-
-	return nil
-}
-
-func (handler *proxyHandler) validateAccess(
-	ctx context.Context, tenID roachpb.TenantID, ipAddr string,
-) error {
-	// Validate against the denylist service if it exists.
-	list := handler.denyListService
-	if list == nil {
-		return nil
-	}
-
-	if entry, err := list.Denied(denylist.DenyEntity{Item: tenID.String(), Type: denylist.ClusterType}); err != nil {
-		// Log error but don't return since this could be transient.
-		log.Errorf(ctx, "could not consult denied list for tenant: %d", tenID.ToUint64())
-	} else if entry != nil {
-		log.Errorf(ctx, "access denied for tenant: %d, reason: %s", tenID.ToUint64(), entry.Reason)
-		return newErrorf(codeProxyRefusedConnection, "tenant %d %s", tenID.ToUint64(), entry.Reason)
-	}
-
-	if entry, err := list.Denied(denylist.DenyEntity{Item: ipAddr, Type: denylist.IPAddrType}); err != nil {
-		// Log error but don't return since this could be transient.
-		log.Errorf(ctx, "could not consult denied list for IP address: %s", ipAddr)
-	} else if entry != nil {
-		log.Errorf(ctx, "access denied for IP address: %s, reason: %s", ipAddr, entry.Reason)
-		return newErrorf(codeProxyRefusedConnection, "IP address %s %s", ipAddr, entry.Reason)
 	}
 
 	return nil
