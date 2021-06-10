@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/time/rate"
@@ -63,6 +64,12 @@ var initConns = sharedFlags.Int("init-conns", 16,
 var displayEvery = runFlags.Duration("display-every", time.Second, "How much time between every one-line activity reports.")
 
 var displayFormat = runFlags.String("display-format", "simple", "Output display format (simple, incremental-json)")
+
+var prometheusPort = sharedFlags.Int(
+	"prometheus-port",
+	2112,
+	"Port to expose prometheus metrics if the workload has a prometheus gatherer set.",
+)
 
 var histograms = runFlags.String(
 	"histograms", "",
@@ -370,7 +377,20 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
-	reg := histogram.NewRegistry(*histogramsMaxLatency)
+	reg := histogram.NewRegistry(
+		*histogramsMaxLatency,
+		gen.Meta().Name,
+	)
+	// Expose the prometheus gatherer.
+	go func() {
+		if err := http.ListenAndServe(
+			fmt.Sprintf(":%d", *prometheusPort),
+			promhttp.HandlerFor(reg.Gatherer(), promhttp.HandlerOpts{}),
+		); err != nil {
+			log.Errorf(context.Background(), "error serving prometheus: %v", err)
+		}
+	}()
+
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
 	log.Infof(ctx, "creating load generator...")

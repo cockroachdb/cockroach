@@ -25,6 +25,7 @@ go_library(
         "//pkg/workload/histogram",
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_golang//prometheus/promhttp",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_x_time//rate",
