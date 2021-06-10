@@ -280,9 +280,9 @@ CREATE TABLE abc (
 memo
 SELECT d FROM abc ORDER BY lower(d)
 ----
-memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +6])
+memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +7])
  ├── G1: (project G2 G3 d)
- │    ├── [presentation: d:4] [ordering: +6]
+ │    ├── [presentation: d:4] [ordering: +7]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1323.85
  │    └── []
@@ -401,33 +401,33 @@ INSERT INTO fk_b (b,a) VALUES (1,1)
 insert fk_b
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:4 => b:1
- │    └── column2:5 => fk_b.a:2
+ │    ├── column1:5 => b:1
+ │    └── column2:6 => fk_b.a:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:4!null column2:5!null
+ │    ├── columns: column1:5!null column2:6!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(4,5)
+ │    ├── fd: ()-->(5,6)
  │    └── (1, 1)
  └── f-k-checks
       └── f-k-checks-item: fk_b(a) -> fk_a(a)
            └── anti-join (lookup fk_a)
-                ├── columns: a:6!null
-                ├── key columns: [6] = [7]
+                ├── columns: a:7!null
+                ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(6)
+                ├── fd: ()-->(7)
                 ├── with-scan &1
-                │    ├── columns: a:6!null
+                │    ├── columns: a:7!null
                 │    ├── mapping:
-                │    │    └──  column2:5 => a:6
+                │    │    └──  column2:6 => a:7
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(6)
+                │    └── fd: ()-->(7)
                 └── filters (true)
 
 # --------------------------------------------------
@@ -534,25 +534,25 @@ project
  ├── fd: ()-->(3)
  └── locality-optimized-search
       ├── columns: a:3!null b:4!null
-      ├── left columns: a:10 b:11
-      ├── right columns: a:17 b:18
+      ├── left columns: a:11 b:12
+      ├── right columns: a:19 b:20
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(3,4)
       ├── scan abc_part@b_idx
-      │    ├── columns: a:10!null b:11!null
-      │    ├── constraint: /8/11: [/'east'/1 - /'east'/1]
+      │    ├── columns: a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'east'/1 - /'east'/1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(10,11)
+      │    └── fd: ()-->(11,12)
       └── scan abc_part@b_idx
-           ├── columns: a:17!null b:18!null
-           ├── constraint: /15/18
+           ├── columns: a:19!null b:20!null
+           ├── constraint: /17/20
            │    ├── [/'central'/1 - /'central'/1]
            │    └── [/'west'/1 - /'west'/1]
            ├── cardinality: [0 - 1]
            ├── key: ()
-           └── fd: ()-->(17,18)
+           └── fd: ()-->(19,20)
 
 opt locality=(region=west) expect=GenerateLocalityOptimizedScan
 SELECT * FROM abc_part WHERE b = 1
@@ -564,25 +564,25 @@ index-join abc_part
  ├── fd: ()-->(1-6)
  └── locality-optimized-search
       ├── columns: r:1!null a:3!null b:4!null
-      ├── left columns: r:8 a:10 b:11
-      ├── right columns: r:15 a:17 b:18
+      ├── left columns: r:9 a:11 b:12
+      ├── right columns: r:17 a:19 b:20
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,3,4)
       ├── scan abc_part@b_idx
-      │    ├── columns: r:8!null a:10!null b:11!null
-      │    ├── constraint: /8/11: [/'west'/1 - /'west'/1]
+      │    ├── columns: r:9!null a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'west'/1 - /'west'/1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(8,10,11)
+      │    └── fd: ()-->(9,11,12)
       └── scan abc_part@b_idx
-           ├── columns: r:15!null a:17!null b:18!null
-           ├── constraint: /15/18
+           ├── columns: r:17!null a:19!null b:20!null
+           ├── constraint: /17/20
            │    ├── [/'central'/1 - /'central'/1]
            │    └── [/'east'/1 - /'east'/1]
            ├── cardinality: [0 - 1]
            ├── key: ()
-           └── fd: ()-->(15,17,18)
+           └── fd: ()-->(17,19,20)
 
 opt locality=(region=central) expect=GenerateLocalityOptimizedScan
 SELECT * FROM abc_part WHERE b = 1
@@ -594,25 +594,25 @@ index-join abc_part
  ├── fd: ()-->(1-6)
  └── locality-optimized-search
       ├── columns: r:1!null a:3!null b:4!null
-      ├── left columns: r:8 a:10 b:11
-      ├── right columns: r:15 a:17 b:18
+      ├── left columns: r:9 a:11 b:12
+      ├── right columns: r:17 a:19 b:20
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,3,4)
       ├── scan abc_part@b_idx
-      │    ├── columns: r:8!null a:10!null b:11!null
-      │    ├── constraint: /8/11: [/'central'/1 - /'central'/1]
+      │    ├── columns: r:9!null a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'central'/1 - /'central'/1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(8,10,11)
+      │    └── fd: ()-->(9,11,12)
       └── scan abc_part@b_idx
-           ├── columns: r:15!null a:17!null b:18!null
-           ├── constraint: /15/18
+           ├── columns: r:17!null a:19!null b:20!null
+           ├── constraint: /17/20
            │    ├── [/'east'/1 - /'east'/1]
            │    └── [/'west'/1 - /'west'/1]
            ├── cardinality: [0 - 1]
            ├── key: ()
-           └── fd: ()-->(15,17,18)
+           └── fd: ()-->(17,19,20)
 
 opt locality=(region=east) expect=GenerateLocalityOptimizedScan
 SELECT * FROM abc_part WHERE c = 1
@@ -624,22 +624,22 @@ index-join abc_part
  ├── fd: ()-->(1-6)
  └── locality-optimized-search
       ├── columns: r:1!null t:2!null a:3!null c:5!null
-      ├── left columns: r:8 t:9 a:10 c:12
-      ├── right columns: r:15 t:16 a:17 c:19
+      ├── left columns: r:9 t:10 a:11 c:13
+      ├── right columns: r:17 t:18 a:19 c:21
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
       ├── scan abc_part@c_idx
-      │    ├── columns: r:8!null t:9!null a:10!null c:12!null
-      │    ├── constraint: /8/9/12
+      │    ├── columns: r:9!null t:10!null a:11!null c:13!null
+      │    ├── constraint: /9/10/13
       │    │    ├── [/'east'/1/1 - /'east'/1/1]
       │    │    └── [/'east'/2/1 - /'east'/2/1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(8-10,12)
+      │    └── fd: ()-->(9-11,13)
       └── scan abc_part@c_idx
-           ├── columns: r:15!null t:16!null a:17!null c:19!null
-           ├── constraint: /15/16/19
+           ├── columns: r:17!null t:18!null a:19!null c:21!null
+           ├── constraint: /17/18/21
            │    ├── [/'central'/1/1 - /'central'/1/1]
            │    ├── [/'central'/2/1 - /'central'/2/1]
            │    ├── [/'central'/3/1 - /'central'/3/1]
@@ -649,7 +649,7 @@ index-join abc_part
            │    └── [/'west'/3/1 - /'west'/3/1]
            ├── cardinality: [0 - 1]
            ├── key: ()
-           └── fd: ()-->(15-17,19)
+           └── fd: ()-->(17-19,21)
 
 opt locality=(region=west) expect=GenerateLocalityOptimizedScan
 SELECT * FROM abc_part WHERE c = 1
@@ -661,23 +661,23 @@ index-join abc_part
  ├── fd: ()-->(1-6)
  └── locality-optimized-search
       ├── columns: r:1!null t:2!null a:3!null c:5!null
-      ├── left columns: r:8 t:9 a:10 c:12
-      ├── right columns: r:15 t:16 a:17 c:19
+      ├── left columns: r:9 t:10 a:11 c:13
+      ├── right columns: r:17 t:18 a:19 c:21
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
       ├── scan abc_part@c_idx
-      │    ├── columns: r:8!null t:9!null a:10!null c:12!null
-      │    ├── constraint: /8/9/12
+      │    ├── columns: r:9!null t:10!null a:11!null c:13!null
+      │    ├── constraint: /9/10/13
       │    │    ├── [/'west'/1/1 - /'west'/1/1]
       │    │    ├── [/'west'/2/1 - /'west'/2/1]
       │    │    └── [/'west'/3/1 - /'west'/3/1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(8-10,12)
+      │    └── fd: ()-->(9-11,13)
       └── scan abc_part@c_idx
-           ├── columns: r:15!null t:16!null a:17!null c:19!null
-           ├── constraint: /15/16/19
+           ├── columns: r:17!null t:18!null a:19!null c:21!null
+           ├── constraint: /17/18/21
            │    ├── [/'central'/1/1 - /'central'/1/1]
            │    ├── [/'central'/2/1 - /'central'/2/1]
            │    ├── [/'central'/3/1 - /'central'/3/1]
@@ -686,7 +686,7 @@ index-join abc_part
            │    └── [/'east'/3/1 - /'east'/3/1]
            ├── cardinality: [0 - 1]
            ├── key: ()
-           └── fd: ()-->(15-17,19)
+           └── fd: ()-->(17-19,21)
 
 opt locality=(region=central) expect=GenerateLocalityOptimizedScan
 SELECT * FROM abc_part WHERE c = 1
@@ -698,24 +698,24 @@ index-join abc_part
  ├── fd: ()-->(1-6)
  └── locality-optimized-search
       ├── columns: r:1!null t:2!null a:3!null c:5!null
-      ├── left columns: r:8 t:9 a:10 c:12
-      ├── right columns: r:15 t:16 a:17 c:19
+      ├── left columns: r:9 t:10 a:11 c:13
+      ├── right columns: r:17 t:18 a:19 c:21
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
       ├── scan abc_part@c_idx
-      │    ├── columns: r:8!null t:9!null a:10!null c:12!null
-      │    ├── constraint: /8/9/12
+      │    ├── columns: r:9!null t:10!null a:11!null c:13!null
+      │    ├── constraint: /9/10/13
       │    │    ├── [/'central'/1/1 - /'central'/1/1]
       │    │    ├── [/'central'/2/1 - /'central'/2/1]
       │    │    ├── [/'central'/3/1 - /'central'/3/1]
       │    │    └── [/'east'/3/1 - /'east'/3/1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(8-10,12)
+      │    └── fd: ()-->(9-11,13)
       └── scan abc_part@c_idx
-           ├── columns: r:15!null t:16!null a:17!null c:19!null
-           ├── constraint: /15/16/19
+           ├── columns: r:17!null t:18!null a:19!null c:21!null
+           ├── constraint: /17/18/21
            │    ├── [/'east'/1/1 - /'east'/1/1]
            │    ├── [/'east'/2/1 - /'east'/2/1]
            │    ├── [/'west'/1/1 - /'west'/1/1]
@@ -723,7 +723,7 @@ index-join abc_part
            │    └── [/'west'/3/1 - /'west'/3/1]
            ├── cardinality: [0 - 1]
            ├── key: ()
-           └── fd: ()-->(15-17,19)
+           └── fd: ()-->(17-19,21)
 
 # b is not constrained to a single value.
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
@@ -791,22 +791,22 @@ project
  ├── fd: ()-->(3)
  └── locality-optimized-search
       ├── columns: a:3!null b:4!null
-      ├── left columns: a:10 b:11
-      ├── right columns: a:17 b:18
+      ├── left columns: a:11 b:12
+      ├── right columns: a:19 b:20
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(3,4)
       ├── scan abc_part@b_idx
-      │    ├── columns: a:10!null b:11!null
-      │    ├── constraint: /8/11: [/'east'/1 - /'east'/1]
+      │    ├── columns: a:11!null b:12!null
+      │    ├── constraint: /9/12: [/'east'/1 - /'east'/1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(10,11)
+      │    └── fd: ()-->(11,12)
       └── scan abc_part@b_idx
-           ├── columns: a:17!null b:18!null
-           ├── constraint: /15/18
+           ├── columns: a:19!null b:20!null
+           ├── constraint: /17/20
            │    ├── [/'central'/1 - /'central'/1]
            │    └── [/'west'/1 - /'west'/1]
            ├── cardinality: [0 - 1]
            ├── key: ()
-           └── fd: ()-->(17,18)
+           └── fd: ()-->(19,20)

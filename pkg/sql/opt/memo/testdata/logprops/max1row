@@ -24,35 +24,35 @@ project
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-4,+3,+1)
  └── select
-      ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal)
+      ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal) xyzs.tableoid:6(oid)
       ├── key: (1)
-      ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-      ├── prune: (1-5)
+      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      ├── prune: (1-6)
       ├── interesting orderings: (+1) (-4,+3,+1)
       ├── scan xyzs
-      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal)
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal) xyzs.tableoid:6(oid)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-      │    ├── prune: (1-5)
+      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    ├── prune: (1-6)
       │    └── interesting orderings: (+1) (-4,+3,+1)
       └── filters
            └── eq [type=bool, subquery]
                 ├── subquery [type=string]
                 │    └── max1-row
-                │         ├── columns: v:8(string)
+                │         ├── columns: v:9(string)
                 │         ├── error: "more than one row returned by a subquery used as an expression"
                 │         ├── cardinality: [0 - 1]
                 │         ├── key: ()
-                │         ├── fd: ()-->(8)
+                │         ├── fd: ()-->(9)
                 │         └── project
-                │              ├── columns: v:8(string)
-                │              ├── prune: (8)
+                │              ├── columns: v:9(string)
+                │              ├── prune: (9)
                 │              └── scan kuv
-                │                   ├── columns: k:6(int!null) u:7(float) v:8(string) kuv.crdb_internal_mvcc_timestamp:9(decimal)
-                │                   ├── key: (6)
-                │                   ├── fd: (6)-->(7-9)
-                │                   ├── prune: (6-9)
-                │                   └── interesting orderings: (+6)
+                │                   ├── columns: k:7(int!null) u:8(float) v:9(string) kuv.crdb_internal_mvcc_timestamp:10(decimal) kuv.tableoid:11(oid)
+                │                   ├── key: (7)
+                │                   ├── fd: (7)-->(8-11)
+                │                   ├── prune: (7-11)
+                │                   └── interesting orderings: (+7)
                 └── const: 'foo' [type=string]
 
 # MakeMax1Row retains equivalence dependencies of the FD set.

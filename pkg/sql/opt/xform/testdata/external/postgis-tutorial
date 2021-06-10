@@ -149,11 +149,11 @@ WHERE
     )
 ----
 scalar-group-by
- ├── columns: sum:12
+ ├── columns: sum:13
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(12)
+ ├── fd: ()-->(13)
  ├── select
  │    ├── columns: popn_total:3 geom:10!null
  │    ├── immutable
@@ -162,7 +162,7 @@ scalar-group-by
  │    └── filters
  │         └── st_dwithin(geom:10, '01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', 50.0) [outer=(10), immutable, constraints=(/10: (/NULL - ])]
  └── aggregations
-      └── sum [as=sum:12, outer=(3)]
+      └── sum [as=sum:13, outer=(3)]
            └── popn_total:3
 
 # 13.0
@@ -181,29 +181,29 @@ ORDER BY
     subway_name, neighborhood_name, borough
 ----
 sort
- ├── columns: subway_name:9!null neighborhood_name:3 borough:2
+ ├── columns: subway_name:10!null neighborhood_name:3 borough:2
  ├── immutable
- ├── fd: ()-->(9)
- ├── ordering: +3,+2 opt(9) [actual: +3,+2]
+ ├── fd: ()-->(10)
+ ├── ordering: +3,+2 opt(10) [actual: +3,+2]
  └── project
-      ├── columns: boroname:2 neighborhoods.name:3 subways.name:9!null
+      ├── columns: boroname:2 neighborhoods.name:3 subways.name:10!null
       ├── immutable
-      ├── fd: ()-->(9)
+      ├── fd: ()-->(10)
       └── inner-join (cross)
-           ├── columns: boroname:2 neighborhoods.name:3 neighborhoods.geom:4!null subways.name:9!null subways.geom:21!null
+           ├── columns: boroname:2 neighborhoods.name:3 neighborhoods.geom:4!null subways.name:10!null subways.geom:22!null
            ├── immutable
-           ├── fd: ()-->(9)
+           ├── fd: ()-->(10)
            ├── scan nyc_neighborhoods [as=neighborhoods]
            │    └── columns: boroname:2 neighborhoods.name:3 neighborhoods.geom:4
            ├── select
-           │    ├── columns: subways.name:9!null subways.geom:21
-           │    ├── fd: ()-->(9)
+           │    ├── columns: subways.name:10!null subways.geom:22
+           │    ├── fd: ()-->(10)
            │    ├── scan nyc_subway_stations [as=subways]
-           │    │    └── columns: subways.name:9 subways.geom:21
+           │    │    └── columns: subways.name:10 subways.geom:22
            │    └── filters
-           │         └── subways.name:9 = 'Broad St' [outer=(9), constraints=(/9: [/'Broad St' - /'Broad St']; tight), fd=()-->(9)]
+           │         └── subways.name:10 = 'Broad St' [outer=(10), constraints=(/10: [/'Broad St' - /'Broad St']; tight), fd=()-->(10)]
            └── filters
-                └── st_contains(neighborhoods.geom:4, subways.geom:21) [outer=(4,21), immutable, constraints=(/4: (/NULL - ]; /21: (/NULL - ])]
+                └── st_contains(neighborhoods.geom:4, subways.geom:22) [outer=(4,22), immutable, constraints=(/4: (/NULL - ]; /22: (/NULL - ])]
 
 # 13.1a
 opt
@@ -226,28 +226,28 @@ ORDER BY
     white_pct DESC
 ----
 sort
- ├── columns: neighborhood_name:3 population:17 white_pct:20 black_pct:21
+ ├── columns: neighborhood_name:3 population:19 white_pct:22 black_pct:23
  ├── immutable
  ├── key: (3)
- ├── fd: (3)-->(17,20,21)
- ├── ordering: -20
+ ├── fd: (3)-->(19,22,23)
+ ├── ordering: -22
  └── project
-      ├── columns: white_pct:20 black_pct:21 name:3 sum:17
+      ├── columns: white_pct:22 black_pct:23 name:3 sum:19
       ├── immutable
       ├── key: (3)
-      ├── fd: (3)-->(17,20,21)
+      ├── fd: (3)-->(19,22,23)
       ├── group-by
-      │    ├── columns: name:3 sum:17 sum:18 sum:19
+      │    ├── columns: name:3 sum:19 sum:20 sum:21
       │    ├── grouping columns: name:3
       │    ├── immutable
       │    ├── key: (3)
-      │    ├── fd: (3)-->(17-19)
+      │    ├── fd: (3)-->(19-21)
       │    ├── inner-join (cross)
-      │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4!null popn_total:8 popn_white:9 popn_black:10 census.geom:15!null
+      │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4!null popn_total:9 popn_white:10 popn_black:11 census.geom:16!null
       │    │    ├── immutable
       │    │    ├── fd: ()-->(2)
       │    │    ├── scan nyc_census_blocks [as=census]
-      │    │    │    └── columns: popn_total:8 popn_white:9 popn_black:10 census.geom:15
+      │    │    │    └── columns: popn_total:9 popn_white:10 popn_black:11 census.geom:16
       │    │    ├── select
       │    │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4
       │    │    │    ├── fd: ()-->(2)
@@ -256,17 +256,17 @@ sort
       │    │    │    └── filters
       │    │    │         └── neighborhoods.boroname:2 = 'Manhattan' [outer=(2), constraints=(/2: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(2)]
       │    │    └── filters
-      │    │         └── st_intersects(neighborhoods.geom:4, census.geom:15) [outer=(4,15), immutable, constraints=(/4: (/NULL - ]; /15: (/NULL - ])]
+      │    │         └── st_intersects(neighborhoods.geom:4, census.geom:16) [outer=(4,16), immutable, constraints=(/4: (/NULL - ]; /16: (/NULL - ])]
       │    └── aggregations
-      │         ├── sum [as=sum:17, outer=(8)]
-      │         │    └── popn_total:8
-      │         ├── sum [as=sum:18, outer=(9)]
-      │         │    └── popn_white:9
-      │         └── sum [as=sum:19, outer=(10)]
-      │              └── popn_black:10
+      │         ├── sum [as=sum:19, outer=(9)]
+      │         │    └── popn_total:9
+      │         ├── sum [as=sum:20, outer=(10)]
+      │         │    └── popn_white:10
+      │         └── sum [as=sum:21, outer=(11)]
+      │              └── popn_black:11
       └── projections
-           ├── (sum:18 * 100.0) / sum:17 [as=white_pct:20, outer=(17,18), immutable]
-           └── (sum:19 * 100.0) / sum:17 [as=black_pct:21, outer=(17,19), immutable]
+           ├── (sum:20 * 100.0) / sum:19 [as=white_pct:22, outer=(19,20), immutable]
+           └── (sum:21 * 100.0) / sum:19 [as=black_pct:23, outer=(19,21), immutable]
 
 # 13.1c
 opt
@@ -282,41 +282,41 @@ WHERE
     strpos(subways.routes, 'A') > 0
 ----
 project
- ├── columns: white_pct:32 black_pct:33 popn_total:30
+ ├── columns: white_pct:34 black_pct:35 popn_total:32
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(30,32,33)
+ ├── fd: ()-->(32,34,35)
  ├── scalar-group-by
- │    ├── columns: sum:29 sum:30 sum:31
+ │    ├── columns: sum:31 sum:32 sum:33
  │    ├── cardinality: [1 - 1]
  │    ├── immutable
  │    ├── key: ()
- │    ├── fd: ()-->(29-31)
+ │    ├── fd: ()-->(31-33)
  │    ├── inner-join (cross)
- │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:22 subways.geom:27!null
+ │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:23 subways.geom:28!null
  │    │    ├── immutable
  │    │    ├── scan nyc_census_blocks [as=census]
  │    │    │    └── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10
  │    │    ├── select
- │    │    │    ├── columns: routes:22 subways.geom:27
+ │    │    │    ├── columns: routes:23 subways.geom:28
  │    │    │    ├── immutable
  │    │    │    ├── scan nyc_subway_stations [as=subways]
- │    │    │    │    └── columns: routes:22 subways.geom:27
+ │    │    │    │    └── columns: routes:23 subways.geom:28
  │    │    │    └── filters
- │    │    │         └── strpos(routes:22, 'A') > 0 [outer=(22), immutable]
+ │    │    │         └── strpos(routes:23, 'A') > 0 [outer=(23), immutable]
  │    │    └── filters
- │    │         └── st_dwithin(census.geom:10, subways.geom:27, 200.0) [outer=(10,27), immutable, constraints=(/10: (/NULL - ]; /27: (/NULL - ])]
+ │    │         └── st_dwithin(census.geom:10, subways.geom:28, 200.0) [outer=(10,28), immutable, constraints=(/10: (/NULL - ]; /28: (/NULL - ])]
  │    └── aggregations
- │         ├── sum [as=sum:29, outer=(4)]
+ │         ├── sum [as=sum:31, outer=(4)]
  │         │    └── popn_white:4
- │         ├── sum [as=sum:30, outer=(3)]
+ │         ├── sum [as=sum:32, outer=(3)]
  │         │    └── popn_total:3
- │         └── sum [as=sum:31, outer=(5)]
+ │         └── sum [as=sum:33, outer=(5)]
  │              └── popn_black:5
  └── projections
-      ├── (sum:29 * 100.0) / sum:30 [as=white_pct:32, outer=(29,30), immutable]
-      └── (sum:31 * 100.0) / sum:30 [as=black_pct:33, outer=(30,31), immutable]
+      ├── (sum:31 * 100.0) / sum:32 [as=white_pct:34, outer=(31,32), immutable]
+      └── (sum:33 * 100.0) / sum:32 [as=black_pct:35, outer=(32,33), immutable]
 
 # 13.2
 # The optimal plan for this query is to join census with subways and
@@ -339,48 +339,48 @@ ORDER BY
     black_pct DESC
 ----
 sort
- ├── columns: route:29 white_pct:35 black_pct:36 popn_total:33
+ ├── columns: route:31 white_pct:38 black_pct:39 popn_total:36
  ├── immutable
- ├── key: (29)
- ├── fd: (29)-->(33,35,36)
- ├── ordering: -36
+ ├── key: (31)
+ ├── fd: (31)-->(36,38,39)
+ ├── ordering: -39
  └── project
-      ├── columns: white_pct:35 black_pct:36 route:29 sum:33
+      ├── columns: white_pct:38 black_pct:39 route:31 sum:36
       ├── immutable
-      ├── key: (29)
-      ├── fd: (29)-->(33,35,36)
+      ├── key: (31)
+      ├── fd: (31)-->(36,38,39)
       ├── group-by
-      │    ├── columns: route:29 sum:32 sum:33 sum:34
-      │    ├── grouping columns: route:29
+      │    ├── columns: route:31 sum:35 sum:36 sum:37
+      │    ├── grouping columns: route:31
       │    ├── immutable
-      │    ├── key: (29)
-      │    ├── fd: (29)-->(32-34)
+      │    ├── key: (31)
+      │    ├── fd: (31)-->(35-37)
       │    ├── inner-join (cross)
-      │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:22 subways.geom:27!null route:29
+      │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:23 subways.geom:28!null route:31
       │    │    ├── immutable
       │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:22 subways.geom:27!null
+      │    │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:23 subways.geom:28!null
       │    │    │    ├── immutable
       │    │    │    ├── scan nyc_census_blocks [as=census]
       │    │    │    │    └── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10
       │    │    │    ├── scan nyc_subway_stations [as=subways]
-      │    │    │    │    └── columns: routes:22 subways.geom:27
+      │    │    │    │    └── columns: routes:23 subways.geom:28
       │    │    │    └── filters
-      │    │    │         └── st_dwithin(census.geom:10, subways.geom:27, 200.0) [outer=(10,27), immutable, constraints=(/10: (/NULL - ]; /27: (/NULL - ])]
+      │    │    │         └── st_dwithin(census.geom:10, subways.geom:28, 200.0) [outer=(10,28), immutable, constraints=(/10: (/NULL - ]; /28: (/NULL - ])]
       │    │    ├── scan subway_lines [as=lines]
-      │    │    │    └── columns: route:29
+      │    │    │    └── columns: route:31
       │    │    └── filters
-      │    │         └── strpos(routes:22, route:29) > 0 [outer=(22,29), immutable]
+      │    │         └── strpos(routes:23, route:31) > 0 [outer=(23,31), immutable]
       │    └── aggregations
-      │         ├── sum [as=sum:32, outer=(4)]
+      │         ├── sum [as=sum:35, outer=(4)]
       │         │    └── popn_white:4
-      │         ├── sum [as=sum:33, outer=(3)]
+      │         ├── sum [as=sum:36, outer=(3)]
       │         │    └── popn_total:3
-      │         └── sum [as=sum:34, outer=(5)]
+      │         └── sum [as=sum:37, outer=(5)]
       │              └── popn_black:5
       └── projections
-           ├── (sum:32 * 100.0) / sum:33 [as=white_pct:35, outer=(32,33), immutable]
-           └── (sum:34 * 100.0) / sum:33 [as=black_pct:36, outer=(33,34), immutable]
+           ├── (sum:35 * 100.0) / sum:36 [as=white_pct:38, outer=(35,36), immutable]
+           └── (sum:37 * 100.0) / sum:36 [as=black_pct:39, outer=(36,37), immutable]
 
 # 14.1a
 opt
@@ -397,20 +397,20 @@ project
  ├── columns: name:4 routes:11
  ├── immutable
  └── inner-join (cross)
-      ├── columns: s.name:4 routes:11 s.geom:16!null n.name:20!null n.geom:21!null
+      ├── columns: s.name:4 routes:11 s.geom:16!null n.name:21!null n.geom:22!null
       ├── immutable
-      ├── fd: ()-->(20)
+      ├── fd: ()-->(21)
       ├── scan nyc_subway_stations [as=s]
       │    └── columns: s.name:4 routes:11 s.geom:16
       ├── select
-      │    ├── columns: n.name:20!null n.geom:21
-      │    ├── fd: ()-->(20)
+      │    ├── columns: n.name:21!null n.geom:22
+      │    ├── fd: ()-->(21)
       │    ├── scan nyc_neighborhoods [as=n]
-      │    │    └── columns: n.name:20 n.geom:21
+      │    │    └── columns: n.name:21 n.geom:22
       │    └── filters
-      │         └── n.name:20 = 'Little Italy' [outer=(20), constraints=(/20: [/'Little Italy' - /'Little Italy']; tight), fd=()-->(20)]
+      │         └── n.name:21 = 'Little Italy' [outer=(21), constraints=(/21: [/'Little Italy' - /'Little Italy']; tight), fd=()-->(21)]
       └── filters
-           └── st_contains(n.geom:21, s.geom:16) [outer=(16,21), immutable, constraints=(/16: (/NULL - ]; /21: (/NULL - ])]
+           └── st_contains(n.geom:22, s.geom:16) [outer=(16,22), immutable, constraints=(/16: (/NULL - ]; /22: (/NULL - ])]
 
 # 14.2b
 opt
@@ -426,17 +426,17 @@ ORDER BY
     n.name, n.boroname
 ----
 sort
- ├── columns: name:20 boroname:19
+ ├── columns: name:21 boroname:20
  ├── immutable
- ├── key: (19,20)
- ├── ordering: +20,+19
+ ├── key: (20,21)
+ ├── ordering: +21,+20
  └── distinct-on
-      ├── columns: boroname:19 n.name:20
-      ├── grouping columns: boroname:19 n.name:20
+      ├── columns: boroname:20 n.name:21
+      ├── grouping columns: boroname:20 n.name:21
       ├── immutable
-      ├── key: (19,20)
+      ├── key: (20,21)
       └── inner-join (cross)
-           ├── columns: routes:11 s.geom:16!null boroname:19 n.name:20 n.geom:21!null
+           ├── columns: routes:11 s.geom:16!null boroname:20 n.name:21 n.geom:22!null
            ├── immutable
            ├── select
            │    ├── columns: routes:11 s.geom:16
@@ -446,9 +446,9 @@ sort
            │    └── filters
            │         └── strpos(routes:11, '6') > 0 [outer=(11), immutable]
            ├── scan nyc_neighborhoods [as=n]
-           │    └── columns: boroname:19 n.name:20 n.geom:21
+           │    └── columns: boroname:20 n.name:21 n.geom:22
            └── filters
-                └── st_contains(n.geom:21, s.geom:16) [outer=(16,21), immutable, constraints=(/16: (/NULL - ]; /21: (/NULL - ])]
+                └── st_contains(n.geom:22, s.geom:16) [outer=(16,22), immutable, constraints=(/16: (/NULL - ]; /22: (/NULL - ])]
 
 # 14.2c
 opt
@@ -462,17 +462,17 @@ WHERE
     n.name = 'Battery Park'
 ----
 scalar-group-by
- ├── columns: sum:17
+ ├── columns: sum:19
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(17)
+ ├── fd: ()-->(19)
  ├── inner-join (cross)
- │    ├── columns: name:3!null n.geom:4!null popn_total:8 c.geom:15!null
+ │    ├── columns: name:3!null n.geom:4!null popn_total:9 c.geom:16!null
  │    ├── immutable
  │    ├── fd: ()-->(3)
  │    ├── scan nyc_census_blocks [as=c]
- │    │    └── columns: popn_total:8 c.geom:15
+ │    │    └── columns: popn_total:9 c.geom:16
  │    ├── select
  │    │    ├── columns: name:3!null n.geom:4
  │    │    ├── fd: ()-->(3)
@@ -481,10 +481,10 @@ scalar-group-by
  │    │    └── filters
  │    │         └── name:3 = 'Battery Park' [outer=(3), constraints=(/3: [/'Battery Park' - /'Battery Park']; tight), fd=()-->(3)]
  │    └── filters
- │         └── st_intersects(n.geom:4, c.geom:15) [outer=(4,15), immutable, constraints=(/4: (/NULL - ]; /15: (/NULL - ])]
+ │         └── st_intersects(n.geom:4, c.geom:16) [outer=(4,16), immutable, constraints=(/4: (/NULL - ]; /16: (/NULL - ])]
  └── aggregations
-      └── sum [as=sum:17, outer=(8)]
-           └── popn_total:8
+      └── sum [as=sum:19, outer=(9)]
+           └── popn_total:9
 
 # 14.3c
 opt
@@ -504,36 +504,36 @@ ORDER BY
     n.name
 ----
 sort
- ├── columns: name:14!null popn_per_sqkm:18
+ ├── columns: name:15!null popn_per_sqkm:20
  ├── immutable
- ├── ordering: +14
+ ├── ordering: +15
  └── project
-      ├── columns: popn_per_sqkm:18 name:14!null
+      ├── columns: popn_per_sqkm:20 name:15!null
       ├── immutable
       ├── group-by
-      │    ├── columns: name:14!null n.geom:15!null sum:17
-      │    ├── grouping columns: name:14!null n.geom:15!null
+      │    ├── columns: name:15!null n.geom:16!null sum:19
+      │    ├── grouping columns: name:15!null n.geom:16!null
       │    ├── immutable
-      │    ├── key: (14,15)
-      │    ├── fd: (14,15)-->(17)
+      │    ├── key: (15,16)
+      │    ├── fd: (15,16)-->(19)
       │    ├── inner-join (cross)
-      │    │    ├── columns: popn_total:3 c.geom:10!null name:14!null n.geom:15!null
+      │    │    ├── columns: popn_total:3 c.geom:10!null name:15!null n.geom:16!null
       │    │    ├── immutable
       │    │    ├── scan nyc_census_blocks [as=c]
       │    │    │    └── columns: popn_total:3 c.geom:10
       │    │    ├── select
-      │    │    │    ├── columns: name:14!null n.geom:15
+      │    │    │    ├── columns: name:15!null n.geom:16
       │    │    │    ├── scan nyc_neighborhoods [as=n]
-      │    │    │    │    └── columns: name:14 n.geom:15
+      │    │    │    │    └── columns: name:15 n.geom:16
       │    │    │    └── filters
-      │    │    │         └── (name:14 = 'Upper West Side') OR (name:14 = 'Upper East Side') [outer=(14), constraints=(/14: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
+      │    │    │         └── (name:15 = 'Upper West Side') OR (name:15 = 'Upper East Side') [outer=(15), constraints=(/15: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
       │    │    └── filters
-      │    │         └── st_intersects(c.geom:10, n.geom:15) [outer=(10,15), immutable, constraints=(/10: (/NULL - ]; /15: (/NULL - ])]
+      │    │         └── st_intersects(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
       │    └── aggregations
-      │         └── sum [as=sum:17, outer=(3)]
+      │         └── sum [as=sum:19, outer=(3)]
       │              └── popn_total:3
       └── projections
-           └── sum:17 / (st_area(n.geom:15) / 1e+06) [as=popn_per_sqkm:18, outer=(15,17), immutable]
+           └── sum:19 / (st_area(n.geom:16) / 1e+06) [as=popn_per_sqkm:20, outer=(16,19), immutable]
 
 # 15.0
 opt
@@ -550,17 +550,17 @@ project
  ├── columns: blkid:2
  ├── immutable
  └── inner-join (cross)
-      ├── columns: blkid:2 blocks.geom:10!null name:15!null subways.geom:27!null
+      ├── columns: blkid:2 blocks.geom:10!null name:16!null subways.geom:28!null
       ├── immutable
-      ├── fd: ()-->(15)
+      ├── fd: ()-->(16)
       ├── scan nyc_census_blocks [as=blocks]
       │    └── columns: blkid:2 blocks.geom:10
       ├── select
-      │    ├── columns: name:15!null subways.geom:27
-      │    ├── fd: ()-->(15)
+      │    ├── columns: name:16!null subways.geom:28
+      │    ├── fd: ()-->(16)
       │    ├── scan nyc_subway_stations [as=subways]
-      │    │    └── columns: name:15 subways.geom:27
+      │    │    └── columns: name:16 subways.geom:28
       │    └── filters
-      │         └── name:15 = 'Broad St' [outer=(15), constraints=(/15: [/'Broad St' - /'Broad St']; tight), fd=()-->(15)]
+      │         └── name:16 = 'Broad St' [outer=(16), constraints=(/16: [/'Broad St' - /'Broad St']; tight), fd=()-->(16)]
       └── filters
-           └── st_contains(blocks.geom:10, subways.geom:27) [outer=(10,27), immutable, constraints=(/10: (/NULL - ]; /27: (/NULL - ])]
+           └── st_contains(blocks.geom:10, subways.geom:28) [outer=(10,28), immutable, constraints=(/10: (/NULL - ]; /28: (/NULL - ])]

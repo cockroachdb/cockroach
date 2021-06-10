@@ -76,12 +76,12 @@ func TestOrderingColumn_RemapColumn(t *testing.T) {
 		t.Errorf("\ncol2 was changed: %s\n", col2.String())
 	}
 
-	expected = "+6"
+	expected = "+7"
 	if remappedCol1.String() != expected {
 		t.Errorf("\nexpected: %s\nactual: %s\n", expected, remappedCol1.String())
 	}
 
-	expected = "-9"
+	expected = "-10"
 	if remappedCol2.String() != expected {
 		t.Errorf("\nexpected: %s\nactual: %s\n", expected, remappedCol2.String())
 	}

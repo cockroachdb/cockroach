@@ -35,7 +35,7 @@ distinct-on
  └── project
       ├── columns: x:1 y:2 z:3
       └── scan xyz
-           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 build
 SELECT DISTINCT ON (z, x, y) x FROM xyz
@@ -46,7 +46,7 @@ distinct-on
  └── project
       ├── columns: x:1 y:2 z:3
       └── scan xyz
-           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 build
 SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
@@ -57,7 +57,7 @@ distinct-on
  └── project
       ├── columns: a:1!null b:2!null c:3!null
       └── scan abc
-           └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4
+           └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
 
 build
 SELECT DISTINCT ON (b, c, a) a FROM abc
@@ -68,7 +68,7 @@ distinct-on
  └── project
       ├── columns: a:1!null b:2!null c:3!null
       └── scan abc
-           └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4
+           └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
 
 build
 SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
@@ -83,7 +83,7 @@ distinct-on
       └── project
            ├── columns: a:1!null b:2!null c:3!null
            └── scan abc
-                └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4
+                └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
 
 
 # 2/3 columns
@@ -97,7 +97,7 @@ distinct-on
  └── project
       ├── columns: x:1 y:2
       └── scan xyz
-           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 build
 SELECT DISTINCT ON (y, x) x FROM xyz
@@ -108,7 +108,7 @@ distinct-on
  └── project
       ├── columns: x:1 y:2
       └── scan xyz
-           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 build
 SELECT DISTINCT ON (y, x, x, y, x) x, y FROM xyz
@@ -119,7 +119,7 @@ distinct-on
  └── project
       ├── columns: x:1 y:2
       └── scan xyz
-           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 build
 SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
@@ -132,7 +132,7 @@ distinct-on
       ├── columns: x:1 pk1:4!null
       ├── ordering: +4
       └── scan xyz
-           ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
            └── ordering: +4
 
 build
@@ -144,7 +144,7 @@ distinct-on
  ├── project
  │    ├── columns: a:1!null b:2!null c:3!null
  │    └── scan abc
- │         └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4
+ │         └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  └── aggregations
       └── first-agg [as=b:2]
            └── b:2
@@ -158,7 +158,7 @@ distinct-on
  ├── project
  │    ├── columns: a:1!null b:2!null c:3!null
  │    └── scan abc
- │         └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4
+ │         └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  └── aggregations
       └── first-agg [as=b:2]
            └── b:2
@@ -179,7 +179,7 @@ sort
       └── project
            ├── columns: x:1
            └── scan xyz
-                └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+                └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 build
 SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
@@ -194,7 +194,7 @@ distinct-on
  │    └── project
  │         ├── columns: x:1 y:2 z:3
  │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       └── first-agg [as=y:2]
            └── y:2
@@ -213,7 +213,7 @@ distinct-on
  │    └── project
  │         ├── columns: x:1 y:2 z:3
  │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       ├── first-agg [as=y:2]
       │    └── y:2
@@ -228,47 +228,47 @@ build
 SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
 distinct-on
- ├── columns: max:7  [hidden: max:8]
- ├── grouping columns: max:8
+ ├── columns: max:8  [hidden: max:9]
+ ├── grouping columns: max:9
  ├── scalar-group-by
- │    ├── columns: max:7 max:8
+ │    ├── columns: max:8 max:9
  │    ├── project
  │    │    ├── columns: x:1 y:2
  │    │    └── scan xyz
- │    │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │    │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  │    └── aggregations
- │         ├── max [as=max:7]
+ │         ├── max [as=max:8]
  │         │    └── x:1
- │         └── max [as=max:8]
+ │         └── max [as=max:9]
  │              └── y:2
  └── aggregations
-      └── first-agg [as=max:7]
-           └── max:7
+      └── first-agg [as=max:8]
+           └── max:8
 
 build
 SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
 distinct-on
- ├── columns: max:5  [hidden: min:6 max:7 min:8]
- ├── grouping columns: min:6 max:7 min:8
+ ├── columns: max:6  [hidden: min:7 max:8 min:9]
+ ├── grouping columns: min:7 max:8 min:9
  ├── scalar-group-by
- │    ├── columns: max:5 min:6 max:7 min:8
+ │    ├── columns: max:6 min:7 max:8 min:9
  │    ├── project
  │    │    ├── columns: a:1!null b:2!null c:3!null
  │    │    └── scan abc
- │    │         └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4
+ │    │         └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  │    └── aggregations
- │         ├── max [as=max:5]
+ │         ├── max [as=max:6]
  │         │    └── a:1
- │         ├── min [as=min:6]
+ │         ├── min [as=min:7]
  │         │    └── a:1
- │         ├── max [as=max:7]
+ │         ├── max [as=max:8]
  │         │    └── b:2
- │         └── min [as=min:8]
+ │         └── min [as=min:9]
  │              └── c:3
  └── aggregations
-      └── first-agg [as=max:5]
-           └── max:5
+      └── first-agg [as=max:6]
+           └── max:6
 
 #################
 # With GROUP BY #
@@ -278,44 +278,44 @@ build
 SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
 distinct-on
- ├── columns: min:7  [hidden: y:2]
+ ├── columns: min:8  [hidden: y:2]
  ├── grouping columns: y:2
  ├── group-by
- │    ├── columns: y:2 min:7
+ │    ├── columns: y:2 min:8
  │    ├── grouping columns: y:2
  │    ├── project
  │    │    ├── columns: x:1 y:2
  │    │    └── scan xyz
- │    │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │    │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  │    └── aggregations
- │         └── min [as=min:7]
+ │         └── min [as=min:8]
  │              └── x:1
  └── aggregations
-      └── first-agg [as=min:7]
-           └── min:7
+      └── first-agg [as=min:8]
+           └── min:8
 
 build
 SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
 distinct-on
- ├── columns: min:7!null
- ├── grouping columns: min:7!null
+ ├── columns: min:8!null
+ ├── grouping columns: min:8!null
  └── project
-      ├── columns: min:7!null
+      ├── columns: min:8!null
       └── select
-           ├── columns: y:2 min:7!null
+           ├── columns: y:2 min:8!null
            ├── group-by
-           │    ├── columns: y:2 min:7
+           │    ├── columns: y:2 min:8
            │    ├── grouping columns: y:2
            │    ├── project
            │    │    ├── columns: x:1 y:2
            │    │    └── scan xyz
-           │    │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           │    │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
            │    └── aggregations
-           │         └── min [as=min:7]
+           │         └── min [as=min:8]
            │              └── x:1
            └── filters
-                └── min:7 = 1
+                └── min:8 = 1
 
 #########################
 # With window functions #
@@ -325,16 +325,16 @@ build
 SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
 distinct-on
- ├── columns: y:2  [hidden: row_number:7]
- ├── grouping columns: row_number:7
+ ├── columns: y:2  [hidden: row_number:8]
+ ├── grouping columns: row_number:8
  ├── project
- │    ├── columns: y:2 row_number:7
+ │    ├── columns: y:2 row_number:8
  │    └── window partition=()
- │         ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 row_number:7
+ │         ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7 row_number:8
  │         ├── scan xyz
- │         │    └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │         │    └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  │         └── windows
- │              └── row-number [as=row_number:7]
+ │              └── row-number [as=row_number:8]
  └── aggregations
       └── first-agg [as=y:2]
            └── y:2
@@ -352,7 +352,7 @@ distinct-on
  ├── project
  │    ├── columns: x:1 y:2 z:3
  │    └── scan xyz
- │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       ├── first-agg [as=y:2]
       │    └── y:2
@@ -368,7 +368,7 @@ distinct-on
  └── project
       ├── columns: a:1!null b:2!null c:3!null
       └── scan abc
-           └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4
+           └── columns: a:1!null b:2!null c:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
 
 #########################
 # With alias references #
@@ -384,7 +384,7 @@ distinct-on
  ├── project
  │    ├── columns: x:1 y:2
  │    └── scan xyz
- │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       └── first-agg [as=y:2]
            └── y:2
@@ -399,7 +399,7 @@ distinct-on
  └── project
       ├── columns: x:1
       └── scan xyz
-           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 ##################################
 # With nested parentheses/tuples #
@@ -414,7 +414,7 @@ distinct-on
  └── project
       ├── columns: x:1 y:2
       └── scan xyz
-           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+           └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
 
 ################################
 # Hybrid PK and non-PK queries #
@@ -433,7 +433,7 @@ distinct-on
  │    └── project
  │         ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null
  │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       └── first-agg [as=z:3]
            └── z:3
@@ -451,7 +451,7 @@ distinct-on
  │    └── project
  │         ├── columns: x:1 y:2 z:3 pk1:4!null
  │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       └── first-agg [as=pk1:4]
            └── pk1:4
@@ -470,7 +470,7 @@ distinct-on
  │    └── project
  │         ├── columns: x:1 y:2 z:3
  │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       └── first-agg [as=z:3]
            └── z:3
@@ -489,7 +489,7 @@ distinct-on
  │    └── project
  │         ├── columns: x:1 y:2 z:3
  │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6
+ │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
  └── aggregations
       └── first-agg [as=z:3]
            └── z:3

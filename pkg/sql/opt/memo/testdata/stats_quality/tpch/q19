@@ -56,23 +56,23 @@ WHERE
 ----
 scalar-group-by
  ├── save-table-name: q19_scalar_group_by_1
- ├── columns: revenue:29(float)
+ ├── columns: revenue:31(float)
  ├── cardinality: [1 - 1]
  ├── immutable
- ├── stats: [rows=1, distinct(29)=1, null(29)=0]
+ ├── stats: [rows=1, distinct(31)=1, null(31)=0]
  ├── key: ()
- ├── fd: ()-->(29)
+ ├── fd: ()-->(31)
  ├── project
  │    ├── save-table-name: q19_project_2
- │    ├── columns: column28:28(float!null)
+ │    ├── columns: column30:30(float!null)
  │    ├── immutable
- │    ├── stats: [rows=190.292138, distinct(28)=190.249692, null(28)=0]
+ │    ├── stats: [rows=190.292138, distinct(30)=190.249692, null(30)=0]
  │    ├── inner-join (hash)
  │    │    ├── save-table-name: q19_inner_join_3
- │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:18(int!null) p_brand:21(char!null) p_size:23(int!null) p_container:24(char!null)
+ │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    ├── stats: [rows=190.292138, distinct(2)=190.292138, null(2)=0, distinct(5)=5.55555556, null(5)=0, distinct(6)=190.24067, null(6)=0, distinct(7)=10.9999997, null(7)=0, distinct(14)=1, null(14)=0, distinct(15)=2, null(15)=0, distinct(18)=190.292138, null(18)=0, distinct(21)=3, null(21)=0, distinct(23)=16.6666667, null(23)=0, distinct(24)=12, null(24)=0, distinct(6,7)=190.249692, null(6,7)=0, distinct(21,23,24)=190.292138, null(21,23,24)=0]
- │    │    ├── fd: ()-->(14), (18)-->(21,23,24), (2)==(18), (18)==(2)
+ │    │    ├── stats: [rows=190.292138, distinct(2)=190.292138, null(2)=0, distinct(5)=5.55555556, null(5)=0, distinct(6)=190.24067, null(6)=0, distinct(7)=10.9999997, null(7)=0, distinct(14)=1, null(14)=0, distinct(15)=2, null(15)=0, distinct(19)=190.292138, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=16.6666667, null(24)=0, distinct(25)=12, null(25)=0, distinct(6,7)=190.249692, null(6,7)=0, distinct(22,24,25)=190.292138, null(22,24,25)=0]
+ │    │    ├── fd: ()-->(14), (19)-->(22,24,25), (2)==(19), (19)==(2)
  │    │    ├── select
  │    │    │    ├── save-table-name: q19_select_4
  │    │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null)
@@ -103,36 +103,36 @@ scalar-group-by
  │    │    │         └── l_shipinstruct:14 = 'DELIVER IN PERSON' [type=bool, outer=(14), constraints=(/14: [/'DELIVER IN PERSON' - /'DELIVER IN PERSON']; tight), fd=()-->(14)]
  │    │    ├── select
  │    │    │    ├── save-table-name: q19_select_6
- │    │    │    ├── columns: p_partkey:18(int!null) p_brand:21(char!null) p_size:23(int!null) p_container:24(char!null)
- │    │    │    ├── stats: [rows=200000, distinct(18)=199241, null(18)=0, distinct(21)=25, null(21)=0, distinct(23)=50, null(23)=0, distinct(24)=40, null(24)=0, distinct(21,23,24)=50000, null(21,23,24)=0]
- │    │    │    │   histogram(23)=  0 3760 1.925e+05 3740
+ │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
+ │    │    │    ├── stats: [rows=200000, distinct(19)=199241, null(19)=0, distinct(22)=25, null(22)=0, distinct(24)=50, null(24)=0, distinct(25)=40, null(25)=0, distinct(22,24,25)=50000, null(22,24,25)=0]
+ │    │    │    │   histogram(24)=  0 3760 1.925e+05 3740
  │    │    │    │                 <--- 1 ------------ 50
- │    │    │    ├── key: (18)
- │    │    │    ├── fd: (18)-->(21,23,24)
+ │    │    │    ├── key: (19)
+ │    │    │    ├── fd: (19)-->(22,24,25)
  │    │    │    ├── scan part
  │    │    │    │    ├── save-table-name: q19_scan_7
- │    │    │    │    ├── columns: p_partkey:18(int!null) p_brand:21(char!null) p_size:23(int!null) p_container:24(char!null)
- │    │    │    │    ├── stats: [rows=200000, distinct(18)=199241, null(18)=0, distinct(21)=25, null(21)=0, distinct(23)=50, null(23)=0, distinct(24)=40, null(24)=0, distinct(21,23,24)=50000, null(21,23,24)=0]
- │    │    │    │    │   histogram(18)=  0  20  980  20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20
+ │    │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
+ │    │    │    │    ├── stats: [rows=200000, distinct(19)=199241, null(19)=0, distinct(22)=25, null(22)=0, distinct(24)=50, null(24)=0, distinct(25)=40, null(25)=0, distinct(22,24,25)=50000, null(22,24,25)=0]
+ │    │    │    │    │   histogram(19)=  0  20  980  20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20
  │    │    │    │    │                 <--- 11 ----- 728 ----- 1645 ----- 2631 ----- 3709 ----- 4776 ----- 5561 ----- 6561 ----- 7453 ----- 8507 ----- 9391 ----- 10246 ----- 11291 ----- 12247 ----- 13190 ----- 14162 ----- 15360 ----- 16279 ----- 17470 ----- 18268 ----- 19116 ----- 20021 ----- 20910 ----- 21722 ----- 22568 ----- 23525 ----- 24605 ----- 25518 ----- 26552 ----- 27774 ----- 28571 ----- 29469 ----- 30689 ----- 31727 ----- 32646 ----- 33512 ----- 34737 ----- 35503 ----- 36365 ----- 37320 ----- 38146 ----- 39374 ----- 40214 ----- 41258 ----- 42381 ----- 43414 ----- 44505 ----- 45498 ----- 46687 ----- 47357 ----- 48402 ----- 49289 ----- 50503 ----- 51267 ----- 52365 ----- 53360 ----- 54114 ----- 54992 ----- 56028 ----- 56976 ----- 57919 ----- 58684 ----- 59544 ----- 60362 ----- 61372 ----- 62402 ----- 63261 ----- 64284 ----- 65157 ----- 66431 ----- 67649 ----- 68642 ----- 69759 ----- 70717 ----- 71768 ----- 72812 ----- 73928 ----- 75069 ----- 76089 ----- 77188 ----- 78003 ----- 79079 ----- 79895 ----- 80931 ----- 81904 ----- 82866 ----- 83812 ----- 84882 ----- 85743 ----- 86558 ----- 87686 ----- 88864 ----- 89834 ----- 90952 ----- 91855 ----- 92815 ----- 93983 ----- 95122 ----- 96110 ----- 97232 ----- 98327 ----- 99529 ----- 100662 ----- 101582 ----- 102475 ----- 103543 ----- 104588 ----- 105673 ----- 106646 ----- 107885 ----- 108848 ----- 109913 ----- 111053 ----- 111992 ----- 112875 ----- 113729 ----- 114830 ----- 115985 ----- 117017 ----- 118197 ----- 119027 ----- 119897 ----- 120979 ----- 122225 ----- 123339 ----- 124326 ----- 125507 ----- 126742 ----- 127739 ----- 128929 ----- 129766 ----- 130824 ----- 131780 ----- 132832 ----- 133849 ----- 134968 ----- 135887 ----- 136981 ----- 138203 ----- 139167 ----- 140214 ----- 141310 ----- 142333 ----- 143119 ----- 144146 ----- 145323 ----- 146333 ----- 147232 ----- 148140 ----- 148972 ----- 150048 ------ 151418 ------ 152456 ------ 153742 ------ 154633 ------ 155602 ------ 156660 ------ 157544 ------ 158653 ------ 159749 ------ 160523 ------ 161563 ------ 162605 ------ 163645 ------ 164720 ------ 165585 ------ 166792 ------ 167795 ------ 168739 ------ 169589 ------ 170526 ------ 171884 ------ 172894 ------ 173761 ------ 174914 ------ 176104 ------ 177260 ------ 178143 ------ 179073 ------ 179850 ------ 180913 ------ 181781 ------ 182661 ------ 183485 ------ 184505 ------ 185790 ------ 187010 ------ 187993 ------ 188916 ------ 190000 ------ 190931 ------ 192079 ------ 193006 ------ 193932 ------ 195013 ------ 196008 ------ 196799 ------ 197766 ------ 198943 ------ 199965
- │    │    │    │    │   histogram(21)=  0     7800     1.8392e+05     8280
+ │    │    │    │    │   histogram(22)=  0     7800     1.8392e+05     8280
  │    │    │    │    │                 <--- 'Brand#11' ------------ 'Brand#55'
- │    │    │    │    │   histogram(23)=  0 3760 1.925e+05 3740
+ │    │    │    │    │   histogram(24)=  0 3760 1.925e+05 3740
  │    │    │    │    │                 <--- 1 ------------ 50
- │    │    │    │    │   histogram(24)=  0     5060      1.9034e+05     4600
+ │    │    │    │    │   histogram(25)=  0     5060      1.9034e+05     4600
  │    │    │    │    │                 <--- 'JUMBO BAG' ------------ 'WRAP PKG'
- │    │    │    │    ├── key: (18)
- │    │    │    │    └── fd: (18)-->(21,23,24)
+ │    │    │    │    ├── key: (19)
+ │    │    │    │    └── fd: (19)-->(22,24,25)
  │    │    │    └── filters
- │    │    │         └── p_size:23 >= 1 [type=bool, outer=(23), constraints=(/23: [/1 - ]; tight)]
+ │    │    │         └── p_size:24 >= 1 [type=bool, outer=(24), constraints=(/24: [/1 - ]; tight)]
  │    │    └── filters
- │    │         ├── p_partkey:18 = l_partkey:2 [type=bool, outer=(2,18), constraints=(/2: (/NULL - ]; /18: (/NULL - ]), fd=(2)==(18), (18)==(2)]
- │    │         └── ((((((p_brand:21 = 'Brand#12') AND (p_container:24 IN ('SM BOX', 'SM CASE', 'SM PACK', 'SM PKG'))) AND (l_quantity:5 >= 1.0)) AND (l_quantity:5 <= 11.0)) AND (p_size:23 <= 5)) OR (((((p_brand:21 = 'Brand#23') AND (p_container:24 IN ('MED BAG', 'MED BOX', 'MED PACK', 'MED PKG'))) AND (l_quantity:5 >= 10.0)) AND (l_quantity:5 <= 20.0)) AND (p_size:23 <= 10))) OR (((((p_brand:21 = 'Brand#34') AND (p_container:24 IN ('LG BOX', 'LG CASE', 'LG PACK', 'LG PKG'))) AND (l_quantity:5 >= 20.0)) AND (l_quantity:5 <= 30.0)) AND (p_size:23 <= 15)) [type=bool, outer=(5,21,23,24), constraints=(/5: [/1.0 - /30.0]; /21: [/'Brand#12' - /'Brand#12'] [/'Brand#23' - /'Brand#23'] [/'Brand#34' - /'Brand#34']; /23: (/NULL - /15]; /24: [/'LG BOX' - /'LG BOX'] [/'LG CASE' - /'LG CASE'] [/'LG PACK' - /'LG PACK'] [/'LG PKG' - /'LG PKG'] [/'MED BAG' - /'MED BAG'] [/'MED BOX' - /'MED BOX'] [/'MED PACK' - /'MED PACK'] [/'MED PKG' - /'MED PKG'] [/'SM BOX' - /'SM BOX'] [/'SM CASE' - /'SM CASE'] [/'SM PACK' - /'SM PACK'] [/'SM PKG' - /'SM PKG'])]
+ │    │         ├── p_partkey:19 = l_partkey:2 [type=bool, outer=(2,19), constraints=(/2: (/NULL - ]; /19: (/NULL - ]), fd=(2)==(19), (19)==(2)]
+ │    │         └── ((((((p_brand:22 = 'Brand#12') AND (p_container:25 IN ('SM BOX', 'SM CASE', 'SM PACK', 'SM PKG'))) AND (l_quantity:5 >= 1.0)) AND (l_quantity:5 <= 11.0)) AND (p_size:24 <= 5)) OR (((((p_brand:22 = 'Brand#23') AND (p_container:25 IN ('MED BAG', 'MED BOX', 'MED PACK', 'MED PKG'))) AND (l_quantity:5 >= 10.0)) AND (l_quantity:5 <= 20.0)) AND (p_size:24 <= 10))) OR (((((p_brand:22 = 'Brand#34') AND (p_container:25 IN ('LG BOX', 'LG CASE', 'LG PACK', 'LG PKG'))) AND (l_quantity:5 >= 20.0)) AND (l_quantity:5 <= 30.0)) AND (p_size:24 <= 15)) [type=bool, outer=(5,22,24,25), constraints=(/5: [/1.0 - /30.0]; /22: [/'Brand#12' - /'Brand#12'] [/'Brand#23' - /'Brand#23'] [/'Brand#34' - /'Brand#34']; /24: (/NULL - /15]; /25: [/'LG BOX' - /'LG BOX'] [/'LG CASE' - /'LG CASE'] [/'LG PACK' - /'LG PACK'] [/'LG PKG' - /'LG PKG'] [/'MED BAG' - /'MED BAG'] [/'MED BOX' - /'MED BOX'] [/'MED PACK' - /'MED PACK'] [/'MED PKG' - /'MED PKG'] [/'SM BOX' - /'SM BOX'] [/'SM CASE' - /'SM CASE'] [/'SM PACK' - /'SM PACK'] [/'SM PKG' - /'SM PKG'])]
  │    └── projections
- │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column28:28, type=float, outer=(6,7), immutable]
+ │         └── l_extendedprice:6 * (1.0 - l_discount:7) [as=column30:30, type=float, outer=(6,7), immutable]
  └── aggregations
-      └── sum [as=sum:29, type=float, outer=(28)]
-           └── column28:28 [type=float]
+      └── sum [as=sum:31, type=float, outer=(30)]
+           └── column30:30 [type=float]
 
 ----Stats for q19_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count
@@ -143,10 +143,10 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 
 ----Stats for q19_project_2----
 column_names  row_count  distinct_count  null_count
-{column28}    121        121             0
+{column30}    121        121             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column28}    190.00         1.57           190.00              1.57                0.00            1.00
+{column30}    190.00         1.57           190.00              1.57                0.00            1.00
 
 ----Stats for q19_inner_join_3----
 column_names       row_count  distinct_count  null_count

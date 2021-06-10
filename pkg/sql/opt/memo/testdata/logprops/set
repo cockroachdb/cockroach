@@ -14,11 +14,11 @@ build
 SELECT * FROM xy UNION SELECT * FROM uv
 ----
 union
- ├── columns: x:8(int) y:9(int)
+ ├── columns: x:10(int) y:11(int)
  ├── left columns: xy.x:1(int) xy.y:2(int)
- ├── right columns: u:4(int) v:5(int)
- ├── key: (8,9)
- ├── interesting orderings: (+8)
+ ├── right columns: u:5(int) v:6(int)
+ ├── key: (10,11)
+ ├── interesting orderings: (+10)
  ├── project
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
@@ -26,20 +26,20 @@ union
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xy
- │         ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal)
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── prune: (1-3)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
  │         └── interesting orderings: (+1)
  └── project
-      ├── columns: u:4(int) v:5(int!null)
-      ├── prune: (4,5)
+      ├── columns: u:5(int) v:6(int!null)
+      ├── prune: (5,6)
       └── scan uv
-           ├── columns: u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
-           ├── key: (6)
-           ├── fd: (6)-->(4,5,7)
-           ├── prune: (4-7)
-           └── interesting orderings: (+6)
+           ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           ├── key: (7)
+           ├── fd: (7)-->(5,6,8,9)
+           ├── prune: (5-9)
+           └── interesting orderings: (+7)
 
 build
 SELECT x, y, x FROM xy INTERSECT SELECT v, u, rowid FROM (SELECT *, rowid FROM uv WHERE u=1) uv
@@ -47,7 +47,7 @@ SELECT x, y, x FROM xy INTERSECT SELECT v, u, rowid FROM (SELECT *, rowid FROM u
 intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: x:1(int!null) y:2(int) x:1(int!null)
- ├── right columns: v:5(int) u:4(int) rowid:6(int)
+ ├── right columns: v:6(int) u:5(int) rowid:7(int)
  ├── key: (1,2)
  ├── interesting orderings: (+1)
  ├── project
@@ -57,32 +57,32 @@ intersect
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xy
- │         ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal)
+ │         ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── prune: (1-3)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
  │         └── interesting orderings: (+1)
  └── project
-      ├── columns: u:4(int!null) v:5(int!null) rowid:6(int!null)
-      ├── key: (6)
-      ├── fd: ()-->(4), (6)-->(5)
-      ├── prune: (4-6)
-      ├── interesting orderings: (+6 opt(4))
+      ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null)
+      ├── key: (7)
+      ├── fd: ()-->(5), (7)-->(6)
+      ├── prune: (5-7)
+      ├── interesting orderings: (+7 opt(5))
       └── select
-           ├── columns: u:4(int!null) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
-           ├── key: (6)
-           ├── fd: ()-->(4), (6)-->(5,7)
-           ├── prune: (5-7)
-           ├── interesting orderings: (+6 opt(4))
+           ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           ├── key: (7)
+           ├── fd: ()-->(5), (7)-->(6,8,9)
+           ├── prune: (6-9)
+           ├── interesting orderings: (+7 opt(5))
            ├── scan uv
-           │    ├── columns: u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
-           │    ├── key: (6)
-           │    ├── fd: (6)-->(4,5,7)
-           │    ├── prune: (4-7)
-           │    └── interesting orderings: (+6)
+           │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           │    ├── key: (7)
+           │    ├── fd: (7)-->(5,6,8,9)
+           │    ├── prune: (5-9)
+           │    └── interesting orderings: (+7)
            └── filters
-                └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-                     ├── variable: u:4 [type=int]
+                └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+                     ├── variable: u:5 [type=int]
                      └── const: 1 [type=int]
 
 build
@@ -91,7 +91,7 @@ SELECT x, x, y FROM xy EXCEPT SELECT u, v, v FROM (SELECT * FROM uv WHERE u=1) u
 except
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── left columns: x:1(int!null) x:1(int!null) y:2(int)
- ├── right columns: u:4(int) v:5(int) v:5(int)
+ ├── right columns: u:5(int) v:6(int) v:6(int)
  ├── key: (1,2)
  ├── interesting orderings: (+1)
  ├── project
@@ -101,30 +101,30 @@ except
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xy
- │         ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal)
+ │         ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── prune: (1-3)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── prune: (1-4)
  │         └── interesting orderings: (+1)
  └── project
-      ├── columns: u:4(int!null) v:5(int!null)
-      ├── fd: ()-->(4)
-      ├── prune: (4,5)
+      ├── columns: u:5(int!null) v:6(int!null)
+      ├── fd: ()-->(5)
+      ├── prune: (5,6)
       └── select
-           ├── columns: u:4(int!null) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
-           ├── key: (6)
-           ├── fd: ()-->(4), (6)-->(5,7)
-           ├── prune: (5-7)
-           ├── interesting orderings: (+6 opt(4))
+           ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           ├── key: (7)
+           ├── fd: ()-->(5), (7)-->(6,8,9)
+           ├── prune: (6-9)
+           ├── interesting orderings: (+7 opt(5))
            ├── scan uv
-           │    ├── columns: u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
-           │    ├── key: (6)
-           │    ├── fd: (6)-->(4,5,7)
-           │    ├── prune: (4-7)
-           │    └── interesting orderings: (+6)
+           │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+           │    ├── key: (7)
+           │    ├── fd: (7)-->(5,6,8,9)
+           │    ├── prune: (5-9)
+           │    └── interesting orderings: (+7)
            └── filters
-                └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-                     ├── variable: u:4 [type=int]
+                └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+                     ├── variable: u:5 [type=int]
                      └── const: 1 [type=int]
 
 # Propagate outer columns.
@@ -139,68 +139,68 @@ project
  ├── prune: (1,2)
  ├── interesting orderings: (+1)
  └── select
-      ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal)
+      ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── prune: (3)
+      ├── fd: (1)-->(2-4)
+      ├── prune: (3,4)
       ├── interesting orderings: (+1)
       ├── scan xy
-      │    ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal)
+      │    ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,3)
-      │    ├── prune: (1-3)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── prune: (1-4)
       │    └── interesting orderings: (+1)
       └── filters
            └── eq [type=bool, outer=(1,2), immutable, correlated-subquery]
                 ├── subquery [type=tuple{int, int}]
                 │    └── max1-row
-                │         ├── columns: column16:16(tuple{int, int})
+                │         ├── columns: column19:19(tuple{int, int})
                 │         ├── error: "more than one row returned by a subquery used as an expression"
                 │         ├── outer: (1,2)
                 │         ├── cardinality: [0 - 1]
                 │         ├── key: ()
-                │         ├── fd: ()-->(16)
+                │         ├── fd: ()-->(19)
                 │         └── project
-                │              ├── columns: column16:16(tuple{int, int})
+                │              ├── columns: column19:19(tuple{int, int})
                 │              ├── outer: (1,2)
-                │              ├── prune: (16)
+                │              ├── prune: (19)
                 │              ├── union
-                │              │    ├── columns: x:14(int) u:15(int)
-                │              │    ├── left columns: x:8(int) uv.u:4(int)
-                │              │    ├── right columns: y:13(int) v:10(int)
+                │              │    ├── columns: x:17(int) u:18(int)
+                │              │    ├── left columns: x:10(int) uv.u:5(int)
+                │              │    ├── right columns: y:16(int) v:12(int)
                 │              │    ├── outer: (1,2)
-                │              │    ├── key: (14,15)
+                │              │    ├── key: (17,18)
                 │              │    ├── project
-                │              │    │    ├── columns: x:8(int) uv.u:4(int)
+                │              │    │    ├── columns: x:10(int) uv.u:5(int)
                 │              │    │    ├── outer: (1)
-                │              │    │    ├── fd: ()-->(8)
-                │              │    │    ├── prune: (4,8)
+                │              │    │    ├── fd: ()-->(10)
+                │              │    │    ├── prune: (5,10)
                 │              │    │    ├── scan uv
-                │              │    │    │    ├── columns: uv.u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
-                │              │    │    │    ├── key: (6)
-                │              │    │    │    ├── fd: (6)-->(4,5,7)
-                │              │    │    │    ├── prune: (4-7)
-                │              │    │    │    └── interesting orderings: (+6)
+                │              │    │    │    ├── columns: uv.u:5(int) v:6(int!null) rowid:7(int!null) uv.crdb_internal_mvcc_timestamp:8(decimal) uv.tableoid:9(oid)
+                │              │    │    │    ├── key: (7)
+                │              │    │    │    ├── fd: (7)-->(5,6,8,9)
+                │              │    │    │    ├── prune: (5-9)
+                │              │    │    │    └── interesting orderings: (+7)
                 │              │    │    └── projections
-                │              │    │         └── variable: xy.x:1 [as=x:8, type=int, outer=(1)]
+                │              │    │         └── variable: xy.x:1 [as=x:10, type=int, outer=(1)]
                 │              │    └── project
-                │              │         ├── columns: y:13(int) v:10(int!null)
+                │              │         ├── columns: y:16(int) v:12(int!null)
                 │              │         ├── outer: (2)
-                │              │         ├── fd: ()-->(13)
-                │              │         ├── prune: (10,13)
+                │              │         ├── fd: ()-->(16)
+                │              │         ├── prune: (12,16)
                 │              │         ├── scan uv
-                │              │         │    ├── columns: uv.u:9(int) v:10(int!null) rowid:11(int!null) uv.crdb_internal_mvcc_timestamp:12(decimal)
-                │              │         │    ├── key: (11)
-                │              │         │    ├── fd: (11)-->(9,10,12)
-                │              │         │    ├── prune: (9-12)
-                │              │         │    └── interesting orderings: (+11)
+                │              │         │    ├── columns: uv.u:11(int) v:12(int!null) rowid:13(int!null) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
+                │              │         │    ├── key: (13)
+                │              │         │    ├── fd: (13)-->(11,12,14,15)
+                │              │         │    ├── prune: (11-15)
+                │              │         │    └── interesting orderings: (+13)
                 │              │         └── projections
-                │              │              └── variable: xy.y:2 [as=y:13, type=int, outer=(2)]
+                │              │              └── variable: xy.y:2 [as=y:16, type=int, outer=(2)]
                 │              └── projections
-                │                   └── tuple [as=column16:16, type=tuple{int, int}, outer=(14,15)]
-                │                        ├── variable: x:14 [type=int]
-                │                        └── variable: u:15 [type=int]
+                │                   └── tuple [as=column19:19, type=tuple{int, int}, outer=(17,18)]
+                │                        ├── variable: x:17 [type=int]
+                │                        └── variable: u:18 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
                      └── const: 2 [type=int]
@@ -360,18 +360,18 @@ UNION
 SELECT a, b, c FROM abc WHERE a > 10 AND a = c
 ----
 distinct-on
- ├── columns: a:9(int!null) b:10(int) c:11(int!null)
- ├── grouping columns: a:9(int!null)
- ├── key: (9)
- ├── fd: (9)==(11), (11)==(9), (9)-->(10,11)
- ├── prune: (10,11)
+ ├── columns: a:11(int!null) b:12(int) c:13(int!null)
+ ├── grouping columns: a:11(int!null)
+ ├── key: (11)
+ ├── fd: (11)==(13), (13)==(11), (11)-->(12,13)
+ ├── prune: (12,13)
  ├── union-all
- │    ├── columns: a:9(int!null) b:10(int) c:11(int!null)
+ │    ├── columns: a:11(int!null) b:12(int) c:13(int!null)
  │    ├── left columns: abc.a:1(int) abc.b:2(int) abc.c:3(int)
- │    ├── right columns: abc.a:5(int) abc.b:6(int) abc.c:7(int)
- │    ├── fd: (9)==(11), (11)==(9)
- │    ├── prune: (10)
- │    ├── interesting orderings: (+(9|11))
+ │    ├── right columns: abc.a:6(int) abc.b:7(int) abc.c:8(int)
+ │    ├── fd: (11)==(13), (13)==(11)
+ │    ├── prune: (12)
+ │    ├── interesting orderings: (+(11|13))
  │    ├── select
  │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int!null)
  │    │    ├── key: (1)
@@ -392,29 +392,29 @@ distinct-on
  │    │              ├── variable: abc.a:1 [type=int]
  │    │              └── variable: abc.c:3 [type=int]
  │    └── select
- │         ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int!null)
- │         ├── key: (5)
- │         ├── fd: (5)-->(6), (5)==(7), (7)==(5)
- │         ├── prune: (6)
- │         ├── interesting orderings: (+(5|7))
+ │         ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(int!null)
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(7), (6)==(8), (8)==(6)
+ │         ├── prune: (7)
+ │         ├── interesting orderings: (+(6|8))
  │         ├── scan abc
- │         │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
- │         │    ├── key: (5)
- │         │    ├── fd: (5)-->(6,7)
- │         │    ├── prune: (5-7)
- │         │    └── interesting orderings: (+5)
+ │         │    ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(int)
+ │         │    ├── key: (6)
+ │         │    ├── fd: (6)-->(7,8)
+ │         │    ├── prune: (6-8)
+ │         │    └── interesting orderings: (+6)
  │         └── filters
- │              ├── gt [type=bool, outer=(5), constraints=(/5: [/11 - ]; tight)]
- │              │    ├── variable: abc.a:5 [type=int]
+ │              ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+ │              │    ├── variable: abc.a:6 [type=int]
  │              │    └── const: 10 [type=int]
- │              └── eq [type=bool, outer=(5,7), constraints=(/5: (/NULL - ]; /7: (/NULL - ]), fd=(5)==(7), (7)==(5)]
- │                   ├── variable: abc.a:5 [type=int]
- │                   └── variable: abc.c:7 [type=int]
+ │              └── eq [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │                   ├── variable: abc.a:6 [type=int]
+ │                   └── variable: abc.c:8 [type=int]
  └── aggregations
-      ├── const-agg [as=b:10, type=int, outer=(10)]
-      │    └── variable: b:10 [type=int]
-      └── const-agg [as=c:11, type=int, outer=(11)]
-           └── variable: c:11 [type=int]
+      ├── const-agg [as=b:12, type=int, outer=(12)]
+      │    └── variable: b:12 [type=int]
+      └── const-agg [as=c:13, type=int, outer=(13)]
+           └── variable: c:13 [type=int]
 
 # Do not include equivalencies from only the left or right input.
 norm
@@ -423,17 +423,17 @@ UNION
 SELECT a, b, c FROM abc WHERE a > 10 AND a = b
 ----
 distinct-on
- ├── columns: a:9(int!null) b:10(int) c:11(int)
- ├── grouping columns: a:9(int!null)
- ├── key: (9)
- ├── fd: (9)-->(10,11)
- ├── prune: (10,11)
+ ├── columns: a:11(int!null) b:12(int) c:13(int)
+ ├── grouping columns: a:11(int!null)
+ ├── key: (11)
+ ├── fd: (11)-->(12,13)
+ ├── prune: (12,13)
  ├── union-all
- │    ├── columns: a:9(int!null) b:10(int) c:11(int)
+ │    ├── columns: a:11(int!null) b:12(int) c:13(int)
  │    ├── left columns: abc.a:1(int) abc.b:2(int) abc.c:3(int)
- │    ├── right columns: abc.a:5(int) abc.b:6(int) abc.c:7(int)
- │    ├── prune: (10,11)
- │    ├── interesting orderings: (+9)
+ │    ├── right columns: abc.a:6(int) abc.b:7(int) abc.c:8(int)
+ │    ├── prune: (12,13)
+ │    ├── interesting orderings: (+11)
  │    ├── select
  │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int!null)
  │    │    ├── key: (1)
@@ -454,29 +454,29 @@ distinct-on
  │    │              ├── variable: abc.a:1 [type=int]
  │    │              └── variable: abc.c:3 [type=int]
  │    └── select
- │         ├── columns: abc.a:5(int!null) abc.b:6(int!null) abc.c:7(int)
- │         ├── key: (5)
- │         ├── fd: (5)-->(7), (5)==(6), (6)==(5)
- │         ├── prune: (7)
- │         ├── interesting orderings: (+(5|6))
+ │         ├── columns: abc.a:6(int!null) abc.b:7(int!null) abc.c:8(int)
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(8), (6)==(7), (7)==(6)
+ │         ├── prune: (8)
+ │         ├── interesting orderings: (+(6|7))
  │         ├── scan abc
- │         │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
- │         │    ├── key: (5)
- │         │    ├── fd: (5)-->(6,7)
- │         │    ├── prune: (5-7)
- │         │    └── interesting orderings: (+5)
+ │         │    ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(int)
+ │         │    ├── key: (6)
+ │         │    ├── fd: (6)-->(7,8)
+ │         │    ├── prune: (6-8)
+ │         │    └── interesting orderings: (+6)
  │         └── filters
- │              ├── gt [type=bool, outer=(5), constraints=(/5: [/11 - ]; tight)]
- │              │    ├── variable: abc.a:5 [type=int]
+ │              ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+ │              │    ├── variable: abc.a:6 [type=int]
  │              │    └── const: 10 [type=int]
- │              └── eq [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
- │                   ├── variable: abc.a:5 [type=int]
- │                   └── variable: abc.b:6 [type=int]
+ │              └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+ │                   ├── variable: abc.a:6 [type=int]
+ │                   └── variable: abc.b:7 [type=int]
  └── aggregations
-      ├── const-agg [as=b:10, type=int, outer=(10)]
-      │    └── variable: b:10 [type=int]
-      └── const-agg [as=c:11, type=int, outer=(11)]
-           └── variable: c:11 [type=int]
+      ├── const-agg [as=b:12, type=int, outer=(12)]
+      │    └── variable: b:12 [type=int]
+      └── const-agg [as=c:13, type=int, outer=(13)]
+           └── variable: c:13 [type=int]
 
 # Intersect FDs include equivalencies for columns that have equivalencies in the
 # left input.
@@ -488,7 +488,7 @@ SELECT a, b, c FROM abc WHERE a > 10 AND a = b
 intersect
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── left columns: a:1(int!null) b:2(int) c:3(int)
- ├── right columns: a:5(int) b:6(int) c:7(int)
+ ├── right columns: a:6(int) b:7(int) c:8(int)
  ├── key: (2,3)
  ├── fd: (1)==(3), (3)==(1)
  ├── interesting orderings: (+1)
@@ -512,24 +512,24 @@ intersect
  │              ├── variable: a:1 [type=int]
  │              └── variable: c:3 [type=int]
  └── select
-      ├── columns: a:5(int!null) b:6(int!null) c:7(int)
-      ├── key: (5)
-      ├── fd: (5)-->(7), (5)==(6), (6)==(5)
-      ├── prune: (7)
-      ├── interesting orderings: (+(5|6))
+      ├── columns: a:6(int!null) b:7(int!null) c:8(int)
+      ├── key: (6)
+      ├── fd: (6)-->(8), (6)==(7), (7)==(6)
+      ├── prune: (8)
+      ├── interesting orderings: (+(6|7))
       ├── scan abc
-      │    ├── columns: a:5(int!null) b:6(int) c:7(int)
-      │    ├── key: (5)
-      │    ├── fd: (5)-->(6,7)
-      │    ├── prune: (5-7)
-      │    └── interesting orderings: (+5)
+      │    ├── columns: a:6(int!null) b:7(int) c:8(int)
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8)
+      │    ├── prune: (6-8)
+      │    └── interesting orderings: (+6)
       └── filters
-           ├── gt [type=bool, outer=(5), constraints=(/5: [/11 - ]; tight)]
-           │    ├── variable: a:5 [type=int]
+           ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+           │    ├── variable: a:6 [type=int]
            │    └── const: 10 [type=int]
-           └── eq [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
-                ├── variable: a:5 [type=int]
-                └── variable: b:6 [type=int]
+           └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+                ├── variable: a:6 [type=int]
+                └── variable: b:7 [type=int]
 
 # Except FDs include equivalencies for columns that have equivalencies in the
 # left input.
@@ -541,7 +541,7 @@ SELECT a, b, c FROM abc WHERE a > 10 AND a = b
 except
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── left columns: a:1(int!null) b:2(int) c:3(int)
- ├── right columns: a:5(int) b:6(int) c:7(int)
+ ├── right columns: a:6(int) b:7(int) c:8(int)
  ├── key: (2,3)
  ├── fd: (1)==(3), (3)==(1)
  ├── interesting orderings: (+1)
@@ -565,21 +565,21 @@ except
  │              ├── variable: a:1 [type=int]
  │              └── variable: c:3 [type=int]
  └── select
-      ├── columns: a:5(int!null) b:6(int!null) c:7(int)
-      ├── key: (5)
-      ├── fd: (5)-->(7), (5)==(6), (6)==(5)
-      ├── prune: (7)
-      ├── interesting orderings: (+(5|6))
+      ├── columns: a:6(int!null) b:7(int!null) c:8(int)
+      ├── key: (6)
+      ├── fd: (6)-->(8), (6)==(7), (7)==(6)
+      ├── prune: (8)
+      ├── interesting orderings: (+(6|7))
       ├── scan abc
-      │    ├── columns: a:5(int!null) b:6(int) c:7(int)
-      │    ├── key: (5)
-      │    ├── fd: (5)-->(6,7)
-      │    ├── prune: (5-7)
-      │    └── interesting orderings: (+5)
+      │    ├── columns: a:6(int!null) b:7(int) c:8(int)
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,8)
+      │    ├── prune: (6-8)
+      │    └── interesting orderings: (+6)
       └── filters
-           ├── gt [type=bool, outer=(5), constraints=(/5: [/11 - ]; tight)]
-           │    ├── variable: a:5 [type=int]
+           ├── gt [type=bool, outer=(6), constraints=(/6: [/11 - ]; tight)]
+           │    ├── variable: a:6 [type=int]
            │    └── const: 10 [type=int]
-           └── eq [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
-                ├── variable: a:5 [type=int]
-                └── variable: b:6 [type=int]
+           └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+                ├── variable: a:6 [type=int]
+                └── variable: b:7 [type=int]

@@ -93,27 +93,27 @@ build
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
 ----
 project
- ├── columns: a:1 b:4 a:7 b:8
+ ├── columns: a:1 b:5 a:9 b:10
  └── inner-join-apply
-      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6 generate_series:7 generate_series:8
+      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8 generate_series:9 generate_series:10
       ├── inner-join-apply
-      │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6 generate_series:7
+      │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8 generate_series:9
       │    ├── inner-join-apply
-      │    │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6
+      │    │    ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    │    ├── scan t
-      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3
+      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    │    ├── scan u
-      │    │    │    └── columns: b:4 u.rowid:5!null u.crdb_internal_mvcc_timestamp:6
+      │    │    │    └── columns: b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    │    └── filters (true)
       │    ├── project-set
-      │    │    ├── columns: generate_series:7
+      │    │    ├── columns: generate_series:9
       │    │    ├── values
       │    │    │    └── ()
       │    │    └── zip
       │    │         └── generate_series(1, 2)
       │    └── filters (true)
       ├── project-set
-      │    ├── columns: generate_series:8
+      │    ├── columns: generate_series:10
       │    ├── values
       │    │    └── ()
       │    └── zip
@@ -715,70 +715,70 @@ build
 SELECT max(a) FROM t HAVING max(a::int) > (SELECT generate_series(0, b::int) FROM u limit 1)
 ----
 project
- ├── columns: max:4
+ ├── columns: max:5
  └── select
-      ├── columns: max:4 max:6!null
+      ├── columns: max:5 max:7!null
       ├── scalar-group-by
-      │    ├── columns: max:4 max:6
+      │    ├── columns: max:5 max:7
       │    ├── project
-      │    │    ├── columns: column5:5 a:1
+      │    │    ├── columns: column6:6 a:1
       │    │    ├── scan t
-      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3
+      │    │    │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       │    │    └── projections
-      │    │         └── a:1::INT8 [as=column5:5]
+      │    │         └── a:1::INT8 [as=column6:6]
       │    └── aggregations
-      │         ├── max [as=max:4]
+      │         ├── max [as=max:5]
       │         │    └── a:1
-      │         └── max [as=max:6]
-      │              └── column5:5
+      │         └── max [as=max:7]
+      │              └── column6:6
       └── filters
            └── gt
-                ├── max:6
+                ├── max:7
                 └── subquery
                      └── max1-row
-                          ├── columns: generate_series:10
+                          ├── columns: generate_series:12
                           └── limit
-                               ├── columns: generate_series:10
+                               ├── columns: generate_series:12
                                ├── project
-                               │    ├── columns: generate_series:10
+                               │    ├── columns: generate_series:12
                                │    ├── limit hint: 1.00
                                │    └── project-set
-                               │         ├── columns: b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9 generate_series:10
+                               │         ├── columns: b:8 u.rowid:9!null u.crdb_internal_mvcc_timestamp:10 u.tableoid:11 generate_series:12
                                │         ├── limit hint: 1.00
                                │         ├── scan u
-                               │         │    ├── columns: b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9
+                               │         │    ├── columns: b:8 u.rowid:9!null u.crdb_internal_mvcc_timestamp:10 u.tableoid:11
                                │         │    └── limit hint: 1.00
                                │         └── zip
-                               │              └── generate_series(0, b:7::INT8)
+                               │              └── generate_series(0, b:8::INT8)
                                └── 1
 
 build
 SELECT generate_series((SELECT generate_subscripts(ARRAY[a, a||b]) FROM t, u), 100) FROM t
 ----
 project
- ├── columns: generate_series:11
+ ├── columns: generate_series:14
  └── project-set
-      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 generate_series:11
+      ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 generate_series:14
       ├── scan t
-      │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3
+      │    └── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       └── zip
            └── function: generate_series
                 ├── subquery
                 │    └── max1-row
-                │         ├── columns: generate_subscripts:10
+                │         ├── columns: generate_subscripts:13
                 │         └── project
-                │              ├── columns: generate_subscripts:10
+                │              ├── columns: generate_subscripts:13
                 │              └── project-set
-                │                   ├── columns: a:4 t.rowid:5!null t.crdb_internal_mvcc_timestamp:6 b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9 generate_subscripts:10
+                │                   ├── columns: a:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 b:9 u.rowid:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12 generate_subscripts:13
                 │                   ├── inner-join (cross)
-                │                   │    ├── columns: a:4 t.rowid:5!null t.crdb_internal_mvcc_timestamp:6 b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9
+                │                   │    ├── columns: a:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 b:9 u.rowid:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
                 │                   │    ├── scan t
-                │                   │    │    └── columns: a:4 t.rowid:5!null t.crdb_internal_mvcc_timestamp:6
+                │                   │    │    └── columns: a:5 t.rowid:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8
                 │                   │    ├── scan u
-                │                   │    │    └── columns: b:7 u.rowid:8!null u.crdb_internal_mvcc_timestamp:9
+                │                   │    │    └── columns: b:9 u.rowid:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
                 │                   │    └── filters (true)
                 │                   └── zip
-                │                        └── generate_subscripts(ARRAY[a:4, a:4 || b:7])
+                │                        └── generate_subscripts(ARRAY[a:5, a:5 || b:9])
                 └── 100
 
 exec-ddl
@@ -794,56 +794,56 @@ SELECT
 FROM a
 ----
 project
- ├── columns: json_array_elements:7 jsonb_each:21 jsonb_object_keys:22 generate_series:23
+ ├── columns: json_array_elements:8 jsonb_each:23 jsonb_object_keys:24 generate_series:25
  ├── project-set
- │    ├── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6 json_array_elements:7
+ │    ├── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6 tableoid:7 json_array_elements:8
  │    ├── scan a
- │    │    └── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6
+ │    │    └── columns: x:1!null j:2 k:3 m:4 n:5 crdb_internal_mvcc_timestamp:6 tableoid:7
  │    └── zip
  │         └── json_array_elements(j:2)
  └── projections
-      ├── subquery [as=jsonb_each:21]
+      ├── subquery [as=jsonb_each:23]
       │    └── max1-row
-      │         ├── columns: jsonb_each:10
+      │         ├── columns: jsonb_each:11
       │         └── project
-      │              ├── columns: jsonb_each:10
+      │              ├── columns: jsonb_each:11
       │              ├── project-set
-      │              │    ├── columns: key:8 value:9
+      │              │    ├── columns: key:9 value:10
       │              │    ├── values
       │              │    │    └── ()
       │              │    └── zip
       │              │         └── jsonb_each(k:3)
       │              └── projections
-      │                   └── ((key:8, value:9) AS key, value) [as=jsonb_each:10]
-      ├── subquery [as=jsonb_object_keys:22]
+      │                   └── ((key:9, value:10) AS key, value) [as=jsonb_each:11]
+      ├── subquery [as=jsonb_object_keys:24]
       │    └── max1-row
-      │         ├── columns: jsonb_object_keys:17
+      │         ├── columns: jsonb_object_keys:19
       │         └── project
-      │              ├── columns: jsonb_object_keys:17
+      │              ├── columns: jsonb_object_keys:19
       │              └── project-set
-      │                   ├── columns: x:11!null j:12 k:13 m:14 n:15 crdb_internal_mvcc_timestamp:16 jsonb_object_keys:17
+      │                   ├── columns: x:12!null j:13 k:14 m:15 n:16 crdb_internal_mvcc_timestamp:17 tableoid:18 jsonb_object_keys:19
       │                   ├── scan a
-      │                   │    └── columns: x:11!null j:12 k:13 m:14 n:15 crdb_internal_mvcc_timestamp:16
+      │                   │    └── columns: x:12!null j:13 k:14 m:15 n:16 crdb_internal_mvcc_timestamp:17 tableoid:18
       │                   └── zip
-      │                        └── jsonb_object_keys(m:14)
-      └── subquery [as=generate_series:23]
+      │                        └── jsonb_object_keys(m:15)
+      └── subquery [as=generate_series:25]
            └── max1-row
-                ├── columns: generate_series:20
+                ├── columns: generate_series:22
                 └── project-set
-                     ├── columns: generate_series:20
+                     ├── columns: generate_series:22
                      ├── values
                      │    └── ()
                      └── zip
                           └── function: generate_series
                                ├── subquery
                                │    └── max1-row
-                               │         ├── columns: generate_series:19
+                               │         ├── columns: generate_series:21
                                │         └── project
-                               │              ├── columns: generate_series:19
+                               │              ├── columns: generate_series:21
                                │              └── project-set
-                               │                   ├── columns: value:18 generate_series:19
+                               │                   ├── columns: value:20 generate_series:21
                                │                   ├── project-set
-                               │                   │    ├── columns: value:18
+                               │                   │    ├── columns: value:20
                                │                   │    ├── values
                                │                   │    │    └── ()
                                │                   │    └── zip
@@ -877,7 +877,7 @@ build
 SELECT * FROM ROWS FROM (CAST((SELECT a FROM tab31755 LIMIT 1) AS SERIAL2[])) AS ident
 ----
 project-set
- ├── columns: ident:4
+ ├── columns: ident:5
  ├── values
  │    └── ()
  └── zip
@@ -891,6 +891,6 @@ project-set
                           │    ├── columns: tab31755.a:1
                           │    ├── limit hint: 1.00
                           │    └── scan tab31755
-                          │         ├── columns: tab31755.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3
+                          │         ├── columns: tab31755.a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
                           │         └── limit hint: 1.00
                           └── 1

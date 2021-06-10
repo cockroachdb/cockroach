@@ -20,19 +20,19 @@ norm perturb-cost=(0.5)
 SELECT * FROM a JOIN b ON a.x=b.x ORDER BY a.y
 ----
 sort
- ├── columns: x:1!null y:2 x:4!null
- ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=1000, null(4)=0]
+ ├── columns: x:1!null y:2 x:5!null
+ ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(5)=1000, null(5)=0]
  ├── cost: 2377.96569
- ├── key: (4)
- ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+ ├── key: (5)
+ ├── fd: (1)-->(2), (1)==(5), (5)==(1)
  ├── ordering: +2
  └── inner-join (hash)
-      ├── columns: a.x:1!null y:2 b.x:4!null
+      ├── columns: a.x:1!null y:2 b.x:5!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
-      ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=1000, null(4)=0]
+      ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(5)=1000, null(5)=0]
       ├── cost: 2128.64
-      ├── key: (4)
-      ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+      ├── key: (5)
+      ├── fd: (1)-->(2), (1)==(5), (5)==(1)
       ├── scan a
       │    ├── columns: a.x:1!null y:2
       │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
@@ -40,12 +40,12 @@ sort
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       ├── scan b
-      │    ├── columns: b.x:4!null
-      │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0]
+      │    ├── columns: b.x:5!null
+      │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0]
       │    ├── cost: 1034.21
-      │    └── key: (4)
+      │    └── key: (5)
       └── filters
-           └── a.x:1 = b.x:4 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+           └── a.x:1 = b.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 opt perturb-cost=(0.9)
 SELECT 1

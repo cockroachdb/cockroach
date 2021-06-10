@@ -371,31 +371,31 @@ norm expect=FoldNonNullIsNull
 SELECT (i,f) IS NOT DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── false [as="?column?":8]
+      └── false [as="?column?":9]
 
 norm expect=FoldNonNullIsNull
 SELECT ARRAY[k,i] IS NOT DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── false [as="?column?":8]
+      └── false [as="?column?":9]
 
 norm expect-not=FoldNonNullIsNull
 SELECT (i,f) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── scan a
  │    └── columns: i:2 f:3
  └── projections
-      └── (i:2, f:3) IS NULL [as="?column?":8, outer=(2,3)]
+      └── (i:2, f:3) IS NULL [as="?column?":9, outer=(2,3)]
 
 # --------------------------------------------------
 # FoldNullTupleIsTupleNull
@@ -424,12 +424,12 @@ norm expect-not=FoldNullTupleIsTupleNull
 SELECT (k, NULL) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1, NULL) IS NULL [as="?column?":8, outer=(1)]
+      └── (k:1, NULL) IS NULL [as="?column?":9, outer=(1)]
 
 # --------------------------------------------------
 # FoldNonNullTupleIsTupleNull
@@ -458,11 +458,11 @@ norm expect=FoldNonNullTupleIsTupleNull
 SELECT (1, k) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── false [as="?column?":8]
+      └── false [as="?column?":9]
 
 norm expect=FoldNonNullTupleIsTupleNull
 SELECT ((NULL, NULL), NULL) IS NULL AS r
@@ -488,12 +488,12 @@ norm expect-not=FoldNonNullTupleIsTupleNull
 SELECT (k, NULL) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1, NULL) IS NULL [as="?column?":8, outer=(1)]
+      └── (k:1, NULL) IS NULL [as="?column?":9, outer=(1)]
 
 # --------------------------------------------------
 # FoldIsNotNull
@@ -518,16 +518,16 @@ norm expect=FoldNonNullIsNotNull
 SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
- ├── columns: r:8!null s:9!null t:10!null
- ├── fd: ()-->(8)
+ ├── columns: r:9!null s:10!null t:11!null
+ ├── fd: ()-->(9)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── true [as=r:8]
-      ├── k:1 IS NOT NULL [as=s:9, outer=(1)]
-      └── i:2 IS NOT NULL [as=t:10, outer=(2)]
+      ├── true [as=r:9]
+      ├── k:1 IS NOT NULL [as=s:10, outer=(1)]
+      └── i:2 IS NOT NULL [as=t:11, outer=(2)]
 
 norm expect=FoldNonNullIsNotNull
 SELECT (1, 2, 3) IS DISTINCT FROM NULL AS r
@@ -563,31 +563,31 @@ norm expect=FoldNonNullIsNotNull
 SELECT (i,f) IS DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── true [as="?column?":8]
+      └── true [as="?column?":9]
 
 norm expect=FoldNonNullIsNotNull
 SELECT ARRAY[k,i] IS DISTINCT FROM NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── true [as="?column?":8]
+      └── true [as="?column?":9]
 
 norm expect-not=FoldNonNullIsNotNull
 SELECT (i,f) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── scan a
  │    └── columns: i:2 f:3
  └── projections
-      └── (i:2, f:3) IS NOT NULL [as="?column?":8, outer=(2,3)]
+      └── (i:2, f:3) IS NOT NULL [as="?column?":9, outer=(2,3)]
 
 # --------------------------------------------------
 # FoldNonNullTupleIsTupleNotNull
@@ -636,12 +636,12 @@ norm expect-not=FoldNonNullTupleIsTupleNotNull
 SELECT (1, k) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (1, k:1) IS NOT NULL [as="?column?":8, outer=(1)]
+      └── (1, k:1) IS NOT NULL [as="?column?":9, outer=(1)]
 
 # --------------------------------------------------
 # FoldNullTupleIsTupleNotNull
@@ -660,22 +660,22 @@ norm expect=FoldNullTupleIsTupleNotNull
 SELECT (k, NULL) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
- ├── fd: ()-->(8)
+ ├── columns: "?column?":9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── false [as="?column?":8]
+      └── false [as="?column?":9]
 
 norm expect-not=FoldNonNullTupleIsTupleNotNull
 SELECT (1, k) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (1, k:1) IS NOT NULL [as="?column?":8, outer=(1)]
+      └── (1, k:1) IS NOT NULL [as="?column?":9, outer=(1)]
 
 # --------------------------------------------------
 # CommuteNullIs
@@ -701,45 +701,45 @@ norm expect=NormalizeCmpTimeZoneFunction
 SELECT timezone('America/Denver', ts) >= '2020-06-01 12:35:55-07' FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 >= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
+      └── ts:1 >= '2020-06-01 13:35:55' [as="?column?":6, outer=(1)]
 
 # Apply after commuting the inequality.
 norm expect=NormalizeCmpTimeZoneFunction
 SELECT '2020-06-01 12:35:55-07' >= timezone('America/Denver', ts)  FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
+      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":6, outer=(1)]
 
 # Don't normalize when the right-hand-side is not a constant.
 norm expect-not=NormalizeCmpTimeZoneFunction
 SELECT timezone('America/Denver', ts) >= tz FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── immutable
  ├── scan t
  │    └── columns: ts:1 tz:2
  └── projections
-      └── tz:2 <= timezone('America/Denver', ts:1) [as="?column?":5, outer=(1,2), immutable]
+      └── tz:2 <= timezone('America/Denver', ts:1) [as="?column?":6, outer=(1,2), immutable]
 
 # Don't normalize when the timezone() arguments are constants.
 norm expect-not=NormalizeCmpTimeZoneFunction
 SELECT timezone('America/Denver', '2020-06-01 12:35:55'::TIMESTAMP) >= tz FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":5, outer=(2)]
+      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":6, outer=(2)]
 
 # --------------------------------------------------
 # NormalizeCmpTimeZoneFunctionTZ
@@ -748,45 +748,45 @@ norm expect=NormalizeCmpTimeZoneFunctionTZ
 SELECT timezone('America/Denver', tz) >= '2020-06-01 12:35:55' FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 >= '2020-06-01 18:35:55+00:00' [as="?column?":5, outer=(2)]
+      └── tz:2 >= '2020-06-01 18:35:55+00:00' [as="?column?":6, outer=(2)]
 
 # Apply after commuting the inequality.
 norm expect=NormalizeCmpTimeZoneFunctionTZ
 SELECT '2020-06-01 12:35:55' >= timezone('America/Denver', tz)  FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":5, outer=(2)]
+      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":6, outer=(2)]
 
 # Don't normalize when the right-hand-side is not a constant.
 norm expect-not=NormalizeCmpTimeZoneFunctionTZ
 SELECT timezone('America/Denver', tz) >= ts FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── immutable
  ├── scan t
  │    └── columns: ts:1 tz:2
  └── projections
-      └── ts:1 <= timezone('America/Denver', tz:2) [as="?column?":5, outer=(1,2), immutable]
+      └── ts:1 <= timezone('America/Denver', tz:2) [as="?column?":6, outer=(1,2), immutable]
 
 # Don't normalize when the timezone() arguments are constants.
 norm expect-not=NormalizeCmpTimeZoneFunctionTZ
 SELECT timezone('America/Denver', '2020-06-01 12:35:55-07'::TIMESTAMPTZ) >= ts FROM t
 ----
 project
- ├── columns: "?column?":5
+ ├── columns: "?column?":6
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
+      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":6, outer=(1)]
 
 # --------------------------------------------------
 # FoldEqZeroSTDistance
@@ -1141,11 +1141,11 @@ norm expect=FoldEqTrue
 SELECT b=TRUE FROM tbl
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan tbl
  │    └── columns: b:2
  └── projections
-      └── b:2 [as="?column?":4, outer=(2)]
+      └── b:2 [as="?column?":5, outer=(2)]
 
 norm expect=FoldEqFalse
 SELECT * FROM tbl WHERE b=FALSE
@@ -1165,11 +1165,11 @@ norm expect=FoldEqFalse
 SELECT b=FALSE FROM tbl
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan tbl
  │    └── columns: b:2
  └── projections
-      └── NOT b:2 [as="?column?":4, outer=(2)]
+      └── NOT b:2 [as="?column?":5, outer=(2)]
 
 exec-ddl
 CREATE INVERTED INDEX ON geom_geog(geom)
@@ -1181,11 +1181,11 @@ opt expect=FoldEqTrue
 SELECT count(*) FROM geom_geog WHERE (geom && st_geomfromewkt('SRID=4326;POLYGON((0 0,0 100,100 100,100 0,0 0))'))=TRUE;
 ----
 scalar-group-by
- ├── columns: count:7!null
+ ├── columns: count:8!null
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(7)
+ ├── fd: ()-->(8)
  ├── select
  │    ├── columns: geom:1!null
  │    ├── immutable
@@ -1193,7 +1193,7 @@ scalar-group-by
  │    │    ├── columns: geom:1
  │    │    └── inverted-filter
  │    │         ├── columns: rowid:4!null
- │    │         ├── inverted expression: /6
+ │    │         ├── inverted expression: /7
  │    │         │    ├── tight: false, unique: false
  │    │         │    └── union spans
  │    │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
@@ -1202,17 +1202,17 @@ scalar-group-by
  │    │         │    └── st_intersects('0103000020E610000001000000050000000000000000000000000000000000000000000000000000000000000000005940000000000000594000000000000059400000000000005940000000000000000000000000000000000000000000000000', geom:1)
  │    │         ├── key: (4)
  │    │         └── scan geom_geog@secondary
- │    │              ├── columns: rowid:4!null geom_inverted_key:6!null
- │    │              ├── inverted constraint: /6/4
+ │    │              ├── columns: rowid:4!null geom_inverted_key:7!null
+ │    │              ├── inverted constraint: /7/4
  │    │              │    └── spans
  │    │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
  │    │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  │    │              ├── key: (4)
- │    │              └── fd: (4)-->(6)
+ │    │              └── fd: (4)-->(7)
  │    └── filters
  │         └── geom:1 && '0103000020E610000001000000050000000000000000000000000000000000000000000000000000000000000000005940000000000000594000000000000059400000000000005940000000000000000000000000000000000000000000000000' [outer=(1), immutable, constraints=(/1: (/NULL - ])]
  └── aggregations
-      └── count-rows [as=count_rows:7]
+      └── count-rows [as=count_rows:8]
 
 # --------------------------------------------------
 # FoldNeTrue + FoldNeFalse
@@ -1236,11 +1236,11 @@ norm expect=FoldNeTrue
 SELECT b != TRUE FROM tbl
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan tbl
  │    └── columns: b:2
  └── projections
-      └── NOT b:2 [as="?column?":4, outer=(2)]
+      └── NOT b:2 [as="?column?":5, outer=(2)]
 
 norm expect=FoldNeFalse
 SELECT * FROM tbl WHERE b != FALSE
@@ -1260,8 +1260,8 @@ norm expect=FoldNeFalse
 SELECT b != FALSE FROM tbl
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan tbl
  │    └── columns: b:2
  └── projections
-      └── b:2 [as="?column?":4, outer=(2)]
+      └── b:2 [as="?column?":5, outer=(2)]
