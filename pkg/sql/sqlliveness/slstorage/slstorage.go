@@ -15,15 +15,16 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // GCInterval specifies duration between attempts to delete extant
@@ -75,12 +77,12 @@ type Storage struct {
 	stopper    *stop.Stopper
 	clock      *hlc.Clock
 	db         *kv.DB
-	ex         sqlutil.InternalExecutor
+	codec      keys.SQLCodec
 	metrics    Metrics
 	gcInterval func() time.Duration
 	g          singleflight.Group
-	sd         sessiondata.InternalExecutorOverride
 	newTimer   func() timeutil.TimerI
+	tableID    descpb.ID
 
 	mu struct {
 		syncutil.Mutex
@@ -102,9 +104,9 @@ func NewTestingStorage(
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *kv.DB,
-	ie sqlutil.InternalExecutor,
+	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	database string,
+	sqllivenessTableID descpb.ID,
 	newTimer func() timeutil.TimerI,
 ) *Storage {
 	s := &Storage{
@@ -112,11 +114,8 @@ func NewTestingStorage(
 		stopper:  stopper,
 		clock:    clock,
 		db:       db,
-		ex:       ie,
-		sd: sessiondata.InternalExecutorOverride{
-			User:     security.NodeUserName(),
-			Database: database,
-		},
+		codec:    codec,
+		tableID:  sqllivenessTableID,
 		newTimer: newTimer,
 		gcInterval: func() time.Duration {
 			baseInterval := GCInterval.Get(&settings.SV)
@@ -142,10 +141,10 @@ func NewStorage(
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *kv.DB,
-	ie sqlutil.InternalExecutor,
+	codec keys.SQLCodec,
 	settings *cluster.Settings,
 ) *Storage {
-	return NewTestingStorage(stopper, clock, db, ie, settings, "system",
+	return NewTestingStorage(stopper, clock, db, codec, settings, keys.SqllivenessID,
 		timeutil.DefaultTimeSource{}.NewTimer)
 }
 
@@ -237,23 +236,19 @@ func (s *Storage) deleteOrFetchSession(
 	ctx context.Context, sid sqlliveness.SessionID, prevExpiration hlc.Timestamp,
 ) (alive bool, expiration hlc.Timestamp, err error) {
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-
-		row, err := s.ex.QueryRowEx(ctx, "fetch-single-session", txn, s.sd, `
-SELECT expiration FROM sqlliveness WHERE session_id = $1
-`, sid.UnsafeBytes())
+		k := s.makeSessionKey(sid)
+		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err
 		}
-
 		// The session is not alive.
-		if row == nil {
+		if kv.Value == nil {
 			return nil
 		}
-
-		// The session is alive if the read expiration differs from prevExpiration.
-		expiration, err = tree.DecimalToHLC(&row[0].(*tree.DDecimal).Decimal)
+		expiration, err = decodeValue(kv)
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse expiration for session")
+			return errors.Wrapf(err, "failed to decode expiration for %s",
+				redact.SafeString(sid.String()))
 		}
 		if !expiration.Equal(prevExpiration) {
 			alive = true
@@ -262,10 +257,7 @@ SELECT expiration FROM sqlliveness WHERE session_id = $1
 
 		// The session is expired and needs to be deleted.
 		expiration = hlc.Timestamp{}
-		_, err = s.ex.ExecEx(ctx, "delete-expired-session", txn, s.sd, `
-DELETE FROM sqlliveness WHERE session_id = $1
-`, sid.UnsafeBytes())
-		return err
+		return txn.Del(ctx, k)
 	}); err != nil {
 		return false, hlc.Timestamp{}, errors.Wrapf(err,
 			"could not query session id: %s", sid)
@@ -299,30 +291,42 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 // matter. This would closer align with the behavior in node-liveness.
 func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	now := s.clock.Now()
-	row, err := s.ex.QueryRowEx(ctx, "delete-sessions", nil /* txn */, s.sd,
-		`
-  WITH deleted_sessions AS (
-                            DELETE FROM sqlliveness
-                                  WHERE expiration < $1
-                              RETURNING session_id
-                        )
-	SELECT count(*)
-  FROM deleted_sessions;`,
-		tree.TimestampToDecimalDatum(now),
-	)
-	if err != nil {
+	var deleted int64
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		deleted = 0 // reset for restarts
+		start := s.makeTablePrefix()
+		end := start.PrefixEnd()
+		const maxRows = 1024 // arbitrary but plenty
+		for {
+			rows, err := txn.Scan(ctx, start, end, maxRows)
+			if err != nil {
+				return err
+			}
+			if len(rows) == 0 {
+				return nil
+			}
+			var toDel []interface{}
+			for i := range rows {
+				exp, err := decodeValue(rows[i])
+				if err != nil {
+					log.Warningf(ctx, "failed to decode row %s: %v", rows[i].Key.String(), err)
+				}
+				if exp.Less(now) {
+					toDel = append(toDel, rows[i].Key)
+					deleted++
+				}
+			}
+			if err := txn.Del(ctx, toDel...); err != nil {
+				return err
+			}
+			start = rows[len(rows)-1].Key.Next()
+		}
+	}); err != nil {
 		if ctx.Err() == nil {
 			log.Errorf(ctx, "could not delete expired sessions: %+v", err)
 		}
 		return
 	}
-	if row == nil {
-		if ctx.Err() == nil {
-			log.Error(ctx, "could not delete expired sessions")
-		}
-		return
-	}
-	deleted := int64(*row[0].(*tree.DInt))
 
 	s.metrics.SessionDeletionsRuns.Inc(1)
 	s.metrics.SessionsDeleted.Inc(deleted)
@@ -338,14 +342,9 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 func (s *Storage) Insert(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (err error) {
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := s.ex.QueryRowEx(
-			ctx, "insert-session", txn, s.sd,
-			`INSERT INTO sqlliveness VALUES ($1, $2)`,
-			sid.UnsafeBytes(), tree.TimestampToDecimalDatum(expiration),
-		)
-		return err
-	}); err != nil {
+	k := s.makeSessionKey(sid)
+	v := encodeValue(expiration)
+	if err := s.db.InitPut(ctx, k, &v, true); err != nil {
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
@@ -360,16 +359,16 @@ func (s *Storage) Update(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (sessionExists bool, err error) {
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		data, err := s.ex.QueryRowEx(
-			ctx, "update-session", txn, s.sd, `
-UPDATE sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING session_id`,
-			tree.TimestampToDecimalDatum(expiration), sid.UnsafeBytes(),
-		)
+		k := s.makeSessionKey(sid)
+		kv, err := s.db.Get(ctx, k)
 		if err != nil {
 			return err
 		}
-		sessionExists = data != nil
-		return nil
+		if sessionExists = kv.Value != nil; !sessionExists {
+			return nil
+		}
+		v := encodeValue(expiration)
+		return s.db.Put(ctx, k, &v)
 	})
 	if err != nil || !sessionExists {
 		s.metrics.WriteFailures.Inc(1)
@@ -379,4 +378,33 @@ UPDATE sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING session_i
 	}
 	s.metrics.WriteSuccesses.Inc(1)
 	return sessionExists, nil
+}
+
+func (s *Storage) makeTablePrefix() roachpb.Key {
+	return s.codec.IndexPrefix(uint32(s.tableID), 1)
+}
+
+func (s *Storage) makeSessionKey(id sqlliveness.SessionID) roachpb.Key {
+	return keys.MakeFamilyKey(encoding.EncodeBytesAscending(s.makeTablePrefix(), id.UnsafeBytes()), 0)
+}
+
+func decodeValue(kv kv.KeyValue) (hlc.Timestamp, error) {
+	tup, err := kv.Value.GetTuple()
+	if err != nil {
+		return hlc.Timestamp{},
+			errors.Wrapf(err, "failed to decode tuple from key %v", kv.Key)
+	}
+	_, dec, err := encoding.DecodeDecimalValue(tup)
+	if err != nil {
+		return hlc.Timestamp{},
+			errors.Wrapf(err, "failed to decode decimal from key %v", kv.Key)
+	}
+	return tree.DecimalToHLC(&dec)
+}
+
+func encodeValue(expiration hlc.Timestamp) roachpb.Value {
+	var v roachpb.Value
+	dec := tree.TimestampToDecimal(expiration)
+	v.SetTuple(encoding.EncodeDecimalValue(nil, 2, &dec))
+	return v
 }

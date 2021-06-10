@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
@@ -279,4 +280,102 @@ func TestPebbleEncryption(t *testing.T) {
 	require.Equal(t, stats.TotalBytes, stats.ActiveKeyBytes)
 
 	db.Close()
+}
+
+func TestPebbleEncryption2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	memFS := vfs.NewMem()
+	firstKeyFile128 := "111111111111111111111111111111111234567890123456"
+	secondKeyFile128 := "111111111111111111111111111111198765432198765432"
+	writeToFile(t, memFS, "16v1.key", []byte(firstKeyFile128))
+	writeToFile(t, memFS, "16v2.key", []byte(secondKeyFile128))
+
+	keys := make(map[string]bool)
+	validateKeys := func(reader storage.Reader) bool {
+		keysCopy := make(map[string]bool)
+		for k, v := range keys {
+			keysCopy[k] = v
+		}
+
+		foundUnknown := false
+		kvFunc := func(kv roachpb.KeyValue) error {
+			key := kv.Key
+			val := kv.Value
+			expected := keysCopy[string(key)]
+			if !expected || len(val.RawBytes) == 0 {
+				foundUnknown = true
+				return nil
+			}
+			delete(keysCopy, string(key))
+			return nil
+		}
+
+		_, err := storage.MVCCIterate(
+			context.Background(),
+			reader,
+			nil,
+			roachpb.KeyMax,
+			hlc.Timestamp{},
+			storage.MVCCScanOptions{},
+			kvFunc,
+		)
+		require.NoError(t, err)
+		return len(keysCopy) == 0 && !foundUnknown
+	}
+
+	addKeyAndValidate := func(
+		key string, val string, encKeyFile string, oldEncFileKey string,
+	) {
+		encOptions := baseccl.EncryptionOptions{
+			KeySource: baseccl.EncryptionKeySource_KeyFiles,
+			KeyFiles: &baseccl.EncryptionKeyFiles{
+				CurrentKey: encKeyFile,
+				OldKey:     oldEncFileKey,
+			},
+			DataKeyRotationPeriod: 1000,
+		}
+		encOptionsBytes, err := protoutil.Marshal(&encOptions)
+		require.NoError(t, err)
+
+		opts := storage.DefaultPebbleOptions()
+		opts.FS = memFS
+		opts.Cache = pebble.NewCache(1 << 20)
+		defer opts.Cache.Unref()
+
+		db, err := storage.NewPebble(
+			context.Background(),
+			storage.PebbleConfig{
+				StorageConfig: base.StorageConfig{
+					Attrs:             roachpb.Attributes{},
+					MaxSize:           512 << 20,
+					UseFileRegistry:   true,
+					EncryptionOptions: encOptionsBytes,
+				},
+				Opts: opts,
+			})
+		require.NoError(t, err)
+		require.True(t, validateKeys(db))
+
+		keys[key] = true
+		err = storage.MVCCPut(
+			context.Background(),
+			db,
+			nil, /* ms */
+			roachpb.Key(key),
+			hlc.Timestamp{},
+			roachpb.MakeValueFromBytes([]byte(val)),
+			nil, /* txn */
+		)
+		require.NoError(t, err)
+		require.NoError(t, db.Flush())
+		require.NoError(t, db.Compact())
+		require.True(t, validateKeys(db))
+		db.Close()
+	}
+
+	addKeyAndValidate("a", "a", "16v1.key", "plain")
+	addKeyAndValidate("b", "b", "plain", "16v1.key")
+	addKeyAndValidate("c", "c", "16v2.key", "plain")
+	addKeyAndValidate("d", "d", "plain", "16v2.key")
 }
