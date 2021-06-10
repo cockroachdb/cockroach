@@ -95,6 +95,13 @@ type testRegistration struct {
 	errC   <-chan *roachpb.Error
 }
 
+func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIteratorConstructor {
+	if iter == nil {
+		return nil
+	}
+	return func() *CatchUpIterator { return &CatchUpIterator{SimpleMVCCIterator: iter} }
+}
+
 func newTestRegistration(
 	span roachpb.Span, ts hlc.Timestamp, catchup storage.SimpleMVCCIterator, withDiff bool,
 ) *testRegistration {
@@ -103,7 +110,7 @@ func newTestRegistration(
 	r := newRegistration(
 		span,
 		ts,
-		makeIteratorConstructor(catchup),
+		makeCatchUpIteratorConstructor(catchup),
 		withDiff,
 		5,
 		NewMetrics(),
