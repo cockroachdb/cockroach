@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@npm_cluster_ui//webpack-cli:index.bzl", webpack = "webpack_cli")
+load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+load("@npm//@bazel/typescript:index.bzl", "ts_project")
+
+ts_project(
+    name = "cluster_ui_ts_project",
+    srcs = glob(["src/**"]),
+    tsconfig = "tsconfig.json",
+    emit_declaration_only = True,
+    declaration = True,
+    deps = [
+        "@npm_cluster_ui//@babel/parser",
+        "@npm_cluster_ui//@types",
+        "@npm_cluster_ui//@babel/types",
+      #  "//pkg/ui/src/js:ui_protos_lib",
+      #  "@npm_cluster_ui//@cockroachlabs/crdb-protobuf-client",
+      # "@npm_cluster_ui//:node_modules",
+    ],
+)
+
+js_library(
+    name = "test_ui_protos_lib",
+    package_name = "@cockroachlabs/crdb-protobuf-client-test",
+    srcs = [
+        "package.json",
+        "@npm_cluster_ui//@cockroachlabs/crdb-protobuf-client"
+    ],
+    deps = ["@npm_cluster_ui//@cockroachlabs/crdb-protobuf-client"],
+    visibility = ["//visibility:public"],
+)
+
+# cluster_ui_bundle depends on //pkg/ui/src/js:db_console_oss_js_lib target
+# pkg/ui/src/js is a local NPM package which is installed/linked to current cluster-ui package
+webpack(
+    name = "cluster_ui_bundle",
+    args = [
+        "--config",
+        "$(execpath webpack.config.js)",
+        "--mode",
+        "production",
+        "--display-error-details",
+    ],
+    data = [
+        "src",
+        "babel.config.js",
+        "webpack.config.js",
+        "tsconfig.json",
+        "package.json",
+        "yarn.lock",
+        # "@npm_cluster_ui//:node_modules",
+        # "@npm_cluster_ui//@cockroachlabs/crdb-protobuf-client"
+    ],
+)

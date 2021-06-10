@@ -54,6 +54,7 @@
     "@babel/core": "^7.7.7",
     "@babel/preset-env": "^7.7.7",
     "@babel/preset-react": "^7.7.4",
+    "@bazel/typescript": "^3.5.1",
     "@cockroachlabs/eslint-config": "^0.1.11",
     "@storybook/react": "5.0.6",
     "@types/analytics-node": "^0.0.32",
