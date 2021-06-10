@@ -88,6 +88,7 @@ func NewServer(
 		),
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+	ds.flowScheduler.Init(ds.Metrics)
 
 	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		if !colexec.HashAggregationDiskSpillingEnabled.Get(&cfg.Settings.SV) {
@@ -121,7 +122,6 @@ func (ds *ServerImpl) Start() {
 		panic(err)
 	}
 
-	ds.flowScheduler.Init(ds.Metrics)
 	ds.flowScheduler.Start()
 }
 
