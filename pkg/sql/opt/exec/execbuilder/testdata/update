@@ -518,6 +518,74 @@ vectorized: true
           spans: [/2 - /9]
           locking strength: for update
 
+query T
+EXPLAIN UPDATE kv3 SET v = (SELECT count(*) FROM kv2) WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: kv3
+│   │ set: v
+│   │ auto commit
+│   │
+│   └── • render
+│       │
+│       └── • scan
+│             missing stats
+│             table: kv3@primary
+│             spans: [/1 - /1]
+│             locking strength: for update
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT count(*) FROM kv2)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: kv2@primary
+              spans: FULL SCAN
+              locking strength: for update
+
+query T
+EXPLAIN UPDATE kv3 SET v = (SELECT count(*) FROM kv3) WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: kv3
+│   │ set: v
+│   │ auto commit
+│   │
+│   └── • render
+│       │
+│       └── • scan
+│             missing stats
+│             table: kv3@primary
+│             spans: [/1 - /1]
+│             locking strength: for update
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT count(*) FROM kv3)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: FULL SCAN
+              locking strength: for update
+
 statement ok
 SET enable_implicit_select_for_update = false
 
@@ -659,6 +727,70 @@ vectorized: true
           missing stats
           table: kv3@kv3_v_idx
           spans: [/2 - /9]
+
+query T
+EXPLAIN UPDATE kv3 SET v = (SELECT count(*) FROM kv2) WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: kv3
+│   │ set: v
+│   │ auto commit
+│   │
+│   └── • render
+│       │
+│       └── • scan
+│             missing stats
+│             table: kv3@primary
+│             spans: [/1 - /1]
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT count(*) FROM kv2)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: kv2@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN UPDATE kv3 SET v = (SELECT count(*) FROM kv3) WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: kv3
+│   │ set: v
+│   │ auto commit
+│   │
+│   └── • render
+│       │
+│       └── • scan
+│             missing stats
+│             table: kv3@primary
+│             spans: [/1 - /1]
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT count(*) FROM kv3)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: FULL SCAN
 
 # Reset for rest of test.
 statement ok
