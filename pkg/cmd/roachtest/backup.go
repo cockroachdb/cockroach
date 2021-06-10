@@ -148,7 +148,7 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 	// roachtest.
 	reg := histogram.NewRegistry(
 		timeout,
-		histogram.MockNewPrometheusHistogram,
+		histogram.MockWorkloadName,
 	)
 	reg.GetHandle().Get(testName)
 

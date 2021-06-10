@@ -57,7 +57,7 @@ func TestWorkload(t *testing.T) {
 		workload.Flagser
 	})
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	reg := histogram.NewRegistry(20*time.Second, histogram.MockNewPrometheusHistogram)
+	reg := histogram.NewRegistry(20*time.Second, m.Name)
 	tdb.Exec(t, "CREATE USER testuser")
 	tdb.Exec(t, "CREATE DATABASE schemachange")
 	tdb.Exec(t, "GRANT admin TO testuser")
