@@ -394,5 +394,6 @@ var PostgresMode = multiOption(
 	IgnoreFNs("_escape$"),
 	// Some spatial functions are CockroachDB-specific.
 	IgnoreFNs("st_.*withinexclusive$"),
-	IgnoreFNs("^postgis_.*_build_date"),
+	IgnoreFNs("^postgis_.*build_date"),
+	IgnoreFNs("^postgis_.*version"),
 )
