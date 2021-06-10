@@ -1999,9 +1999,10 @@ message AdmissionHeader {
   // request or a parent request. See admission.WorkInfo.Priority for details.
   // It is used to give preference to older requests.
   int64 create_time = 2;
-  // Source represents the immediate source of a request. FROM_SQL represents
-  // a KV request originating in SQL, and ROOT_KV represents a request
-  // originating within KV, but at the root of the tree of requests.
+
+  // Source is a bitmap represents the immediate source of a request. FROM_SQL
+  // represents a KV request originating in SQL, and ROOT_KV represents a
+  // request originating within KV, but at the root of the tree of requests.
   // BatchRequests can cause other BatchRequests (e.g. to PushTransaction),
   // which may result in yet more BatchRequests (e.g. to
   // ResolveIndeterminateCommit). These can cause a deadlock when using slot
@@ -2009,10 +2010,15 @@ message AdmissionHeader {
   // to admission control. This behavior errs on the side of no deadlock, if
   // we overlooked an instrumentation point, since the default value of OTHER
   // bypasses admission control.
+  // LOCAL is a special bit that is only set on codepaths that are calling the
+  // KV api from the same node (not using gRPC). If FROM_SQL and ROOT_KV are
+  // not set, it represents OTHER. This allows codepaths that don't initialize
+  // the source to function as OTHER.
   enum Source {
     OTHER = 0;
     FROM_SQL = 1;
     ROOT_KV = 2;
+    LOCAL = 4;
   }
   Source source = 3;
 }

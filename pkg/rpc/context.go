@@ -459,6 +459,9 @@ type internalClientAdapter struct {
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
+	// Mark this as originating locally, which is useful for the decision about
+	// memory allocation tracking.
+	ba.AdmissionHeader.Source = ba.AdmissionHeader.Source | roachpb.AdmissionHeader_LOCAL
 	return a.InternalServer.Batch(ctx, ba)
 }
 

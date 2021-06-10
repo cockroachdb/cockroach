@@ -921,7 +921,7 @@ func (n *Node) Batch(
 		// a request with source other than AdmissionHeader_FROM_SQL, change it to
 		// FROM_SQL.
 		tenantID = roachpb.SystemTenantID
-		if args.AdmissionHeader.Source == roachpb.AdmissionHeader_OTHER {
+		if roachpb.IsAdmissionHeaderOTHER(args.AdmissionHeader.Source) {
 			bypassAdmission = true
 		}
 		createTime := args.AdmissionHeader.CreateTime

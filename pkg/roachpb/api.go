@@ -1527,3 +1527,11 @@ func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
 func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
+
+func IsAdmissionHeaderOTHER(source AdmissionHeader_Source) bool {
+	return source|AdmissionHeader_FROM_SQL == 0 && source|AdmissionHeader_ROOT_KV == 0
+}
+
+func IsAdmissionHeaderLOCAL(source AdmissionHeader_Source) bool {
+	return source|AdmissionHeader_LOCAL != 0
+}
