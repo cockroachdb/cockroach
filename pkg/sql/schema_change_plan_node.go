@@ -122,7 +122,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	scs := p.extendedEvalCtx.SchemaChangerState
 	executor := scexec.NewExecutor(p.txn, p.Descriptors(), p.EvalContext().Codec,
 		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs,
-		params.extendedEvalCtx.ExecCfg.JobRegistry, params.p.execCfg.InternalExecutor)
+		params.extendedEvalCtx.ExecCfg.JobRegistry, params.p.execCfg.InternalExecutor, p.ExecCfg().Settings, p.EvalContext())
 	after, err := runNewSchemaChanger(
 		params.ctx, scplan.StatementPhase, s.plannedState, executor, scs.stmts,
 	)
