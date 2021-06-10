@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"golang.org/x/time/rate"
 )
@@ -126,6 +127,12 @@ type EvalContext interface {
 	// WatchForMerge arranges to block all requests until the in-progress merge
 	// completes. Returns an error if no in-progress merge is detected.
 	WatchForMerge(ctx context.Context) error
+
+	// GetResponseMemoryAccount returns a memory account to be used when
+	// generating BatchResponses. Currently only used for MVCC scans, and only
+	// non-nil on those paths (a nil account is safe to use since it functions
+	// as an unlimited account).
+	GetResponseMemoryAccount() *mon.BoundAccount
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -150,7 +157,7 @@ type MockEvalCtx struct {
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
 // modifications to the underlying MockEvalContext.
 func (m *MockEvalCtx) EvalContext() EvalContext {
-	return &mockEvalCtxImpl{m}
+	return &mockEvalCtxImpl{MockEvalCtx: m}
 }
 
 type mockEvalCtxImpl struct {
@@ -257,4 +264,8 @@ func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequen
 }
 func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
 	panic("unimplemented")
+}
+func (m *mockEvalCtxImpl) GetResponseMemoryAccount() *mon.BoundAccount {
+	// No limits.
+	return nil
 }

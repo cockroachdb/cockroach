@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -803,6 +804,8 @@ type MVCCGetOptions struct {
 	//
 	// The field is only set if Txn is also set.
 	LocalUncertaintyLimit hlc.Timestamp
+	// MemoryAccount is used for tracking memory allocations.
+	MemoryAccount *mon.BoundAccount
 }
 
 func (opts *MVCCGetOptions) validate() error {
@@ -881,6 +884,7 @@ func mvccGet(
 	// key different than the start key. This is a bit of a hack.
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
+		memAccount:       opts.MemoryAccount,
 		start:            key,
 		ts:               timestamp,
 		maxKeys:          1,
@@ -891,7 +895,7 @@ func mvccGet(
 	}
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
-	mvccScanner.get()
+	mvccScanner.get(ctx)
 
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
@@ -2374,6 +2378,7 @@ func mvccScanToBytes(
 
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
+		memAccount:       opts.MemoryAccount,
 		reverse:          opts.Reverse,
 		start:            key,
 		end:              endKey,
@@ -2391,7 +2396,7 @@ func mvccScanToBytes(
 
 	var res MVCCScanResult
 	var err error
-	res.ResumeSpan, err = mvccScanner.scan()
+	res.ResumeSpan, err = mvccScanner.scan(ctx)
 
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -2523,6 +2528,8 @@ type MVCCScanOptions struct {
 	// Not used in inconsistent scans.
 	// The zero value indicates no limit.
 	MaxIntents int64
+	// MemoryAccount is used for tracking memory allocations.
+	MemoryAccount *mon.BoundAccount
 }
 
 func (opts *MVCCScanOptions) validate() error {

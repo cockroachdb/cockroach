@@ -516,6 +516,16 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// Init initializes a BoundAccount, connecting it to the given monitor. It is
+// similar to MakeBoundAccount, but allows the caller to save a BoundAccount
+// allocation.
+func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
+	if *b != (BoundAccount{}) {
+		log.Fatalf(ctx, "trying to re-initialize non-empty account")
+	}
+	b.mon = mon
+}
+
 // Empty shrinks the account to use 0 bytes. Previously used memory is returned
 // to the reserved buffer, which is subsequently released such that at most
 // poolAllocationSize is reserved.
