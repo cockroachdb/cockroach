@@ -16,6 +16,8 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scexec/descriptorutils",
         "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/tree",
         "//pkg/util/protoutil",
         "//pkg/util/sequence",
         "@com_github_cockroachdb_errors//:errors",
