@@ -115,7 +115,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			if err := scexec.NewExecutor(
 				txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller,
 				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs, execCtx.ExecCfg().JobRegistry,
-				execCtx.ExecCfg().InternalExecutor).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
+				execCtx.ExecCfg().InternalExecutor, execCtx.ExecCfg().Settings, &execCtx.ExtendedEvalContext().EvalContext).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
 				Statements: n.job.Payload().Statement,
 				Phase:      scplan.PostCommitPhase,
 			}); err != nil {
