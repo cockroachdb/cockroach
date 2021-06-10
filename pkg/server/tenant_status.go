@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -42,6 +43,7 @@ func newTenantStatusServer(
 	privilegeChecker *adminPrivilegeChecker,
 	sessionRegistry *sql.SessionRegistry,
 	contentionRegistry *contention.Registry,
+	flowScheduler *flowinfra.FlowScheduler,
 	st *cluster.Settings,
 	sqlServer *SQLServer,
 ) *tenantStatusServer {
@@ -52,6 +54,7 @@ func newTenantStatusServer(
 			privilegeChecker:   privilegeChecker,
 			sessionRegistry:    sessionRegistry,
 			contentionRegistry: contentionRegistry,
+			flowScheduler:      flowScheduler,
 			st:                 st,
 			sqlServer:          sqlServer,
 		},
@@ -108,16 +111,6 @@ func (t *tenantStatusServer) ListContentionEvents(
 	return t.ListLocalContentionEvents(ctx, request)
 }
 
-func (t *tenantStatusServer) ListLocalContentionEvents(
-	ctx context.Context, request *serverpb.ListContentionEventsRequest,
-) (*serverpb.ListContentionEventsResponse, error) {
-	events, err := t.getLocalContentionEvents(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	return &serverpb.ListContentionEventsResponse{Events: events}, nil
-}
-
 func (t *tenantStatusServer) ResetSQLStats(
 	ctx context.Context, _ *serverpb.ResetSQLStatsRequest,
 ) (*serverpb.ResetSQLStatsResponse, error) {
@@ -140,4 +133,10 @@ func (t *tenantStatusServer) Statements(
 	}
 
 	return resp, nil
+}
+
+func (t *tenantStatusServer) ListDistSQLFlows(
+	ctx context.Context, request *serverpb.ListDistSQLFlowsRequest,
+) (*serverpb.ListDistSQLFlowsResponse, error) {
+	return t.ListLocalDistSQLFlows(ctx, request)
 }
