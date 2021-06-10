@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -723,6 +724,9 @@ type StoreConfig struct {
 	// subsystem. It is queried during the GC process and in the handling of
 	// AdminVerifyProtectedTimestampRequest.
 	ProtectedTimestampCache protectedts.Cache
+
+	// KV Memory Monitor. Must be non-nil.
+	KVMemoryMonitor *mon.BytesMonitor
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -2889,6 +2893,10 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 	if s.ctSender != nil {
 		s.ctSender.UnregisterLeaseholder(ctx, s.StoreID(), rangeID)
 	}
+}
+
+func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
+	return s.cfg.KVMemoryMonitor
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local

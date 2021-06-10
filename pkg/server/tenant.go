@@ -36,6 +36,11 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
+	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
+		memoryPoolSize:          args.MemoryPoolSize,
+		histogramWindowInterval: args.HistogramWindowInterval(),
+		settings:                args.Settings,
+	})
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return nil, "", "", err
