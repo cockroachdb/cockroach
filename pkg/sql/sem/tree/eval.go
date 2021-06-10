@@ -2170,10 +2170,10 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Bytes, types.Bytes, VolatilityLeakProof),
 		makeLtFn(types.Date, types.Date, VolatilityLeakProof),
 		makeLtFn(types.Decimal, types.Decimal, VolatilityImmutable),
-		makeLtFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
 		// Note: it is an error to compare two strings with different collations;
 		// the operator is leak proof under the assumption that these cases will be
 		// detected during type checking.
+		makeLtFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
 		makeLtFn(types.Float, types.Float, VolatilityLeakProof),
 		makeLtFn(types.Box2D, types.Box2D, VolatilityLeakProof),
 		makeLtFn(types.Geography, types.Geography, VolatilityLeakProof),

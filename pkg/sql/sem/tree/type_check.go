@@ -1739,6 +1739,25 @@ func typeCheckAndRequireTupleElems(
 		tuple.Exprs[i] = rightTyped
 		tuple.typ.TupleContents()[i] = rightTyped.ResolvedType()
 	}
+	if len(tuple.typ.TupleContents()) > 0 && tuple.typ.TupleContents()[0].Family() == types.CollatedStringFamily {
+		// Make sure that all elements of the tuple have the correct locale set
+		// for collated strings. Note that if the locales were different, an
+		// error would have been already emitted, so here we are only upgrading
+		// an empty locale (which might be set for NULLs) to a non-empty (if
+		// such is found).
+		var typWithLocale *types.T
+		for _, typ := range tuple.typ.TupleContents() {
+			if typ.Locale() != "" {
+				typWithLocale = typ
+				break
+			}
+		}
+		if typWithLocale != nil {
+			for i := range tuple.typ.TupleContents() {
+				tuple.typ.TupleContents()[i] = typWithLocale
+			}
+		}
+	}
 	return tuple, nil
 }
 

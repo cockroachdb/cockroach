@@ -507,3 +507,18 @@ query T
 SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
 ----
 Bbb
+
+subtest regression_45142
+
+statement ok
+CREATE TABLE t45142(c STRING COLLATE en);
+
+query error unsupported comparison operator
+SELECT * FROM t45142 WHERE c < SOME ('' COLLATE de, '' COLLATE en);
+
+query error unsupported comparison operator
+SELECT * FROM t45142 WHERE c < SOME ('' COLLATE en, '' COLLATE de);
+
+statement ok
+SELECT * FROM t45142 WHERE c < SOME (CASE WHEN true THEN NULL END, '' COLLATE en);
+SELECT * FROM t45142 WHERE c < SOME ('' COLLATE en, CASE WHEN true THEN NULL END);
