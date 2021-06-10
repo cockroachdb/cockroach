@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -33,62 +34,38 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 
 	bt, bf := true, false
 
-	// If the default directory was not specified, use the one
-	// provided by the environment.
-	if c.FileDefaults.Dir == nil {
-		c.FileDefaults.Dir = defaultLogDir
+	baseCommonSinkConfig := CommonSinkConfig{
+		Filter:      logpb.Severity_INFO,
+		Auditable:   &bf,
+		Redactable:  &bt,
+		Redact:      &bf,
+		Criticality: &bf,
 	}
+	baseFileDefaults := FileDefaults{
+		Dir:            defaultLogDir,
+		BufferedWrites: &bt,
+		MaxFileSize:    func() *ByteSize { s := ByteSize(0); return &s }(),
+		MaxGroupSize:   func() *ByteSize { s := ByteSize(0); return &s }(),
+		CommonSinkConfig: CommonSinkConfig{
+			Format:      func() *string { s := DefaultFileFormat; return &s }(),
+			Criticality: &bt,
+		},
+	}
+	baseFluentDefaults := FluentDefaults{
+		CommonSinkConfig: CommonSinkConfig{
+			Format: func() *string { s := DefaultFluentFormat; return &s }(),
+		},
+	}
+
+	progagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
+	progagateCommonDefaults(&baseFluentDefaults.CommonSinkConfig, baseCommonSinkConfig)
+
+	progagateFileDefaults(&c.FileDefaults, baseFileDefaults)
+	progagateFluentDefaults(&c.FluentDefaults, baseFluentDefaults)
+
 	// Normalize the directory.
 	if err := normalizeDir(&c.FileDefaults.Dir); err != nil {
 		fmt.Fprintf(&errBuf, "file-defaults: %v\n", err)
-	}
-	// No severity -> default INFO.
-	if c.FileDefaults.Filter == logpb.Severity_UNKNOWN {
-		c.FileDefaults.Filter = logpb.Severity_INFO
-	}
-	if c.FluentDefaults.Filter == logpb.Severity_UNKNOWN {
-		c.FluentDefaults.Filter = logpb.Severity_INFO
-	}
-	// Sinks are not auditable by default.
-	if c.FileDefaults.Auditable == nil {
-		c.FileDefaults.Auditable = &bf
-	}
-	if c.FluentDefaults.Auditable == nil {
-		c.FluentDefaults.Auditable = &bf
-	}
-	// File sinks are buffered by default.
-	if c.FileDefaults.BufferedWrites == nil {
-		c.FileDefaults.BufferedWrites = &bt
-	}
-	// No format -> populate defaults.
-	if c.FileDefaults.Format == nil {
-		s := DefaultFileFormat
-		c.FileDefaults.Format = &s
-	}
-	if c.FluentDefaults.Format == nil {
-		s := DefaultFluentFormat
-		c.FluentDefaults.Format = &s
-	}
-	// No redaction markers -> default keep them.
-	if c.FileDefaults.Redactable == nil {
-		c.FileDefaults.Redactable = &bt
-	}
-	if c.FluentDefaults.Redactable == nil {
-		c.FluentDefaults.Redactable = &bt
-	}
-	// No redaction specification -> default false.
-	if c.FileDefaults.Redact == nil {
-		c.FileDefaults.Redact = &bf
-	}
-	if c.FluentDefaults.Redact == nil {
-		c.FluentDefaults.Redact = &bf
-	}
-	// No criticality -> default true for files, false for fluent.
-	if c.FileDefaults.Criticality == nil {
-		c.FileDefaults.Criticality = &bt
-	}
-	if c.FluentDefaults.Criticality == nil {
-		c.FluentDefaults.Criticality = &bf
 	}
 
 	// Validate and fill in defaults for file sinks.
@@ -116,20 +93,19 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	}
 
 	// Defaults for stderr.
-	c.inheritCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
 	if c.Sinks.Stderr.Filter == logpb.Severity_UNKNOWN {
 		c.Sinks.Stderr.Filter = logpb.Severity_NONE
 	}
-	if c.Sinks.Stderr.Auditable != nil {
-		if *c.Sinks.Stderr.Auditable {
-			if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
-				f := "crdb-v1-tty-count"
-				c.Sinks.Stderr.Format = &f
-			}
-			c.Sinks.Stderr.Criticality = &bt
+	progagateCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
+	if c.Sinks.Stderr.Auditable != nil && *c.Sinks.Stderr.Auditable {
+		if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
+			f := "crdb-v1-tty-count"
+			c.Sinks.Stderr.Format = &f
 		}
-		c.Sinks.Stderr.Auditable = nil
+		c.Sinks.Stderr.Criticality = &bt
 	}
+	c.Sinks.Stderr.Auditable = nil
+
 	c.Sinks.Stderr.Channels.Sort()
 
 	// fileSinks maps channels to files.
@@ -179,7 +155,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	// validation on it.
 	if c.CaptureFd2.Enable {
 		if c.CaptureFd2.MaxGroupSize == nil {
-			c.CaptureFd2.MaxGroupSize = &c.FileDefaults.MaxGroupSize
+			c.CaptureFd2.MaxGroupSize = c.FileDefaults.MaxGroupSize
 		}
 		if c.CaptureFd2.Dir == nil {
 			// No directory specified; inherit defaults.
@@ -212,6 +188,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 			Channels: ChannelList{Channels: []logpb.Channel{devch}},
 		}
 		fc.prefix = "default"
+		progagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
 		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintln(&errBuf, err)
 		}
@@ -267,47 +244,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	return nil
 }
 
-func (c *Config) inheritCommonDefaults(fc, defaults *CommonSinkConfig) {
-	if fc.Filter == logpb.Severity_UNKNOWN {
-		fc.Filter = defaults.Filter
-	}
-	if fc.Format == nil {
-		fc.Format = defaults.Format
-	}
-	if fc.Redact == nil {
-		fc.Redact = defaults.Redact
-	}
-	if fc.Redactable == nil {
-		fc.Redactable = defaults.Redactable
-	}
-	if fc.Criticality == nil {
-		fc.Criticality = defaults.Criticality
-	}
-	if fc.Auditable == nil {
-		fc.Auditable = defaults.Auditable
-	}
-}
-
 func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
-	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
-
-	// Inherit file-specific defaults.
-	if fc.MaxFileSize == nil {
-		fc.MaxFileSize = &c.FileDefaults.MaxFileSize
-	}
-	if fc.MaxGroupSize == nil {
-		fc.MaxGroupSize = &c.FileDefaults.MaxGroupSize
-	}
-	if fc.BufferedWrites == nil {
-		fc.BufferedWrites = c.FileDefaults.BufferedWrites
-	}
-
-	// Set up the directory.
-	if fc.Dir == nil {
-		// If the specific group does not specify its directory,
-		// inherit the default.
-		fc.Dir = c.FileDefaults.Dir
-	} else {
+	progagateFileDefaults(&fc.FileDefaults, c.FileDefaults)
+	if fc.Dir != c.FileDefaults.Dir {
 		// A directory was specified explicitly. Normalize it.
 		if err := normalizeDir(&fc.Dir); err != nil {
 			return err
@@ -336,8 +275,7 @@ func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *strin
 }
 
 func (c *Config) validateFluentSinkConfig(fc *FluentSinkConfig) error {
-	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FluentDefaults.CommonSinkConfig)
-
+	progagateFluentDefaults(&fc.FluentDefaults, c.FluentDefaults)
 	fc.Net = strings.ToLower(strings.TrimSpace(fc.Net))
 	switch fc.Net {
 	case "tcp", "tcp4", "tcp6":
@@ -379,4 +317,37 @@ func normalizeDir(dir **string) error {
 	}
 	*dir = &absDir
 	return nil
+}
+
+func progagateCommonDefaults(target *CommonSinkConfig, source CommonSinkConfig) {
+	progagateDefaults(target, source)
+}
+
+func progagateFileDefaults(target *FileDefaults, source FileDefaults) {
+	progagateDefaults(target, source)
+}
+
+func progagateFluentDefaults(target *FluentDefaults, source FluentDefaults) {
+	progagateDefaults(target, source)
+}
+
+// progagateDefaults takes (target *T, source T) where T is a struct
+// and sets zero-valued exported fields in target to the values
+// from source (recursively for struct-valued fields).
+// Wrap for static type-checking, as unexpected types will panic.
+//
+// (Consider making this a common utility if it gets some maturity here.)
+func progagateDefaults(target, source interface{}) {
+	s := reflect.ValueOf(source)
+	t := reflect.Indirect(reflect.ValueOf(target)) // *target
+
+	for i := 0; i < t.NumField(); i++ {
+		tf := t.Field(i)
+		sf := s.Field(i)
+		if tf.Kind() == reflect.Struct {
+			progagateDefaults(tf.Addr().Interface(), sf.Interface())
+		} else if tf.CanSet() && tf.IsZero() {
+			tf.Set(s.Field(i))
+		}
+	}
 }

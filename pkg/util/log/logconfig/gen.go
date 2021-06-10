@@ -35,11 +35,11 @@ func main() {
 }
 
 type sinkInfo struct {
-	Comment         string
-	Name            string
-	AnchorName      string
-	Fields          []fieldInfo
-	InheritedFields []fieldInfo
+	Comment      string
+	Name         string
+	AnchorName   string
+	Fields       []fieldInfo
+	CommonFields []fieldInfo
 }
 
 type fieldInfo struct {
@@ -87,7 +87,7 @@ func run() error {
 	sort.Strings(keys)
 	var sortedSinkInfos []*sinkInfo
 	for _, k := range keys {
-		if k == "CommonSinkConfig" {
+		if k == "CommonSinkConfig" || strings.HasSuffix(k, "Defaults") {
 			// We don't want the common configuration to appear as a sink in
 			// the output doc.
 			continue
@@ -218,8 +218,13 @@ func readInput(infos map[string]*sinkInfo) error {
 			}
 
 			if otherMsg, ok := infos[typ]; ok {
-				// Inline the fields from the other struct here.
-				curSink.InheritedFields = append(curSink.InheritedFields, otherMsg.Fields...)
+				if typ == "CommonSinkConfig" {
+					// Inline the fields from the other struct here.
+					curSink.CommonFields = append(curSink.CommonFields, otherMsg.Fields...)
+				} else {
+					curSink.Fields = append(curSink.Fields, otherMsg.Fields...)
+					curSink.CommonFields = append(curSink.CommonFields, otherMsg.CommonFields...)
+				}
 			} else {
 				fi := fieldInfo{
 					Comment:   comment,
@@ -235,7 +240,7 @@ func readInput(infos map[string]*sinkInfo) error {
 	return nil
 }
 
-var configStructRe = regexp.MustCompile(`^type (?P<name>[A-Z][a-z0-9]*)SinkConfig struct`)
+var configStructRe = regexp.MustCompile(`^type (?P<name>[A-Z][a-z0-9]*)(SinkConfig|Defaults) struct`)
 
 var fieldDefRe = regexp.MustCompile(`^\s*` +
 	// Field name in Go.
@@ -287,13 +292,13 @@ Type-specific configuration options:
 {{end}}
 {{- end}}
 
-{{if .InheritedFields -}}
+{{if .CommonFields -}}
 
 Configuration options shared across all sink types:
 
 | Field | Description |
 |--|--|
-{{range .InheritedFields -}}
+{{range .CommonFields -}}
 | ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }} |
 {{end}}
 {{- end}}
