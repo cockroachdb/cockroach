@@ -88,6 +88,11 @@ func NewServer(
 		),
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+	// We have to initialize the flow scheduler at the same time we're creating
+	// the DistSQLServer because the latter will be registered as a gRPC service
+	// right away, so the RPCs might start coming in pretty much right after the
+	// current method returns. See #66330.
+	ds.flowScheduler.Init(ds.Metrics)
 
 	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		if !colexec.HashAggregationDiskSpillingEnabled.Get(&cfg.Settings.SV) {
@@ -99,6 +104,12 @@ func NewServer(
 }
 
 // Start launches workers for the server.
+//
+// Note that the initialization of the server required for performing the
+// incoming RPCs needs to go into NewServer above because once that method
+// returns, the server is registered as a gRPC service and needs to be fully
+// initialized. For example, the initialization of the flow scheduler has to
+// happen in NewServer.
 func (ds *ServerImpl) Start() {
 	// Gossip the version info so that other nodes don't plan incompatible flows
 	// for us.
@@ -121,7 +132,6 @@ func (ds *ServerImpl) Start() {
 		panic(err)
 	}
 
-	ds.flowScheduler.Init(ds.Metrics)
 	ds.flowScheduler.Start()
 }
 
