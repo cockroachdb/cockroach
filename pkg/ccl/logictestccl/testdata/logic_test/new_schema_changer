@@ -1,0 +1,13 @@
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+subtest create_index
+
+statement ok
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
+
+statement ok
+CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (id) (
+                                                              PARTITION p1 VALUES IN (1)
+                                                            );
+

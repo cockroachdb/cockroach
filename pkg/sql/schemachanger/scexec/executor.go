@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -43,6 +44,8 @@ type Executor struct {
 	testingKnobs    *NewSchemaChangerTestingKnobs
 	jobRegistry     *jobs.Registry
 	executor        sqlutil.InternalExecutor
+	settings        *cluster.Settings
+	evalCtx         *tree.EvalContext
 }
 
 // NewExecutor creates a new Executor.
@@ -55,6 +58,8 @@ func NewExecutor(
 	testingKnobs *NewSchemaChangerTestingKnobs,
 	jobRegistry *jobs.Registry,
 	executor sqlutil.InternalExecutor,
+	settings *cluster.Settings,
+	evalCtx *tree.EvalContext,
 ) *Executor {
 	return &Executor{
 		txn:             txn,
@@ -65,6 +70,8 @@ func NewExecutor(
 		testingKnobs:    testingKnobs,
 		jobRegistry:     jobRegistry,
 		executor:        executor,
+		settings:        settings,
+		evalCtx:         evalCtx,
 	}
 }
 
@@ -123,8 +130,8 @@ func (ex *Executor) executeBackfillOps(ctx context.Context, execute []scop.Op) e
 	for _, op := range execute {
 		var err error
 		switch op := op.(type) {
-		case *scop.BackfillIndex:
-			err = ex.executeIndexBackfillOp(ctx, op)
+		case scop.BackfillIndex:
+			err = ex.executeIndexBackfillOp(ctx, &op)
 		default:
 			panic("unimplemented")
 		}
@@ -216,7 +223,7 @@ func (ex *Executor) maybeSplitIndexSpans(ctx context.Context, span roachpb.Span)
 }
 
 func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, ops []scop.Op) error {
-	dg := newMutationDescGetter(ex.descsCollection, ex.txn, ex.executor)
+	dg := newMutationDescGetter(ex.descsCollection, ex.txn, ex.executor, ex.settings, ex.evalCtx)
 	mj := &mutationJobs{jobRegistry: ex.jobRegistry}
 	v := scmutationexec.NewMutationVisitor(dg, mj)
 	for _, op := range ops {

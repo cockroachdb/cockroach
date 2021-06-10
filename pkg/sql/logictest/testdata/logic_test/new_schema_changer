@@ -666,6 +666,183 @@ CREATE TABLE public.trewrite (
    FAMILY fam_0_k_ts (k, ts, c)
 )
 
+subtest create-index
+statement ok
+CREATE TABLE tIndex (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO tIndex VALUES (1,1)
+
+user root
+
+statement ok
+CREATE INDEX foo ON tIndex (b)
+
+statement error relation \"foo\" already exists
+CREATE INDEX foo ON tIndex (a)
+
+statement error column "c" does not exist
+CREATE INDEX bar ON tIndex (c)
+
+statement error index \"bar\" contains duplicate column \"b\"
+CREATE INDEX bar ON tIndex (b, b);
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INDEX bar ON tIndex ((a+b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INDEX bar ON tIndex (abs(b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE UNIQUE INDEX bar ON tIndex (abs(b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INVERTED INDEX bar ON tIndex ((ARRAY[a,b]))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
+
+query TTBITTBB colnames
+SHOW INDEXES FROM tIndex
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+tindex      foo         true        1             b            ASC        false    false
+tindex      foo         true        2             a            ASC        false    true
+tindex      primary     false       1             a            ASC        false    false
+tindex      primary     false       2             b            N/A        true     false
+
+statement ok
+INSERT INTO tIndex VALUES (2,1)
+
+# FIXME: Disabled until rollback is supported
+#statement error pgcode 23505 violates unique constraint "bar"
+#CREATE UNIQUE INDEX bar ON tIndex (b)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM tIndex
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+tindex      foo         true        1             b            ASC        false    false
+tindex      foo         true        2             a            ASC        false    true
+tindex      primary     false       1             a            ASC        false    false
+tindex      primary     false       2             b            N/A        true     false
+
+# test for DESC index
+
+statement ok
+DROP TABLE tIndex
+
+statement ok
+CREATE TABLE tIndx (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+
+statement ok
+INSERT INTO tIndx VALUES (1,1,1), (2,2,2)
+
+statement ok
+CREATE INDEX b_desc ON tIndx (b DESC)
+
+statement ok
+CREATE INDEX b_asc ON tIndx (b ASC, c DESC)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM tIndx
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+tindx       b_asc       true        1             b            ASC        false    false
+tindx       b_asc       true        2             c            DESC       false    false
+tindx       b_asc       true        3             a            ASC        false    true
+tindx       b_desc      true        1             b            DESC       false    false
+tindx       b_desc      true        2             a            ASC        false    true
+tindx       primary     false       1             a            ASC        false    false
+tindx       primary     false       2             b            N/A        true     false
+tindx       primary     false       3             c            N/A        true     false
+
+statement error pgcode 42P01 relation "foo" does not exist
+CREATE INDEX fail ON foo (b DESC)
+
+statement ok
+CREATE VIEW vIndx AS SELECT a,b FROM tIndx
+
+statement error pgcode 42809 "vindx" is not a table or materialized view
+CREATE INDEX failview ON vIndx (b DESC)
+
+statement ok
+CREATE TABLE privs (a INT PRIMARY KEY, b INT)
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on relation privs
+CREATE INDEX foo ON privs (b)
+
+user root
+
+query TTBITTBB colnames
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+privs       primary     false       1             a            ASC        false    false
+privs       primary     false       2             b            N/A        true     false
+
+statement ok
+GRANT CREATE ON privs TO testuser
+
+user testuser
+
+statement ok
+CREATE INDEX foo ON privs (b)
+
+query TTBITTBB colnames
+SHOW INDEXES FROM privs
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+privs       foo         true        1             b            ASC        false    false
+privs       foo         true        2             a            ASC        false    true
+privs       primary     false       1             a            ASC        false    false
+privs       primary     false       2             b            N/A        true     false
+
+
+user root
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true;
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB
+)
+
+
+# Test that creating an index on a column which is currently being dropped
+# causes an error.
+subtest create_index_on_dropping_column
+
+statement ok
+CREATE TABLE create_idx_drop_column (c0 INT PRIMARY KEY, c1 INT);
+
+statement ok
+begin; ALTER TABLE create_idx_drop_column DROP COLUMN c1;
+
+statement error column "c1" does not exist
+CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP TABLE create_idx_drop_column;
+
 # Works around view back references to tables not being cleaned up.
 # see issue #66677
 statement ok

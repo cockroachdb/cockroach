@@ -35,6 +35,7 @@ message ElementProto {
   Type type = 16;
   Schema schema = 17;
   Database database = 18;
+  Partitioning partitioning = 19;
 }
 
 message Target {
@@ -67,17 +68,45 @@ message Column {
 }
 
 message PrimaryIndex {
+  // The direction of a column in the index.
+  enum Direction {
+    ASC = 0;
+    DESC = 1;
+  }
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
-  uint32 other_primary_index_id = 3 [(gogoproto.customname) = "OtherPrimaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  uint32 index_id = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  string index_name = 3  [(gogoproto.customname) = "IndexName"];
+  bool unique = 4  [(gogoproto.customname) = "Unique"];
+  repeated uint32 key_column_ids = 5 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  repeated Direction key_column_direction = 6 [(gogoproto.customname) = "KeyColumnDirections"];
+  repeated uint32 key_suffix_column_ids = 7 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  cockroach.sql.sqlbase.ShardedDescriptor sharded_descriptor = 8 [(gogoproto.customname) = "ShardedDescriptor"];
+  repeated uint32 storing_column_ids = 9 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  repeated uint32 composite_column_ids = 10 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  bool inverted = 11  [(gogoproto.customname) = "Inverted"];
+  bool concurrently = 12  [(gogoproto.customname) = "Concurrently"];
 }
 
 message SecondaryIndex {
+  // The direction of a column in the index.
+  enum Direction {
+    ASC = 0;
+    DESC = 1;
+  }
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
-  uint32 primary_index = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+   uint32 index_id = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  string index_name = 3  [(gogoproto.customname) = "IndexName"];
+  bool unique = 4  [(gogoproto.customname) = "Unique"];
+  repeated uint32 key_column_ids = 5 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  repeated Direction key_column_direction = 6 [(gogoproto.customname) = "KeyColumnDirections"];
+  repeated uint32 key_suffix_column_ids = 7 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  cockroach.sql.sqlbase.ShardedDescriptor sharded_descriptor = 8 [(gogoproto.customname) = "ShardedDescriptor"];
+  repeated uint32 storing_column_ids = 9 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  repeated uint32 composite_column_ids = 10 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  bool inverted = 11  [(gogoproto.customname) = "Inverted"];
+  bool concurrently = 12  [(gogoproto.customname) = "Concurrently"];
 }
 
 message SequenceDependency {
@@ -191,4 +220,27 @@ message Schema {
 message Database {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   repeated uint32 dependentObjects = 2  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+}
+
+// FIXME: Dead code
+message ListPartition {
+  option (gogoproto.equal) = true;
+  string name = 1  [(gogoproto.customname) = "Name"];
+  repeated string expr = 2  [(gogoproto.customname) = "Expr"];
+}
+
+message RangePartitions {
+  option (gogoproto.equal) = true;
+  string name = 1  [(gogoproto.customname) = "Name"];
+  repeated string To = 2  [(gogoproto.customname) = "To"];
+  repeated string From = 3  [(gogoproto.customname) = "From"];
+}
+
+message Partitioning {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 index_id = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  repeated string fields = 3  [(gogoproto.customname) = "Fields"];
+  repeated ListPartition list_partitions = 4  [(gogoproto.customname) = "ListPartitions"];
+  repeated RangePartitions range_partitions = 5  [(gogoproto.customname) = "RangePartitions"];
 }

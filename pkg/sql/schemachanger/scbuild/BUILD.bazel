@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "builder.go",
         "database.go",
+        "index.go",
         "relation_common.go",
         "schema.go",
         "sequence.go",
