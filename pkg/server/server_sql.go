@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
@@ -248,6 +250,46 @@ type sqlServerArgs struct {
 
 	// Used to watch settings and descriptor changes.
 	rangeFeedFactory *rangefeed.Factory
+
+	// monitorAndMetrics contains the return value of newRootSQLMemoryMonitor.
+	monitorAndMetrics monitorAndMetrics
+}
+
+type monitorAndMetrics struct {
+	rootSQLMemoryMonitor *mon.BytesMonitor
+	rootSQLMetrics       sql.BaseMemoryMetrics
+}
+
+type monitorAndMetricsOptions struct {
+	memoryPoolSize          int64
+	histogramWindowInterval time.Duration
+	settings                *cluster.Settings
+}
+
+// newRootSQLMemoryMonitor returns a started BytesMonitor and corresponding
+// metrics.
+func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
+	rootSQLMetrics := sql.MakeBaseMemMetrics("root", opts.histogramWindowInterval)
+	// We do not set memory monitors or a noteworthy limit because the children of
+	// this monitor will be setting their own noteworthy limits.
+	rootSQLMemoryMonitor := mon.NewMonitor(
+		"root",
+		mon.MemoryResource,
+		rootSQLMetrics.CurBytesCount,
+		rootSQLMetrics.MaxBytesHist,
+		-1,            /* increment: use default increment */
+		math.MaxInt64, /* noteworthy */
+		opts.settings,
+	)
+	// Set the limit to the memoryPoolSize. Note that this memory monitor also
+	// serves as a parent for a memory monitor that accounts for memory used in
+	// the KV layer at the same node.
+	rootSQLMemoryMonitor.Start(
+		context.Background(), nil, mon.MakeStandaloneBudget(opts.memoryPoolSize))
+	return monitorAndMetrics{
+		rootSQLMemoryMonitor: rootSQLMemoryMonitor,
+		rootSQLMetrics:       rootSQLMetrics,
+	}
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
@@ -328,25 +370,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 
-	rootSQLMetrics := sql.MakeBaseMemMetrics("root", cfg.HistogramWindowInterval())
+	rootSQLMetrics := cfg.monitorAndMetrics.rootSQLMetrics
 	cfg.registry.AddMetricStruct(rootSQLMetrics)
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	internalMemMetrics := sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(internalMemMetrics)
 
-	// We do not set memory monitors or a noteworthy limit because the children of
-	// this monitor will be setting their own noteworthy limits.
-	rootSQLMemoryMonitor := mon.NewMonitor(
-		"root",
-		mon.MemoryResource,
-		rootSQLMetrics.CurBytesCount,
-		rootSQLMetrics.MaxBytesHist,
-		-1,            /* increment: use default increment */
-		math.MaxInt64, /* noteworthy */
-		cfg.Settings,
-	)
-	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(cfg.MemoryPoolSize))
+	rootSQLMemoryMonitor := cfg.monitorAndMetrics.rootSQLMemoryMonitor
 
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
 	// operations (IMPORT, index backfill). It is itself a child of the

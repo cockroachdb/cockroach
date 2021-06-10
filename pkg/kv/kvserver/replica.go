@@ -1871,6 +1871,13 @@ func (r *Replica) markSystemConfigGossipFailed() {
 	r.mu.failureToGossipSystemConfig = true
 }
 
+// GetScannerMemoryMonitor implements the batcheval.EvalContext interface.
+func (r *Replica) GetScannerMemoryMonitor() storage.ScannerMemoryMonitor {
+	// Return an empty monitor. Places where a real monitor is needed use a
+	// wrapper for Replica as the EvalContext.
+	return storage.ScannerMemoryMonitor{}
+}
+
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }

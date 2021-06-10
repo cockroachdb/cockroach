@@ -261,3 +261,8 @@ func (rec *SpanSetReplicaEvalContext) RevokeLease(ctx context.Context, seq roach
 func (rec *SpanSetReplicaEvalContext) WatchForMerge(ctx context.Context) error {
 	return rec.i.WatchForMerge(ctx)
 }
+
+// GetScannerMemoryMonitor implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetScannerMemoryMonitor() storage.ScannerMemoryMonitor {
+	return rec.i.GetScannerMemoryMonitor()
+}

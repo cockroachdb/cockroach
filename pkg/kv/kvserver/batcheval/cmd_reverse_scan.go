@@ -47,6 +47,7 @@ func ReverseScan(
 		TargetBytes:      h.TargetBytes,
 		FailOnMoreRecent: args.KeyLocking != lock.None,
 		Reverse:          true,
+		MemoryMonitor:    cArgs.EvalCtx.GetScannerMemoryMonitor(),
 	}
 
 	switch args.ScanFormat {
