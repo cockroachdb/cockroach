@@ -245,16 +245,6 @@ func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 	return ba.isSingleRequestWithMethod(CheckConsistency)
 }
 
-// IsSingleAddSSTableRequest returns true iff the batch contains a single
-// request, and that request is an AddSSTableRequest that will ingest as an SST,
-// (i.e. does not have IngestAsWrites set)
-func (ba *BatchRequest) IsSingleAddSSTableRequest() bool {
-	if ba.isSingleRequestWithMethod(AddSSTable) {
-		return !ba.Requests[0].GetInner().(*AddSSTableRequest).IngestAsWrites
-	}
-	return false
-}
-
 // IsCompleteTransaction determines whether a batch contains every write in a
 // transactions.
 func (ba *BatchRequest) IsCompleteTransaction() bool {

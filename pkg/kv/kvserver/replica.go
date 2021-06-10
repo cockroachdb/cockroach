@@ -826,11 +826,6 @@ func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 	return r.abortSpan
 }
 
-// GetLimiters returns the Replica's limiters.
-func (r *Replica) GetLimiters() *batcheval.Limiters {
-	return &r.store.limiters
-}
-
 // GetConcurrencyManager returns the Replica's concurrency.Manager.
 func (r *Replica) GetConcurrencyManager() concurrency.Manager {
 	return r.concMgr

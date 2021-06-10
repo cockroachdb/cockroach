@@ -25,6 +25,12 @@ type ConcurrentRequestLimiter struct {
 	sem      *quotapool.IntPool
 }
 
+// Reservation is a allocation from a limiter which should be released once the
+// limited task has been completed.
+type Reservation interface {
+	Release()
+}
+
 // MakeConcurrentRequestLimiter creates a ConcurrentRequestLimiter.
 func MakeConcurrentRequestLimiter(spanName string, limit int) ConcurrentRequestLimiter {
 	return ConcurrentRequestLimiter{
@@ -36,19 +42,19 @@ func MakeConcurrentRequestLimiter(spanName string, limit int) ConcurrentRequestL
 // Begin attempts to reserve a spot in the pool, blocking if needed until the
 // one is available or the context is canceled and adding a tracing span if it
 // is forced to block.
-func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (*quotapool.IntAlloc, error) {
+func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (Reservation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	alloc, err := l.sem.TryAcquire(ctx, 1)
+	res, err := l.sem.TryAcquire(ctx, 1)
 	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, l.spanName)
 		defer span.Finish()
-		alloc, err = l.sem.Acquire(ctx, 1)
+		res, err = l.sem.Acquire(ctx, 1)
 	}
-	return alloc, err
+	return res, err
 }
 
 // SetLimit adjusts the size of the pool.
