@@ -16,14 +16,45 @@ import (
 )
 
 func columnInSecondaryIndex(this *scpb.Column, that *scpb.SecondaryIndex) bool {
-	return this.TableID == that.TableID &&
-		indexContainsColumn(&that.Index, this.Column.ID)
+	if this.TableID == that.TableID {
+		for _, columnID := range that.KeyColumnIDs {
+			if columnID == this.Column.ID {
+				return true
+			}
+		}
+		for _, columnID := range that.StoringColumnIDs {
+			if columnID == this.Column.ID {
+				return true
+			}
+		}
+		for _, columnID := range that.KeySuffixColumnIDs {
+			if columnID == this.Column.ID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func columnInPrimaryIndex(this *scpb.Column, that *scpb.PrimaryIndex) bool {
-	return this.TableID == that.TableID &&
-		indexContainsColumn(&that.Index, this.Column.ID) ||
-		columnsContainsID(that.Index.StoreColumnIDs, this.Column.ID)
+	if this.TableID == that.TableID {
+		for _, columnID := range that.KeyColumnIDs {
+			if columnID == this.Column.ID {
+				return true
+			}
+		}
+		for _, columnID := range that.StoringColumnIDs {
+			if columnID == this.Column.ID {
+				return true
+			}
+		}
+		for _, columnID := range that.KeySuffixColumnIDs {
+			if columnID == this.Column.ID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func primaryIndexContainsColumn(this *scpb.PrimaryIndex, that *scpb.Column) bool {
@@ -32,7 +63,7 @@ func primaryIndexContainsColumn(this *scpb.PrimaryIndex, that *scpb.Column) bool
 
 func primaryIndexesReferenceEachOther(this, that *scpb.PrimaryIndex) bool {
 	return this.TableID == that.TableID &&
-		this.OtherPrimaryIndexID == that.Index.ID
+		this.IndexId != that.IndexId
 }
 
 func typeReferenceIsFromThisView(this *scpb.View, that *scpb.TypeReference) bool {
@@ -182,6 +213,26 @@ func typeHasReference(this *scpb.Type, that *scpb.TypeReference) bool {
 	return this.TypeID == that.TypeID
 }
 
+func indexReferencesColumn(this *scpb.SecondaryIndex, that *scpb.Column) bool {
+	for _, columnID := range this.KeyColumnIDs {
+		if that.TableID == this.TableID &&
+			that.Column.ID == columnID {
+			return true
+		}
+	}
+	return false
+}
+
+func partitioningReferencesIndex(this *scpb.Partitioning, that *scpb.SecondaryIndex) bool {
+	return this.TableID == that.TableID &&
+		this.IndexId == that.IndexId
+}
+
+func indexReferencesPartitioning(this *scpb.SecondaryIndex, that *scpb.Partitioning) bool {
+	return this.TableID == that.TableID &&
+		this.IndexId == that.IndexId
+}
+
 func sameDirection(a, b scpb.Target_Direction) bool {
 	return a == b
 }
@@ -204,6 +255,154 @@ func directionsMatch(thisDir, thatDir scpb.Target_Direction) func(a, b scpb.Targ
 }
 
 var rules = map[scpb.Element]targetRules{
+	(*scpb.Partitioning)(nil): {
+		deps: targetDepRules{
+			scpb.Status_PUBLIC: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_DELETE_ONLY,
+					predicate:    partitioningReferencesIndex,
+				},
+			},
+		},
+		backwards: nil,
+		forward: targetOpRules{
+			scpb.Status_ABSENT: {
+				{
+					predicate: func(this *scpb.Partitioning, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_PUBLIC,
+					op: func(this *scpb.Partitioning) scop.Op {
+						return &scop.AddIndexPartitionInfo{
+							TableID:         this.TableID,
+							IndexID:         this.IndexId,
+							PartitionFields: this.Fields,
+							ListPartitions:  this.ListPartitions,
+							RangePartitions: this.RangePartitions,
+						}
+					},
+				},
+			},
+		},
+	},
+	(*scpb.SecondaryIndex)(nil): {
+		deps: targetDepRules{
+			scpb.Status_DELETE_ONLY: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_PUBLIC,
+					predicate:    indexReferencesColumn,
+				},
+			},
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
+				{
+					dirPredicate: sameDirection,
+					thatStatus:   scpb.Status_PUBLIC,
+					predicate:    indexReferencesPartitioning,
+				},
+			},
+		},
+		backwards: nil,
+		forward: targetOpRules{
+			scpb.Status_ABSENT: {
+				{
+					predicate: func(this *scpb.SecondaryIndex, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_DELETE_ONLY,
+					op: func(this *scpb.SecondaryIndex) scop.Op {
+						return &scop.MakeAddedIndexDeleteOnly{
+							TableID:             this.TableID,
+							IndexId:             this.IndexId,
+							IndexName:           this.IndexName,
+							Unique:              this.Unique,
+							KeyColumnIDs:        this.KeyColumnIDs,
+							KeyColumnDirections: convertSecondaryIndexColumnDir(this),
+							KeySuffixColumnIDs:  this.KeySuffixColumnIDs,
+							StoreColumnIDs:      this.StoringColumnIDs,
+							CompositeColumnIDs:  this.CompositeColumnIDs,
+							ShardedDescriptor:   this.ShardedDescriptor,
+							Inverted:            this.Inverted,
+							Concurrently:        this.Concurrently,
+							SecondaryIndex:      true,
+						}
+					},
+				},
+			},
+			scpb.Status_DELETE_ONLY: {
+				{
+					predicate: func(this *scpb.SecondaryIndex, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextStatus: scpb.Status_DELETE_AND_WRITE_ONLY,
+					op: func(this *scpb.SecondaryIndex) scop.Op {
+						return &scop.MakeAddedIndexDeleteAndWriteOnly{
+							TableID: this.TableID,
+							IndexID: this.IndexId,
+						}
+					},
+				},
+			},
+			scpb.Status_DELETE_AND_WRITE_ONLY: {
+				{
+					// If this index is unique (which primary indexes should be) and
+					// there's not already a covering primary index, then we'll need to
+					// validate that this index indeed is unique.
+					predicate: func(this *scpb.SecondaryIndex, flags Params) bool {
+						return this.Unique
+					},
+					nextStatus: scpb.Status_BACKFILLED,
+					op: func(this *scpb.SecondaryIndex) scop.Op {
+						return scop.BackfillIndex{
+							TableID: this.TableID,
+							IndexID: this.IndexId,
+						}
+					},
+				},
+				{
+					nextStatus: scpb.Status_VALIDATED,
+					op: func(this *scpb.SecondaryIndex) scop.Op {
+						return scop.BackfillIndex{
+							TableID: this.TableID,
+							IndexID: this.IndexId,
+						}
+					},
+				},
+			},
+			scpb.Status_BACKFILLED: {
+				{
+					nextStatus: scpb.Status_VALIDATED,
+					op: func(this *scpb.SecondaryIndex) scop.Op {
+						return scop.ValidateUniqueIndex{
+							TableID: this.TableID,
+							IndexID: this.IndexId,
+						}
+					},
+				},
+			},
+			scpb.Status_VALIDATED: {
+				{
+					nextStatus: scpb.Status_PUBLIC,
+					op: func(this *scpb.SecondaryIndex) scop.Op {
+						return &scop.MakeAddedSecondaryIndexPublic{
+							TableID: this.TableID,
+							IndexID: this.IndexId,
+						}
+					},
+				},
+			},
+		},
+	},
 	(*scpb.Database)(nil): {
 		deps: targetDepRules{
 			scpb.Status_DELETE_ONLY: {
@@ -845,17 +1044,17 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.PrimaryIndex)(nil): {
 		deps: targetDepRules{
-			scpb.Status_PUBLIC: {
+			scpb.Status_DELETE_ONLY: {
 				{
-					dirPredicate: directionsMatch(scpb.Target_ADD, scpb.Target_DROP),
-					thatStatus:   scpb.Status_DELETE_AND_WRITE_ONLY,
-					predicate:    primaryIndexesReferenceEachOther,
+					dirPredicate: bothDirectionsEqual(scpb.Target_ADD),
+					thatStatus:   scpb.Status_DELETE_ONLY,
+					predicate:    primaryIndexContainsColumn,
 				},
 			},
 			scpb.Status_DELETE_AND_WRITE_ONLY: {
 				{
 					dirPredicate: directionsMatch(scpb.Target_DROP, scpb.Target_ADD),
-					thatStatus:   scpb.Status_PUBLIC,
+					thatStatus:   scpb.Status_DELETE_ONLY,
 					predicate:    primaryIndexesReferenceEachOther,
 				},
 				{
@@ -877,8 +1076,19 @@ var rules = map[scpb.Element]targetRules{
 					nextStatus: scpb.Status_DELETE_ONLY,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						return &scop.MakeAddedIndexDeleteOnly{
-							TableID: this.TableID,
-							Index:   this.Index,
+							TableID:             this.TableID,
+							IndexId:             this.IndexId,
+							IndexName:           this.IndexName,
+							Unique:              this.Unique,
+							KeyColumnIDs:        this.KeyColumnIDs,
+							KeyColumnDirections: convertPrimaryIndexColumnDir(this),
+							KeySuffixColumnIDs:  this.KeySuffixColumnIDs,
+							StoreColumnIDs:      this.StoringColumnIDs,
+							CompositeColumnIDs:  this.CompositeColumnIDs,
+							ShardedDescriptor:   this.ShardedDescriptor,
+							Inverted:            this.Inverted,
+							Concurrently:        this.Concurrently,
+							SecondaryIndex:      false,
 						}
 					},
 				},
@@ -895,7 +1105,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						return &scop.MakeAddedIndexDeleteAndWriteOnly{
 							TableID: this.TableID,
-							IndexID: this.Index.ID,
+							IndexID: this.IndexId,
 						}
 					},
 				},
@@ -908,22 +1118,22 @@ var rules = map[scpb.Element]targetRules{
 					//
 					// TODO(ajwerner): Rationalize this and hook up the optimization.
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
-						return this.Index.Unique
+						return this.Unique
 					},
 					nextStatus: scpb.Status_BACKFILLED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return &scop.BackfillIndex{
+						return scop.BackfillIndex{
 							TableID: this.TableID,
-							IndexID: this.Index.ID,
+							IndexID: this.IndexId,
 						}
 					},
 				},
 				{
 					nextStatus: scpb.Status_VALIDATED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return &scop.BackfillIndex{
+						return scop.BackfillIndex{
 							TableID: this.TableID,
-							IndexID: this.Index.ID,
+							IndexID: this.IndexId,
 						}
 					},
 				},
@@ -933,9 +1143,8 @@ var rules = map[scpb.Element]targetRules{
 					nextStatus: scpb.Status_VALIDATED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						return &scop.ValidateUniqueIndex{
-							TableID:        this.TableID,
-							PrimaryIndexID: this.OtherPrimaryIndexID,
-							IndexID:        this.Index.ID,
+							TableID: this.TableID,
+							IndexID: this.IndexId,
 						}
 					},
 				},
@@ -946,7 +1155,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						return &scop.MakeAddedPrimaryIndexPublic{
 							TableID: this.TableID,
-							Index:   this.Index,
+							IndexID: this.IndexId,
 						}
 					},
 				},
@@ -966,7 +1175,7 @@ var rules = map[scpb.Element]targetRules{
 						// Most of this logic is taken from MakeMutationComplete().
 						return &scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
 							TableID: this.TableID,
-							Index:   this.Index,
+							IndexID: this.IndexId,
 						}
 					},
 				},
@@ -983,7 +1192,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						return &scop.MakeDroppedIndexDeleteOnly{
 							TableID: this.TableID,
-							IndexID: this.Index.ID,
+							IndexID: this.IndexId,
 						}
 					},
 				},
@@ -994,7 +1203,7 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						return &scop.MakeIndexAbsent{
 							TableID: this.TableID,
-							IndexID: this.Index.ID,
+							IndexID: this.IndexId,
 						}
 					},
 				},

@@ -10,7 +10,10 @@
 
 package scplan
 
-import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+)
 
 func indexContainsColumn(idx *descpb.IndexDescriptor, colID descpb.ColumnID) bool {
 	return columnsContainsID(idx.KeyColumnIDs, colID) ||
@@ -25,4 +28,36 @@ func columnsContainsID(haystack []descpb.ColumnID, needle descpb.ColumnID) bool 
 		}
 	}
 	return false
+}
+
+func convertPrimaryIndexColumnDir(
+	primaryIndex *scpb.PrimaryIndex,
+) []descpb.IndexDescriptor_Direction {
+	// Convert column directions
+	convertedColumnDirs := make([]descpb.IndexDescriptor_Direction, 0, len(primaryIndex.KeyColumnDirections))
+	for _, columnDir := range primaryIndex.KeyColumnDirections {
+		switch columnDir {
+		case scpb.PrimaryIndex_DESC:
+			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_DESC)
+		case scpb.PrimaryIndex_ASC:
+			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_ASC)
+		}
+	}
+	return convertedColumnDirs
+}
+
+func convertSecondaryIndexColumnDir(
+	secondaryIndex *scpb.SecondaryIndex,
+) []descpb.IndexDescriptor_Direction {
+	// Convert column directions
+	convertedColumnDirs := make([]descpb.IndexDescriptor_Direction, 0, len(secondaryIndex.KeyColumnDirections))
+	for _, columnDir := range secondaryIndex.KeyColumnDirections {
+		switch columnDir {
+		case scpb.SecondaryIndex_DESC:
+			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_DESC)
+		case scpb.SecondaryIndex_ASC:
+			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_ASC)
+		}
+	}
+	return convertedColumnDirs
 }

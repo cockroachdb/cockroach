@@ -24,6 +24,7 @@ type MutationOp interface {
 type MutationVisitor interface {
 	MakeAddedIndexDeleteOnly(context.Context, MakeAddedIndexDeleteOnly) error
 	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
+	MakeAddedSecondaryIndexPublic(context.Context, MakeAddedSecondaryIndexPublic) error
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
 	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
 	CreateGcJobForDescriptor(context.Context, CreateGcJobForDescriptor) error
@@ -47,6 +48,7 @@ type MutationVisitor interface {
 	AddColumnFamily(context.Context, AddColumnFamily) error
 	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
 	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
+	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -57,6 +59,11 @@ func (op MakeAddedIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor)
 // Visit is part of the MutationOp interface.
 func (op MakeAddedIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAddedIndexDeleteAndWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAddedSecondaryIndexPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAddedSecondaryIndexPublic(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -172,4 +179,9 @@ func (op DropForeignKeyRef) Visit(ctx context.Context, v MutationVisitor) error 
 // Visit is part of the MutationOp interface.
 func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveSequenceOwnedBy(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddIndexPartitionInfo) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddIndexPartitionInfo(ctx, op)
 }

@@ -16,13 +16,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -34,16 +38,24 @@ type mutationDescGetter struct {
 	retrieved    catalog.DescriptorIDSet
 	drainedNames map[descpb.ID][]descpb.NameInfo
 	executor     sqlutil.InternalExecutor
+	settings     *cluster.Settings
+	evalCtx      *tree.EvalContext
 }
 
 func newMutationDescGetter(
-	descs *descs.Collection, txn *kv.Txn, executor sqlutil.InternalExecutor,
+	descs *descs.Collection,
+	txn *kv.Txn,
+	executor sqlutil.InternalExecutor,
+	settings *cluster.Settings,
+	evalCtx *tree.EvalContext,
 ) *mutationDescGetter {
 	return &mutationDescGetter{
 		descs:        descs,
 		txn:          txn,
 		drainedNames: make(map[descpb.ID][]descpb.NameInfo),
 		executor:     executor,
+		settings:     settings,
+		evalCtx:      evalCtx,
 	}
 }
 
@@ -121,6 +133,60 @@ func (m *mutationDescGetter) RemoveObjectComments(ctx context.Context, id descpb
 		return err
 	}
 	return err
+}
+
+func (m *mutationDescGetter) AddPartitioning(
+	tableDesc *tabledesc.Mutable,
+	indexDesc *descpb.IndexDescriptor,
+	partitionFields []string,
+	listPartition []*scpb.ListPartition,
+	rangePartition []*scpb.RangePartitions,
+	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
+) error {
+	ctx := context.Background()
+	// Deserialize back into tree based types
+	partitionBy := &tree.PartitionBy{}
+	partitionBy.List = make([]tree.ListPartition, 0, len(listPartition))
+	partitionBy.Range = make([]tree.RangePartition, 0, len(rangePartition))
+	for _, partition := range listPartition {
+		exprs, err := parser.ParseExprs(partition.Expr)
+		if err != nil {
+			return err
+		}
+		partitionBy.List = append(partitionBy.List,
+			tree.ListPartition{
+				Name:  tree.UnrestrictedName(partition.Name),
+				Exprs: exprs,
+			})
+	}
+	for _, partition := range rangePartition {
+		toExpr, err := parser.ParseExprs(partition.To)
+		if err != nil {
+			return err
+		}
+		fromExpr, err := parser.ParseExprs(partition.From)
+		if err != nil {
+			return err
+		}
+		partitionBy.Range = append(partitionBy.Range,
+			tree.RangePartition{
+				Name: tree.UnrestrictedName(partition.Name),
+				To:   toExpr,
+				From: fromExpr,
+			})
+	}
+	partitionBy.Fields = make(tree.NameList, 0, len(partitionFields))
+	for _, field := range partitionFields {
+		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
+	}
+	// Create the paritioning
+	newImplicitCols, newPartitioning, err := scbuild.CreatePartitioningCCL(ctx, m.settings, m.evalCtx, tableDesc, *indexDesc, partitionBy, allowedNewColumnNames, allowImplicitPartitioning)
+	if err != nil {
+		return err
+	}
+	tabledesc.UpdateIndexPartitioning(indexDesc, false, newImplicitCols, newPartitioning)
+	return nil
 }
 
 var _ scmutationexec.Catalog = (*mutationDescGetter)(nil)
