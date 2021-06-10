@@ -11,9 +11,26 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
+
+func convertPrimaryIndexColumnDir(
+	primaryIndex *scpb.PrimaryIndex,
+) []descpb.IndexDescriptor_Direction {
+	// Convert column directions
+	convertedColumnDirs := make([]descpb.IndexDescriptor_Direction, 0, len(primaryIndex.KeyColumnDirections))
+	for _, columnDir := range primaryIndex.KeyColumnDirections {
+		switch columnDir {
+		case scpb.PrimaryIndex_DESC:
+			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_DESC)
+		case scpb.PrimaryIndex_ASC:
+			convertedColumnDirs = append(convertedColumnDirs, descpb.IndexDescriptor_ASC)
+		}
+	}
+	return convertedColumnDirs
+}
 
 func init() {
 	opRegistry.register(
@@ -24,8 +41,19 @@ func init() {
 			minPhase(scop.PreCommitPhase),
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeAddedIndexDeleteOnly{
-					TableID: this.TableID,
-					Index:   this.Index,
+					TableID:             this.TableID,
+					IndexID:             this.IndexId,
+					IndexName:           this.IndexName,
+					Unique:              this.Unique,
+					KeyColumnIDs:        this.KeyColumnIDs,
+					KeyColumnDirections: convertPrimaryIndexColumnDir(this),
+					KeySuffixColumnIDs:  this.KeySuffixColumnIDs,
+					StoreColumnIDs:      this.StoringColumnIDs,
+					CompositeColumnIDs:  this.CompositeColumnIDs,
+					ShardedDescriptor:   this.ShardedDescriptor,
+					Inverted:            this.Inverted,
+					Concurrently:        this.Concurrently,
+					SecondaryIndex:      false,
 				}
 			})),
 		to(scpb.Status_DELETE_AND_WRITE_ONLY,
@@ -33,14 +61,14 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeAddedIndexDeleteAndWriteOnly{
 					TableID: this.TableID,
-					IndexID: this.Index.ID,
+					IndexID: this.IndexId,
 				}
 			})),
 		to(scpb.Status_BACKFILLED,
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.BackfillIndex{
 					TableID: this.TableID,
-					IndexID: this.Index.ID,
+					IndexID: this.IndexId,
 				}
 			})),
 		// If this index is unique (which primary indexes should be) and
@@ -51,16 +79,15 @@ func init() {
 		to(scpb.Status_VALIDATED,
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.ValidateUniqueIndex{
-					TableID:        this.TableID,
-					PrimaryIndexID: this.OtherPrimaryIndexID,
-					IndexID:        this.Index.ID,
+					TableID: this.TableID,
+					IndexID: this.IndexId,
 				}
 			})),
 		to(scpb.Status_PUBLIC,
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeAddedPrimaryIndexPublic{
 					TableID: this.TableID,
-					Index:   this.Index,
+					IndexID: this.IndexId,
 				}
 			})),
 	)
@@ -75,7 +102,7 @@ func init() {
 				// Most of this logic is taken from MakeMutationComplete().
 				return &scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
 					TableID: this.TableID,
-					Index:   this.Index,
+					IndexID: this.IndexId,
 				}
 			})),
 		to(scpb.Status_DELETE_ONLY,
@@ -85,7 +112,7 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeDroppedIndexDeleteOnly{
 					TableID: this.TableID,
-					IndexID: this.Index.ID,
+					IndexID: this.IndexId,
 				}
 			})),
 		to(scpb.Status_ABSENT,
@@ -93,7 +120,7 @@ func init() {
 			emit(func(this *scpb.PrimaryIndex) scop.Op {
 				return &scop.MakeIndexAbsent{
 					TableID: this.TableID,
-					IndexID: this.Index.ID,
+					IndexID: this.IndexId,
 				}
 			})),
 	)

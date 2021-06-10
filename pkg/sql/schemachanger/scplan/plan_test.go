@@ -53,7 +53,7 @@ func TestPlanAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema":
+			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema", "create-index":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
@@ -70,6 +70,8 @@ func TestPlanAlterTable(t *testing.T) {
 				case *tree.CreateDatabase:
 					tableName = ""
 				case *tree.CreateSchema:
+					tableName = ""
+				case *tree.CreateIndex:
 					tableName = ""
 				default:
 					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
@@ -245,7 +247,7 @@ func TestPlanGraphSort(t *testing.T) {
 	require.NoError(t, err)
 	// Setup op edges for all the nodes
 	for idx := range ops {
-		graph.AddOpEdges(state[idx].Target, scpb.Status_ABSENT, scpb.Status_PUBLIC, true, ops[idx])
+		require.NoError(t, graph.AddOpEdges(state[idx].Target, scpb.Status_ABSENT, scpb.Status_PUBLIC, true, ops[idx]))
 	}
 	// Fetch the new Ndoes that will be added
 	nodes := make([]*scpb.Node, 0, len(state))
@@ -259,14 +261,14 @@ func TestPlanGraphSort(t *testing.T) {
 	// 1) 0 depends on 1
 	// 2) 3 depends on 0
 	// 3) 2 depends on nothing
-	graph.AddDepEdge("0 to 1", state[0].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
-	graph.AddDepEdge("3 to 0", state[3].Target, scpb.Status_PUBLIC, state[0].Target, scpb.Status_PUBLIC)
+	require.NoError(t, graph.AddDepEdge("0 to 1", state[0].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC))
+	require.NoError(t, graph.AddDepEdge("3 to 0", state[3].Target, scpb.Status_PUBLIC, state[0].Target, scpb.Status_PUBLIC))
 	// Validate the ranks matches what we expect
 	expectedOrder := []*scpb.Node{nodes[1], nodes[0], nodes[2], nodes[3]}
 	validateNodeRanks(graph, expectedOrder, nodes)
 	// Sanity cycles should always lead to panics.
-	graph.AddDepEdge("1 to 3", state[1].Target, scpb.Status_PUBLIC, state[3].Target, scpb.Status_PUBLIC)
-	graph.AddDepEdge("3 to 1", state[3].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
+	require.NoError(t, graph.AddDepEdge("1 to 3", state[1].Target, scpb.Status_PUBLIC, state[3].Target, scpb.Status_PUBLIC))
+	require.NoError(t, graph.AddDepEdge("3 to 1", state[3].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC))
 	expectedOrder = []*scpb.Node{nodes[0], nodes[1], nodes[2], nodes[3]}
 	require.Panicsf(t, func() {
 		graph.GetNodeRanks()
