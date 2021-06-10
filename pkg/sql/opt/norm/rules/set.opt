@@ -2,16 +2,20 @@
 # set.opt contains normalization rules for set operators.
 # =============================================================================
 
-# EliminateUnionAllLeft replaces a union all with a right side having a
-# cardinality of zero, with just the left side operand.
+# EliminateSetLeft replaces a UnionAll or ExceptAll operator with a right side
+# having a cardinality of zero, with just the left side operand.
 #
-# It is possible for the left and right sides of the UnionAll to have column
-# IDs that are also present in the output columns of the UnionAll, e.g. after
+# It is possible for the left and right sides of the set operator to have column
+# IDs that are also present in the output columns of the operator, e.g. after
 # the SplitDisjunction exploration rule has been applied. These columns are
 # included as passthrough columns in the generated Project because they do not
 # need to be projected. All other column IDs are added to the ProjectionsExpr.
-[EliminateUnionAllLeft, Normalize]
-(UnionAll $left:* $right:* & (HasZeroRows $right) $colmap:*)
+[EliminateSetLeft, Normalize]
+(UnionAll | ExceptAll
+    $left:*
+    $right:* & (HasZeroRows $right)
+    $colmap:*
+)
 =>
 (Project
     $left
@@ -19,12 +23,14 @@
     (ProjectPassthroughLeft $colmap)
 )
 
-# EliminateUnionAllRight replaces a union all with a left side having a
-# cardinality of zero, with just the right side operand.
+# EliminateSetRight replaces a UnionAll operator with a left side having a
+# cardinality of zero, with just the right side operand. Note that it only
+# applies to UnionAll operators because Except operators only output left input
+# rows.
 #
-# See the comment above EliminateUnionAllLeft which describes when columns are
+# See the comment above EliminateSetLeft which describes when columns are
 # projected vs. passed-through.
-[EliminateUnionAllRight, Normalize]
+[EliminateSetRight, Normalize]
 (UnionAll $left:* & (HasZeroRows $left) $right:* $colmap:*)
 =>
 (Project
@@ -33,10 +39,14 @@
     (ProjectPassthroughRight $colmap)
 )
 
-# EliminateUnionLeft replaces a union with a right side having a cardinality of
-# zero, with a Distinct on just the left side operand.
-[EliminateUnionLeft, Normalize]
-(Union $left:* $right:* & (HasZeroRows $right) $colMap:*)
+# EliminateDistinctSetLeft replaces a Union or Except operator with a right side
+# having a cardinality of zero, with a Distinct on just the left side operand.
+[EliminateDistinctSetLeft, Normalize]
+(Union | Except
+    $left:*
+    $right:* & (HasZeroRows $right)
+    $colMap:*
+)
 =>
 (DistinctOn
     $project:(Project
@@ -48,8 +58,9 @@
     (MakeGrouping (OutputCols $project) (EmptyOrdering))
 )
 
-# EliminateUnionRight mirrors EliminateUnionLeft.
-[EliminateUnionRight, Normalize]
+# EliminateDistinctSetRight mirrors EliminateDistinctSetLeft. Note that it only
+# applies to Union because Except operators only output left input rows.
+[EliminateDistinctSetRight, Normalize]
 (Union $left:* & (HasZeroRows $left) $right:* $colMap:*)
 =>
 (DistinctOn
@@ -61,6 +72,20 @@
     []
     (MakeGrouping (OutputCols $project) (EmptyOrdering))
 )
+
+# SimplifyExcept converts an Except operator into an ExceptAll operator when the
+# left input has a key. This avoids the de-duplication step.
+[SimplifyExcept, Normalize]
+(Except $left:* & (HasStrictKey $left) $right:* $colMap:*)
+=>
+(ExceptAll $left $right $colMap)
+
+# SimplifyIntersect converts an Intersect operator into an IntersectAll operator
+# when the left input has a key. This avoids the de-duplication step.
+[SimplifyIntersect, Normalize]
+(Intersect $left:* & (HasStrictKey $left) $right:* $colMap:*)
+=>
+(IntersectAll $left $right $colMap)
 
 # ConvertUnionToDistinctUnionAll replaces a Union with a DistinctOn on top of a
 # UnionAll when the left and right inputs satisfy the following conditions:
