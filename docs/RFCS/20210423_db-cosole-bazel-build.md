@@ -58,7 +58,15 @@ Bazel build pipeline for UI can be broken down in following steps:
 - Build protobuf js client code [db-console: bazel build for protobufjs clients #64065](https://github.com/cockroachdb/cockroach/pull/64065)
 - `cluster-ui` standalone build (react + webpack project) 
 - `db-console` standalone build (react + webpack project)
-- Change `bindata.go` to use `embed` Go's directive 
+
+### Generate protobuf JS client code
+Protobuf CCL and OSS packages are considered as an independent bazel projects and they depend on following
+bazel projects:
+- 
+
+Generation of protobuf js client code is performed by `protobufjs` package and its current version requires additional
+manual setup as described here https://github.com/dcodeIO/protobuf.js/issues/716.
+
 
 
 ### Suggested out of scope project improvements 
