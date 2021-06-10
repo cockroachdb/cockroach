@@ -109,8 +109,8 @@ denylist:
 		for i, tc := range testCases {
 			filename := filepath.Join(tempDir, fmt.Sprintf("denylist%d.yaml", i))
 			require.NoError(t, ioutil.WriteFile(filename, []byte(tc.input), 0777))
-			dl := NewDenylistWithFile(ctx, filename)
-			require.Equal(t, tc.expected, dl.mu.entries, "should return expected parsed file for %s",
+			dl, _ := newDenylistWithFile(ctx, filename)
+			require.Equal(t, tc.expected, dl.entries, "should return expected parsed file for %s",
 				tc.input)
 		}
 	})
@@ -149,7 +149,7 @@ func TestDenylistLogic(t *testing.T) {
 
 	type denyIOSpec struct {
 		entity  DenyEntity
-		outcome *Entry
+		outcome string
 	}
 
 	// This is a time evolution of a denylist.
@@ -170,9 +170,9 @@ denylist:
 			),
 			startTime.Add(10 * time.Second),
 			[]denyIOSpec{
-				{DenyEntity{"1.2.3.4", IPAddrType}, &Entry{"over quota"}},
-				{DenyEntity{"61", ClusterType}, nil},
-				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
+				{DenyEntity{"1.2.3.4", IPAddrType}, "over quota"},
+				{DenyEntity{"61", ClusterType}, ""},
+				{DenyEntity{"1.2.3.5", IPAddrType}, ""},
 			},
 		},
 		// Blocks both IP address and tenant cluster.
@@ -191,9 +191,9 @@ denylist:
 			),
 			startTime.Add(20 * time.Second),
 			[]denyIOSpec{
-				{DenyEntity{"1.2.3.4", IPAddrType}, &Entry{"over quota"}},
-				{DenyEntity{"61", ClusterType}, &Entry{"splunk pipeline"}},
-				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
+				{DenyEntity{"1.2.3.4", IPAddrType}, "over quota"},
+				{DenyEntity{"61", ClusterType}, "splunk pipeline"},
+				{DenyEntity{"1.2.3.5", IPAddrType}, ""},
 			},
 		},
 		// Entry that has expired.
@@ -208,9 +208,9 @@ denylist:
 			),
 			futureTime,
 			[]denyIOSpec{
-				{DenyEntity{"1.2.3.4", IPAddrType}, nil},
-				{DenyEntity{"61", ClusterType}, nil},
-				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
+				{DenyEntity{"1.2.3.4", IPAddrType}, ""},
+				{DenyEntity{"61", ClusterType}, ""},
+				{DenyEntity{"1.2.3.5", IPAddrType}, ""},
 			},
 		},
 		// Entry without any expiration.
@@ -222,9 +222,9 @@ denylist:
   reason: over quota`,
 			futureTime,
 			[]denyIOSpec{
-				{DenyEntity{"1.2.3.4", IPAddrType}, &Entry{"over quota"}},
-				{DenyEntity{"61", ClusterType}, nil},
-				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
+				{DenyEntity{"1.2.3.4", IPAddrType}, "over quota"},
+				{DenyEntity{"61", ClusterType}, ""},
+				{DenyEntity{"1.2.3.5", IPAddrType}, ""},
 			},
 		},
 	}
@@ -235,16 +235,19 @@ denylist:
 
 	filename := filepath.Join(tempDir, "denylist.yaml")
 	manualTime := timeutil.NewManualTime(startTime)
-	dl := NewDenylistWithFile(ctx, filename, WithPollingInterval(100*time.Millisecond))
-	dl.timeSource = manualTime
+	_, channel := newDenylistWithFile(
+		ctx, filename, WithPollingInterval(100*time.Millisecond), WithTimeSource(manualTime))
 	for _, tc := range testCases {
 		require.NoError(t, ioutil.WriteFile(filename, []byte(tc.input), 0777))
 		manualTime.AdvanceTo(tc.time)
-		time.Sleep(500 * time.Millisecond)
+		dl := <-channel
 		for _, ioPairs := range tc.specs {
-			actual, err := dl.Denied(ioPairs.entity)
-			require.NoError(t, err)
-			require.Equal(t, ioPairs.outcome, actual)
+			err := dl.Denied(ioPairs.entity)
+			if ioPairs.outcome == "" {
+				require.Nil(t, err)
+			} else {
+				require.EqualError(t, err, ioPairs.outcome)
+			}
 		}
 	}
 }
