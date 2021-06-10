@@ -55,7 +55,7 @@ type registration struct {
 	// Input.
 	span                   roachpb.Span
 	catchupTimestamp       hlc.Timestamp
-	catchupIterConstructor func() storage.SimpleMVCCIterator
+	catchupIterConstructor CatchupIteratorConstructor
 	withDiff               bool
 	metrics                *Metrics
 
@@ -86,7 +86,7 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchupIterConstructor func() storage.SimpleMVCCIterator,
+	catchupIterConstructor CatchupIteratorConstructor,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -305,7 +305,7 @@ func (r *registration) maybeRunCatchupScan() error {
 	// events for the same key until a different key is encountered, then output
 	// the encountered values in reverse. This also allows us to buffer events
 	// as we fill in previous values.
-	var lastKey roachpb.Key
+	var lastKey storage.MVCCKey
 	reorderBuf := make([]roachpb.RangeFeedEvent, 0, 5)
 	addPrevToLastEvent := func(val []byte) {
 		if l := len(reorderBuf); l > 0 {
@@ -316,6 +316,19 @@ func (r *registration) maybeRunCatchupScan() error {
 		}
 	}
 	outputEvents := func() error {
+		// Our last entry will be erroneously missing a
+		// previous value if it was outside the time window of
+		// the incremental iterator.
+		if l := len(reorderBuf); r.withDiff && l > 0 {
+			prev, err := catchupIter.UnsafePrevValueForKey(lastKey)
+			if err != nil {
+				return err
+			}
+			if len(prev) > 0 {
+				a, reorderBuf[len(reorderBuf)-1].Val.PrevValue.RawBytes = a.Copy(prev, 0)
+			}
+		}
+
 		for i := len(reorderBuf) - 1; i >= 0; i-- {
 			e := reorderBuf[i]
 			if err := r.stream.Send(&e); err != nil {
@@ -369,16 +382,17 @@ func (r *registration) maybeRunCatchupScan() error {
 		}
 
 		// Determine whether the iterator moved to a new key.
-		sameKey := bytes.Equal(unsafeKey.Key, lastKey)
+		sameKey := bytes.Equal(unsafeKey.Key, lastKey.Key)
 		if !sameKey {
 			// If so, output events for the last key encountered.
 			if err := outputEvents(); err != nil {
 				return err
 			}
-			a, lastKey = a.Copy(unsafeKey.Key, 0)
+			a, lastKey.Key = a.Copy(unsafeKey.Key, 0)
 		}
-		key := lastKey
+		key := lastKey.Key
 		ts := unsafeKey.Timestamp
+		lastKey.Timestamp = unsafeKey.Timestamp
 
 		// Ignore the version if it's not inline and its timestamp is at
 		// or before the registration's (exclusive) starting timestamp.
