@@ -51,6 +51,13 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// RangefeedTBIEnabled controls whether or not we use a TBI during catch-up scan.
+var RangefeedTBIEnabled = settings.RegisterBoolSetting(
+	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
+	"if true, rangefeed's will use time-bound iterators for catchup-scans when possible",
+	true,
+)
+
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
@@ -210,20 +217,26 @@ func (r *Replica) RangeFeed(
 	var catchUpIterFunc rangefeed.IteratorConstructor
 	if usingCatchupIter {
 		catchUpIterFunc = func() storage.SimpleMVCCIterator {
-
-			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				UpperBound: args.Span.EndKey,
-				// RangeFeed originally intended to use the time-bound iterator
-				// performance optimization. However, they've had correctness issues in
-				// the past (#28358, #34819) and no-one has the time for the due-diligence
-				// necessary to be confidant in their correctness going forward. Not using
-				// them causes the total time spent in RangeFeed catchup on changefeed
-				// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
-				// workable. See #35122 for details.
-				// MinTimestampHint: args.Timestamp,
-			})
+			var iter storage.SimpleMVCCIterator
+			// We can't use a time-bound iterator when we require diff information since
+			// the last value could be arbitrarily in the past.
+			if !args.WithDiff && RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV) {
+				iter = storage.NewMVCCIncrementalIterator(r.Engine(), storage.MVCCIncrementalIterOptions{
+					EnableTimeBoundIteratorOptimization: true,
+					EndKey:                              args.Span.EndKey,
+					// StartTime is exclusive
+					StartTime:    args.Timestamp.Prev(),
+					EndTime:      hlc.MaxTimestamp,
+					IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+					InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
+				})
+			} else {
+				iter = r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+					UpperBound: args.Span.EndKey,
+				})
+			}
 			catchUpIter := iteratorWithCloser{
-				SimpleMVCCIterator: innerIter,
+				SimpleMVCCIterator: iter,
 				close:              iterSemRelease,
 			}
 			return catchUpIter
