@@ -14,7 +14,7 @@ const WebpackBar = require("webpackbar");
 const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
 
 module.exports = {
-  entry: "./src/index.ts",
+  entry: path.resolve(__dirname, "./src/index.ts"),
 
   output: {
     path: path.resolve(__dirname, "dist"),

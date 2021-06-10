@@ -2,7 +2,11 @@
 # `@cockroach//...`.
 workspace(
     name = "cockroach",
-    managed_directories = {"@npm": ["node_modules"]},
+    managed_directories = {
+       "@npm": ["pkg/ui/node_modules"],
+       "@npm_proto_js": ["pkg/ui/src/js/node_modules"],
+       "@npm_cluster_ui": ["pkg/ui/cluster-ui/node_modules"],
+    },
 )
 
 # Load the things that let us load other things.
@@ -19,8 +23,8 @@ git_repository(
 # Like the above, but for nodeJS.
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "6142e9586162b179fdd570a55e50d1332e7d9c030efd853453438d607569721d",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/3.0.0/rules_nodejs-3.0.0.tar.gz"],
+    sha256 = "0fa2d443571c9e02fcb7363a74ae591bdcce2dd76af8677a95965edf329d778a",
+    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/3.6.0/rules_nodejs-3.6.0.tar.gz"],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -118,6 +122,7 @@ yarn_install(
     name = "npm",
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
+    frozen_lockfile = False,
 )
 
 # install external dependencies for pkg/ui/src/js package (used to generate protobuf js client)
@@ -125,6 +130,23 @@ yarn_install(
     name = "npm_proto_js",
     package_json = "//pkg/ui/src/js:package.json",
     yarn_lock = "//pkg/ui/src/js:yarn.lock",
+    args = ["--modules-folder", "./node_modules"],
+    frozen_lockfile = False,
+)
+
+# install external dependencies for pkg/ui/cluster-ui
+yarn_install(
+    name = "npm_cluster_ui",
+    package_json = "//pkg/ui/cluster-ui:package.json",
+    yarn_lock = "//pkg/ui/cluster-ui:yarn.lock",
+    package_path = "pkg/ui/cluster-ui",
+    links = {
+        "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/src/js:ui_protos_lib",
+    },
+    strict_visibility = False,
+    generate_local_modules_build_files = True,
+    # symlink_node_modules = True,
+    frozen_lockfile = False,
 )
 
 # NB: @bazel_skylib comes from go_rules_dependencies().

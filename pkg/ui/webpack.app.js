@@ -48,10 +48,10 @@ module.exports = (env, argv) => {
   }
 
   const config = {
-    entry: ["./src/index.tsx"],
+    entry: [path.resolve(__dirname, "./src/index.tsx")],
     output: {
-      filename: "bundle.js",
-      path: path.resolve(__dirname, `dist${env.dist}`),
+      filename: "distccl/bundle.js",
+      //path: path.resolve(__dirname, `dist${env.dist}`),
     },
 
     mode: argv.mode || "production",
@@ -156,7 +156,9 @@ module.exports = (env, argv) => {
         context: path.resolve(__dirname, `dist${env.dist}`),
         manifest: require("./vendor.oss.manifest.json"),
       }),
-      new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
+      new CopyWebpackPlugin([
+        { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
+      ]),
       new VisualizerPlugin({ filename: `../dist/stats.${env.dist}.html` }),
       // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
       new WebpackBar({
@@ -174,7 +176,7 @@ module.exports = (env, argv) => {
       proxy: {
         "/": {
           secure: false,
-          target: process.env.TARGET,
+          target: env.target || process.env.TARGET,
         },
       },
     },
