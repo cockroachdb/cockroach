@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pebbletool "github.com/cockroachdb/pebble/tool"
-	"github.com/rcrowley/go-metrics"
+	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/trace"
@@ -104,10 +104,15 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	// Register the stopper endpoint, which lists all active tasks.
 	mux.HandleFunc("/debug/stopper", stop.HandleDebug)
 
+	// Set up the vmodule endpoint.
+	vsrv := &vmoduleServer{}
+	mux.HandleFunc("/debug/vmodule", vsrv.vmoduleHandleDebug)
+
 	// Set up the log spy, a tool that allows inspecting filtered logs at high
 	// verbosity.
 	spy := logSpy{
-		setIntercept: log.Intercept,
+		vsrv:         vsrv,
+		setIntercept: log.InterceptWith,
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
