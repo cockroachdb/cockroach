@@ -19,12 +19,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -60,6 +65,8 @@ type txnDeps struct {
 	codec           keys.SQLCodec
 	descsCollection *descs.Collection
 	jobRegistry     *jobs.Registry
+	st              *cluster.Settings
+	evalCtx         *tree.EvalContext
 }
 
 var _ scexec.Catalog = (*txnDeps)(nil)
@@ -86,6 +93,61 @@ func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
 // RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
 func (d *txnDeps) RemoveSyntheticDescriptor(id descpb.ID) {
 	d.descsCollection.RemoveSyntheticDescriptor(id)
+}
+
+// AddPartitioning implements the  scmutationexec.CatalogReader interface.
+func (d *txnDeps) AddPartitioning(
+	tableDesc *tabledesc.Mutable,
+	indexDesc *descpb.IndexDescriptor,
+	partitionFields []string,
+	listPartition []*scpb.ListPartition,
+	rangePartition []*scpb.RangePartitions,
+	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
+) error {
+	ctx := context.Background()
+	// Deserialize back into tree based types
+	partitionBy := &tree.PartitionBy{}
+	partitionBy.List = make([]tree.ListPartition, 0, len(listPartition))
+	partitionBy.Range = make([]tree.RangePartition, 0, len(rangePartition))
+	for _, partition := range listPartition {
+		exprs, err := parser.ParseExprs(partition.Expr)
+		if err != nil {
+			return err
+		}
+		partitionBy.List = append(partitionBy.List,
+			tree.ListPartition{
+				Name:  tree.UnrestrictedName(partition.Name),
+				Exprs: exprs,
+			})
+	}
+	for _, partition := range rangePartition {
+		toExpr, err := parser.ParseExprs(partition.To)
+		if err != nil {
+			return err
+		}
+		fromExpr, err := parser.ParseExprs(partition.From)
+		if err != nil {
+			return err
+		}
+		partitionBy.Range = append(partitionBy.Range,
+			tree.RangePartition{
+				Name: tree.UnrestrictedName(partition.Name),
+				To:   toExpr,
+				From: fromExpr,
+			})
+	}
+	partitionBy.Fields = make(tree.NameList, 0, len(partitionFields))
+	for _, field := range partitionFields {
+		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
+	}
+	// Create the paritioning
+	newImplicitCols, newPartitioning, err := scbuild.CreatePartitioningCCL(ctx, d.st, d.evalCtx, tableDesc, *indexDesc, partitionBy, allowedNewColumnNames, allowImplicitPartitioning)
+	if err != nil {
+		return err
+	}
+	tabledesc.UpdateIndexPartitioning(indexDesc, false, newImplicitCols, newPartitioning)
+	return nil
 }
 
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
