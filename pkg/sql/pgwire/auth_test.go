@@ -170,8 +170,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		bt := true
 		cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
 			"auth": {
-				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
-				Channels:         logconfig.ChannelList{Channels: []log.Channel{channel.SESSIONS}},
+				FileDefaults: logconfig.FileDefaults{
+					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+				},
+				Channels: logconfig.ChannelList{Channels: []log.Channel{channel.SESSIONS}},
 			}}
 		dir := sc.GetDirectory()
 		if err := cfg.Validate(&dir); err != nil {

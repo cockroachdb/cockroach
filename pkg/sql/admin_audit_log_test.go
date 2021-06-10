@@ -37,8 +37,10 @@ func installSensitiveAccessLogFileSink(sc *log.TestLogScope, t *testing.T) func(
 	bt := true
 	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
 		"sql-audit": {
-			CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
-			Channels:         logconfig.ChannelList{Channels: []log.Channel{channel.SENSITIVE_ACCESS}},
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+			},
+			Channels: logconfig.ChannelList{Channels: []log.Channel{channel.SENSITIVE_ACCESS}},
 		}}
 	dir := sc.GetDirectory()
 	if err := cfg.Validate(&dir); err != nil {
