@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -60,6 +62,8 @@ type buildDeps struct {
 	sessionData     *sessiondata.SessionData
 	settings        *cluster.Settings
 	statements      []string
+	semaCtx         *tree.SemaContext
+	evalCtx         *tree.EvalContext
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -204,6 +208,11 @@ func (d *buildDeps) CatalogReader() scbuild.CatalogReader {
 	return d
 }
 
+// DescUtils implements the scbuild.Dependencies interface.
+func (d *buildDeps) DescUtils() scbuild.DescUtils {
+	return d
+}
+
 // Codec implements the scbuild.Dependencies interface.
 func (d *buildDeps) Codec() keys.SQLCodec {
 	return d.codec
@@ -222,4 +231,22 @@ func (d *buildDeps) ClusterSettings() *cluster.Settings {
 // Statements implements the scbuild.Dependencies interface.
 func (d *buildDeps) Statements() []string {
 	return d.statements
+}
+
+func (d *buildDeps) EvalShardBucketCount(
+	ctx context.Context, shardBuckets tree.Expr,
+) (int32, error) {
+	return tabledesc.EvalShardBucketCount(ctx, d.semaCtx, d.evalCtx, shardBuckets)
+}
+
+func (d *buildDeps) DequalifyAndValidateExpr(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	expr tree.Expr,
+	typ *types.T,
+	context string,
+	maxVolatility tree.Volatility,
+	tn *tree.TableName,
+) (string, *types.T, catalog.TableColSet, error) {
+	return schemaexpr.DequalifyAndValidateExpr(ctx, desc, expr, typ, context, d.semaCtx, maxVolatility, tn)
 }
