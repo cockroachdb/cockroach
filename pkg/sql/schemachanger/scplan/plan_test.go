@@ -53,7 +53,7 @@ func TestPlanAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema":
+			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema", "create-index":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
@@ -70,6 +70,8 @@ func TestPlanAlterTable(t *testing.T) {
 				case *tree.CreateDatabase:
 					tableName = ""
 				case *tree.CreateSchema:
+					tableName = ""
+				case *tree.CreateIndex:
 					tableName = ""
 				default:
 					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
@@ -239,14 +241,14 @@ func TestPlanGraphSort(t *testing.T) {
 	require.NoError(t, err)
 	// Setup op edges for all the nodes
 	for idx := range ops {
-		graph.AddOpEdges(state[idx].Target, scpb.Status_ABSENT, scpb.Status_PUBLIC, true, ops[idx])
+		require.NoError(t, graph.AddOpEdges(state[idx].Target, scpb.Status_ABSENT, scpb.Status_PUBLIC, true, ops[idx]))
 	}
 	// We will set up the dependency graph, so that:
 	// 1) 0 depends on 1
 	// 2) 3 depends on 0
 	// 3) 2 depends on nothing
-	graph.AddDepEdge("0 to 1", state[0].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
-	graph.AddDepEdge("3 to 0", state[3].Target, scpb.Status_PUBLIC, state[0].Target, scpb.Status_PUBLIC)
+	require.NoError(t, graph.AddDepEdge("0 to 1", state[0].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC))
+	require.NoError(t, graph.AddDepEdge("3 to 0", state[3].Target, scpb.Status_PUBLIC, state[0].Target, scpb.Status_PUBLIC))
 	// Sort the ops validate we get the correct order
 	scplan.SortOps(graph, opsToSort)
 	// Validate the order matches what we expect
@@ -259,8 +261,8 @@ func TestPlanGraphSort(t *testing.T) {
 	// Sanity for cycles return the same order
 	// as before.
 	copy(opsToSort, ops)
-	graph.AddDepEdge("1 to 3", state[1].Target, scpb.Status_PUBLIC, state[3].Target, scpb.Status_PUBLIC)
-	graph.AddDepEdge("3 to 1", state[3].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC)
+	require.NoError(t, graph.AddDepEdge("1 to 3", state[1].Target, scpb.Status_PUBLIC, state[3].Target, scpb.Status_PUBLIC))
+	require.NoError(t, graph.AddDepEdge("3 to 1", state[3].Target, scpb.Status_PUBLIC, state[1].Target, scpb.Status_PUBLIC))
 	expectedOrder = []scop.Op{ops[0], ops[1], ops[2], ops[3]}
 	scplan.SortOps(graph, opsToSort)
 	for idx := range expectedOrder {
