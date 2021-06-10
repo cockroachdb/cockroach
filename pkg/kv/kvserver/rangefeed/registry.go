@@ -11,7 +11,6 @@
 package rangefeed
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -19,12 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -55,7 +51,7 @@ type registration struct {
 	// Input.
 	span                   roachpb.Span
 	catchupTimestamp       hlc.Timestamp
-	catchupIterConstructor func() storage.SimpleMVCCIterator
+	catchupIterConstructor CatchupIteratorConstructor
 	withDiff               bool
 	metrics                *Metrics
 
@@ -86,7 +82,7 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchupIterConstructor func() storage.SimpleMVCCIterator,
+	catchupIterConstructor CatchupIteratorConstructor,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -296,128 +292,10 @@ func (r *registration) maybeRunCatchupScan() error {
 		r.metrics.RangeFeedCatchupScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	var a bufalloc.ByteAllocator
 	startKey := storage.MakeMVCCMetadataKey(r.span.Key)
 	endKey := storage.MakeMVCCMetadataKey(r.span.EndKey)
 
-	// MVCCIterator will encounter historical values for each key in
-	// reverse-chronological order. To output in chronological order, store
-	// events for the same key until a different key is encountered, then output
-	// the encountered values in reverse. This also allows us to buffer events
-	// as we fill in previous values.
-	var lastKey roachpb.Key
-	reorderBuf := make([]roachpb.RangeFeedEvent, 0, 5)
-	addPrevToLastEvent := func(val []byte) {
-		if l := len(reorderBuf); l > 0 {
-			if reorderBuf[l-1].Val.PrevValue.IsPresent() {
-				panic("RangeFeedValue.PrevVal unexpectedly set")
-			}
-			reorderBuf[l-1].Val.PrevValue.RawBytes = val
-		}
-	}
-	outputEvents := func() error {
-		for i := len(reorderBuf) - 1; i >= 0; i-- {
-			e := reorderBuf[i]
-			if err := r.stream.Send(&e); err != nil {
-				return err
-			}
-		}
-		reorderBuf = reorderBuf[:0]
-		return nil
-	}
-
-	// Iterate though all keys using Next. We want to publish all committed
-	// versions of each key that are after the registration's startTS, so we
-	// can't use NextKey.
-	var meta enginepb.MVCCMetadata
-	catchupIter.SeekGE(startKey)
-	for {
-		if ok, err := catchupIter.Valid(); err != nil {
-			return err
-		} else if !ok || !catchupIter.UnsafeKey().Less(endKey) {
-			break
-		}
-
-		unsafeKey := catchupIter.UnsafeKey()
-		unsafeVal := catchupIter.UnsafeValue()
-		if !unsafeKey.IsValue() {
-			// Found a metadata key.
-			if err := protoutil.Unmarshal(unsafeVal, &meta); err != nil {
-				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
-			}
-			if !meta.IsInline() {
-				// This is an MVCCMetadata key for an intent. The catchup scan
-				// only cares about committed values, so ignore this and skip
-				// past the corresponding provisional key-value. To do this,
-				// scan to the timestamp immediately before (i.e. the key
-				// immediately after) the provisional key.
-				//
-				// Make a copy since should not pass an unsafe key from the iterator
-				// that provided it, when asking it to seek.
-				a, unsafeKey.Key = a.Copy(unsafeKey.Key, 0)
-				catchupIter.SeekGE(storage.MVCCKey{
-					Key:       unsafeKey.Key,
-					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
-				})
-				continue
-			}
-
-			// If write is inline, it doesn't have a timestamp so we don't
-			// filter on the registration's starting timestamp. Instead, we
-			// return all inline writes.
-			unsafeVal = meta.RawBytes
-		}
-
-		// Determine whether the iterator moved to a new key.
-		sameKey := bytes.Equal(unsafeKey.Key, lastKey)
-		if !sameKey {
-			// If so, output events for the last key encountered.
-			if err := outputEvents(); err != nil {
-				return err
-			}
-			a, lastKey = a.Copy(unsafeKey.Key, 0)
-		}
-		key := lastKey
-		ts := unsafeKey.Timestamp
-
-		// Ignore the version if it's not inline and its timestamp is at
-		// or before the registration's (exclusive) starting timestamp.
-		ignore := !(ts.IsEmpty() || r.catchupTimestamp.Less(ts))
-		if ignore && !r.withDiff {
-			// Skip all the way to the next key.
-			// NB: fast-path to avoid value copy when !r.withDiff.
-			catchupIter.NextKey()
-			continue
-		}
-
-		var val []byte
-		a, val = a.Copy(unsafeVal, 0)
-		if r.withDiff {
-			// Update the last version with its previous value (this version).
-			addPrevToLastEvent(val)
-		}
-
-		if ignore {
-			// Skip all the way to the next key.
-			catchupIter.NextKey()
-		} else {
-			// Move to the next version of this key.
-			catchupIter.Next()
-
-			var event roachpb.RangeFeedEvent
-			event.MustSetValue(&roachpb.RangeFeedValue{
-				Key: key,
-				Value: roachpb.Value{
-					RawBytes:  val,
-					Timestamp: ts,
-				},
-			})
-			reorderBuf = append(reorderBuf, event)
-		}
-	}
-
-	// Output events for the last key encountered.
-	return outputEvents()
+	return catchupIter.CatchupScan(startKey, endKey, r.catchupTimestamp, r.withDiff, r.stream.Send)
 }
 
 // ID implements interval.Interface.
