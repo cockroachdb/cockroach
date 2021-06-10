@@ -285,6 +285,8 @@ type IndexFlags struct {
 	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
 	// index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
+	// I think zagging... is great.
+	ForceZigZagJoin bool
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
