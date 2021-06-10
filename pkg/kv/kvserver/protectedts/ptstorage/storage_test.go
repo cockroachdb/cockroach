@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -593,7 +594,7 @@ func TestErrorsFromSQL(t *testing.T) {
 	s := tc.Server(0)
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	wrappedIE := &wrappedInternalExecutor{wrapped: ie}
-	pts := ptstorage.New(s.ClusterSettings(), wrappedIE)
+	pts := ptstorage.New(s.ClusterSettings(), wrappedIE.wrapped)
 
 	wrappedIE.setErrFunc(func(string) error {
 		return errors.New("boom")
@@ -753,4 +754,10 @@ func (ie *wrappedInternalExecutor) setErrFunc(f func(statement string) error) {
 	ie.mu.Lock()
 	defer ie.mu.Unlock()
 	ie.mu.errFunc = f
+}
+
+func (ie *wrappedInternalExecutor) WithSyntheticDescriptors(
+	descs []catalog.Descriptor, run func() error,
+) error {
+	panic("not implemented")
 }
