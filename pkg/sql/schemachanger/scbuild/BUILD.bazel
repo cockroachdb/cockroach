@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "builder.go",
         "database.go",
+        "index.go",
         "relation_common.go",
         "schema.go",
         "sequence.go",
@@ -15,6 +16,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
@@ -31,6 +33,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",
         "//pkg/util/sequence",

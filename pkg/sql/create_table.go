@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2570,73 +2571,8 @@ func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescript
 		Type:     types.Int4,
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
-	col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
+	col.ComputeExpr = scbuild.MakeHashShardComputeExpr(colNames, buckets)
 	return col, nil
-}
-
-// makeHashShardComputeExpr creates the serialized computed expression for a hash shard
-// column based on the column names and the number of buckets. The expression will be
-// of the form:
-//
-//    mod(fnv32(colNames[0]::STRING)+fnv32(colNames[1])+...,buckets)
-//
-func makeHashShardComputeExpr(colNames []string, buckets int) *string {
-	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
-		return tree.ResolvableFunctionReference{
-			FunctionReference: &tree.UnresolvedName{
-				NumParts: 1,
-				Parts:    tree.NameParts{funcName},
-			},
-		}
-	}
-	hashedColumnExpr := func(colName string) tree.Expr {
-		return &tree.FuncExpr{
-			Func: unresolvedFunc("fnv32"),
-			Exprs: tree.Exprs{
-				// NB: We have created the hash shard column as NOT NULL so we need
-				// to coalesce NULLs into something else. There's a variety of different
-				// reasonable choices here. We could pick some outlandish value, we
-				// could pick a zero value for each type, or we can do the simple thing
-				// we do here, however the empty string seems pretty reasonable. At worst
-				// we'll have a collision for every combination of NULLable string
-				// columns. That seems just fine.
-				&tree.CoalesceExpr{
-					Name: "COALESCE",
-					Exprs: tree.Exprs{
-						&tree.CastExpr{
-							Type: types.String,
-							Expr: &tree.ColumnItem{ColumnName: tree.Name(colName)},
-						},
-						tree.NewDString(""),
-					},
-				},
-			},
-		}
-	}
-
-	// Construct an expression which is the sum of all of the casted and hashed
-	// columns.
-	var expr tree.Expr
-	for i := len(colNames) - 1; i >= 0; i-- {
-		c := colNames[i]
-		if expr == nil {
-			expr = hashedColumnExpr(c)
-		} else {
-			expr = &tree.BinaryExpr{
-				Left:     hashedColumnExpr(c),
-				Operator: tree.MakeBinaryOperator(tree.Plus),
-				Right:    expr,
-			}
-		}
-	}
-	str := tree.Serialize(&tree.FuncExpr{
-		Func: unresolvedFunc("mod"),
-		Exprs: tree.Exprs{
-			expr,
-			tree.NewDInt(tree.DInt(buckets)),
-		},
-	})
-	return &str
 }
 
 func makeShardCheckConstraintDef(

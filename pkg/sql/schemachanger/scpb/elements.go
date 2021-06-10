@@ -75,6 +75,7 @@ func (e *Column) getAttribute(attribute Attribute) attributeValue {
 	}
 }
 
+// GetAttributes implements the Element interface
 func (e *PrimaryIndex) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
@@ -82,14 +83,15 @@ func (e *PrimaryIndex) getAttribute(attr Attribute) attributeValue {
 	case AttributeDescID:
 		return (*descID)(&e.TableID)
 	case AttributeIndexID:
-		return (*indexID)(&e.Index.ID)
+		return (*indexID)(&e.IndexId)
 	case AttributeElementName:
-		return (*elementName)(&e.Index.Name)
+		return (*elementName)(&e.IndexName)
 	default:
 		return nil
 	}
 }
 
+// GetAttributes implements the Element interface
 func (e *SecondaryIndex) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
@@ -97,9 +99,9 @@ func (e *SecondaryIndex) getAttribute(attr Attribute) attributeValue {
 	case AttributeDescID:
 		return (*descID)(&e.TableID)
 	case AttributeIndexID:
-		return (*indexID)(&e.Index.ID)
+		return (*indexID)(&e.IndexId)
 	case AttributeElementName:
-		return (*elementName)(&e.Index.Name)
+		return (*elementName)(&e.IndexName)
 	default:
 		return nil
 	}
@@ -292,6 +294,20 @@ func (e *Database) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.DatabaseID)
+	default:
+		return nil
+	}
+}
+
+// GetAttributes implements the Element interface
+func (e *Partitioning) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeIndexID:
+		return (*indexID)(&e.IndexId)
 	default:
 		return nil
 	}
