@@ -413,6 +413,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 	require.NoError(t, g.Wait())
 }
 
+/*
 func TestCorrectIndexBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer sqltestutils.SetTestJobsAdoptInterval()()
@@ -518,3 +519,4 @@ func TestCorrectIndexBackfill(t *testing.T) {
 	close(continueNotification)
 	require.NoError(t, g.Wait())
 }
+*/
