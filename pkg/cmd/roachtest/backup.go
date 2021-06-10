@@ -146,7 +146,10 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 	// Register a named histogram to track the total time the bulk job took.
 	// Roachperf uses this information to display information about this
 	// roachtest.
-	reg := histogram.NewRegistry(timeout)
+	reg := histogram.NewRegistry(
+		timeout,
+		histogram.MockNewPrometheusHistogram,
+	)
 	reg.GetHandle().Get(testName)
 
 	// Create the stats file where the roachtest will write perf artifacts.

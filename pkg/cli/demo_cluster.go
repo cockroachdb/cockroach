@@ -999,7 +999,10 @@ func (c *transientCluster) runWorkload(
 	}
 
 	// Dummy registry to prove to the Opser.
-	reg := histogram.NewRegistry(time.Duration(100) * time.Millisecond)
+	reg := histogram.NewRegistry(
+		time.Duration(100)*time.Millisecond,
+		histogram.MockNewPrometheusHistogram,
+	)
 	ops, err := opser.Ops(ctx, sqlUrls, reg)
 	if err != nil {
 		return errors.Wrap(err, "unable to create workload")

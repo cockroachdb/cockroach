@@ -12,6 +12,7 @@ package tpcc
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/exp/rand"
 )
 
@@ -45,6 +47,11 @@ type txInfo struct {
 	keyingTime  int     // keying time in seconds, see 5.2.5.7
 	thinkTime   float64 // minimum mean of think time distribution, 5.2.5.7
 	weight      int     // percent likelihood that each transaction type is run
+
+	// successCounter measures the number of successes for the given tx.
+	successCounter prometheus.Counter
+	// errorCounter measures the number of errors for the given tx.
+	errorCounter prometheus.Counter
 }
 
 var allTxs = [...]txInfo{
@@ -78,6 +85,27 @@ var allTxs = [...]txInfo{
 		keyingTime:  2,
 		thinkTime:   5,
 	},
+}
+
+func init() {
+	for i, tx := range allTxs {
+		allTxs[i].successCounter = workload.PrometheusMetrics.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: workload.PrometheusNamespace,
+				Subsystem: tpccMeta.Name,
+				Name:      fmt.Sprintf("%s_success", tx.name),
+				Help:      fmt.Sprintf("The total number of successful %s events.", tx.name),
+			},
+		)
+		allTxs[i].errorCounter = workload.PrometheusMetrics.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: workload.PrometheusNamespace,
+				Subsystem: tpccMeta.Name,
+				Name:      fmt.Sprintf("%s_error", tx.name),
+				Help:      fmt.Sprintf("The total number of error %s events.", tx.name),
+			},
+		)
+	}
 }
 
 func initializeMix(config *tpcc) error {
@@ -188,12 +216,14 @@ func (w *worker) run(ctx context.Context) error {
 	// but don't account for them in the histogram.
 	start := timeutil.Now()
 	if _, err := tx.run(context.Background(), warehouseID); err != nil {
+		txInfo.errorCounter.Inc()
 		return errors.Wrapf(err, "error in %s", txInfo.name)
 	}
 	if ctx.Err() == nil {
 		elapsed := timeutil.Since(start)
 		w.hists.Get(txInfo.name).Record(elapsed)
 	}
+	txInfo.successCounter.Inc()
 
 	// 5.2.5.4: Think time is taken independently from a negative exponential
 	// distribution. Think time = -log(r) * u, where r is a uniform random number

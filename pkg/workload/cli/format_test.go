@@ -45,7 +45,10 @@ func Example_json_formatter() {
 }
 
 func testFormatter(formatter outputFormat) {
-	reg := histogram.NewRegistry(time.Second)
+	reg := histogram.NewRegistry(
+		time.Second,
+		histogram.MockNewPrometheusHistogram,
+	)
 
 	start := time.Time{}
 
@@ -86,7 +89,10 @@ func TestJSONStructure(t *testing.T) {
 
 	var buf bytes.Buffer
 	f := jsonFormatter{w: &buf}
-	reg := histogram.NewRegistry(time.Second)
+	reg := histogram.NewRegistry(
+		time.Second,
+		histogram.MockNewPrometheusHistogram,
+	)
 
 	start := time.Time{}
 
