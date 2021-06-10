@@ -12,6 +12,7 @@ package migrations_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -168,4 +170,61 @@ func runMigrationAndCheckState(t *testing.T, tdb *sqlutils.SQLRunner) {
 	require.True(t, isTableDescThere(t, tdb, keys.NamespaceTableID))
 	require.Equal(t, keys.NamespaceTableID, lookupNamespaceEntry(t, tdb, `namespace`))
 	require.Zero(t, lookupNamespaceEntry(t, tdb, `namespace2`))
+}
+
+// TestCanReadSystemNamespaceWhenNamedNamespace2 tests that the name resolution
+// code for the namespace table does not break when upgrading from an earlier
+// version in which the descriptor in question (30) carries the name
+// "namespace2".
+func TestCanReadSystemNamespaceWhenNamedNamespace2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	// Validate that we can query the namespace table.
+	tdb.Exec(t, "SELECT * FROM system.namespace")
+	// Update the descriptor to be named "namespace2".
+	tdb.Exec(t, `
+  WITH ns_table AS (
+					SELECT id,
+					       crdb_internal.pb_to_json(
+							'cockroach.sql.sqlbase.Descriptor',
+							descriptor,
+							false
+					       ) AS d
+					  FROM system.descriptor
+					 WHERE id = $1
+                ),
+       updated AS (
+				SELECT id,
+				       crdb_internal.json_to_pb(
+						'cockroach.sql.sqlbase.Descriptor',
+						json_set(d, ARRAY['table', 'name'], '"namespace2"'::jsonb)
+				       ) AS d
+				  FROM ns_table
+               )
+SELECT crdb_internal.unsafe_upsert_descriptor(id, d)
+  FROM updated;
+`, keys.NamespaceTableID)
+	// Validate that that got injected.
+	tdb.CheckQueryResults(t,
+		fmt.Sprintf(`
+SELECT crdb_internal.pb_to_json(
+		'cockroach.sql.sqlbase.Descriptor',
+		descriptor
+       )->'table'->>'name'
+  FROM system.descriptor
+ WHERE id = %d`, keys.NamespaceTableID),
+		[][]string{{"namespace2"}})
+	// Validate that we can still query the namespace table.
+	tdb.Exec(t, "SELECT * FROM system.namespace")
+
+	// Restart the server and then validate that we can still query the
+	// namespace table.
+	tc.RestartServer(0)
+	tdb.Exec(t, "SELECT * FROM system.namespace")
 }
