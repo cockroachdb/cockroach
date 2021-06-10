@@ -362,6 +362,7 @@ func (r opResult) createDiskBackedSort(
 		sorterMemMonitorName string
 		inMemorySorter       colexecop.Operator
 		err                  error
+		topK                 uint64
 	)
 	if len(ordering.Columns) == int(matchLen) {
 		// The input is already fully ordered, so there is nothing to sort.
@@ -400,10 +401,10 @@ func (r opResult) createDiskBackedSort(
 				ctx, flowCtx, opNamePrefix+"topk-sort", processorID,
 			)
 		}
-		k := post.Limit + post.Offset
+		topK = post.Limit + post.Offset
 		inMemorySorter = colexec.NewTopKSorter(
 			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input, inputTypes,
-			ordering.Columns, k,
+			ordering.Columns, topK,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.
@@ -459,7 +460,7 @@ func (r opResult) createDiskBackedSort(
 				sortUnlimitedAllocator,
 				mergeUnlimitedAllocator,
 				outputUnlimitedAllocator,
-				input, inputTypes, ordering,
+				input, inputTypes, ordering, topK,
 				execinfra.GetWorkMemLimit(flowCtx),
 				maxNumberPartitions,
 				args.TestingKnobs.NumForcedRepartitions,
