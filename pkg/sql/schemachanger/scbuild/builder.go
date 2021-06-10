@@ -160,10 +160,31 @@ func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb
 		b.dropDatabase(ctx, n)
 	case *tree.AlterTable:
 		b.alterTable(ctx, n)
+	case *tree.CreateIndex:
+		b.createIndex(ctx, n)
 	default:
 		return nil, &notImplementedError{n: n}
 	}
 	return b.output, nil
+}
+
+// checkIfNodeExists checks if an existing node is already there,
+// in any direction.
+func (b *buildContext) checkIfNewColumnExistsByName(tableID descpb.ID, name tree.Name) bool {
+	// Check if any existing node matches the new node we are
+	// trying to add.
+	for _, node := range b.output {
+		if node.Status != scpb.Status_ABSENT {
+			continue
+		}
+		column, ok := node.Element().(*scpb.Column)
+		if ok &&
+			column.TableID == tableID &&
+			column.Column.Name == string(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkIfNodeExists checks if an existing node is already there,

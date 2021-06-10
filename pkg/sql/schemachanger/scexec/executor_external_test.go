@@ -128,7 +128,7 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil, nil, nil)
+			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil, nil, nil, nil, nil)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
@@ -313,6 +313,8 @@ func TestSchemaChanger(t *testing.T) {
 						nil,
 						nil,
 						nil,
+						nil,
+						nil,
 					)
 					require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
@@ -329,7 +331,7 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil)
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil)
 				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 				after = s.After
 			}
@@ -399,7 +401,7 @@ func TestSchemaChanger(t *testing.T) {
 				})
 				require.NoError(t, err)
 				for _, s := range sc.Stages {
-					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil).
+					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil).
 						ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
 				}
@@ -414,7 +416,7 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil)
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil)
 				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 			}
 			return nil

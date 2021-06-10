@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2580,11 +2581,10 @@ func makeShardColumnDesc(
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
 	if useDatumsToBytes {
-		col.ComputeExpr = makeHashShardComputeExpr(colNames, buckets)
+		col.ComputeExpr = scbuild.MakeHashShardComputeExpr(colNames, buckets)
 	} else {
 		col.ComputeExpr = makeDeprecatedHashShardComputeExpr(colNames, buckets)
 	}
-
 	return col, nil
 }
 
