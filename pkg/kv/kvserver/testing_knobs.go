@@ -339,6 +339,14 @@ type StoreTestingKnobs struct {
 	// is called under the replica lock and raftMu, so basically don't
 	// acquire any locks in this method.
 	OnRaftTimeoutCampaign func(roachpb.RangeID)
+
+	// LeaseRenewalSignalChan populates `Store.renewableLeasesSignal`.
+	LeaseRenewalSignalChan chan struct{}
+	// LeaseRenewalOnPostCycle is invoked after each lease renewal cycle.
+	LeaseRenewalOnPostCycle func()
+	// LeaseRenewalDurationOverride replaces the timer duration for proactively
+	// renewing expiration based leases.
+	LeaseRenewalDurationOverride time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
