@@ -124,7 +124,8 @@ func TestFlowScheduler(t *testing.T) {
 	)
 	defer stopper.Stop(ctx)
 
-	scheduler := NewFlowScheduler(log.AmbientContext{}, stopper, settings, &metrics)
+	scheduler := NewFlowScheduler(log.AmbientContext{}, stopper, settings)
+	scheduler.Init(&metrics)
 	scheduler.Start()
 	getNumRunning := func() int {
 		return int(atomic.LoadInt32(&scheduler.atomics.numRunning))
