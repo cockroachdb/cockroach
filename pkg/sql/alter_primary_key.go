@@ -240,6 +240,7 @@ func (p *planner) AlterPrimaryKey(
 	if err := newPrimaryIndexDesc.FillColumns(alterPKNode.Columns); err != nil {
 		return err
 	}
+	tabledesc.RebuildPrimaryIndexStoreColumns(newPrimaryIndexDesc, tableDesc.DeletableColumns())
 	if err := tableDesc.AddIndexMutation(newPrimaryIndexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}

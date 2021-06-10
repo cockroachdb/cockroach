@@ -334,6 +334,10 @@ INSERT INTO foo VALUES (1), (10), (100);
 					EncodingType: descpb.PrimaryIndexEncoding,
 				}
 				mut.NextIndexID++
+
+				mut.PrimaryIndex.StoreColumnIDs = indexToBackfill.StoreColumnIDs
+				mut.PrimaryIndex.StoreColumnNames = indexToBackfill.StoreColumnNames
+
 				require.NoError(t, mut.AddIndexMutation(
 					&indexToBackfill, descpb.DescriptorMutation_ADD,
 				))

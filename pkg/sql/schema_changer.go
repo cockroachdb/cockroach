@@ -1264,6 +1264,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			didUpdate = true
 			i++
 		}
+
 		if didUpdate = i > 0; !didUpdate {
 			// The table descriptor is unchanged, return without writing anything.
 			return nil

@@ -617,7 +617,10 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 }
 
 func (desc *Mutable) ensurePrimaryKey() error {
-	if len(desc.PrimaryIndex.KeyColumnNames) == 0 && desc.IsPhysicalTable() {
+	if !desc.IsPhysicalTable() {
+		return nil
+	}
+	if len(desc.PrimaryIndex.KeyColumnNames) == 0 {
 		// Ensure a Primary Key exists.
 		nameExists := func(name string) bool {
 			_, err := desc.FindColumnWithName(tree.Name(name))
@@ -664,6 +667,9 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			compositeColIDs.Add(col.ID)
 		}
 	}
+
+	// Rebuild primary index store columns.
+	RebuildPrimaryIndexStoreColumns(&desc.PrimaryIndex, desc.DeletableColumns())
 
 	// Populate IDs.
 	primaryColIDs := desc.GetPrimaryIndex().CollectKeyColumnIDs()
@@ -741,6 +747,23 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		}
 	}
 	return nil
+}
+
+func RebuildPrimaryIndexStoreColumns(
+	primaryIndex *descpb.IndexDescriptor, columns []catalog.Column,
+) {
+	pkCols := make(map[string]struct{}, len(columns))
+	for _, name := range primaryIndex.KeyColumnNames {
+		pkCols[name] = struct{}{}
+	}
+	primaryIndex.StoreColumnNames = primaryIndex.StoreColumnNames[:0]
+	primaryIndex.StoreColumnIDs = primaryIndex.StoreColumnIDs[:0]
+	for _, col := range columns {
+		if _, found := pkCols[col.GetName()]; !found && !col.IsVirtual() {
+			primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, col.GetName())
+			primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, col.GetID())
+		}
+	}
 }
 
 func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.ColumnID) {
@@ -1635,14 +1658,10 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 
 			{
 				primaryIndex := newIndex.IndexDescDeepCopy()
-				if args.NewPrimaryIndexName == "" {
-					primaryIndex.Name = PrimaryKeyIndexName
-				} else {
+				primaryIndex.Name = PrimaryKeyIndexName
+				if args.NewPrimaryIndexName != "" {
 					primaryIndex.Name = args.NewPrimaryIndexName
 				}
-				// The primary index "implicitly" stores all columns in the table.
-				// Explicitly including them in the stored columns list is incorrect.
-				primaryIndex.StoreColumnNames, primaryIndex.StoreColumnIDs = nil, nil
 				desc.SetPrimaryIndex(primaryIndex)
 			}
 

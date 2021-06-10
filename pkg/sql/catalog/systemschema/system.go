@@ -11,6 +11,8 @@
 package systemschema
 
 import (
+	"context"
+	"log"
 	"math"
 	"time"
 
@@ -403,7 +405,15 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 }
 
 func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
-	return tabledesc.NewBuilder(&desc).BuildImmutableTable()
+	mut := tabledesc.NewBuilder(&desc).BuildCreatedMutableTable()
+	if err := mut.AllocateIDs(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+	tbl := tabledesc.NewBuilder(mut.TableDesc()).BuildImmutableTable()
+	if err := catalog.ValidateSelf(tbl); err != nil {
+		log.Fatal(err)
+	}
+	return tbl
 }
 
 // These system config descpb.TableDescriptor literals should match the descriptor

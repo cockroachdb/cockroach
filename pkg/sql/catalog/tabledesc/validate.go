@@ -1052,6 +1052,21 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 					idx.GetName(), colID, foundIn)
 			}
 		}
+		// Check presence of all deletable column IDs in primary index.
+		if idx.Primary() {
+			primaryIDs := idx.CollectKeyColumnIDs()
+			primaryIDs.UnionWith(idx.CollectPrimaryStoredColumnIDs())
+			var missing []string
+			for _, col := range desc.DeletableColumns() {
+				if !col.IsVirtual() && !primaryIDs.Contains(col.GetID()) {
+					missing = append(missing, col.GetName())
+				}
+			}
+			if missing != nil {
+				return errors.AssertionFailedf("index %q is missing columns: %v",
+					idx.GetName(), missing)
+			}
+		}
 	}
 	return nil
 }

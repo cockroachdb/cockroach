@@ -229,6 +229,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnNames:      []string{"b"},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				StoreColumnIDs:      []descpb.ColumnID{1},
+				StoreColumnNames:    []string{"a"},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			[]descpb.IndexDescriptor{

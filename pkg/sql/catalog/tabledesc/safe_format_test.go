@@ -85,7 +85,7 @@ func TestSafeMessage(t *testing.T) {
 				`PrimaryIndex: 1, ` +
 				`NextIndexID: 4, ` +
 				`Indexes: [` +
-				`{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}]}, ` +
+				`{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}], StoreColumns: [2, 3, 5]}, ` +
 				`{ID: 2, Unique: false, KeyColumns: [{ID: 3, Dir: ASC}], KeySuffixColumns: [1]}` +
 				`], ` +
 				`Checks: [` +
@@ -228,6 +228,8 @@ func TestSafeMessage(t *testing.T) {
 				mutable.NextIndexID = 4
 				mutable.Families[0].ColumnNames = append(mutable.Families[0].ColumnNames, "c")
 				mutable.Families[0].ColumnIDs = append(mutable.Families[0].ColumnIDs, 5)
+				mutable.PrimaryIndex.StoreColumnNames = append(mutable.PrimaryIndex.StoreColumnNames, "c")
+				mutable.PrimaryIndex.StoreColumnIDs = append(mutable.PrimaryIndex.StoreColumnIDs, 5)
 				mutable.ModificationTime = hlc.Timestamp{WallTime: 1e9}
 				mutable.ClusterVersion = *mutable.TableDesc()
 				return mutable.ImmutableCopy().(catalog.TableDescriptor)
