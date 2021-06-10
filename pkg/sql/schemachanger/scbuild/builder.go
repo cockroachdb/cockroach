@@ -160,6 +160,8 @@ func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb
 		b.dropDatabase(ctx, n)
 	case *tree.AlterTable:
 		b.alterTable(ctx, n)
+	case *tree.CreateIndex:
+		b.createIndex(ctx, n)
 	default:
 		return nil, &notImplementedError{n: n}
 	}
