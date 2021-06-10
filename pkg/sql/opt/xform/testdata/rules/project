@@ -34,15 +34,15 @@ opt expect=EliminateIndexJoinInsideProject
 SELECT k + 1, i + 1 FROM a WHERE s LIKE 'foo%'
 ----
 project
- ├── columns: "?column?":8!null "?column?":9
+ ├── columns: "?column?":9!null "?column?":10
  ├── immutable
  ├── scan a@i,partial
  │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── k:1 + 1 [as="?column?":8, outer=(1), immutable]
-      └── i:2 + 1 [as="?column?":9, outer=(2), immutable]
+      ├── k:1 + 1 [as="?column?":9, outer=(1), immutable]
+      └── i:2 + 1 [as="?column?":10, outer=(2), immutable]
 
 # Do not eliminate the IndexJoin when the Project passthrough columns are not a
 # subset of the IndexJoin's input columns.
@@ -67,9 +67,9 @@ opt expect-not=EliminateIndexJoinInsideProject
 SELECT k, NOT b FROM a WHERE s LIKE 'foo%'
 ----
 project
- ├── columns: k:1!null "?column?":8
+ ├── columns: k:1!null "?column?":9
  ├── key: (1)
- ├── fd: (1)-->(8)
+ ├── fd: (1)-->(9)
  ├── index-join a
  │    ├── columns: k:1!null s:3!null b:4
  │    ├── key: (1)
@@ -78,7 +78,7 @@ project
  │         ├── columns: k:1!null
  │         └── key: (1)
  └── projections
-      └── NOT b:4 [as="?column?":8, outer=(4)]
+      └── NOT b:4 [as="?column?":9, outer=(4)]
 
 # Eliminate the IndexJoin for an inverted index scan when only the primary key
 # column(s) are needed as passthrough columns.
@@ -91,7 +91,7 @@ project
  ├── key: (1)
  └── scan a@j
       ├── columns: k:1!null
-      ├── inverted constraint: /7/1
+      ├── inverted constraint: /8/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
@@ -101,15 +101,15 @@ opt expect=EliminateIndexJoinInsideProject
 SELECT k + 1 FROM a WHERE j @> '{"a": "b"}'
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── immutable
  ├── scan a@j
  │    ├── columns: k:1!null
- │    ├── inverted constraint: /7/1
+ │    ├── inverted constraint: /8/1
  │    │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
  │    └── key: (1)
  └── projections
-      └── k:1 + 1 [as="?column?":8, outer=(1), immutable]
+      └── k:1 + 1 [as="?column?":9, outer=(1), immutable]
 
 # Do not eliminate the IndexJoin when the indexed column is needed. An inverted
 # index scan cannot recreate the JSON column, so it must fetched from the
@@ -122,6 +122,6 @@ index-join a
  ├── immutable
  └── scan a@j
       ├── columns: k:1!null
-      ├── inverted constraint: /7/1
+      ├── inverted constraint: /8/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)

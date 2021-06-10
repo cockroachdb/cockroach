@@ -22,10 +22,10 @@ offset
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-4,+3,+1)
  │    └── scan xyzs
- │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
- │         ├── prune: (1-5)
+ │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │         ├── prune: (1-6)
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 1 [type=int]
 
@@ -45,30 +45,30 @@ offset
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-4,+3,+1)
  │    └── scan xyzs
- │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
- │         ├── prune: (1-5)
+ │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │         ├── prune: (1-6)
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── subquery [type=int]
       └── max1-row
-           ├── columns: "?column?":6(int!null)
+           ├── columns: "?column?":7(int!null)
            ├── error: "more than one row returned by a subquery used as an expression"
            ├── cardinality: [1 - 1]
            ├── key: ()
-           ├── fd: ()-->(6)
+           ├── fd: ()-->(7)
            └── project
-                ├── columns: "?column?":6(int!null)
+                ├── columns: "?column?":7(int!null)
                 ├── cardinality: [1 - 1]
                 ├── key: ()
-                ├── fd: ()-->(6)
-                ├── prune: (6)
+                ├── fd: ()-->(7)
+                ├── prune: (7)
                 ├── values
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
                 │    └── tuple [type=tuple]
                 └── projections
-                     └── const: 1 [as="?column?":6, type=int]
+                     └── const: 1 [as="?column?":7, type=int]
 
 build
 SELECT * FROM xyzs OFFSET 0
@@ -86,10 +86,10 @@ offset
  │    ├── prune: (1-4)
  │    ├── interesting orderings: (+1) (-4,+3,+1)
  │    └── scan xyzs
- │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
- │         ├── prune: (1-5)
+ │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │         ├── prune: (1-6)
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 0 [type=int]
 
@@ -98,41 +98,41 @@ build
 SELECT (SELECT x FROM kuv OFFSET y) FROM xyzs
 ----
 project
- ├── columns: x:11(int)
- ├── prune: (11)
+ ├── columns: x:13(int)
+ ├── prune: (13)
  ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal)
+ │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal) xyzs.tableoid:6(oid)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
- │    ├── prune: (1-5)
+ │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    ├── prune: (1-6)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── projections
-      └── subquery [as=x:11, type=int, outer=(1,2), correlated-subquery]
+      └── subquery [as=x:13, type=int, outer=(1,2), correlated-subquery]
            └── max1-row
-                ├── columns: x:10(int)
+                ├── columns: x:12(int)
                 ├── error: "more than one row returned by a subquery used as an expression"
                 ├── outer: (1,2)
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(10)
+                ├── fd: ()-->(12)
                 └── offset
-                     ├── columns: x:10(int)
+                     ├── columns: x:12(int)
                      ├── outer: (1,2)
-                     ├── fd: ()-->(10)
-                     ├── prune: (10)
+                     ├── fd: ()-->(12)
+                     ├── prune: (12)
                      ├── project
-                     │    ├── columns: x:10(int)
+                     │    ├── columns: x:12(int)
                      │    ├── outer: (1)
-                     │    ├── fd: ()-->(10)
-                     │    ├── prune: (10)
+                     │    ├── fd: ()-->(12)
+                     │    ├── prune: (12)
                      │    ├── scan kuv
-                     │    │    ├── columns: k:6(int!null) u:7(float) v:8(string) kuv.crdb_internal_mvcc_timestamp:9(decimal)
-                     │    │    ├── key: (6)
-                     │    │    ├── fd: (6)-->(7-9)
-                     │    │    ├── prune: (6-9)
-                     │    │    └── interesting orderings: (+6)
+                     │    │    ├── columns: k:7(int!null) u:8(float) v:9(string) kuv.crdb_internal_mvcc_timestamp:10(decimal) kuv.tableoid:11(oid)
+                     │    │    ├── key: (7)
+                     │    │    ├── fd: (7)-->(8-11)
+                     │    │    ├── prune: (7-11)
+                     │    │    └── interesting orderings: (+7)
                      │    └── projections
-                     │         └── variable: xyzs.x:1 [as=x:10, type=int, outer=(1)]
+                     │         └── variable: xyzs.x:1 [as=x:12, type=int, outer=(1)]
                      └── variable: y:2 [type=int]
 
 # Reduce cardinality of input set.
@@ -142,17 +142,17 @@ FROM ((SELECT x FROM xyzs LIMIT 10) UNION ALL (SELECT * FROM (VALUES (1), (2), (
 OFFSET 2
 ----
 offset
- ├── columns: x:7(int!null)
+ ├── columns: x:8(int!null)
  ├── cardinality: [1 - 11]
- ├── prune: (7)
- ├── interesting orderings: (+7)
+ ├── prune: (8)
+ ├── interesting orderings: (+8)
  ├── union-all
- │    ├── columns: x:7(int!null)
+ │    ├── columns: x:8(int!null)
  │    ├── left columns: xyzs.x:1(int)
- │    ├── right columns: column1:6(int)
+ │    ├── right columns: column1:7(int)
  │    ├── cardinality: [3 - 13]
- │    ├── prune: (7)
- │    ├── interesting orderings: (+7)
+ │    ├── prune: (8)
+ │    ├── interesting orderings: (+8)
  │    ├── limit
  │    │    ├── columns: xyzs.x:1(int!null)
  │    │    ├── cardinality: [0 - 10]
@@ -166,17 +166,17 @@ offset
  │    │    │    ├── prune: (1)
  │    │    │    ├── interesting orderings: (+1)
  │    │    │    └── scan xyzs
- │    │    │         ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+ │    │    │         ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
  │    │    │         ├── key: (1)
- │    │    │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+ │    │    │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    │    │         ├── limit hint: 10.00
- │    │    │         ├── prune: (1-5)
+ │    │    │         ├── prune: (1-6)
  │    │    │         └── interesting orderings: (+1) (-4,+3,+1)
  │    │    └── const: 10 [type=int]
  │    └── values
- │         ├── columns: column1:6(int!null)
+ │         ├── columns: column1:7(int!null)
  │         ├── cardinality: [3 - 3]
- │         ├── prune: (6)
+ │         ├── prune: (7)
  │         ├── tuple [type=tuple{int}]
  │         │    └── const: 1 [type=int]
  │         ├── tuple [type=tuple{int}]

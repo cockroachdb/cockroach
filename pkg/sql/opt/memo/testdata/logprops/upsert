@@ -34,177 +34,177 @@ project
  └── upsert abc
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
       ├── arbiter indexes: secondary
-      ├── canary column: rowid:15(int)
-      ├── fetch columns: a:12(int) b:13(int) c:14(int) rowid:15(int)
+      ├── canary column: rowid:17(int)
+      ├── fetch columns: a:14(int) b:15(int) c:16(int) rowid:17(int)
       ├── insert-mapping:
-      │    ├── x:6 => a:1
-      │    ├── y:7 => b:2
-      │    ├── c_comp:11 => c:3
-      │    └── rowid_default:10 => rowid:4
+      │    ├── x:7 => a:1
+      │    ├── y:8 => b:2
+      │    ├── c_comp:13 => c:3
+      │    └── rowid_default:12 => rowid:4
       ├── update-mapping:
-      │    ├── upsert_a:20 => a:1
-      │    ├── upsert_b:21 => b:2
-      │    └── upsert_c:22 => c:3
+      │    ├── upsert_a:23 => a:1
+      │    ├── upsert_b:24 => b:2
+      │    └── upsert_c:25 => c:3
       ├── return-mapping:
-      │    ├── upsert_a:20 => a:1
-      │    ├── upsert_b:21 => b:2
-      │    ├── upsert_c:22 => c:3
-      │    └── upsert_rowid:23 => rowid:4
+      │    ├── upsert_a:23 => a:1
+      │    ├── upsert_b:24 => b:2
+      │    ├── upsert_c:25 => c:3
+      │    └── upsert_rowid:26 => rowid:4
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       └── project
-           ├── columns: upsert_a:20(int!null) upsert_b:21(int) upsert_c:22(int) upsert_rowid:23(int) x:6(int!null) y:7(int!null) rowid_default:10(int) c_comp:11(int!null) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal) a_new:17(int!null) b_new:18(int) c_comp:19(int)
+           ├── columns: upsert_a:23(int!null) upsert_b:24(int) upsert_c:25(int) upsert_rowid:26(int) x:7(int!null) y:8(int!null) rowid_default:12(int) c_comp:13(int!null) a:14(int) b:15(int) c:16(int) rowid:17(int) abc.crdb_internal_mvcc_timestamp:18(decimal) abc.tableoid:19(oid) a_new:20(int!null) b_new:21(int) c_comp:22(int)
            ├── cardinality: [0 - 1]
            ├── volatile
-           ├── key: (15)
-           ├── fd: ()-->(6,7,10,11,17), (15)-->(12-14,16,20-23), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14), (14)-->(18), (18)-->(19)
-           ├── prune: (6,7,10-23)
-           ├── reject-nulls: (12-16,18,19)
-           ├── interesting orderings: (+15 opt(6,7,10,11,17)) (+12 opt(6,7,10,11,17)) (+13,+15 opt(6,7,10,11,17))
+           ├── key: (17)
+           ├── fd: ()-->(7,8,12,13,20), (17)-->(14-16,18,19,23-26), (14)-->(15-19), (15,16)~~>(14,17-19), (15)~~>(16), (16)-->(21), (21)-->(22)
+           ├── prune: (7,8,12-26)
+           ├── reject-nulls: (14-19,21,22)
+           ├── interesting orderings: (+17 opt(7,8,12,13,20)) (+14 opt(7,8,12,13,20)) (+15,+17 opt(7,8,12,13,20))
            ├── project
-           │    ├── columns: c_comp:19(int) x:6(int!null) y:7(int!null) rowid_default:10(int) c_comp:11(int!null) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal) a_new:17(int!null) b_new:18(int)
+           │    ├── columns: c_comp:22(int) x:7(int!null) y:8(int!null) rowid_default:12(int) c_comp:13(int!null) a:14(int) b:15(int) c:16(int) rowid:17(int) abc.crdb_internal_mvcc_timestamp:18(decimal) abc.tableoid:19(oid) a_new:20(int!null) b_new:21(int)
            │    ├── cardinality: [0 - 1]
            │    ├── volatile
-           │    ├── key: (15)
-           │    ├── fd: ()-->(6,7,10,11,17), (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14), (14)-->(18), (18)-->(19)
-           │    ├── prune: (6,7,10-19)
-           │    ├── reject-nulls: (12-16,18,19)
-           │    ├── interesting orderings: (+15 opt(6,7,10,11,17)) (+12 opt(6,7,10,11,17)) (+13,+15 opt(6,7,10,11,17))
+           │    ├── key: (17)
+           │    ├── fd: ()-->(7,8,12,13,20), (17)-->(14-16,18,19), (14)-->(15-19), (15,16)~~>(14,17-19), (15)~~>(16), (16)-->(21), (21)-->(22)
+           │    ├── prune: (7,8,12-22)
+           │    ├── reject-nulls: (14-19,21,22)
+           │    ├── interesting orderings: (+17 opt(7,8,12,13,20)) (+14 opt(7,8,12,13,20)) (+15,+17 opt(7,8,12,13,20))
            │    ├── project
-           │    │    ├── columns: a_new:17(int!null) b_new:18(int) x:6(int!null) y:7(int!null) rowid_default:10(int) c_comp:11(int!null) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal)
+           │    │    ├── columns: a_new:20(int!null) b_new:21(int) x:7(int!null) y:8(int!null) rowid_default:12(int) c_comp:13(int!null) a:14(int) b:15(int) c:16(int) rowid:17(int) abc.crdb_internal_mvcc_timestamp:18(decimal) abc.tableoid:19(oid)
            │    │    ├── cardinality: [0 - 1]
            │    │    ├── volatile
-           │    │    ├── key: (15)
-           │    │    ├── fd: ()-->(6,7,10,11,17), (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14), (14)-->(18)
-           │    │    ├── prune: (6,7,10-18)
-           │    │    ├── reject-nulls: (12-16,18)
-           │    │    ├── interesting orderings: (+15 opt(6,7,10,11,17)) (+12 opt(6,7,10,11,17)) (+13,+15 opt(6,7,10,11,17))
+           │    │    ├── key: (17)
+           │    │    ├── fd: ()-->(7,8,12,13,20), (17)-->(14-16,18,19), (14)-->(15-19), (15,16)~~>(14,17-19), (15)~~>(16), (16)-->(21)
+           │    │    ├── prune: (7,8,12-21)
+           │    │    ├── reject-nulls: (14-19,21)
+           │    │    ├── interesting orderings: (+17 opt(7,8,12,13,20)) (+14 opt(7,8,12,13,20)) (+15,+17 opt(7,8,12,13,20))
            │    │    ├── left-join (hash)
-           │    │    │    ├── columns: x:6(int!null) y:7(int!null) rowid_default:10(int) c_comp:11(int!null) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal)
+           │    │    │    ├── columns: x:7(int!null) y:8(int!null) rowid_default:12(int) c_comp:13(int!null) a:14(int) b:15(int) c:16(int) rowid:17(int) abc.crdb_internal_mvcc_timestamp:18(decimal) abc.tableoid:19(oid)
            │    │    │    ├── cardinality: [0 - 1]
            │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
            │    │    │    ├── volatile
-           │    │    │    ├── key: (15)
-           │    │    │    ├── fd: ()-->(6,7,10,11), (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14)
-           │    │    │    ├── prune: (12,15,16)
-           │    │    │    ├── reject-nulls: (12-16)
-           │    │    │    ├── interesting orderings: (+15) (+12) (+13,+15)
+           │    │    │    ├── key: (17)
+           │    │    │    ├── fd: ()-->(7,8,12,13), (17)-->(14-16,18,19), (14)-->(15-19), (15,16)~~>(14,17-19), (15)~~>(16)
+           │    │    │    ├── prune: (14,17-19)
+           │    │    │    ├── reject-nulls: (14-19)
+           │    │    │    ├── interesting orderings: (+17) (+14) (+15,+17)
            │    │    │    ├── ensure-upsert-distinct-on
-           │    │    │    │    ├── columns: x:6(int!null) y:7(int!null) rowid_default:10(int) c_comp:11(int!null)
-           │    │    │    │    ├── grouping columns: y:7(int!null) c_comp:11(int!null)
+           │    │    │    │    ├── columns: x:7(int!null) y:8(int!null) rowid_default:12(int) c_comp:13(int!null)
+           │    │    │    │    ├── grouping columns: y:8(int!null) c_comp:13(int!null)
            │    │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
            │    │    │    │    ├── cardinality: [0 - 1]
            │    │    │    │    ├── volatile
            │    │    │    │    ├── key: ()
-           │    │    │    │    ├── fd: ()-->(6,7,10,11)
+           │    │    │    │    ├── fd: ()-->(7,8,12,13)
            │    │    │    │    ├── project
-           │    │    │    │    │    ├── columns: c_comp:11(int!null) x:6(int!null) y:7(int!null) rowid_default:10(int)
+           │    │    │    │    │    ├── columns: c_comp:13(int!null) x:7(int!null) y:8(int!null) rowid_default:12(int)
            │    │    │    │    │    ├── volatile
-           │    │    │    │    │    ├── key: (6)
-           │    │    │    │    │    ├── fd: ()-->(7,11), (6)-->(10)
-           │    │    │    │    │    ├── prune: (6,7,10,11)
-           │    │    │    │    │    ├── interesting orderings: (+6 opt(7,11))
+           │    │    │    │    │    ├── key: (7)
+           │    │    │    │    │    ├── fd: ()-->(8,13), (7)-->(12)
+           │    │    │    │    │    ├── prune: (7,8,12,13)
+           │    │    │    │    │    ├── interesting orderings: (+7 opt(8,13))
            │    │    │    │    │    ├── project
-           │    │    │    │    │    │    ├── columns: rowid_default:10(int) x:6(int!null) y:7(int!null)
+           │    │    │    │    │    │    ├── columns: rowid_default:12(int) x:7(int!null) y:8(int!null)
            │    │    │    │    │    │    ├── volatile
-           │    │    │    │    │    │    ├── key: (6)
-           │    │    │    │    │    │    ├── fd: ()-->(7), (6)-->(10)
-           │    │    │    │    │    │    ├── prune: (6,7,10)
-           │    │    │    │    │    │    ├── interesting orderings: (+6 opt(7))
+           │    │    │    │    │    │    ├── key: (7)
+           │    │    │    │    │    │    ├── fd: ()-->(8), (7)-->(12)
+           │    │    │    │    │    │    ├── prune: (7,8,12)
+           │    │    │    │    │    │    ├── interesting orderings: (+7 opt(8))
            │    │    │    │    │    │    ├── project
-           │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int!null)
-           │    │    │    │    │    │    │    ├── key: (6)
-           │    │    │    │    │    │    │    ├── fd: ()-->(7)
-           │    │    │    │    │    │    │    ├── prune: (6,7)
-           │    │    │    │    │    │    │    ├── interesting orderings: (+6 opt(7))
+           │    │    │    │    │    │    │    ├── columns: x:7(int!null) y:8(int!null)
+           │    │    │    │    │    │    │    ├── key: (7)
+           │    │    │    │    │    │    │    ├── fd: ()-->(8)
+           │    │    │    │    │    │    │    ├── prune: (7,8)
+           │    │    │    │    │    │    │    ├── interesting orderings: (+7 opt(8))
            │    │    │    │    │    │    │    └── select
-           │    │    │    │    │    │    │         ├── columns: x:6(int!null) y:7(int!null) z:8(int) xyz.crdb_internal_mvcc_timestamp:9(decimal)
-           │    │    │    │    │    │    │         ├── key: (6)
-           │    │    │    │    │    │    │         ├── fd: ()-->(7), (6)-->(8,9), (7,8)~~>(6,9)
-           │    │    │    │    │    │    │         ├── prune: (6,8,9)
-           │    │    │    │    │    │    │         ├── interesting orderings: (+6 opt(7)) (+8,+6 opt(7))
+           │    │    │    │    │    │    │         ├── columns: x:7(int!null) y:8(int!null) z:9(int) xyz.crdb_internal_mvcc_timestamp:10(decimal) xyz.tableoid:11(oid)
+           │    │    │    │    │    │    │         ├── key: (7)
+           │    │    │    │    │    │    │         ├── fd: ()-->(8), (7)-->(9-11), (8,9)~~>(7,10,11)
+           │    │    │    │    │    │    │         ├── prune: (7,9-11)
+           │    │    │    │    │    │    │         ├── interesting orderings: (+7 opt(8)) (+9,+7 opt(8))
            │    │    │    │    │    │    │         ├── scan xyz
-           │    │    │    │    │    │    │         │    ├── columns: x:6(int!null) y:7(int) z:8(int) xyz.crdb_internal_mvcc_timestamp:9(decimal)
-           │    │    │    │    │    │    │         │    ├── key: (6)
-           │    │    │    │    │    │    │         │    ├── fd: (6)-->(7-9), (7,8)~~>(6,9)
-           │    │    │    │    │    │    │         │    ├── prune: (6-9)
-           │    │    │    │    │    │    │         │    └── interesting orderings: (+6) (+7,+8,+6) (+8,+7,+6)
+           │    │    │    │    │    │    │         │    ├── columns: x:7(int!null) y:8(int) z:9(int) xyz.crdb_internal_mvcc_timestamp:10(decimal) xyz.tableoid:11(oid)
+           │    │    │    │    │    │    │         │    ├── key: (7)
+           │    │    │    │    │    │    │         │    ├── fd: (7)-->(8-11), (8,9)~~>(7,10,11)
+           │    │    │    │    │    │    │         │    ├── prune: (7-11)
+           │    │    │    │    │    │    │         │    └── interesting orderings: (+7) (+8,+9,+7) (+9,+8,+7)
            │    │    │    │    │    │    │         └── filters
-           │    │    │    │    │    │    │              └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           │    │    │    │    │    │    │                   ├── variable: y:7 [type=int]
+           │    │    │    │    │    │    │              └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+           │    │    │    │    │    │    │                   ├── variable: y:8 [type=int]
            │    │    │    │    │    │    │                   └── const: 1 [type=int]
            │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:10, type=int, volatile]
+           │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:12, type=int, volatile]
            │    │    │    │    │    └── projections
-           │    │    │    │    │         └── plus [as=c_comp:11, type=int, outer=(7), immutable]
-           │    │    │    │    │              ├── variable: y:7 [type=int]
+           │    │    │    │    │         └── plus [as=c_comp:13, type=int, outer=(8), immutable]
+           │    │    │    │    │              ├── variable: y:8 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
            │    │    │    │    └── aggregations
-           │    │    │    │         ├── first-agg [as=x:6, type=int, outer=(6)]
-           │    │    │    │         │    └── variable: x:6 [type=int]
-           │    │    │    │         └── first-agg [as=rowid_default:10, type=int, outer=(10)]
-           │    │    │    │              └── variable: rowid_default:10 [type=int]
+           │    │    │    │         ├── first-agg [as=x:7, type=int, outer=(7)]
+           │    │    │    │         │    └── variable: x:7 [type=int]
+           │    │    │    │         └── first-agg [as=rowid_default:12, type=int, outer=(12)]
+           │    │    │    │              └── variable: rowid_default:12 [type=int]
            │    │    │    ├── scan abc
-           │    │    │    │    ├── columns: a:12(int!null) b:13(int) c:14(int) rowid:15(int!null) abc.crdb_internal_mvcc_timestamp:16(decimal)
+           │    │    │    │    ├── columns: a:14(int!null) b:15(int) c:16(int) rowid:17(int!null) abc.crdb_internal_mvcc_timestamp:18(decimal) abc.tableoid:19(oid)
            │    │    │    │    ├── computed column expressions
-           │    │    │    │    │    └── c:14
+           │    │    │    │    │    └── c:16
            │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── variable: b:13 [type=int]
+           │    │    │    │    │              ├── variable: b:15 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
-           │    │    │    │    ├── key: (15)
-           │    │    │    │    ├── fd: (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)-->(14)
-           │    │    │    │    ├── prune: (12-16)
-           │    │    │    │    ├── interesting orderings: (+15) (+12) (+13,+15)
-           │    │    │    │    └── unfiltered-cols: (12-16)
+           │    │    │    │    ├── key: (17)
+           │    │    │    │    ├── fd: (17)-->(14-16,18,19), (14)-->(15-19), (15,16)~~>(14,17-19), (15)-->(16)
+           │    │    │    │    ├── prune: (14-19)
+           │    │    │    │    ├── interesting orderings: (+17) (+14) (+15,+17)
+           │    │    │    │    └── unfiltered-cols: (14-19)
            │    │    │    └── filters
-           │    │    │         ├── eq [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
-           │    │    │         │    ├── variable: y:7 [type=int]
-           │    │    │         │    └── variable: b:13 [type=int]
-           │    │    │         └── eq [type=bool, outer=(11,14), constraints=(/11: (/NULL - ]; /14: (/NULL - ]), fd=(11)==(14), (14)==(11)]
-           │    │    │              ├── variable: c_comp:11 [type=int]
-           │    │    │              └── variable: c:14 [type=int]
+           │    │    │         ├── eq [type=bool, outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
+           │    │    │         │    ├── variable: y:8 [type=int]
+           │    │    │         │    └── variable: b:15 [type=int]
+           │    │    │         └── eq [type=bool, outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
+           │    │    │              ├── variable: c_comp:13 [type=int]
+           │    │    │              └── variable: c:16 [type=int]
            │    │    └── projections
-           │    │         ├── const: 1 [as=a_new:17, type=int]
-           │    │         └── plus [as=b_new:18, type=int, outer=(7,14), immutable]
-           │    │              ├── variable: y:7 [type=int]
-           │    │              └── variable: c:14 [type=int]
+           │    │         ├── const: 1 [as=a_new:20, type=int]
+           │    │         └── plus [as=b_new:21, type=int, outer=(8,16), immutable]
+           │    │              ├── variable: y:8 [type=int]
+           │    │              └── variable: c:16 [type=int]
            │    └── projections
-           │         └── plus [as=c_comp:19, type=int, outer=(18), immutable]
-           │              ├── variable: b_new:18 [type=int]
+           │         └── plus [as=c_comp:22, type=int, outer=(21), immutable]
+           │              ├── variable: b_new:21 [type=int]
            │              └── const: 1 [type=int]
            └── projections
-                ├── case [as=upsert_a:20, type=int, outer=(6,15,17)]
+                ├── case [as=upsert_a:23, type=int, outer=(7,17,20)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid:15 [type=int]
+                │    │    │    ├── variable: rowid:17 [type=int]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: x:6 [type=int]
-                │    └── variable: a_new:17 [type=int]
-                ├── case [as=upsert_b:21, type=int, outer=(7,15,18)]
+                │    │    └── variable: x:7 [type=int]
+                │    └── variable: a_new:20 [type=int]
+                ├── case [as=upsert_b:24, type=int, outer=(8,17,21)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid:15 [type=int]
+                │    │    │    ├── variable: rowid:17 [type=int]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: y:7 [type=int]
-                │    └── variable: b_new:18 [type=int]
-                ├── case [as=upsert_c:22, type=int, outer=(11,15,19)]
+                │    │    └── variable: y:8 [type=int]
+                │    └── variable: b_new:21 [type=int]
+                ├── case [as=upsert_c:25, type=int, outer=(13,17,22)]
                 │    ├── true [type=bool]
                 │    ├── when [type=int]
                 │    │    ├── is [type=bool]
-                │    │    │    ├── variable: rowid:15 [type=int]
+                │    │    │    ├── variable: rowid:17 [type=int]
                 │    │    │    └── null [type=unknown]
-                │    │    └── variable: c_comp:11 [type=int]
-                │    └── variable: c_comp:19 [type=int]
-                └── case [as=upsert_rowid:23, type=int, outer=(10,15)]
+                │    │    └── variable: c_comp:13 [type=int]
+                │    └── variable: c_comp:22 [type=int]
+                └── case [as=upsert_rowid:26, type=int, outer=(12,17)]
                      ├── true [type=bool]
                      ├── when [type=int]
                      │    ├── is [type=bool]
-                     │    │    ├── variable: rowid:15 [type=int]
+                     │    │    ├── variable: rowid:17 [type=int]
                      │    │    └── null [type=unknown]
-                     │    └── variable: rowid_default:10 [type=int]
-                     └── variable: rowid:15 [type=int]
+                     │    └── variable: rowid_default:12 [type=int]
+                     └── variable: rowid:17 [type=int]
 
 # DO NOTHING case.
 build
@@ -223,303 +223,303 @@ project
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
       ├── arbiter indexes: primary secondary secondary
       ├── insert-mapping:
-      │    ├── x:6 => a:1
-      │    ├── y:7 => b:2
-      │    ├── c_comp:11 => c:3
-      │    └── rowid_default:10 => rowid:4
+      │    ├── x:7 => a:1
+      │    ├── y:8 => b:2
+      │    ├── c_comp:13 => c:3
+      │    └── rowid_default:12 => rowid:4
       ├── volatile, mutations
       ├── key: (1)
       ├── fd: (1)-->(2-4), (2)-->(3), (4)~~>(1-3), (2,3)~~>(1,4)
       └── upsert-distinct-on
-           ├── columns: x:6(int!null) y:7(int) rowid_default:10(int) c_comp:11(int)
-           ├── grouping columns: y:7(int) c_comp:11(int)
+           ├── columns: x:7(int!null) y:8(int) rowid_default:12(int) c_comp:13(int)
+           ├── grouping columns: y:8(int) c_comp:13(int)
            ├── volatile
-           ├── key: (6)
-           ├── fd: (6)-->(7,10,11), (7)-->(11), (10)~~>(6,7,11), (7,11)~~>(6,10)
+           ├── key: (7)
+           ├── fd: (7)-->(8,12,13), (8)-->(13), (12)~~>(7,8,13), (8,13)~~>(7,12)
            ├── upsert-distinct-on
-           │    ├── columns: x:6(int!null) y:7(int) rowid_default:10(int) c_comp:11(int)
-           │    ├── grouping columns: x:6(int!null)
+           │    ├── columns: x:7(int!null) y:8(int) rowid_default:12(int) c_comp:13(int)
+           │    ├── grouping columns: x:7(int!null)
            │    ├── volatile
-           │    ├── key: (6)
-           │    ├── fd: (6)-->(7,10,11), (7)-->(11), (10)~~>(6,7,11)
+           │    ├── key: (7)
+           │    ├── fd: (7)-->(8,12,13), (8)-->(13), (12)~~>(7,8,13)
            │    ├── upsert-distinct-on
-           │    │    ├── columns: x:6(int!null) y:7(int) rowid_default:10(int) c_comp:11(int)
-           │    │    ├── grouping columns: rowid_default:10(int)
+           │    │    ├── columns: x:7(int!null) y:8(int) rowid_default:12(int) c_comp:13(int)
+           │    │    ├── grouping columns: rowid_default:12(int)
            │    │    ├── volatile
-           │    │    ├── key: (6)
-           │    │    ├── fd: (6)-->(7,10), (7)-->(11), (10)~~>(6,7,11)
+           │    │    ├── key: (7)
+           │    │    ├── fd: (7)-->(8,12), (8)-->(13), (12)~~>(7,8,13)
            │    │    ├── anti-join (hash)
-           │    │    │    ├── columns: x:6(int!null) y:7(int) rowid_default:10(int) c_comp:11(int)
+           │    │    │    ├── columns: x:7(int!null) y:8(int) rowid_default:12(int) c_comp:13(int)
            │    │    │    ├── volatile
-           │    │    │    ├── key: (6)
-           │    │    │    ├── fd: (6)-->(7,10), (7)-->(11)
-           │    │    │    ├── interesting orderings: (+6) (+7)
+           │    │    │    ├── key: (7)
+           │    │    │    ├── fd: (7)-->(8,12), (8)-->(13)
+           │    │    │    ├── interesting orderings: (+7) (+8)
            │    │    │    ├── anti-join (hash)
-           │    │    │    │    ├── columns: x:6(int!null) y:7(int) rowid_default:10(int) c_comp:11(int)
+           │    │    │    │    ├── columns: x:7(int!null) y:8(int) rowid_default:12(int) c_comp:13(int)
            │    │    │    │    ├── volatile
-           │    │    │    │    ├── key: (6)
-           │    │    │    │    ├── fd: (6)-->(7,10), (7)-->(11)
-           │    │    │    │    ├── prune: (7,11)
-           │    │    │    │    ├── interesting orderings: (+6) (+7)
+           │    │    │    │    ├── key: (7)
+           │    │    │    │    ├── fd: (7)-->(8,12), (8)-->(13)
+           │    │    │    │    ├── prune: (8,13)
+           │    │    │    │    ├── interesting orderings: (+7) (+8)
            │    │    │    │    ├── anti-join (hash)
-           │    │    │    │    │    ├── columns: x:6(int!null) y:7(int) rowid_default:10(int) c_comp:11(int)
+           │    │    │    │    │    ├── columns: x:7(int!null) y:8(int) rowid_default:12(int) c_comp:13(int)
            │    │    │    │    │    ├── volatile
-           │    │    │    │    │    ├── key: (6)
-           │    │    │    │    │    ├── fd: (6)-->(7,10), (7)-->(11)
-           │    │    │    │    │    ├── prune: (6,7,11)
-           │    │    │    │    │    ├── interesting orderings: (+6) (+7)
+           │    │    │    │    │    ├── key: (7)
+           │    │    │    │    │    ├── fd: (7)-->(8,12), (8)-->(13)
+           │    │    │    │    │    ├── prune: (7,8,13)
+           │    │    │    │    │    ├── interesting orderings: (+7) (+8)
            │    │    │    │    │    ├── project
-           │    │    │    │    │    │    ├── columns: c_comp:11(int) x:6(int!null) y:7(int) rowid_default:10(int)
+           │    │    │    │    │    │    ├── columns: c_comp:13(int) x:7(int!null) y:8(int) rowid_default:12(int)
            │    │    │    │    │    │    ├── volatile
-           │    │    │    │    │    │    ├── key: (6)
-           │    │    │    │    │    │    ├── fd: (6)-->(7,10), (7)-->(11)
-           │    │    │    │    │    │    ├── prune: (6,7,10,11)
-           │    │    │    │    │    │    ├── interesting orderings: (+6) (+7)
-           │    │    │    │    │    │    ├── unfiltered-cols: (6-9)
+           │    │    │    │    │    │    ├── key: (7)
+           │    │    │    │    │    │    ├── fd: (7)-->(8,12), (8)-->(13)
+           │    │    │    │    │    │    ├── prune: (7,8,12,13)
+           │    │    │    │    │    │    ├── interesting orderings: (+7) (+8)
+           │    │    │    │    │    │    ├── unfiltered-cols: (7-11)
            │    │    │    │    │    │    ├── project
-           │    │    │    │    │    │    │    ├── columns: rowid_default:10(int) x:6(int!null) y:7(int)
+           │    │    │    │    │    │    │    ├── columns: rowid_default:12(int) x:7(int!null) y:8(int)
            │    │    │    │    │    │    │    ├── volatile
-           │    │    │    │    │    │    │    ├── key: (6)
-           │    │    │    │    │    │    │    ├── fd: (6)-->(7,10)
-           │    │    │    │    │    │    │    ├── prune: (6,7,10)
-           │    │    │    │    │    │    │    ├── interesting orderings: (+6) (+7)
-           │    │    │    │    │    │    │    ├── unfiltered-cols: (6-9)
+           │    │    │    │    │    │    │    ├── key: (7)
+           │    │    │    │    │    │    │    ├── fd: (7)-->(8,12)
+           │    │    │    │    │    │    │    ├── prune: (7,8,12)
+           │    │    │    │    │    │    │    ├── interesting orderings: (+7) (+8)
+           │    │    │    │    │    │    │    ├── unfiltered-cols: (7-11)
            │    │    │    │    │    │    │    ├── project
-           │    │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
-           │    │    │    │    │    │    │    │    ├── key: (6)
-           │    │    │    │    │    │    │    │    ├── fd: (6)-->(7)
-           │    │    │    │    │    │    │    │    ├── prune: (6,7)
-           │    │    │    │    │    │    │    │    ├── interesting orderings: (+6) (+7)
-           │    │    │    │    │    │    │    │    ├── unfiltered-cols: (6-9)
+           │    │    │    │    │    │    │    │    ├── columns: x:7(int!null) y:8(int)
+           │    │    │    │    │    │    │    │    ├── key: (7)
+           │    │    │    │    │    │    │    │    ├── fd: (7)-->(8)
+           │    │    │    │    │    │    │    │    ├── prune: (7,8)
+           │    │    │    │    │    │    │    │    ├── interesting orderings: (+7) (+8)
+           │    │    │    │    │    │    │    │    ├── unfiltered-cols: (7-11)
            │    │    │    │    │    │    │    │    └── scan xyz
-           │    │    │    │    │    │    │    │         ├── columns: x:6(int!null) y:7(int) z:8(int) xyz.crdb_internal_mvcc_timestamp:9(decimal)
-           │    │    │    │    │    │    │    │         ├── key: (6)
-           │    │    │    │    │    │    │    │         ├── fd: (6)-->(7-9), (7,8)~~>(6,9)
-           │    │    │    │    │    │    │    │         ├── prune: (6-9)
-           │    │    │    │    │    │    │    │         ├── interesting orderings: (+6) (+7,+8,+6) (+8,+7,+6)
-           │    │    │    │    │    │    │    │         └── unfiltered-cols: (6-9)
+           │    │    │    │    │    │    │    │         ├── columns: x:7(int!null) y:8(int) z:9(int) xyz.crdb_internal_mvcc_timestamp:10(decimal) xyz.tableoid:11(oid)
+           │    │    │    │    │    │    │    │         ├── key: (7)
+           │    │    │    │    │    │    │    │         ├── fd: (7)-->(8-11), (8,9)~~>(7,10,11)
+           │    │    │    │    │    │    │    │         ├── prune: (7-11)
+           │    │    │    │    │    │    │    │         ├── interesting orderings: (+7) (+8,+9,+7) (+9,+8,+7)
+           │    │    │    │    │    │    │    │         └── unfiltered-cols: (7-11)
            │    │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:10, type=int, volatile]
+           │    │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:12, type=int, volatile]
            │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │         └── plus [as=c_comp:11, type=int, outer=(7), immutable]
-           │    │    │    │    │    │              ├── variable: y:7 [type=int]
+           │    │    │    │    │    │         └── plus [as=c_comp:13, type=int, outer=(8), immutable]
+           │    │    │    │    │    │              ├── variable: y:8 [type=int]
            │    │    │    │    │    │              └── const: 1 [type=int]
            │    │    │    │    │    ├── scan abc
-           │    │    │    │    │    │    ├── columns: a:12(int!null) b:13(int) c:14(int) rowid:15(int!null)
+           │    │    │    │    │    │    ├── columns: a:14(int!null) b:15(int) c:16(int) rowid:17(int!null)
            │    │    │    │    │    │    ├── computed column expressions
-           │    │    │    │    │    │    │    └── c:14
+           │    │    │    │    │    │    │    └── c:16
            │    │    │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │    │    │              ├── variable: b:13 [type=int]
+           │    │    │    │    │    │    │              ├── variable: b:15 [type=int]
            │    │    │    │    │    │    │              └── const: 1 [type=int]
-           │    │    │    │    │    │    ├── key: (15)
-           │    │    │    │    │    │    ├── fd: (15)-->(12-14), (12)-->(13-15), (13,14)~~>(12,15), (13)-->(14)
-           │    │    │    │    │    │    ├── prune: (12-15)
-           │    │    │    │    │    │    ├── interesting orderings: (+15) (+12) (+13,+15)
-           │    │    │    │    │    │    └── unfiltered-cols: (12-16)
+           │    │    │    │    │    │    ├── key: (17)
+           │    │    │    │    │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17), (15)-->(16)
+           │    │    │    │    │    │    ├── prune: (14-17)
+           │    │    │    │    │    │    ├── interesting orderings: (+17) (+14) (+15,+17)
+           │    │    │    │    │    │    └── unfiltered-cols: (14-19)
            │    │    │    │    │    └── filters
-           │    │    │    │    │         └── eq [type=bool, outer=(10,15), constraints=(/10: (/NULL - ]; /15: (/NULL - ]), fd=(10)==(15), (15)==(10)]
-           │    │    │    │    │              ├── variable: rowid_default:10 [type=int]
-           │    │    │    │    │              └── variable: rowid:15 [type=int]
+           │    │    │    │    │         └── eq [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+           │    │    │    │    │              ├── variable: rowid_default:12 [type=int]
+           │    │    │    │    │              └── variable: rowid:17 [type=int]
            │    │    │    │    ├── scan abc
-           │    │    │    │    │    ├── columns: a:17(int!null) b:18(int) c:19(int) rowid:20(int!null)
+           │    │    │    │    │    ├── columns: a:20(int!null) b:21(int) c:22(int) rowid:23(int!null)
            │    │    │    │    │    ├── computed column expressions
-           │    │    │    │    │    │    └── c:19
+           │    │    │    │    │    │    └── c:22
            │    │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │    │              ├── variable: b:18 [type=int]
+           │    │    │    │    │    │              ├── variable: b:21 [type=int]
            │    │    │    │    │    │              └── const: 1 [type=int]
-           │    │    │    │    │    ├── key: (20)
-           │    │    │    │    │    ├── fd: (20)-->(17-19), (17)-->(18-20), (18,19)~~>(17,20), (18)-->(19)
-           │    │    │    │    │    ├── prune: (17-20)
-           │    │    │    │    │    ├── interesting orderings: (+20) (+17) (+18,+20)
-           │    │    │    │    │    └── unfiltered-cols: (17-21)
+           │    │    │    │    │    ├── key: (23)
+           │    │    │    │    │    ├── fd: (23)-->(20-22), (20)-->(21-23), (21,22)~~>(20,23), (21)-->(22)
+           │    │    │    │    │    ├── prune: (20-23)
+           │    │    │    │    │    ├── interesting orderings: (+23) (+20) (+21,+23)
+           │    │    │    │    │    └── unfiltered-cols: (20-25)
            │    │    │    │    └── filters
-           │    │    │    │         └── eq [type=bool, outer=(6,17), constraints=(/6: (/NULL - ]; /17: (/NULL - ]), fd=(6)==(17), (17)==(6)]
-           │    │    │    │              ├── variable: x:6 [type=int]
-           │    │    │    │              └── variable: a:17 [type=int]
+           │    │    │    │         └── eq [type=bool, outer=(7,20), constraints=(/7: (/NULL - ]; /20: (/NULL - ]), fd=(7)==(20), (20)==(7)]
+           │    │    │    │              ├── variable: x:7 [type=int]
+           │    │    │    │              └── variable: a:20 [type=int]
            │    │    │    ├── scan abc
-           │    │    │    │    ├── columns: a:22(int!null) b:23(int) c:24(int) rowid:25(int!null)
+           │    │    │    │    ├── columns: a:26(int!null) b:27(int) c:28(int) rowid:29(int!null)
            │    │    │    │    ├── computed column expressions
-           │    │    │    │    │    └── c:24
+           │    │    │    │    │    └── c:28
            │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── variable: b:23 [type=int]
+           │    │    │    │    │              ├── variable: b:27 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
-           │    │    │    │    ├── key: (25)
-           │    │    │    │    ├── fd: (25)-->(22-24), (22)-->(23-25), (23,24)~~>(22,25), (23)-->(24)
-           │    │    │    │    ├── prune: (22-25)
-           │    │    │    │    ├── interesting orderings: (+25) (+22) (+23,+25)
-           │    │    │    │    └── unfiltered-cols: (22-26)
+           │    │    │    │    ├── key: (29)
+           │    │    │    │    ├── fd: (29)-->(26-28), (26)-->(27-29), (27,28)~~>(26,29), (27)-->(28)
+           │    │    │    │    ├── prune: (26-29)
+           │    │    │    │    ├── interesting orderings: (+29) (+26) (+27,+29)
+           │    │    │    │    └── unfiltered-cols: (26-31)
            │    │    │    └── filters
-           │    │    │         ├── eq [type=bool, outer=(7,23), constraints=(/7: (/NULL - ]; /23: (/NULL - ]), fd=(7)==(23), (23)==(7)]
-           │    │    │         │    ├── variable: y:7 [type=int]
-           │    │    │         │    └── variable: b:23 [type=int]
-           │    │    │         └── eq [type=bool, outer=(11,24), constraints=(/11: (/NULL - ]; /24: (/NULL - ]), fd=(11)==(24), (24)==(11)]
-           │    │    │              ├── variable: c_comp:11 [type=int]
-           │    │    │              └── variable: c:24 [type=int]
+           │    │    │         ├── eq [type=bool, outer=(8,27), constraints=(/8: (/NULL - ]; /27: (/NULL - ]), fd=(8)==(27), (27)==(8)]
+           │    │    │         │    ├── variable: y:8 [type=int]
+           │    │    │         │    └── variable: b:27 [type=int]
+           │    │    │         └── eq [type=bool, outer=(13,28), constraints=(/13: (/NULL - ]; /28: (/NULL - ]), fd=(13)==(28), (28)==(13)]
+           │    │    │              ├── variable: c_comp:13 [type=int]
+           │    │    │              └── variable: c:28 [type=int]
            │    │    └── aggregations
-           │    │         ├── first-agg [as=x:6, type=int, outer=(6)]
-           │    │         │    └── variable: x:6 [type=int]
-           │    │         ├── first-agg [as=y:7, type=int, outer=(7)]
-           │    │         │    └── variable: y:7 [type=int]
-           │    │         └── first-agg [as=c_comp:11, type=int, outer=(11)]
-           │    │              └── variable: c_comp:11 [type=int]
+           │    │         ├── first-agg [as=x:7, type=int, outer=(7)]
+           │    │         │    └── variable: x:7 [type=int]
+           │    │         ├── first-agg [as=y:8, type=int, outer=(8)]
+           │    │         │    └── variable: y:8 [type=int]
+           │    │         └── first-agg [as=c_comp:13, type=int, outer=(13)]
+           │    │              └── variable: c_comp:13 [type=int]
            │    └── aggregations
-           │         ├── first-agg [as=y:7, type=int, outer=(7)]
-           │         │    └── variable: y:7 [type=int]
-           │         ├── first-agg [as=rowid_default:10, type=int, outer=(10)]
-           │         │    └── variable: rowid_default:10 [type=int]
-           │         └── first-agg [as=c_comp:11, type=int, outer=(11)]
-           │              └── variable: c_comp:11 [type=int]
+           │         ├── first-agg [as=y:8, type=int, outer=(8)]
+           │         │    └── variable: y:8 [type=int]
+           │         ├── first-agg [as=rowid_default:12, type=int, outer=(12)]
+           │         │    └── variable: rowid_default:12 [type=int]
+           │         └── first-agg [as=c_comp:13, type=int, outer=(13)]
+           │              └── variable: c_comp:13 [type=int]
            └── aggregations
-                ├── first-agg [as=x:6, type=int, outer=(6)]
-                │    └── variable: x:6 [type=int]
-                └── first-agg [as=rowid_default:10, type=int, outer=(10)]
-                     └── variable: rowid_default:10 [type=int]
+                ├── first-agg [as=x:7, type=int, outer=(7)]
+                │    └── variable: x:7 [type=int]
+                └── first-agg [as=rowid_default:12, type=int, outer=(12)]
+                     └── variable: rowid_default:12 [type=int]
 
 # UPSERT case.
 build
 UPSERT INTO abc (a) VALUES (1), (2) RETURNING b+c
 ----
 project
- ├── columns: "?column?":19(int)
+ ├── columns: "?column?":21(int)
  ├── cardinality: [1 - 2]
  ├── volatile, mutations
- ├── prune: (19)
+ ├── prune: (21)
  ├── upsert abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
  │    ├── arbiter indexes: primary
- │    ├── canary column: rowid:13(int)
- │    ├── fetch columns: a:10(int) b:11(int) c:12(int) rowid:13(int)
+ │    ├── canary column: rowid:14(int)
+ │    ├── fetch columns: a:11(int) b:12(int) c:13(int) rowid:14(int)
  │    ├── insert-mapping:
- │    │    ├── column1:6 => a:1
- │    │    ├── b_default:7 => b:2
- │    │    ├── c_comp:9 => c:3
- │    │    └── rowid_default:8 => rowid:4
+ │    │    ├── column1:7 => a:1
+ │    │    ├── b_default:8 => b:2
+ │    │    ├── c_comp:10 => c:3
+ │    │    └── rowid_default:9 => rowid:4
  │    ├── update-mapping:
- │    │    └── column1:6 => a:1
+ │    │    └── column1:7 => a:1
  │    ├── return-mapping:
- │    │    ├── column1:6 => a:1
- │    │    ├── upsert_b:16 => b:2
- │    │    ├── upsert_c:17 => c:3
- │    │    └── upsert_rowid:18 => rowid:4
+ │    │    ├── column1:7 => a:1
+ │    │    ├── upsert_b:18 => b:2
+ │    │    ├── upsert_c:19 => c:3
+ │    │    └── upsert_rowid:20 => rowid:4
  │    ├── cardinality: [1 - 2]
  │    ├── volatile, mutations
  │    └── project
- │         ├── columns: upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:6(int!null) b_default:7(int!null) rowid_default:8(int) c_comp:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) crdb_internal_mvcc_timestamp:14(decimal) c_comp:15(int)
+ │         ├── columns: upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) column1:7(int!null) b_default:8(int!null) rowid_default:9(int) c_comp:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) c_comp:17(int)
  │         ├── cardinality: [1 - 2]
  │         ├── volatile
- │         ├── lax-key: (8,13)
- │         ├── fd: ()-->(7,9), (8)~~>(6), (13)-->(10-12,14,16,17), (10)-->(11-14), (11,12)~~>(10,13,14), (11)~~>(12), (11)-->(15), (8,13)-->(18)
- │         ├── prune: (6-18)
- │         ├── reject-nulls: (10-15)
- │         ├── interesting orderings: (+13 opt(7,9)) (+10 opt(7,9)) (+11,+13 opt(7,9))
+ │         ├── lax-key: (9,14)
+ │         ├── fd: ()-->(8,10), (9)~~>(7), (14)-->(11-13,15,16,18,19), (11)-->(12-16), (12,13)~~>(11,14-16), (12)~~>(13), (12)-->(17), (9,14)-->(20)
+ │         ├── prune: (7-20)
+ │         ├── reject-nulls: (11-17)
+ │         ├── interesting orderings: (+14 opt(8,10)) (+11 opt(8,10)) (+12,+14 opt(8,10))
  │         ├── project
- │         │    ├── columns: c_comp:15(int) column1:6(int!null) b_default:7(int!null) rowid_default:8(int) c_comp:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+ │         │    ├── columns: c_comp:17(int) column1:7(int!null) b_default:8(int!null) rowid_default:9(int) c_comp:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
  │         │    ├── cardinality: [1 - 2]
  │         │    ├── volatile
- │         │    ├── lax-key: (8,13)
- │         │    ├── fd: ()-->(7,9), (8)~~>(6), (13)-->(10-12,14), (10)-->(11-14), (11,12)~~>(10,13,14), (11)~~>(12), (11)-->(15)
- │         │    ├── prune: (6-15)
- │         │    ├── reject-nulls: (10-15)
- │         │    ├── interesting orderings: (+13 opt(7,9)) (+10 opt(7,9)) (+11,+13 opt(7,9))
+ │         │    ├── lax-key: (9,14)
+ │         │    ├── fd: ()-->(8,10), (9)~~>(7), (14)-->(11-13,15,16), (11)-->(12-16), (12,13)~~>(11,14-16), (12)~~>(13), (12)-->(17)
+ │         │    ├── prune: (7-17)
+ │         │    ├── reject-nulls: (11-17)
+ │         │    ├── interesting orderings: (+14 opt(8,10)) (+11 opt(8,10)) (+12,+14 opt(8,10))
  │         │    ├── left-join (hash)
- │         │    │    ├── columns: column1:6(int!null) b_default:7(int!null) rowid_default:8(int) c_comp:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) crdb_internal_mvcc_timestamp:14(decimal)
+ │         │    │    ├── columns: column1:7(int!null) b_default:8(int!null) rowid_default:9(int) c_comp:10(int!null) a:11(int) b:12(int) c:13(int) rowid:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
  │         │    │    ├── cardinality: [1 - 2]
  │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │         │    │    ├── volatile
- │         │    │    ├── lax-key: (8,13)
- │         │    │    ├── fd: ()-->(7,9), (8)~~>(6), (13)-->(10-12,14), (10)-->(11-14), (11,12)~~>(10,13,14), (11)~~>(12)
- │         │    │    ├── prune: (10-12,14)
- │         │    │    ├── reject-nulls: (10-14)
- │         │    │    ├── interesting orderings: (+13) (+10) (+11,+13)
+ │         │    │    ├── lax-key: (9,14)
+ │         │    │    ├── fd: ()-->(8,10), (9)~~>(7), (14)-->(11-13,15,16), (11)-->(12-16), (12,13)~~>(11,14-16), (12)~~>(13)
+ │         │    │    ├── prune: (11-13,15,16)
+ │         │    │    ├── reject-nulls: (11-16)
+ │         │    │    ├── interesting orderings: (+14) (+11) (+12,+14)
  │         │    │    ├── ensure-upsert-distinct-on
- │         │    │    │    ├── columns: column1:6(int!null) b_default:7(int!null) rowid_default:8(int) c_comp:9(int!null)
- │         │    │    │    ├── grouping columns: rowid_default:8(int)
+ │         │    │    │    ├── columns: column1:7(int!null) b_default:8(int!null) rowid_default:9(int) c_comp:10(int!null)
+ │         │    │    │    ├── grouping columns: rowid_default:9(int)
  │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │         │    │    │    ├── cardinality: [1 - 2]
  │         │    │    │    ├── volatile
- │         │    │    │    ├── lax-key: (8)
- │         │    │    │    ├── fd: ()-->(7,9), (8)~~>(6,7,9)
+ │         │    │    │    ├── lax-key: (9)
+ │         │    │    │    ├── fd: ()-->(8,10), (9)~~>(7,8,10)
  │         │    │    │    ├── project
- │         │    │    │    │    ├── columns: c_comp:9(int!null) column1:6(int!null) b_default:7(int!null) rowid_default:8(int)
+ │         │    │    │    │    ├── columns: c_comp:10(int!null) column1:7(int!null) b_default:8(int!null) rowid_default:9(int)
  │         │    │    │    │    ├── cardinality: [2 - 2]
  │         │    │    │    │    ├── volatile
- │         │    │    │    │    ├── fd: ()-->(7,9)
- │         │    │    │    │    ├── prune: (6-9)
+ │         │    │    │    │    ├── fd: ()-->(8,10)
+ │         │    │    │    │    ├── prune: (7-10)
  │         │    │    │    │    ├── project
- │         │    │    │    │    │    ├── columns: b_default:7(int!null) rowid_default:8(int) column1:6(int!null)
+ │         │    │    │    │    │    ├── columns: b_default:8(int!null) rowid_default:9(int) column1:7(int!null)
  │         │    │    │    │    │    ├── cardinality: [2 - 2]
  │         │    │    │    │    │    ├── volatile
- │         │    │    │    │    │    ├── fd: ()-->(7)
- │         │    │    │    │    │    ├── prune: (6-8)
+ │         │    │    │    │    │    ├── fd: ()-->(8)
+ │         │    │    │    │    │    ├── prune: (7-9)
  │         │    │    │    │    │    ├── values
- │         │    │    │    │    │    │    ├── columns: column1:6(int!null)
+ │         │    │    │    │    │    │    ├── columns: column1:7(int!null)
  │         │    │    │    │    │    │    ├── cardinality: [2 - 2]
- │         │    │    │    │    │    │    ├── prune: (6)
+ │         │    │    │    │    │    │    ├── prune: (7)
  │         │    │    │    │    │    │    ├── tuple [type=tuple{int}]
  │         │    │    │    │    │    │    │    └── const: 1 [type=int]
  │         │    │    │    │    │    │    └── tuple [type=tuple{int}]
  │         │    │    │    │    │    │         └── const: 2 [type=int]
  │         │    │    │    │    │    └── projections
- │         │    │    │    │    │         ├── const: 10 [as=b_default:7, type=int]
- │         │    │    │    │    │         └── function: unique_rowid [as=rowid_default:8, type=int, volatile]
+ │         │    │    │    │    │         ├── const: 10 [as=b_default:8, type=int]
+ │         │    │    │    │    │         └── function: unique_rowid [as=rowid_default:9, type=int, volatile]
  │         │    │    │    │    └── projections
- │         │    │    │    │         └── plus [as=c_comp:9, type=int, outer=(7), immutable]
- │         │    │    │    │              ├── variable: b_default:7 [type=int]
+ │         │    │    │    │         └── plus [as=c_comp:10, type=int, outer=(8), immutable]
+ │         │    │    │    │              ├── variable: b_default:8 [type=int]
  │         │    │    │    │              └── const: 1 [type=int]
  │         │    │    │    └── aggregations
- │         │    │    │         ├── first-agg [as=column1:6, type=int, outer=(6)]
- │         │    │    │         │    └── variable: column1:6 [type=int]
- │         │    │    │         ├── first-agg [as=b_default:7, type=int, outer=(7)]
- │         │    │    │         │    └── variable: b_default:7 [type=int]
- │         │    │    │         └── first-agg [as=c_comp:9, type=int, outer=(9)]
- │         │    │    │              └── variable: c_comp:9 [type=int]
+ │         │    │    │         ├── first-agg [as=column1:7, type=int, outer=(7)]
+ │         │    │    │         │    └── variable: column1:7 [type=int]
+ │         │    │    │         ├── first-agg [as=b_default:8, type=int, outer=(8)]
+ │         │    │    │         │    └── variable: b_default:8 [type=int]
+ │         │    │    │         └── first-agg [as=c_comp:10, type=int, outer=(10)]
+ │         │    │    │              └── variable: c_comp:10 [type=int]
  │         │    │    ├── scan abc
- │         │    │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null) crdb_internal_mvcc_timestamp:14(decimal)
+ │         │    │    │    ├── columns: a:11(int!null) b:12(int) c:13(int) rowid:14(int!null) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
  │         │    │    │    ├── computed column expressions
- │         │    │    │    │    └── c:12
+ │         │    │    │    │    └── c:13
  │         │    │    │    │         └── plus [type=int]
- │         │    │    │    │              ├── variable: b:11 [type=int]
+ │         │    │    │    │              ├── variable: b:12 [type=int]
  │         │    │    │    │              └── const: 1 [type=int]
- │         │    │    │    ├── key: (13)
- │         │    │    │    ├── fd: (13)-->(10-12,14), (10)-->(11-14), (11,12)~~>(10,13,14), (11)-->(12)
- │         │    │    │    ├── prune: (10-14)
- │         │    │    │    ├── interesting orderings: (+13) (+10) (+11,+13)
- │         │    │    │    └── unfiltered-cols: (10-14)
+ │         │    │    │    ├── key: (14)
+ │         │    │    │    ├── fd: (14)-->(11-13,15,16), (11)-->(12-16), (12,13)~~>(11,14-16), (12)-->(13)
+ │         │    │    │    ├── prune: (11-16)
+ │         │    │    │    ├── interesting orderings: (+14) (+11) (+12,+14)
+ │         │    │    │    └── unfiltered-cols: (11-16)
  │         │    │    └── filters
- │         │    │         └── eq [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
- │         │    │              ├── variable: rowid_default:8 [type=int]
- │         │    │              └── variable: rowid:13 [type=int]
+ │         │    │         └── eq [type=bool, outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
+ │         │    │              ├── variable: rowid_default:9 [type=int]
+ │         │    │              └── variable: rowid:14 [type=int]
  │         │    └── projections
- │         │         └── plus [as=c_comp:15, type=int, outer=(11), immutable]
- │         │              ├── variable: b:11 [type=int]
+ │         │         └── plus [as=c_comp:17, type=int, outer=(12), immutable]
+ │         │              ├── variable: b:12 [type=int]
  │         │              └── const: 1 [type=int]
  │         └── projections
- │              ├── case [as=upsert_b:16, type=int, outer=(7,11,13)]
+ │              ├── case [as=upsert_b:18, type=int, outer=(8,12,14)]
  │              │    ├── true [type=bool]
  │              │    ├── when [type=int]
  │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid:13 [type=int]
+ │              │    │    │    ├── variable: rowid:14 [type=int]
  │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: b_default:7 [type=int]
- │              │    └── variable: b:11 [type=int]
- │              ├── case [as=upsert_c:17, type=int, outer=(9,12,13)]
+ │              │    │    └── variable: b_default:8 [type=int]
+ │              │    └── variable: b:12 [type=int]
+ │              ├── case [as=upsert_c:19, type=int, outer=(10,13,14)]
  │              │    ├── true [type=bool]
  │              │    ├── when [type=int]
  │              │    │    ├── is [type=bool]
- │              │    │    │    ├── variable: rowid:13 [type=int]
+ │              │    │    │    ├── variable: rowid:14 [type=int]
  │              │    │    │    └── null [type=unknown]
- │              │    │    └── variable: c_comp:9 [type=int]
- │              │    └── variable: c:12 [type=int]
- │              └── case [as=upsert_rowid:18, type=int, outer=(8,13)]
+ │              │    │    └── variable: c_comp:10 [type=int]
+ │              │    └── variable: c:13 [type=int]
+ │              └── case [as=upsert_rowid:20, type=int, outer=(9,14)]
  │                   ├── true [type=bool]
  │                   ├── when [type=int]
  │                   │    ├── is [type=bool]
- │                   │    │    ├── variable: rowid:13 [type=int]
+ │                   │    │    ├── variable: rowid:14 [type=int]
  │                   │    │    └── null [type=unknown]
- │                   │    └── variable: rowid_default:8 [type=int]
- │                   └── variable: rowid:13 [type=int]
+ │                   │    └── variable: rowid_default:9 [type=int]
+ │                   └── variable: rowid:14 [type=int]
  └── projections
-      └── plus [as="?column?":19, type=int, outer=(2,3), immutable]
+      └── plus [as="?column?":21, type=int, outer=(2,3), immutable]
            ├── variable: b:2 [type=int]
            └── variable: c:3 [type=int]
 
@@ -534,156 +534,156 @@ UPDATE SET b=2
 upsert abc
  ├── columns: <none>
  ├── arbiter indexes: secondary
- ├── canary column: a:13(int)
- ├── fetch columns: a:13(int) b:14(int) c:15(int) rowid:16(int)
+ ├── canary column: a:15(int)
+ ├── fetch columns: a:15(int) b:16(int) c:17(int) rowid:18(int)
  ├── insert-mapping:
- │    ├── y:7 => a:1
- │    ├── b_default:10 => b:2
- │    ├── c_comp:12 => c:3
- │    └── rowid_default:11 => rowid:4
+ │    ├── y:8 => a:1
+ │    ├── b_default:12 => b:2
+ │    ├── c_comp:14 => c:3
+ │    └── rowid_default:13 => rowid:4
  ├── update-mapping:
- │    ├── upsert_b:21 => b:2
- │    └── upsert_c:22 => c:3
+ │    ├── upsert_b:24 => b:2
+ │    └── upsert_c:25 => c:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: upsert_a:20(int) upsert_b:21(int!null) upsert_c:22(int!null) upsert_rowid:23(int) y:7(int!null) b_default:10(int!null) rowid_default:11(int) c_comp:12(int!null) a:13(int) b:14(int) c:15(int) rowid:16(int) abc.crdb_internal_mvcc_timestamp:17(decimal) b_new:18(int!null) c_comp:19(int!null)
+      ├── columns: upsert_a:23(int) upsert_b:24(int!null) upsert_c:25(int!null) upsert_rowid:26(int) y:8(int!null) b_default:12(int!null) rowid_default:13(int) c_comp:14(int!null) a:15(int) b:16(int) c:17(int) rowid:18(int) abc.crdb_internal_mvcc_timestamp:19(decimal) abc.tableoid:20(oid) b_new:21(int!null) c_comp:22(int!null)
       ├── volatile
-      ├── key: (7)
-      ├── fd: ()-->(10,12,18,19), (7)-->(11,13-17,20), (16)-->(13-15,17), (13)-->(14-17,21,22), (14,15)~~>(13,16,17), (14)~~>(15), (11,16)-->(23)
-      ├── prune: (7,10-23)
-      ├── reject-nulls: (13-17)
-      ├── interesting orderings: (+16 opt(10,12,18,19)) (+13 opt(10,12,18,19)) (+14,+16 opt(10,12,18,19))
+      ├── key: (8)
+      ├── fd: ()-->(12,14,21,22), (8)-->(13,15-20,23), (18)-->(15-17,19,20), (15)-->(16-20,24,25), (16,17)~~>(15,18-20), (16)~~>(17), (13,18)-->(26)
+      ├── prune: (8,12-26)
+      ├── reject-nulls: (15-20)
+      ├── interesting orderings: (+18 opt(12,14,21,22)) (+15 opt(12,14,21,22)) (+16,+18 opt(12,14,21,22))
       ├── project
-      │    ├── columns: c_comp:19(int!null) y:7(int!null) b_default:10(int!null) rowid_default:11(int) c_comp:12(int!null) a:13(int) b:14(int) c:15(int) rowid:16(int) abc.crdb_internal_mvcc_timestamp:17(decimal) b_new:18(int!null)
+      │    ├── columns: c_comp:22(int!null) y:8(int!null) b_default:12(int!null) rowid_default:13(int) c_comp:14(int!null) a:15(int) b:16(int) c:17(int) rowid:18(int) abc.crdb_internal_mvcc_timestamp:19(decimal) abc.tableoid:20(oid) b_new:21(int!null)
       │    ├── volatile
-      │    ├── key: (7)
-      │    ├── fd: ()-->(10,12,18,19), (7)-->(11,13-17), (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)~~>(15)
-      │    ├── prune: (7,10-19)
-      │    ├── reject-nulls: (13-17)
-      │    ├── interesting orderings: (+16 opt(10,12,18,19)) (+13 opt(10,12,18,19)) (+14,+16 opt(10,12,18,19))
+      │    ├── key: (8)
+      │    ├── fd: ()-->(12,14,21,22), (8)-->(13,15-20), (18)-->(15-17,19,20), (15)-->(16-20), (16,17)~~>(15,18-20), (16)~~>(17)
+      │    ├── prune: (8,12-22)
+      │    ├── reject-nulls: (15-20)
+      │    ├── interesting orderings: (+18 opt(12,14,21,22)) (+15 opt(12,14,21,22)) (+16,+18 opt(12,14,21,22))
       │    ├── project
-      │    │    ├── columns: b_new:18(int!null) y:7(int!null) b_default:10(int!null) rowid_default:11(int) c_comp:12(int!null) a:13(int) b:14(int) c:15(int) rowid:16(int) abc.crdb_internal_mvcc_timestamp:17(decimal)
+      │    │    ├── columns: b_new:21(int!null) y:8(int!null) b_default:12(int!null) rowid_default:13(int) c_comp:14(int!null) a:15(int) b:16(int) c:17(int) rowid:18(int) abc.crdb_internal_mvcc_timestamp:19(decimal) abc.tableoid:20(oid)
       │    │    ├── volatile
-      │    │    ├── key: (7)
-      │    │    ├── fd: ()-->(10,12,18), (7)-->(11,13-17), (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)~~>(15)
-      │    │    ├── prune: (7,10-18)
-      │    │    ├── reject-nulls: (13-17)
-      │    │    ├── interesting orderings: (+16 opt(10,12,18)) (+13 opt(10,12,18)) (+14,+16 opt(10,12,18))
+      │    │    ├── key: (8)
+      │    │    ├── fd: ()-->(12,14,21), (8)-->(13,15-20), (18)-->(15-17,19,20), (15)-->(16-20), (16,17)~~>(15,18-20), (16)~~>(17)
+      │    │    ├── prune: (8,12-21)
+      │    │    ├── reject-nulls: (15-20)
+      │    │    ├── interesting orderings: (+18 opt(12,14,21)) (+15 opt(12,14,21)) (+16,+18 opt(12,14,21))
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: y:7(int!null) b_default:10(int!null) rowid_default:11(int) c_comp:12(int!null) a:13(int) b:14(int) c:15(int) rowid:16(int) abc.crdb_internal_mvcc_timestamp:17(decimal)
+      │    │    │    ├── columns: y:8(int!null) b_default:12(int!null) rowid_default:13(int) c_comp:14(int!null) a:15(int) b:16(int) c:17(int) rowid:18(int) abc.crdb_internal_mvcc_timestamp:19(decimal) abc.tableoid:20(oid)
       │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    │    ├── volatile
-      │    │    │    ├── key: (7)
-      │    │    │    ├── fd: ()-->(10,12), (7)-->(11,13-17), (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)~~>(15)
-      │    │    │    ├── prune: (14-17)
-      │    │    │    ├── reject-nulls: (13-17)
-      │    │    │    ├── interesting orderings: (+16) (+13) (+14,+16)
+      │    │    │    ├── key: (8)
+      │    │    │    ├── fd: ()-->(12,14), (8)-->(13,15-20), (18)-->(15-17,19,20), (15)-->(16-20), (16,17)~~>(15,18-20), (16)~~>(17)
+      │    │    │    ├── prune: (16-20)
+      │    │    │    ├── reject-nulls: (15-20)
+      │    │    │    ├── interesting orderings: (+18) (+15) (+16,+18)
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: y:7(int!null) b_default:10(int!null) rowid_default:11(int) c_comp:12(int!null)
-      │    │    │    │    ├── grouping columns: y:7(int!null)
+      │    │    │    │    ├── columns: y:8(int!null) b_default:12(int!null) rowid_default:13(int) c_comp:14(int!null)
+      │    │    │    │    ├── grouping columns: y:8(int!null)
       │    │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    │    ├── volatile
-      │    │    │    │    ├── key: (7)
-      │    │    │    │    ├── fd: ()-->(10,12), (7)-->(10-12)
+      │    │    │    │    ├── key: (8)
+      │    │    │    │    ├── fd: ()-->(12,14), (8)-->(12-14)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: c_comp:12(int!null) y:7(int!null) b_default:10(int!null) rowid_default:11(int)
+      │    │    │    │    │    ├── columns: c_comp:14(int!null) y:8(int!null) b_default:12(int!null) rowid_default:13(int)
       │    │    │    │    │    ├── volatile
-      │    │    │    │    │    ├── fd: ()-->(10,12)
-      │    │    │    │    │    ├── prune: (7,10-12)
-      │    │    │    │    │    ├── interesting orderings: (+7 opt(10,12))
+      │    │    │    │    │    ├── fd: ()-->(12,14)
+      │    │    │    │    │    ├── prune: (8,12-14)
+      │    │    │    │    │    ├── interesting orderings: (+8 opt(12,14))
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: b_default:10(int!null) rowid_default:11(int) y:7(int!null)
+      │    │    │    │    │    │    ├── columns: b_default:12(int!null) rowid_default:13(int) y:8(int!null)
       │    │    │    │    │    │    ├── volatile
-      │    │    │    │    │    │    ├── fd: ()-->(10)
-      │    │    │    │    │    │    ├── prune: (7,10,11)
-      │    │    │    │    │    │    ├── interesting orderings: (+7 opt(10))
+      │    │    │    │    │    │    ├── fd: ()-->(12)
+      │    │    │    │    │    │    ├── prune: (8,12,13)
+      │    │    │    │    │    │    ├── interesting orderings: (+8 opt(12))
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: y:7(int!null)
-      │    │    │    │    │    │    │    ├── prune: (7)
-      │    │    │    │    │    │    │    ├── interesting orderings: (+7)
+      │    │    │    │    │    │    │    ├── columns: y:8(int!null)
+      │    │    │    │    │    │    │    ├── prune: (8)
+      │    │    │    │    │    │    │    ├── interesting orderings: (+8)
       │    │    │    │    │    │    │    └── select
-      │    │    │    │    │    │    │         ├── columns: x:6(int!null) y:7(int!null) z:8(int) xyz.crdb_internal_mvcc_timestamp:9(decimal)
-      │    │    │    │    │    │    │         ├── key: (6)
-      │    │    │    │    │    │    │         ├── fd: (6)-->(7-9), (7,8)~~>(6,9)
-      │    │    │    │    │    │    │         ├── prune: (6,8,9)
-      │    │    │    │    │    │    │         ├── interesting orderings: (+6) (+7,+8,+6) (+8,+7,+6)
+      │    │    │    │    │    │    │         ├── columns: x:7(int!null) y:8(int!null) z:9(int) xyz.crdb_internal_mvcc_timestamp:10(decimal) xyz.tableoid:11(oid)
+      │    │    │    │    │    │    │         ├── key: (7)
+      │    │    │    │    │    │    │         ├── fd: (7)-->(8-11), (8,9)~~>(7,10,11)
+      │    │    │    │    │    │    │         ├── prune: (7,9-11)
+      │    │    │    │    │    │    │         ├── interesting orderings: (+7) (+8,+9,+7) (+9,+8,+7)
       │    │    │    │    │    │    │         ├── scan xyz
-      │    │    │    │    │    │    │         │    ├── columns: x:6(int!null) y:7(int) z:8(int) xyz.crdb_internal_mvcc_timestamp:9(decimal)
-      │    │    │    │    │    │    │         │    ├── key: (6)
-      │    │    │    │    │    │    │         │    ├── fd: (6)-->(7-9), (7,8)~~>(6,9)
-      │    │    │    │    │    │    │         │    ├── prune: (6-9)
-      │    │    │    │    │    │    │         │    └── interesting orderings: (+6) (+7,+8,+6) (+8,+7,+6)
+      │    │    │    │    │    │    │         │    ├── columns: x:7(int!null) y:8(int) z:9(int) xyz.crdb_internal_mvcc_timestamp:10(decimal) xyz.tableoid:11(oid)
+      │    │    │    │    │    │    │         │    ├── key: (7)
+      │    │    │    │    │    │    │         │    ├── fd: (7)-->(8-11), (8,9)~~>(7,10,11)
+      │    │    │    │    │    │    │         │    ├── prune: (7-11)
+      │    │    │    │    │    │    │         │    └── interesting orderings: (+7) (+8,+9,+7) (+9,+8,+7)
       │    │    │    │    │    │    │         └── filters
-      │    │    │    │    │    │    │              └── is-not [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
-      │    │    │    │    │    │    │                   ├── variable: y:7 [type=int]
+      │    │    │    │    │    │    │              └── is-not [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
+      │    │    │    │    │    │    │                   ├── variable: y:8 [type=int]
       │    │    │    │    │    │    │                   └── null [type=unknown]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         ├── const: 10 [as=b_default:10, type=int]
-      │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:11, type=int, volatile]
+      │    │    │    │    │    │         ├── const: 10 [as=b_default:12, type=int]
+      │    │    │    │    │    │         └── function: unique_rowid [as=rowid_default:13, type=int, volatile]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── plus [as=c_comp:12, type=int, outer=(10), immutable]
-      │    │    │    │    │              ├── variable: b_default:10 [type=int]
+      │    │    │    │    │         └── plus [as=c_comp:14, type=int, outer=(12), immutable]
+      │    │    │    │    │              ├── variable: b_default:12 [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
       │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=b_default:10, type=int, outer=(10)]
-      │    │    │    │         │    └── variable: b_default:10 [type=int]
-      │    │    │    │         ├── first-agg [as=rowid_default:11, type=int, outer=(11)]
-      │    │    │    │         │    └── variable: rowid_default:11 [type=int]
-      │    │    │    │         └── first-agg [as=c_comp:12, type=int, outer=(12)]
-      │    │    │    │              └── variable: c_comp:12 [type=int]
+      │    │    │    │         ├── first-agg [as=b_default:12, type=int, outer=(12)]
+      │    │    │    │         │    └── variable: b_default:12 [type=int]
+      │    │    │    │         ├── first-agg [as=rowid_default:13, type=int, outer=(13)]
+      │    │    │    │         │    └── variable: rowid_default:13 [type=int]
+      │    │    │    │         └── first-agg [as=c_comp:14, type=int, outer=(14)]
+      │    │    │    │              └── variable: c_comp:14 [type=int]
       │    │    │    ├── scan abc
-      │    │    │    │    ├── columns: a:13(int!null) b:14(int) c:15(int) rowid:16(int!null) abc.crdb_internal_mvcc_timestamp:17(decimal)
+      │    │    │    │    ├── columns: a:15(int!null) b:16(int) c:17(int) rowid:18(int!null) abc.crdb_internal_mvcc_timestamp:19(decimal) abc.tableoid:20(oid)
       │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    └── c:15
+      │    │    │    │    │    └── c:17
       │    │    │    │    │         └── plus [type=int]
-      │    │    │    │    │              ├── variable: b:14 [type=int]
+      │    │    │    │    │              ├── variable: b:16 [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
-      │    │    │    │    ├── key: (16)
-      │    │    │    │    ├── fd: (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)-->(15)
-      │    │    │    │    ├── prune: (13-17)
-      │    │    │    │    ├── interesting orderings: (+16) (+13) (+14,+16)
-      │    │    │    │    └── unfiltered-cols: (13-17)
+      │    │    │    │    ├── key: (18)
+      │    │    │    │    ├── fd: (18)-->(15-17,19,20), (15)-->(16-20), (16,17)~~>(15,18-20), (16)-->(17)
+      │    │    │    │    ├── prune: (15-20)
+      │    │    │    │    ├── interesting orderings: (+18) (+15) (+16,+18)
+      │    │    │    │    └── unfiltered-cols: (15-20)
       │    │    │    └── filters
-      │    │    │         └── eq [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
-      │    │    │              ├── variable: y:7 [type=int]
-      │    │    │              └── variable: a:13 [type=int]
+      │    │    │         └── eq [type=bool, outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
+      │    │    │              ├── variable: y:8 [type=int]
+      │    │    │              └── variable: a:15 [type=int]
       │    │    └── projections
-      │    │         └── const: 2 [as=b_new:18, type=int]
+      │    │         └── const: 2 [as=b_new:21, type=int]
       │    └── projections
-      │         └── plus [as=c_comp:19, type=int, outer=(18), immutable]
-      │              ├── variable: b_new:18 [type=int]
+      │         └── plus [as=c_comp:22, type=int, outer=(21), immutable]
+      │              ├── variable: b_new:21 [type=int]
       │              └── const: 1 [type=int]
       └── projections
-           ├── case [as=upsert_a:20, type=int, outer=(7,13)]
+           ├── case [as=upsert_a:23, type=int, outer=(8,15)]
            │    ├── true [type=bool]
            │    ├── when [type=int]
            │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a:13 [type=int]
+           │    │    │    ├── variable: a:15 [type=int]
            │    │    │    └── null [type=unknown]
-           │    │    └── variable: y:7 [type=int]
-           │    └── variable: a:13 [type=int]
-           ├── case [as=upsert_b:21, type=int, outer=(10,13,18)]
+           │    │    └── variable: y:8 [type=int]
+           │    └── variable: a:15 [type=int]
+           ├── case [as=upsert_b:24, type=int, outer=(12,15,21)]
            │    ├── true [type=bool]
            │    ├── when [type=int]
            │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a:13 [type=int]
+           │    │    │    ├── variable: a:15 [type=int]
            │    │    │    └── null [type=unknown]
-           │    │    └── variable: b_default:10 [type=int]
-           │    └── variable: b_new:18 [type=int]
-           ├── case [as=upsert_c:22, type=int, outer=(12,13,19)]
+           │    │    └── variable: b_default:12 [type=int]
+           │    └── variable: b_new:21 [type=int]
+           ├── case [as=upsert_c:25, type=int, outer=(14,15,22)]
            │    ├── true [type=bool]
            │    ├── when [type=int]
            │    │    ├── is [type=bool]
-           │    │    │    ├── variable: a:13 [type=int]
+           │    │    │    ├── variable: a:15 [type=int]
            │    │    │    └── null [type=unknown]
-           │    │    └── variable: c_comp:12 [type=int]
-           │    └── variable: c_comp:19 [type=int]
-           └── case [as=upsert_rowid:23, type=int, outer=(11,13,16)]
+           │    │    └── variable: c_comp:14 [type=int]
+           │    └── variable: c_comp:22 [type=int]
+           └── case [as=upsert_rowid:26, type=int, outer=(13,15,18)]
                 ├── true [type=bool]
                 ├── when [type=int]
                 │    ├── is [type=bool]
-                │    │    ├── variable: a:13 [type=int]
+                │    │    ├── variable: a:15 [type=int]
                 │    │    └── null [type=unknown]
-                │    └── variable: rowid_default:11 [type=int]
-                └── variable: rowid:16 [type=int]
+                │    └── variable: rowid_default:13 [type=int]
+                └── variable: rowid:18 [type=int]

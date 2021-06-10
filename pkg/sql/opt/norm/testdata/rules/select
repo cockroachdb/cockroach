@@ -139,7 +139,7 @@ norm expect-not=SimplifySelectFilters
 Select a IS True FROM c WHERE b
 ----
 project
- ├── columns: "?column?":8!null
+ ├── columns: "?column?":9!null
  ├── select
  │    ├── columns: a:1 b:2!null
  │    ├── fd: ()-->(2)
@@ -148,7 +148,7 @@ project
  │    └── filters
  │         └── b:2 [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
  └── projections
-      └── a:1 IS true [as="?column?":8, outer=(1)]
+      └── a:1 IS true [as="?column?":9, outer=(1)]
 
 # Don't simplify an IS NOT expression.
 norm expect-not=SimplifySelectFilters
@@ -291,11 +291,11 @@ norm expect=ConsolidateSelectFilters disable=InlineConstVar
 SELECT * FROM (SELECT * FROM a WHERE k = 5) AS a, e WHERE a.k = e.k AND a.k > 1 AND e.k < 10
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2 f:3 s:4 j:5 k:7!null i:8 t:9 tz:10 d:11
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 k:8!null i:9 t:10 tz:11 d:12
  ├── cardinality: [0 - 1]
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: ()
- ├── fd: ()-->(1-5,7-11), (7)==(1), (1)==(7)
+ ├── fd: ()-->(1-5,8-12), (8)==(1), (1)==(8)
  ├── select
  │    ├── columns: a.k:1!null a.i:2 f:3 s:4 j:5
  │    ├── cardinality: [0 - 1]
@@ -308,27 +308,27 @@ inner-join (hash)
  │    └── filters
  │         └── ((a.k:1 = 5) AND (a.k:1 > 1)) AND (a.k:1 < 10) [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  ├── select
- │    ├── columns: e.k:7!null e.i:8 t:9 tz:10 d:11
+ │    ├── columns: e.k:8!null e.i:9 t:10 tz:11 d:12
  │    ├── cardinality: [0 - 8]
- │    ├── key: (7)
- │    ├── fd: (7)-->(8-11)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9-12)
  │    ├── scan e
- │    │    ├── columns: e.k:7!null e.i:8 t:9 tz:10 d:11
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8-11)
+ │    │    ├── columns: e.k:8!null e.i:9 t:10 tz:11 d:12
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9-12)
  │    └── filters
- │         └── (e.k:7 < 10) AND (e.k:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
+ │         └── (e.k:8 < 10) AND (e.k:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
  └── filters
-      └── a.k:1 = e.k:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── a.k:1 = e.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # The duplicate filter i >= 5 should be eliminated.
 norm expect=ConsolidateSelectFilters
 SELECT * FROM (SELECT * FROM a WHERE i >= 5 AND i < 10) AS a, xy WHERE i >= 5
 ----
 inner-join (cross)
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
- ├── key: (1,7)
- ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null y:9
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │    ├── key: (1)
@@ -340,18 +340,18 @@ inner-join (cross)
  │    └── filters
  │         └── (i:2 >= 5) AND (i:2 < 10) [outer=(2), constraints=(/2: [/5 - /9]; tight)]
  ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
  └── filters (true)
 
 norm expect=ConsolidateSelectFilters
 SELECT * FROM (SELECT * FROM a WHERE i < 10 AND i >= 5) AS a, xy WHERE i >= 5
 ----
 inner-join (cross)
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
- ├── key: (1,7)
- ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null y:9
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │    ├── key: (1)
@@ -363,9 +363,9 @@ inner-join (cross)
  │    └── filters
  │         └── (i:2 < 10) AND (i:2 >= 5) [outer=(2), constraints=(/2: [/5 - /9]; tight)]
  ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
  └── filters (true)
 
 norm expect=ConsolidateSelectFilters
@@ -373,9 +373,9 @@ SELECT * FROM (SELECT * FROM a WHERE i < 10 AND i >= 5 AND i IN (0, 2, 4, 6, 8, 
 WHERE i >= 5 AND i < 10
 ----
 inner-join (cross)
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
- ├── key: (1,7)
- ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null y:9
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │    ├── key: (1)
@@ -387,9 +387,9 @@ inner-join (cross)
  │    └── filters
  │         └── ((i:2 < 10) AND (i:2 >= 5)) AND (i:2 IN (0, 2, 4, 6, 8, 10, 12)) [outer=(2), constraints=(/2: [/6 - /6] [/8 - /8]; tight)]
  ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
  └── filters (true)
 
 # --------------------------------------------------
@@ -487,9 +487,9 @@ norm expect=PushSelectIntoProject
 SELECT * FROM (SELECT i, i+1 AS r, f FROM a) a WHERE f=10.0
 ----
 project
- ├── columns: i:2 r:7 f:3!null
+ ├── columns: i:2 r:8 f:3!null
  ├── immutable
- ├── fd: ()-->(3), (2)-->(7)
+ ├── fd: ()-->(3), (2)-->(8)
  ├── select
  │    ├── columns: i:2 f:3!null
  │    ├── fd: ()-->(3)
@@ -498,37 +498,37 @@ project
  │    └── filters
  │         └── f:3 = 10.0 [outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
  └── projections
-      └── i:2 + 1 [as=r:7, outer=(2), immutable]
+      └── i:2 + 1 [as=r:8, outer=(2), immutable]
 
 # Don't push down select if it depends on computed column that can't be inlined.
 norm expect-not=PushSelectIntoProject
 SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 ----
 select
- ├── columns: i:2 div:7!null f:3
+ ├── columns: i:2 div:8!null f:3
  ├── immutable
- ├── fd: ()-->(7)
+ ├── fd: ()-->(8)
  ├── project
- │    ├── columns: div:7 i:2 f:3
- │    ├── fd: (2)-->(7)
+ │    ├── columns: div:8 i:2 f:3
+ │    ├── fd: (2)-->(8)
  │    ├── scan a
  │    │    └── columns: i:2 f:3
  │    └── projections
- │         └── i:2 / 2 [as=div:7, outer=(2)]
+ │         └── i:2 / 2 [as=div:8, outer=(2)]
  └── filters
-      └── div:7 = 2 [outer=(7), immutable, constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+      └── div:8 = 2 [outer=(8), immutable, constraints=(/8: [/2 - /2]; tight), fd=()-->(8)]
 
 # Push down some conjuncts, but not others.
 norm expect=PushSelectIntoProject
 SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 ----
 select
- ├── columns: i:2!null div:7!null f:3!null
+ ├── columns: i:2!null div:8!null f:3!null
  ├── immutable
- ├── fd: ()-->(2,3,7)
+ ├── fd: ()-->(2,3,8)
  ├── project
- │    ├── columns: div:7!null i:2!null f:3!null
- │    ├── fd: ()-->(2,3,7)
+ │    ├── columns: div:8!null i:2!null f:3!null
+ │    ├── fd: ()-->(2,3,8)
  │    ├── select
  │    │    ├── columns: i:2!null f:3!null
  │    │    ├── fd: ()-->(2,3)
@@ -538,36 +538,36 @@ select
  │    │         ├── f:3 = 10.0 [outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
  │    │         └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  │    └── projections
- │         └── i:2 / 2 [as=div:7, outer=(2)]
+ │         └── i:2 / 2 [as=div:8, outer=(2)]
  └── filters
-      └── div:7 = 2 [outer=(7), immutable, constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+      └── div:8 = 2 [outer=(8), immutable, constraints=(/8: [/2 - /2]; tight), fd=()-->(8)]
 
 # Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
 norm
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) a
 ----
 project
- ├── columns: f:3 r:8
+ ├── columns: f:3 r:9
  ├── immutable
- ├── fd: (3)-->(8)
+ ├── fd: (3)-->(9)
  ├── select
- │    ├── columns: i:2 f:3 sum:7!null
+ │    ├── columns: i:2 f:3 sum:8!null
  │    ├── key: (2,3)
- │    ├── fd: ()-->(7)
+ │    ├── fd: ()-->(8)
  │    ├── group-by
- │    │    ├── columns: i:2 f:3 sum:7
+ │    │    ├── columns: i:2 f:3 sum:8
  │    │    ├── grouping columns: i:2 f:3
  │    │    ├── key: (2,3)
- │    │    ├── fd: (2,3)-->(7)
+ │    │    ├── fd: (2,3)-->(8)
  │    │    ├── scan a
  │    │    │    └── columns: i:2 f:3
  │    │    └── aggregations
- │    │         └── sum [as=sum:7, outer=(3)]
+ │    │         └── sum [as=sum:8, outer=(3)]
  │    │              └── f:3
  │    └── filters
- │         └── sum:7 = 10.0 [outer=(7), constraints=(/7: [/10.0 - /10.0]; tight), fd=()-->(7)]
+ │         └── sum:8 = 10.0 [outer=(8), constraints=(/8: [/10.0 - /10.0]; tight), fd=()-->(8)]
  └── projections
-      └── f:3 + 1.1 [as=r:8, outer=(3), immutable]
+      └── f:3 + 1.1 [as=r:9, outer=(3), immutable]
 
 # --------------------------------------
 # PushSelectCondLeftIntoJoinLeftAndRight
@@ -578,14 +578,14 @@ norm expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.k > 5 AND (xy.x = 6 OR xy.x IS NULL)
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
  ├── key: (1)
- ├── fd: (1)-->(2-5,7,8), (7)-->(8)
+ ├── fd: (1)-->(2-5,8,9), (8)-->(9)
  ├── left-join (hash)
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5,7,8), (7)-->(8)
+ │    ├── fd: (1)-->(2-5,8,9), (8)-->(9)
  │    ├── select
  │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
@@ -597,19 +597,19 @@ select
  │    │    └── filters
  │    │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
  │    ├── select
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    ├── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    ├── fd: (8)-->(9)
  │    │    ├── scan xy
- │    │    │    ├── columns: x:7!null y:8
- │    │    │    ├── key: (7)
- │    │    │    └── fd: (7)-->(8)
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
  │    │    └── filters
- │    │         └── x:7 > 5 [outer=(7), constraints=(/7: [/6 - ]; tight)]
+ │    │         └── x:8 > 5 [outer=(8), constraints=(/8: [/6 - ]; tight)]
  │    └── filters
- │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── filters
-      └── (x:7 = 6) OR (x:7 IS NULL) [outer=(7), constraints=(/7: [/NULL - /NULL] [/6 - /6]; tight)]
+      └── (x:8 = 6) OR (x:8 IS NULL) [outer=(8), constraints=(/8: [/NULL - /NULL] [/6 - /6]; tight)]
 
 norm expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a WHERE EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
@@ -629,15 +629,15 @@ semi-join (hash)
  │    └── filters
  │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
  ├── select
- │    ├── columns: x:7!null
- │    ├── key: (7)
+ │    ├── columns: x:8!null
+ │    ├── key: (8)
  │    ├── scan xy
- │    │    ├── columns: x:7!null
- │    │    └── key: (7)
+ │    │    ├── columns: x:8!null
+ │    │    └── key: (8)
  │    └── filters
- │         └── x:7 > 5 [outer=(7), constraints=(/7: [/6 - ]; tight)]
+ │         └── x:8 > 5 [outer=(8), constraints=(/8: [/6 - ]; tight)]
  └── filters
-      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 norm expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a WHERE NOT EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
@@ -657,15 +657,15 @@ anti-join (hash)
  │    └── filters
  │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
  ├── select
- │    ├── columns: x:7!null
- │    ├── key: (7)
+ │    ├── columns: x:8!null
+ │    ├── key: (8)
  │    ├── scan xy
- │    │    ├── columns: x:7!null
- │    │    └── key: (7)
+ │    │    ├── columns: x:8!null
+ │    │    └── key: (8)
  │    └── filters
- │         └── x:7 > 5 [outer=(7), constraints=(/7: [/6 - ]; tight)]
+ │         └── x:8 > 5 [outer=(8), constraints=(/8: [/6 - ]; tight)]
  └── filters
-      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinLeft
@@ -674,10 +674,10 @@ norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.f=1.1
 ----
 left-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7 y:8
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,4,5,7,8), (7)-->(8)
+ ├── fd: ()-->(3), (1)-->(2,4,5,8,9), (8)-->(9)
  ├── select
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
@@ -689,25 +689,25 @@ left-join (hash)
  │    └── filters
  │         └── f:3 = 1.1 [outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
  ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
  └── filters
-      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a LEFT JOIN xy ON a.k=xy.x
 WHERE a.f=1.1 AND (a.i<xy.y OR xy.y IS NULL) AND (a.s='foo' OR a.s='bar')
 ----
 select
- ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:7 y:8
+ ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:8 y:9
  ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,4,5,7,8), (7)-->(8)
+ ├── fd: ()-->(3), (1)-->(2,4,5,8,9), (8)-->(9)
  ├── left-join (hash)
- │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:7 y:8
+ │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5 x:8 y:9
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: ()-->(3), (1)-->(2,4,5,7,8), (7)-->(8)
+ │    ├── fd: ()-->(3), (1)-->(2,4,5,8,9), (8)-->(9)
  │    ├── select
  │    │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5
  │    │    ├── key: (1)
@@ -720,23 +720,23 @@ select
  │    │         ├── f:3 = 1.1 [outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
  │    │         └── (s:4 = 'foo') OR (s:4 = 'bar') [outer=(4), constraints=(/4: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters
- │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── filters
-      └── (i:2 < y:8) OR (y:8 IS NULL) [outer=(2,8)]
+      └── (i:2 < y:9) OR (y:9 IS NULL) [outer=(2,9)]
 
 # Pushdown constant condition.
 norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a LEFT JOIN xy ON True WHERE a.i=100 AND $1>'2000-01-01T1:00:00'
 ----
 left-join (cross)
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7 y:8
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8 y:9
  ├── has-placeholder
- ├── key: (1,7)
- ├── fd: ()-->(2), (1)-->(3-5), (7)-->(8)
+ ├── key: (1,8)
+ ├── fd: ()-->(2), (1)-->(3-5), (8)-->(9)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │    ├── has-placeholder
@@ -750,14 +750,14 @@ left-join (cross)
  │         ├── $1 > '2000-01-01T1:00:00'
  │         └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
  ├── select
- │    ├── columns: x:7!null y:8
+ │    ├── columns: x:8!null y:9
  │    ├── has-placeholder
- │    ├── key: (7)
- │    ├── fd: (7)-->(8)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters
  │         └── $1 > '2000-01-01T1:00:00'
  └── filters (true)
@@ -767,24 +767,24 @@ norm
 SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
- ├── key: (7)
- ├── fd: (7)-->(1-5,8), (1)-->(2-5)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:8!null y:9
+ ├── key: (8)
+ ├── fd: (8)-->(1-5,9), (1)-->(2-5)
  ├── left-join (hash)
- │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8!null y:9
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
- │    ├── key: (7)
- │    ├── fd: (7)-->(1-5,8), (1)-->(2-5)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(1-5,9), (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters
- │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── filters
       └── (i:2 = 100) OR (i:2 IS NULL) [outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100]; tight)]
 
@@ -793,24 +793,24 @@ norm
 SELECT * FROM a FULL JOIN xy ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
- ├── key: (1,7)
- ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 y:9
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9)
  ├── full-join (hash)
- │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 y:9
  │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- │    ├── key: (1,7)
- │    ├── fd: (1)-->(2-5), (7)-->(8)
+ │    ├── key: (1,8)
+ │    ├── fd: (1)-->(2-5), (8)-->(9)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters
- │         └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── filters
       └── (i:2 = 100) OR (i:2 IS NULL) [outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100]; tight)]
 
@@ -833,10 +833,10 @@ semi-join (hash)
  │    └── filters
  │         └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
- │    ├── columns: x:7!null
- │    └── key: (7)
+ │    ├── columns: x:8!null
+ │    └── key: (8)
  └── filters
-      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Push into anti-join.
 norm expect=PushSelectIntoJoinLeft
@@ -857,62 +857,62 @@ anti-join (hash)
  │    └── filters
  │         └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
- │    ├── columns: x:7!null
- │    └── key: (7)
+ │    ├── columns: x:8!null
+ │    └── key: (8)
  └── filters
-      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Don't push down conditions in case of LEFT JOIN.
 norm
 SELECT * FROM xy LEFT JOIN a ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: x:1!null y:2 k:4 i:5 f:6 s:7 j:8
+ ├── columns: x:1!null y:2 k:5 i:6 f:7 s:8 j:9
  ├── key: (1)
- ├── fd: (1)-->(2,4-8), (4)-->(5-8)
+ ├── fd: (1)-->(2,5-9), (5)-->(6-9)
  ├── left-join (hash)
- │    ├── columns: x:1!null y:2 k:4 i:5 f:6 s:7 j:8
+ │    ├── columns: x:1!null y:2 k:5 i:6 f:7 s:8 j:9
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,4-8), (4)-->(5-8)
+ │    ├── fd: (1)-->(2,5-9), (5)-->(6-9)
  │    ├── scan xy
  │    │    ├── columns: x:1!null y:2
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── scan a
- │    │    ├── columns: k:4!null i:5 f:6 s:7 j:8
- │    │    ├── key: (4)
- │    │    └── fd: (4)-->(5-8)
+ │    │    ├── columns: k:5!null i:6 f:7 s:8 j:9
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6-9)
  │    └── filters
- │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── filters
-      └── (i:5 = 100) OR (i:5 IS NULL) [outer=(5), constraints=(/5: [/NULL - /NULL] [/100 - /100]; tight)]
+      └── (i:6 = 100) OR (i:6 IS NULL) [outer=(6), constraints=(/6: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # Don't push down conditions in case of FULL JOIN.
 norm
 SELECT * FROM xy FULL JOIN a ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: x:1 y:2 k:4 i:5 f:6 s:7 j:8
- ├── key: (1,4)
- ├── fd: (1)-->(2), (4)-->(5-8)
+ ├── columns: x:1 y:2 k:5 i:6 f:7 s:8 j:9
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6-9)
  ├── full-join (hash)
- │    ├── columns: x:1 y:2 k:4 i:5 f:6 s:7 j:8
+ │    ├── columns: x:1 y:2 k:5 i:6 f:7 s:8 j:9
  │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- │    ├── key: (1,4)
- │    ├── fd: (1)-->(2), (4)-->(5-8)
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2), (5)-->(6-9)
  │    ├── scan xy
  │    │    ├── columns: x:1!null y:2
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── scan a
- │    │    ├── columns: k:4!null i:5 f:6 s:7 j:8
- │    │    ├── key: (4)
- │    │    └── fd: (4)-->(5-8)
+ │    │    ├── columns: k:5!null i:6 f:7 s:8 j:9
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6-9)
  │    └── filters
- │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── filters
-      └── (i:5 = 100) OR (i:5 IS NULL) [outer=(5), constraints=(/5: [/NULL - /NULL] [/100 - /100]; tight)]
+      └── (i:6 = 100) OR (i:6 IS NULL) [outer=(6), constraints=(/6: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # --------------------------------------------------
 # MergeSelectInnerJoin
@@ -921,122 +921,122 @@ norm expect=MergeSelectInnerJoin
 SELECT * FROM a, xy WHERE a.k=xy.x AND (a.s='foo' OR xy.y<100)
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null y:9
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (7)
- ├── fd: (1)-->(2-5), (7)-->(8), (1)==(7), (7)==(1)
+ ├── key: (8)
+ ├── fd: (1)-->(2-5), (8)-->(9), (1)==(8), (8)==(1)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
  └── filters
-      ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      └── (s:4 = 'foo') OR (y:8 < 100) [outer=(4,8)]
+      ├── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      └── (s:4 = 'foo') OR (y:9 < 100) [outer=(4,9)]
 
 norm expect=MergeSelectInnerJoin
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE (a.s='foo' OR xy.y<100)
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null y:9
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (7)
- ├── fd: (1)-->(2-5), (7)-->(8), (1)==(7), (7)==(1)
+ ├── key: (8)
+ ├── fd: (1)-->(2-5), (8)-->(9), (1)==(8), (8)==(1)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
  └── filters
-      ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      └── (s:4 = 'foo') OR (y:8 < 100) [outer=(4,8)]
+      ├── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      └── (s:4 = 'foo') OR (y:9 < 100) [outer=(4,9)]
 
 norm expect=MergeSelectInnerJoin
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
 ----
 values
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:7!null y:8!null
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:8!null y:9!null
  ├── cardinality: [0 - 0]
  ├── key: ()
- └── fd: ()-->(1-5,7,8)
+ └── fd: ()-->(1-5,8,9)
 
 # Don't merge with LEFT JOIN.
 norm expect-not=MergeSelectInnerJoin
 SELECT * FROM a LEFT JOIN xy ON True WHERE a.k=xy.x OR xy.x IS NULL
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
- ├── key: (1,7)
- ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9)
  ├── left-join (cross)
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
- │    ├── key: (1,7)
- │    ├── fd: (1)-->(2-5), (7)-->(8)
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
+ │    ├── key: (1,8)
+ │    ├── fd: (1)-->(2-5), (8)-->(9)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters (true)
  └── filters
-      └── (k:1 = x:7) OR (x:7 IS NULL) [outer=(1,7)]
+      └── (k:1 = x:8) OR (x:8 IS NULL) [outer=(1,8)]
 
 # Don't merge with RIGHT JOIN.
 norm expect-not=MergeSelectInnerJoin
 SELECT * FROM a RIGHT JOIN xy ON True WHERE a.k=xy.x OR a.k IS NULL
 ----
 select
- ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
- ├── key: (1,7)
- ├── fd: (7)-->(8), (1)-->(2-5)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:8!null y:9
+ ├── key: (1,8)
+ ├── fd: (8)-->(9), (1)-->(2-5)
  ├── left-join (cross)
- │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7!null y:8
- │    ├── key: (1,7)
- │    ├── fd: (7)-->(8), (1)-->(2-5)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8!null y:9
+ │    ├── key: (1,8)
+ │    ├── fd: (8)-->(9), (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters (true)
  └── filters
-      └── (k:1 = x:7) OR (k:1 IS NULL) [outer=(1,7)]
+      └── (k:1 = x:8) OR (k:1 IS NULL) [outer=(1,8)]
 
 # Don't merge with FULL JOIN.
 norm expect-not=MergeSelectInnerJoin
 SELECT * FROM a FULL JOIN xy ON True WHERE a.k=xy.x OR a.k IS NULL OR xy.x IS NULL
 ----
 select
- ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
- ├── key: (1,7)
- ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 y:9
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9)
  ├── full-join (cross)
- │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:7 y:8
- │    ├── key: (1,7)
- │    ├── fd: (1)-->(2-5), (7)-->(8)
+ │    ├── columns: k:1 i:2 f:3 s:4 j:5 x:8 y:9
+ │    ├── key: (1,8)
+ │    ├── fd: (1)-->(2-5), (8)-->(9)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters (true)
  └── filters
-      └── ((k:1 = x:7) OR (k:1 IS NULL)) OR (x:7 IS NULL) [outer=(1,7)]
+      └── ((k:1 = x:8) OR (k:1 IS NULL)) OR (x:8 IS NULL) [outer=(1,8)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinLeft + MergeSelectInnerJoin
@@ -1045,10 +1045,10 @@ norm
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND s='foo' AND xy.y=10 AND a.i<xy.y
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 x:7!null y:8!null
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 x:8!null y:9!null
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (7)
- ├── fd: ()-->(3,4,8), (1)-->(2,5), (1)==(7), (7)==(1)
+ ├── key: (8)
+ ├── fd: ()-->(3,4,9), (1)-->(2,5), (1)==(8), (8)==(1)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3!null s:4!null j:5
  │    ├── key: (1)
@@ -1062,27 +1062,27 @@ inner-join (hash)
  │         ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── i:2 < 10 [outer=(2), constraints=(/2: (/NULL - /9]; tight)]
  ├── select
- │    ├── columns: x:7!null y:8!null
- │    ├── key: (7)
- │    ├── fd: ()-->(8)
+ │    ├── columns: x:8!null y:9!null
+ │    ├── key: (8)
+ │    ├── fd: ()-->(9)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters
- │         └── y:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
+ │         └── y:9 = 10 [outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
  └── filters
-      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 norm
 SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:7!null y:8
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null y:9
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── has-placeholder
- ├── key: (7)
- ├── fd: ()-->(2), (1)-->(3-5), (7)-->(8), (1)==(7), (7)==(1)
+ ├── key: (8)
+ ├── fd: ()-->(2), (1)-->(3-5), (8)-->(9), (1)==(8), (8)==(1)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
  │    ├── has-placeholder
@@ -1096,18 +1096,18 @@ inner-join (hash)
  │         ├── $1 > '2000-01-01T1:00:00'
  │         └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
  ├── select
- │    ├── columns: x:7!null y:8
+ │    ├── columns: x:8!null y:9
  │    ├── has-placeholder
- │    ├── key: (7)
- │    ├── fd: (7)-->(8)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9)
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters
  │         └── $1 > '2000-01-01T1:00:00'
  └── filters
-      └── x:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # --------------------------------------------------
 # PushSelectIntoGroupBy
@@ -1118,10 +1118,10 @@ norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT i, count(*) FROM a GROUP BY i) a WHERE i=1
 ----
 group-by
- ├── columns: i:2!null count:7!null
+ ├── columns: i:2!null count:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(2,7)
+ ├── fd: ()-->(2,8)
  ├── select
  │    ├── columns: i:2!null
  │    ├── fd: ()-->(2)
@@ -1130,7 +1130,7 @@ group-by
  │    └── filters
  │         └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── aggregations
-      ├── count-rows [as=count_rows:7]
+      ├── count-rows [as=count_rows:8]
       └── const-agg [as=i:2, outer=(2)]
            └── i:2
 
@@ -1159,14 +1159,14 @@ norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='foo'
 ----
 select
- ├── columns: k:1!null i:2!null m:7!null
+ ├── columns: k:1!null i:2!null m:8!null
  ├── key: (1)
- ├── fd: ()-->(7), (1)==(2), (2)==(1), (1)-->(2)
+ ├── fd: ()-->(8), (1)==(2), (2)==(1), (1)-->(2)
  ├── group-by
- │    ├── columns: k:1!null i:2!null max:7
+ │    ├── columns: k:1!null i:2!null max:8
  │    ├── grouping columns: k:1!null
  │    ├── key: (1)
- │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,7)
+ │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,8)
  │    ├── select
  │    │    ├── columns: k:1!null i:2!null s:4
  │    │    ├── key: (1)
@@ -1178,12 +1178,12 @@ select
  │    │    └── filters
  │    │         └── i:2 = k:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
  │    └── aggregations
- │         ├── max [as=max:7, outer=(4)]
+ │         ├── max [as=max:8, outer=(4)]
  │         │    └── s:4
  │         └── const-agg [as=i:2, outer=(2)]
  │              └── i:2
  └── filters
-      └── max:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+      └── max:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
 
 # DistinctOn case.
 norm expect=PushSelectIntoGroupBy
@@ -1209,14 +1209,14 @@ norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT DISTINCT ON (k, f, s) k, i, f, x FROM a JOIN xy ON i=y) WHERE k > f
 ----
 distinct-on
- ├── columns: k:1!null i:2!null f:3!null x:7!null
+ ├── columns: k:1!null i:2!null f:3!null x:8!null
  ├── grouping columns: k:1!null
  ├── key: (1)
- ├── fd: (1)-->(2,3,7), (7)-->(2)
+ ├── fd: (1)-->(2,3,8), (8)-->(2)
  ├── inner-join (hash)
- │    ├── columns: k:1!null i:2!null f:3!null x:7!null y:8!null
- │    ├── key: (1,7)
- │    ├── fd: (1)-->(2,3), (7)-->(8), (2)==(8), (8)==(2)
+ │    ├── columns: k:1!null i:2!null f:3!null x:8!null y:9!null
+ │    ├── key: (1,8)
+ │    ├── fd: (1)-->(2,3), (8)-->(9), (2)==(9), (9)==(2)
  │    ├── select
  │    │    ├── columns: k:1!null i:2 f:3!null
  │    │    ├── key: (1)
@@ -1228,16 +1228,16 @@ distinct-on
  │    │    └── filters
  │    │         └── k:1 > f:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
  │    └── filters
- │         └── i:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  └── aggregations
       ├── first-agg [as=i:2, outer=(2)]
       │    └── i:2
-      ├── first-agg [as=x:7, outer=(7)]
-      │    └── x:7
+      ├── first-agg [as=x:8, outer=(8)]
+      │    └── x:8
       └── const-agg [as=f:3, outer=(3)]
            └── f:3
 
@@ -1246,22 +1246,22 @@ norm expect-not=PushSelectIntoGroupBy
 SELECT * FROM (SELECT count(*) c FROM a) a WHERE $1<'2000-01-01T10:00:00' AND c=0
 ----
 select
- ├── columns: c:7!null
+ ├── columns: c:8!null
  ├── cardinality: [0 - 1]
  ├── has-placeholder
  ├── key: ()
- ├── fd: ()-->(7)
+ ├── fd: ()-->(8)
  ├── scalar-group-by
- │    ├── columns: count_rows:7!null
+ │    ├── columns: count_rows:8!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(7)
+ │    ├── fd: ()-->(8)
  │    ├── scan a
  │    └── aggregations
- │         └── count-rows [as=count_rows:7]
+ │         └── count-rows [as=count_rows:8]
  └── filters
       ├── $1 < '2000-01-01T10:00:00'
-      └── count_rows:7 = 0 [outer=(7), constraints=(/7: [/0 - /0]; tight), fd=()-->(7)]
+      └── count_rows:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
 
 # --------------------------------------------------
 # RemoveNotNullCondition
@@ -1391,7 +1391,7 @@ norm expect=PushSelectIntoProjectSet
 SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE k = 1
 ----
 project-set
- ├── columns: k:1!null g:7
+ ├── columns: k:1!null g:8
  ├── immutable
  ├── fd: ()-->(1)
  ├── select
@@ -1412,10 +1412,10 @@ norm expect-not=PushSelectIntoProjectSet
 SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1
 ----
 select
- ├── columns: k:1!null g:7!null
+ ├── columns: k:1!null g:8!null
  ├── immutable
  ├── project-set
- │    ├── columns: k:1!null generate_series:7
+ │    ├── columns: k:1!null generate_series:8
  │    ├── immutable
  │    ├── scan a
  │    │    ├── columns: k:1!null
@@ -1423,18 +1423,18 @@ select
  │    └── zip
  │         └── generate_series(0, k:1, 10) [outer=(1), immutable]
  └── filters
-      └── generate_series:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+      └── generate_series:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
 
 # Expect that only the applicable filters are pushed down into the project-set.
 norm expect=PushSelectIntoProjectSet
 SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1 AND k = 1
 ----
 select
- ├── columns: k:1!null g:7!null
+ ├── columns: k:1!null g:8!null
  ├── immutable
  ├── fd: ()-->(1)
  ├── project-set
- │    ├── columns: k:1!null generate_series:7
+ │    ├── columns: k:1!null generate_series:8
  │    ├── immutable
  │    ├── fd: ()-->(1)
  │    ├── select
@@ -1450,7 +1450,7 @@ select
  │    └── zip
  │         └── generate_series(0, k:1, 10) [outer=(1), immutable]
  └── filters
-      └── generate_series:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+      └── generate_series:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
 
 
 # --------------------------------------------------
@@ -1465,9 +1465,9 @@ SELECT k FROM
 WHERE k < 10
 ----
 union-all
- ├── columns: k:13!null
+ ├── columns: k:15!null
  ├── left columns: b.k:1
- ├── right columns: b.k:7
+ ├── right columns: b.k:8
  ├── select
  │    ├── columns: b.k:1!null
  │    ├── key: (1)
@@ -1477,13 +1477,13 @@ union-all
  │    └── filters
  │         └── b.k:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
  └── select
-      ├── columns: b.k:7!null
-      ├── key: (7)
+      ├── columns: b.k:8!null
+      ├── key: (8)
       ├── scan b
-      │    ├── columns: b.k:7!null
-      │    └── key: (7)
+      │    ├── columns: b.k:8!null
+      │    └── key: (8)
       └── filters
-           └── b.k:7 < 10 [outer=(7), constraints=(/7: (/NULL - /9]; tight)]
+           └── b.k:8 < 10 [outer=(8), constraints=(/8: (/NULL - /9]; tight)]
 
 norm expect=PushFilterIntoSetOp
 SELECT k FROM
@@ -1493,10 +1493,10 @@ SELECT k FROM
 WHERE k < 10 AND k > 1
 ----
 union
- ├── columns: k:13!null
+ ├── columns: k:15!null
  ├── left columns: b.k:1
- ├── right columns: a.i:8
- ├── key: (13)
+ ├── right columns: a.i:9
+ ├── key: (15)
  ├── select
  │    ├── columns: b.k:1!null
  │    ├── cardinality: [0 - 8]
@@ -1507,11 +1507,11 @@ union
  │    └── filters
  │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
-      ├── columns: a.i:8!null
+      ├── columns: a.i:9!null
       ├── scan a
-      │    └── columns: a.i:8
+      │    └── columns: a.i:9
       └── filters
-           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+           └── (a.i:9 < 10) AND (a.i:9 > 1) [outer=(9), constraints=(/9: [/2 - /9]; tight)]
 
 norm expect=PushFilterIntoSetOp
 SELECT k FROM
@@ -1523,7 +1523,7 @@ WHERE k < 10 AND k > 1
 except
  ├── columns: k:1!null
  ├── left columns: b.k:1!null
- ├── right columns: a.i:8
+ ├── right columns: a.i:9
  ├── cardinality: [0 - 8]
  ├── key: (1)
  ├── select
@@ -1536,11 +1536,11 @@ except
  │    └── filters
  │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
-      ├── columns: a.i:8!null
+      ├── columns: a.i:9!null
       ├── scan a
-      │    └── columns: a.i:8
+      │    └── columns: a.i:9
       └── filters
-           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+           └── (a.i:9 < 10) AND (a.i:9 > 1) [outer=(9), constraints=(/9: [/2 - /9]; tight)]
 
 norm expect=PushFilterIntoSetOp
 SELECT k FROM
@@ -1552,7 +1552,7 @@ WHERE k < 10 AND k > 1
 except-all
  ├── columns: k:1!null
  ├── left columns: b.k:1!null
- ├── right columns: a.i:8
+ ├── right columns: a.i:9
  ├── cardinality: [0 - 8]
  ├── select
  │    ├── columns: b.k:1!null
@@ -1564,11 +1564,11 @@ except-all
  │    └── filters
  │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
-      ├── columns: a.i:8!null
+      ├── columns: a.i:9!null
       ├── scan a
-      │    └── columns: a.i:8
+      │    └── columns: a.i:9
       └── filters
-           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+           └── (a.i:9 < 10) AND (a.i:9 > 1) [outer=(9), constraints=(/9: [/2 - /9]; tight)]
 
 norm expect=PushFilterIntoSetOp
 SELECT k FROM
@@ -1580,7 +1580,7 @@ WHERE k < 10 AND k > 1
 intersect
  ├── columns: k:1!null
  ├── left columns: b.k:1!null
- ├── right columns: a.i:8
+ ├── right columns: a.i:9
  ├── cardinality: [0 - 8]
  ├── key: (1)
  ├── select
@@ -1593,11 +1593,11 @@ intersect
  │    └── filters
  │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
-      ├── columns: a.i:8!null
+      ├── columns: a.i:9!null
       ├── scan a
-      │    └── columns: a.i:8
+      │    └── columns: a.i:9
       └── filters
-           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+           └── (a.i:9 < 10) AND (a.i:9 > 1) [outer=(9), constraints=(/9: [/2 - /9]; tight)]
 
 norm expect=PushFilterIntoSetOp
 SELECT k FROM
@@ -1609,7 +1609,7 @@ WHERE k < 10 AND k > 1
 intersect-all
  ├── columns: k:1!null
  ├── left columns: b.k:1!null
- ├── right columns: a.i:8
+ ├── right columns: a.i:9
  ├── cardinality: [0 - 8]
  ├── select
  │    ├── columns: b.k:1!null
@@ -1621,11 +1621,11 @@ intersect-all
  │    └── filters
  │         └── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
-      ├── columns: a.i:8!null
+      ├── columns: a.i:9!null
       ├── scan a
-      │    └── columns: a.i:8
+      │    └── columns: a.i:9
       └── filters
-           └── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+           └── (a.i:9 < 10) AND (a.i:9 > 1) [outer=(9), constraints=(/9: [/2 - /9]; tight)]
 
 norm expect=PushFilterIntoSetOp
 SELECT k FROM
@@ -1635,11 +1635,11 @@ SELECT k FROM
 WHERE k < 10 AND k > 1 AND random() < 0.5
 ----
 union
- ├── columns: k:13!null
+ ├── columns: k:15!null
  ├── left columns: b.k:1
- ├── right columns: a.i:8
+ ├── right columns: a.i:9
  ├── volatile
- ├── key: (13)
+ ├── key: (15)
  ├── select
  │    ├── columns: b.k:1!null
  │    ├── cardinality: [0 - 8]
@@ -1652,12 +1652,12 @@ union
  │         ├── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
  │         └── random() < 0.5 [volatile]
  └── select
-      ├── columns: a.i:8!null
+      ├── columns: a.i:9!null
       ├── volatile
       ├── scan a
-      │    └── columns: a.i:8
+      │    └── columns: a.i:9
       └── filters
-           ├── (a.i:8 < 10) AND (a.i:8 > 1) [outer=(8), constraints=(/8: [/2 - /9]; tight)]
+           ├── (a.i:9 < 10) AND (a.i:9 > 1) [outer=(9), constraints=(/9: [/2 - /9]; tight)]
            └── random() < 0.5 [volatile]
 
 norm expect=PushFilterIntoSetOp
@@ -1669,9 +1669,9 @@ SELECT * FROM
   SELECT * FROM a WHERE k=1)
 ----
 union-all
- ├── columns: k:13!null
+ ├── columns: k:15!null
  ├── left columns: b.k:1
- ├── right columns: b.k:7
+ ├── right columns: b.k:8
  ├── select
  │    ├── columns: b.k:1!null
  │    ├── key: (1)
@@ -1681,35 +1681,35 @@ union-all
  │    └── filters
  │         └── exists [subquery]
  │              └── select
- │                   ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
+ │                   ├── columns: a.k:16!null a.i:17 a.f:18 a.s:19 a.j:20
  │                   ├── cardinality: [0 - 1]
  │                   ├── key: ()
- │                   ├── fd: ()-->(14-18)
+ │                   ├── fd: ()-->(16-20)
  │                   ├── scan a
- │                   │    ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
- │                   │    ├── key: (14)
- │                   │    └── fd: (14)-->(15-18)
+ │                   │    ├── columns: a.k:16!null a.i:17 a.f:18 a.s:19 a.j:20
+ │                   │    ├── key: (16)
+ │                   │    └── fd: (16)-->(17-20)
  │                   └── filters
- │                        └── a.k:14 = 1 [outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
+ │                        └── a.k:16 = 1 [outer=(16), constraints=(/16: [/1 - /1]; tight), fd=()-->(16)]
  └── select
-      ├── columns: b.k:7!null
-      ├── key: (7)
+      ├── columns: b.k:8!null
+      ├── key: (8)
       ├── scan b
-      │    ├── columns: b.k:7!null
-      │    └── key: (7)
+      │    ├── columns: b.k:8!null
+      │    └── key: (8)
       └── filters
            └── exists [subquery]
                 └── select
-                     ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
+                     ├── columns: a.k:16!null a.i:17 a.f:18 a.s:19 a.j:20
                      ├── cardinality: [0 - 1]
                      ├── key: ()
-                     ├── fd: ()-->(14-18)
+                     ├── fd: ()-->(16-20)
                      ├── scan a
-                     │    ├── columns: a.k:14!null a.i:15 a.f:16 a.s:17 a.j:18
-                     │    ├── key: (14)
-                     │    └── fd: (14)-->(15-18)
+                     │    ├── columns: a.k:16!null a.i:17 a.f:18 a.s:19 a.j:20
+                     │    ├── key: (16)
+                     │    └── fd: (16)-->(17-20)
                      └── filters
-                          └── a.k:14 = 1 [outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
+                          └── a.k:16 = 1 [outer=(16), constraints=(/16: [/1 - /1]; tight), fd=()-->(16)]
 
 norm expect=PushFilterIntoSetOp
 SELECT * FROM
@@ -1720,14 +1720,14 @@ WHERE EXISTS(
   SELECT * FROM a WHERE k=1) AND random() < 0.5
 ----
 union-all
- ├── columns: k:27!null
- ├── left columns: k:13
- ├── right columns: k:26
+ ├── columns: k:31!null
+ ├── left columns: k:15
+ ├── right columns: k:30
  ├── volatile
  ├── union-all
- │    ├── columns: k:13!null
+ │    ├── columns: k:15!null
  │    ├── left columns: b.k:1
- │    ├── right columns: b.k:7
+ │    ├── right columns: b.k:8
  │    ├── volatile
  │    ├── select
  │    │    ├── columns: b.k:1!null
@@ -1739,84 +1739,84 @@ union-all
  │    │    └── filters
  │    │         ├── exists [subquery]
  │    │         │    └── select
- │    │         │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+ │    │         │         ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         ├── fd: ()-->(28-32)
+ │    │         │         ├── fd: ()-->(32-36)
  │    │         │         ├── scan a
- │    │         │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
- │    │         │         │    ├── key: (28)
- │    │         │         │    └── fd: (28)-->(29-32)
+ │    │         │         │    ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
+ │    │         │         │    ├── key: (32)
+ │    │         │         │    └── fd: (32)-->(33-36)
  │    │         │         └── filters
- │    │         │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+ │    │         │              └── a.k:32 = 1 [outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
  │    │         └── random() < 0.5 [volatile]
  │    └── select
- │         ├── columns: b.k:7!null
+ │         ├── columns: b.k:8!null
  │         ├── volatile
- │         ├── key: (7)
+ │         ├── key: (8)
  │         ├── scan b
- │         │    ├── columns: b.k:7!null
- │         │    └── key: (7)
+ │         │    ├── columns: b.k:8!null
+ │         │    └── key: (8)
  │         └── filters
  │              ├── exists [subquery]
  │              │    └── select
- │              │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+ │              │         ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
  │              │         ├── cardinality: [0 - 1]
  │              │         ├── key: ()
- │              │         ├── fd: ()-->(28-32)
+ │              │         ├── fd: ()-->(32-36)
  │              │         ├── scan a
- │              │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
- │              │         │    ├── key: (28)
- │              │         │    └── fd: (28)-->(29-32)
+ │              │         │    ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
+ │              │         │    ├── key: (32)
+ │              │         │    └── fd: (32)-->(33-36)
  │              │         └── filters
- │              │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+ │              │              └── a.k:32 = 1 [outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
  │              └── random() < 0.5 [volatile]
  └── union-all
-      ├── columns: k:26!null
-      ├── left columns: b.k:14
-      ├── right columns: b.k:20
+      ├── columns: k:30!null
+      ├── left columns: b.k:16
+      ├── right columns: b.k:23
       ├── volatile
       ├── select
-      │    ├── columns: b.k:14!null
+      │    ├── columns: b.k:16!null
       │    ├── volatile
-      │    ├── key: (14)
+      │    ├── key: (16)
       │    ├── scan b
-      │    │    ├── columns: b.k:14!null
-      │    │    └── key: (14)
+      │    │    ├── columns: b.k:16!null
+      │    │    └── key: (16)
       │    └── filters
       │         ├── exists [subquery]
       │         │    └── select
-      │         │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+      │         │         ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
       │         │         ├── cardinality: [0 - 1]
       │         │         ├── key: ()
-      │         │         ├── fd: ()-->(28-32)
+      │         │         ├── fd: ()-->(32-36)
       │         │         ├── scan a
-      │         │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
-      │         │         │    ├── key: (28)
-      │         │         │    └── fd: (28)-->(29-32)
+      │         │         │    ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
+      │         │         │    ├── key: (32)
+      │         │         │    └── fd: (32)-->(33-36)
       │         │         └── filters
-      │         │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+      │         │              └── a.k:32 = 1 [outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
       │         └── random() < 0.5 [volatile]
       └── select
-           ├── columns: b.k:20!null
+           ├── columns: b.k:23!null
            ├── volatile
-           ├── key: (20)
+           ├── key: (23)
            ├── scan b
-           │    ├── columns: b.k:20!null
-           │    └── key: (20)
+           │    ├── columns: b.k:23!null
+           │    └── key: (23)
            └── filters
                 ├── exists [subquery]
                 │    └── select
-                │         ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
+                │         ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
                 │         ├── cardinality: [0 - 1]
                 │         ├── key: ()
-                │         ├── fd: ()-->(28-32)
+                │         ├── fd: ()-->(32-36)
                 │         ├── scan a
-                │         │    ├── columns: a.k:28!null a.i:29 a.f:30 a.s:31 a.j:32
-                │         │    ├── key: (28)
-                │         │    └── fd: (28)-->(29-32)
+                │         │    ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
+                │         │    ├── key: (32)
+                │         │    └── fd: (32)-->(33-36)
                 │         └── filters
-                │              └── a.k:28 = 1 [outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+                │              └── a.k:32 = 1 [outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
                 └── random() < 0.5 [volatile]
 
 # No-op case because the filter references outer columns.
@@ -1830,37 +1830,37 @@ SELECT
 FROM a
 ----
 project
- ├── columns: k:20
+ ├── columns: k:23
  ├── ensure-distinct-on
- │    ├── columns: a.k:1!null k:19
+ │    ├── columns: a.k:1!null k:22
  │    ├── grouping columns: a.k:1!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── key: (1)
- │    ├── fd: (1)-->(19)
+ │    ├── fd: (1)-->(22)
  │    ├── left-join (cross)
- │    │    ├── columns: a.k:1!null a.i:2 k:19
+ │    │    ├── columns: a.k:1!null a.i:2 k:22
  │    │    ├── fd: (1)-->(2)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:1!null a.i:2
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2)
  │    │    ├── union-all
- │    │    │    ├── columns: k:19!null
- │    │    │    ├── left columns: b.k:7
- │    │    │    ├── right columns: b.k:13
+ │    │    │    ├── columns: k:22!null
+ │    │    │    ├── left columns: b.k:8
+ │    │    │    ├── right columns: b.k:15
  │    │    │    ├── scan b
- │    │    │    │    ├── columns: b.k:7!null
- │    │    │    │    └── key: (7)
+ │    │    │    │    ├── columns: b.k:8!null
+ │    │    │    │    └── key: (8)
  │    │    │    └── scan b
- │    │    │         ├── columns: b.k:13!null
- │    │    │         └── key: (13)
+ │    │    │         ├── columns: b.k:15!null
+ │    │    │         └── key: (15)
  │    │    └── filters
- │    │         └── k:19 < a.i:2 [outer=(2,19), constraints=(/2: (/NULL - ]; /19: (/NULL - ])]
+ │    │         └── k:22 < a.i:2 [outer=(2,22), constraints=(/2: (/NULL - ]; /22: (/NULL - ])]
  │    └── aggregations
- │         └── const-agg [as=k:19, outer=(19)]
- │              └── k:19
+ │         └── const-agg [as=k:22, outer=(22)]
+ │              └── k:22
  └── projections
-      └── k:19 [as=k:20, outer=(19)]
+      └── k:22 [as=k:23, outer=(22)]
 
 norm
 SELECT * FROM ((values (1,2))

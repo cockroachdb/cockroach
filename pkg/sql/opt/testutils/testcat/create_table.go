@@ -155,6 +155,22 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	)
 	tab.Columns = append(tab.Columns, mvcc)
 
+	// Add the tableoid system column.
+	var tableoid cat.Column
+	ordinal = len(tab.Columns)
+	tableoid.InitNonVirtual(
+		ordinal,
+		cat.StableID(1+ordinal),
+		colinfo.TableOIDColumnName,
+		cat.System,
+		types.Oid,
+		true, /* nullable */
+		cat.Hidden,
+		nil, /* defaultExpr */
+		nil, /* computedExpr */
+	)
+	tab.Columns = append(tab.Columns, tableoid)
+
 	// Cache the partitioning statement for the primary index.
 	if stmt.PartitionByTable != nil {
 		tab.partitionBy = stmt.PartitionByTable.PartitionBy
