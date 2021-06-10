@@ -734,6 +734,8 @@ func (w *tpcc) Ops(
 		}
 	}
 
+	counters := setupTPCCMetrics(reg.Registerer())
+
 	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -857,7 +859,7 @@ func (w *tpcc) Ops(
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(ctx, w, db, reg.GetHandle(), warehouse)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), counters, warehouse)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}

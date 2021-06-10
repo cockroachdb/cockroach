@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// TODO(tbg): rename this package to "workloadmetrics" or something like that.
+
 package histogram
 
 import (
@@ -22,9 +24,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
+	// PrometheusNamespace is the value that should be used for the
+	// Namespace field whenever a workload-related prometheus metric
+	// is defined.
+	PrometheusNamespace = "workload"
+	// MockWorkloadName is to be used in the event that a Registry is required
+	// outside of a workload.
+	MockWorkloadName = "mock"
+
 	sigFigs    = 1
 	minLatency = 100 * time.Microsecond
 )
@@ -32,21 +44,26 @@ const (
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
 // but intended to be thread-local.
 type NamedHistogram struct {
-	name string
-	mu   struct {
+	name                string
+	prometheusHistogram prometheus.Histogram
+	mu                  struct {
 		syncutil.Mutex
 		current *hdrhistogram.Histogram
 	}
 }
 
 func newNamedHistogram(reg *Registry, name string) *NamedHistogram {
-	w := &NamedHistogram{name: name}
+	w := &NamedHistogram{
+		name:                name,
+		prometheusHistogram: reg.getPrometheusHistogram(name + "_duration_seconds"),
+	}
 	w.mu.current = reg.newHistogram()
 	return w
 }
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
 	if elapsed < minLatency {
 		elapsed = minLatency
@@ -82,9 +99,15 @@ func (w *NamedHistogram) tick(
 // named histograms. It allows for "tick"ing them periodically to reset the
 // counts and also supports aggregations.
 type Registry struct {
-	mu struct {
+	workloadName string // name of the workload reporting to this registry
+	mu           struct {
 		syncutil.Mutex
 		registered map[string][]*NamedHistogram
+	}
+	promReg      *prometheus.Registry
+	prometheusMu struct {
+		syncutil.RWMutex
+		prometheusHistograms map[string]prometheus.Histogram
 	}
 
 	start         time.Time
@@ -93,14 +116,19 @@ type Registry struct {
 	histogramPool *sync.Pool
 }
 
-// NewRegistry returns an initialized Registry. maxLat is the maximum time that
-// queries are expected to take to execute which is needed to initialize the
-// pool of histograms.
-func NewRegistry(maxLat time.Duration) *Registry {
+// NewRegistry returns an initialized Registry.
+// maxLat is the maximum time that queries are expected to take to execute
+// which is needed to initialize the pool of histograms.
+// newPrometheusHistogramFunc specifies how to generate a new
+// prometheus.Histogram with a given name. Use MockNewPrometheusHistogram
+// if prometheus logging is undesired.
+func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 	r := &Registry{
-		start:      timeutil.Now(),
-		cumulative: make(map[string]*hdrhistogram.Histogram),
-		prevTick:   make(map[string]time.Time),
+		workloadName: workloadName,
+		start:        timeutil.Now(),
+		cumulative:   make(map[string]*hdrhistogram.Histogram),
+		prevTick:     make(map[string]time.Time),
+		promReg:      prometheus.NewRegistry(),
 		histogramPool: &sync.Pool{
 			New: func() interface{} {
 				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
@@ -108,7 +136,18 @@ func NewRegistry(maxLat time.Duration) *Registry {
 		},
 	}
 	r.mu.registered = make(map[string][]*NamedHistogram)
+	r.prometheusMu.prometheusHistograms = make(map[string]prometheus.Histogram)
 	return r
+}
+
+// Registerer returns a prometheus.Registerer.
+func (w *Registry) Registerer() prometheus.Registerer {
+	return w.promReg
+}
+
+// Gatherer returns a prometheus.Gatherer.
+func (w *Registry) Gatherer() prometheus.Gatherer {
+	return w.promReg
 }
 
 func (w *Registry) newHistogram() *hdrhistogram.Histogram {
@@ -116,10 +155,41 @@ func (w *Registry) newHistogram() *hdrhistogram.Histogram {
 	return h
 }
 
+func makePrometheusLatencyHistogramBuckets() []float64 {
+	// This covers 0.5ms to 12 minutes at good resolution, using 150 buckets.
+	return prometheus.ExponentialBuckets(0.0005, 1.1, 150)
+}
+
+func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
+	w.prometheusMu.RLock()
+	ph, ok := w.prometheusMu.prometheusHistograms[name]
+	w.prometheusMu.RUnlock()
+
+	if ok {
+		return ph
+	}
+
+	w.prometheusMu.Lock()
+	defer w.prometheusMu.Unlock()
+	ph, ok = w.prometheusMu.prometheusHistograms[name]
+	if !ok {
+		ph = promauto.With(w.promReg).NewHistogram(prometheus.HistogramOpts{
+			Namespace: PrometheusNamespace,
+			Subsystem: w.workloadName,
+			Name:      name,
+			Buckets:   makePrometheusLatencyHistogramBuckets(),
+		})
+		w.prometheusMu.prometheusHistograms[name] = ph
+	}
+	return ph
+}
+
 // GetHandle returns a thread-local handle for creating and registering
 // NamedHistograms.
 func (w *Registry) GetHandle() *Histograms {
-	hists := &Histograms{reg: w}
+	hists := &Histograms{
+		reg: w,
+	}
 	hists.mu.hists = make(map[string]*NamedHistogram)
 	return hists
 }
