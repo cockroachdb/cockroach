@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// TODO(tbg): rename this package to "workloadmetrics" or something like that.
+
 package histogram
 
 import (
@@ -27,6 +29,14 @@ import (
 )
 
 const (
+	// PrometheusNamespace is the value that should be used for the
+	// Namespace field whenever a workload-related prometheus metric
+	// is defined.
+	PrometheusNamespace = "workload"
+	// MockWorkloadName is to be used in the event that a Registry is required
+	// outside of a workload.
+	MockWorkloadName = "mock"
+
 	sigFigs    = 1
 	minLatency = 100 * time.Microsecond
 )
@@ -53,13 +63,13 @@ func newNamedHistogram(reg *Registry, name string) *NamedHistogram {
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
 	if elapsed < minLatency {
 		elapsed = minLatency
 	} else if elapsed > maxLatency {
 		elapsed = maxLatency
 	}
-	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 
 	w.mu.Lock()
 	err := w.mu.current.RecordValue(elapsed.Nanoseconds())
@@ -89,30 +99,21 @@ func (w *NamedHistogram) tick(
 // named histograms. It allows for "tick"ing them periodically to reset the
 // counts and also supports aggregations.
 type Registry struct {
-	mu struct {
+	workloadName string // name of the workload reporting to this registry
+	mu           struct {
 		syncutil.Mutex
 		registered map[string][]*NamedHistogram
 	}
+	promReg      *prometheus.Registry
 	prometheusMu struct {
 		syncutil.RWMutex
 		prometheusHistograms map[string]prometheus.Histogram
 	}
 
-	start                      time.Time
-	cumulative                 map[string]*hdrhistogram.Histogram
-	prevTick                   map[string]time.Time
-	histogramPool              *sync.Pool
-	newPrometheusHistogramFunc func(string) prometheus.Histogram
-}
-
-// MockNewPrometheusHistogram returns a prometheus.Histogram which is not
-// attached to any prometheus registry.
-func MockNewPrometheusHistogram(n string) prometheus.Histogram {
-	return promauto.With(prometheus.NewRegistry()).NewHistogram(
-		prometheus.HistogramOpts{
-			Name: n,
-		},
-	)
+	start         time.Time
+	cumulative    map[string]*hdrhistogram.Histogram
+	prevTick      map[string]time.Time
+	histogramPool *sync.Pool
 }
 
 // NewRegistry returns an initialized Registry.
@@ -121,14 +122,13 @@ func MockNewPrometheusHistogram(n string) prometheus.Histogram {
 // newPrometheusHistogramFunc specifies how to generate a new
 // prometheus.Histogram with a given name. Use MockNewPrometheusHistogram
 // if prometheus logging is undesired.
-func NewRegistry(
-	maxLat time.Duration, newPrometheusHistogramFunc func(string) prometheus.Histogram,
-) *Registry {
+func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 	r := &Registry{
-		start:                      timeutil.Now(),
-		cumulative:                 make(map[string]*hdrhistogram.Histogram),
-		prevTick:                   make(map[string]time.Time),
-		newPrometheusHistogramFunc: newPrometheusHistogramFunc,
+		workloadName: workloadName,
+		start:        timeutil.Now(),
+		cumulative:   make(map[string]*hdrhistogram.Histogram),
+		prevTick:     make(map[string]time.Time),
+		promReg:      prometheus.NewRegistry(),
 		histogramPool: &sync.Pool{
 			New: func() interface{} {
 				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
@@ -138,6 +138,16 @@ func NewRegistry(
 	r.mu.registered = make(map[string][]*NamedHistogram)
 	r.prometheusMu.prometheusHistograms = make(map[string]prometheus.Histogram)
 	return r
+}
+
+// Registerer returns a prometheus.Registerer.
+func (w *Registry) Registerer() prometheus.Registerer {
+	return w.promReg
+}
+
+// Gatherer returns a prometheus.Gatherer.
+func (w *Registry) Gatherer() prometheus.Gatherer {
+	return w.promReg
 }
 
 func (w *Registry) newHistogram() *hdrhistogram.Histogram {
@@ -158,7 +168,11 @@ func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
 	defer w.prometheusMu.Unlock()
 	ph, ok = w.prometheusMu.prometheusHistograms[name]
 	if !ok {
-		ph = w.newPrometheusHistogramFunc(name)
+		ph = promauto.With(w.promReg).NewHistogram(prometheus.HistogramOpts{
+			Namespace: PrometheusNamespace,
+			Subsystem: w.workloadName,
+			Name:      name,
+		})
 		w.prometheusMu.prometheusHistograms[name] = ph
 	}
 	return ph

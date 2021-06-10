@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -189,16 +188,6 @@ func CmdHelper(
 				}
 			}
 		}
-
-		// Expose the prometheus gatherer.
-		go func() {
-			if err := http.ListenAndServe(
-				fmt.Sprintf(":%d", *prometheusPort),
-				promhttp.HandlerFor(workload.PrometheusRegistry, promhttp.HandlerOpts{}),
-			); err != nil {
-				log.Errorf(context.Background(), "error serving prometheus: %v", err)
-			}
-		}()
 
 		// HACK: Steal the dbOverride out of flags. This should go away
 		// once more of run.go moves inside workload.
@@ -390,14 +379,18 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}
 	reg := histogram.NewRegistry(
 		*histogramsMaxLatency,
-		func(n string) prometheus.Histogram {
-			return workload.PrometheusMetrics.NewHistogram(prometheus.HistogramOpts{
-				Namespace: workload.PrometheusNamespace,
-				Subsystem: gen.Meta().Name,
-				Name:      n,
-			})
-		},
+		gen.Meta().Name,
 	)
+	// Expose the prometheus gatherer.
+	go func() {
+		if err := http.ListenAndServe(
+			fmt.Sprintf(":%d", *prometheusPort),
+			promhttp.HandlerFor(reg.Gatherer(), promhttp.HandlerOpts{}),
+		); err != nil {
+			log.Errorf(context.Background(), "error serving prometheus: %v", err)
+		}
+	}()
+
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
 	log.Infof(ctx, "creating load generator...")
