@@ -2063,6 +2063,7 @@ message AdmissionHeader {
   // request or a parent request. See admission.WorkInfo.Priority for details.
   // It is used to give preference to older requests.
   int64 create_time = 2;
+
   // Source represents the immediate source of a request. FROM_SQL represents
   // a KV request originating in SQL, and ROOT_KV represents a request
   // originating within KV, but at the root of the tree of requests.
@@ -2079,6 +2080,35 @@ message AdmissionHeader {
     ROOT_KV = 2;
   }
   Source source = 3;
+
+  // SourceLocation specifies physically where the call originated. LOCAL
+  // means the client is collocated on the same node as the server. It is set
+  // on codepaths that use internalClientAdapter which avoids using gRPC for
+  // local calls to the KV API.
+  enum SourceLocation {
+    REMOTE = 0;
+    LOCAL = 1;
+  }
+  SourceLocation source_location = 4;
+
+  // NoMemoryReservedAtSource is set by the source/client when it has
+  // effectively reserved close to 0 bytes. It is read by the server only when
+  // SourceLocation=LOCAL, to differentiate this 0 reservation case from the
+  // case where the client has already reserved enough memory based on
+  // previous responses. In the latter case the server avoids reserving more
+  // since it would result in double counting. Not setting this defaults to
+  // turning off server reserving more memory -- this optimistic choice was
+  // made to err on the side of avoiding double counting in case we forget to
+  // instrument some calling path.
+  //
+  // NOTE: This field is a temporary field until we move to comprehensive
+  // accounting at the client, by reserving all the bytes for responses, and
+  // explicitly propagating these through DistSender to the servers, so the
+  // servers can (best-effort) respect these values when producing responses.
+  // In that future world, the local server will explicitly know what has
+  // already been accounted for, and can start reserving more only when it
+  // exceeds.
+  bool no_memory_reserved_at_source = 5;
 }
 
 // A BatchRequest contains one or more requests to be executed in
