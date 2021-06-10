@@ -2,7 +2,7 @@
 # `@cockroach//...`.
 workspace(
     name = "cockroach",
-    managed_directories = {"@npm": ["node_modules"]},
+    managed_directories = {"@npm": ["pkg/ui/node_modules"]},
 )
 
 # Load the things that let us load other things.
@@ -118,6 +118,7 @@ yarn_install(
     name = "npm",
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
+    symlink_node_modules = True,
 )
 
 # install external dependencies for pkg/ui/src/js package (used to generate protobuf js client)
@@ -125,6 +126,7 @@ yarn_install(
     name = "npm_proto_js",
     package_json = "//pkg/ui/src/js:package.json",
     yarn_lock = "//pkg/ui/src/js:yarn.lock",
+    symlink_node_modules = True,
 )
 
 # NB: @bazel_skylib comes from go_rules_dependencies().
