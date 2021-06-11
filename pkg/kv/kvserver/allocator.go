@@ -829,7 +829,12 @@ func (a *Allocator) TransferLeaseTarget(
 		if preferred[0].StoreID == leaseStoreID {
 			return roachpb.ReplicaDescriptor{}
 		}
-		return preferred[0]
+		// Verify that the preferred replica is eligible to receive the lease.
+		preferred, _ = a.storePool.liveAndDeadReplicas(preferred)
+		if len(preferred) == 1 {
+			return preferred[0]
+		}
+		return roachpb.ReplicaDescriptor{}
 	} else if len(preferred) > 1 {
 		// If the current leaseholder is not preferred, set checkTransferLeaseSource
 		// to false to motivate the below logic to transfer the lease.

@@ -1363,8 +1363,18 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	var stores []*roachpb.StoreDescriptor
 	for i := 1; i <= 3; i++ {
 		stores = append(stores, &roachpb.StoreDescriptor{
-			StoreID:  roachpb.StoreID(i),
-			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			StoreID: roachpb.StoreID(i),
+			Attrs:   roachpb.Attributes{Attrs: []string{fmt.Sprintf("s%d", i)}},
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(i),
+				Attrs:  roachpb.Attributes{Attrs: []string{fmt.Sprintf("n%d", i)}},
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "dc", Value: strconv.Itoa(i)},
+						{Key: "region", Value: strconv.Itoa(i % 2)},
+					},
+				},
+			},
 			Capacity: roachpb.StoreCapacity{LeaseCount: int32(100 * i)},
 		})
 	}
@@ -1373,6 +1383,13 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 
 	// UNAVAILABLE is the node liveness status used for a node that's draining.
 	nl.setNodeStatus(1, kvserverpb.NodeLivenessStatus_UNAVAILABLE)
+	preferDC1 := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Key: "dc", Value: "1", Type: zonepb.Constraint_REQUIRED}}},
+	}
+	//This means odd nodes.
+	preferRegion1 := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{{Key: "region", Value: "1", Type: zonepb.Constraint_REQUIRED}}},
+	}
 
 	existing := []roachpb.ReplicaDescriptor{
 		{StoreID: 1},
@@ -1385,27 +1402,33 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		leaseholder roachpb.StoreID
 		check       bool
 		expected    roachpb.StoreID
+		zone        *zonepb.ZoneConfig
 	}{
 		// No existing lease holder, nothing to do.
-		{existing: existing, leaseholder: 0, check: true, expected: 0},
+		{existing: existing, leaseholder: 0, check: true, expected: 0, zone: zonepb.EmptyCompleteZoneConfig()},
 		// Store 1 is draining, so it will try to transfer its lease if
 		// checkTransferLeaseSource is false. This behavior isn't relied upon,
 		// though; leases are manually transferred when draining.
-		{existing: existing, leaseholder: 1, check: true, expected: 0},
-		{existing: existing, leaseholder: 1, check: false, expected: 2},
+		{existing: existing, leaseholder: 1, check: true, expected: 0, zone: zonepb.EmptyCompleteZoneConfig()},
+		{existing: existing, leaseholder: 1, check: false, expected: 2, zone: zonepb.EmptyCompleteZoneConfig()},
 		// Store 2 is not a lease transfer source.
-		{existing: existing, leaseholder: 2, check: true, expected: 0},
-		{existing: existing, leaseholder: 2, check: false, expected: 3},
+		{existing: existing, leaseholder: 2, check: true, expected: 0, zone: zonepb.EmptyCompleteZoneConfig()},
+		{existing: existing, leaseholder: 2, check: false, expected: 3, zone: zonepb.EmptyCompleteZoneConfig()},
 		// Store 3 is a lease transfer source, but won't transfer to
 		// node 1 because it's draining.
-		{existing: existing, leaseholder: 3, check: true, expected: 2},
-		{existing: existing, leaseholder: 3, check: false, expected: 2},
+		{existing: existing, leaseholder: 3, check: true, expected: 2, zone: zonepb.EmptyCompleteZoneConfig()},
+		{existing: existing, leaseholder: 3, check: false, expected: 2, zone: zonepb.EmptyCompleteZoneConfig()},
+		// Verify that lease preferences dont impact draining
+		{existing: existing, leaseholder: 2, check: true, expected: 0, zone: &zonepb.ZoneConfig{LeasePreferences: preferDC1}},
+		{existing: existing, leaseholder: 2, check: false, expected: 0, zone: &zonepb.ZoneConfig{LeasePreferences: preferDC1}},
+		{existing: existing, leaseholder: 2, check: true, expected: 3, zone: &zonepb.ZoneConfig{LeasePreferences: preferRegion1}},
+		{existing: existing, leaseholder: 2, check: false, expected: 3, zone: &zonepb.ZoneConfig{LeasePreferences: preferRegion1}},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				zonepb.EmptyCompleteZoneConfig(),
+				c.zone,
 				c.existing,
 				c.leaseholder,
 				nil, /* replicaStats */
