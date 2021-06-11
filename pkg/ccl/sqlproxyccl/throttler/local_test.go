@@ -100,7 +100,7 @@ func TestLocalService_Eviction(t *testing.T) {
 	s := newTestLocalService()
 	s.maxMapSize = 10
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 20; i++ {
 		ipAddress := fmt.Sprintf("%d", i)
 		_ = s.LoginCheck(ipAddress, s.clock.Now())
 		require.Less(t, len(s.mu.limiters), 11)

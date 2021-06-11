@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -595,7 +595,10 @@ func TestDenylistUpdate(t *testing.T) {
 
 	defer sql.Stopper().Stop(ctx)
 
-	s, addr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{Denylist: denyList.Name()})
+	s, addr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{
+		Denylist:           denyList.Name(),
+		PollConfigInterval: 10 * time.Millisecond,
+	})
 	defer func() { _ = os.Remove(denyList.Name()) }()
 
 	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28", addr)
@@ -684,11 +687,11 @@ func newDirectoryServer(
 		return err == nil
 	}, 30*time.Second, time.Second)
 	require.NoError(t, err)
-	tds, err := tenant.NewTestDirectoryServer(tdsStopper)
+	tds, err := tenantdirsvr.New(tdsStopper)
 	require.NoError(t, err)
-	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenant.Process, error) {
+	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenantdirsvr.Process, error) {
 		log.TestingClearServerIdentifiers()
-		tenantStopper := tenant.NewSubStopper(tdsStopper)
+		tenantStopper := tenantdirsvr.NewSubStopper(tdsStopper)
 		ten, err := srv.StartTenant(ctx, base.TestTenantArgs{
 			Existing:      true,
 			TenantID:      roachpb.MakeTenantID(tenantID),
@@ -699,7 +702,7 @@ func newDirectoryServer(
 		sqlAddr, err := net.ResolveTCPAddr("tcp", ten.SQLAddr())
 		require.NoError(t, err)
 		ten.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
-		return &tenant.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
+		return &tenantdirsvr.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
 	}
 	go func() { require.NoError(t, tds.Serve(listener)) }()
 	return tdsStopper, listener.Addr().(*net.TCPAddr)
