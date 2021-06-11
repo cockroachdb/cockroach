@@ -23,7 +23,7 @@ import (
 )
 
 func tlsConfig() (*tls.Config, error) {
-	cer, err := tls.LoadX509KeyPair("testserver.crt", "testserver.key")
+	cer, err := tls.LoadX509KeyPair("testdata/testserver.crt", "testdata/testserver.key")
 	if err != nil {
 		return nil, err
 	}

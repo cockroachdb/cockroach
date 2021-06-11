@@ -97,7 +97,7 @@ go_library(
         "//pkg/base",
         "//pkg/build",
         "//pkg/ccl/sqlproxyccl",
-        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/cli/cliflags",
         "//pkg/cli/exit",
         "//pkg/cli/syncbench",

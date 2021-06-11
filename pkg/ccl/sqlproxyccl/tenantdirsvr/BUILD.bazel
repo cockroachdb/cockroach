@@ -1,30 +1,18 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
-go_test(
-    name = "tenantdirsvr_test",
-    srcs = [
-        "directory_test.go",
-        "main_test.go",
-    ],
+go_library(
+    name = "tenantdirsvr",
+    srcs = ["test_directory_svr.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr",
+    visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
-        "//pkg/ccl",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/tenant",
-        "//pkg/ccl/utilccl",
         "//pkg/roachpb",
-        "//pkg/security",
-        "//pkg/security/securitytest",
-        "//pkg/server",
-        "//pkg/sql",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/randutil",
         "//pkg/util/stop",
-        "@com_github_stretchr_testify//assert",
-        "@com_github_stretchr_testify//require",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
         "@org_golang_google_grpc//:go_default_library",
     ],
 )

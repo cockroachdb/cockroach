@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +40,7 @@ func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {
 	}
 	defer stopper.Stop(ctx)
 
-	tds, err := tenant.NewTestDirectoryServer(stopper)
+	tds, err := tenantdirsvr.New(stopper)
 	if err != nil {
 		return err
 	}

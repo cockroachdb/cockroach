@@ -11,8 +11,6 @@ package throttler
 
 import "time"
 
-//go:generate mockgen -package=throttler -destination=mocks_generated.go -source=service.go . Service
-
 // Service provides the interface for performing throttle checks before
 // allowing requests into the managed service system.
 type Service interface {

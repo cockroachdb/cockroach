@@ -27,7 +27,8 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// EventType shows the event type of the notifications that the server streams to its clients.
+// EventType shows the event type of the notifications that the server streams
+// to its clients.
 type EventType int32
 
 const (
@@ -89,8 +90,8 @@ func (m *WatchEndpointsRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WatchEndpointsRequest proto.InternalMessageInfo
 
-// WatchEndpointsResponse represents the notifications that the server sends to its clients when clients
-// want to monitor the directory server activity.
+// WatchEndpointsResponse represents the notifications that the server sends to
+// its clients when clients want to monitor the directory server activity.
 type WatchEndpointsResponse struct {
 	// EventType is the type of the notifications - added, modified, deleted.
 	Typ EventType `protobuf:"varint,1,opt,name=typ,proto3,enum=cockroach.ccl.sqlproxyccl.tenant.EventType" json:"typ,omitempty"`
@@ -129,9 +130,11 @@ func (m *WatchEndpointsResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WatchEndpointsResponse proto.InternalMessageInfo
 
-// ListEndpointsRequest is used to query the server for the list of current endpoints of a given tenant.
+// ListEndpointsRequest is used to query the server for the list of current
+// endpoints of a given tenant.
 type ListEndpointsRequest struct {
-	// TenantID identifies the tenant for which the client is requesting a list of the endpoints.
+	// TenantID identifies the tenant for which the client is requesting a list of
+	// the endpoints.
 	TenantID uint64 `protobuf:"varint,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 }
 
@@ -164,8 +167,9 @@ func (m *ListEndpointsRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ListEndpointsRequest proto.InternalMessageInfo
 
-// EnsureEndpointRequest is used to ensure that a tenant's backend is active. If there is an active backend then the
-// server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
+// EnsureEndpointRequest is used to ensure that a tenant's backend is active. If
+// there is an active backend then the server doesn't have to do anything. If
+// there isn't an active backend, then the server has to bring a new one up.
 type EnsureEndpointRequest struct {
 	// TenantID is the id of the tenant for which an active backend is requested.
 	TenantID uint64 `protobuf:"varint,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -200,7 +204,8 @@ func (m *EnsureEndpointRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_EnsureEndpointRequest proto.InternalMessageInfo
 
-// EnsureEndpointResponse is empty and indicates that the server processed the request.
+// EnsureEndpointResponse is empty and indicates that the server processed the
+// request.
 type EnsureEndpointResponse struct {
 }
 
@@ -233,8 +238,8 @@ func (m *EnsureEndpointResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_EnsureEndpointResponse proto.InternalMessageInfo
 
-// Endpoint contains the information about a tenant endpoint. Most often it is a combination of an ip address and port.
-// i.e. 132.130.1.11:34576
+// Endpoint contains the information about a tenant endpoint. Most often it is a
+// combination of an ip address and port, e.g. 132.130.1.11:34576.
 type Endpoint struct {
 	// IP is the ip and port combo identifying the tenant endpoint.
 	IP string `protobuf:"bytes,1,opt,name=IP,proto3" json:"IP,omitempty"`
@@ -269,7 +274,8 @@ func (m *Endpoint) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Endpoint proto.InternalMessageInfo
 
-// ListEndpointsResponse is sent back as a result of requesting the list of endpoints for a given tenant.
+// ListEndpointsResponse is sent back as a result of requesting the list of
+// endpoints for a given tenant.
 type ListEndpointsResponse struct {
 	// Endpoints is the list of endpoints currently active for the requested tenant.
 	Endpoints []*Endpoint `protobuf:"bytes,1,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
@@ -304,7 +310,8 @@ func (m *ListEndpointsResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ListEndpointsResponse proto.InternalMessageInfo
 
-// GetTenantRequest is used by a client to request from the sever metadata related to a given tenant.
+// GetTenantRequest is used by a client to request from the sever metadata
+// related to a given tenant.
 type GetTenantRequest struct {
 	// TenantID identifies the tenant for which the metadata is being requested.
 	TenantID uint64 `protobuf:"varint,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -440,13 +447,15 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type DirectoryClient interface {
-	// ListEndpoints is used to query the server for the list of current endpoints of a given tenant.
+	// ListEndpoints is used to query the server for the list of current endpoints
+	// of a given tenant.
 	ListEndpoints(ctx context.Context, in *ListEndpointsRequest, opts ...grpc.CallOption) (*ListEndpointsResponse, error)
-	// WatchEndpoints is used to get a stream, that is used to receive notifications about changes in tenant
-	// backend's state - added, modified and deleted.
+	// WatchEndpoints is used to get a stream, that is used to receive notifications
+	// about changes in tenant backend's state - added, modified and deleted.
 	WatchEndpoints(ctx context.Context, in *WatchEndpointsRequest, opts ...grpc.CallOption) (Directory_WatchEndpointsClient, error)
-	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there is an active backend then the
-	// server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
+	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there
+	// is an active backend then the server doesn't have to do anything. If there
+	// isn't an active backend, then the server has to bring a new one up.
 	EnsureEndpoint(ctx context.Context, in *EnsureEndpointRequest, opts ...grpc.CallOption) (*EnsureEndpointResponse, error)
 	// GetTenant is used to fetch the metadata of a specific tenant.
 	GetTenant(ctx context.Context, in *GetTenantRequest, opts ...grpc.CallOption) (*GetTenantResponse, error)
@@ -521,13 +530,15 @@ func (c *directoryClient) GetTenant(ctx context.Context, in *GetTenantRequest, o
 
 // DirectoryServer is the server API for Directory service.
 type DirectoryServer interface {
-	// ListEndpoints is used to query the server for the list of current endpoints of a given tenant.
+	// ListEndpoints is used to query the server for the list of current endpoints
+	// of a given tenant.
 	ListEndpoints(context.Context, *ListEndpointsRequest) (*ListEndpointsResponse, error)
-	// WatchEndpoints is used to get a stream, that is used to receive notifications about changes in tenant
-	// backend's state - added, modified and deleted.
+	// WatchEndpoints is used to get a stream, that is used to receive notifications
+	// about changes in tenant backend's state - added, modified and deleted.
 	WatchEndpoints(*WatchEndpointsRequest, Directory_WatchEndpointsServer) error
-	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there is an active backend then the
-	// server doesn't have to do anything. If there isn't an active backend, then the server has to bring a new one up.
+	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there
+	// is an active backend then the server doesn't have to do anything. If there
+	// isn't an active backend, then the server has to bring a new one up.
 	EnsureEndpoint(context.Context, *EnsureEndpointRequest) (*EnsureEndpointResponse, error)
 	// GetTenant is used to fetch the metadata of a specific tenant.
 	GetTenant(context.Context, *GetTenantRequest) (*GetTenantResponse, error)

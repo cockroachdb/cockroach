@@ -23,8 +23,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-//go:generate mockgen -package=tenant -destination=mocks_generated.go . DirectoryClient,Directory_WatchEndpointsClient
-
 // dirOptions control the behavior of tenant.Directory.
 type dirOptions struct {
 	deterministic bool
