@@ -336,6 +336,7 @@ func (s *Stopper) RunAsyncTask(
 	return s.RunAsyncTaskEx(ctx,
 		TaskOpts{
 			TaskName:   taskName,
+			SameTrace:  false,
 			Sem:        nil,
 			WaitForSem: false,
 		},
@@ -347,6 +348,23 @@ type TaskOpts struct {
 	// TaskName is a human-readable name for the operation. Used as the name of
 	// the tracing span.
 	TaskName string
+
+	// SameTrace, if set, makes the tracing span created for the task be a child
+	// of the caller's span (if the caller has a span in the passed-in ctx). If
+	// not set, the task's span is not a child span (technically, the task's span
+	// will have a FollowsFrom relationship with the parent instead of ChildOf
+	// relationship). When set, the recording of the parent span (if the parent is
+	// recording) will include the child.
+	//
+	// Regardless of this setting, if the caller doesn't have a span, the task
+	// doesn't get a span either.
+	//
+	// Setting SameTrace can have consequences on memory usage. The lifetime of
+	// the task's span becomes tied to the lifetime of the parent. Generally
+	// SameTrace should be used when the parent waits for the task to complete,
+	// and the parent is not a long-running process.
+	SameTrace bool
+
 	// If set, Sem is used as a semaphore limiting the concurrency (each task has
 	// weight 1).
 	//
@@ -403,7 +421,13 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		return ErrUnavailable
 	}
 
-	ctx, span := tracing.ForkSpan(ctx, taskName)
+	// If the caller has a span, the task gets a child span.
+	var span *tracing.Span
+	if opt.SameTrace {
+		ctx, span = tracing.ChildSpan(ctx, taskName)
+	} else {
+		ctx, span = tracing.ForkSpan(ctx, taskName)
+	}
 
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
