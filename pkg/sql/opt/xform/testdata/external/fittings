@@ -2627,16 +2627,16 @@ project
            ├── ordering: -1
            ├── sort
            │    ├── columns: killmail:1!null
-           │    ├── stats: [rows=0.0023556407, distinct(12)=0.0023556407, null(12)=0]
-           │    │   histogram(12)=
+           │    ├── stats: [rows=0.0023556407, distinct(13)=0.0023556407, null(13)=0]
+           │    │   histogram(13)=
            │    ├── key: (1)
            │    ├── ordering: -1
            │    ├── limit hint: 100.00
            │    └── scan fits@fits_items_idx
            │         ├── columns: killmail:1!null
-           │         ├── inverted constraint: /12/1
+           │         ├── inverted constraint: /13/1
            │         │    └── spans: ["7\x00\x03\x00\x01,\v_>\x00", "7\x00\x03\x00\x01,\v_>\x00"]
-           │         ├── stats: [rows=0.0023556407, distinct(12)=0.0023556407, null(12)=0]
-           │         │   histogram(12)=
+           │         ├── stats: [rows=0.0023556407, distinct(13)=0.0023556407, null(13)=0]
+           │         │   histogram(13)=
            │         └── key: (1)
            └── 100

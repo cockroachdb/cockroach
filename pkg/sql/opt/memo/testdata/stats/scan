@@ -22,10 +22,10 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── scan a
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       ├── stats: [rows=2000]
       ├── key: (1)
-      └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7)
 
 # Check that boolean columns have distinct count 2 when there are no stats
 # available.
@@ -38,15 +38,15 @@ project
  ├── key: (1)
  ├── fd: ()-->(5), (1)-->(2-4), (3,4)~~>(1,2)
  └── select
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool!null) crdb_internal_mvcc_timestamp:6(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool!null) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       ├── stats: [rows=990, distinct(5)=1, null(5)=0]
       ├── key: (1)
-      ├── fd: ()-->(5), (1)-->(2-4,6), (3,4)~~>(1,2,6)
+      ├── fd: ()-->(5), (1)-->(2-4,6,7), (3,4)~~>(1,2,6,7)
       ├── scan a
-      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(4)=200, null(4)=0, distinct(5)=3, null(5)=20]
       │    ├── key: (1)
-      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      │    └── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7)
       └── filters
            └── b:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
@@ -100,10 +100,10 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── scan a
-      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
       ├── stats: [rows=3000]
       ├── key: (1)
-      └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+      └── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7)
 
 # Test constrained scan.
 opt
@@ -133,13 +133,13 @@ opt
 SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 ----
 group-by
- ├── columns: count:7(int!null) y:2(int) x:1(int!null)
+ ├── columns: count:8(int!null) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
  ├── internal-ordering: +1
  ├── cardinality: [0 - 100]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0]
  ├── key: (1)
- ├── fd: (1)-->(2,7)
+ ├── fd: (1)-->(2,8)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── constraint: /1: [/1 - /100]
@@ -149,7 +149,7 @@ group-by
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      ├── count-rows [as=count_rows:7, type=int]
+      ├── count-rows [as=count_rows:8, type=int]
       └── const-agg [as=y:2, type=int, outer=(2)]
            └── y:2 [type=int]
 
@@ -525,38 +525,38 @@ WHERE
   subq.col1;
 ----
 project
- ├── columns: "?column?":28(int!null)
+ ├── columns: "?column?":30(int!null)
  ├── immutable
  ├── stats: [rows=1]
- ├── fd: ()-->(28)
+ ├── fd: ()-->(30)
  ├── select
- │    ├── columns: col1:27(bool!null)
+ │    ├── columns: col1:29(bool!null)
  │    ├── immutable
- │    ├── stats: [rows=1, distinct(27)=1, null(27)=0]
- │    ├── fd: ()-->(27)
+ │    ├── stats: [rows=1, distinct(29)=1, null(29)=0]
+ │    ├── fd: ()-->(29)
  │    ├── project
- │    │    ├── columns: col1:27(bool)
+ │    │    ├── columns: col1:29(bool)
  │    │    ├── immutable
- │    │    ├── stats: [rows=10000, distinct(27)=10000, null(27)=0]
+ │    │    ├── stats: [rows=10000, distinct(29)=10000, null(29)=0]
  │    │    ├── inner-join (hash)
- │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
+ │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:18(varchar) tab1.f:19("char") tab1.j:23(float!null)
  │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
- │    │    │    ├── stats: [rows=10000, distinct(10)=100, null(10)=0, distinct(22)=100, null(22)=0, distinct(5,6,8,17,18)=10000, null(5,6,8,17,18)=1e-06]
- │    │    │    ├── fd: (10)==(22), (22)==(10)
+ │    │    │    ├── stats: [rows=10000, distinct(10)=100, null(10)=0, distinct(23)=100, null(23)=0, distinct(5,6,8,18,19)=10000, null(5,6,8,18,19)=1e-06]
+ │    │    │    ├── fd: (10)==(23), (23)==(10)
  │    │    │    ├── scan t37953 [as=tab0]
  │    │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
  │    │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0, distinct(5,6,8)=1000, null(5,6,8)=0.001]
  │    │    │    ├── scan t37953 [as=tab1]
- │    │    │    │    ├── columns: tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
- │    │    │    │    └── stats: [rows=1000, distinct(22)=100, null(22)=0, distinct(17,18)=1000, null(17,18)=0.1]
+ │    │    │    │    ├── columns: tab1.e:18(varchar) tab1.f:19("char") tab1.j:23(float!null)
+ │    │    │    │    └── stats: [rows=1000, distinct(23)=100, null(23)=0, distinct(18,19)=1000, null(18,19)=0.1]
  │    │    │    └── filters
- │    │    │         └── tab0.j:10 = tab1.j:22 [type=bool, outer=(10,22), constraints=(/10: (/NULL - ]; /22: (/NULL - ]), fd=(10)==(22), (22)==(10)]
+ │    │    │         └── tab0.j:10 = tab1.j:23 [type=bool, outer=(10,23), constraints=(/10: (/NULL - ]; /23: (/NULL - ]), fd=(10)==(23), (23)==(10)]
  │    │    └── projections
- │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:17, tab0.f:6, tab0.e:5::STRING), tab1.f:18, '') THEN true ELSE false END [as=col1:27, type=bool, outer=(5,6,8,17,18), immutable]
+ │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:18, tab0.f:6, tab0.e:5::STRING), tab1.f:19, '') THEN true ELSE false END [as=col1:29, type=bool, outer=(5,6,8,18,19), immutable]
  │    └── filters
- │         └── col1:27 [type=bool, outer=(27), constraints=(/27: [/true - /true]; tight), fd=()-->(27)]
+ │         └── col1:29 [type=bool, outer=(29), constraints=(/29: [/true - /true]; tight), fd=()-->(29)]
  └── projections
-      └── 1 [as="?column?":28, type=int]
+      └── 1 [as="?column?":30, type=int]
 
 # ---------------------
 # Tests with Histograms
@@ -1037,10 +1037,10 @@ opt
 SELECT a, b::string FROM t47742 WHERE b = true
 ----
 project
- ├── columns: a:1(int) b:5(string!null)
+ ├── columns: a:1(int) b:6(string!null)
  ├── immutable
  ├── stats: [rows=2640.64496]
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── index-join t47742
  │    ├── columns: a:1(int) t47742.b:2(bool!null)
  │    ├── stats: [rows=2640.64496, distinct(2)=1.00246926, null(2)=0]
@@ -1056,7 +1056,7 @@ project
  │         ├── key: (3)
  │         └── fd: ()-->(2)
  └── projections
-      └── t47742.b:2::STRING [as=b:5, type=string, outer=(2), immutable]
+      └── t47742.b:2::STRING [as=b:6, type=string, outer=(2), immutable]
 
 # Multi-column stats tests.
 exec-ddl

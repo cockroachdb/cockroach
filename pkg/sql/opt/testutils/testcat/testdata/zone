@@ -20,6 +20,7 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
@@ -45,6 +46,7 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
@@ -72,6 +74,7 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
@@ -101,6 +104,7 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
@@ -130,6 +134,7 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
@@ -159,6 +164,7 @@ TABLE abc
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    ├── a int not null
  │    └── ZONE
@@ -217,6 +223,7 @@ TABLE abc_part
  ├── b int
  ├── c string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── CHECK (r IN ('east', 'west'))
  ├── PRIMARY INDEX primary
  │    └── a int not null

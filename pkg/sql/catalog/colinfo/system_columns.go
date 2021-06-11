@@ -62,13 +62,16 @@ var MVCCTimestampColumnType = types.Decimal
 
 // TableOIDColumnDesc is a column descriptor for the tableoid column.
 var TableOIDColumnDesc = descpb.ColumnDescriptor{
-	Name:             "tableoid",
+	Name:             TableOIDColumnName,
 	Type:             types.Oid,
 	Hidden:           true,
 	Nullable:         true,
 	SystemColumnKind: descpb.SystemColumnKind_TABLEOID,
 	ID:               TableOIDColumnID,
 }
+
+// TableOIDColumnName is the name of the tableoid system column.
+const TableOIDColumnName = "tableoid"
 
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
 func IsColIDSystemColumn(colID descpb.ColumnID) bool {

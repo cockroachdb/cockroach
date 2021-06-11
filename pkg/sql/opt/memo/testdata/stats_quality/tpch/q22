@@ -56,29 +56,29 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q22_sort_1
- ├── columns: cntrycode:30(string) numcust:31(int!null) totacctbal:32(float!null)
+ ├── columns: cntrycode:33(string) numcust:34(int!null) totacctbal:35(float!null)
  ├── immutable
- ├── stats: [rows=1e-10, distinct(30)=1e-10, null(30)=0, distinct(31)=1e-10, null(31)=0, distinct(32)=1e-10, null(32)=0]
- ├── key: (30)
- ├── fd: (30)-->(31,32)
- ├── ordering: +30
+ ├── stats: [rows=1e-10, distinct(33)=1e-10, null(33)=0, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0]
+ ├── key: (33)
+ ├── fd: (33)-->(34,35)
+ ├── ordering: +33
  └── group-by
       ├── save-table-name: q22_group_by_2
-      ├── columns: cntrycode:30(string) count_rows:31(int!null) sum:32(float!null)
-      ├── grouping columns: cntrycode:30(string)
+      ├── columns: cntrycode:33(string) count_rows:34(int!null) sum:35(float!null)
+      ├── grouping columns: cntrycode:33(string)
       ├── immutable
-      ├── stats: [rows=1e-10, distinct(30)=1e-10, null(30)=0, distinct(31)=1e-10, null(31)=0, distinct(32)=1e-10, null(32)=0]
-      ├── key: (30)
-      ├── fd: (30)-->(31,32)
+      ├── stats: [rows=1e-10, distinct(33)=1e-10, null(33)=0, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0]
+      ├── key: (33)
+      ├── fd: (33)-->(34,35)
       ├── project
       │    ├── save-table-name: q22_project_3
-      │    ├── columns: cntrycode:30(string) c_acctbal:6(float!null)
+      │    ├── columns: cntrycode:33(string) c_acctbal:6(float!null)
       │    ├── immutable
-      │    ├── stats: [rows=1e-10, distinct(6)=1e-10, null(6)=0, distinct(30)=1e-10, null(30)=0]
+      │    ├── stats: [rows=1e-10, distinct(6)=1e-10, null(6)=0, distinct(33)=1e-10, null(33)=0]
       │    ├── anti-join (lookup orders@o_ck)
       │    │    ├── save-table-name: q22_lookup_join_4
       │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
-      │    │    ├── key columns: [1] = [21]
+      │    │    ├── key columns: [1] = [23]
       │    │    ├── immutable
       │    │    ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(5)=1e-10, null(5)=0, distinct(6)=1e-10, null(6)=0]
       │    │    ├── key: (1)
@@ -109,39 +109,39 @@ sort
       │    │    │              └── subquery [type=float]
       │    │    │                   └── scalar-group-by
       │    │    │                        ├── save-table-name: q22_scalar_group_by_7
-      │    │    │                        ├── columns: avg:19(float)
+      │    │    │                        ├── columns: avg:21(float)
       │    │    │                        ├── cardinality: [1 - 1]
       │    │    │                        ├── immutable
-      │    │    │                        ├── stats: [rows=1, distinct(19)=1, null(19)=0]
+      │    │    │                        ├── stats: [rows=1, distinct(21)=1, null(21)=0]
       │    │    │                        ├── key: ()
-      │    │    │                        ├── fd: ()-->(19)
+      │    │    │                        ├── fd: ()-->(21)
       │    │    │                        ├── select
       │    │    │                        │    ├── save-table-name: q22_select_8
-      │    │    │                        │    ├── columns: c_phone:14(char!null) c_acctbal:15(float!null)
+      │    │    │                        │    ├── columns: c_phone:15(char!null) c_acctbal:16(float!null)
       │    │    │                        │    ├── immutable
-      │    │    │                        │    ├── stats: [rows=45450.4793, distinct(14)=45450.4793, null(14)=0, distinct(15)=45450.4793, null(15)=0]
-      │    │    │                        │    │   histogram(15)=  0   0   45445     5
+      │    │    │                        │    ├── stats: [rows=45450.4793, distinct(15)=45450.4793, null(15)=0, distinct(16)=45450.4793, null(16)=0]
+      │    │    │                        │    │   histogram(16)=  0   0   45445     5
       │    │    │                        │    │                 <--- 0.0 ------- 9999.96
       │    │    │                        │    ├── scan customer
       │    │    │                        │    │    ├── save-table-name: q22_scan_9
-      │    │    │                        │    │    ├── columns: c_phone:14(char!null) c_acctbal:15(float!null)
-      │    │    │                        │    │    └── stats: [rows=150000, distinct(14)=150000, null(14)=0, distinct(15)=140628, null(15)=0]
-      │    │    │                        │    │        histogram(14)=  0         15          1.4997e+05         15
+      │    │    │                        │    │    ├── columns: c_phone:15(char!null) c_acctbal:16(float!null)
+      │    │    │                        │    │    └── stats: [rows=150000, distinct(15)=150000, null(15)=0, distinct(16)=140628, null(16)=0]
+      │    │    │                        │    │        histogram(15)=  0         15          1.4997e+05         15
       │    │    │                        │    │                      <--- '10-100-106-1617' ------------ '34-999-404-9770'
-      │    │    │                        │    │        histogram(15)=  0    15     1.4997e+05    15
+      │    │    │                        │    │        histogram(16)=  0    15     1.4997e+05    15
       │    │    │                        │    │                      <--- -999.99 ------------ 9999.96
       │    │    │                        │    └── filters
-      │    │    │                        │         ├── c_acctbal:15 > 0.0 [type=bool, outer=(15), constraints=(/15: [/5e-324 - ]; tight)]
-      │    │    │                        │         └── substring(c_phone:14, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(14), immutable]
+      │    │    │                        │         ├── c_acctbal:16 > 0.0 [type=bool, outer=(16), constraints=(/16: [/5e-324 - ]; tight)]
+      │    │    │                        │         └── substring(c_phone:15, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(15), immutable]
       │    │    │                        └── aggregations
-      │    │    │                             └── avg [as=avg:19, type=float, outer=(15)]
-      │    │    │                                  └── c_acctbal:15 [type=float]
+      │    │    │                             └── avg [as=avg:21, type=float, outer=(16)]
+      │    │    │                                  └── c_acctbal:16 [type=float]
       │    │    └── filters (true)
       │    └── projections
-      │         └── substring(c_phone:5, 1, 2) [as=cntrycode:30, type=string, outer=(5), immutable]
+      │         └── substring(c_phone:5, 1, 2) [as=cntrycode:33, type=string, outer=(5), immutable]
       └── aggregations
-           ├── count-rows [as=count_rows:31, type=int]
-           └── sum [as=sum:32, type=float, outer=(6)]
+           ├── count-rows [as=count_rows:34, type=int]
+           └── sum [as=sum:35, type=float, outer=(6)]
                 └── c_acctbal:6 [type=float]
 
 ----Stats for q22_sort_1----

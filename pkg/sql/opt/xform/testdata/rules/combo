@@ -30,109 +30,109 @@ GenerateIndexScans
 ================================================================================
 Source expression:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 New expression 1 of 1:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc@ab
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 ================================================================================
 GenerateIndexScans
 ================================================================================
 Source expression:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 New expression 1 of 1:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz@xy
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 ================================================================================
 ReorderJoins
 ================================================================================
 Source expression:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 New expression 1 of 1:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 ================================================================================
 GenerateMergeJoins
 ================================================================================
 Source expression:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 New expression 1 of 1:
   inner-join (merge)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
    ├── left ordering: +1,+2
-   ├── right ordering: +6,+7
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── right ordering: +7,+8
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc@ab
    │    ├── columns: a:1 b:2 c:3
    │    └── ordering: +1,+2
    ├── scan xyz@xy
-   │    ├── columns: x:6 y:7 z:8
-   │    └── ordering: +6,+7
+   │    ├── columns: x:7 y:8 z:9
+   │    └── ordering: +7,+8
    └── filters (true)
 
 ================================================================================
@@ -140,21 +140,21 @@ GenerateLookupJoins
 ================================================================================
 Source expression:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 New expression 1 of 1:
   inner-join (lookup xyz@xy)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── key columns: [1 2] = [6 7]
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── key columns: [1 2] = [7 8]
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    └── filters (true)
@@ -164,25 +164,25 @@ GenerateMergeJoins
 ================================================================================
 Source expression:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 New expression 1 of 1:
   inner-join (merge)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── left ordering: +6,+7
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── left ordering: +7,+8
    ├── right ordering: +1,+2
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan xyz@xy
-   │    ├── columns: x:6 y:7 z:8
-   │    └── ordering: +6,+7
+   │    ├── columns: x:7 y:8 z:9
+   │    └── ordering: +7,+8
    ├── scan abc@ab
    │    ├── columns: a:1 b:2 c:3
    │    └── ordering: +1,+2
@@ -193,23 +193,23 @@ GenerateLookupJoins
 ================================================================================
 Source expression:
   inner-join (hash)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    └── filters
-        ├── a:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-        └── b:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 New expression 1 of 1:
   inner-join (lookup abc@ab)
-   ├── columns: a:1!null b:2!null c:3 x:6!null y:7!null z:8
-   ├── key columns: [6 7] = [1 2]
-   ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── key columns: [7 8] = [1 2]
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
    ├── scan xyz
-   │    └── columns: x:6 y:7 z:8
+   │    └── columns: x:7 y:8 z:9
    └── filters (true)
 ----
 ----

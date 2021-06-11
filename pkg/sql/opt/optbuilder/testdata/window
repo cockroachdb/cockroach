@@ -79,94 +79,94 @@ build
 SELECT lag('foo'::string) OVER (), lag(1) OVER () FROM kv
 ----
 project
- ├── columns: lag:9 lag:10
+ ├── columns: lag:10 lag:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag:10 lag_1_arg1:11!null lag_1_arg2:12!null lag_1_arg3:13 lag_2_arg3:14
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14 lag_2_arg3:15
       ├── project
-      │    ├── columns: lag_1_arg1:11!null lag_1_arg2:12!null lag_1_arg3:13 lag_2_arg3:14 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14 lag_2_arg3:15 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── 'foo' [as=lag_1_arg1:11]
-      │         ├── 1 [as=lag_1_arg2:12]
-      │         ├── NULL::STRING [as=lag_1_arg3:13]
-      │         └── NULL::INT8 [as=lag_2_arg3:14]
+      │         ├── 'foo' [as=lag_1_arg1:12]
+      │         ├── 1 [as=lag_1_arg2:13]
+      │         ├── NULL::STRING [as=lag_1_arg3:14]
+      │         └── NULL::INT8 [as=lag_2_arg3:15]
       └── windows
-           ├── lag [as=lag:9]
-           │    ├── lag_1_arg1:11
-           │    ├── lag_1_arg2:12
-           │    └── lag_1_arg3:13
-           └── lag [as=lag:10]
-                ├── lag_1_arg2:12
-                ├── lag_1_arg2:12
-                └── lag_2_arg3:14
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg2:13
+           │    └── lag_1_arg3:14
+           └── lag [as=lag:11]
+                ├── lag_1_arg2:13
+                ├── lag_1_arg2:13
+                └── lag_2_arg3:15
 
 build
 SELECT count(*) OVER () FROM kv
 ----
 project
- ├── columns: count:9
+ ├── columns: count:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 count_rows:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 count_rows:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── count-rows [as=count_rows:9]
+           └── count-rows [as=count_rows:10]
 
 build
 SELECT lag((SELECT k FROM kv kv2 WHERE kv2.k = kv.k)) OVER () FROM kv
 ----
 project
- ├── columns: lag:17
+ ├── columns: lag:19
  └── window partition=()
-      ├── columns: kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8 lag:17 lag_1_arg1:18 lag_1_arg2:19!null lag_1_arg3:20
+      ├── columns: kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8 kv.tableoid:9 lag:19 lag_1_arg1:20 lag_1_arg2:21!null lag_1_arg3:22
       ├── project
-      │    ├── columns: lag_1_arg1:18 lag_1_arg2:19!null lag_1_arg3:20 kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8
+      │    ├── columns: lag_1_arg1:20 lag_1_arg2:21!null lag_1_arg3:22 kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8 kv.tableoid:9
       │    ├── scan kv
-      │    │    └── columns: kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: kv.k:1!null kv.v:2 kv.w:3 kv.f:4 kv.d:5 kv.s:6 kv.b:7 kv.crdb_internal_mvcc_timestamp:8 kv.tableoid:9
       │    └── projections
-      │         ├── subquery [as=lag_1_arg1:18]
+      │         ├── subquery [as=lag_1_arg1:20]
       │         │    └── max1-row
-      │         │         ├── columns: kv2.k:9!null
+      │         │         ├── columns: kv2.k:10!null
       │         │         └── project
-      │         │              ├── columns: kv2.k:9!null
+      │         │              ├── columns: kv2.k:10!null
       │         │              └── select
-      │         │                   ├── columns: kv2.k:9!null kv2.v:10 kv2.w:11 kv2.f:12 kv2.d:13 kv2.s:14 kv2.b:15 kv2.crdb_internal_mvcc_timestamp:16
+      │         │                   ├── columns: kv2.k:10!null kv2.v:11 kv2.w:12 kv2.f:13 kv2.d:14 kv2.s:15 kv2.b:16 kv2.crdb_internal_mvcc_timestamp:17 kv2.tableoid:18
       │         │                   ├── scan kv [as=kv2]
-      │         │                   │    └── columns: kv2.k:9!null kv2.v:10 kv2.w:11 kv2.f:12 kv2.d:13 kv2.s:14 kv2.b:15 kv2.crdb_internal_mvcc_timestamp:16
+      │         │                   │    └── columns: kv2.k:10!null kv2.v:11 kv2.w:12 kv2.f:13 kv2.d:14 kv2.s:15 kv2.b:16 kv2.crdb_internal_mvcc_timestamp:17 kv2.tableoid:18
       │         │                   └── filters
-      │         │                        └── kv2.k:9 = kv.k:1
-      │         ├── 1 [as=lag_1_arg2:19]
-      │         └── NULL::INT8 [as=lag_1_arg3:20]
+      │         │                        └── kv2.k:10 = kv.k:1
+      │         ├── 1 [as=lag_1_arg2:21]
+      │         └── NULL::INT8 [as=lag_1_arg3:22]
       └── windows
-           └── lag [as=lag:17]
-                ├── lag_1_arg1:18
-                ├── lag_1_arg2:19
-                └── lag_1_arg3:20
+           └── lag [as=lag:19]
+                ├── lag_1_arg1:20
+                ├── lag_1_arg2:21
+                └── lag_1_arg3:22
 
 build
 SELECT lag(1) OVER (), lead(1) OVER () FROM kv
 ----
 project
- ├── columns: lag:9 lead:10
+ ├── columns: lag:10 lead:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lead:10 lag_1_arg1:11!null lag_1_arg3:12
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lead:11 lag_1_arg1:12!null lag_1_arg3:13
       ├── project
-      │    ├── columns: lag_1_arg1:11!null lag_1_arg3:12 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg3:13 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── 1 [as=lag_1_arg1:11]
-      │         └── NULL::INT8 [as=lag_1_arg3:12]
+      │         ├── 1 [as=lag_1_arg1:12]
+      │         └── NULL::INT8 [as=lag_1_arg3:13]
       └── windows
-           ├── lag [as=lag:9]
-           │    ├── lag_1_arg1:11
-           │    ├── lag_1_arg1:11
-           │    └── lag_1_arg3:12
-           └── lead [as=lead:10]
-                ├── lag_1_arg1:11
-                ├── lag_1_arg1:11
-                └── lag_1_arg3:12
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg1:12
+           │    └── lag_1_arg3:13
+           └── lead [as=lead:11]
+                ├── lag_1_arg1:12
+                ├── lag_1_arg1:12
+                └── lag_1_arg3:13
 
 build
 SELECT
@@ -178,43 +178,43 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: lag:9 lag:10 lag:11 lead:12 lead:13
+ ├── columns: lag:10 lag:11 lag:12 lead:13 lead:14
  └── window partition=(2)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag:10 lag:11 lead:12 lead:13 lag_1_arg1:14!null lag_1_arg3:15
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag:12 lead:13 lead:14 lag_1_arg1:15!null lag_1_arg3:16
       ├── window partition=(1)
-      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag:10 lead:12 lag_1_arg1:14!null lag_1_arg3:15
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lead:13 lag_1_arg1:15!null lag_1_arg3:16
       │    ├── window partition=(1,2)
-      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag_1_arg1:14!null lag_1_arg3:15
+      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag_1_arg1:15!null lag_1_arg3:16
       │    │    ├── project
-      │    │    │    ├── columns: lag_1_arg1:14!null lag_1_arg3:15 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── columns: lag_1_arg1:15!null lag_1_arg3:16 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    │    │    ├── scan kv
-      │    │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    │    │    └── projections
-      │    │    │         ├── 1 [as=lag_1_arg1:14]
-      │    │    │         └── NULL::INT8 [as=lag_1_arg3:15]
+      │    │    │         ├── 1 [as=lag_1_arg1:15]
+      │    │    │         └── NULL::INT8 [as=lag_1_arg3:16]
       │    │    └── windows
-      │    │         └── lag [as=lag:9]
-      │    │              ├── lag_1_arg1:14
-      │    │              ├── lag_1_arg1:14
-      │    │              └── lag_1_arg3:15
+      │    │         └── lag [as=lag:10]
+      │    │              ├── lag_1_arg1:15
+      │    │              ├── lag_1_arg1:15
+      │    │              └── lag_1_arg3:16
       │    └── windows
-      │         ├── lag [as=lag:10]
-      │         │    ├── lag_1_arg1:14
-      │         │    ├── lag_1_arg1:14
-      │         │    └── lag_1_arg3:15
-      │         └── lead [as=lead:12]
-      │              ├── lag_1_arg1:14
-      │              ├── lag_1_arg1:14
-      │              └── lag_1_arg3:15
+      │         ├── lag [as=lag:11]
+      │         │    ├── lag_1_arg1:15
+      │         │    ├── lag_1_arg1:15
+      │         │    └── lag_1_arg3:16
+      │         └── lead [as=lead:13]
+      │              ├── lag_1_arg1:15
+      │              ├── lag_1_arg1:15
+      │              └── lag_1_arg3:16
       └── windows
-           ├── lag [as=lag:11]
-           │    ├── lag_1_arg1:14
-           │    ├── lag_1_arg1:14
-           │    └── lag_1_arg3:15
-           └── lead [as=lead:13]
-                ├── lag_1_arg1:14
-                ├── lag_1_arg1:14
-                └── lag_1_arg3:15
+           ├── lag [as=lag:12]
+           │    ├── lag_1_arg1:15
+           │    ├── lag_1_arg1:15
+           │    └── lag_1_arg3:16
+           └── lead [as=lead:14]
+                ├── lag_1_arg1:15
+                ├── lag_1_arg1:15
+                └── lag_1_arg3:16
 
 build
 SELECT
@@ -226,121 +226,121 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: lag:9 lag:10 lag:11 lead:12 lead:13
+ ├── columns: lag:10 lag:11 lag:12 lead:13 lead:14
  └── window partition=(2)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag:10 lag:11 lead:12 lead:13 lag_1_arg1:14!null lag_1_arg3:15
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag:12 lead:13 lead:14 lag_1_arg1:15!null lag_1_arg3:16
       ├── window partition=(2) ordering=+4
-      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag:10 lag:11 lead:12 lag_1_arg1:14!null lag_1_arg3:15
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lag:12 lead:13 lag_1_arg1:15!null lag_1_arg3:16
       │    ├── window partition=(1) ordering=+2
-      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag:10 lead:12 lag_1_arg1:14!null lag_1_arg3:15
+      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag:11 lead:13 lag_1_arg1:15!null lag_1_arg3:16
       │    │    ├── window partition=(1,2)
-      │    │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lag_1_arg1:14!null lag_1_arg3:15
+      │    │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lag_1_arg1:15!null lag_1_arg3:16
       │    │    │    ├── project
-      │    │    │    │    ├── columns: lag_1_arg1:14!null lag_1_arg3:15 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    ├── columns: lag_1_arg1:15!null lag_1_arg3:16 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    │    │    │    ├── scan kv
-      │    │    │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    │    │    │    └── projections
-      │    │    │    │         ├── 1 [as=lag_1_arg1:14]
-      │    │    │    │         └── NULL::INT8 [as=lag_1_arg3:15]
+      │    │    │    │         ├── 1 [as=lag_1_arg1:15]
+      │    │    │    │         └── NULL::INT8 [as=lag_1_arg3:16]
       │    │    │    └── windows
-      │    │    │         └── lag [as=lag:9]
-      │    │    │              ├── lag_1_arg1:14
-      │    │    │              ├── lag_1_arg1:14
-      │    │    │              └── lag_1_arg3:15
+      │    │    │         └── lag [as=lag:10]
+      │    │    │              ├── lag_1_arg1:15
+      │    │    │              ├── lag_1_arg1:15
+      │    │    │              └── lag_1_arg3:16
       │    │    └── windows
-      │    │         ├── lag [as=lag:10]
-      │    │         │    ├── lag_1_arg1:14
-      │    │         │    ├── lag_1_arg1:14
-      │    │         │    └── lag_1_arg3:15
-      │    │         └── lead [as=lead:12]
-      │    │              ├── lag_1_arg1:14
-      │    │              ├── lag_1_arg1:14
-      │    │              └── lag_1_arg3:15
+      │    │         ├── lag [as=lag:11]
+      │    │         │    ├── lag_1_arg1:15
+      │    │         │    ├── lag_1_arg1:15
+      │    │         │    └── lag_1_arg3:16
+      │    │         └── lead [as=lead:13]
+      │    │              ├── lag_1_arg1:15
+      │    │              ├── lag_1_arg1:15
+      │    │              └── lag_1_arg3:16
       │    └── windows
-      │         └── lag [as=lag:11]
-      │              ├── lag_1_arg1:14
-      │              ├── lag_1_arg1:14
-      │              └── lag_1_arg3:15
+      │         └── lag [as=lag:12]
+      │              ├── lag_1_arg1:15
+      │              ├── lag_1_arg1:15
+      │              └── lag_1_arg3:16
       └── windows
-           └── lead [as=lead:13]
-                ├── lag_1_arg1:14
-                ├── lag_1_arg1:14
-                └── lag_1_arg3:15
+           └── lead [as=lead:14]
+                ├── lag_1_arg1:15
+                ├── lag_1_arg1:15
+                └── lag_1_arg3:16
 
 build
 SELECT lag(1, 2) OVER (), lead(1, 2) OVER () FROM kv
 ----
 project
- ├── columns: lag:9 lead:10
+ ├── columns: lag:10 lead:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lead:10 lag_1_arg1:11!null lag_1_arg2:12!null lag_1_arg3:13
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lead:11 lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14
       ├── project
-      │    ├── columns: lag_1_arg1:11!null lag_1_arg2:12!null lag_1_arg3:13 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── 1 [as=lag_1_arg1:11]
-      │         ├── 2 [as=lag_1_arg2:12]
-      │         └── NULL::INT8 [as=lag_1_arg3:13]
+      │         ├── 1 [as=lag_1_arg1:12]
+      │         ├── 2 [as=lag_1_arg2:13]
+      │         └── NULL::INT8 [as=lag_1_arg3:14]
       └── windows
-           ├── lag [as=lag:9]
-           │    ├── lag_1_arg1:11
-           │    ├── lag_1_arg2:12
-           │    └── lag_1_arg3:13
-           └── lead [as=lead:10]
-                ├── lag_1_arg1:11
-                ├── lag_1_arg2:12
-                └── lag_1_arg3:13
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg2:13
+           │    └── lag_1_arg3:14
+           └── lead [as=lead:11]
+                ├── lag_1_arg1:12
+                ├── lag_1_arg2:13
+                └── lag_1_arg3:14
 
 build
 SELECT lag(1, 2, 3) OVER (), lead(1, 2, 3) OVER () FROM kv
 ----
 project
- ├── columns: lag:9 lead:10
+ ├── columns: lag:10 lead:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 lag:9 lead:10 lag_1_arg1:11!null lag_1_arg2:12!null lag_1_arg3:13!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 lag:10 lead:11 lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14!null
       ├── project
-      │    ├── columns: lag_1_arg1:11!null lag_1_arg2:12!null lag_1_arg3:13!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: lag_1_arg1:12!null lag_1_arg2:13!null lag_1_arg3:14!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── 1 [as=lag_1_arg1:11]
-      │         ├── 2 [as=lag_1_arg2:12]
-      │         └── 3 [as=lag_1_arg3:13]
+      │         ├── 1 [as=lag_1_arg1:12]
+      │         ├── 2 [as=lag_1_arg2:13]
+      │         └── 3 [as=lag_1_arg3:14]
       └── windows
-           ├── lag [as=lag:9]
-           │    ├── lag_1_arg1:11
-           │    ├── lag_1_arg2:12
-           │    └── lag_1_arg3:13
-           └── lead [as=lead:10]
-                ├── lag_1_arg1:11
-                ├── lag_1_arg2:12
-                └── lag_1_arg3:13
+           ├── lag [as=lag:10]
+           │    ├── lag_1_arg1:12
+           │    ├── lag_1_arg2:13
+           │    └── lag_1_arg3:14
+           └── lead [as=lead:11]
+                ├── lag_1_arg1:12
+                ├── lag_1_arg2:13
+                └── lag_1_arg3:14
 
 build
 SELECT avg(k) OVER () FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── avg [as=avg:9]
+           └── avg [as=avg:10]
                 └── k:1
 
 build
 SELECT x FROM (SELECT avg(k) OVER () AS x FROM kv)
 ----
 project
- ├── columns: x:9
+ ├── columns: x:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── avg [as=avg:9]
+           └── avg [as=avg:10]
                 └── k:1
 
 build
@@ -352,20 +352,20 @@ build
 SELECT avg(k) FILTER (WHERE k > 5) OVER () FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg_1_filter:10!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg_1_filter:11!null
       ├── project
-      │    ├── columns: avg_1_filter:10!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: avg_1_filter:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         └── k:1 > 5 [as=avg_1_filter:10]
+      │         └── k:1 > 5 [as=avg_1_filter:11]
       └── windows
-           └── agg-filter [as=avg:9]
+           └── agg-filter [as=avg:10]
                 ├── avg
                 │    └── k:1
-                └── avg_1_filter:10
+                └── avg_1_filter:11
 
 build
 SELECT avg(k), max(v) OVER () FROM kv ORDER BY 1
@@ -376,228 +376,228 @@ build
 SELECT avg(k) OVER () FROM kv ORDER BY 1
 ----
 sort
- ├── columns: avg:9
- ├── ordering: +9
+ ├── columns: avg:10
+ ├── ordering: +10
  └── project
-      ├── columns: avg:9
+      ├── columns: avg:10
       └── window partition=()
-           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
            ├── scan kv
-           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
            └── windows
-                └── avg [as=avg:9]
+                └── avg [as=avg:10]
                      └── k:1
 
 build
 SELECT k, v, rank() OVER w FROM kv WINDOW w AS ()
 ----
 project
- ├── columns: k:1!null v:2 rank:9
+ ├── columns: k:1!null v:2 rank:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── rank [as=rank:9]
+           └── rank [as=rank:10]
 
 build
 SELECT k, v, first_value(v) OVER () FROM kv
 ----
 project
- ├── columns: k:1!null v:2 first_value:9
+ ├── columns: k:1!null v:2 first_value:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 first_value:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 first_value:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── first-value [as=first_value:9]
+           └── first-value [as=first_value:10]
                 └── v:2
 
 build
 SELECT avg(k), max(v), min(w), 2 + row_number() OVER () FROM kv ORDER BY 1
 ----
 project
- ├── columns: avg:9 max:10 min:11 "?column?":13
- ├── ordering: +9
+ ├── columns: avg:10 max:11 min:12 "?column?":14
+ ├── ordering: +10
  ├── window partition=()
- │    ├── columns: avg:9 max:10 min:11 row_number:12
+ │    ├── columns: avg:10 max:11 min:12 row_number:13
  │    ├── scalar-group-by
- │    │    ├── columns: avg:9 max:10 min:11
+ │    │    ├── columns: avg:10 max:11 min:12
  │    │    ├── project
  │    │    │    ├── columns: k:1!null v:2 w:3
  │    │    │    └── scan kv
- │    │    │         └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+ │    │    │         └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
  │    │    └── aggregations
- │    │         ├── avg [as=avg:9]
+ │    │         ├── avg [as=avg:10]
  │    │         │    └── k:1
- │    │         ├── max [as=max:10]
+ │    │         ├── max [as=max:11]
  │    │         │    └── v:2
- │    │         └── min [as=min:11]
+ │    │         └── min [as=min:12]
  │    │              └── w:3
  │    └── windows
- │         └── row-number [as=row_number:12]
+ │         └── row-number [as=row_number:13]
  └── projections
-      └── 2 + row_number:12 [as="?column?":13]
+      └── 2 + row_number:13 [as="?column?":14]
 
 build
 SELECT k, rank() OVER (), dense_rank() OVER (), percent_rank() OVER (), cume_dist() OVER () FROM kv
 ----
 project
- ├── columns: k:1!null rank:9 dense_rank:10 percent_rank:11 cume_dist:12
+ ├── columns: k:1!null rank:10 dense_rank:11 percent_rank:12 cume_dist:13
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 dense_rank:10 percent_rank:11 cume_dist:12
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 dense_rank:11 percent_rank:12 cume_dist:13
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           ├── rank [as=rank:9]
-           ├── dense-rank [as=dense_rank:10]
-           ├── percent-rank [as=percent_rank:11]
-           └── cume-dist [as=cume_dist:12]
+           ├── rank [as=rank:10]
+           ├── dense-rank [as=dense_rank:11]
+           ├── percent-rank [as=percent_rank:12]
+           └── cume-dist [as=cume_dist:13]
 
 build
 SELECT k, rank() OVER (), rank() OVER () FROM kv
 ----
 project
- ├── columns: k:1!null rank:9 rank:9
+ ├── columns: k:1!null rank:10 rank:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── rank [as=rank:9]
+           └── rank [as=rank:10]
 
 build
 SELECT k, rank() OVER (), row_number() OVER () FROM kv
 ----
 project
- ├── columns: k:1!null rank:9 row_number:10
+ ├── columns: k:1!null rank:10 row_number:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 row_number:10
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           ├── rank [as=rank:9]
-           └── row-number [as=row_number:10]
+           ├── rank [as=rank:10]
+           └── row-number [as=row_number:11]
 
 build
 SELECT k, rank() OVER (), row_number() OVER () FROM kv ORDER BY 1
 ----
 sort
- ├── columns: k:1!null rank:9 row_number:10
+ ├── columns: k:1!null rank:10 row_number:11
  ├── ordering: +1
  └── project
-      ├── columns: k:1!null rank:9 row_number:10
+      ├── columns: k:1!null rank:10 row_number:11
       └── window partition=()
-           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 row_number:10
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11
            ├── scan kv
-           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
            └── windows
-                ├── rank [as=rank:9]
-                └── row-number [as=row_number:10]
+                ├── rank [as=rank:10]
+                └── row-number [as=row_number:11]
 
 build
 SELECT k, v, rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
 ----
 sort
- ├── columns: k:1!null v:2 rank:9
+ ├── columns: k:1!null v:2 rank:10
  ├── ordering: +1
  └── project
-      ├── columns: k:1!null v:2 rank:9
+      ├── columns: k:1!null v:2 rank:10
       └── window partition=(2)
-           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
            ├── scan kv
-           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
            └── windows
-                └── rank [as=rank:9]
+                └── rank [as=rank:10]
 
 build
 SELECT k, row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
 ----
 sort
- ├── columns: k:1!null row_number:9 rank:10
+ ├── columns: k:1!null row_number:10 rank:11
  ├── ordering: +1
  └── project
-      ├── columns: k:1!null row_number:9 rank:10
+      ├── columns: k:1!null row_number:10 rank:11
       └── window partition=(2)
-           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9 rank:10
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10 rank:11
            ├── scan kv
-           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
            └── windows
-                ├── row-number [as=row_number:9]
-                └── rank [as=rank:10]
+                ├── row-number [as=row_number:10]
+                └── rank [as=rank:11]
 
 build
 SELECT k, v, ntile(1) OVER () FROM kv
 ----
 project
- ├── columns: k:1!null v:2 ntile:9
+ ├── columns: k:1!null v:2 ntile:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 ntile:9 ntile_1_arg1:10!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 ntile:10 ntile_1_arg1:11!null
       ├── project
-      │    ├── columns: ntile_1_arg1:10!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: ntile_1_arg1:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         └── 1 [as=ntile_1_arg1:10]
+      │         └── 1 [as=ntile_1_arg1:11]
       └── windows
-           └── ntile [as=ntile:9]
-                └── ntile_1_arg1:10
+           └── ntile [as=ntile:10]
+                └── ntile_1_arg1:11
 
 build
 SELECT k, v, ntile(1) OVER (), ntile(50) OVER () FROM kv
 ----
 project
- ├── columns: k:1!null v:2 ntile:9 ntile:10
+ ├── columns: k:1!null v:2 ntile:10 ntile:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 ntile:9 ntile:10 ntile_1_arg1:11!null ntile_2_arg1:12!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 ntile:10 ntile:11 ntile_1_arg1:12!null ntile_2_arg1:13!null
       ├── project
-      │    ├── columns: ntile_1_arg1:11!null ntile_2_arg1:12!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: ntile_1_arg1:12!null ntile_2_arg1:13!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── 1 [as=ntile_1_arg1:11]
-      │         └── 50 [as=ntile_2_arg1:12]
+      │         ├── 1 [as=ntile_1_arg1:12]
+      │         └── 50 [as=ntile_2_arg1:13]
       └── windows
-           ├── ntile [as=ntile:9]
-           │    └── ntile_1_arg1:11
-           └── ntile [as=ntile:10]
-                └── ntile_2_arg1:12
+           ├── ntile [as=ntile:10]
+           │    └── ntile_1_arg1:12
+           └── ntile [as=ntile:11]
+                └── ntile_2_arg1:13
 
 build
 SELECT k, v, nth_value('foo', 1) OVER () FROM kv
 ----
 project
- ├── columns: k:1!null v:2 nth_value:9
+ ├── columns: k:1!null v:2 nth_value:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 nth_value:9 nth_value_1_arg1:10!null nth_value_1_arg2:11!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 nth_value:10 nth_value_1_arg1:11!null nth_value_1_arg2:12!null
       ├── project
-      │    ├── columns: nth_value_1_arg1:10!null nth_value_1_arg2:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: nth_value_1_arg1:11!null nth_value_1_arg2:12!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── 'foo' [as=nth_value_1_arg1:10]
-      │         └── 1 [as=nth_value_1_arg2:11]
+      │         ├── 'foo' [as=nth_value_1_arg1:11]
+      │         └── 1 [as=nth_value_1_arg2:12]
       └── windows
-           └── nth-value [as=nth_value:9]
-                ├── nth_value_1_arg1:10
-                └── nth_value_1_arg2:11
+           └── nth-value [as=nth_value:10]
+                ├── nth_value_1_arg1:11
+                └── nth_value_1_arg2:12
 
 build
 SELECT k, v, nth_value(1, k) OVER () FROM kv
 ----
 project
- ├── columns: k:1!null v:2 nth_value:9
+ ├── columns: k:1!null v:2 nth_value:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 nth_value:9 nth_value_1_arg1:10!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 nth_value:10 nth_value_1_arg1:11!null
       ├── project
-      │    ├── columns: nth_value_1_arg1:10!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: nth_value_1_arg1:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         └── 1 [as=nth_value_1_arg1:10]
+      │         └── 1 [as=nth_value_1_arg1:11]
       └── windows
-           └── nth-value [as=nth_value:9]
-                ├── nth_value_1_arg1:10
+           └── nth-value [as=nth_value:10]
+                ├── nth_value_1_arg1:11
                 └── k:1
 
 # Partitions
@@ -616,102 +616,102 @@ build
 SELECT row_number() OVER (PARTITION BY v) FROM kv
 ----
 project
- ├── columns: row_number:9
+ ├── columns: row_number:10
  └── window partition=(2)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── row-number [as=row_number:9]
+           └── row-number [as=row_number:10]
 
 build
 SELECT v, row_number() OVER (PARTITION BY v) FROM kv
 ----
 project
- ├── columns: v:2 row_number:9
+ ├── columns: v:2 row_number:10
  └── window partition=(2)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── row-number [as=row_number:9]
+           └── row-number [as=row_number:10]
 
 build
 SELECT v, row_number() OVER (PARTITION BY v+1) FROM kv
 ----
 project
- ├── columns: v:2 row_number:9
- └── window partition=(10)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9 row_number_1_partition_1:10
+ ├── columns: v:2 row_number:10
+ └── window partition=(11)
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10 row_number_1_partition_1:11
       ├── project
-      │    ├── columns: row_number_1_partition_1:10 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: row_number_1_partition_1:11 k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         └── v:2 + 1 [as=row_number_1_partition_1:10]
+      │         └── v:2 + 1 [as=row_number_1_partition_1:11]
       └── windows
-           └── row-number [as=row_number:9]
+           └── row-number [as=row_number:10]
 
 build
 SELECT v, row_number() OVER (PARTITION BY avg(k)) FROM kv GROUP BY v
 ----
 project
- ├── columns: v:2 row_number:10
- └── window partition=(9)
-      ├── columns: v:2 avg:9!null row_number:10
+ ├── columns: v:2 row_number:11
+ └── window partition=(10)
+      ├── columns: v:2 avg:10!null row_number:11
       ├── group-by
-      │    ├── columns: v:2 avg:9!null
+      │    ├── columns: v:2 avg:10!null
       │    ├── grouping columns: v:2
       │    ├── project
       │    │    ├── columns: k:1!null v:2
       │    │    └── scan kv
-      │    │         └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │         └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── aggregations
-      │         └── avg [as=avg:9]
+      │         └── avg [as=avg:10]
       │              └── k:1
       └── windows
-           └── row-number [as=row_number:10]
+           └── row-number [as=row_number:11]
 
 # TODO(justin): expand these tuples.
 build
 SELECT k, row_number() OVER (PARTITION BY (k, v)) FROM kv
 ----
 project
- ├── columns: k:1!null row_number:9
+ ├── columns: k:1!null row_number:10
  └── window partition=(1,2)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── row-number [as=row_number:9]
+           └── row-number [as=row_number:10]
 
 build
 SELECT k, row_number() OVER (PARTITION BY kv.*) FROM kv
 ----
 project
- ├── columns: k:1!null row_number:9
+ ├── columns: k:1!null row_number:10
  └── window partition=(1-7)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── row-number [as=row_number:9]
+           └── row-number [as=row_number:10]
 
 build
 SELECT row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v, f) FROM kv
 ----
 project
- ├── columns: row_number:9 rank:10
+ ├── columns: row_number:10 rank:11
  └── window partition=(2,4)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9 rank:10
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10 rank:11
       ├── window partition=(2)
-      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── windows
-      │         └── row-number [as=row_number:9]
+      │         └── row-number [as=row_number:10]
       └── windows
-           └── rank [as=rank:10]
+           └── rank [as=rank:11]
 
 # Ordering
 
@@ -719,28 +719,28 @@ build
 SELECT row_number() OVER (ORDER BY v) FROM kv
 ----
 project
- ├── columns: row_number:9
+ ├── columns: row_number:10
  └── window partition=() ordering=+2
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── row-number [as=row_number:9]
+           └── row-number [as=row_number:10]
 
 build
 SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
 ----
 sort
- ├── columns: k:1!null v:2 rank:9
+ ├── columns: k:1!null v:2 rank:10
  ├── ordering: +1
  └── project
-      ├── columns: k:1!null v:2 rank:9
+      ├── columns: k:1!null v:2 rank:10
       └── window partition=() ordering=+1
-           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
            ├── scan kv
-           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
            └── windows
-                └── rank [as=rank:9]
+                └── rank [as=rank:10]
 
 # Ensure tuples in orderings get expanded.
 
@@ -754,41 +754,41 @@ SELECT
 FROM kv ORDER BY 1
 ----
 sort
- ├── columns: k:1!null v:2 rank:9 row_number:10 dense_rank:11
+ ├── columns: k:1!null v:2 rank:10 row_number:11 dense_rank:12
  ├── ordering: +1
  └── project
-      ├── columns: k:1!null v:2 rank:9 row_number:10 dense_rank:11
+      ├── columns: k:1!null v:2 rank:10 row_number:11 dense_rank:12
       └── window partition=() ordering=+4,+2,+3
-           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 row_number:10 dense_rank:11
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11 dense_rank:12
            ├── window partition=() ordering=+2,+3,+4
-           │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 row_number:10
+           │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 row_number:11
            │    ├── window partition=() ordering=+2,+3
-           │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+           │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
            │    │    ├── scan kv
-           │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+           │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
            │    │    └── windows
-           │    │         └── rank [as=rank:9]
+           │    │         └── rank [as=rank:10]
            │    └── windows
-           │         └── row-number [as=row_number:10]
+           │         └── row-number [as=row_number:11]
            └── windows
-                └── dense-rank [as=dense_rank:11]
+                └── dense-rank [as=dense_rank:12]
 
 build
 SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
 ----
 sort
- ├── columns: k:1!null v:2 w:3 "?column?":10
+ ├── columns: k:1!null v:2 w:3 "?column?":11
  ├── ordering: +1
  └── project
-      ├── columns: "?column?":10 k:1!null v:2 w:3
+      ├── columns: "?column?":11 k:1!null v:2 w:3
       ├── window partition=(1,2) ordering=+3
-      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── windows
-      │         └── row-number [as=row_number:9]
+      │         └── row-number [as=row_number:10]
       └── projections
-           └── ((v:2 - w:3) + 2) + row_number:9 [as="?column?":10]
+           └── ((v:2 - w:3) + 2) + row_number:10 [as="?column?":11]
 
 build
 SELECT
@@ -799,20 +799,20 @@ ORDER BY
     row_number() OVER (ORDER BY (k, v)) DESC
 ----
 distinct-on
- ├── columns: w:3  [hidden: row_number:9]
- ├── grouping columns: row_number:9
- ├── ordering: -9
+ ├── columns: w:3  [hidden: row_number:10]
+ ├── grouping columns: row_number:10
+ ├── ordering: -10
  ├── sort
- │    ├── columns: w:3 row_number:9
- │    ├── ordering: -9
+ │    ├── columns: w:3 row_number:10
+ │    ├── ordering: -10
  │    └── project
- │         ├── columns: w:3 row_number:9
+ │         ├── columns: w:3 row_number:10
  │         └── window partition=() ordering=+1,+2
- │              ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 row_number:9
+ │              ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 row_number:10
  │              ├── scan kv
- │              │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+ │              │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
  │              └── windows
- │                   └── row-number [as=row_number:9]
+ │                   └── row-number [as=row_number:10]
  └── aggregations
       └── first-agg [as=w:3]
            └── w:3
@@ -824,13 +824,13 @@ build
 SELECT avg(k) OVER () FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── avg [as=avg:9]
+           └── avg [as=avg:10]
                 └── k:1
 
 build
@@ -852,19 +852,19 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg:9 avg:10 avg:11 avg:12
+ ├── columns: avg:10 avg:11 avg:12 avg:13
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg:10 avg:11 avg:12
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           ├── avg [as=avg:9, frame="range from unbounded to unbounded"]
+           ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
            │    └── k:1
-           ├── avg [as=avg:10]
+           ├── avg [as=avg:11]
            │    └── k:1
-           ├── avg [as=avg:11, frame="range from current-row to unbounded"]
+           ├── avg [as=avg:12, frame="range from current-row to unbounded"]
            │    └── k:1
-           └── avg [as=avg:12, frame="range from current-row to current-row"]
+           └── avg [as=avg:13, frame="range from current-row to current-row"]
                 └── k:1
 
 build
@@ -876,19 +876,19 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg:9 avg:10 avg:11 avg:12
+ ├── columns: avg:10 avg:11 avg:12 avg:13
  └── window partition=() ordering=+2
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg:10 avg:11 avg:12
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           ├── avg [as=avg:9, frame="range from unbounded to unbounded"]
+           ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
            │    └── k:1
-           ├── avg [as=avg:10]
+           ├── avg [as=avg:11]
            │    └── k:1
-           ├── avg [as=avg:11, frame="range from current-row to unbounded"]
+           ├── avg [as=avg:12, frame="range from current-row to unbounded"]
            │    └── k:1
-           └── avg [as=avg:12, frame="range from current-row to current-row"]
+           └── avg [as=avg:13, frame="range from current-row to current-row"]
                 └── k:1
 
 build
@@ -898,15 +898,15 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg:9 avg:10
+ ├── columns: avg:10 avg:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg:10
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           ├── avg [as=avg:9]
+           ├── avg [as=avg:10]
            │    └── k:1
-           └── avg [as=avg:10, frame="range from current-row to current-row"]
+           └── avg [as=avg:11, frame="range from current-row to current-row"]
                 └── k:1
 
 # TODO(justin): add support for offset expressions.
@@ -919,13 +919,13 @@ build
 SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=() ordering=+2
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── window-to-offset [as=avg:9, frame="range from unbounded to offset"]
+           └── window-to-offset [as=avg:10, frame="range from unbounded to offset"]
                 ├── avg
                 │    └── k:1
                 └── 10
@@ -936,13 +936,13 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg_price:9
+ ├── columns: avg_price:10
  └── window partition=(3) ordering=+4
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── window-to-offset [as=avg:9, frame="range from offset to offset"]
+           └── window-to-offset [as=avg:10, frame="range from offset to offset"]
                 ├── window-from-offset
                 │    ├── avg
                 │    │    └── v:2
@@ -955,13 +955,13 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg_price:9
+ ├── columns: avg_price:10
  └── window partition=(3)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── window-to-offset [as=avg:9, frame="rows from offset to offset"]
+           └── window-to-offset [as=avg:10, frame="rows from offset to offset"]
                 ├── window-from-offset
                 │    ├── avg
                 │    │    └── v:2
@@ -980,26 +980,26 @@ FROM
     kv
 ----
 project
- ├── columns: avg:18
+ ├── columns: avg:20
  └── window partition=(3)
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:18
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:20
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── window-to-offset [as=avg:18, frame="rows from offset to offset"]
+           └── window-to-offset [as=avg:20, frame="rows from offset to offset"]
                 ├── window-from-offset
                 │    ├── avg
                 │    │    └── v:2
                 │    └── subquery
                 │         └── max1-row
-                │              ├── columns: count_rows:17!null
+                │              ├── columns: count_rows:19!null
                 │              └── scalar-group-by
-                │                   ├── columns: count_rows:17!null
+                │                   ├── columns: count_rows:19!null
                 │                   ├── project
                 │                   │    └── scan kv
-                │                   │         └── columns: k:9!null v:10 w:11 f:12 d:13 s:14 b:15 crdb_internal_mvcc_timestamp:16
+                │                   │         └── columns: k:10!null v:11 w:12 f:13 d:14 s:15 b:16 crdb_internal_mvcc_timestamp:17 tableoid:18
                 │                   └── aggregations
-                │                        └── count-rows [as=count_rows:17]
+                │                        └── count-rows [as=count_rows:19]
                 └── 1
 
 # TODO(justin): consider adding rules to hoist correlated subqueries in the
@@ -1023,13 +1023,13 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=() ordering=+2
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── window-to-offset [as=avg:9, frame="groups from offset to offset"]
+           └── window-to-offset [as=avg:10, frame="groups from offset to offset"]
                 ├── window-from-offset
                 │    ├── avg
                 │    │    └── v:2
@@ -1042,13 +1042,13 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=() ordering=+1
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── window-from-offset [as=avg:9, frame="groups from offset to unbounded"]
+           └── window-from-offset [as=avg:10, frame="groups from offset to unbounded"]
                 ├── avg
                 │    └── v:2
                 └── 1
@@ -1057,13 +1057,13 @@ build
 SELECT avg(v) OVER (ORDER BY f RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=() ordering=+4
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── window-from-offset [as=avg:9, frame="range from offset to unbounded"]
+           └── window-from-offset [as=avg:10, frame="range from offset to unbounded"]
                 ├── avg
                 │    └── v:2
                 └── 1.0
@@ -1075,20 +1075,20 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: avg:9 avg:10
+ ├── columns: avg:10 avg:11
  └── window partition=() ordering=+5
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg:10
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11
       ├── window partition=() ordering=+4
-      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── windows
-      │         └── window-from-offset [as=avg:9, frame="range from offset to unbounded"]
+      │         └── window-from-offset [as=avg:10, frame="range from offset to unbounded"]
       │              ├── avg
       │              │    └── v:2
       │              └── 1.0
       └── windows
-           └── window-from-offset [as=avg:10, frame="range from offset to unbounded"]
+           └── window-from-offset [as=avg:11, frame="range from offset to unbounded"]
                 ├── avg
                 │    └── v:2
                 └── 2
@@ -1125,41 +1125,40 @@ FROM
     kv
 ----
 project
- ├── columns: avg:9 avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17 avg:18 avg:19 avg:20 "?column?":21 "?column?":22 "?column?":23 "?column?":24 "?column?":25 "?column?":26 "?column?":27 "?column?":28 "?column?":29 "?column?":30 "?column?":31 "?column?":32
+ ├── columns: avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17 avg:18 avg:19 avg:20 avg:21 "?column?":22 "?column?":23 "?column?":24 "?column?":25 "?column?":26 "?column?":27 "?column?":28 "?column?":29 "?column?":30 "?column?":31 "?column?":32 "?column?":33
  ├── window partition=() ordering=+2
- │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17 avg:18 avg:19 avg:20
+ │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17 avg:18 avg:19 avg:20 avg:21
  │    ├── window partition=()
- │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16
+ │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13 avg:14 avg:15 avg:16 avg:17
  │    │    ├── scan kv
- │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+ │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
  │    │    └── windows
- │    │         ├── avg [as=avg:9, frame="range from unbounded to unbounded"]
+ │    │         ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
  │    │         │    └── k:1
- │    │         ├── avg [as=avg:10]
+ │    │         ├── avg [as=avg:11]
  │    │         │    └── k:1
- │    │         ├── avg [as=avg:11, frame="range from current-row to unbounded"]
+ │    │         ├── avg [as=avg:12, frame="range from current-row to unbounded"]
  │    │         │    └── k:1
- │    │         ├── avg [as=avg:12, frame="range from current-row to current-row"]
+ │    │         ├── avg [as=avg:13, frame="range from current-row to current-row"]
  │    │         │    └── k:1
- │    │         ├── avg [as=avg:13, frame="rows from unbounded to unbounded"]
+ │    │         ├── avg [as=avg:14, frame="rows from unbounded to unbounded"]
  │    │         │    └── k:1
- │    │         ├── avg [as=avg:14, frame="rows from unbounded to current-row"]
+ │    │         ├── avg [as=avg:15, frame="rows from unbounded to current-row"]
  │    │         │    └── k:1
- │    │         ├── avg [as=avg:15, frame="rows from current-row to unbounded"]
+ │    │         ├── avg [as=avg:16, frame="rows from current-row to unbounded"]
  │    │         │    └── k:1
- │    │         └── avg [as=avg:16, frame="rows from current-row to current-row"]
+ │    │         └── avg [as=avg:17, frame="rows from current-row to current-row"]
  │    │              └── k:1
  │    └── windows
- │         ├── avg [as=avg:17, frame="groups from unbounded to unbounded"]
+ │         ├── avg [as=avg:18, frame="groups from unbounded to unbounded"]
  │         │    └── k:1
- │         ├── avg [as=avg:18, frame="groups from unbounded to current-row"]
+ │         ├── avg [as=avg:19, frame="groups from unbounded to current-row"]
  │         │    └── k:1
- │         ├── avg [as=avg:19, frame="groups from current-row to unbounded"]
+ │         ├── avg [as=avg:20, frame="groups from current-row to unbounded"]
  │         │    └── k:1
- │         └── avg [as=avg:20, frame="groups from current-row to current-row"]
+ │         └── avg [as=avg:21, frame="groups from current-row to current-row"]
  │              └── k:1
  └── projections
-      ├── 1 + avg:9 [as="?column?":21]
       ├── 1 + avg:10 [as="?column?":22]
       ├── 1 + avg:11 [as="?column?":23]
       ├── 1 + avg:12 [as="?column?":24]
@@ -1170,7 +1169,8 @@ project
       ├── 1 + avg:17 [as="?column?":29]
       ├── 1 + avg:18 [as="?column?":30]
       ├── 1 + avg:19 [as="?column?":31]
-      └── 1 + avg:20 [as="?column?":32]
+      ├── 1 + avg:20 [as="?column?":32]
+      └── 1 + avg:21 [as="?column?":33]
 
 build
 SELECT
@@ -1186,33 +1186,33 @@ FROM
     kv
 ----
 project
- ├── columns: avg:9 avg:10 avg:11 avg:12 "?column?":13 "?column?":14 "?column?":15 "?column?":16
+ ├── columns: avg:10 avg:11 avg:12 avg:13 "?column?":14 "?column?":15 "?column?":16 "?column?":17
  ├── window partition=() ordering=+2
- │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg:10 avg:11 avg:12
+ │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg:11 avg:12 avg:13
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+ │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
  │    └── windows
- │         ├── avg [as=avg:9, frame="range from unbounded to unbounded"]
+ │         ├── avg [as=avg:10, frame="range from unbounded to unbounded"]
  │         │    └── k:1
- │         ├── window-from-offset [as=avg:10, frame="range from offset to unbounded"]
+ │         ├── window-from-offset [as=avg:11, frame="range from offset to unbounded"]
  │         │    ├── avg
  │         │    │    └── k:1
  │         │    └── 1
- │         ├── window-to-offset [as=avg:11, frame="range from offset to offset"]
+ │         ├── window-to-offset [as=avg:12, frame="range from offset to offset"]
  │         │    ├── window-from-offset
  │         │    │    ├── avg
  │         │    │    │    └── k:1
  │         │    │    └── 1
  │         │    └── 1
- │         └── window-to-offset [as=avg:12, frame="range from unbounded to offset"]
+ │         └── window-to-offset [as=avg:13, frame="range from unbounded to offset"]
  │              ├── avg
  │              │    └── k:1
  │              └── 1
  └── projections
-      ├── 1 + avg:9 [as="?column?":13]
       ├── 1 + avg:10 [as="?column?":14]
       ├── 1 + avg:11 [as="?column?":15]
-      └── 1 + avg:12 [as="?column?":16]
+      ├── 1 + avg:12 [as="?column?":16]
+      └── 1 + avg:13 [as="?column?":17]
 
 # Filter.
 
@@ -1225,44 +1225,44 @@ build
 SELECT avg(f) FILTER (WHERE k = 1) OVER () FROM kv
 ----
 project
- ├── columns: avg:9
+ ├── columns: avg:10
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 avg:9 avg_1_filter:10!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 avg:10 avg_1_filter:11!null
       ├── project
-      │    ├── columns: avg_1_filter:10!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: avg_1_filter:11!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         └── k:1 = 1 [as=avg_1_filter:10]
+      │         └── k:1 = 1 [as=avg_1_filter:11]
       └── windows
-           └── agg-filter [as=avg:9]
+           └── agg-filter [as=avg:10]
                 ├── avg
                 │    └── f:4
-                └── avg_1_filter:10
+                └── avg_1_filter:11
 
 build
 SELECT count(*) FILTER (WHERE true) OVER (), count(*) FILTER (WHERE false) OVER () FROM kv
 ----
 project
- ├── columns: count:9 count:10
+ ├── columns: count:10 count:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 count:9 count:10 count_1_arg1:11!null count_2_filter:12!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 count:10 count:11 count_1_arg1:12!null count_2_filter:13!null
       ├── project
-      │    ├── columns: count_1_arg1:11!null count_2_filter:12!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: count_1_arg1:12!null count_2_filter:13!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── true [as=count_1_arg1:11]
-      │         └── false [as=count_2_filter:12]
+      │         ├── true [as=count_1_arg1:12]
+      │         └── false [as=count_2_filter:13]
       └── windows
-           ├── agg-filter [as=count:9]
+           ├── agg-filter [as=count:10]
            │    ├── count
-           │    │    └── count_1_arg1:11
-           │    └── count_1_arg1:11
-           └── agg-filter [as=count:10]
+           │    │    └── count_1_arg1:12
+           │    └── count_1_arg1:12
+           └── agg-filter [as=count:11]
                 ├── count
-                │    └── count_1_arg1:11
-                └── count_2_filter:12
+                │    └── count_1_arg1:12
+                └── count_2_filter:13
 
 build
 SELECT
@@ -1273,25 +1273,25 @@ FROM
     kv
 ----
 project
- ├── columns: count:9 count:9 avg:10
+ ├── columns: count:10 count:10 avg:11
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 count:9 avg:10 count_1_arg1:11!null count_1_filter:12!null
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 count:10 avg:11 count_1_arg1:12!null count_1_filter:13!null
       ├── project
-      │    ├── columns: count_1_arg1:11!null count_1_filter:12!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: count_1_arg1:12!null count_1_filter:13!null k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    └── projections
-      │         ├── true [as=count_1_arg1:11]
-      │         └── false [as=count_1_filter:12]
+      │         ├── true [as=count_1_arg1:12]
+      │         └── false [as=count_1_filter:13]
       └── windows
-           ├── agg-filter [as=count:9]
+           ├── agg-filter [as=count:10]
            │    ├── count
-           │    │    └── count_1_arg1:11
-           │    └── count_1_filter:12
-           └── agg-filter [as=avg:10]
+           │    │    └── count_1_arg1:12
+           │    └── count_1_filter:13
+           └── agg-filter [as=avg:11]
                 ├── avg
                 │    └── k:1
-                └── count_1_filter:12
+                └── count_1_filter:13
 
 # Named windows.
 
@@ -1301,13 +1301,13 @@ SELECT
 FROM kv WINDOW w as (ORDER BY v)
 ----
 project
- ├── columns: rank:9
+ ├── columns: rank:10
  └── window partition=() ordering=+2
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── rank [as=rank:9]
+           └── rank [as=rank:10]
 
 build
 SELECT
@@ -1315,13 +1315,13 @@ SELECT
 FROM kv WINDOW w as (ORDER BY v)
 ----
 project
- ├── columns: rank:9
+ ├── columns: rank:10
  └── window partition=() ordering=+2
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── rank [as=rank:9]
+           └── rank [as=rank:10]
 
 build
 SELECT
@@ -1333,23 +1333,23 @@ SELECT
 FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
 ----
 project
- ├── columns: rank:9 rank:10 row_number:11 row_number:12 row_number:13
+ ├── columns: rank:10 rank:11 row_number:12 row_number:13 row_number:14
  └── window partition=(2) ordering=+4
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 rank:10 row_number:11 row_number:12 row_number:13
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11 row_number:12 row_number:13 row_number:14
       ├── window partition=(2)
-      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 rank:10 row_number:11 row_number:13
+      │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11 row_number:12 row_number:14
       │    ├── window partition=() ordering=+2
-      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 rank:10
+      │    │    ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11
       │    │    ├── scan kv
-      │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    │    └── windows
-      │    │         ├── rank [as=rank:9]
-      │    │         └── rank [as=rank:10]
+      │    │         ├── rank [as=rank:10]
+      │    │         └── rank [as=rank:11]
       │    └── windows
-      │         ├── row-number [as=row_number:11]
-      │         └── row-number [as=row_number:13]
+      │         ├── row-number [as=row_number:12]
+      │         └── row-number [as=row_number:14]
       └── windows
-           └── row-number [as=row_number:12]
+           └── row-number [as=row_number:13]
 
 build
 SELECT
@@ -1357,13 +1357,13 @@ SELECT
 FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
 ----
 project
- ├── columns: rank:9
+ ├── columns: rank:10
  └── window partition=() ordering=+2
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           └── rank [as=rank:9]
+           └── rank [as=rank:10]
 
 build
 SELECT
@@ -1372,16 +1372,16 @@ FROM kv WINDOW w as (ORDER BY v)
 ORDER BY rank() OVER w
 ----
 sort
- ├── columns: rank:9
- ├── ordering: +9
+ ├── columns: rank:10
+ ├── ordering: +10
  └── project
-      ├── columns: rank:9
+      ├── columns: rank:10
       └── window partition=() ordering=+2
-           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9
+           ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10
            ├── scan kv
-           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+           │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
            └── windows
-                └── rank [as=rank:9]
+                └── rank [as=rank:10]
 
 build
 SELECT
@@ -1438,16 +1438,16 @@ SELECT
 FROM kv
 ----
 project
- ├── columns: rank:9 rank:10 rank:11 rank:12
+ ├── columns: rank:10 rank:11 rank:12 rank:13
  └── window partition=()
-      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 rank:9 rank:10 rank:11 rank:12
+      ├── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9 rank:10 rank:11 rank:12 rank:13
       ├── scan kv
-      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8
+      │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       └── windows
-           ├── rank [as=rank:9, frame="range from unbounded to current-row exclude current row"]
-           ├── rank [as=rank:10, frame="range from unbounded to current-row exclude group"]
-           ├── rank [as=rank:11, frame="range from unbounded to current-row exclude ties"]
-           └── rank [as=rank:12]
+           ├── rank [as=rank:10, frame="range from unbounded to current-row exclude current row"]
+           ├── rank [as=rank:11, frame="range from unbounded to current-row exclude group"]
+           ├── rank [as=rank:12, frame="range from unbounded to current-row exclude ties"]
+           └── rank [as=rank:13]
 
 exec-ddl
 CREATE TABLE table1 (col5 CHAR, col8 INT2);

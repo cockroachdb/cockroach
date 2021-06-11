@@ -12,6 +12,7 @@ TABLE kv
  ├── k int not null
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX primary
       └── k int not null
 
@@ -40,6 +41,7 @@ TABLE abcdef
  ├── g int as (a + b) virtual
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── CHECK (f > 2)
  └── PRIMARY INDEX primary
       └── rowid int not null default (unique_rowid()) [hidden]
@@ -69,7 +71,8 @@ TABLE uvwxy
  ├── x int
  ├── y int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── FAMILY family1 (u, v, w, crdb_internal_mvcc_timestamp)
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY family1 (u, v, w, crdb_internal_mvcc_timestamp, tableoid)
  ├── FAMILY family2 (x)
  ├── FAMILY family3 (y)
  └── PRIMARY INDEX primary
@@ -87,6 +90,7 @@ TABLE a
  ├── a int
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  └── UNIQUE INDEX a_a_key
@@ -108,6 +112,7 @@ TABLE part1
  ├── a int not null
  ├── b int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX primary
       ├── a int not null
       └── partitions
@@ -147,6 +152,7 @@ TABLE part2
  ├── b string not null
  ├── c int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    ├── a string not null
  │    ├── b string not null
@@ -195,6 +201,7 @@ TABLE inv
  ├── j jsonb
  ├── g geometry
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── j_inverted_key jsonb not null [virtual-inverted]
  ├── g_inverted_key geometry not null [virtual-inverted]
  ├── PRIMARY INDEX primary
@@ -226,6 +233,7 @@ TABLE inv2
  ├── g geometry
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── j_inverted_key jsonb not null [virtual-inverted]
  ├── g_inverted_key geometry not null [virtual-inverted]
  ├── PRIMARY INDEX primary
@@ -263,6 +271,7 @@ TABLE uniq
  ├── m string
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── CHECK (k IN ('foo', 'bar', 'baz'))
  ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
@@ -301,6 +310,7 @@ TABLE mutations
  ├── c int [write-only]
  ├── d int [delete-only]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INDEX idxa (mutation)
