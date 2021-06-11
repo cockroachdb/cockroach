@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -200,8 +201,10 @@ func (c *castOpNullAny) Next() coldata.Batch {
 // probably require changing the way we handle cast overloads as well.
 
 // {{range .LeftFamilies}}
+// {{$leftFamily := .LeftCanonicalFamilyStr}}
 // {{range .LeftWidths}}
 // {{range .RightFamilies}}
+// {{$rightFamily := .RightCanonicalFamilyStr}}
 // {{range .RightWidths}}
 
 type cast_NAMEOp struct {
@@ -211,6 +214,13 @@ type cast_NAMEOp struct {
 	colIdx    int
 	outputIdx int
 	toType    *types.T
+	// {{if and (eq $leftFamily "types.DecimalFamily") (eq $rightFamily "types.IntFamily")}}
+	// {{/*
+	// overloadHelper is used only when we perform the cast from decimals to
+	// ints. In all other cases we don't want to wastefully allocate the helper.
+	// */}}
+	overloadHelper execgen.OverloadHelper
+	// {{end}}
 }
 
 var _ colexecop.ResettableOperator = &cast_NAMEOp{}
@@ -228,6 +238,11 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
+	// {{if and (eq $leftFamily "types.DecimalFamily") (eq $rightFamily "types.IntFamily")}}
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
+	_overloadHelper := c.overloadHelper
+	// {{end}}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
