@@ -22,15 +22,15 @@ type byID struct {
 	t *btree.BTree
 }
 
-func (t byID) upsert(d catalog.Descriptor) (replaced catalog.Descriptor) {
+func (t byID) upsert(d catalog.NameEntry) (replaced catalog.NameEntry) {
 	return upsert(t.t, makeByIDItem(d).get())
 }
 
-func (t byID) get(id descpb.ID) (catalog.Descriptor, bool) {
+func (t byID) get(id descpb.ID) (catalog.NameEntry, bool) {
 	return get(t.t, byIDItem{id: id}.get())
 }
 
-func (t byID) delete(id descpb.ID) (removed catalog.Descriptor) {
+func (t byID) delete(id descpb.ID) (removed catalog.NameEntry) {
 	return delete(t.t, byIDItem{id: id}.get())
 }
 
@@ -48,10 +48,10 @@ func (t byID) len() int {
 
 type byIDItem struct {
 	id descpb.ID
-	d  catalog.Descriptor
+	d  catalog.NameEntry
 }
 
-func makeByIDItem(d catalog.Descriptor) byIDItem {
+func makeByIDItem(d catalog.NameEntry) byIDItem {
 	return byIDItem{id: d.GetID(), d: d}
 }
 
@@ -72,7 +72,7 @@ func (b byIDItem) get() *byIDItem {
 	return alloc
 }
 
-func (b *byIDItem) descriptor() catalog.Descriptor {
+func (b *byIDItem) descriptor() catalog.NameEntry {
 	return b.d
 }
 

@@ -113,13 +113,18 @@ type NameKeyComponents interface {
 	GetParentSchemaID() descpb.ID
 }
 
+// NameEntry corresponds to an entry in the namespace table.
+type NameEntry interface {
+	NameKeyComponents
+	GetID() descpb.ID
+}
+
 var _ NameKeyComponents = descpb.NameInfo{}
 
 // Descriptor is an interface to be shared by individual descriptor
 // types.
 type Descriptor interface {
-	GetID() descpb.ID
-	NameKeyComponents
+	NameEntry
 
 	// IsUncommittedVersion returns true if this descriptor represent a version
 	// which is not the currently committed version. Implementations may return
