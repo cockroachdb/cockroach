@@ -605,6 +605,7 @@ func (c *cluster) makeConfig() concurrency.Config {
 		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
 			ev.Duration = 1234 * time.Millisecond // for determinism
 		},
+		ConcurrencyMetrics:                 concurrency.NewMetrics(),
 		TxnWaitMetrics:                     txnwait.NewMetrics(time.Minute),
 		ConflictingIntentCleanupRejections: metric.NewCounter(metric.Metadata{}),
 	}

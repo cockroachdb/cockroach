@@ -911,6 +911,17 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "LockTable"}},
+		Charts: []chartDescription{
+			{
+				Title: "Waiting",
+				Metrics: []string{
+					"kv.lock_table.wait_queue.waiting",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
 		Charts: []chartDescription{
 			{

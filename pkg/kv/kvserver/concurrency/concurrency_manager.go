@@ -73,6 +73,7 @@ type Config struct {
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver
 	// Metrics.
+	ConcurrencyMetrics                 *Metrics
 	TxnWaitMetrics                     *txnwait.Metrics
 	SlowLatchGauge                     *metric.Gauge
 	ConflictingIntentCleanupRejections *metric.Counter
@@ -114,6 +115,7 @@ func NewManager(cfg Config) Manager {
 			lt:                                  lt,
 			disableTxnPushing:                   cfg.DisableTxnPushing,
 			onContentionEvent:                   cfg.OnContentionEvent,
+			lockWaitQueueWaiters:                cfg.ConcurrencyMetrics.LockWaitQueueWaiters,
 			conflictingIntentsResolveRejections: cfg.ConflictingIntentCleanupRejections,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new

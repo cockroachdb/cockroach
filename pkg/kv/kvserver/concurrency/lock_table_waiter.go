@@ -108,7 +108,8 @@ type lockTableWaiterImpl struct {
 	// Is allowed to mutate the event.
 	onContentionEvent func(ev *roachpb.ContentionEvent)
 
-	// Metric reporting intent resolution failures.
+	// Metrics.
+	lockWaitQueueWaiters                *metric.Gauge
 	conflictingIntentsResolveRejections *metric.Counter
 }
 
@@ -142,6 +143,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var timer *timeutil.Timer
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
+
+	w.lockWaitQueueWaiters.Inc(1)
+	defer w.lockWaitQueueWaiters.Dec(1)
 
 	h := contentionEventHelper{
 		sp:      tracing.SpanFromContext(ctx),

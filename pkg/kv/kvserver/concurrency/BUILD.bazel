@@ -9,6 +9,7 @@ go_library(
         "latch_manager.go",
         "lock_table.go",
         "lock_table_waiter.go",
+        "metrics.go",
         ":lockstate_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency",

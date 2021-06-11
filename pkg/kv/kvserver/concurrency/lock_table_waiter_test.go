@@ -114,6 +114,7 @@ func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *moc
 		stopper:                             stop.NewStopper(),
 		ir:                                  ir,
 		lt:                                  &mockLockTable{},
+		lockWaitQueueWaiters:                metric.NewGauge(metric.Metadata{}),
 		conflictingIntentsResolveRejections: metric.NewCounter(metric.Metadata{}),
 	}
 	return w, ir, guard
@@ -620,6 +621,48 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	}
 	err := w.WaitOn(ctx, req, g)
 	require.Equal(t, err1, err)
+}
+
+// TestLockTableWaiterDeferredIntentResolverError tests that the lockTableWaiter
+// correctly maintains relevant metrics.
+func TestLockTableWaiterMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	w, ir, g := setupLockTableWaiterTest()
+	defer w.stopper.Stop(ctx)
+
+	txn := makeTxnProto("request")
+	req := Request{
+		Txn:       &txn,
+		Timestamp: txn.ReadTimestamp,
+	}
+
+	// Set up the waitingState so that the waiter will push.
+	pusheeTxn := makeTxnProto("pushee")
+	g.state = waitingState{
+		kind:        waitForDistinguished,
+		txn:         &pusheeTxn.TxnMeta,
+		key:         roachpb.Key("keyA"),
+		held:        true,
+		guardAccess: spanset.SpanReadWrite,
+	}
+	g.notify()
+
+	var waiterWhilePushing int64
+	err1 := roachpb.NewErrorf("error1")
+	ir.pushTxn = func(
+		_ context.Context, _ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
+	) (*roachpb.Transaction, *Error) {
+		waiterWhilePushing = w.lockWaitQueueWaiters.Value()
+		return nil, err1
+	}
+
+	require.Equal(t, int64(0), w.lockWaitQueueWaiters.Value())
+	err := w.WaitOn(ctx, req, g)
+	require.Equal(t, err1, err)
+	require.Equal(t, int64(1), waiterWhilePushing)
+	require.Equal(t, int64(0), w.lockWaitQueueWaiters.Value())
 }
 
 func TestTxnCache(t *testing.T) {

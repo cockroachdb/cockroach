@@ -80,6 +80,7 @@ func newUnloadedReplica(
 			Clock:                              store.Clock(),
 			Stopper:                            store.Stopper(),
 			IntentResolver:                     store.intentResolver,
+			ConcurrencyMetrics:                 store.concurrencyMetrics,
 			TxnWaitMetrics:                     store.txnWaitMetrics,
 			SlowLatchGauge:                     store.metrics.SlowLatchRequests,
 			ConflictingIntentCleanupRejections: store.metrics.ConflictingIntentsResolveRejected,
