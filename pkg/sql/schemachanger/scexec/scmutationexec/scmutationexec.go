@@ -331,7 +331,7 @@ func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent
 		return err
 	}
 	col := mut.GetColumn()
-	table.RemoveColumnFromFamily(col.ID)
+	table.RemoveColumnFromFamilyAndPrimaryIndex(col.ID)
 	return nil
 }
 

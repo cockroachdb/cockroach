@@ -1048,15 +1048,31 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		if idx.Primary() {
 			primaryIDs := idx.CollectKeyColumnIDs()
 			primaryIDs.UnionWith(idx.CollectPrimaryStoredColumnIDs())
-			var missingIDs []descpb.ColumnID
+			expectedIDs := catalog.TableColSet{}
+			var names []string
 			for _, col := range desc.DeletableColumns() {
-				if !col.IsVirtual() && !primaryIDs.Contains(col.GetID()) {
-					missingIDs = append(missingIDs, col.GetID())
+				if col.IsVirtual() {
+					continue
+				}
+				expectedIDs.Add(col.GetID())
+				if !primaryIDs.Contains(col.GetID()) {
+					names = append(names, col.GetName())
 				}
 			}
-			if missingIDs != nil {
-				return errors.AssertionFailedf("index %q is missing deletable column IDs: %v",
-					idx.GetName(), missingIDs)
+			if names != nil {
+				return errors.AssertionFailedf("primary index %q is missing deletable non-virtual non-pk columns: %v",
+					idx.GetName(), names)
+			}
+			for i := 0; i < idx.NumPrimaryStoredColumns(); i++ {
+				id := idx.GetStoredColumnID(i)
+				name := idx.GetStoredColumnName(i)
+				if !expectedIDs.Contains(id) {
+					names = append(names, name)
+				}
+			}
+			if names != nil {
+				return errors.AssertionFailedf("primary index %q has invalid stored column references: %v",
+					idx.GetName(), names)
 			}
 		}
 	}

@@ -1179,8 +1179,22 @@ func (desc *Mutable) AddColumnToFamilyMaybeCreate(
 	return nil
 }
 
-// RemoveColumnFromFamily removes a colID from the family it's assigned to.
-func (desc *Mutable) RemoveColumnFromFamily(colID descpb.ColumnID) {
+// RemoveColumnFromFamilyAndPrimaryIndex removes a colID from the family it's
+// assigned to, and from the stored column references in the primary index.
+func (desc *Mutable) RemoveColumnFromFamilyAndPrimaryIndex(colID descpb.ColumnID) {
+	desc.removeColumnFromFamily(colID)
+	idx := desc.GetPrimaryIndex().IndexDescDeepCopy()
+	for i, id := range idx.StoreColumnIDs {
+		if id == colID {
+			idx.StoreColumnIDs = append(idx.StoreColumnIDs[:i], idx.StoreColumnIDs[i+1:]...)
+			idx.StoreColumnNames = append(idx.StoreColumnNames[:i], idx.StoreColumnNames[i+1:]...)
+			desc.SetPrimaryIndex(idx)
+			return
+		}
+	}
+}
+
+func (desc *Mutable) removeColumnFromFamily(colID descpb.ColumnID) {
 	for i := range desc.Families {
 		for j, c := range desc.Families[i].ColumnIDs {
 			if c == colID {
@@ -1744,7 +1758,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 		// set of column/index descriptors at mutation creation time.
 		// Constraints to be dropped are dropped before column/index backfills.
 		case *descpb.DescriptorMutation_Column:
-			desc.RemoveColumnFromFamily(t.Column.ID)
+			desc.RemoveColumnFromFamilyAndPrimaryIndex(t.Column.ID)
 		}
 	}
 	return nil
