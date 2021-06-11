@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -41,6 +42,11 @@ func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	return r.sendWithRangeID(ctx, r.RangeID, &ba)
+}
+
+type keyAndIntent struct {
+	key    roachpb.Key
+	intent enginepb.MVCCMetadata
 }
 
 // sendWithRangeID takes an unused rangeID argument so that the range
@@ -121,6 +127,17 @@ func (r *Replica) sendWithRangeID(
 	} else {
 		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
 			pErr = filter(ctx, *ba, br)
+		}
+	}
+	if br != nil && len(br.Responses) > 0 {
+		// A batch corresponding to a MigrateLockTable command would have that as
+		// the only response. Check it here and run the migration before sending
+		// the result.
+		if mlt := br.Responses[0].GetMigrateLockTable(); mlt != nil {
+			err := r.migrateLockTable(ctx, ba.Requests[0].GetMigrateLockTable(), mlt)
+			if err != nil {
+				return nil, roachpb.NewError(errors.Wrap(err, "error when migrating lock table"))
+			}
 		}
 	}
 

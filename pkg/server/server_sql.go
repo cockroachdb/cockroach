@@ -687,6 +687,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				NodeLiveness: nodeLiveness,
 				Dialer:       cfg.nodeDialer,
 				DB:           cfg.db,
+				Stopper:      cfg.stopper,
 			})
 		} else {
 			c = migrationcluster.NewTenantCluster(cfg.db)
