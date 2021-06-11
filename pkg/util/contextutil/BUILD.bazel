@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "context.go",
         "timeout_error.go",
+        "uncancelled_context.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/contextutil",
     visibility = ["//visibility:public"],
