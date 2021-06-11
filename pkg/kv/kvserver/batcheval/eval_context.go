@@ -56,7 +56,6 @@ type EvalContext interface {
 	DB() *kv.DB
 	AbortSpan() *abortspan.AbortSpan
 	GetConcurrencyManager() concurrency.Manager
-	GetLimiters() *Limiters
 
 	NodeID() roachpb.NodeID
 	StoreID() roachpb.StoreID
@@ -180,9 +179,6 @@ func (m *mockEvalCtxImpl) Clock() *hlc.Clock {
 	return m.MockEvalCtx.Clock
 }
 func (m *mockEvalCtxImpl) DB() *kv.DB {
-	panic("unimplemented")
-}
-func (m *mockEvalCtxImpl) GetLimiters() *Limiters {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) AbortSpan() *abortspan.AbortSpan {

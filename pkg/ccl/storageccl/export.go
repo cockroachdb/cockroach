@@ -85,12 +85,6 @@ func evalExport(
 		reply.StartTime = cArgs.EvalCtx.GetGCThreshold()
 	}
 
-	q, err := cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Begin(ctx)
-	if err != nil {
-		return result.Result{}, err
-	}
-	defer q.Release()
-
 	makeExternalStorage := !args.ReturnSST || args.Storage != roachpb.ExternalStorage{} ||
 		(args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0)
 	if makeExternalStorage || log.V(1) {
