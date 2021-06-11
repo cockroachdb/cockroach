@@ -9196,6 +9196,9 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		Status:        roachpb.ABORTED,
 		Poison:        true,
 	}
+	barrierReq := &roachpb.BarrierRequest{
+		RequestHeader: rh,
+	}
 
 	sendReq := func(
 		ctx context.Context, repl *Replica, req roachpb.Request, txn *roachpb.Transaction,
@@ -9348,6 +9351,15 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			req: resolveAbortedIntentReq,
 			// No-op - the abort span has already been poisoned.
 			expProposal: false,
+		},
+		{
+			name: "barrier",
+			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
+				return sendReq(ctx, repl, barrierReq, nil /* txn */)
+			},
+			req: barrierReq,
+			// Barrier requests are always proposed on the leaseholder.
+			expProposal: true,
 		},
 	}
 	for _, c := range testCases {

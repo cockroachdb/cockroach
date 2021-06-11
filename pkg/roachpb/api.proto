@@ -1820,6 +1820,39 @@ message QueryResolvedTimestampResponse {
     (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
 }
 
+// ScanInterleavedIntentsRequest is the request for a ScanInterleavedIntents operation.
+// This is a read-only operation that returns all interleaved (non-separated)
+// intents found over the request range.
+message ScanInterleavedIntentsRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// ScanInterleavedIntentsResponse is the response to a ScanInterleavedIntents operation.
+message ScanInterleavedIntentsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The intents encountered in the part of the request span that was
+  // evaluated. A resume span is set in the response header if the entirety of
+  // the request span was not evaluated.
+  repeated Intent intents = 3 [(gogoproto.nullable) = false];
+}
+
+// BarrierRequest is the request for a Barrier operation. This goes through Raft
+// and has the purpose of waiting until all conflicting in-flight operations on
+// this range have completed, without blocking any new operations.
+message BarrierRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// BarrierResponse is the response for a Barrier operation.
+message BarrierResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Timestamp at which this Barrier was evaluated. Can be used to guarantee
+  // future operations happen on the same or newer leaseholders.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1871,6 +1904,8 @@ message RequestUnion {
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
     QueryResolvedTimestampRequest query_resolved_timestamp = 51;
+    ScanInterleavedIntentsRequest scan_interleaved_intents = 52;
+    BarrierRequest barrier = 53;
   }
   reserved 8, 15, 23, 25, 27, 31, 34;
 }
@@ -1922,6 +1957,8 @@ message ResponseUnion {
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
     QueryResolvedTimestampResponse query_resolved_timestamp = 51;
+    ScanInterleavedIntentsResponse scan_interleaved_intents = 52;
+    BarrierResponse barrier = 53;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34;
 }

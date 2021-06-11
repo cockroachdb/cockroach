@@ -839,9 +839,11 @@ func (r *Replica) evaluateProposal(
 	// 2. the request had an impact on the MVCCStats. NB: this is possible
 	//    even with an empty write batch when stats are recomputed.
 	// 3. the request has replicated side-effects.
+	// 4. the request is of a type that requires consensus (eg. Barrier).
 	needConsensus := !batch.Empty() ||
 		ms != (enginepb.MVCCStats{}) ||
-		!res.Replicated.IsZero()
+		!res.Replicated.IsZero() ||
+		ba.RequiresConsensus()
 
 	if needConsensus {
 		// Set the proposal's WriteBatch, which is the serialized representation of

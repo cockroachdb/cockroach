@@ -145,6 +145,14 @@ func scanSingleRequest(
 		var r roachpb.RequestLeaseRequest
 		return &r
 
+	case "barrier":
+		var r roachpb.BarrierRequest
+		r.Key = roachpb.Key(mustGetField("key"))
+		if v, ok := fields["endkey"]; ok {
+			r.EndKey = roachpb.Key(v)
+		}
+		return &r
+
 	default:
 		d.Fatalf(t, "unknown request type: %s", cmd)
 		return nil
