@@ -22,9 +22,10 @@ import (
 
 var mtTestDirectorySvr = &cobra.Command{
 	Use:   "test-directory",
-	Short: "Run a test directory service.",
+	Short: "run a test directory service",
 	Long: `
-Run a test directory service.
+Run a test directory service that starts and manages tenant SQL instances as
+processes on the local machine.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runDirectorySvr),
