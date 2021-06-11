@@ -159,17 +159,16 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				reqs, reqUnions := scanRequests(t, d, c)
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
 
-				c.requestsByName[reqName] = testReq{
-					Request: concurrency.Request{
-						Txn:       txn,
-						Timestamp: ts,
-						// TODO(nvanbenschoten): test Priority
-						ReadConsistency: readConsistency,
-						WaitPolicy:      waitPolicy,
-						Requests:        reqUnions,
-						LatchSpans:      latchSpans,
-						LockSpans:       lockSpans,
-					}}
+				c.requestsByName[reqName] = concurrency.Request{
+					Txn:       txn,
+					Timestamp: ts,
+					// TODO(nvanbenschoten): test Priority
+					ReadConsistency: readConsistency,
+					WaitPolicy:      waitPolicy,
+					Requests:        reqUnions,
+					LatchSpans:      latchSpans,
+					LockSpans:       lockSpans,
+				}
 				return ""
 
 			case "sequence":
@@ -200,8 +199,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.mu.Unlock()
 
 				opName := fmt.Sprintf("sequence %s", reqName)
-				cancel := mon.runAsync(opName, func(ctx context.Context) {
-					guard, resp, err := m.SequenceReq(ctx, prev, req.Request, evalKind)
+				mon.runAsync(opName, func(ctx context.Context) {
+					guard, resp, err := m.SequenceReq(ctx, prev, req, evalKind)
 					if err != nil {
 						log.Eventf(ctx, "sequencing complete, returned error: %v", err)
 					} else if resp != nil {
@@ -215,8 +214,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						log.Event(ctx, "sequencing complete, returned no guard")
 					}
 				})
-				req.cancel = cancel
-				c.requestsByName[reqName] = req
 				return c.waitAndCollect(t, mon)
 
 			case "finish":
@@ -534,11 +531,6 @@ func scanRequests(
 	return reqs, reqUnions
 }
 
-type testReq struct {
-	cancel func()
-	concurrency.Request
-}
-
 // cluster encapsulates the state of a running cluster and a set of requests.
 // It serves as the test harness in TestConcurrencyManagerBasic - maintaining
 // transaction and request declarations, recording the state of in-flight
@@ -555,7 +547,7 @@ type cluster struct {
 	// Definitions.
 	txnCounter     uint32
 	txnsByName     map[string]*roachpb.Transaction
-	requestsByName map[string]testReq
+	requestsByName map[string]concurrency.Request
 
 	// Request state. Cleared on reset.
 	mu              syncutil.Mutex
@@ -588,7 +580,7 @@ func newCluster() *cluster {
 		clock:     hlc.NewClock(manual.UnixNano, time.Nanosecond),
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
-		requestsByName:  make(map[string]testReq),
+		requestsByName:  make(map[string]concurrency.Request),
 		guardsByReqName: make(map[string]*concurrency.Guard),
 		txnRecords:      make(map[uuid.UUID]*txnRecord),
 		txnPushes:       make(map[uuid.UUID]*txnPush),
@@ -886,7 +878,7 @@ func (c *cluster) resetNamespace() {
 	defer c.mu.Unlock()
 	c.txnCounter = 0
 	c.txnsByName = make(map[string]*roachpb.Transaction)
-	c.requestsByName = make(map[string]testReq)
+	c.requestsByName = make(map[string]concurrency.Request)
 	c.txnRecords = make(map[uuid.UUID]*txnRecord)
 }
 
