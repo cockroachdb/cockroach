@@ -208,27 +208,16 @@ func (e *tenantEntry) ensureTenantEndpoint(
 		return ips, nil
 	}
 
-	// Get up-to-date count of endpoints for the tenant from the K8s server.
-	resp, err := client.ListEndpoints(ctx, &ListEndpointsRequest{TenantID: e.TenantID.ToUint64()})
-	if err != nil {
-		return nil, err
-	}
-
 	for {
 		// Check for context cancellation or timeout.
 		if err = ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		// Check if tenant needs to be resumed.
-		if len(resp.Endpoints) == 0 {
-			log.Infof(ctx, "resuming tenant %d", e.TenantID)
-
-			if _, err := client.EnsureEndpoint(
-				ctx, &EnsureEndpointRequest{e.TenantID.ToUint64()},
-			); err != nil {
-				return nil, err
-			}
+		// Try to resume the tenant if not yet resumed.
+		_, err = client.EnsureEndpoint(ctx, &EnsureEndpointRequest{e.TenantID.ToUint64()})
+		if err != nil {
+			return nil, err
 		}
 
 		// Get endpoint information for the newly resumed tenant. Except in rare
@@ -240,6 +229,7 @@ func (e *tenantEntry) ensureTenantEndpoint(
 			return nil, err
 		}
 		if len(ips) != 0 {
+			log.Infof(ctx, "resumed tenant %d", e.TenantID)
 			break
 		}
 

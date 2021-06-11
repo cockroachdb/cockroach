@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -120,10 +120,12 @@ func NewDirectory(
 // processes for the tenant, then LookupTenantIPs will choose one of them (note
 // that currently there is always at most one SQL process per tenant).
 //
-// If clusterName is non-empty, then an error is returned if no endpoints match
-// the cluster name. This can be used to ensure that the incoming SQL connection
-// "knows" some additional information about the tenant, such as the name of the
-// cluster, before being allowed to connect.
+// If clusterName is non-empty, then a GRPC NotFound error is returned if no
+// endpoints match the cluster name. This can be used to ensure that the
+// incoming SQL connection "knows" some additional information about the tenant,
+// such as the name of the cluster, before being allowed to connect. Similarly,
+// if the tenant does not exist (e.g. because it was deleted), EnsureTenantIP
+// returns a GRPC NotFound error.
 func (d *Directory) EnsureTenantIP(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
@@ -135,13 +137,16 @@ func (d *Directory) EnsureTenantIP(
 
 	// Check the cluster name matches, if specified.
 	if clusterName != "" && clusterName != entry.ClusterName {
+		// Return a GRPC NotFound error.
 		log.Errorf(ctx, "cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
-		return "", errors.New("not found")
+		return "", status.Errorf(codes.NotFound,
+			"cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
 	}
+
 	ctx, _ = d.stopper.WithCancelOnQuiesce(ctx)
 	ip, err := entry.ChooseEndpointIP(ctx, d.client, d.options.deterministic)
 	if err != nil {
-		if s, ok := status.FromError(err); ok && s.Message() == "not found" {
+		if status.Code(err) == codes.NotFound {
 			d.deleteEntry(tenantID)
 		}
 	}
@@ -149,7 +154,9 @@ func (d *Directory) EnsureTenantIP(
 }
 
 // LookupTenantIPs returns the IP addresses for all available SQL processes for
-// the given tenant. It returns an error if the tenant has not yet been created.
+// the given tenant. It returns a GRPC NotFound error if the tenant does not
+// exist (e.g. it has not yet been created) or if it has not yet been fetched
+// into the directory's cache (LookupTenantIPs will never attempt to fetch it).
 // If no processes are available for the tenant, LookupTenantIPs will return the
 // empty set (unlike EnsureTenantIP).
 func (d *Directory) LookupTenantIPs(
@@ -162,7 +169,8 @@ func (d *Directory) LookupTenantIPs(
 	}
 
 	if entry == nil {
-		return nil, errors.New("not found")
+		return nil, status.Errorf(
+			codes.NotFound, "tenant %d not in directory cache", tenantID.ToUint64())
 	}
 	return entry.getEndpointIPs(), nil
 }
@@ -325,7 +333,8 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 				if grpcutil.IsContextCanceled(err) {
 					break
 				}
-				// This should never happen.
+				// This should only happen in case of a deleted tenant or a transient
+				// error during fetch of tenant metadata.
 				log.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", resp.TenantID, err)
 				continue
 			}
@@ -349,6 +358,7 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 	if err != nil {
 		return err
 	}
+
 	// Block until the initial endpoint watcher client stream is constructed.
 	waitInit.Wait()
 	return err
