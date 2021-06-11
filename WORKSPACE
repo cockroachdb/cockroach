@@ -175,9 +175,14 @@ load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_depende
 rules_foreign_cc_dependencies()
 
 # Load custom toolchains.
-load("//build:toolchains/REPOSITORIES.bzl", "toolchain_dependencies")
+load("//build/toolchains:REPOSITORIES.bzl", "toolchain_dependencies")
 
 toolchain_dependencies()
+
+register_toolchains(
+    "//build/toolchains:cross_linux_toolchain",
+    "//build/toolchains:cross_windows_toolchain",
+)
 
 http_archive(
     name = "bazel_gomock",
