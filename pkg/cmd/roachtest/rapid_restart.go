@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func runRapidRestart(ctx context.Context, t *test, c clusterI) {
+func runRapidRestart(ctx context.Context, t *test, c Cluster) {
 	// Use a single-node cluster which speeds the stop/start cycle.
 	nodes := c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", nodes)

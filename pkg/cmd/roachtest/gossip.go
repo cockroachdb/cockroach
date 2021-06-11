@@ -32,7 +32,7 @@ import (
 )
 
 func registerGossip(r *testRegistry) {
-	runGossipChaos := func(ctx context.Context, t *test, c clusterI) {
+	runGossipChaos := func(ctx context.Context, t *test, c Cluster) {
 		args := startArgs("--args=--vmodule=*=1")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All(), args)
@@ -153,7 +153,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(9),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runGossipChaos(ctx, t, c)
 		},
 	})
@@ -165,7 +165,7 @@ type gossipUtil struct {
 	conn     func(ctx context.Context, i int) *gosql.DB
 }
 
-func newGossipUtil(ctx context.Context, t *test, c clusterI) *gossipUtil {
+func newGossipUtil(ctx context.Context, t *test, c Cluster) *gossipUtil {
 	urlMap := make(map[int]string)
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
 	if err != nil {
@@ -186,7 +186,7 @@ type checkGossipFunc func(map[string]gossip.Info) error
 // checkGossip fetches the gossip infoStore from each node and invokes the
 // given function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
-func (g *gossipUtil) check(ctx context.Context, c clusterI, f checkGossipFunc) error {
+func (g *gossipUtil) check(ctx context.Context, c Cluster, f checkGossipFunc) error {
 	return retry.ForDuration(g.waitTime, func() error {
 		var infoStatus gossip.InfoStatus
 		for i := 1; i <= c.Spec().NodeCount; i++ {
@@ -236,7 +236,7 @@ func (gossipUtil) hasClusterID(infos map[string]gossip.Info) error {
 	return nil
 }
 
-func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c clusterI) {
+func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c Cluster) {
 	t.l.Printf("waiting for gossip to be connected\n")
 	if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount)); err != nil {
 		t.Fatal(err)
@@ -281,7 +281,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c
 	}
 }
 
-func runGossipPeerings(ctx context.Context, t *test, c clusterI) {
+func runGossipPeerings(ctx context.Context, t *test, c Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t)
 
@@ -314,7 +314,7 @@ func runGossipPeerings(ctx context.Context, t *test, c clusterI) {
 	}
 }
 
-func runGossipRestart(ctx context.Context, t *test, c clusterI) {
+func runGossipRestart(ctx context.Context, t *test, c Cluster) {
 	t.Skip("skipping flaky acceptance/gossip/restart", "https://github.com/cockroachdb/cockroach/issues/48423")
 
 	c.Put(ctx, cockroach, "./cockroach")
@@ -340,7 +340,7 @@ func runGossipRestart(ctx context.Context, t *test, c clusterI) {
 	}
 }
 
-func runGossipRestartNodeOne(ctx context.Context, t *test, c clusterI) {
+func runGossipRestartNodeOne(ctx context.Context, t *test, c Cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", "--encrypt=false")
 	c.Put(ctx, cockroach, "./cockroach")
 	// Reduce the scan max idle time to speed up evacuation of node 1.
@@ -491,7 +491,7 @@ SELECT count(replicas)
 	c.Start(ctx, t, c.Node(1))
 }
 
-func runCheckLocalityIPAddress(ctx context.Context, t *test, c clusterI) {
+func runCheckLocalityIPAddress(ctx context.Context, t *test, c Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	externalIP, err := c.ExternalIP(ctx, c.Range(1, c.Spec().NodeCount))

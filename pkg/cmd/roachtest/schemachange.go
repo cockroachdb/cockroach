@@ -25,7 +25,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 		Name:    `schemachange/during/kv`,
 		Owner:   OwnerSQLSchema,
 		Cluster: makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
 			c.Put(ctx, cockroach, "./cockroach")
@@ -298,7 +298,7 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 		Owner:   OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
@@ -331,7 +331,7 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 		Timeout: length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
 			// The payload column will be randomized and thus uncorrelated with the primary key (a, b, c).
 			aNum := numRows
@@ -413,7 +413,7 @@ func makeSchemaChangeDuringTPCC(spec clusterSpec, warehouses int, length time.Du
 		Owner:   OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
@@ -464,7 +464,7 @@ func makeSchemaChangeDuringTPCC(spec clusterSpec, warehouses int, length time.Du
 	}
 }
 
-func runAndLogStmts(ctx context.Context, t *test, c clusterI, prefix string, stmts []string) error {
+func runAndLogStmts(ctx context.Context, t *test, c Cluster, prefix string, stmts []string) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 	t.l.Printf("%s: running %d statements\n", prefix, len(stmts))

@@ -2774,9 +2774,7 @@ func (c *cluster) Extend(ctx context.Context, d time.Duration, l *logger) error 
 }
 
 // getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
-func getDiskUsageInBytes(
-	ctx context.Context, c clusterI, logger *logger, nodeIdx int,
-) (int, error) {
+func getDiskUsageInBytes(ctx context.Context, c Cluster, logger *logger, nodeIdx int) (int, error) {
 	var out []byte
 	for {
 		var err error
@@ -2832,7 +2830,7 @@ type monitor struct {
 	expDeaths int32 // atomically
 }
 
-func newMonitor(ctx context.Context, ci clusterI, opts ...option) *monitor {
+func newMonitor(ctx context.Context, ci Cluster, opts ...option) *monitor {
 	c := ci.(*cluster) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `makeNodes`
 	m := &monitor{
 		t:     c.t,
@@ -3097,7 +3095,7 @@ func (lg loadGroupList) loadNodes() nodeListOption {
 // makeLoadGroups create a loadGroupList that has an equal number of cockroach
 // nodes per zone. It assumes that numLoadNodes <= numZones and that numZones is
 // divisible by numLoadNodes.
-func makeLoadGroups(c clusterI, numZones, numRoachNodes, numLoadNodes int) loadGroupList {
+func makeLoadGroups(c Cluster, numZones, numRoachNodes, numLoadNodes int) loadGroupList {
 	if numLoadNodes > numZones {
 		panic("cannot have more than one load node per zone")
 	} else if numZones%numLoadNodes != 0 {

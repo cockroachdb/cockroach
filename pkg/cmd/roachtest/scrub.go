@@ -50,7 +50,7 @@ func makeScrubTPCCTest(
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
 		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,
 				ExtraRunArgs: "--wait=false --tolerate-errors",

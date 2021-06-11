@@ -22,7 +22,7 @@ import (
 )
 
 func registerAllocator(r *testRegistry) {
-	runAllocator := func(ctx context.Context, t *test, c clusterI, start int, maxStdDev float64) {
+	runAllocator := func(ctx context.Context, t *test, c Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, cockroach, "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
@@ -74,7 +74,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/up/1to3`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
@@ -82,7 +82,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
@@ -250,7 +250,7 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 	}
 }
 
-func runWideReplication(ctx context.Context, t *test, c clusterI) {
+func runWideReplication(ctx context.Context, t *test, c Cluster) {
 	nodes := c.Spec().NodeCount
 	if nodes != 9 {
 		t.Fatalf("9-node cluster required")

@@ -23,7 +23,7 @@ func registerFlowable(r *testRegistry) {
 	runFlowable := func(
 		ctx context.Context,
 		t *test,
-		c clusterI,
+		c Cluster,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -101,7 +101,7 @@ func registerFlowable(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runFlowable(ctx, t, c)
 		},
 	})

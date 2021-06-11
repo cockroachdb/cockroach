@@ -19,7 +19,7 @@ func registerLiquibase(r *testRegistry) {
 	runLiquibase := func(
 		ctx context.Context,
 		t *test,
-		c clusterI,
+		c Cluster,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -106,7 +106,7 @@ func registerLiquibase(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `tool`},
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runLiquibase(ctx, t, c)
 		},
 	})

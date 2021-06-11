@@ -91,7 +91,7 @@ func getMetrics(
 
 func verifyTxnPerSecond(
 	ctx context.Context,
-	c clusterI,
+	c Cluster,
 	t *test,
 	adminNode nodeListOption,
 	start, end time.Time,
@@ -142,7 +142,7 @@ func verifyTxnPerSecond(
 
 func verifyLookupsPerSec(
 	ctx context.Context,
-	c clusterI,
+	c Cluster,
 	t *test,
 	adminNode nodeListOption,
 	start, end time.Time,
