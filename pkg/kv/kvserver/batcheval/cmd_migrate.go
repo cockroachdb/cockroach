@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
 	RegisterReadWriteCommand(roachpb.Migrate, declareKeysMigrate, Migrate)
+	RegisterReadOnlyCommand(roachpb.MigrateLockTable, declareKeysMigrateLockTable, MigrateLockTable)
 }
 
 func declareKeysMigrate(
@@ -46,15 +49,56 @@ func declareKeysMigrate(
 	lockSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
 }
 
+func declareKeysMigrateLockTable(
+	rs ImmutableRangeState,
+	_ roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+) {
+	// Only add a latch for the range descriptor. No latches are necessary for the
+	// span of the request, as any writes beyond this point are guaranteed to
+	// not write interleaved intents.
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+}
+
 // migrationRegistry is a global registry of all KV-level migrations. See
 // pkg/migration for details around how the migrations defined here are
 // wired up.
 var migrationRegistry = make(map[roachpb.Version]migration)
 
+// lockTableMigrationSnapshotRegistryType is a node-local registry of all snapshots
+// created as part of the MigrateLockTable command. A singleton instance
+// of this type is stored as lockTableMigrationSnapshotRegistry.
+type lockTableMigrationSnapshotRegistryType struct {
+	syncutil.Mutex
+
+	registry map[uint64]storage.Reader
+}
+
+var lockTableMigrationSnapshotRegistry = lockTableMigrationSnapshotRegistryType{
+	registry: make(map[uint64]storage.Reader),
+}
+
+// GetAndRemoveLockTableMigrationSnapshot grabs a lock on the lock table snapshot
+// registry, and retrieves a snapshot for the specified ID if it exists. The
+// snapshot is then deleted from the registry. The caller is responsible for
+// actually closing the engine snapshot.
+func GetAndRemoveLockTableMigrationSnapshot(id uint64) storage.Reader {
+	lockTableMigrationSnapshotRegistry.Lock()
+	defer lockTableMigrationSnapshotRegistry.Unlock()
+
+	if val, ok := lockTableMigrationSnapshotRegistry.registry[id]; ok {
+		delete(lockTableMigrationSnapshotRegistry.registry, id)
+		return val
+	}
+	return nil
+}
+
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
 
 func init() {
 	registerMigration(clusterversion.TruncatedAndRangeAppliedStateMigration, truncatedAndAppliedStateMigration)
+	registerMigration(clusterversion.SeparatedIntentsMigration, separatedIntentsMigration)
 }
 
 func registerMigration(key clusterversion.Key, migration migration) {
@@ -95,6 +139,35 @@ func Migrate(
 	return pd, nil
 }
 
+// MigrateLockTable leaks the engine's snapshot for an eventual lock-table migration.
+// The actual migration is implemented in Replica.migrateLockTable.
+func MigrateLockTable(
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, response roachpb.Response,
+) (result.Result, error) {
+	snap := cArgs.EvalCtx.Engine().NewSnapshot()
+	resp := response.(*roachpb.MigrateLockTableResponse)
+	ms := cArgs.Stats
+
+	if ms != nil && ms.ContainsEstimates == 0 && ms.IntentCount == 0 {
+		// Fast path: this range does not contain any intents. Return the zero
+		// value result.
+		resp.NoIntents = true
+	}
+	id := rand.Uint64()
+	lockTableMigrationSnapshotRegistry.Lock()
+	defer lockTableMigrationSnapshotRegistry.Unlock()
+	for {
+		if _, ok := lockTableMigrationSnapshotRegistry.registry[id]; !ok {
+			break
+		}
+		id = rand.Uint64()
+	}
+	lockTableMigrationSnapshotRegistry.registry[id] = snap
+	resp.SnapshotId = id
+
+	return result.Result{}, nil
+}
+
 // truncatedAndRangeAppliedStateMigration lets us stop using the legacy
 // replicated truncated state and start using the new RangeAppliedState for this
 // specific range.
@@ -128,6 +201,16 @@ func truncatedAndAppliedStateMigration(
 		}
 	}
 	return pd, nil
+}
+
+// separatedIntentsMigration is the below-raft part of the migration for
+// interleaved to separated intents. It is a no-op as the only purpose of
+// running the Migrate command here is to clear out any orphaned replicas with
+// interleaved intents.
+func separatedIntentsMigration(
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs,
+) (result.Result, error) {
+	return result.Result{}, nil
 }
 
 // TestingRegisterMigrationInterceptor is used in tests to register an

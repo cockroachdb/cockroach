@@ -1730,6 +1730,24 @@ message MigrateResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// MigrateLockTableRequest TODO fill this in
+message MigrateLockTableRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// MigrateLockTableResponse is the response to a Migrate operation.
+message MigrateLockTableResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // snapshot_id contains a lookup key to get the saved engine snapshot on this
+  // node.
+  uint64 snapshot_id = 2;
+
+  // no_intents is true if this range is not expected to contain any intents.
+  // The value of snapshot_id is ignored in that case.
+  bool no_intents = 3;
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1781,6 +1799,7 @@ message RequestUnion {
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
+    MigrateLockTableRequest migrate_lock_table = 51;
   }
   reserved 8, 15, 23, 25, 27, 34;
 }
@@ -1832,6 +1851,7 @@ message ResponseUnion {
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
+    MigrateLockTableResponse migrate_lock_table = 51;
   }
   reserved 8, 15, 23, 25, 27, 28, 34;
 }

@@ -66,6 +66,10 @@ var migrations = []migration.Migration{
 		"delete the deprecated namespace table descriptor at ID=2",
 		toCV(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration),
 		deleteDeprecatedNamespaceTableDescriptorMigration),
+	migration.NewSystemMigration(
+		"move over all intents to separate lock table",
+		toCV(clusterversion.SeparatedIntentsMigration),
+		separatedIntentsMigration),
 }
 
 func init() {

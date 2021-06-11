@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -1869,6 +1870,140 @@ func (r *Replica) markSystemConfigGossipFailed() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.failureToGossipSystemConfig = true
+}
+
+// migrateLockTable runs a migration of all interleaved intents in the provided
+// snapshot into separated intents. It does this by queueing up all txns that
+// have interleaved intents in the specified key range, and then pushing
+// those txns with PUSH_ABORT. This could result in those txns getting aborted.
+// That is okay for our purpose as the new iteration of that txn is guaranteed
+// to write separated intents.
+func (r *Replica) migrateLockTable(
+	ctx context.Context, req *roachpb.MigrateLockTableRequest, res *roachpb.MigrateLockTableResponse,
+) error {
+	if res.NoIntents {
+		// This range is guaranteed to not contain any intents.
+		return nil
+	}
+	snap := batcheval.GetAndRemoveLockTableMigrationSnapshot(res.SnapshotId)
+	ir := r.store.intentResolver
+	if snap == nil {
+		return errors.New("expected non-nil snapshot from migrate lock table command")
+	}
+	defer snap.Close()
+
+	// Put a limit on memory usage by scanning for at least intentBatchSize
+	// intents, then pushing those. Pushing a transaction multiple times is okay
+	// and so is resolving an intent that no longer exists; neither of those will
+	// error out.
+	const intentBatchSize = 100
+	resumeKey := storage.EngineKey{Key: req.Key}
+
+	for resumeKey.Key != nil {
+		iter := snap.NewEngineIterator(storage.IterOptions{
+			LowerBound: resumeKey.Key,
+			UpperBound: req.EndKey,
+		})
+		defer func() {
+			if iter != nil {
+				iter.Close()
+			}
+			iter = nil
+		}()
+		valid, err := iter.SeekEngineKeyGE(resumeKey)
+		resumeKey = storage.EngineKey{}
+
+		// txnIntents is an in-memory map of all interleaved intents and txns observed
+		// in this range.
+		txnIntents := make(map[uuid.UUID][]keyAndIntent)
+		intentCount := 0
+
+		for ; valid && err == nil; valid, err = iter.NextEngineKey() {
+			key, err := iter.EngineKey()
+			if err != nil {
+				return err
+			}
+			if !key.IsMVCCKey() {
+				// This should never happen, as the only non-MVCC keys are lock table
+				// keys and those are in the local keyspace. Return an error.
+				return errors.New("encountered non-MVCC key during lock table migration")
+			}
+			mvccKey, err := key.ToMVCCKey()
+			if err != nil {
+				return err
+			}
+			if !mvccKey.Timestamp.IsEmpty() {
+				// Versioned value - not an intent.
+				//
+				// TODO(bilal): Explore seeking here in case there are keys with lots of
+				// versioned values.
+				continue
+			}
+
+			val := iter.Value()
+			meta := enginepb.MVCCMetadata{}
+			if err := protoutil.Unmarshal(val, &meta); err != nil {
+				return err
+			}
+			if meta.IsInline() {
+				// Inlined value - not an intent.
+				continue
+			}
+
+			if intentCount >= intentBatchSize {
+				resumeKey = key
+				break
+			}
+			txnIntents[meta.Txn.ID] = append(txnIntents[meta.Txn.ID], keyAndIntent{
+				key:    mvccKey.Key,
+				intent: meta,
+			})
+			intentCount++
+		}
+
+		// If an error was returned before the loop was exhausted, return to the
+		// caller.
+		if err != nil {
+			return err
+		}
+		// Close the iterator. This helps reduce resource utilization, in case
+		// txn pushes take a while.
+		if iter != nil {
+			iter.Close()
+		}
+		iter = nil
+
+		for _, intents := range txnIntents {
+			txn := intents[0].intent.Txn
+
+			// Create a request for a PushTxn request of type PUSH_ABORT. Run it with
+			// a clean new transaction. If this transaction is still running, it will
+			// abort. The retry of that transaction will then write separated intents.
+			h := roachpb.Header{
+				Timestamp:    r.Clock().Now(),
+				UserPriority: roachpb.MaxUserPriority,
+			}
+			h.Txn = &roachpb.Transaction{
+				Name: "separated intent migration txn pusher",
+			}
+			pushedTxn, err := ir.PushTransaction(ctx, txn, h, roachpb.PUSH_ABORT)
+			if err != nil {
+				return err.GoError()
+			}
+
+			lockUpdates := make([]roachpb.LockUpdate, 0, len(intents))
+			for _, intent := range intents {
+				resolve := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: intent.key})
+				lockUpdates = append(lockUpdates, resolve)
+			}
+			opts := intentresolver.ResolveOptions{Poison: true}
+			// TODO(bilal): Consider rate-limiting on intent resolution.
+			if err := ir.ResolveIntents(ctx, lockUpdates, opts); err != nil {
+				return err.GoError()
+			}
+		}
+	}
+	return nil
 }
 
 func init() {
