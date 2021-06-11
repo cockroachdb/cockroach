@@ -780,13 +780,12 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		}
 	}
 
-	// We don't have a client whose context we can attach to, but we do want to
-	// limit how long this request is going to be around for to avoid leaking a
-	// goroutine (in case of a long-lived network partition). If it gets through
-	// Raft, and the intent resolver has free async task capacity, the actual
-	// cleanup will be independent of this context.
+	// We want to limit how long this request is going to be around for to avoid
+	// leaking a goroutine (in case of a long-lived network partition). If it gets
+	// through Raft, and the intent resolver has free async task capacity, the
+	// actual cleanup will be independent of this context.
 	stopper := txn.db.ctx.Stopper
-	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
+	ctx, cancel := stopper.WithCancelOnQuiesce(contextutil.WithoutCancel(ctx))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
 		defer cancel()
 		// A batch with only endTxnReq is not subject to admission control, in
