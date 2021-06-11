@@ -29,7 +29,7 @@ func registerActiveRecord(r *testRegistry) {
 	runActiveRecord := func(
 		ctx context.Context,
 		t *test,
-		c clusterI,
+		c Cluster,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")

@@ -24,7 +24,7 @@ func registerPebble(r *testRegistry) {
 		pebble = "./pebble.linux"
 	}
 
-	run := func(ctx context.Context, t *test, c clusterI, size int) {
+	run := func(ctx context.Context, t *test, c Cluster, size int) {
 		c.Put(ctx, pebble, "./pebble")
 
 		const initialKeys = 10_000_000
@@ -107,7 +107,7 @@ func registerPebble(r *testRegistry) {
 			MinVersion: "v20.1.0",
 			Cluster:    makeClusterSpec(5, cpu(16)),
 			Tags:       []string{"pebble"},
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				run(ctx, t, c, size)
 			},
 		})

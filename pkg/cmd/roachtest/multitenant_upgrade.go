@@ -32,7 +32,7 @@ func registerMultiTenantUpgrade(r *testRegistry) {
 		Cluster:           makeClusterSpec(2),
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runMultiTenantUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -53,7 +53,7 @@ type tenantNode struct {
 func createTenantNode(
 	ctx context.Context,
 	t *test,
-	c clusterI,
+	c Cluster,
 	binary string,
 	kvAddrs []string,
 	tenantID int,
@@ -72,7 +72,7 @@ func createTenantNode(
 	return tn
 }
 
-func (tn *tenantNode) stop(ctx context.Context, t *test, c clusterI) {
+func (tn *tenantNode) stop(ctx context.Context, t *test, c Cluster) {
 	if tn.errCh == nil {
 		return
 	}
@@ -88,7 +88,7 @@ func (tn *tenantNode) logDir() string {
 	return fmt.Sprintf("logs/mt-%d", tn.tenantID)
 }
 
-func (tn *tenantNode) start(ctx context.Context, t *test, c clusterI, binary string) {
+func (tn *tenantNode) start(ctx context.Context, t *test, c Cluster, binary string) {
 	tn.binary = binary
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), binary, tn.kvAddrs, tn.tenantID,
@@ -154,7 +154,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c clusterI, binary str
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 13 and make sure it still works.
 //  * Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
-func runMultiTenantUpgrade(ctx context.Context, t *test, c clusterI, v version.Version) {
+func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Version) {
 	predecessor, err := PredecessorVersion(v)
 	require.NoError(t, err)
 
@@ -406,7 +406,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c clusterI, v version.V
 
 func startTenantServer(
 	tenantCtx context.Context,
-	c clusterI,
+	c Cluster,
 	node nodeListOption,
 	binary string,
 	kvAddrs []string,

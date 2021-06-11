@@ -62,7 +62,7 @@ type cdcTestArgs struct {
 	targetTxnPerSecond       float64
 }
 
-func cdcBasicTest(ctx context.Context, t *test, c clusterI, args cdcTestArgs) {
+func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
@@ -232,7 +232,7 @@ func cdcBasicTest(ctx context.Context, t *test, c clusterI, args cdcTestArgs) {
 	}
 }
 
-func runCDCBank(ctx context.Context, t *test, c clusterI) {
+func runCDCBank(ctx context.Context, t *test, c Cluster) {
 
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
@@ -389,7 +389,7 @@ func runCDCBank(ctx context.Context, t *test, c clusterI) {
 // This test verifies that the changefeed avro + confluent schema registry works
 // end-to-end (including the schema registry default of requiring backward
 // compatibility within a topic).
-func runCDCSchemaRegistry(ctx context.Context, t *test, c clusterI) {
+func runCDCSchemaRegistry(ctx context.Context, t *test, c Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
@@ -516,7 +516,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c clusterI) {
 	}
 }
 
-func runCDCKafkaAuth(ctx context.Context, t *test, c clusterI) {
+func runCDCKafkaAuth(ctx context.Context, t *test, c Cluster) {
 	lastCrdbNode := c.Spec().NodeCount - 1
 	if lastCrdbNode == 0 {
 		lastCrdbNode = 1
@@ -607,7 +607,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           OwnerCDC,
 		Cluster:         makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1000,
@@ -623,7 +623,7 @@ func registerCDC(r *testRegistry) {
 		Cluster:         makeClusterSpec(4, cpu(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1000,
@@ -639,7 +639,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           OwnerCDC,
 		Cluster:         makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -655,7 +655,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -671,7 +671,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -692,7 +692,7 @@ func registerCDC(r *testRegistry) {
 		// of this test. Look into it.
 		Cluster:         makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
 				workloadDuration:         "30m",
@@ -708,7 +708,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType: tpccWorkloadType,
 				// Sending data to Google Cloud Storage is a bit slower than sending to
@@ -729,7 +729,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         makeClusterSpec(1),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
@@ -738,7 +738,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         makeClusterSpec(4),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
@@ -747,7 +747,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         makeClusterSpec(1),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
 	})
@@ -1083,7 +1083,7 @@ confluent.support.customer.id=anonymous
 
 type kafkaManager struct {
 	t     *test
-	c     clusterI
+	c     Cluster
 	nodes nodeListOption
 }
 
@@ -1385,7 +1385,7 @@ type tpccWorkload struct {
 	tolerateErrors     bool
 }
 
-func (tw *tpccWorkload) install(ctx context.Context, c clusterI) {
+func (tw *tpccWorkload) install(ctx context.Context, c Cluster) {
 	// For fixtures import, use the version built into the cockroach binary so
 	// the tpcc workload-versions match on release branches.
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
@@ -1395,7 +1395,7 @@ func (tw *tpccWorkload) install(ctx context.Context, c clusterI) {
 	))
 }
 
-func (tw *tpccWorkload) run(ctx context.Context, c clusterI, workloadDuration string) {
+func (tw *tpccWorkload) run(ctx context.Context, c Cluster, workloadDuration string) {
 	tolerateErrors := ""
 	if tw.tolerateErrors {
 		tolerateErrors = "--tolerate-errors"
@@ -1411,14 +1411,14 @@ type ledgerWorkload struct {
 	sqlNodes      nodeListOption
 }
 
-func (lw *ledgerWorkload) install(ctx context.Context, c clusterI) {
+func (lw *ledgerWorkload) install(ctx context.Context, c Cluster) {
 	c.Run(ctx, lw.workloadNodes.randNode(), fmt.Sprintf(
 		`./workload init ledger {pgurl%s}`,
 		lw.sqlNodes.randNode(),
 	))
 }
 
-func (lw *ledgerWorkload) run(ctx context.Context, c clusterI, workloadDuration string) {
+func (lw *ledgerWorkload) run(ctx context.Context, c Cluster, workloadDuration string) {
 	c.Run(ctx, lw.workloadNodes, fmt.Sprintf(
 		`./workload run ledger --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
 		lw.sqlNodes,

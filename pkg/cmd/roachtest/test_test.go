@@ -85,13 +85,13 @@ func TestRunnerRun(t *testing.T) {
 	r.Add(testSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
-		Run:     func(ctx context.Context, t *test, c clusterI) {},
+		Run:     func(ctx context.Context, t *test, c Cluster) {},
 		Cluster: makeClusterSpec(0),
 	})
 	r.Add(testSpec{
 		Name:  "fail",
 		Owner: OwnerUnitTest,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			t.Fatal("failed")
 		},
 		Cluster: makeClusterSpec(0),
@@ -179,7 +179,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
 		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			<-ctx.Done()
 		},
 	}
@@ -197,7 +197,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {
-	dummyRun := func(context.Context, *test, clusterI) {}
+	dummyRun := func(context.Context, *test, Cluster) {}
 
 	var listTests = func(t *testSpec) []string {
 		return []string{t.Name}
@@ -286,7 +286,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
 				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c clusterI) {
+				Run: func(ctx context.Context, t *test, c Cluster) {
 					runA = true
 				},
 			})
@@ -295,7 +295,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c clusterI) {
+				Run: func(ctx context.Context, t *test, c Cluster) {
 					runB = true
 				},
 			})
@@ -345,7 +345,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
 		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)
 			}

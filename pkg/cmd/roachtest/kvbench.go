@@ -89,7 +89,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 		Tags:    []string{"manual"},
 		Owner:   OwnerKV,
 		Cluster: nodes,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runKVBench(ctx, t, c, b)
 		},
 	})
@@ -176,7 +176,7 @@ func registerKVBench(r *testRegistry) {
 	}
 }
 
-func makeKVLoadGroup(c clusterI, numRoachNodes, numLoadNodes int) loadGroup {
+func makeKVLoadGroup(c Cluster, numRoachNodes, numLoadNodes int) loadGroup {
 	return loadGroup{
 		roachNodes: c.Range(1, numRoachNodes),
 		loadNodes:  c.Range(numRoachNodes+1, numRoachNodes+numLoadNodes),
@@ -191,7 +191,7 @@ func makeKVLoadGroup(c clusterI, numRoachNodes, numLoadNodes int) loadGroup {
 // This tool was primarily written with the objective of demonstrating the write
 // performance characteristics of using hash sharded indexes, for sequential workloads
 // which would've otherwise created a single-range hotspot.
-func runKVBench(ctx context.Context, t *test, c clusterI, b kvBenchSpec) {
+func runKVBench(ctx context.Context, t *test, c Cluster, b kvBenchSpec) {
 	loadGroup := makeKVLoadGroup(c, b.Nodes, 1)
 	roachNodes := loadGroup.roachNodes
 	loadNodes := loadGroup.loadNodes

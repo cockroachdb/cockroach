@@ -15,12 +15,12 @@ import (
 	"os"
 )
 
-// clusterI is the interface through which a given roachtest interacts with the
+// Cluster is the interface through which a given roachtest interacts with the
 // provisioned cloud hardware for a given test.
 //
 // This interface is currently crufty and unprincipled as it was extracted from
 // code in which tests had direct access to the `cluster` type.
-type clusterI interface {
+type Cluster interface {
 	// Selecting nodes.
 
 	All() nodeListOption

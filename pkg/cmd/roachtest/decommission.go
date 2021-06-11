@@ -38,7 +38,7 @@ func registerDecommission(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Cluster:    makeClusterSpec(4),
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				if local {
 					duration = 5 * time.Minute
 					t.l.Printf("running with duration=%s in local mode\n", duration)
@@ -55,7 +55,7 @@ func registerDecommission(r *testRegistry) {
 			MinVersion: "v20.2.0",
 			Timeout:    10 * time.Minute,
 			Cluster:    makeClusterSpec(numNodes),
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
 		})
@@ -67,7 +67,7 @@ func registerDecommission(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Cluster:    makeClusterSpec(numNodes),
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
 			},
 		})
@@ -83,7 +83,7 @@ func registerDecommission(r *testRegistry) {
 // that would spam the log before #23605. I wonder if we should really
 // start grepping the logs. An alternative is to introduce a metric
 // that would have signaled this and check that instead.
-func runDecommission(ctx context.Context, t *test, c clusterI, nodes int, duration time.Duration) {
+func runDecommission(ctx context.Context, t *test, c Cluster, nodes int, duration time.Duration) {
 	const defaultReplicationFactor = 3
 	if defaultReplicationFactor > nodes {
 		t.Fatal("improper configuration: replication factor greater than number of nodes in the test")
@@ -297,7 +297,7 @@ func runDecommission(ctx context.Context, t *test, c clusterI, nodes int, durati
 // through partial decommissioning of random nodes, ensuring we're able to undo
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
-func runDecommissionRandomized(ctx context.Context, t *test, c clusterI) {
+func runDecommissionRandomized(ctx context.Context, t *test, c Cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
@@ -897,14 +897,14 @@ const statusHeaderMembershipColumnIdx = 11
 
 type decommTestHelper struct {
 	t       *test
-	c       clusterI
+	c       Cluster
 	nodeIDs []int
 	// randNodeBlocklist are the nodes that won't be returned from randNode().
 	// populated via blockFromRandNode().
 	randNodeBlocklist map[int]struct{}
 }
 
-func newDecommTestHelper(t *test, c clusterI) *decommTestHelper {
+func newDecommTestHelper(t *test, c Cluster) *decommTestHelper {
 	var nodeIDs []int
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		nodeIDs = append(nodeIDs, i)
@@ -1055,7 +1055,7 @@ func (h *decommTestHelper) getRandNodeOtherThan(ids ...int) int {
 }
 
 func execCLI(
-	ctx context.Context, t *test, c clusterI, runNode int, extraArgs ...string,
+	ctx context.Context, t *test, c Cluster, runNode int, extraArgs ...string,
 ) (string, error) {
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)

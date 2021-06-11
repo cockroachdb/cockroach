@@ -81,7 +81,7 @@ type testSpec struct {
 	RequiresLicense bool
 
 	// Run is the test function.
-	Run func(ctx context.Context, t *test, c clusterI)
+	Run func(ctx context.Context, t *test, c Cluster)
 }
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts

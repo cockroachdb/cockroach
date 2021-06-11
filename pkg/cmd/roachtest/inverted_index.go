@@ -23,7 +23,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 		Name:    "schemachange/invertedindex",
 		Owner:   OwnerSQLSchema,
 		Cluster: makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
 	})
@@ -31,7 +31,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 
 // runInvertedIndex tests the correctness and performance of building an
 // inverted index on randomly generated JSON data (from the JSON workload).
-func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c clusterI) {
+func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c Cluster) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 

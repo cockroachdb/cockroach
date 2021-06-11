@@ -26,7 +26,7 @@ import (
 func alterZoneConfigAndClusterSettings(
 	ctx context.Context,
 	version string,
-	c clusterI,
+	c Cluster,
 	nodeIdx int,
 	dbConnectionParams *SecureDBConnectionParams,
 ) error {

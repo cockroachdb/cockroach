@@ -31,7 +31,7 @@ func registerInterleaved(r *testRegistry) {
 	runInterleaved := func(
 		ctx context.Context,
 		t *test,
-		c clusterI,
+		c Cluster,
 		config config,
 	) {
 		numZones, numRoachNodes, numLoadNodes := 3, 9, 3
@@ -121,7 +121,7 @@ func registerInterleaved(r *testRegistry) {
 		Name:    "interleavedpartitioned",
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(12, geo(), zones("us-east1-b,us-west1-b,europe-west2-b")),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runInterleaved(ctx, t, c,
 				config{
 					eastName:        `europe-west2-b`,

@@ -22,7 +22,7 @@ var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<p
 var gormSupportedTag = "v1.21.8"
 
 func registerGORM(r *testRegistry) {
-	runGORM := func(ctx context.Context, t *test, c clusterI) {
+	runGORM := func(ctx context.Context, t *test, c Cluster) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
 		}

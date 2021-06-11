@@ -39,7 +39,7 @@ var jepsenNemeses = []struct {
 	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
 
-func initJepsen(ctx context.Context, t *test, c clusterI) {
+func initJepsen(ctx context.Context, t *test, c Cluster) {
 	// NB: comment this out to see the commands jepsen would run locally.
 	if c.isLocal() {
 		t.Fatal("local execution not supported")
@@ -139,7 +139,7 @@ func initJepsen(ctx context.Context, t *test, c clusterI) {
 	c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 }
 
-func runJepsen(ctx context.Context, t *test, c clusterI, testName, nemesis string) {
+func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string) {
 	initJepsen(ctx, t, c)
 
 	controller := c.Node(c.Spec().NodeCount)
@@ -155,7 +155,7 @@ func runJepsen(ctx context.Context, t *test, c clusterI, testName, nemesis strin
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	run := func(c clusterI, ctx context.Context, node nodeListOption, args ...string) {
+	run := func(c Cluster, ctx context.Context, node nodeListOption, args ...string) {
 		if !c.isLocal() {
 			c.Run(ctx, node, args...)
 			return
@@ -163,7 +163,7 @@ func runJepsen(ctx context.Context, t *test, c clusterI, testName, nemesis strin
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
 		t.l.Printf("> %s\n", strings.Join(args, " "))
 	}
-	runE := func(c clusterI, ctx context.Context, node nodeListOption, args ...string) error {
+	runE := func(c Cluster, ctx context.Context, node nodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}
@@ -351,7 +351,7 @@ func registerJepsen(r *testRegistry) {
 				// if they detect that the machines have already been properly
 				// initialized.
 				Cluster: makeClusterSpec(6, reuseTagged("jepsen")),
-				Run: func(ctx context.Context, t *test, c clusterI) {
+				Run: func(ctx context.Context, t *test, c Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}
