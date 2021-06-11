@@ -13,6 +13,7 @@ package collector_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -128,10 +129,23 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
-	t.Run("fetch-local-recordings", func(t *testing.T) {
-		recordedSpan, err := traceCollector.GetSpanRecordingsFromCluster(ctx, localTraceID)
-		require.NoError(t, err)
+	getSpansFromAllNodes := func(traceID uint64) tracing.Recording {
+		res := make(tracing.Recording, 0)
 
+		var iter *collector.Iterator
+		for iter = traceCollector.StartIter(ctx, traceID); iter.Valid(); iter.Next() {
+			res = append(res, iter.Value())
+		}
+		require.NoError(t, iter.Error())
+
+		sort.SliceStable(res, func(i, j int) bool {
+			return res[i].StartTime.Before(res[j].StartTime)
+		})
+		return res
+	}
+
+	t.Run("fetch-local-recordings", func(t *testing.T) {
+		recordedSpan := getSpansFromAllNodes(localTraceID)
 		require.NoError(t, tracing.TestingCheckRecordedSpans(recordedSpan, `
 			span: root
 				tags: _unfinished=1 _verbose=1
@@ -149,9 +163,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	// The traceCollector is running on node 1, so most of the recordings for this
 	// subtest will be passed back by node 2 over RPC.
 	t.Run("fetch-remote-recordings", func(t *testing.T) {
-		recordedSpan, err := traceCollector.GetSpanRecordingsFromCluster(ctx, remoteTraceID)
-		require.NoError(t, err)
-
+		recordedSpan := getSpansFromAllNodes(remoteTraceID)
 		require.NoError(t, tracing.TestingCheckRecordedSpans(recordedSpan, `
 			span: root2
 				tags: _unfinished=1 _verbose=1
