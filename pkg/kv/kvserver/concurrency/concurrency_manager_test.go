@@ -193,6 +193,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						d.Fatalf(t, "unknown eval-kind: %s", kind)
 					}
 				}
+
+				// Copy the request's latch and lock spans before handing them to
+				// SequenceReq, because they may be destroyed once handed to the
+				// concurrency manager.
+				req.LatchSpans = req.LatchSpans.Copy()
+				req.LockSpans = req.LockSpans.Copy()
+
 				c.mu.Lock()
 				prev := c.guardsByReqName[reqName]
 				delete(c.guardsByReqName, reqName)
