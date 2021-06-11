@@ -13,14 +13,10 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/util/ctxgroup",
         "//pkg/util/log",
-        "//pkg/util/quotapool",
-        "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -35,6 +31,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl/utilccl",
         "//pkg/kv/kvserver/liveness",
+        "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
         "//pkg/security",
         "//pkg/security/securitytest",

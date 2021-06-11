@@ -18,10 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
@@ -53,59 +50,40 @@ func New(
 	}
 }
 
-// GetSpanRecordingsFromCluster returns the inflight span recordings from all
-// nodes in the cluster.
+// GetNodesForTraceCollection initializes the TraceCollector by identifying all
+// non-decommissioned nodes in the cluster.
+func (t *TraceCollector) GetNodesForTraceCollection(ctx context.Context) ([]roachpb.NodeID, error) {
+	return nodesFromNodeLiveness(ctx, t.nodeliveness)
+}
+
+// GetTraceSpanRecordingsForNode returns the inflight span recordings for traces
+// with traceID from the node with nodeID. The span recordings are sorted by
+// StartTime.
+//
+// GetTraceSpanRecordingsForNode can be called concurrently to parallelize the
+// RPC fan out to all the nodes in a cluster, but the user is responsible for
+// budgeting for the span recordings buffered in memory.
+//
 // This method does not distinguish between requests for local and remote
 // inflight spans, and relies on gRPC short circuiting local requests.
-func (t *TraceCollector) GetSpanRecordingsFromCluster(
-	ctx context.Context, traceID uint64,
+func (t *TraceCollector) GetTraceSpanRecordingsForNode(
+	ctx context.Context, traceID uint64, nodeID roachpb.NodeID,
 ) ([]tracingpb.RecordedSpan, error) {
-	var res []tracingpb.RecordedSpan
-	ns, err := nodesFromNodeLiveness(ctx, t.nodeliveness)
+	log.Infof(ctx, "executing GetSpanRecordings on nodes %s", nodeID.String())
+	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
-		return res, err
+		return nil, err
+	}
+	traceClient := tracingservicepb.NewTracingClient(conn)
+	resp, err := traceClient.GetSpanRecordings(ctx,
+		&tracingservicepb.SpanRecordingRequest{TraceID: traceID})
+	if err != nil {
+		return nil, err
 	}
 
-	// Collect spans from all clients.
-	// We'll want to rate limit outgoing RPCs (limit pulled out of thin air).
-	var mu syncutil.Mutex
-	qp := quotapool.NewIntPool("every-node", 25)
-	log.Infof(ctx, "executing GetSpanRecordings on nodes %s", ns)
-	grp := ctxgroup.WithContext(ctx)
-
-	for _, node := range ns {
-		id := node.id // copy out of the loop variable
-		alloc, err := qp.Acquire(ctx, 1)
-		if err != nil {
-			return res, err
-		}
-
-		grp.GoCtx(func(ctx context.Context) error {
-			defer alloc.Release()
-
-			conn, err := t.dialer.Dial(ctx, id, rpc.DefaultClass)
-			if err != nil {
-				return err
-			}
-			traceClient := tracingservicepb.NewTracingClient(conn)
-			resp, err := traceClient.GetSpanRecordings(ctx,
-				&tracingservicepb.SpanRecordingRequest{TraceID: traceID})
-			if err != nil {
-				return err
-			}
-			mu.Lock()
-			res = append(res, resp.SpanRecordings...)
-			mu.Unlock()
-			return nil
-		})
-	}
-	if err := grp.Wait(); err != nil {
-		return res, err
-	}
-
-	sort.SliceStable(res, func(i, j int) bool {
-		return res[i].StartTime.Before(res[j].StartTime)
+	sort.SliceStable(resp.SpanRecordings, func(i, j int) bool {
+		return resp.SpanRecordings[i].StartTime.Before(resp.SpanRecordings[j].StartTime)
 	})
 
-	return res, nil
+	return resp.SpanRecordings, nil
 }
