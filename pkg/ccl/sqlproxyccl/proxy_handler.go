@@ -147,8 +147,12 @@ func newProxyHandler(
 	}
 
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
-	handler.denyListService = denylist.NewDenylistWithFile(ctx, options.Denylist,
-		denylist.WithPollingInterval(options.PollConfigInterval))
+
+	// If denylist functionality is requested, create the denylist service.
+	if options.Denylist != "" {
+		handler.denyListService = denylist.NewDenylistWithFile(ctx, options.Denylist,
+			denylist.WithPollingInterval(options.PollConfigInterval))
+	}
 
 	handler.throttleService = throttler.NewLocalService(throttler.WithBaseDelay(options.RatelimitBaseDelay))
 	handler.connCache = cache.NewCappedConnCache(maxKnownConnCacheSize)
@@ -406,8 +410,12 @@ func (handler *proxyHandler) validateAccessAndThrottle(
 func (handler *proxyHandler) validateAccess(
 	ctx context.Context, tenID roachpb.TenantID, ipAddr string,
 ) error {
-	// First validate against the deny list service
+	// Validate against the denylist service if it exists.
 	list := handler.denyListService
+	if list == nil {
+		return nil
+	}
+
 	if entry, err := list.Denied(denylist.DenyEntity{Item: tenID.String(), Type: denylist.ClusterType}); err != nil {
 		// Log error but don't return since this could be transient.
 		log.Errorf(ctx, "could not consult denied list for tenant: %d", tenID.ToUint64())
