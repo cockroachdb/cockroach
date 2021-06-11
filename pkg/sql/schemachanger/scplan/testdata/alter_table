@@ -524,6 +524,10 @@ Stage 4
       KeyColumnNames:
       - rowid
       Name: new_primary_key
+      StoreColumnIDs:
+      - 1
+      StoreColumnNames:
+      - j
       Unique: true
     TableID: 53
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly

@@ -371,6 +371,10 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       name: new_primary_key
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 1
+      storeColumnNames:
+      - j
       unique: true
     otherPrimaryIndexId: 1
     storeColumnIds:
@@ -397,6 +401,10 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       name: primary
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 1
+      storeColumnNames:
+      - j
       unique: true
     otherPrimaryIndexId: 2
     storeColumnIds:
