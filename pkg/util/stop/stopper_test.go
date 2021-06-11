@@ -318,10 +318,13 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			_ = s.RunAsyncTask(ctx, "test", func(ctx context.Context) { explode(ctx) })
 		},
 		func() {
-			_ = s.RunLimitedAsyncTask(
-				context.Background(), "test",
-				quotapool.NewIntPool("test", 1),
-				true, /* wait */
+			_ = s.RunAsyncTaskEx(
+				context.Background(),
+				stop.TaskOpts{
+					TaskName:   "test",
+					Sem:        quotapool.NewIntPool("test", 1),
+					WaitForSem: true,
+				},
 				func(ctx context.Context) { explode(ctx) },
 			)
 		},
@@ -479,8 +482,14 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	for i := 0; i < numTasks; i++ {
 		wg.Add(1)
-		if err := s.RunLimitedAsyncTask(
-			context.Background(), "test", sem, true /* wait */, f,
+		if err := s.RunAsyncTaskEx(
+			context.Background(),
+			stop.TaskOpts{
+				TaskName:   "test",
+				Sem:        sem,
+				WaitForSem: true,
+			},
+			f,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -497,9 +506,14 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	sem = quotapool.NewIntPool("test", 1)
 	_, err := sem.Acquire(context.Background(), 1)
 	require.NoError(t, err)
-	err = s.RunLimitedAsyncTask(
-		context.Background(), "test", sem, false /* wait */, func(_ context.Context) {
+	err = s.RunAsyncTaskEx(
+		context.Background(),
+		stop.TaskOpts{
+			TaskName:   "test",
+			Sem:        sem,
+			WaitForSem: false,
 		},
+		func(_ context.Context) {},
 	)
 	if !errors.Is(err, stop.ErrThrottled) {
 		t.Fatalf("expected %v; got %v", stop.ErrThrottled, err)
@@ -524,7 +538,13 @@ func TestStopperRunLimitedAsyncTaskCloser(t *testing.T) {
 		time.Sleep(time.Millisecond)
 		s.Stop(ctx)
 	}()
-	err = s.RunLimitedAsyncTask(ctx, "foo", sem, true /* wait */, func(context.Context) {})
+	err = s.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName:   "foo",
+			Sem:        sem,
+			WaitForSem: true,
+		},
+		func(context.Context) {})
 	require.Equal(t, stop.ErrUnavailable, err)
 	<-s.IsStopped()
 }
@@ -554,7 +574,13 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	// This loop will block when the semaphore is filled.
 	if err := s.RunAsyncTask(ctx, "test", func(ctx context.Context) {
 		for i := 0; i < maxConcurrency*2; i++ {
-			if err := s.RunLimitedAsyncTask(ctx, "test", sem, true, f); err != nil {
+			if err := s.RunAsyncTaskEx(ctx,
+				stop.TaskOpts{
+					TaskName:   "test",
+					Sem:        sem,
+					WaitForSem: true,
+				},
+				f); err != nil {
 				if !errors.Is(err, context.Canceled) {
 					t.Fatal(err)
 				}
