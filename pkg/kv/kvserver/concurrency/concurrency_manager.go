@@ -154,14 +154,14 @@ func (m *managerImpl) SequenceReq(
 		case OptimisticEval:
 			panic("optimistic eval cannot happen when re-sequencing")
 		case PessimisticAfterFailedOptimisticEval:
-			if shouldAcquireLatches(req) {
+			if shouldAcquireLatches(g.Req) {
 				g.AssertLatches()
 			}
 			log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
 		}
 	}
 	g.EvalKind = evalKind
-	resp, err := m.sequenceReqWithGuard(ctx, g, req)
+	resp, err := m.sequenceReqWithGuard(ctx, g)
 	if resp != nil || err != nil {
 		// Ensure that we release the guard if we return a response or an error.
 		m.FinishReq(g)
@@ -170,13 +170,9 @@ func (m *managerImpl) SequenceReq(
 	return g, nil, nil
 }
 
-// TODO(sumeer): we are using both g.Req and req, when the former should
-// suffice. Remove the req parameter.
-func (m *managerImpl) sequenceReqWithGuard(
-	ctx context.Context, g *Guard, req Request,
-) (Response, *Error) {
+func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Response, *Error) {
 	// Some requests don't need to acquire latches at all.
-	if !shouldAcquireLatches(req) {
+	if !shouldAcquireLatches(g.Req) {
 		log.Event(ctx, "not acquiring latches")
 		return nil, nil
 	}
@@ -184,7 +180,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 	// Provide the manager with an opportunity to intercept the request. It
 	// may be able to serve the request directly, and even if not, it may be
 	// able to update its internal state based on the request.
-	resp, err := m.maybeInterceptReq(ctx, req)
+	resp, err := m.maybeInterceptReq(ctx, g.Req)
 	if resp != nil || err != nil {
 		return resp, err
 	}
@@ -205,14 +201,14 @@ func (m *managerImpl) sequenceReqWithGuard(
 			// Acquire latches for the request. This synchronizes the request
 			// with all conflicting in-flight requests.
 			log.Event(ctx, "acquiring latches")
-			g.lg, err = m.lm.Acquire(ctx, req)
+			g.lg, err = m.lm.Acquire(ctx, g.Req)
 			if err != nil {
 				return nil, err
 			}
 		}
 
 		// Some requests don't want the wait on locks.
-		if req.LockSpans.Empty() {
+		if g.Req.LockSpans.Empty() {
 			return nil, nil
 		}
 
@@ -515,18 +511,36 @@ func newGuard(req Request) *Guard {
 }
 
 func releaseGuard(g *Guard) {
+	if g.Req.LatchSpans != nil {
+		g.Req.LatchSpans.Release()
+	}
+	if g.Req.LockSpans != nil {
+		g.Req.LockSpans.Release()
+	}
 	*g = Guard{}
 	guardPool.Put(g)
 }
 
 // LatchSpans returns the maximal set of spans that the request will access.
+// The returned spanset is not safe for use after the guard has been finished.
 func (g *Guard) LatchSpans() *spanset.SpanSet {
 	return g.Req.LatchSpans
 }
 
 // LockSpans returns the maximal set of lock spans that the request will access.
+// The returned spanset is not safe for use after the guard has been finished.
 func (g *Guard) LockSpans() *spanset.SpanSet {
 	return g.Req.LockSpans
+}
+
+// TakeSpanSets transfers ownership of the Guard's LatchSpans and LockSpans
+// SpanSets to the caller, ensuring that the SpanSets are not destroyed with the
+// Guard. The method is only safe if called immediately before passing the Guard
+// to FinishReq.
+func (g *Guard) TakeSpanSets() (*spanset.SpanSet, *spanset.SpanSet) {
+	la, lo := g.Req.LatchSpans, g.Req.LockSpans
+	g.Req.LatchSpans, g.Req.LockSpans = nil, nil
+	return la, lo
 }
 
 // HoldingLatches returned whether the guard is holding latches or not.

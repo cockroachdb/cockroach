@@ -361,8 +361,8 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
 			Requests:        ba.Requests,
-			LatchSpans:      latchSpans,
-			LockSpans:       lockSpans,
+			LatchSpans:      latchSpans, // nil if g != nil
+			LockSpans:       lockSpans,  // nil if g != nil
 		}, requestEvalKind)
 		if pErr != nil {
 			return nil, pErr
@@ -371,6 +371,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			br.Responses = resp
 			return br, nil
 		}
+		latchSpans, lockSpans = nil, nil // ownership released
 
 		br, g, pErr = fn(r, ctx, ba, g)
 		if pErr == nil {
@@ -409,6 +410,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		case *roachpb.IndeterminateCommitError:
 			// Drop latches and lock wait-queues.
+			latchSpans, lockSpans = g.TakeSpanSets()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then launch a task to handle the indeterminate commit error.
@@ -417,6 +419,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		case *roachpb.InvalidLeaseError:
 			// Drop latches and lock wait-queues.
+			latchSpans, lockSpans = g.TakeSpanSets()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then attempt to acquire the lease if not currently held by any
@@ -427,6 +430,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		case *roachpb.MergeInProgressError:
 			// Drop latches and lock wait-queues.
+			latchSpans, lockSpans = g.TakeSpanSets()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then listen for the merge to complete.
@@ -778,13 +782,12 @@ func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) e
 func (r *Replica) collectSpans(
 	ba *roachpb.BatchRequest,
 ) (latchSpans, lockSpans *spanset.SpanSet, requestEvalKind concurrency.RequestEvalKind, _ error) {
-	latchSpans, lockSpans = new(spanset.SpanSet), new(spanset.SpanSet)
+	latchSpans, lockSpans = spanset.New(), spanset.New()
 	isReadOnly := ba.IsReadOnly()
 	r.mu.RLock()
 	desc := r.descRLocked()
 	liveCount := r.mu.state.Stats.LiveCount
 	r.mu.RUnlock()
-
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
