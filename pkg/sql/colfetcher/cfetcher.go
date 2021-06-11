@@ -804,6 +804,29 @@ func (rf *cFetcher) nextAdapter() {
 	rf.adapter.batch, rf.adapter.err = rf.nextBatch(rf.adapter.ctx)
 }
 
+// setNextKV sets the next KV to process to the input KV. needsCopy, if true,
+// causes the input kv to be deep copied. needsCopy should be set to true if
+// the input KV is pointing to the last KV of a batch, so that the batch can
+// be garbage collected before fetching the next one.
+// gcassert:inline
+func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
+	if !needsCopy {
+		rf.machine.nextKV = kv
+		return
+	}
+
+	// If we've made it to the very last key in the batch, copy out the key
+	// so that the GC can reclaim the large backing slice before we call
+	// NextKV() again.
+	kvCopy := roachpb.KeyValue{}
+	kvCopy.Key = make(roachpb.Key, len(kv.Key))
+	copy(kvCopy.Key, kv.Key)
+	kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
+	copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
+	kvCopy.Value.Timestamp = kv.Value.Timestamp
+	rf.machine.nextKV = kvCopy
+}
+
 // nextBatch processes keys until we complete one batch of rows,
 // coldata.BatchSize() in length, which are returned in columnar format as a
 // coldata.Batch. The batch contains one Vec per table column, regardless of
@@ -819,11 +842,11 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKeys, kv, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			ok, kv, newSpan, atBatchBoundary, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
-			if !moreKeys {
+			if !ok {
 				rf.machine.state[0] = stateEmitLastBatch
 				continue
 			}
@@ -850,7 +873,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				*/
 			}
 
-			rf.machine.nextKV = kv
+			rf.setNextKV(kv, atBatchBoundary)
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
@@ -976,15 +999,16 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 		case stateSeekPrefix:
+			// Note: seekPrefix is only used for interleaved tables.
 			for {
-				moreRows, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+				ok, kv, _, atBatchBoundary, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 				if err != nil {
 					return nil, rf.convertFetchError(ctx, err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
 				}
-				if !moreRows {
+				if !ok {
 					// We ran out of data, so ignore whatever our next state was going to
 					// be and emit the final batch.
 					rf.machine.state[1] = stateEmitLastBatch
@@ -1002,18 +1026,18 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				// TODO(jordan): if nextKV returns newSpan = true, set the new span
 				//  prefix and indicate that it needs decoding.
 				if comparison >= 0 {
-					rf.machine.nextKV = kv
+					rf.setNextKV(kv, atBatchBoundary)
 					break
 				}
 			}
 			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			ok, kv, _, atBatchBoundary, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
-			if !moreKVs {
+			if !ok {
 				// No more data. Finalize the row and exit.
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateEmitLastBatch
@@ -1021,7 +1045,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
-			rf.machine.nextKV = kv
+			rf.setNextKV(kv, atBatchBoundary)
 			if debugState {
 				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}

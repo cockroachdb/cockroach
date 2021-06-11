@@ -52,7 +52,7 @@ type kvBatchFetcher interface {
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, origSpan roachpb.Span, err error)
+		batchResponse []byte, origSpan roachpb.Span, moreKeys bool, err error)
 
 	close(ctx context.Context)
 }
@@ -713,16 +713,42 @@ func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvBatchFetcher) error {
 	return err
 }
 
+// setNextKV sets the next KV to process to the input KV. needsCopy, if true,
+// causes the input kv to be deep copied. needsCopy should be set to true if
+// the input KV is pointing to the last KV of a batch, so that the batch can
+// be garbage collected before fetching the next one.
+// gcassert:inline
+func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
+	if needsCopy {
+		// If we've made it to the very last key in the batch, copy out the key
+		// so that the GC can reclaim the large backing slice before we call
+		// NextKV() again.
+		kvCopy := roachpb.KeyValue{}
+		kvCopy.Key = make(roachpb.Key, len(kv.Key))
+		copy(kvCopy.Key, kv.Key)
+		kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
+		copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
+		kvCopy.Value.Timestamp = kv.Value.Timestamp
+		rf.kv = kvCopy
+	} else {
+		rf.kv = kv
+	}
+}
+
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
 func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, _, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+		var atBatchBoundary bool
+		var kv roachpb.KeyValue
+		ok, kv, _, atBatchBoundary, err = rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 		if err != nil {
 			return false, ConvertFetchError(ctx, rf, err)
 		}
+		rf.setNextKV(kv, atBatchBoundary)
+
 		rf.kvEnd = !ok
 		if rf.kvEnd {
 			// No more keys in the scan. We need to transition
