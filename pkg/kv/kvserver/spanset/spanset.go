@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -84,6 +85,35 @@ type SpanSet struct {
 	spans [NumSpanAccess][NumSpanScope][]Span
 }
 
+var spanSetPool = sync.Pool{
+	New: func() interface{} { return new(SpanSet) },
+}
+
+// New creates a new empty SpanSet.
+func New() *SpanSet {
+	return spanSetPool.Get().(*SpanSet)
+}
+
+// Release releases the SpanSet and its underlying slices. The receiver should
+// not be used after being released.
+func (s *SpanSet) Release() {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			// Recycle slice if capacity below threshold.
+			const maxRecycleCap = 8
+			var recycle []Span
+			if sl := s.spans[sa][ss]; cap(sl) <= maxRecycleCap {
+				for i := range sl {
+					sl[i] = Span{}
+				}
+				recycle = sl[:0]
+			}
+			s.spans[sa][ss] = recycle
+		}
+	}
+	spanSetPool.Put(s)
+}
+
 // String prints a string representation of the SpanSet.
 func (s *SpanSet) String() string {
 	var buf strings.Builder
@@ -116,7 +146,7 @@ func (s *SpanSet) Empty() bool {
 
 // Copy copies the SpanSet.
 func (s *SpanSet) Copy() *SpanSet {
-	n := &SpanSet{}
+	n := New()
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
 		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
 			n.spans[sa][ss] = append(n.spans[sa][ss], s.spans[sa][ss]...)
@@ -142,7 +172,10 @@ func (s *SpanSet) Iterate(f func(SpanAccess, SpanScope, Span)) {
 // Reserve space for N additional spans.
 func (s *SpanSet) Reserve(access SpanAccess, scope SpanScope, n int) {
 	existing := s.spans[access][scope]
-	s.spans[access][scope] = make([]Span, len(existing), n+cap(existing))
+	if n <= cap(existing)-len(existing) {
+		return
+	}
+	s.spans[access][scope] = make([]Span, len(existing), n+len(existing))
 	copy(s.spans[access][scope], existing)
 }
 

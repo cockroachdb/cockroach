@@ -81,8 +81,8 @@ import (
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
 // care about properly declaring their spans.
-var allSpans = func() spanset.SpanSet {
-	var ss spanset.SpanSet
+func allSpans() *spanset.SpanSet {
+	ss := spanset.New()
 	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    roachpb.KeyMin,
 		EndKey: roachpb.KeyMax,
@@ -93,7 +93,7 @@ var allSpans = func() spanset.SpanSet {
 		EndKey: append([]byte("\x01"), roachpb.KeyMax...),
 	})
 	return ss
-}()
+}
 
 // allSpansGuard returns a concurrency guard that indicates that it provides
 // isolation across all key spans for use in tests that don't care about
@@ -101,7 +101,8 @@ var allSpans = func() spanset.SpanSet {
 func allSpansGuard() *concurrency.Guard {
 	return &concurrency.Guard{
 		Req: concurrency.Request{
-			LatchSpans: &allSpans,
+			LatchSpans: allSpans(),
+			LockSpans:  spanset.New(),
 		},
 	}
 }
@@ -1016,7 +1017,7 @@ func TestReplicaLease(t *testing.T) {
 	} {
 		if _, err := batcheval.RequestLease(ctx, tc.store.Engine(),
 			batcheval.CommandArgs{
-				EvalCtx: NewReplicaEvalContext(tc.repl, &allSpans),
+				EvalCtx: NewReplicaEvalContext(tc.repl, allSpans()),
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
@@ -5118,7 +5119,7 @@ func TestEndTxnDirectGC(t *testing.T) {
 				var gr roachpb.GetResponse
 				if _, err := batcheval.Get(
 					ctx, tc.engine, batcheval.CommandArgs{
-						EvalCtx: NewReplicaEvalContext(tc.repl, &allSpans),
+						EvalCtx: NewReplicaEvalContext(tc.repl, allSpans()),
 						Args: &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{
 							Key: keys.TransactionKey(txn.Key, txn.ID),
 						}},
@@ -5495,7 +5496,7 @@ func TestAbortSpanError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := &SpanSetReplicaEvalContext{tc.repl, allSpans}
+	rec := &SpanSetReplicaEvalContext{tc.repl, *allSpans()}
 	pErr := checkIfTxnAborted(context.Background(), rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
@@ -8232,7 +8233,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		st := r.CurrentLeaseStatus(ctx)
-		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, st, hlc.Timestamp{}, &allSpans, &allSpans)
+		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, st, hlc.Timestamp{}, allSpans(), allSpans())
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -8354,7 +8355,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 
 	incCmdID = makeIDKey()
 	atomic.StoreInt32(&filterActive, 1)
-	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, repl.CurrentLeaseStatus(ctx), hlc.Timestamp{}, &allSpans, &allSpans)
+	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, repl.CurrentLeaseStatus(ctx), hlc.Timestamp{}, allSpans(), allSpans())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8804,7 +8805,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	assignSeqNumsForReqs(txn, &txnPut, &txnPut2)
 	origTxn := txn.Clone()
 
-	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, hlc.Timestamp{}, &allSpans, &allSpans)
+	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, hlc.Timestamp{}, allSpans(), allSpans())
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -13024,7 +13025,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		req := putArgs(roachpb.Key("some-key"), []byte("some-value"))
 		ba.Add(&req)
-		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, tc.repl.CurrentLeaseStatus(ctx), hlc.Timestamp{}, &allSpans, &allSpans)
+		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, tc.repl.CurrentLeaseStatus(ctx), hlc.Timestamp{}, allSpans(), allSpans())
 		if err != nil {
 			t.Error(err)
 		}
