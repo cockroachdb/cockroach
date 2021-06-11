@@ -16,6 +16,7 @@ TABLE kv
  ├── k int not null
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    └── k int not null
  └── INDEX idx
@@ -53,6 +54,7 @@ TABLE kv
  ├── k int not null
  ├── v int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX primary
  │    └── k int not null
  └── INDEX idx
@@ -80,6 +82,7 @@ TABLE g
  ├── b int
  ├── geog geography
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── geog_inverted_key geography not null [virtual-inverted]
  ├── geog_inverted_key geography not null [virtual-inverted]
  ├── PRIMARY INDEX primary
@@ -118,6 +121,7 @@ TABLE xyz
  ├── y int
  ├── z string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── idx_expr_1 string as (lower(z)) virtual [hidden]
  ├── idx_expr_2 int as (y + 1) virtual [hidden]
  ├── idx_expr_3 int as (x + y) virtual [hidden]

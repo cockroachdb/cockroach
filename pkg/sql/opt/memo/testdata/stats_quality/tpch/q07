@@ -59,111 +59,111 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q7_sort_1
- ├── columns: supp_nation:46(char!null) cust_nation:51(char!null) l_year:55(float) revenue:57(float!null)
+ ├── columns: supp_nation:50(char!null) cust_nation:56(char!null) l_year:61(float) revenue:63(float!null)
  ├── immutable
- ├── stats: [rows=974.270387, distinct(46)=1.33333333, null(46)=0, distinct(51)=1.33333333, null(51)=0, distinct(55)=730.977982, null(55)=0, distinct(57)=974.270387, null(57)=0, distinct(46,51,55)=974.270387, null(46,51,55)=0]
- ├── key: (46,51,55)
- ├── fd: (46,51,55)-->(57)
- ├── ordering: +46,+51,+55
+ ├── stats: [rows=974.270387, distinct(50)=1.33333333, null(50)=0, distinct(56)=1.33333333, null(56)=0, distinct(61)=730.977982, null(61)=0, distinct(63)=974.270387, null(63)=0, distinct(50,56,61)=974.270387, null(50,56,61)=0]
+ ├── key: (50,56,61)
+ ├── fd: (50,56,61)-->(63)
+ ├── ordering: +50,+56,+61
  └── group-by
       ├── save-table-name: q7_group_by_2
-      ├── columns: n1.n_name:46(char!null) n2.n_name:51(char!null) l_year:55(float) sum:57(float!null)
-      ├── grouping columns: n1.n_name:46(char!null) n2.n_name:51(char!null) l_year:55(float)
+      ├── columns: n1.n_name:50(char!null) n2.n_name:56(char!null) l_year:61(float) sum:63(float!null)
+      ├── grouping columns: n1.n_name:50(char!null) n2.n_name:56(char!null) l_year:61(float)
       ├── immutable
-      ├── stats: [rows=974.270387, distinct(46)=1.33333333, null(46)=0, distinct(51)=1.33333333, null(51)=0, distinct(55)=730.977982, null(55)=0, distinct(57)=974.270387, null(57)=0, distinct(46,51,55)=974.270387, null(46,51,55)=0]
-      ├── key: (46,51,55)
-      ├── fd: (46,51,55)-->(57)
+      ├── stats: [rows=974.270387, distinct(50)=1.33333333, null(50)=0, distinct(56)=1.33333333, null(56)=0, distinct(61)=730.977982, null(61)=0, distinct(63)=974.270387, null(63)=0, distinct(50,56,61)=974.270387, null(50,56,61)=0]
+      ├── key: (50,56,61)
+      ├── fd: (50,56,61)-->(63)
       ├── project
       │    ├── save-table-name: q7_project_3
-      │    ├── columns: l_year:55(float) volume:56(float!null) n1.n_name:46(char!null) n2.n_name:51(char!null)
+      │    ├── columns: l_year:61(float) volume:62(float!null) n1.n_name:50(char!null) n2.n_name:56(char!null)
       │    ├── immutable
-      │    ├── stats: [rows=7609.92027, distinct(46)=1.33333333, null(46)=0, distinct(51)=1.33333333, null(51)=0, distinct(55)=730.977982, null(55)=0, distinct(56)=7450.66407, null(56)=0, distinct(46,51,55)=974.270387, null(46,51,55)=0]
+      │    ├── stats: [rows=7609.92027, distinct(50)=1.33333333, null(50)=0, distinct(56)=1.33333333, null(56)=0, distinct(61)=730.977982, null(61)=0, distinct(62)=7450.66407, null(62)=0, distinct(50,56,61)=974.270387, null(50,56,61)=0]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q7_inner_join_4
-      │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:9(int!null) l_suppkey:11(int!null) l_extendedprice:14(float!null) l_discount:15(float!null) l_shipdate:19(date!null) o_orderkey:26(int!null) o_custkey:27(int!null) c_custkey:36(int!null) c_nationkey:39(int!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
+      │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:10(int!null) l_suppkey:12(int!null) l_extendedprice:15(float!null) l_discount:16(float!null) l_shipdate:20(date!null) o_orderkey:28(int!null) o_custkey:29(int!null) c_custkey:39(int!null) c_nationkey:42(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
       │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    ├── stats: [rows=7609.92027, distinct(1)=7609.92027, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(9)=7364.64802, null(9)=0, distinct(11)=7609.92027, null(11)=0, distinct(14)=7441.09567, null(14)=0, distinct(15)=11, null(15)=0, distinct(19)=730.977982, null(19)=0, distinct(26)=7364.64802, null(26)=0, distinct(27)=4896.16795, null(27)=0, distinct(36)=4896.16795, null(36)=0, distinct(39)=1.29975178, null(39)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0, distinct(14,15)=7450.66407, null(14,15)=0, distinct(19,46,51)=974.270387, null(19,46,51)=0]
-      │    │    ├── fd: (1)-->(4), (26)-->(27), (36)-->(39), (45)-->(46), (50)-->(51), (39)==(50), (50)==(39), (27)==(36), (36)==(27), (9)==(26), (26)==(9), (1)==(11), (11)==(1), (4)==(45), (45)==(4)
+      │    │    ├── stats: [rows=7609.92027, distinct(1)=7609.92027, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(10)=7364.64802, null(10)=0, distinct(12)=7609.92027, null(12)=0, distinct(15)=7441.09567, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=730.977982, null(20)=0, distinct(28)=7364.64802, null(28)=0, distinct(29)=4896.16795, null(29)=0, distinct(39)=4896.16795, null(39)=0, distinct(42)=1.29975178, null(42)=0, distinct(49)=1.29975178, null(49)=0, distinct(50)=1.33333333, null(50)=0, distinct(55)=1.29975178, null(55)=0, distinct(56)=1.33333333, null(56)=0, distinct(15,16)=7450.66407, null(15,16)=0, distinct(20,50,56)=974.270387, null(20,50,56)=0]
+      │    │    ├── fd: (1)-->(4), (28)-->(29), (39)-->(42), (49)-->(50), (55)-->(56), (42)==(55), (55)==(42), (29)==(39), (39)==(29), (10)==(28), (28)==(10), (1)==(12), (12)==(1), (4)==(49), (49)==(4)
       │    │    ├── scan customer@c_nk
       │    │    │    ├── save-table-name: q7_scan_5
-      │    │    │    ├── columns: c_custkey:36(int!null) c_nationkey:39(int!null)
-      │    │    │    ├── stats: [rows=150000, distinct(36)=148813, null(36)=0, distinct(39)=25, null(39)=0]
-      │    │    │    │   histogram(36)=  0 15  735  15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15
+      │    │    │    ├── columns: c_custkey:39(int!null) c_nationkey:42(int!null)
+      │    │    │    ├── stats: [rows=150000, distinct(39)=148813, null(39)=0, distinct(42)=25, null(42)=0]
+      │    │    │    │   histogram(39)=  0 15  735  15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15   735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735   15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    735    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15    750    15
       │    │    │    │                 <--- 1 ----- 678 ----- 1399 ----- 2177 ----- 2911 ----- 3572 ----- 4383 ----- 5241 ----- 5963 ----- 6700 ----- 7514 ----- 8344 ----- 9262 ----- 10104 ----- 10682 ----- 11364 ----- 12228 ----- 13177 ----- 13867 ----- 14583 ----- 15392 ----- 16096 ----- 16929 ----- 17806 ----- 18523 ----- 19324 ----- 20101 ----- 20834 ----- 21481 ----- 22224 ----- 22897 ----- 23567 ----- 24127 ----- 24922 ----- 25671 ----- 26462 ----- 27283 ----- 28113 ----- 29030 ----- 29757 ----- 30510 ----- 31314 ----- 32132 ----- 32680 ----- 33455 ----- 34261 ----- 34980 ----- 35774 ----- 36466 ----- 37134 ----- 37753 ----- 38356 ----- 39098 ----- 39899 ----- 40801 ----- 41530 ----- 42349 ----- 43109 ----- 43777 ----- 44565 ----- 45327 ----- 46082 ----- 46847 ----- 47502 ----- 48096 ----- 48800 ----- 49720 ----- 50395 ----- 51207 ----- 51923 ----- 52628 ----- 53503 ----- 54317 ----- 54913 ----- 55581 ----- 56301 ----- 57027 ----- 57998 ----- 58543 ----- 59210 ----- 59952 ----- 60898 ----- 61636 ----- 62298 ----- 63222 ----- 64020 ----- 64628 ----- 65392 ----- 66121 ----- 66723 ----- 67433 ----- 68143 ----- 69022 ----- 69788 ----- 70674 ----- 71340 ----- 72161 ----- 72916 ----- 73561 ----- 74205 ----- 74835 ----- 75597 ----- 76228 ----- 76938 ----- 77562 ----- 78167 ----- 79086 ----- 79799 ----- 80542 ----- 81131 ----- 81884 ----- 82434 ----- 83129 ----- 83845 ----- 84613 ----- 85415 ----- 86299 ----- 87176 ----- 87819 ----- 88666 ----- 89473 ----- 90086 ----- 90772 ----- 91425 ----- 92283 ----- 93145 ----- 93792 ----- 94518 ----- 95307 ----- 96022 ----- 96756 ----- 97509 ----- 98329 ----- 98995 ----- 99642 ----- 100371 ----- 100968 ----- 101625 ----- 102360 ----- 103082 ----- 103924 ----- 104743 ----- 105637 ----- 106457 ----- 107406 ----- 108239 ----- 108939 ----- 109660 ----- 110707 ----- 111410 ----- 112088 ----- 112798 ----- 113545 ----- 114386 ----- 115217 ----- 116078 ----- 116981 ----- 117633 ----- 118389 ----- 119372 ----- 120184 ----- 121112 ----- 121890 ----- 122519 ----- 123317 ----- 124065 ----- 124931 ----- 125675 ----- 126329 ----- 127204 ----- 127838 ----- 128541 ----- 129280 ----- 130005 ----- 130776 ----- 131531 ----- 132367 ----- 133306 ----- 133892 ----- 134638 ----- 135458 ----- 136117 ----- 136915 ----- 137541 ----- 138481 ----- 139129 ----- 139859 ----- 140804 ----- 141608 ----- 142370 ----- 143284 ----- 143910 ----- 144465 ----- 145200 ----- 146007 ----- 146764 ----- 147489 ----- 148465 ----- 149291 ----- 149999
-      │    │    │    │   histogram(39)=  0 6135 0 6285 0 6330 0 5940 0 6285 0 6000 0 5355 0 5790 0 6150 0 6015 0 5880 0 6255 0 5670 0 6930 0 5775 0 5955 0 6045 0 6030 0 6045 0 5820 0 6180 0 6000 0 5865 0 5880 0 5385
+      │    │    │    │   histogram(42)=  0 6135 0 6285 0 6330 0 5940 0 6285 0 6000 0 5355 0 5790 0 6150 0 6015 0 5880 0 6255 0 5670 0 6930 0 5775 0 5955 0 6045 0 6030 0 6045 0 5820 0 6180 0 6000 0 5865 0 5880 0 5385
       │    │    │    │                 <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 ---- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
-      │    │    │    ├── key: (36)
-      │    │    │    └── fd: (36)-->(39)
+      │    │    │    ├── key: (39)
+      │    │    │    └── fd: (39)-->(42)
       │    │    ├── inner-join (lookup orders)
       │    │    │    ├── save-table-name: q7_lookup_join_6
-      │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:9(int!null) l_suppkey:11(int!null) l_extendedprice:14(float!null) l_discount:15(float!null) l_shipdate:19(date!null) o_orderkey:26(int!null) o_custkey:27(int!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
-      │    │    │    ├── key columns: [9] = [26]
+      │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:10(int!null) l_suppkey:12(int!null) l_extendedprice:15(float!null) l_discount:16(float!null) l_shipdate:20(date!null) o_orderkey:28(int!null) o_custkey:29(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
+      │    │    │    ├── key columns: [10] = [28]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── stats: [rows=97674.7838, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(9)=93669.8596, null(9)=0, distinct(11)=529.630441, null(11)=0, distinct(14)=60234.7187, null(14)=0, distinct(15)=11, null(15)=0, distinct(19)=731, null(19)=0, distinct(26)=93669.8596, null(26)=0, distinct(27)=62307.2278, null(27)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0]
-      │    │    │    ├── fd: (26)-->(27), (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (1)==(11), (11)==(1), (9)==(26), (26)==(9)
+      │    │    │    ├── stats: [rows=97674.7838, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(10)=93669.8596, null(10)=0, distinct(12)=529.630441, null(12)=0, distinct(15)=60234.7187, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=731, null(20)=0, distinct(28)=93669.8596, null(28)=0, distinct(29)=62307.2278, null(29)=0, distinct(49)=1.29975178, null(49)=0, distinct(50)=1.33333333, null(50)=0, distinct(55)=1.29975178, null(55)=0, distinct(56)=1.33333333, null(56)=0]
+      │    │    │    ├── fd: (28)-->(29), (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4), (1)==(12), (12)==(1), (10)==(28), (28)==(10)
       │    │    │    ├── inner-join (lookup lineitem)
       │    │    │    │    ├── save-table-name: q7_lookup_join_7
-      │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:9(int!null) l_suppkey:11(int!null) l_extendedprice:14(float!null) l_discount:15(float!null) l_shipdate:19(date!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
-      │    │    │    │    ├── key columns: [9 12] = [9 12]
+      │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:10(int!null) l_suppkey:12(int!null) l_extendedprice:15(float!null) l_discount:16(float!null) l_shipdate:20(date!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
+      │    │    │    │    ├── key columns: [10 13] = [10 13]
       │    │    │    │    ├── lookup columns are key
-      │    │    │    │    ├── stats: [rows=97674.7838, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(9)=93669.8596, null(9)=0, distinct(11)=529.630441, null(11)=0, distinct(14)=92192.1779, null(14)=0, distinct(15)=11, null(15)=0, distinct(19)=731, null(19)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0]
-      │    │    │    │    ├── fd: (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (1)==(11), (11)==(1)
+      │    │    │    │    ├── stats: [rows=97674.7838, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(10)=93669.8596, null(10)=0, distinct(12)=529.630441, null(12)=0, distinct(15)=92192.1779, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=731, null(20)=0, distinct(49)=1.29975178, null(49)=0, distinct(50)=1.33333333, null(50)=0, distinct(55)=1.29975178, null(55)=0, distinct(56)=1.33333333, null(56)=0]
+      │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4), (1)==(12), (12)==(1)
       │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
       │    │    │    │    │    ├── save-table-name: q7_lookup_join_8
-      │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:9(int!null) l_suppkey:11(int!null) l_linenumber:12(int!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
-      │    │    │    │    │    ├── key columns: [1] = [11]
-      │    │    │    │    │    ├── stats: [rows=322645.968, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(9)=290856.916, null(9)=0, distinct(11)=529.630441, null(11)=0, distinct(12)=7, null(12)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0]
-      │    │    │    │    │    ├── key: (9,12,50)
-      │    │    │    │    │    ├── fd: (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (9,12)-->(11), (1)==(11), (11)==(1)
+      │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:10(int!null) l_suppkey:12(int!null) l_linenumber:13(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
+      │    │    │    │    │    ├── key columns: [1] = [12]
+      │    │    │    │    │    ├── stats: [rows=322645.968, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(10)=290856.916, null(10)=0, distinct(12)=529.630441, null(12)=0, distinct(13)=7, null(13)=0, distinct(49)=1.29975178, null(49)=0, distinct(50)=1.33333333, null(50)=0, distinct(55)=1.29975178, null(55)=0, distinct(56)=1.33333333, null(56)=0]
+      │    │    │    │    │    ├── key: (10,13,55)
+      │    │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4), (10,13)-->(12), (1)==(12), (12)==(1)
       │    │    │    │    │    ├── inner-join (lookup supplier@s_nk)
       │    │    │    │    │    │    ├── save-table-name: q7_lookup_join_9
-      │    │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
-      │    │    │    │    │    │    ├── key columns: [45] = [4]
-      │    │    │    │    │    │    ├── stats: [rows=533.333333, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0]
-      │    │    │    │    │    │    ├── key: (1,50)
-      │    │    │    │    │    │    ├── fd: (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4)
+      │    │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
+      │    │    │    │    │    │    ├── key columns: [49] = [4]
+      │    │    │    │    │    │    ├── stats: [rows=533.333333, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(49)=1.29975178, null(49)=0, distinct(50)=1.33333333, null(50)=0, distinct(55)=1.29975178, null(55)=0, distinct(56)=1.33333333, null(56)=0]
+      │    │    │    │    │    │    ├── key: (1,55)
+      │    │    │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4)
       │    │    │    │    │    │    ├── inner-join (cross)
       │    │    │    │    │    │    │    ├── save-table-name: q7_inner_join_10
-      │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
-      │    │    │    │    │    │    │    ├── stats: [rows=1.33333333, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0, distinct(46,51)=1.33333333, null(46,51)=0]
-      │    │    │    │    │    │    │    ├── key: (45,50)
-      │    │    │    │    │    │    │    ├── fd: (45)-->(46), (50)-->(51)
+      │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
+      │    │    │    │    │    │    │    ├── stats: [rows=1.33333333, distinct(49)=1.29975178, null(49)=0, distinct(50)=1.33333333, null(50)=0, distinct(55)=1.29975178, null(55)=0, distinct(56)=1.33333333, null(56)=0, distinct(50,56)=1.33333333, null(50,56)=0]
+      │    │    │    │    │    │    │    ├── key: (49,55)
+      │    │    │    │    │    │    │    ├── fd: (49)-->(50), (55)-->(56)
       │    │    │    │    │    │    │    ├── scan nation [as=n1]
       │    │    │    │    │    │    │    │    ├── save-table-name: q7_scan_11
-      │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:45(int!null) n1.n_name:46(char!null)
-      │    │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(45)=25, null(45)=0, distinct(46)=25, null(46)=0]
-      │    │    │    │    │    │    │    │    │   histogram(45)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+      │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:49(int!null) n1.n_name:50(char!null)
+      │    │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(49)=25, null(49)=0, distinct(50)=25, null(50)=0]
+      │    │    │    │    │    │    │    │    │   histogram(49)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
       │    │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
-      │    │    │    │    │    │    │    │    │   histogram(46)=  0      1      23      1
+      │    │    │    │    │    │    │    │    │   histogram(50)=  0      1      23      1
       │    │    │    │    │    │    │    │    │                 <--- 'ALGERIA' ---- 'VIETNAM'
-      │    │    │    │    │    │    │    │    ├── key: (45)
-      │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
+      │    │    │    │    │    │    │    │    ├── key: (49)
+      │    │    │    │    │    │    │    │    └── fd: (49)-->(50)
       │    │    │    │    │    │    │    ├── scan nation [as=n2]
       │    │    │    │    │    │    │    │    ├── save-table-name: q7_scan_12
-      │    │    │    │    │    │    │    │    ├── columns: n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
-      │    │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(50)=25, null(50)=0, distinct(51)=25, null(51)=0]
-      │    │    │    │    │    │    │    │    │   histogram(50)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
+      │    │    │    │    │    │    │    │    ├── columns: n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
+      │    │    │    │    │    │    │    │    ├── stats: [rows=25, distinct(55)=25, null(55)=0, distinct(56)=25, null(56)=0]
+      │    │    │    │    │    │    │    │    │   histogram(55)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
       │    │    │    │    │    │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19 --- 20 --- 21 --- 22 --- 23 --- 24
-      │    │    │    │    │    │    │    │    │   histogram(51)=  0      1      23      1
+      │    │    │    │    │    │    │    │    │   histogram(56)=  0      1      23      1
       │    │    │    │    │    │    │    │    │                 <--- 'ALGERIA' ---- 'VIETNAM'
-      │    │    │    │    │    │    │    │    ├── key: (50)
-      │    │    │    │    │    │    │    │    └── fd: (50)-->(51)
+      │    │    │    │    │    │    │    │    ├── key: (55)
+      │    │    │    │    │    │    │    │    └── fd: (55)-->(56)
       │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── ((n1.n_name:46 = 'FRANCE') AND (n2.n_name:51 = 'GERMANY')) OR ((n1.n_name:46 = 'GERMANY') AND (n2.n_name:51 = 'FRANCE')) [type=bool, outer=(46,51), constraints=(/46: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /51: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+      │    │    │    │    │    │    │         └── ((n1.n_name:50 = 'FRANCE') AND (n2.n_name:56 = 'GERMANY')) OR ((n1.n_name:50 = 'GERMANY') AND (n2.n_name:56 = 'FRANCE')) [type=bool, outer=(50,56), constraints=(/50: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /56: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
       │    │    │    │    │    │    └── filters (true)
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters
-      │    │    │    │         └── (l_shipdate:19 >= '1995-01-01') AND (l_shipdate:19 <= '1996-12-31') [type=bool, outer=(19), constraints=(/19: [/'1995-01-01' - /'1996-12-31']; tight)]
+      │    │    │    │         └── (l_shipdate:20 >= '1995-01-01') AND (l_shipdate:20 <= '1996-12-31') [type=bool, outer=(20), constraints=(/20: [/'1995-01-01' - /'1996-12-31']; tight)]
       │    │    │    └── filters (true)
       │    │    └── filters
-      │    │         ├── c_nationkey:39 = n2.n_nationkey:50 [type=bool, outer=(39,50), constraints=(/39: (/NULL - ]; /50: (/NULL - ]), fd=(39)==(50), (50)==(39)]
-      │    │         └── c_custkey:36 = o_custkey:27 [type=bool, outer=(27,36), constraints=(/27: (/NULL - ]; /36: (/NULL - ]), fd=(27)==(36), (36)==(27)]
+      │    │         ├── c_nationkey:42 = n2.n_nationkey:55 [type=bool, outer=(42,55), constraints=(/42: (/NULL - ]; /55: (/NULL - ]), fd=(42)==(55), (55)==(42)]
+      │    │         └── c_custkey:39 = o_custkey:29 [type=bool, outer=(29,39), constraints=(/29: (/NULL - ]; /39: (/NULL - ]), fd=(29)==(39), (39)==(29)]
       │    └── projections
-      │         ├── extract('year', l_shipdate:19) [as=l_year:55, type=float, outer=(19), immutable]
-      │         └── l_extendedprice:14 * (1.0 - l_discount:15) [as=volume:56, type=float, outer=(14,15), immutable]
+      │         ├── extract('year', l_shipdate:20) [as=l_year:61, type=float, outer=(20), immutable]
+      │         └── l_extendedprice:15 * (1.0 - l_discount:16) [as=volume:62, type=float, outer=(15,16), immutable]
       └── aggregations
-           └── sum [as=sum:57, type=float, outer=(56)]
-                └── volume:56 [type=float]
+           └── sum [as=sum:63, type=float, outer=(62)]
+                └── volume:62 [type=float]
 
 ----Stats for q7_sort_1----
 column_names   row_count  distinct_count  null_count

@@ -15,17 +15,17 @@ project
  ├── cardinality: [0 - 0]
  ├── prune: (1,2)
  └── select
-      ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
+      ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
       ├── cardinality: [0 - 0]
       ├── key: (3)
-      ├── fd: (3)-->(1,2,4)
-      ├── prune: (1-4)
+      ├── fd: (3)-->(1,2,4,5)
+      ├── prune: (1-5)
       ├── interesting orderings: (+3)
       ├── scan a
-      │    ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
+      │    ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
       │    ├── key: (3)
-      │    ├── fd: (3)-->(1,2,4)
-      │    ├── prune: (1-4)
+      │    ├── fd: (3)-->(1,2,4,5)
+      │    ├── prune: (1-5)
       │    └── interesting orderings: (+3)
       └── filters
            └── false [type=bool, constraints=(contradiction; tight)]
@@ -670,21 +670,21 @@ opt
 SELECT * FROM (SELECT (x, y) AS col FROM a) WHERE col > (1, 2)
 ----
 select
- ├── columns: col:5(tuple{int, int}!null)
+ ├── columns: col:6(tuple{int, int}!null)
  ├── immutable
  ├── project
- │    ├── columns: col:5(tuple{int, int})
- │    ├── prune: (5)
+ │    ├── columns: col:6(tuple{int, int})
+ │    ├── prune: (6)
  │    ├── scan a
  │    │    ├── columns: x:1(int) y:2(int)
  │    │    └── prune: (1,2)
  │    └── projections
- │         └── tuple [as=col:5, type=tuple{int, int}, outer=(1,2)]
+ │         └── tuple [as=col:6, type=tuple{int, int}, outer=(1,2)]
  │              ├── variable: x:1 [type=int]
  │              └── variable: y:2 [type=int]
  └── filters
-      └── gt [type=bool, outer=(5), immutable, constraints=(/5: [/(1, 3) - ]; tight)]
-           ├── variable: col:5 [type=tuple{int, int}]
+      └── gt [type=bool, outer=(6), immutable, constraints=(/6: [/(1, 3) - ]; tight)]
+           ├── variable: col:6 [type=tuple{int, int}]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -1010,20 +1010,20 @@ opt
 SELECT * FROM (SELECT (x, y) AS foo FROM a) WHERE foo IN ((3, 4), (1, 2))
 ----
 select
- ├── columns: foo:5(tuple{int, int}!null)
+ ├── columns: foo:6(tuple{int, int}!null)
  ├── project
- │    ├── columns: foo:5(tuple{int, int})
- │    ├── prune: (5)
+ │    ├── columns: foo:6(tuple{int, int})
+ │    ├── prune: (6)
  │    ├── scan a
  │    │    ├── columns: x:1(int) y:2(int)
  │    │    └── prune: (1,2)
  │    └── projections
- │         └── tuple [as=foo:5, type=tuple{int, int}, outer=(1,2)]
+ │         └── tuple [as=foo:6, type=tuple{int, int}, outer=(1,2)]
  │              ├── variable: x:1 [type=int]
  │              └── variable: y:2 [type=int]
  └── filters
-      └── in [type=bool, outer=(5), constraints=(/5: [/(1, 2) - /(1, 2)] [/(3, 4) - /(3, 4)]; tight)]
-           ├── variable: foo:5 [type=tuple{int, int}]
+      └── in [type=bool, outer=(6), constraints=(/6: [/(1, 2) - /(1, 2)] [/(3, 4) - /(3, 4)]; tight)]
+           ├── variable: foo:6 [type=tuple{int, int}]
            └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── const: 3 [type=int]
@@ -1405,10 +1405,10 @@ opt
 SELECT 1 FROM f WHERE j @> '{"x": "y"}'
 ----
 project
- ├── columns: "?column?":5(int!null)
+ ├── columns: "?column?":6(int!null)
  ├── immutable
- ├── fd: ()-->(5)
- ├── prune: (5)
+ ├── fd: ()-->(6)
+ ├── prune: (6)
  ├── select
  │    ├── columns: j:2(jsonb!null)
  │    ├── immutable
@@ -1420,16 +1420,16 @@ project
  │              ├── variable: j:2 [type=jsonb]
  │              └── const: '{"x": "y"}' [type=jsonb]
  └── projections
-      └── const: 1 [as="?column?":5, type=int]
+      └── const: 1 [as="?column?":6, type=int]
 
 opt
 SELECT 1 FROM f WHERE a @> ARRAY[1]
 ----
 project
- ├── columns: "?column?":5(int!null)
+ ├── columns: "?column?":6(int!null)
  ├── immutable
- ├── fd: ()-->(5)
- ├── prune: (5)
+ ├── fd: ()-->(6)
+ ├── prune: (6)
  ├── select
  │    ├── columns: a:3(int[]!null)
  │    ├── immutable
@@ -1441,7 +1441,7 @@ project
  │              ├── variable: a:3 [type=int[]]
  │              └── const: ARRAY[1] [type=int[]]
  └── projections
-      └── const: 1 [as="?column?":5, type=int]
+      └── const: 1 [as="?column?":6, type=int]
 
 opt
 SELECT * from f where a @> ARRAY[NULL]::INT[]

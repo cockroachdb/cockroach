@@ -115,46 +115,46 @@ AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum
 ----
 sort
- ├── columns: attname:2!null format_type:71 pg_get_expr:72 attnotnull:13!null atttypid:3!null atttypmod:9!null collname:73 comment:74  [hidden: attnum:6!null]
+ ├── columns: attname:2!null format_type:75 pg_get_expr:76 attnotnull:13!null atttypid:3!null atttypmod:9!null collname:77 comment:78  [hidden: attnum:6!null]
  ├── stable
  ├── key: (6)
- ├── fd: (6)-->(2,3,9,13,71-74), (2)-->(3,6,9,13,71-74), (3,9)-->(71)
+ ├── fd: (6)-->(2,3,9,13,75-78), (2)-->(3,6,9,13,75-78), (3,9)-->(75)
  ├── ordering: +6
  └── project
-      ├── columns: format_type:71 pg_get_expr:72 collname:73 comment:74 attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null
+      ├── columns: format_type:75 pg_get_expr:76 collname:77 comment:78 attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null
       ├── stable
       ├── key: (6)
-      ├── fd: (6)-->(2,3,9,13,71-74), (2)-->(3,6,9,13,71-74), (3,9)-->(71)
+      ├── fd: (6)-->(2,3,9,13,75-78), (2)-->(3,6,9,13,75-78), (3,9)-->(75)
       ├── right-join (hash)
-      │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:26 adnum:27 adbin:28 c.oid:31 c.collname:32 t.oid:39 typcollation:66
+      │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:27 adnum:28 adbin:29 c.oid:33 c.collname:34 t.oid:42 typcollation:69
       │    ├── key: (6)
-      │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,26-28,31,32,39,66), (2)-->(3,6,9,13,20), (27)-->(28), (31)-->(32), (39)-->(66)
+      │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,27-29,33,34,42,69), (2)-->(3,6,9,13,20), (28)-->(29), (33)-->(34), (42)-->(69)
       │    ├── inner-join (cross)
-      │    │    ├── columns: c.oid:31!null c.collname:32!null t.oid:39!null typcollation:66!null
-      │    │    ├── key: (31,39)
-      │    │    ├── fd: (31)-->(32), (39)-->(66)
+      │    │    ├── columns: c.oid:33!null c.collname:34!null t.oid:42!null typcollation:69!null
+      │    │    ├── key: (33,42)
+      │    │    ├── fd: (33)-->(34), (42)-->(69)
       │    │    ├── scan pg_collation@pg_collation_name_enc_nsp_index [as=c]
-      │    │    │    ├── columns: c.oid:31!null c.collname:32!null
-      │    │    │    ├── key: (31)
-      │    │    │    └── fd: (31)-->(32)
+      │    │    │    ├── columns: c.oid:33!null c.collname:34!null
+      │    │    │    ├── key: (33)
+      │    │    │    └── fd: (33)-->(34)
       │    │    ├── scan pg_type [as=t]
-      │    │    │    ├── columns: t.oid:39!null typcollation:66!null
-      │    │    │    ├── key: (39)
-      │    │    │    └── fd: (39)-->(66)
+      │    │    │    ├── columns: t.oid:42!null typcollation:69!null
+      │    │    │    ├── key: (42)
+      │    │    │    └── fd: (42)-->(69)
       │    │    └── filters
-      │    │         └── c.oid:31 != typcollation:66 [outer=(31,66), constraints=(/31: (/NULL - ]; /66: (/NULL - ])]
+      │    │         └── c.oid:33 != typcollation:69 [outer=(33,69), constraints=(/33: (/NULL - ]; /69: (/NULL - ])]
       │    ├── left-join (lookup pg_attrdef [as=d])
-      │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:26 adnum:27 adbin:28
-      │    │    ├── key columns: [25] = [25]
+      │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:27 adnum:28 adbin:29
+      │    │    ├── key columns: [26] = [26]
       │    │    ├── lookup columns are key
       │    │    ├── key: (6)
-      │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,26-28), (2)-->(3,6,9,13,20), (27)-->(28)
+      │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,27-29), (2)-->(3,6,9,13,20), (28)-->(29)
       │    │    ├── left-join (lookup pg_attrdef@pg_attrdef_adrelid_adnum_index [as=d])
-      │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null d.oid:25 adrelid:26 adnum:27
-      │    │    │    ├── key columns: [1 6] = [26 27]
+      │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null d.oid:26 adrelid:27 adnum:28
+      │    │    │    ├── key columns: [1 6] = [27 28]
       │    │    │    ├── lookup columns are key
       │    │    │    ├── key: (6)
-      │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,25-27), (2)-->(3,6,9,13,20), (25)-->(26,27), (26,27)-->(25)
+      │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,26-28), (2)-->(3,6,9,13,20), (26)-->(27,28), (27,28)-->(26)
       │    │    │    ├── select
       │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
       │    │    │    │    ├── key: (6)
@@ -167,14 +167,14 @@ sort
       │    │    │    │    └── filters
       │    │    │    │         └── NOT attisdropped:17 [outer=(17), constraints=(/17: [/false - /false]; tight), fd=()-->(17)]
       │    │    │    └── filters
-      │    │    │         ├── adrelid:26 = numbers [outer=(26), constraints=(/26: [/numbers - /numbers]; tight), fd=()-->(26)]
-      │    │    │         └── adnum:27 > 0 [outer=(27), constraints=(/27: [/1 - ]; tight)]
+      │    │    │         ├── adrelid:27 = numbers [outer=(27), constraints=(/27: [/numbers - /numbers]; tight), fd=()-->(27)]
+      │    │    │         └── adnum:28 > 0 [outer=(28), constraints=(/28: [/1 - ]; tight)]
       │    │    └── filters (true)
       │    └── filters
-      │         ├── c.oid:31 = attcollation:20 [outer=(20,31), constraints=(/20: (/NULL - ]; /31: (/NULL - ]), fd=(20)==(31), (31)==(20)]
-      │         └── t.oid:39 = atttypid:3 [outer=(3,39), constraints=(/3: (/NULL - ]; /39: (/NULL - ]), fd=(3)==(39), (39)==(3)]
+      │         ├── c.oid:33 = attcollation:20 [outer=(20,33), constraints=(/20: (/NULL - ]; /33: (/NULL - ]), fd=(20)==(33), (33)==(20)]
+      │         └── t.oid:42 = atttypid:3 [outer=(3,42), constraints=(/3: (/NULL - ]; /42: (/NULL - ]), fd=(3)==(42), (42)==(3)]
       └── projections
-           ├── format_type(atttypid:3, atttypmod:9) [as=format_type:71, outer=(3,9), stable]
-           ├── pg_get_expr(adbin:28, adrelid:26) [as=pg_get_expr:72, outer=(26,28), stable]
-           ├── c.collname:32 [as=collname:73, outer=(32)]
-           └── col_description(attrelid:1, attnum:6) [as=comment:74, outer=(1,6), stable]
+           ├── format_type(atttypid:3, atttypmod:9) [as=format_type:75, outer=(3,9), stable]
+           ├── pg_get_expr(adbin:29, adrelid:27) [as=pg_get_expr:76, outer=(27,29), stable]
+           ├── c.collname:34 [as=collname:77, outer=(34)]
+           └── col_description(attrelid:1, attnum:6) [as=comment:78, outer=(1,6), stable]

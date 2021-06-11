@@ -33,13 +33,13 @@ norm expect=FoldNullUnary
 SELECT +null::int AS r, -null::int AS s, ~null::int AS t FROM a
 ----
 project
- ├── columns: r:8 s:9 t:10
- ├── fd: ()-->(8-10)
+ ├── columns: r:9 s:10 t:11
+ ├── fd: ()-->(9-11)
  ├── scan a
  └── projections
-      ├── CAST(NULL AS INT8) [as=r:8]
-      ├── CAST(NULL AS INT8) [as=s:9]
-      └── CAST(NULL AS INT8) [as=t:10]
+      ├── CAST(NULL AS INT8) [as=r:9]
+      ├── CAST(NULL AS INT8) [as=s:10]
+      └── CAST(NULL AS INT8) [as=t:11]
 
 # --------------------------------------------------
 # FoldNullBinaryLeft, FoldNullBinaryRight
@@ -62,25 +62,25 @@ SELECT
 FROM a
 ----
 project
- ├── columns: ra:8 rb:9 sa:10 sb:11 ta:12 tb:13 ua:14 ub:15 va:16 vb:17 wa:18 wb:19 xa:20 xb:20
+ ├── columns: ra:9 rb:10 sa:11 sb:12 ta:13 tb:14 ua:15 ub:16 va:17 vb:18 wa:19 wb:20 xa:21 xb:21
  ├── immutable
- ├── fd: ()-->(8-15,20)
+ ├── fd: ()-->(9-16,21)
  ├── scan a
  │    └── columns: i:2 arr:6
  └── projections
-      ├── CAST(NULL AS INT8) [as=ra:8]
-      ├── CAST(NULL AS INT8) [as=rb:9]
-      ├── CAST(NULL AS DECIMAL) [as=sa:10]
-      ├── CAST(NULL AS DECIMAL) [as=sb:11]
-      ├── CAST(NULL AS FLOAT8) [as=ta:12]
-      ├── CAST(NULL AS FLOAT8) [as=tb:13]
-      ├── CAST(NULL AS INT8) [as=ua:14]
-      ├── CAST(NULL AS INT8) [as=ub:15]
-      ├── arr:6::DECIMAL[] || CAST(NULL AS DECIMAL[]) [as=va:16, outer=(6), immutable]
-      ├── CAST(NULL AS STRING[]) || arr:6::STRING[] [as=vb:17, outer=(6), immutable]
-      ├── i:2::DECIMAL || CAST(NULL AS DECIMAL[]) [as=wa:18, outer=(2), immutable]
-      ├── CAST(NULL AS FLOAT8[]) || i:2::FLOAT8 [as=wb:19, outer=(2), immutable]
-      └── NULL [as=xa:20]
+      ├── CAST(NULL AS INT8) [as=ra:9]
+      ├── CAST(NULL AS INT8) [as=rb:10]
+      ├── CAST(NULL AS DECIMAL) [as=sa:11]
+      ├── CAST(NULL AS DECIMAL) [as=sb:12]
+      ├── CAST(NULL AS FLOAT8) [as=ta:13]
+      ├── CAST(NULL AS FLOAT8) [as=tb:14]
+      ├── CAST(NULL AS INT8) [as=ua:15]
+      ├── CAST(NULL AS INT8) [as=ub:16]
+      ├── arr:6::DECIMAL[] || CAST(NULL AS DECIMAL[]) [as=va:17, outer=(6), immutable]
+      ├── CAST(NULL AS STRING[]) || arr:6::STRING[] [as=vb:18, outer=(6), immutable]
+      ├── i:2::DECIMAL || CAST(NULL AS DECIMAL[]) [as=wa:19, outer=(2), immutable]
+      ├── CAST(NULL AS FLOAT8[]) || i:2::FLOAT8 [as=wb:20, outer=(2), immutable]
+      └── NULL [as=xa:21]
 
 norm
 SELECT
@@ -93,19 +93,19 @@ SELECT
 FROM a
 ----
 project
- ├── columns: ra:8 rb:9 sa:10 sb:11 ta:12 tb:13 ua:12 ub:13 va:14 vb:15 wa:16 wb:15
- ├── fd: ()-->(8-16)
+ ├── columns: ra:9 rb:10 sa:11 sb:12 ta:13 tb:14 ua:13 ub:14 va:15 vb:16 wa:17 wb:16
+ ├── fd: ()-->(9-17)
  ├── scan a
  └── projections
-      ├── CAST(NULL AS JSONB) [as=ra:8]
-      ├── CAST(NULL AS JSONB) [as=rb:9]
-      ├── CAST(NULL AS JSONB) [as=sa:10]
-      ├── CAST(NULL AS JSONB) [as=sb:11]
-      ├── CAST(NULL AS STRING) [as=ta:12]
-      ├── CAST(NULL AS STRING) [as=tb:13]
-      ├── CAST(NULL AS JSONB) [as=va:14]
-      ├── NULL [as=vb:15]
-      └── CAST(NULL AS STRING) [as=wa:16]
+      ├── CAST(NULL AS JSONB) [as=ra:9]
+      ├── CAST(NULL AS JSONB) [as=rb:10]
+      ├── CAST(NULL AS JSONB) [as=sa:11]
+      ├── CAST(NULL AS JSONB) [as=sb:12]
+      ├── CAST(NULL AS STRING) [as=ta:13]
+      ├── CAST(NULL AS STRING) [as=tb:14]
+      ├── CAST(NULL AS JSONB) [as=va:15]
+      ├── NULL [as=vb:16]
+      └── CAST(NULL AS STRING) [as=wa:17]
 
 # --------------------------------------------------
 # FoldNullInNonEmpty
@@ -114,12 +114,12 @@ norm expect=FoldNullInNonEmpty
 SELECT null IN (i) AS r, null NOT IN (s) AS s FROM a
 ----
 project
- ├── columns: r:8 s:9
- ├── fd: ()-->(8,9)
+ ├── columns: r:9 s:10
+ ├── fd: ()-->(9,10)
  ├── scan a
  └── projections
-      ├── CAST(NULL AS BOOL) [as=r:8]
-      └── CAST(NULL AS BOOL) [as=s:9]
+      ├── CAST(NULL AS BOOL) [as=r:9]
+      └── CAST(NULL AS BOOL) [as=s:10]
 
 # --------------------------------------------------
 # FoldInNull
@@ -128,12 +128,12 @@ norm expect=FoldInNull
 SELECT i IN (null, null) AS r, k NOT IN (1 * null, null::int, 1 < null) AS s FROM a
 ----
 project
- ├── columns: r:8 s:9
- ├── fd: ()-->(8,9)
+ ├── columns: r:9 s:10
+ ├── fd: ()-->(9,10)
  ├── scan a
  └── projections
-      ├── CAST(NULL AS BOOL) [as=r:8]
-      └── CAST(NULL AS BOOL) [as=s:9]
+      ├── CAST(NULL AS BOOL) [as=r:9]
+      └── CAST(NULL AS BOOL) [as=s:10]
 
 # --------------------------------------------------
 # FoldInEmpty
@@ -197,23 +197,23 @@ norm expect=FoldArray
 SELECT ARRAY[1, 2, 3] FROM t
 ----
 project
- ├── columns: array:3!null
- ├── fd: ()-->(3)
+ ├── columns: array:4!null
+ ├── fd: ()-->(4)
  ├── scan t
  └── projections
-      └── ARRAY[1,2,3] [as=array:3]
+      └── ARRAY[1,2,3] [as=array:4]
 
 # Do not fold if there is a non-constant element.
 norm expect-not=FoldArray
 SELECT ARRAY[1, 2, 3, x] FROM t
 ----
 project
- ├── columns: array:3!null
+ ├── columns: array:4!null
  ├── scan t
  │    ├── columns: x:1!null
  │    └── key: (1)
  └── projections
-      └── ARRAY[1, 2, 3, x:1] [as=array:3, outer=(1)]
+      └── ARRAY[1, 2, 3, x:1] [as=array:4, outer=(1)]
 
 norm expect=FoldArray
 SELECT ARRAY['foo', 'bar']
@@ -821,88 +821,88 @@ norm expect=FoldFunctionWithNullArg
 SELECT lpad(NULL::STRING, i) FROM a
 ----
 project
- ├── columns: lpad:8
- ├── fd: ()-->(8)
+ ├── columns: lpad:9
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS STRING) [as=lpad:8]
+      └── CAST(NULL AS STRING) [as=lpad:9]
 
 norm expect=FoldFunctionWithNullArg
 SELECT lpad(s, NULL::INT) FROM a
 ----
 project
- ├── columns: lpad:8
- ├── fd: ()-->(8)
+ ├── columns: lpad:9
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS STRING) [as=lpad:8]
+      └── CAST(NULL AS STRING) [as=lpad:9]
 
 # Fold a stable function.
 norm expect=FoldFunctionWithNullArg
 SELECT date_trunc(s, NULL::TIMESTAMPTZ) FROM a
 ----
 project
- ├── columns: date_trunc:8
- ├── fd: ()-->(8)
+ ├── columns: date_trunc:9
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS TIMESTAMPTZ) [as=date_trunc:8]
+      └── CAST(NULL AS TIMESTAMPTZ) [as=date_trunc:9]
 
 # Fold a volatile function.
 norm expect=FoldFunctionWithNullArg
 SELECT nextval(NULL::STRING) FROM a
 ----
 project
- ├── columns: nextval:8
- ├── fd: ()-->(8)
+ ├── columns: nextval:9
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS INT8) [as=nextval:8]
+      └── CAST(NULL AS INT8) [as=nextval:9]
 
 # Do not fold an aggregate function.
 norm expect-not=FoldFunctionWithNullArg
 SELECT string_agg(s, NULL::STRING) FROM a
 ----
 scalar-group-by
- ├── columns: string_agg:9
+ ├── columns: string_agg:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── project
- │    ├── columns: column8:8 s:4
- │    ├── fd: ()-->(8)
+ │    ├── columns: column9:9 s:4
+ │    ├── fd: ()-->(9)
  │    ├── scan a
  │    │    └── columns: s:4
  │    └── projections
- │         └── CAST(NULL AS STRING) [as=column8:8]
+ │         └── CAST(NULL AS STRING) [as=column9:9]
  └── aggregations
-      └── string-agg [as=string_agg:9, outer=(4,8)]
+      └── string-agg [as=string_agg:10, outer=(4,9)]
            ├── s:4
-           └── column8:8
+           └── column9:9
 
 # Do not fold a function that allows null arguments.
 norm expect-not=FoldFunctionWithNullArg
 SELECT concat(s, NULL::STRING) FROM a
 ----
 project
- ├── columns: concat:8
+ ├── columns: concat:9
  ├── immutable
  ├── scan a
  │    └── columns: s:4
  └── projections
-      └── concat(s:4, CAST(NULL AS STRING)) [as=concat:8, outer=(4), immutable]
+      └── concat(s:4, CAST(NULL AS STRING)) [as=concat:9, outer=(4), immutable]
 
 # Do not fold a function without a Null argument.
 norm expect-not=FoldFunctionWithNullArg
 SELECT lpad(s, 5) FROM a
 ----
 project
- ├── columns: lpad:8
+ ├── columns: lpad:9
  ├── immutable
  ├── scan a
  │    └── columns: s:4
  └── projections
-      └── lpad(s:4, 5) [as=lpad:8, outer=(4), immutable]
+      └── lpad(s:4, 5) [as=lpad:9, outer=(4), immutable]
 
 # --------------------------------------------------
 # FoldFunction
@@ -986,75 +986,75 @@ norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][1] FROM a
 ----
 project
- ├── columns: array:8
+ ├── columns: array:9
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2 [as=array:8, outer=(2)]
+      └── i:2 [as=array:9, outer=(2)]
 
 norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][2] FROM a
 ----
 project
- ├── columns: array:8
+ ├── columns: array:9
  ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2 + 1 [as=array:8, outer=(2), immutable]
+      └── i:2 + 1 [as=array:9, outer=(2), immutable]
 
 # Fold when input is a DArray constant.
 norm expect=FoldIndirection
 SELECT ARRAY[4, 5, 6][2] FROM a
 ----
 project
- ├── columns: array:8!null
- ├── fd: ()-->(8)
+ ├── columns: array:9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── 5 [as=array:8]
+      └── 5 [as=array:9]
 
 # Array bounds are out-of-range.
 norm expect=FoldIndirection
 SELECT ARRAY[s, 'foo'][0] FROM a
 ----
 project
- ├── columns: array:8
- ├── fd: ()-->(8)
+ ├── columns: array:9
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS STRING) [as=array:8]
+      └── CAST(NULL AS STRING) [as=array:9]
 
 norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][3] FROM a
 ----
 project
- ├── columns: array:8
- ├── fd: ()-->(8)
+ ├── columns: array:9
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS INT8) [as=array:8]
+      └── CAST(NULL AS INT8) [as=array:9]
 
 norm expect=FoldIndirection
 SELECT ARRAY[4, 5, 6][0] FROM a
 ----
 project
- ├── columns: array:8
- ├── fd: ()-->(8)
+ ├── columns: array:9
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS INT8) [as=array:8]
+      └── CAST(NULL AS INT8) [as=array:9]
 
 # Array is dynamically constructed.
 norm expect-not=FoldIndirection
 SELECT arr[0] FROM a
 ----
 project
- ├── columns: arr:8
+ ├── columns: arr:9
  ├── scan a
  │    └── columns: a.arr:6
  └── projections
-      └── a.arr:6[0] [as=arr:8, outer=(6)]
+      └── a.arr:6[0] [as=arr:9, outer=(6)]
 
 # Regression test for #40404.
 norm expect=FoldIndirection
@@ -1084,21 +1084,21 @@ norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', i) AS foo, bar)][1]).foo FROM a
 ----
 project
- ├── columns: foo:8!null
- ├── fd: ()-->(8)
+ ├── columns: foo:9!null
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── 'foo' [as=foo:8]
+      └── 'foo' [as=foo:9]
 
 norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', i) AS foo, bar)][1]).bar FROM a
 ----
 project
- ├── columns: bar:8
+ ├── columns: bar:9
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2 [as=bar:8, outer=(2)]
+      └── i:2 [as=bar:9, outer=(2)]
 
 # Fold when input is a constant DTuple.
 norm expect=FoldColumnAccess
@@ -1117,21 +1117,21 @@ norm expect=FoldColumnAccess format=show-types
 SELECT (ARRAY[(('foo', i) AS foo, bar)][0]).foo FROM a
 ----
 project
- ├── columns: foo:8(string)
- ├── fd: ()-->(8)
+ ├── columns: foo:9(string)
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS STRING) [as=foo:8, type=string]
+      └── CAST(NULL AS STRING) [as=foo:9, type=string]
 
 norm expect=FoldColumnAccess format=show-types
 SELECT (ARRAY[(('foo', i) AS foo, bar)][0]).bar FROM a
 ----
 project
- ├── columns: bar:8(int)
- ├── fd: ()-->(8)
+ ├── columns: bar:9(int)
+ ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS INT8) [as=bar:8, type=int]
+      └── CAST(NULL AS INT8) [as=bar:9, type=int]
 
 # --------------------------------------------------
 # FoldEqualsAnyNull

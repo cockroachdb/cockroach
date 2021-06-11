@@ -14,17 +14,17 @@ build
 SELECT * FROM x, y, z
 ----
 project
- ├── columns: a:1!null b:3!null c:5!null
+ ├── columns: a:1!null b:4!null c:7!null
  └── inner-join (cross)
-      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 b:3!null y.crdb_internal_mvcc_timestamp:4 c:5!null z.crdb_internal_mvcc_timestamp:6
+      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3 b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6 c:7!null z.crdb_internal_mvcc_timestamp:8 z.tableoid:9
       ├── scan x
-      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2
+      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3
       ├── inner-join (cross)
-      │    ├── columns: b:3!null y.crdb_internal_mvcc_timestamp:4 c:5!null z.crdb_internal_mvcc_timestamp:6
+      │    ├── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6 c:7!null z.crdb_internal_mvcc_timestamp:8 z.tableoid:9
       │    ├── scan y
-      │    │    └── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │    │    └── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │    ├── scan z
-      │    │    └── columns: c:5!null z.crdb_internal_mvcc_timestamp:6
+      │    │    └── columns: c:7!null z.crdb_internal_mvcc_timestamp:8 z.tableoid:9
       │    └── filters (true)
       └── filters (true)
 
@@ -32,19 +32,19 @@ build
 SELECT * FROM x, LATERAL (SELECT * FROM y WHERE b = a)
 ----
 project
- ├── columns: a:1!null b:3!null
+ ├── columns: a:1!null b:4!null
  └── inner-join-apply
-      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 b:3!null
+      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3 b:4!null
       ├── scan x
-      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2
+      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3
       ├── project
-      │    ├── columns: b:3!null
+      │    ├── columns: b:4!null
       │    └── select
-      │         ├── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │         ├── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │         ├── scan y
-      │         │    └── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │         │    └── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │         └── filters
-      │              └── b:3 = a:1
+      │              └── b:4 = a:1
       └── filters (true)
 
 build
@@ -60,29 +60,29 @@ SELECT
 FROM x
 ----
 project
- ├── columns: b:7
+ ├── columns: b:10
  ├── scan x
- │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2
+ │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3
  └── projections
-      └── subquery [as=b:7]
+      └── subquery [as=b:10]
            └── max1-row
-                ├── columns: y.b:5!null
+                ├── columns: y.b:7!null
                 └── project
-                     ├── columns: y.b:5!null
+                     ├── columns: y.b:7!null
                      └── inner-join-apply
-                          ├── columns: c:3!null y.b:5!null
+                          ├── columns: c:4!null y.b:7!null
                           ├── project
-                          │    ├── columns: c:3!null
+                          │    ├── columns: c:4!null
                           │    └── scan z
-                          │         └── columns: c:3!null z.crdb_internal_mvcc_timestamp:4
+                          │         └── columns: c:4!null z.crdb_internal_mvcc_timestamp:5 z.tableoid:6
                           ├── project
-                          │    ├── columns: y.b:5!null
+                          │    ├── columns: y.b:7!null
                           │    └── select
-                          │         ├── columns: y.b:5!null y.crdb_internal_mvcc_timestamp:6
+                          │         ├── columns: y.b:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
                           │         ├── scan y
-                          │         │    └── columns: y.b:5!null y.crdb_internal_mvcc_timestamp:6
+                          │         │    └── columns: y.b:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
                           │         └── filters
-                          │              └── y.b:5 = c:3
+                          │              └── y.b:7 = c:4
                           └── filters (true)
 
 build
@@ -91,29 +91,29 @@ SELECT
 FROM x
 ----
 project
- ├── columns: b:7
+ ├── columns: b:10
  ├── scan x
- │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2
+ │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3
  └── projections
-      └── subquery [as=b:7]
+      └── subquery [as=b:10]
            └── max1-row
-                ├── columns: y.b:5!null
+                ├── columns: y.b:7!null
                 └── project
-                     ├── columns: y.b:5!null
+                     ├── columns: y.b:7!null
                      └── inner-join (cross)
-                          ├── columns: c:3!null y.b:5!null
+                          ├── columns: c:4!null y.b:7!null
                           ├── project
-                          │    ├── columns: c:3!null
+                          │    ├── columns: c:4!null
                           │    └── scan z
-                          │         └── columns: c:3!null z.crdb_internal_mvcc_timestamp:4
+                          │         └── columns: c:4!null z.crdb_internal_mvcc_timestamp:5 z.tableoid:6
                           ├── project
-                          │    ├── columns: y.b:5!null
+                          │    ├── columns: y.b:7!null
                           │    └── select
-                          │         ├── columns: y.b:5!null y.crdb_internal_mvcc_timestamp:6
+                          │         ├── columns: y.b:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
                           │         ├── scan y
-                          │         │    └── columns: y.b:5!null y.crdb_internal_mvcc_timestamp:6
+                          │         │    └── columns: y.b:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
                           │         └── filters
-                          │              └── y.b:5 = a:1
+                          │              └── y.b:7 = a:1
                           └── filters (true)
 
 build
@@ -122,49 +122,49 @@ SELECT * FROM x AS o WHERE EXISTS(SELECT * FROM x, LATERAL (SELECT * FROM y WHER
 project
  ├── columns: a:1!null
  └── select
-      ├── columns: o.a:1!null o.crdb_internal_mvcc_timestamp:2
+      ├── columns: o.a:1!null o.crdb_internal_mvcc_timestamp:2 o.tableoid:3
       ├── scan x [as=o]
-      │    └── columns: o.a:1!null o.crdb_internal_mvcc_timestamp:2
+      │    └── columns: o.a:1!null o.crdb_internal_mvcc_timestamp:2 o.tableoid:3
       └── filters
            └── exists
                 └── project
-                     ├── columns: x.a:3!null b:5!null
+                     ├── columns: x.a:4!null b:7!null
                      └── inner-join-apply
-                          ├── columns: x.a:3!null x.crdb_internal_mvcc_timestamp:4 b:5!null
+                          ├── columns: x.a:4!null x.crdb_internal_mvcc_timestamp:5 x.tableoid:6 b:7!null
                           ├── scan x
-                          │    └── columns: x.a:3!null x.crdb_internal_mvcc_timestamp:4
+                          │    └── columns: x.a:4!null x.crdb_internal_mvcc_timestamp:5 x.tableoid:6
                           ├── project
-                          │    ├── columns: b:5!null
+                          │    ├── columns: b:7!null
                           │    └── select
-                          │         ├── columns: b:5!null y.crdb_internal_mvcc_timestamp:6
+                          │         ├── columns: b:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
                           │         ├── scan y
-                          │         │    └── columns: b:5!null y.crdb_internal_mvcc_timestamp:6
+                          │         │    └── columns: b:7!null y.crdb_internal_mvcc_timestamp:8 y.tableoid:9
                           │         └── filters
-                          │              └── (b:5 = x.a:3) AND (o.a:1 = x.a:3)
+                          │              └── (b:7 = x.a:4) AND (o.a:1 = x.a:4)
                           └── filters (true)
 
 build
 SELECT * FROM x, LATERAL (SELECT * FROM y WHERE b = a), z
 ----
 project
- ├── columns: a:1!null b:3!null c:5!null
+ ├── columns: a:1!null b:4!null c:7!null
  └── inner-join-apply
-      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 b:3!null c:5!null z.crdb_internal_mvcc_timestamp:6
+      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3 b:4!null c:7!null z.crdb_internal_mvcc_timestamp:8 z.tableoid:9
       ├── inner-join-apply
-      │    ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 b:3!null
+      │    ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3 b:4!null
       │    ├── scan x
-      │    │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2
+      │    │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3
       │    ├── project
-      │    │    ├── columns: b:3!null
+      │    │    ├── columns: b:4!null
       │    │    └── select
-      │    │         ├── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │    │         ├── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │    │         ├── scan y
-      │    │         │    └── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │    │         │    └── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │    │         └── filters
-      │    │              └── b:3 = a:1
+      │    │              └── b:4 = a:1
       │    └── filters (true)
       ├── scan z
-      │    └── columns: c:5!null z.crdb_internal_mvcc_timestamp:6
+      │    └── columns: c:7!null z.crdb_internal_mvcc_timestamp:8 z.tableoid:9
       └── filters (true)
 
 build
@@ -183,13 +183,13 @@ build
 SELECT * FROM j, jsonb_array_elements(j.j->'foo')
 ----
 project
- ├── columns: id:1!null j:2 value:4
+ ├── columns: id:1!null j:2 value:5
  └── inner-join-apply
-      ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 value:4
+      ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4 value:5
       ├── scan j
-      │    └── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3
+      │    └── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── project-set
-      │    ├── columns: value:4
+      │    ├── columns: value:5
       │    ├── values
       │    │    └── ()
       │    └── zip
@@ -202,13 +202,13 @@ build
 SELECT * FROM j, LATERAL jsonb_array_elements(j.j->'foo')
 ----
 project
- ├── columns: id:1!null j:2 value:4
+ ├── columns: id:1!null j:2 value:5
  └── inner-join-apply
-      ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 value:4
+      ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4 value:5
       ├── scan j
-      │    └── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3
+      │    └── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── project-set
-      │    ├── columns: value:4
+      │    ├── columns: value:5
       │    ├── values
       │    │    └── ()
       │    └── zip
@@ -221,26 +221,26 @@ build
 SELECT * FROM j, jsonb_array_elements(j.j->'foo') AS e, jsonb_array_elements(e.e->'bar')
 ----
 project
- ├── columns: id:1!null j:2 e:4 value:5
+ ├── columns: id:1!null j:2 e:5 value:6
  └── inner-join-apply
-      ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 value:4 value:5
+      ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4 value:5 value:6
       ├── inner-join-apply
-      │    ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 value:4
+      │    ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4 value:5
       │    ├── scan j
-      │    │    └── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3
+      │    │    └── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       │    ├── project-set
-      │    │    ├── columns: value:4
+      │    │    ├── columns: value:5
       │    │    ├── values
       │    │    │    └── ()
       │    │    └── zip
       │    │         └── jsonb_array_elements(j:2->'foo')
       │    └── filters (true)
       ├── project-set
-      │    ├── columns: value:5
+      │    ├── columns: value:6
       │    ├── values
       │    │    └── ()
       │    └── zip
-      │         └── jsonb_array_elements(value:4->'bar')
+      │         └── jsonb_array_elements(value:5->'bar')
       └── filters (true)
 
 build
@@ -260,49 +260,49 @@ FROM
     )
 ----
 project
- ├── columns: id:1!null j:2 value:8
+ ├── columns: id:1!null j:2 value:10
  └── inner-join-apply
-      ├── columns: j.id:1!null j.j:2 j.crdb_internal_mvcc_timestamp:3 value:8
+      ├── columns: j.id:1!null j.j:2 j.crdb_internal_mvcc_timestamp:3 j.tableoid:4 value:10
       ├── scan j
-      │    └── columns: j.id:1!null j.j:2 j.crdb_internal_mvcc_timestamp:3
+      │    └── columns: j.id:1!null j.j:2 j.crdb_internal_mvcc_timestamp:3 j.tableoid:4
       ├── project-set
-      │    ├── columns: value:8
+      │    ├── columns: value:10
       │    ├── values
       │    │    └── ()
       │    └── zip
       │         └── function: jsonb_array_elements
       │              └── subquery
       │                   └── max1-row
-      │                        ├── columns: members:7
+      │                        ├── columns: members:9
       │                        └── project
-      │                             ├── columns: members:7
+      │                             ├── columns: members:9
       │                             ├── select
-      │                             │    ├── columns: j2.id:4!null j2.j:5 j2.crdb_internal_mvcc_timestamp:6
+      │                             │    ├── columns: j2.id:5!null j2.j:6 j2.crdb_internal_mvcc_timestamp:7 j2.tableoid:8
       │                             │    ├── scan j [as=j2]
-      │                             │    │    └── columns: j2.id:4!null j2.j:5 j2.crdb_internal_mvcc_timestamp:6
+      │                             │    │    └── columns: j2.id:5!null j2.j:6 j2.crdb_internal_mvcc_timestamp:7 j2.tableoid:8
       │                             │    └── filters
-      │                             │         └── (j2.j:5->>'name') = (j.j:2->>'name')
+      │                             │         └── (j2.j:6->>'name') = (j.j:2->>'name')
       │                             └── projections
-      │                                  └── j2.j:5->'members' [as=members:7]
+      │                                  └── j2.j:6->'members' [as=members:9]
       └── filters (true)
 
 build
 SELECT * FROM x JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
 ----
 project
- ├── columns: a:1!null b:3!null
+ ├── columns: a:1!null b:4!null
  └── inner-join-apply
-      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 b:3!null
+      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3 b:4!null
       ├── scan x
-      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2
+      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3
       ├── project
-      │    ├── columns: b:3!null
+      │    ├── columns: b:4!null
       │    └── select
-      │         ├── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │         ├── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │         ├── scan y
-      │         │    └── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │         │    └── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │         └── filters
-      │              └── b:3 = a:1
+      │              └── b:4 = a:1
       └── filters
            └── true
 
@@ -310,19 +310,19 @@ build
 SELECT * FROM x LEFT JOIN LATERAL (SELECT * FROM y WHERE b = x.a) ON true
 ----
 project
- ├── columns: a:1!null b:3
+ ├── columns: a:1!null b:4
  └── left-join-apply
-      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 b:3
+      ├── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3 b:4
       ├── scan x
-      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2
+      │    └── columns: a:1!null x.crdb_internal_mvcc_timestamp:2 x.tableoid:3
       ├── project
-      │    ├── columns: b:3!null
+      │    ├── columns: b:4!null
       │    └── select
-      │         ├── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │         ├── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │         ├── scan y
-      │         │    └── columns: b:3!null y.crdb_internal_mvcc_timestamp:4
+      │         │    └── columns: b:4!null y.crdb_internal_mvcc_timestamp:5 y.tableoid:6
       │         └── filters
-      │              └── b:3 = a:1
+      │              └── b:4 = a:1
       └── filters
            └── true
 
