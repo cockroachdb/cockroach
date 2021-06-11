@@ -371,6 +371,8 @@ protobufjs-cli-fix-deps:
 .SECONDARY: pkg/ui/yarn.cluster-ui.installed
 pkg/ui/yarn.cluster-ui.installed: pkg/ui/cluster-ui/package.json pkg/ui/cluster-ui/yarn.lock pkg/ui/src/js/protos.js pkg/ui/src/js/protos.d.ts | bin/.submodules-initialized
 	$(NODE_RUN) -C pkg/ui/cluster-ui yarn install --offline
+	# This ensures that any update to the protobuf will be picked up by cluster-ui.
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn upgrade file:pkg/ui/src/js
 	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
 	touch $@
 
