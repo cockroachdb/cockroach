@@ -88,6 +88,9 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalBackwardDependenciesTableID:      crdbInternalBackwardDependenciesTable,
 		catconstants.CrdbInternalBuildInfoTableID:                 crdbInternalBuildInfoTable,
 		catconstants.CrdbInternalBuiltinFunctionsTableID:          crdbInternalBuiltinFunctionsTable,
+		catconstants.CrdbInternalClusterContendedIndexesViewID:    crdbInternalClusterContendedIndexesView,
+		catconstants.CrdbInternalClusterContendedKeysViewID:       crdbInternalClusterContendedKeysView,
+		catconstants.CrdbInternalClusterContendedTablesViewID:     crdbInternalClusterContendedTablesView,
 		catconstants.CrdbInternalClusterContentionEventsTableID:   crdbInternalClusterContentionEventsTable,
 		catconstants.CrdbInternalClusterDistSQLFlowsTableID:       crdbInternalClusterDistSQLFlowsTable,
 		catconstants.CrdbInternalClusterQueriesTableID:            crdbInternalClusterQueriesTable,
@@ -1734,6 +1737,116 @@ func populateSessionsTable(
 	}
 
 	return nil
+}
+
+var crdbInternalClusterContendedTablesView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.cluster_contended_tables (
+  database_name,
+  schema_name,
+  table_name,
+  num_contention_events
+) AS
+  SELECT
+    database_name, schema_name, name, sum(num_contention_events)
+  FROM
+    [
+      SELECT
+        DISTINCT
+        database_name,
+        schema_name,
+        name,
+        index_id,
+        num_contention_events
+      FROM
+        crdb_internal.cluster_contention_events
+        JOIN crdb_internal.tables ON
+            crdb_internal.cluster_contention_events.table_id
+            = crdb_internal.tables.table_id
+    ]
+  GROUP BY
+    database_name, schema_name, name
+`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "database_name", Typ: types.String},
+		{Name: "schema_name", Typ: types.String},
+		{Name: "table_name", Typ: types.String},
+		{Name: "num_contention_events", Typ: types.Int},
+	},
+}
+
+var crdbInternalClusterContendedIndexesView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.cluster_contended_indexes (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  num_contention_events
+) AS
+  SELECT
+    DISTINCT
+    database_name,
+    schema_name,
+    name,
+    index_name,
+    num_contention_events
+  FROM
+    crdb_internal.cluster_contention_events,
+    crdb_internal.tables,
+    crdb_internal.table_indexes
+  WHERE
+    crdb_internal.cluster_contention_events.index_id
+    = crdb_internal.table_indexes.index_id
+    AND crdb_internal.cluster_contention_events.table_id
+      = crdb_internal.tables.table_id
+`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "database_name", Typ: types.String},
+		{Name: "schema_name", Typ: types.String},
+		{Name: "table_name", Typ: types.String},
+		{Name: "index_name", Typ: types.String},
+		{Name: "num_contention_events", Typ: types.Int},
+	},
+}
+
+var crdbInternalClusterContendedKeysView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.cluster_contended_keys (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  key,
+  num_contention_events
+) AS
+  SELECT
+    database_name,
+    schema_name,
+    name,
+    index_name,
+    crdb_internal.pretty_key(key, 0),
+    sum(count)
+  FROM
+    crdb_internal.cluster_contention_events,
+    crdb_internal.tables,
+    crdb_internal.table_indexes
+  WHERE
+    crdb_internal.cluster_contention_events.index_id
+    = crdb_internal.table_indexes.index_id
+    AND crdb_internal.cluster_contention_events.table_id
+      = crdb_internal.tables.table_id
+  GROUP BY
+    database_name, schema_name, name, index_name, key
+`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "database_name", Typ: types.String},
+		{Name: "schema_name", Typ: types.String},
+		{Name: "table_name", Typ: types.String},
+		{Name: "index_name", Typ: types.String},
+		{Name: "key", Typ: types.Bytes},
+		{Name: "num_contention_events", Typ: types.Int},
+	},
 }
 
 const contentionEventsSchemaPattern = `
