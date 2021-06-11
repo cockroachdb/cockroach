@@ -35,9 +35,7 @@ func init() {
 	leaktest.PrintLeakedStoppers = PrintLeakedStoppers
 }
 
-const asyncTaskNamePrefix = "[async] "
-
-// ErrThrottled is returned from RunLimitedAsyncTask in the event that there
+// ErrThrottled is returned from RunAsyncTaskEx in the event that there
 // is no more capacity for async tasks, as limited by the semaphore.
 var ErrThrottled = errors.New("throttled on async limiting semaphore")
 
@@ -332,77 +330,94 @@ func (s *Stopper) RunTaskWithErr(
 
 // RunAsyncTask is like RunTask, except the callback is run in a goroutine. The
 // method doesn't block for the callback to finish execution.
+//
+// See also RunAsyncTaskEx for a version with more options.
 func (s *Stopper) RunAsyncTask(
 	ctx context.Context, taskName string, f func(context.Context),
 ) error {
-	taskName = asyncTaskNamePrefix + taskName
+	return s.RunAsyncTaskEx(ctx,
+		TaskOpts{
+			TaskName:   taskName,
+			Sem:        nil,
+			WaitForSem: false,
+		},
+		f)
+}
+
+// TaskOpts groups the task execution options for RunAsyncTaskEx.
+type TaskOpts struct {
+	// TaskName is a human-readable name for the operation. Used as the name of
+	// the tracing span.
+	TaskName string
+	// If set, Sem is used as a semaphore limiting the concurrency (each task has
+	// weight 1).
+	//
+	// It is the caller's responsibility to ensure that Sem is closed when the
+	// stopper is quiesced. For quotapools which live for the lifetime of the
+	// stopper, it is generally best to register the sem with the stopper using
+	// AddCloser.
+	Sem *quotapool.IntPool
+	// If Sem is not nil, WaitForSem specifies whether the call blocks or not when
+	// the semaphore is full. If true, the call blocks until the semaphore is
+	// available in order to push back on callers that may be trying to create
+	// many tasks. If false, returns immediately with an error if the semaphore is
+	// not available.
+	WaitForSem bool
+}
+
+// RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
+// The call doesn't block for the callback to finish execution.
+func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
+	var alloc *quotapool.IntAlloc
+	taskStarted := false
+	if opt.Sem != nil {
+		// Wait for permission to run from the semaphore.
+		var err error
+		if opt.WaitForSem {
+			alloc, err = opt.Sem.Acquire(ctx, 1)
+		} else {
+			alloc, err = opt.Sem.TryAcquire(ctx, 1)
+		}
+		if errors.Is(err, quotapool.ErrNotEnoughQuota) {
+			err = ErrThrottled
+		} else if quotapool.HasErrClosed(err) {
+			err = ErrUnavailable
+		}
+		if err != nil {
+			return err
+		}
+		defer func() {
+			// If the task is started, the alloc will be released async.
+			if !taskStarted {
+				alloc.Release()
+			}
+		}()
+
+		// Check for canceled context: it's possible to get the semaphore even
+		// if the context is canceled.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+
 	if !s.runPrelude() {
 		return ErrUnavailable
 	}
 
-	ctx, span := tracing.ForkSpan(ctx, taskName)
+	ctx, span := tracing.ForkSpan(ctx, opt.TaskName)
 
-	// Call f.
+	// Call f on another goroutine.
+	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude()
 		defer span.Finish()
-
-		f(ctx)
-	}()
-	return nil
-}
-
-// RunLimitedAsyncTask runs function f in a goroutine, using the given
-// channel as a semaphore to limit the number of tasks that are run
-// concurrently to the channel's capacity. If wait is true, blocks
-// until the semaphore is available in order to push back on callers
-// that may be trying to create many tasks. If wait is false, returns
-// immediately with an error if the semaphore is not
-// available. It is the caller's responsibility to ensure that sem is
-// closed when the stopper is quiesced. For quotapools which live for the
-// lifetime of the stopper, it is generally best to register the sem with the
-// stopper using AddCloser.
-func (s *Stopper) RunLimitedAsyncTask(
-	ctx context.Context, taskName string, sem *quotapool.IntPool, wait bool, f func(context.Context),
-) error {
-	// Wait for permission to run from the semaphore.
-	var alloc *quotapool.IntAlloc
-	var err error
-	if wait {
-		alloc, err = sem.Acquire(ctx, 1)
-	} else {
-		alloc, err = sem.TryAcquire(ctx, 1)
-	}
-	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
-		err = ErrThrottled
-	} else if quotapool.HasErrClosed(err) {
-		err = ErrUnavailable
-	}
-	if err != nil {
-		return err
-	}
-	taskStarted := false
-	defer func() {
-		// If the task is started, the alloc will be released async.
-		if !taskStarted {
-			alloc.Release()
+		if alloc != nil {
+			defer alloc.Release()
 		}
-	}()
 
-	// Check for canceled context: it's possible to get the semaphore even
-	// if the context is canceled.
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-
-	if err := s.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
-		defer alloc.Release()
 		f(ctx)
-	}); err != nil {
-		return err
-	}
-	taskStarted = true
+	}()
 	return nil
 }
 

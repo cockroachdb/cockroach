@@ -1990,9 +1990,13 @@ func (s *statusServer) iterateNodes(
 	defer cancel()
 	for nodeID := range nodeStatuses {
 		nodeID := nodeID // needed to ensure the closure below captures a copy.
-		if err := s.stopper.RunLimitedAsyncTask(
-			ctx, fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
-			sem, true, /* wait */
+		if err := s.stopper.RunAsyncTaskEx(
+			ctx,
+			stop.TaskOpts{
+				TaskName:   fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+				Sem:        sem,
+				WaitForSem: true,
+			},
 			func(ctx context.Context) { nodeQuery(ctx, nodeID) },
 		); err != nil {
 			return err
@@ -2081,9 +2085,13 @@ func (s *statusServer) paginatedIterateNodes(
 	for idx, nodeID := range nodeIDs {
 		nodeID := nodeID // needed to ensure the closure below captures a copy.
 		idx := idx
-		if err := s.stopper.RunLimitedAsyncTask(
-			ctx, fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
-			sem, true, /* wait */
+		if err := s.stopper.RunAsyncTaskEx(
+			ctx,
+			stop.TaskOpts{
+				TaskName:   fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+				Sem:        sem,
+				WaitForSem: true,
+			},
 			func(ctx context.Context) { paginator.queryNode(ctx, nodeID, idx) },
 		); err != nil {
 			return pagState, err
