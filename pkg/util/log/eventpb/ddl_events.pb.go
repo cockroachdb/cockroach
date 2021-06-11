@@ -32,7 +32,7 @@ func (m *CreateDatabase) Reset()         { *m = CreateDatabase{} }
 func (m *CreateDatabase) String() string { return proto.CompactTextString(m) }
 func (*CreateDatabase) ProtoMessage()    {}
 func (*CreateDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{0}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{0}
 }
 func (m *CreateDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -71,7 +71,7 @@ func (m *DropDatabase) Reset()         { *m = DropDatabase{} }
 func (m *DropDatabase) String() string { return proto.CompactTextString(m) }
 func (*DropDatabase) ProtoMessage()    {}
 func (*DropDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{1}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{1}
 }
 func (m *DropDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -110,7 +110,7 @@ func (m *AlterDatabaseAddRegion) Reset()         { *m = AlterDatabaseAddRegion{}
 func (m *AlterDatabaseAddRegion) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabaseAddRegion) ProtoMessage()    {}
 func (*AlterDatabaseAddRegion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{2}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{2}
 }
 func (m *AlterDatabaseAddRegion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -149,7 +149,7 @@ func (m *AlterDatabaseDropRegion) Reset()         { *m = AlterDatabaseDropRegion
 func (m *AlterDatabaseDropRegion) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabaseDropRegion) ProtoMessage()    {}
 func (*AlterDatabaseDropRegion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{3}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{3}
 }
 func (m *AlterDatabaseDropRegion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -188,7 +188,7 @@ func (m *AlterDatabasePrimaryRegion) Reset()         { *m = AlterDatabasePrimary
 func (m *AlterDatabasePrimaryRegion) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabasePrimaryRegion) ProtoMessage()    {}
 func (*AlterDatabasePrimaryRegion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{4}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{4}
 }
 func (m *AlterDatabasePrimaryRegion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -227,7 +227,7 @@ func (m *AlterDatabaseSurvivalGoal) Reset()         { *m = AlterDatabaseSurvival
 func (m *AlterDatabaseSurvivalGoal) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabaseSurvivalGoal) ProtoMessage()    {}
 func (*AlterDatabaseSurvivalGoal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{5}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{5}
 }
 func (m *AlterDatabaseSurvivalGoal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -266,7 +266,7 @@ func (m *RenameDatabase) Reset()         { *m = RenameDatabase{} }
 func (m *RenameDatabase) String() string { return proto.CompactTextString(m) }
 func (*RenameDatabase) ProtoMessage()    {}
 func (*RenameDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{6}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{6}
 }
 func (m *RenameDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -305,7 +305,7 @@ func (m *ConvertToSchema) Reset()         { *m = ConvertToSchema{} }
 func (m *ConvertToSchema) String() string { return proto.CompactTextString(m) }
 func (*ConvertToSchema) ProtoMessage()    {}
 func (*ConvertToSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{7}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{7}
 }
 func (m *ConvertToSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -344,7 +344,7 @@ func (m *CreateSchema) Reset()         { *m = CreateSchema{} }
 func (m *CreateSchema) String() string { return proto.CompactTextString(m) }
 func (*CreateSchema) ProtoMessage()    {}
 func (*CreateSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{8}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{8}
 }
 func (m *CreateSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -381,7 +381,7 @@ func (m *DropSchema) Reset()         { *m = DropSchema{} }
 func (m *DropSchema) String() string { return proto.CompactTextString(m) }
 func (*DropSchema) ProtoMessage()    {}
 func (*DropSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{9}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{9}
 }
 func (m *DropSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -420,7 +420,7 @@ func (m *RenameSchema) Reset()         { *m = RenameSchema{} }
 func (m *RenameSchema) String() string { return proto.CompactTextString(m) }
 func (*RenameSchema) ProtoMessage()    {}
 func (*RenameSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{10}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{10}
 }
 func (m *RenameSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -461,7 +461,7 @@ func (m *SetSchema) Reset()         { *m = SetSchema{} }
 func (m *SetSchema) String() string { return proto.CompactTextString(m) }
 func (*SetSchema) ProtoMessage()    {}
 func (*SetSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{11}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{11}
 }
 func (m *SetSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -500,7 +500,7 @@ func (m *CreateTable) Reset()         { *m = CreateTable{} }
 func (m *CreateTable) String() string { return proto.CompactTextString(m) }
 func (*CreateTable) ProtoMessage()    {}
 func (*CreateTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{12}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{12}
 }
 func (m *CreateTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -539,7 +539,7 @@ func (m *DropTable) Reset()         { *m = DropTable{} }
 func (m *DropTable) String() string { return proto.CompactTextString(m) }
 func (*DropTable) ProtoMessage()    {}
 func (*DropTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{13}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{13}
 }
 func (m *DropTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -578,7 +578,7 @@ func (m *RenameTable) Reset()         { *m = RenameTable{} }
 func (m *RenameTable) String() string { return proto.CompactTextString(m) }
 func (*RenameTable) ProtoMessage()    {}
 func (*RenameTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{14}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{14}
 }
 func (m *RenameTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -615,7 +615,7 @@ func (m *TruncateTable) Reset()         { *m = TruncateTable{} }
 func (m *TruncateTable) String() string { return proto.CompactTextString(m) }
 func (*TruncateTable) ProtoMessage()    {}
 func (*TruncateTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{15}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{15}
 }
 func (m *TruncateTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -656,7 +656,7 @@ func (m *AlterTable) Reset()         { *m = AlterTable{} }
 func (m *AlterTable) String() string { return proto.CompactTextString(m) }
 func (*AlterTable) ProtoMessage()    {}
 func (*AlterTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{16}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{16}
 }
 func (m *AlterTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -699,7 +699,7 @@ func (m *CommentOnColumn) Reset()         { *m = CommentOnColumn{} }
 func (m *CommentOnColumn) String() string { return proto.CompactTextString(m) }
 func (*CommentOnColumn) ProtoMessage()    {}
 func (*CommentOnColumn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{17}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{17}
 }
 func (m *CommentOnColumn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -740,7 +740,7 @@ func (m *CommentOnDatabase) Reset()         { *m = CommentOnDatabase{} }
 func (m *CommentOnDatabase) String() string { return proto.CompactTextString(m) }
 func (*CommentOnDatabase) ProtoMessage()    {}
 func (*CommentOnDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{18}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{18}
 }
 func (m *CommentOnDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -781,7 +781,7 @@ func (m *CommentOnTable) Reset()         { *m = CommentOnTable{} }
 func (m *CommentOnTable) String() string { return proto.CompactTextString(m) }
 func (*CommentOnTable) ProtoMessage()    {}
 func (*CommentOnTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{19}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{19}
 }
 func (m *CommentOnTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -824,7 +824,7 @@ func (m *CommentOnIndex) Reset()         { *m = CommentOnIndex{} }
 func (m *CommentOnIndex) String() string { return proto.CompactTextString(m) }
 func (*CommentOnIndex) ProtoMessage()    {}
 func (*CommentOnIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{20}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{20}
 }
 func (m *CommentOnIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -865,7 +865,7 @@ func (m *CreateIndex) Reset()         { *m = CreateIndex{} }
 func (m *CreateIndex) String() string { return proto.CompactTextString(m) }
 func (*CreateIndex) ProtoMessage()    {}
 func (*CreateIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{21}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{21}
 }
 func (m *CreateIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -908,7 +908,7 @@ func (m *DropIndex) Reset()         { *m = DropIndex{} }
 func (m *DropIndex) String() string { return proto.CompactTextString(m) }
 func (*DropIndex) ProtoMessage()    {}
 func (*DropIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{22}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{22}
 }
 func (m *DropIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -949,7 +949,7 @@ func (m *AlterIndex) Reset()         { *m = AlterIndex{} }
 func (m *AlterIndex) String() string { return proto.CompactTextString(m) }
 func (*AlterIndex) ProtoMessage()    {}
 func (*AlterIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{23}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{23}
 }
 func (m *AlterIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -990,7 +990,7 @@ func (m *CreateView) Reset()         { *m = CreateView{} }
 func (m *CreateView) String() string { return proto.CompactTextString(m) }
 func (*CreateView) ProtoMessage()    {}
 func (*CreateView) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{24}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{24}
 }
 func (m *CreateView) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1029,7 +1029,7 @@ func (m *DropView) Reset()         { *m = DropView{} }
 func (m *DropView) String() string { return proto.CompactTextString(m) }
 func (*DropView) ProtoMessage()    {}
 func (*DropView) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{25}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{25}
 }
 func (m *DropView) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1068,7 +1068,7 @@ func (m *CreateSequence) Reset()         { *m = CreateSequence{} }
 func (m *CreateSequence) String() string { return proto.CompactTextString(m) }
 func (*CreateSequence) ProtoMessage()    {}
 func (*CreateSequence) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{26}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{26}
 }
 func (m *CreateSequence) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1105,7 +1105,7 @@ func (m *DropSequence) Reset()         { *m = DropSequence{} }
 func (m *DropSequence) String() string { return proto.CompactTextString(m) }
 func (*DropSequence) ProtoMessage()    {}
 func (*DropSequence) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{27}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{27}
 }
 func (m *DropSequence) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1142,7 +1142,7 @@ func (m *AlterSequence) Reset()         { *m = AlterSequence{} }
 func (m *AlterSequence) String() string { return proto.CompactTextString(m) }
 func (*AlterSequence) ProtoMessage()    {}
 func (*AlterSequence) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{28}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{28}
 }
 func (m *AlterSequence) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1190,7 +1190,7 @@ func (m *CommonSchemaChangeEventDetails) Reset()         { *m = CommonSchemaChan
 func (m *CommonSchemaChangeEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSchemaChangeEventDetails) ProtoMessage()    {}
 func (*CommonSchemaChangeEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{29}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{29}
 }
 func (m *CommonSchemaChangeEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1231,7 +1231,7 @@ func (m *ReverseSchemaChange) Reset()         { *m = ReverseSchemaChange{} }
 func (m *ReverseSchemaChange) String() string { return proto.CompactTextString(m) }
 func (*ReverseSchemaChange) ProtoMessage()    {}
 func (*ReverseSchemaChange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{30}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{30}
 }
 func (m *ReverseSchemaChange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1267,7 +1267,7 @@ func (m *FinishSchemaChange) Reset()         { *m = FinishSchemaChange{} }
 func (m *FinishSchemaChange) String() string { return proto.CompactTextString(m) }
 func (*FinishSchemaChange) ProtoMessage()    {}
 func (*FinishSchemaChange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{31}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{31}
 }
 func (m *FinishSchemaChange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1303,7 +1303,7 @@ func (m *FinishSchemaChangeRollback) Reset()         { *m = FinishSchemaChangeRo
 func (m *FinishSchemaChangeRollback) String() string { return proto.CompactTextString(m) }
 func (*FinishSchemaChangeRollback) ProtoMessage()    {}
 func (*FinishSchemaChangeRollback) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{32}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{32}
 }
 func (m *FinishSchemaChangeRollback) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1342,7 +1342,7 @@ func (m *CreateType) Reset()         { *m = CreateType{} }
 func (m *CreateType) String() string { return proto.CompactTextString(m) }
 func (*CreateType) ProtoMessage()    {}
 func (*CreateType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{33}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{33}
 }
 func (m *CreateType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1379,7 +1379,7 @@ func (m *DropType) Reset()         { *m = DropType{} }
 func (m *DropType) String() string { return proto.CompactTextString(m) }
 func (*DropType) ProtoMessage()    {}
 func (*DropType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{34}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{34}
 }
 func (m *DropType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1416,7 +1416,7 @@ func (m *AlterType) Reset()         { *m = AlterType{} }
 func (m *AlterType) String() string { return proto.CompactTextString(m) }
 func (*AlterType) ProtoMessage()    {}
 func (*AlterType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{35}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{35}
 }
 func (m *AlterType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1455,7 +1455,7 @@ func (m *RenameType) Reset()         { *m = RenameType{} }
 func (m *RenameType) String() string { return proto.CompactTextString(m) }
 func (*RenameType) ProtoMessage()    {}
 func (*RenameType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{36}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{36}
 }
 func (m *RenameType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1496,7 +1496,7 @@ func (m *CreateStatistics) Reset()         { *m = CreateStatistics{} }
 func (m *CreateStatistics) String() string { return proto.CompactTextString(m) }
 func (*CreateStatistics) ProtoMessage()    {}
 func (*CreateStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{37}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{37}
 }
 func (m *CreateStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1536,7 +1536,7 @@ func (m *UnsafeUpsertDescriptor) Reset()         { *m = UnsafeUpsertDescriptor{}
 func (m *UnsafeUpsertDescriptor) String() string { return proto.CompactTextString(m) }
 func (*UnsafeUpsertDescriptor) ProtoMessage()    {}
 func (*UnsafeUpsertDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{38}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{38}
 }
 func (m *UnsafeUpsertDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1580,7 +1580,7 @@ func (m *UnsafeDeleteDescriptor) Reset()         { *m = UnsafeDeleteDescriptor{}
 func (m *UnsafeDeleteDescriptor) String() string { return proto.CompactTextString(m) }
 func (*UnsafeDeleteDescriptor) ProtoMessage()    {}
 func (*UnsafeDeleteDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{39}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{39}
 }
 func (m *UnsafeDeleteDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1626,7 +1626,7 @@ func (m *UnsafeUpsertNamespaceEntry) Reset()         { *m = UnsafeUpsertNamespac
 func (m *UnsafeUpsertNamespaceEntry) String() string { return proto.CompactTextString(m) }
 func (*UnsafeUpsertNamespaceEntry) ProtoMessage()    {}
 func (*UnsafeUpsertNamespaceEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{40}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{40}
 }
 func (m *UnsafeUpsertNamespaceEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1670,7 +1670,7 @@ func (m *UnsafeDeleteNamespaceEntry) Reset()         { *m = UnsafeDeleteNamespac
 func (m *UnsafeDeleteNamespaceEntry) String() string { return proto.CompactTextString(m) }
 func (*UnsafeDeleteNamespaceEntry) ProtoMessage()    {}
 func (*UnsafeDeleteNamespaceEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{41}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{41}
 }
 func (m *UnsafeDeleteNamespaceEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1705,7 +1705,7 @@ func (m *ForceDeleteTableDataEntry) Reset()         { *m = ForceDeleteTableDataE
 func (m *ForceDeleteTableDataEntry) String() string { return proto.CompactTextString(m) }
 func (*ForceDeleteTableDataEntry) ProtoMessage()    {}
 func (*ForceDeleteTableDataEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_5901a6947040e372, []int{42}
+	return fileDescriptor_ddl_events_9d54541e119d9d43, []int{42}
 }
 func (m *ForceDeleteTableDataEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -12295,10 +12295,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/ddl_events.proto", fileDescriptor_ddl_events_5901a6947040e372)
+	proto.RegisterFile("util/log/eventpb/ddl_events.proto", fileDescriptor_ddl_events_9d54541e119d9d43)
 }
 
-var fileDescriptor_ddl_events_5901a6947040e372 = []byte{
+var fileDescriptor_ddl_events_9d54541e119d9d43 = []byte{
 	// 1617 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x9b, 0xcf, 0x6f, 0x1b, 0x45,
 	0x1b, 0xc7, 0xb3, 0xeb, 0xfc, 0xb0, 0x1f, 0xff, 0x68, 0xb2, 0x69, 0xfb, 0xa6, 0xd1, 0xfb, 0xda,

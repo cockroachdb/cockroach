@@ -139,7 +139,7 @@ func readInput(protoName string) (chans []info, sevs []info, err error) {
 		key := strings.Split(line, " ")[0]
 		title := strings.ReplaceAll(strings.Title(strings.ReplaceAll(strings.ToLower(key), "_", " ")), " ", "")
 		if inSevs {
-			comment := "// The " + key + " severity" + strings.TrimPrefix(rawComment, "// "+key)
+			comment := "// The `" + key + "` severity" + strings.TrimPrefix(rawComment, "// "+key)
 			sevs = append(sevs, info{
 				RawComment: rawComment,
 				Comment:    comment,
@@ -150,7 +150,7 @@ func readInput(protoName string) (chans []info, sevs []info, err error) {
 			})
 		}
 		if inChans {
-			comment := "// The " + key + " channel" + strings.TrimPrefix(rawComment, "// "+key)
+			comment := "// The `" + key + "` channel" + strings.TrimPrefix(rawComment, "// "+key)
 			chans = append(chans, info{
 				RawComment: rawComment,
 				Comment:    comment,
@@ -176,7 +176,7 @@ var templates = map[string]string{
 
 # Logging channels
 {{range .Channels}}
-## {{.NAME}}
+## ` + "`" + `{{.NAME}}` + "`" + `
 
 {{.PComment}}
 {{- end}}
