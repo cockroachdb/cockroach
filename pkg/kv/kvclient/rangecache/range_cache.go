@@ -211,8 +211,8 @@ type EvictionToken struct {
 	// methods re-synchronize with the cache. However, it it changes, the
 	// descriptor only changes to other "compatible" descriptors (same range id
 	// and key bounds).
-	desc     roachpb.RangeDescriptor
-	lease    roachpb.Lease
+	desc     *roachpb.RangeDescriptor
+	lease    *roachpb.Lease
 	closedts roachpb.RangeClosedTimestampPolicy
 
 	// speculativeDesc, if not nil, is the descriptor that should replace desc if
@@ -250,8 +250,8 @@ func (rc *RangeCache) makeEvictionToken(
 	}
 	return EvictionToken{
 		rdc:             rc,
-		desc:            entry.desc,
-		lease:           entry.lease,
+		desc:            entry.Desc(),
+		lease:           entry.leaseEvenIfSpeculative(),
 		closedts:        entry.closedts,
 		speculativeDesc: speculativeDesc,
 	}
@@ -288,7 +288,7 @@ func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
 	if !et.Valid() {
 		return nil
 	}
-	return &et.desc
+	return et.desc
 }
 
 // Leaseholder returns the cached leaseholder. If the cache didn't have any
@@ -297,7 +297,7 @@ func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
 // If a leaseholder is returned, it will correspond to one of the replicas in
 // et.Desc().
 func (et EvictionToken) Leaseholder() *roachpb.ReplicaDescriptor {
-	if et.lease.Empty() {
+	if !et.Valid() || et.lease == nil {
 		return nil
 	}
 	return &et.lease.Replica
@@ -308,6 +308,9 @@ func (et EvictionToken) Leaseholder() *roachpb.ReplicaDescriptor {
 func (et EvictionToken) LeaseSeq() roachpb.LeaseSequence {
 	if !et.Valid() {
 		panic("invalid LeaseSeq() call on empty EvictionToken")
+	}
+	if et.lease == nil {
+		return 0
 	}
 	return et.lease.Sequence
 }
@@ -334,8 +337,8 @@ func (et *EvictionToken) syncRLocked(
 		et.clear()
 		return false, nil, nil
 	}
-	et.desc = cachedEntry.desc
-	et.lease = cachedEntry.lease
+	et.desc = cachedEntry.Desc()
+	et.lease = cachedEntry.leaseEvenIfSpeculative()
 	return true, cachedEntry, rawEntry
 }
 
@@ -382,8 +385,8 @@ func (et *EvictionToken) UpdateLease(ctx context.Context, l *roachpb.Lease) bool
 		return false
 	}
 	if newEntry != nil {
-		et.desc = newEntry.desc
-		et.lease = newEntry.lease
+		et.desc = newEntry.Desc()
+		et.lease = newEntry.leaseEvenIfSpeculative()
 	} else {
 		// newEntry == nil means the lease is not compatible with the descriptor.
 		et.clear()
@@ -424,7 +427,7 @@ func (et *EvictionToken) EvictLease(ctx context.Context) {
 	et.rdc.rangeCache.Lock()
 	defer et.rdc.rangeCache.Unlock()
 
-	if et.lease.Empty() {
+	if et.lease == nil {
 		log.Fatalf(ctx, "attempting to clear lease from cache entry without lease")
 	}
 
@@ -437,8 +440,8 @@ func (et *EvictionToken) EvictLease(ctx context.Context) {
 	if !ok {
 		return
 	}
-	et.desc = newEntry.desc
-	et.lease = newEntry.lease
+	et.desc = newEntry.Desc()
+	et.lease = newEntry.leaseEvenIfSpeculative()
 	et.rdc.swapEntryLocked(ctx, rawEntry, newEntry)
 }
 
@@ -524,7 +527,15 @@ func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (CacheEntry,
 	if err != nil {
 		return CacheEntry{}, err
 	}
-	return CacheEntry{tok.desc, tok.lease, tok.closedts}, nil
+	var e CacheEntry
+	if tok.desc != nil {
+		e.desc = *tok.desc
+	}
+	if tok.lease != nil {
+		e.lease = *tok.lease
+	}
+	e.closedts = tok.closedts
+	return e, nil
 }
 
 // GetCachedOverlapping returns all the cached entries which overlap a given
@@ -1113,6 +1124,16 @@ func (e *CacheEntry) Lease() *roachpb.Lease {
 		return nil
 	}
 	if e.LeaseSpeculative() {
+		return nil
+	}
+	return &e.lease
+}
+
+// leaseEvenIfSpeculative is like Lease, except it returns a Lease object even
+// if that lease is speculative. Returns nil if no speculative or non-speculative
+// lease is known.
+func (e *CacheEntry) leaseEvenIfSpeculative() *roachpb.Lease {
+	if e.lease.Empty() {
 		return nil
 	}
 	return &e.lease
