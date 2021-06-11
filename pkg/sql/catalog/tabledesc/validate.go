@@ -1055,7 +1055,7 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 				}
 			}
 			if missingIDs != nil {
-				return errors.AssertionFailedf("index %q is missing public column IDs: %v",
+				return errors.AssertionFailedf("index %q is missing deletable column IDs: %v",
 					idx.GetName(), missingIDs)
 			}
 		}

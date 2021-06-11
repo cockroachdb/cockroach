@@ -164,6 +164,13 @@ func (p *planner) addColumnImpl(
 		col.ComputeExpr = &serializedExpr
 	}
 
+	{
+		primaryIndex := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
+		primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, col.Name)
+		primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, col.ID)
+		n.tableDesc.SetPrimaryIndex(primaryIndex)
+	}
+
 	return nil
 }
 

@@ -431,7 +431,7 @@ func InitTableDescriptor(
 				Name:                    name,
 				ParentID:                parentID,
 				UnexposedParentSchemaID: parentSchemaID,
-				FormatVersion:           descpb.InterleavedFormatVersion,
+				FormatVersion:           descpb.PrimaryIndexStoredColumnsFormatVersion,
 				Version:                 1,
 				ModificationTime:        creationTime,
 				Privileges:              privileges,

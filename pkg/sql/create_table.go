@@ -1070,7 +1070,7 @@ func addIndexForFK(
 	}
 
 	if ts == NewTable {
-		if err := tbl.AddIndex(idx, false); err != nil {
+		if err := tbl.AddSecondaryIndex(idx); err != nil {
 			return 0, err
 		}
 		if err := tbl.AllocateIDs(ctx); err != nil {
@@ -1766,28 +1766,34 @@ func NewTableDesc(
 	}
 
 	for _, implicitColumnDefIdx := range implicitColumnDefIdxs {
-		// If it is a non-primary index that is implicitly created, ensure
-		// partitioning for PARTITION ALL BY.
-		if desc.PartitionAllBy && !implicitColumnDefIdx.def.PrimaryKey.IsPrimaryKey {
-			var err error
-			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				ctx,
-				st,
-				evalCtx,
-				&desc,
-				*implicitColumnDefIdx.idx,
-				partitionAllBy,
-				nil, /* allowedNewColumnNames */
-				allowImplicitPartitioning,
-			)
-			if err != nil {
+		if implicitColumnDefIdx.def.PrimaryKey.IsPrimaryKey {
+			if err := desc.AddPrimaryIndex(*implicitColumnDefIdx.idx); err != nil {
 				return nil, err
 			}
-			tabledesc.UpdateIndexPartitioning(implicitColumnDefIdx.idx, newImplicitCols, newPartitioning)
-		}
+		} else {
+			// If it is a non-primary index that is implicitly created, ensure
+			// partitioning for PARTITION ALL BY.
+			if desc.PartitionAllBy {
+				var err error
+				newImplicitCols, newPartitioning, err := CreatePartitioning(
+					ctx,
+					st,
+					evalCtx,
+					&desc,
+					*implicitColumnDefIdx.idx,
+					partitionAllBy,
+					nil, /* allowedNewColumnNames */
+					allowImplicitPartitioning,
+				)
+				if err != nil {
+					return nil, err
+				}
+				tabledesc.UpdateIndexPartitioning(implicitColumnDefIdx.idx, newImplicitCols, newPartitioning)
+			}
 
-		if err := desc.AddIndex(*implicitColumnDefIdx.idx, implicitColumnDefIdx.def.PrimaryKey.IsPrimaryKey); err != nil {
-			return nil, err
+			if err := desc.AddSecondaryIndex(*implicitColumnDefIdx.idx); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -1950,7 +1956,7 @@ func NewTableDesc(
 				return nil, err
 			}
 
-			if err := desc.AddIndex(idx, false); err != nil {
+			if err := desc.AddSecondaryIndex(idx); err != nil {
 				return nil, err
 			}
 			if d.Interleave != nil {
@@ -2040,10 +2046,10 @@ func NewTableDesc(
 				}
 				idx.Predicate = expr
 			}
-			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
-				return nil, err
-			}
 			if d.PrimaryKey {
+				if err := desc.AddPrimaryIndex(idx); err != nil {
+					return nil, err
+				}
 				if d.Interleave != nil {
 					return nil, unimplemented.NewWithIssue(
 						45710,
@@ -2052,6 +2058,10 @@ func NewTableDesc(
 				}
 				for _, c := range columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
+				}
+			} else {
+				if err := desc.AddSecondaryIndex(idx); err != nil {
+					return nil, err
 				}
 			}
 			if d.Interleave != nil {

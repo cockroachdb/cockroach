@@ -107,7 +107,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 			NextFamilyID:   1,
 			NextIndexID:    2,
 			NextMutationID: 1,
-			FormatVersion:  descpb.InterleavedFormatVersion,
+			FormatVersion:  descpb.PrimaryIndexStoredColumnsFormatVersion,
 		}).BuildCreatedMutableTable()
 		b := txn.NewBatch()
 

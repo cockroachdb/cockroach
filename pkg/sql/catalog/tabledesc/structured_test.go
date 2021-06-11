@@ -61,7 +61,11 @@ func TestAllocateIDs(t *testing.T) {
 			{Name: "b", Type: types.Int},
 			{Name: "c", Type: types.Int},
 		},
-		PrimaryIndex: makeIndexDescriptor("c", []string{"a", "b"}),
+		PrimaryIndex: func() descpb.IndexDescriptor {
+			idx := makeIndexDescriptor("c", []string{"a", "b"})
+			idx.StoreColumnNames = []string{"c"}
+			return idx
+		}(),
 		Indexes: []descpb.IndexDescriptor{
 			makeIndexDescriptor("d", []string{"b", "a"}),
 			makeIndexDescriptor("e", []string{"b"}),
@@ -72,7 +76,7 @@ func TestAllocateIDs(t *testing.T) {
 			}(),
 		},
 		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
-		FormatVersion: descpb.InterleavedFormatVersion,
+		FormatVersion: descpb.PrimaryIndexStoredColumnsFormatVersion,
 	}).BuildCreatedMutableTable()
 	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
@@ -101,7 +105,9 @@ func TestAllocateIDs(t *testing.T) {
 			KeyColumnNames: []string{"a", "b"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC,
 				descpb.IndexDescriptor_ASC},
-			Version: descpb.StrictIndexColumnIDGuaranteesVersion},
+			StoreColumnIDs:   descpb.ColumnIDs{3},
+			StoreColumnNames: []string{"c"},
+			Version:          descpb.StrictIndexColumnIDGuaranteesVersion},
 		Indexes: []descpb.IndexDescriptor{
 			{ID: 2, Name: "d", KeyColumnIDs: []descpb.ColumnID{2, 1}, KeyColumnNames: []string{"b", "a"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC,
@@ -121,7 +127,7 @@ func TestAllocateIDs(t *testing.T) {
 		NextFamilyID:   1,
 		NextIndexID:    5,
 		NextMutationID: 1,
-		FormatVersion:  descpb.InterleavedFormatVersion,
+		FormatVersion:  descpb.PrimaryIndexStoredColumnsFormatVersion,
 	}).BuildCreatedMutableTable()
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
@@ -278,7 +284,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 		// Test that a version from the future is left alone.
 		{
 			desc: descpb.TableDescriptor{
-				FormatVersion: descpb.InterleavedFormatVersion,
+				FormatVersion: descpb.PrimaryIndexStoredColumnsFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
@@ -435,7 +441,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "a", Type: types.Int},
 			{Name: "b", Type: types.Int},
 			{Name: "c", Type: types.Int}},
-		FormatVersion: descpb.InterleavedFormatVersion,
+		FormatVersion: descpb.PrimaryIndexStoredColumnsFormatVersion,
 		Indexes:       []descpb.IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
 		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{

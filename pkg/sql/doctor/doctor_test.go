@@ -56,7 +56,7 @@ var validTableDesc = &descpb.Descriptor{
 			NextIndexID: 2,
 			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 				descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUserName()),
-			FormatVersion:  descpb.InterleavedFormatVersion,
+			FormatVersion:  descpb.PrimaryIndexStoredColumnsFormatVersion,
 			NextMutationID: 1,
 		},
 	},
@@ -67,7 +67,7 @@ func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
 	if table != nil {
 		descpb.MaybeFixPrivileges(table.GetID(), &table.Privileges)
 		if table.FormatVersion == 0 {
-			table.FormatVersion = descpb.InterleavedFormatVersion
+			table.FormatVersion = descpb.PrimaryIndexStoredColumnsFormatVersion
 		}
 	} else if database != nil {
 		descpb.MaybeFixPrivileges(database.GetID(), &database.Privileges)

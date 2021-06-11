@@ -11,6 +11,7 @@
 package systemschema
 
 import (
+	"context"
 	"math"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -403,7 +405,13 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 }
 
 func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
-	return tabledesc.NewBuilder(&desc).BuildImmutableTable()
+	ctx := context.Background()
+	b := tabledesc.NewBuilder(&desc)
+	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
+	if err != nil {
+		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", desc.Name, err)
+	}
+	return b.BuildImmutableTable()
 }
 
 // These system config descpb.TableDescriptor literals should match the descriptor
