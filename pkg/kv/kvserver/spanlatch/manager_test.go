@@ -586,6 +586,38 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	m.Release(lg4)
 }
 
+func TestLatchManagerWaitFor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var m Manager
+
+	// Acquire latches, no conflict.
+	lg1, err := m.Acquire(context.Background(), spans("d", "f", write, zeroTS))
+	require.NoError(t, err)
+
+	// See if WaitFor waits for above latch.
+	waitForCh := func() <-chan *Guard {
+		ch := make(chan *Guard)
+		go func() {
+			err := m.WaitFor(context.Background(), spans("a", "e", read, zeroTS))
+			require.NoError(t, err)
+			ch <- &Guard{}
+		}()
+		return ch
+	}
+	ch2 := waitForCh()
+	testLatchBlocks(t, ch2)
+	m.Release(lg1)
+	testLatchSucceeds(t, ch2)
+
+	// Optimistic acquire should _not_ encounter conflict - as WaitFor should
+	// not lay any latches.
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS))
+	require.True(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
+	lg3, err = m.WaitUntilAcquired(context.Background(), lg3)
+	require.NoError(t, err)
+	m.Release(lg3)
+}
+
 func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
 	for _, size := range []int{1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {

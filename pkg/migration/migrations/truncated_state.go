@@ -37,11 +37,11 @@ import (
 const defaultPageSize = 200
 
 func truncatedStateMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, h migration.Cluster,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps,
 ) error {
 	var batchIdx, numMigratedRanges int
 	init := func() { batchIdx, numMigratedRanges = 1, 0 }
-	if err := h.IterateRangeDescriptors(ctx, defaultPageSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
+	if err := deps.Cluster.IterateRangeDescriptors(ctx, defaultPageSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
 		for _, desc := range descriptors {
 			// NB: This is a bit of a wart. We want to reach the first range,
 			// but we can't address the (local) StartKey. However, keys.LocalMax
@@ -50,7 +50,7 @@ func truncatedStateMigration(
 			if bytes.Compare(desc.StartKey, keys.LocalMax) < 0 {
 				start, _ = keys.Addr(keys.LocalMax)
 			}
-			if err := h.DB().Migrate(ctx, start, end, cv.Version); err != nil {
+			if err := deps.DB.Migrate(ctx, start, end, cv.Version); err != nil {
 				return err
 			}
 		}
@@ -73,21 +73,21 @@ func truncatedStateMigration(
 	// migrations, this ensures that the applied state is flushed to disk.
 	req := &serverpb.SyncAllEnginesRequest{}
 	op := "flush-stores"
-	return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+	return deps.Cluster.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 		_, err := client.SyncAllEngines(ctx, req)
 		return err
 	})
 }
 
 func postTruncatedStateMigration(
-	ctx context.Context, cv clusterversion.ClusterVersion, h migration.Cluster,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps,
 ) error {
 	// Purge all replicas that haven't been migrated to use the unreplicated
 	// truncated state and the range applied state.
 	truncStateVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
 	req := &serverpb.PurgeOutdatedReplicasRequest{Version: &truncStateVersion}
 	op := fmt.Sprintf("purge-outdated-replicas=%s", req.Version)
-	return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+	return deps.Cluster.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 		_, err := client.PurgeOutdatedReplicas(ctx, req)
 		return err
 	})
