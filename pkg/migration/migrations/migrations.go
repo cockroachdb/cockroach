@@ -77,6 +77,14 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.SQLStatsTable),
 		sqlTransactionStatsTableMigration,
 	),
+	migration.NewSystemMigration(
+		"move over all intents to separate lock table",
+		toCV(clusterversion.SeparatedIntentsMigration),
+		separatedIntentsMigration),
+	migration.NewSystemMigration(
+		"run no-op migrate command on all ranges after lock table migration",
+		toCV(clusterversion.PostSeparatedIntentsMigration),
+		postSeparatedIntentsMigration),
 }
 
 func init() {
