@@ -24,8 +24,8 @@ import (
 
 func registerEngineSwitch(r *testRegistry) {
 	runEngineSwitch := func(ctx context.Context, t *test, c *cluster, additionalArgs ...string) {
-		roachNodes := c.Range(1, c.spec.NodeCount-1)
-		loadNode := c.Node(c.spec.NodeCount)
+		roachNodes := c.Range(1, c.Spec().NodeCount-1)
+		loadNode := c.Node(c.Spec().NodeCount)
 		c.Put(ctx, workload, "./workload", loadNode)
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		pebbleArgs := startArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)

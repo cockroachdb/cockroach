@@ -52,8 +52,8 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 		return
 	}
 
-	controller := c.Node(c.spec.NodeCount)
-	workers := c.Range(1, c.spec.NodeCount-1)
+	controller := c.Node(c.Spec().NodeCount)
+	workers := c.Range(1, c.Spec().NodeCount-1)
 
 	// Install jepsen. This part is fast if the repo is already there,
 	// so do it before the initialization check for ease of iteration.
@@ -142,11 +142,11 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis string) {
 	initJepsen(ctx, t, c)
 
-	controller := c.Node(c.spec.NodeCount)
+	controller := c.Node(c.Spec().NodeCount)
 
 	// Get the IP addresses for all our workers.
 	var nodeFlags []string
-	ips, err := c.InternalIP(ctx, c.Range(1, c.spec.NodeCount-1))
+	ips, err := c.InternalIP(ctx, c.Range(1, c.Spec().NodeCount-1))
 	if err != nil {
 		c.t.Fatal(err)
 	}

@@ -385,7 +385,7 @@ func registerTPCC(r *testRegistry) {
 								Period:   300 * time.Second,
 								DownTime: 300 * time.Second,
 							},
-							Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.spec.NodeCount-1)) },
+							Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
 							Stopper:      time.After(duration),
 							DrainAndQuit: false,
 						}
@@ -415,7 +415,7 @@ func registerTPCC(r *testRegistry) {
 							Period:   45 * time.Second,
 							DownTime: 10 * time.Second,
 						},
-						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.spec.NodeCount-1)) },
+						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
 						Stopper:      time.After(duration),
 						DrainAndQuit: false,
 					}

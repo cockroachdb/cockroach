@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runEventLog(ctx context.Context, t *test, c *cluster) {
+func runEventLog(ctx context.Context, t *test, c clusterI) {
 	type nodeEventInfo struct {
 		NodeID roachpb.NodeID
 	}
@@ -71,9 +71,9 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
 		}
-		if c.spec.NodeCount != len(seenIds) {
+		if c.Spec().NodeCount != len(seenIds) {
 			return fmt.Errorf("expected %d node join messages, found %d: %v",
-				c.spec.NodeCount, len(seenIds), seenIds)
+				c.Spec().NodeCount, len(seenIds), seenIds)
 		}
 		return nil
 	})

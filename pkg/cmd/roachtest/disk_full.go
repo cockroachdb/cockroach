@@ -31,7 +31,7 @@ func registerDiskFull(r *testRegistry) {
 				return
 			}
 
-			nodes := c.spec.NodeCount - 1
+			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 			c.Start(ctx, t, c.Range(1, nodes))

@@ -1166,6 +1166,12 @@ func (c *cluster) EncryptAtRandom(b bool) {
 	c.encryptAtRandom = true
 }
 
+// EncryptDefault sets the default for encryption-at-rest. This can be overridden
+// by options passed to `c.Start`.
+func (c *cluster) EncryptDefault(b bool) {
+	c.encryptDefault = b
+}
+
 // Spec returns the spec underlying the cluster.
 func (c *cluster) Spec() clusterSpec {
 	return c.spec
@@ -1187,7 +1193,7 @@ func (c *cluster) workerStatus(args ...interface{}) {
 }
 
 func (c *cluster) String() string {
-	return fmt.Sprintf("%s [tag:%s] (%d nodes)", c.name, c.tag, c.spec.NodeCount)
+	return fmt.Sprintf("%s [tag:%s] (%d nodes)", c.name, c.tag, c.Spec().NodeCount)
 }
 
 type destroyState struct {

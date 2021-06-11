@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
-func runBuildInfo(ctx context.Context, t *test, c *cluster) {
+func runBuildInfo(ctx context.Context, t *test, c clusterI) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t)
 
@@ -50,7 +50,7 @@ func runBuildInfo(ctx context.Context, t *test, c *cluster) {
 
 // runBuildAnalyze performs static analysis on the built binary to
 // ensure it's built as expected.
-func runBuildAnalyze(ctx context.Context, t *test, c *cluster) {
+func runBuildAnalyze(ctx context.Context, t *test, c clusterI) {
 
 	if c.isLocal() {
 		// This test is linux-specific and needs to be able to install apt

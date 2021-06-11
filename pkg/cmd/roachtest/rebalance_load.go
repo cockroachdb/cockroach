@@ -47,8 +47,8 @@ func registerRebalanceLoad(r *testRegistry) {
 		maxDuration time.Duration,
 		concurrency int,
 	) {
-		roachNodes := c.Range(1, c.spec.NodeCount-1)
-		appNode := c.Node(c.spec.NodeCount)
+		roachNodes := c.Range(1, c.Spec().NodeCount-1)
+		appNode := c.Node(c.Spec().NodeCount)
 		splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)

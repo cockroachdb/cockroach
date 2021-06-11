@@ -63,9 +63,9 @@ type cdcTestArgs struct {
 }
 
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
-	crdbNodes := c.Range(1, c.spec.NodeCount-1)
-	workloadNode := c.Node(c.spec.NodeCount)
-	kafkaNode := c.Node(c.spec.NodeCount)
+	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
+	workloadNode := c.Node(c.Spec().NodeCount)
+	kafkaNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, t, crdbNodes)
@@ -237,7 +237,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
-	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.spec.NodeCount-1), c.Node(c.spec.NodeCount), c.Node(c.spec.NodeCount)
+	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, t, crdbNodes)
@@ -514,12 +514,12 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 }
 
 func runCDCKafkaAuth(ctx context.Context, t *test, c *cluster) {
-	lastCrdbNode := c.spec.NodeCount - 1
+	lastCrdbNode := c.Spec().NodeCount - 1
 	if lastCrdbNode == 0 {
 		lastCrdbNode = 1
 	}
 
-	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.spec.NodeCount)
+	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Start(ctx, t, crdbNodes)
 

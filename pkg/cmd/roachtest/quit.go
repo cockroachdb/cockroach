@@ -80,7 +80,7 @@ func (q *quitTest) runTest(
 	q.t.l.Printf("now running restart loop\n")
 	for i := 0; i < 3; i++ {
 		q.t.l.Printf("iteration %d\n", i)
-		for nodeID := 1; nodeID <= q.c.spec.NodeCount; nodeID++ {
+		for nodeID := 1; nodeID <= q.c.Spec().NodeCount; nodeID++ {
 			q.t.l.Printf("stopping node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { method(ctx, q.t, q.c, nodeID) })
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.checkNoLeases(ctx, nodeID) })
@@ -192,7 +192,7 @@ ALTER TABLE t SPLIT AT TABLE generate_series(%[1]d,%[1]d-99,-1)`, i)); err != ni
 func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 	// We need to use SQL against a node that's not the one we're
 	// shutting down.
-	otherNodeID := 1 + nodeID%q.c.spec.NodeCount
+	otherNodeID := 1 + nodeID%q.c.Spec().NodeCount
 
 	// Now we're going to check two things:
 	//
@@ -226,7 +226,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 		// For condition (2) we accumulate the unwanted leases in
 		// invLeaseMap, then check at the end that the map is empty.
 		invLeaseMap := map[int][]string{}
-		for i := 1; i <= q.c.spec.NodeCount; i++ {
+		for i := 1; i <= q.c.Spec().NodeCount; i++ {
 			if i == nodeID {
 				// Can't request this node. Ignore.
 				continue

@@ -124,7 +124,7 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 	}
 
 	loadNode := c.Node(1)
-	roachNodes := c.Range(1, c.spec.NodeCount)
+	roachNodes := c.Range(1, c.Spec().NodeCount)
 	t.Status("copying binaries")
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
 	c.Put(ctx, workload, "./workload", loadNode)

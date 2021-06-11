@@ -62,7 +62,7 @@ func registerKV(r *testRegistry) {
 		}
 	}
 	runKV := func(ctx context.Context, t *test, c *cluster, opts kvOptions) {
-		nodes := c.spec.NodeCount - 1
+		nodes := c.Spec().NodeCount - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, t, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
@@ -312,7 +312,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 		Cluster:    makeClusterSpec(4),
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			nodes := c.spec.NodeCount - 1
+			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 			c.Start(ctx, t, c.Range(1, nodes))
@@ -393,7 +393,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			nodes := c.spec.NodeCount - 1
+			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 
@@ -610,7 +610,7 @@ func registerKVSplits(r *testRegistry) {
 			Timeout: item.timeout,
 			Cluster: makeClusterSpec(4),
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				nodes := c.spec.NodeCount - 1
+				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 				c.Start(ctx, t, c.Range(1, nodes),
@@ -642,7 +642,7 @@ func registerKVSplits(r *testRegistry) {
 
 func registerKVScalability(r *testRegistry) {
 	runScalability := func(ctx context.Context, t *test, c *cluster, percent int) {
-		nodes := c.spec.NodeCount - 1
+		nodes := c.Spec().NodeCount - 1
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -695,7 +695,7 @@ func registerKVRangeLookups(r *testRegistry) {
 	)
 
 	runRangeLookups := func(ctx context.Context, t *test, c *cluster, workers int, workloadType rangeLookupWorkloadType, maximumRangeLookupsPerSec float64) {
-		nodes := c.spec.NodeCount - 1
+		nodes := c.Spec().NodeCount - 1
 		doneInit := make(chan struct{})
 		doneWorkload := make(chan struct{})
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))

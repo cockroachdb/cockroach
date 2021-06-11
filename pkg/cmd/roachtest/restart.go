@@ -19,7 +19,7 @@ import (
 )
 
 func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Duration) {
-	crdbNodes := c.Range(1, c.spec.NodeCount)
+	crdbNodes := c.Range(1, c.Spec().NodeCount)
 	workloadNode := c.Node(1)
 	const restartNode = 3
 

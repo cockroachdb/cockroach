@@ -53,7 +53,7 @@ type tenantNode struct {
 func createTenantNode(
 	ctx context.Context,
 	t *test,
-	c *cluster,
+	c clusterI,
 	binary string,
 	kvAddrs []string,
 	tenantID int,
@@ -72,7 +72,7 @@ func createTenantNode(
 	return tn
 }
 
-func (tn *tenantNode) stop(ctx context.Context, t *test, c *cluster) {
+func (tn *tenantNode) stop(ctx context.Context, t *test, c clusterI) {
 	if tn.errCh == nil {
 		return
 	}
@@ -88,7 +88,7 @@ func (tn *tenantNode) logDir() string {
 	return fmt.Sprintf("logs/mt-%d", tn.tenantID)
 }
 
-func (tn *tenantNode) start(ctx context.Context, t *test, c *cluster, binary string) {
+func (tn *tenantNode) start(ctx context.Context, t *test, c clusterI, binary string) {
 	tn.binary = binary
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), binary, tn.kvAddrs, tn.tenantID,
@@ -128,7 +128,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c *cluster, binary str
 		t.Fatal(err)
 	}
 
-	c.l.Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
+	t.l.Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
 }
 
 // runMultiTenantUpgrade exercises upgrading tenants and their host cluster.
@@ -406,7 +406,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 
 func startTenantServer(
 	tenantCtx context.Context,
-	c *cluster,
+	c clusterI,
 	node nodeListOption,
 	binary string,
 	kvAddrs []string,

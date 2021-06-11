@@ -62,7 +62,7 @@ func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep 
 			"--tolerate-errors=true",
 			fmt.Sprintf("--max-ops %d", maxOps),
 			fmt.Sprintf("--concurrency %d", concurrency),
-			fmt.Sprintf("{pgurl:1-%d}", u.c.spec.NodeCount),
+			fmt.Sprintf("{pgurl:1-%d}", u.c.Spec().NodeCount),
 		}
 		u.c.Run(ctx, u.c.Node(loadNode), runCmd...)
 	}
