@@ -35,7 +35,7 @@ import (
 //     Calls the add method with a descriptor matching the spec
 //     Prints the entry
 //
-//   Remove id=...
+//   remove id=...
 //     Calls the Remove method on the specified id.
 //     Prints whether it was removed.
 //
@@ -46,7 +46,7 @@ import (
 //     it will be used as the error message, otherwise, the error will
 //     be iterutil.StopIteration.
 //
-//   Clear
+//   clear
 //     Clears the tree.
 //
 //   get-by-id id=...
@@ -189,19 +189,19 @@ func TestDescTreeDataDriven(t *testing.T) {
 				if !ok {
 					return notFound
 				}
-				return formatDesc(got)
+				return formatDesc(got.(catalog.Descriptor))
 			case "get-by-name":
 				a := parseArgs(t, d, argName, argParentID|argParentSchemaID)
 				got, ok := tr.GetByName(a.parentID, a.parentSchemaID, a.name)
 				if !ok {
 					return notFound
 				}
-				return formatDesc(got)
+				return formatDesc(got.(catalog.Descriptor))
 			case "iterate-by-id":
 				a := parseArgs(t, d, 0, argStopAfter)
 				var buf strings.Builder
 				var i int
-				err := tr.IterateByID(func(descriptor catalog.Descriptor) error {
+				err := tr.IterateByID(func(descriptor catalog.NameEntry) error {
 					defer func() { i++ }()
 					if a.set&argStopAfter != 0 && i == a.stopAfter {
 						if d.Input != "" {
@@ -209,7 +209,7 @@ func TestDescTreeDataDriven(t *testing.T) {
 						}
 						return iterutil.StopIteration()
 					}
-					buf.WriteString(formatDesc(descriptor))
+					buf.WriteString(formatDesc(descriptor.(catalog.Descriptor)))
 					buf.WriteString("\n")
 					return nil
 				})

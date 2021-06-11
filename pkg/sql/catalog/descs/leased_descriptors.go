@@ -160,7 +160,7 @@ func (ld *leasedDescriptors) maybeUpdateDeadline(ctx context.Context, txn deadli
 }
 
 func (ld *leasedDescriptors) getDeadline() (deadline hlc.Timestamp, haveDeadline bool) {
-	_ = ld.cache.IterateByID(func(descriptor catalog.Descriptor) error {
+	_ = ld.cache.IterateByID(func(descriptor catalog.NameEntry) error {
 		expiration := descriptor.(lease.LeasedDescriptor).Expiration()
 		if !haveDeadline || expiration.Less(deadline) {
 			deadline, haveDeadline = expiration, true
@@ -172,7 +172,7 @@ func (ld *leasedDescriptors) getDeadline() (deadline hlc.Timestamp, haveDeadline
 
 func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
 	log.VEventf(ctx, 2, "releasing %d descriptors", ld.numDescriptors())
-	_ = ld.cache.IterateByID(func(descriptor catalog.Descriptor) error {
+	_ = ld.cache.IterateByID(func(descriptor catalog.NameEntry) error {
 		descriptor.(lease.LeasedDescriptor).Release(ctx)
 		return nil
 	})

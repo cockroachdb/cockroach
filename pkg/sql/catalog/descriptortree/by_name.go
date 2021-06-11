@@ -22,13 +22,13 @@ type byName struct {
 	t *btree.BTree
 }
 
-func (t byName) upsert(d catalog.Descriptor) (replaced catalog.Descriptor) {
+func (t byName) upsert(d catalog.NameEntry) (replaced catalog.NameEntry) {
 	return upsert(t.t, makeByNameItem(d).get())
 }
 
 func (t byName) getByName(
 	parentID, parentSchemaID descpb.ID, name string,
-) (catalog.Descriptor, bool) {
+) (catalog.NameEntry, bool) {
 	return get(t.t, byNameItem{
 		parentID:       parentID,
 		parentSchemaID: parentSchemaID,
@@ -36,7 +36,7 @@ func (t byName) getByName(
 	}.get())
 }
 
-func (t byName) delete(d catalog.Descriptor) {
+func (t byName) delete(d catalog.NameEntry) {
 	delete(t.t, makeByNameItem(d).get())
 }
 
@@ -47,10 +47,10 @@ func (t byName) clear() {
 type byNameItem struct {
 	parentID, parentSchemaID descpb.ID
 	name                     string
-	d                        catalog.Descriptor
+	d                        catalog.NameEntry
 }
 
-func makeByNameItem(d catalog.Descriptor) byNameItem {
+func makeByNameItem(d catalog.NameEntry) byNameItem {
 	return byNameItem{
 		parentID:       d.GetParentID(),
 		parentSchemaID: d.GetParentSchemaID(),
@@ -72,7 +72,7 @@ func (b *byNameItem) Less(thanItem btree.Item) bool {
 	return b.name < than.name
 }
 
-func (b *byNameItem) descriptor() catalog.Descriptor {
+func (b *byNameItem) descriptor() catalog.NameEntry {
 	return b.d
 }
 

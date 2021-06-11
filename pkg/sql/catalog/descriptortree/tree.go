@@ -32,7 +32,7 @@ type Tree struct {
 // If an error is returned, iteration is stopped and will be propagated
 // up the stack. If the error is iterutil.StopIteration, iteration will
 // stop but no error will be returned.
-type Iterator func(descriptor catalog.Descriptor) error
+type Iterator func(descriptor catalog.NameEntry) error
 
 // Make makes a new Tree.
 func Make() Tree {
@@ -49,7 +49,7 @@ func Make() Tree {
 
 // Upsert adds the descriptor to the tree. If any descriptor exists in the
 // tree with the same name or id, it will be removed.
-func (dt *Tree) Upsert(d catalog.Descriptor) {
+func (dt *Tree) Upsert(d catalog.NameEntry) {
 	if replaced := dt.byName.upsert(d); replaced != nil {
 		dt.byID.delete(replaced.GetID())
 	}
@@ -60,7 +60,7 @@ func (dt *Tree) Upsert(d catalog.Descriptor) {
 
 // Remove removes the descriptor with the given ID from the tree and
 // returns it if it exists.
-func (dt *Tree) Remove(id descpb.ID) (catalog.Descriptor, bool) {
+func (dt *Tree) Remove(id descpb.ID) (catalog.NameEntry, bool) {
 	d := dt.byID.delete(id)
 	if d == nil {
 		return nil, false
@@ -70,14 +70,14 @@ func (dt *Tree) Remove(id descpb.ID) (catalog.Descriptor, bool) {
 }
 
 // GetByID gets a descriptor from the tree by id.
-func (dt *Tree) GetByID(id descpb.ID) (catalog.Descriptor, bool) {
+func (dt *Tree) GetByID(id descpb.ID) (catalog.NameEntry, bool) {
 	return dt.byID.get(id)
 }
 
 // GetByName gets a descriptor from the tree by name.
 func (dt *Tree) GetByName(
 	parentID, parentSchemaID descpb.ID, name string,
-) (catalog.Descriptor, bool) {
+) (catalog.NameEntry, bool) {
 	return dt.byName.getByName(parentID, parentSchemaID, name)
 }
 
@@ -99,11 +99,11 @@ func (dt *Tree) Len() int {
 
 type item interface {
 	btree.Item
-	descriptor() catalog.Descriptor
+	descriptor() catalog.NameEntry
 	put()
 }
 
-func upsert(t *btree.BTree, toUpsert item) catalog.Descriptor {
+func upsert(t *btree.BTree, toUpsert item) catalog.NameEntry {
 	if overwritten := t.ReplaceOrInsert(toUpsert); overwritten != nil {
 		overwrittenItem := overwritten.(item)
 		defer overwrittenItem.put()
@@ -112,7 +112,7 @@ func upsert(t *btree.BTree, toUpsert item) catalog.Descriptor {
 	return nil
 }
 
-func get(t *btree.BTree, k item) (catalog.Descriptor, bool) {
+func get(t *btree.BTree, k item) (catalog.NameEntry, bool) {
 	defer k.put()
 	if got := t.Get(k); got != nil {
 		return got.(item).descriptor(), true
@@ -120,7 +120,7 @@ func get(t *btree.BTree, k item) (catalog.Descriptor, bool) {
 	return nil, false
 }
 
-func delete(t *btree.BTree, k item) catalog.Descriptor {
+func delete(t *btree.BTree, k item) catalog.NameEntry {
 	defer k.put()
 	if deleted, ok := t.Delete(k).(item); ok {
 		defer deleted.put()

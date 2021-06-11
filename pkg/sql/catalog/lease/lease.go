@@ -1645,7 +1645,7 @@ func (m *Manager) resolveName(
 // LeasedDescriptor tracks and manages leasing related
 // information for a descriptor.
 type LeasedDescriptor interface {
-	catalog.Descriptor
+	catalog.NameEntry
 
 	// Underlying returns the underlying descriptor which has been leased.
 	// The implementation of the methods on this object delegate to
