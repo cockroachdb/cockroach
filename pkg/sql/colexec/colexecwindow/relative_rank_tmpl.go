@@ -409,12 +409,10 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
 				for colIdx, vec := range r.scratch.ColVecs() {
 					vec.Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:       batch.ColVec(colIdx),
-								Sel:       sel,
-								SrcEndIdx: n,
-							},
+						coldata.SliceArgs{
+							Src:       batch.ColVec(colIdx),
+							Sel:       sel,
+							SrcEndIdx: n,
 						},
 					)
 				}
@@ -499,11 +497,9 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			r.allocator.PerformOperation(r.output.ColVecs()[:len(r.inputTypes)], func() {
 				for colIdx, vec := range r.output.ColVecs()[:len(r.inputTypes)] {
 					vec.Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:       r.scratch.ColVec(colIdx),
-								SrcEndIdx: n,
-							},
+						coldata.SliceArgs{
+							Src:       r.scratch.ColVec(colIdx),
+							SrcEndIdx: n,
 						},
 					)
 				}
