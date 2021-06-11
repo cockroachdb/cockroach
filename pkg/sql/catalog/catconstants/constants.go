@@ -36,6 +36,9 @@ const (
 	CrdbInternalBackwardDependenciesTableID
 	CrdbInternalBuildInfoTableID
 	CrdbInternalBuiltinFunctionsTableID
+	CrdbInternalClusterContendedIndexesViewID
+	CrdbInternalClusterContendedKeysViewID
+	CrdbInternalClusterContendedTablesViewID
 	CrdbInternalClusterContentionEventsTableID
 	CrdbInternalClusterDistSQLFlowsTableID
 	CrdbInternalClusterQueriesTableID

@@ -28,6 +28,9 @@ test           crdb_internal       NULL                                   admin 
 test           crdb_internal       NULL                                   root     ALL
 test           crdb_internal       backward_dependencies                  public   SELECT
 test           crdb_internal       builtin_functions                      public   SELECT
+test           crdb_internal       cluster_contended_indexes              public   SELECT
+test           crdb_internal       cluster_contended_keys                 public   SELECT
+test           crdb_internal       cluster_contended_tables               public   SELECT
 test           crdb_internal       cluster_contention_events              public   SELECT
 test           crdb_internal       cluster_database_privileges            public   SELECT
 test           crdb_internal       cluster_distsql_flows                  public   SELECT
