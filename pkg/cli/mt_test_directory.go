@@ -22,7 +22,7 @@ import (
 
 var mtTestDirectorySvr = &cobra.Command{
 	Use:   "test-directory",
-	Short: "Run a test directory service.",
+	Short: "run a test directory service.",
 	Long: `
 Run a test directory service.
 `,

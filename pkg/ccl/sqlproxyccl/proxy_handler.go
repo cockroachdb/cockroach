@@ -32,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/gogo/status"
 	"github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -184,7 +186,7 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 	}
 
 	// This currently only happens for CancelRequest type of startup messages
-	// that we don't support
+	// that we don't support.
 	if msg == nil {
 		return nil
 	}
@@ -224,15 +226,30 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 
 	var crdbConn net.Conn
 	var outgoingAddress string
-	retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond, MaxBackoff: time.Second}
+
+	// Repeatedly try to make a connection. Any failures are assumed to be
+	// transient unless the tenant cannot be found (e.g. because it was
+	// deleted). We will simply loop forever, or until the context is canceled
+	// (e.g. by client disconnect). This is preferable to terminating client
+	// connections, because in most cases those connections will simply be
+	// retried, further increasing load on the system.
+	retryOpts := retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+	}
+
 	outgoingAddressErr := log.Every(time.Minute)
 	backendDialErr := log.Every(time.Minute)
 	reportFailureErr := log.Every(time.Minute)
 	var outgoingAddressErrs, codeBackendDownErrs, reportFailureErrs int
+
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		// Get the DNS/IP address of the backend server to dial.
 		outgoingAddress, err = handler.outgoingAddress(ctx, clusterName, tenID)
 		if err != nil {
-			if err.Error() != "not found" {
+			// Failure is assumed to be transient (and should be retried) except
+			// in case where the server was not found.
+			if status.Code(err) != codes.NotFound {
 				outgoingAddressErrs++
 				if outgoingAddressErr.ShouldLog() {
 					log.Ops.Errorf(ctx,
@@ -244,19 +261,24 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 				}
 				continue
 			}
-			clientErr := newErrorf(codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
-			updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+
+			// Remap error for external consumption.
+			err = newErrorf(
+				codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
 			break
 		}
 
+		// Now actually dial the backend server.
 		crdbConn, err = backendDial(backendStartupMsg, outgoingAddress, TLSConf)
-		// If we get a backend down error and are using the directory - report the
-		// error to the directory and retry the connection.
-		codeErr := (*codeError)(nil)
-		if err != nil &&
-			errors.As(err, &codeErr) &&
-			codeErr.code == codeBackendDown &&
-			handler.directory != nil {
+
+		// If we get a backend down error, retry the connection.
+		var codeErr *codeError
+		if err != nil && errors.As(err, &codeErr) && codeErr.code == codeBackendDown {
+			if handler.directory == nil {
+				// Don't retry unless directory is enabled (for now).
+				break
+			}
+
 			codeBackendDownErrs++
 			if backendDialErr.ShouldLog() {
 				log.Ops.Errorf(ctx,
@@ -266,6 +288,9 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 				)
 				codeBackendDownErrs = 0
 			}
+
+			// Report the failure to the directory so that it can refresh any
+			// stale information that may have caused the problem.
 			err = handler.directory.ReportFailure(ctx, tenID, outgoingAddress)
 			if err != nil {
 				reportFailureErrs++
@@ -288,10 +313,12 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 		return err
 	}
 
+	// Set up the idle timeout monitor.
 	crdbConn = idle.DisconnectOverlay(crdbConn, handler.IdleTimeout)
 
 	defer func() { _ = crdbConn.Close() }()
 
+	// Perform user authentication.
 	if err := authenticate(conn, crdbConn); err != nil {
 		handler.metrics.updateForError(err)
 		log.Ops.Errorf(ctx, "authenticate: %s", err)
@@ -339,6 +366,8 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
+	// Copy all pgwire messages from frontend to backend connection until we
+	// encounter an error or shutdown signal.
 	go func() {
 		err := connectionCopy(crdbConn, conn)
 		errConnectionCopy <- err
@@ -377,8 +406,7 @@ func (handler *proxyHandler) outgoingAddress(
 		return addr, nil
 	}
 
-	// This doesn't verify the name part of the tenant and relies just on the
-	// int id.
+	// Lookup tenant in directory.
 	addr, err := handler.directory.EnsureTenantIP(ctx, tenID, name)
 	if err != nil {
 		return "", err

@@ -25,9 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // To ensure tenant startup code is included.
@@ -45,19 +46,19 @@ func TestDirectoryErrors(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	_, err := dir.LookupTenantIPs(ctx, roachpb.MakeTenantID(1000))
-	assert.Regexp(t, "not found", err)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not in directory cache")
 	_, err = dir.LookupTenantIPs(ctx, roachpb.MakeTenantID(1001))
-	assert.Regexp(t, "not found", err)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1001 not in directory cache")
 	_, err = dir.LookupTenantIPs(ctx, roachpb.MakeTenantID(1002))
-	assert.Regexp(t, "not found", err)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1002 not in directory cache")
 
 	// Fail to find tenant that does not exist.
 	_, err = dir.EnsureTenantIP(ctx, roachpb.MakeTenantID(1000), "")
-	assert.Regexp(t, "not found", err)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not found")
 
 	// Fail to find tenant when cluster name doesn't match.
 	_, err = dir.EnsureTenantIP(ctx, roachpb.MakeTenantID(tenantID), "unknown")
-	assert.Regexp(t, "not found", err)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = cluster name unknown doesn't match expected tenant-cluster")
 
 	// No-op when reporting failure for tenant that doesn't exit.
 	require.NoError(t, dir.ReportFailure(ctx, roachpb.MakeTenantID(1000), ""))
@@ -258,9 +259,9 @@ func TestDeleteTenant(t *testing.T) {
 	// Now EnsureTenantIP should return an error and the directory should no
 	// longer cache the tenant.
 	_, err = dir.EnsureTenantIP(ctx, tenantID, "")
-	require.Regexp(t, "not found", err)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not found")
 	ips, err = dir.LookupTenantIPs(ctx, tenantID)
-	require.Regexp(t, "not found", err)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not in directory cache")
 	require.Nil(t, ips)
 }
 
@@ -343,6 +344,10 @@ func startTenant(
 			Stopper:       tenantStopper,
 		})
 	if err != nil {
+		// Remap tenant "not found" error to GRPC NotFound error.
+		if err.Error() == "not found" {
+			return nil, status.Errorf(codes.NotFound, "tenant %d not found", id)
+		}
 		return nil, err
 	}
 	sqlAddr, err := net.ResolveTCPAddr("tcp", t.SQLAddr())
