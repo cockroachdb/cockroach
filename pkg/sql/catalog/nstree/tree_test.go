@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-// TestDescTreeDataDriven tests the Tree using a data-driven
+// TestDescTreeDataDriven tests the Map using a data-driven
 // exposition format. The tests support the following commands:
 //
 //   add [parent-id=...] [parent-schema-id=...] name=... id=... owner=...
@@ -174,7 +174,7 @@ func TestDescTreeDataDriven(t *testing.T) {
 			d.GetParentID(), d.GetParentSchemaID(), d.GetName(), d.GetID(), d.GetPrivileges().Owner())
 	}
 	datadriven.Walk(t, "testdata/desc_tree", func(t *testing.T, path string) {
-		tr := Make()
+		tr := MakeMap()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			const notFound = "not found"
 			switch d.Cmd {
@@ -185,15 +185,15 @@ func TestDescTreeDataDriven(t *testing.T) {
 				return formatDesc(desc)
 			case "get-by-id":
 				a := parseArgs(t, d, argID, 0)
-				got, ok := tr.GetByID(a.id)
-				if !ok {
+				got := tr.GetByID(a.id)
+				if got == nil {
 					return notFound
 				}
 				return formatDesc(got.(catalog.Descriptor))
 			case "get-by-name":
 				a := parseArgs(t, d, argName, argParentID|argParentSchemaID)
-				got, ok := tr.GetByName(a.parentID, a.parentSchemaID, a.name)
-				if !ok {
+				got := tr.GetByName(a.parentID, a.parentSchemaID, a.name)
+				if got == nil {
 					return notFound
 				}
 				return formatDesc(got.(catalog.Descriptor))
