@@ -659,6 +659,12 @@ func (*AddSSTableRequest) Method() Method { return AddSSTable }
 func (*MigrateRequest) Method() Method { return Migrate }
 
 // Method implements the Request interface.
+func (*ScanInterleavedIntentsRequest) Method() Method { return ScanInterleavedIntents }
+
+// Method implements the Request interface.
+func (*BarrierRequest) Method() Method { return Barrier }
+
+// Method implements the Request interface.
 func (*RecomputeStatsRequest) Method() Method { return RecomputeStats }
 
 // Method implements the Request interface.
@@ -894,6 +900,18 @@ func (r *AddSSTableRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *MigrateRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *ScanInterleavedIntentsRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *BarrierRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1228,11 +1246,13 @@ func (*QueryTxnRequest) flags() int   { return isRead | isAlone }
 func (*QueryIntentRequest) flags() int {
 	return isRead | isPrefix | updatesTSCache | updatesTSCacheOnErr
 }
-func (*ResolveIntentRequest) flags() int      { return isWrite }
-func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
-func (*TruncateLogRequest) flags() int        { return isWrite }
-func (*MergeRequest) flags() int              { return isWrite | canBackpressure }
-func (*RequestLeaseRequest) flags() int       { return isWrite | isAlone | skipLeaseCheck }
+func (*ResolveIntentRequest) flags() int          { return isWrite }
+func (*ResolveIntentRangeRequest) flags() int     { return isWrite | isRange }
+func (*TruncateLogRequest) flags() int            { return isWrite }
+func (*MergeRequest) flags() int                  { return isWrite | canBackpressure }
+func (*ScanInterleavedIntentsRequest) flags() int { return isRead | isRange }
+func (*BarrierRequest) flags() int                { return isWrite | isRange }
+func (*RequestLeaseRequest) flags() int           { return isWrite | isAlone | skipLeaseCheck }
 
 // LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the
 // effect of the `skipLeaseCheck` flag that lease write operations have.

@@ -703,6 +703,38 @@ func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roach
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// ScanInterleavedIntents is a command that returns all interleaved intents
+// encountered in the request span. A resume span is returned if the entirety
+// of the request span was not scanned.
+func (db *DB) ScanInterleavedIntents(
+	ctx context.Context, begin, end interface{},
+) ([]roachpb.KeyValue, *roachpb.Span, error) {
+	b := &Batch{}
+	b.scanInterleavedIntents(begin, end)
+	result, err := getOneResult(db.Run(ctx, b), b)
+	if err != nil {
+		return nil, nil, err
+	}
+	responses := b.response.Responses
+	if len(responses) == 0 {
+		return nil, nil, errors.Errorf("unexpected empty response for ScanInterleavedIntents")
+	}
+	resp, ok := responses[0].GetInner().(*roachpb.ScanInterleavedIntentsResponse)
+	if !ok {
+		return nil, nil, errors.Errorf("unexpected response of type %T for ScanInterleavedIntents",
+			responses[0].GetInner())
+	}
+	return resp.IntentRows, result.ResumeSpan, nil
+}
+
+// Barrier is a command that waits for existing writes on the specified key
+// range to finish.
+func (db *DB) Barrier(ctx context.Context, begin, end interface{}) error {
+	b := &Batch{}
+	b.barrier(begin, end)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.

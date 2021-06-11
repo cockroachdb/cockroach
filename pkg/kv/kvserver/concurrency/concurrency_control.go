@@ -146,12 +146,20 @@ import (
 // that it inserted into the lockTable remain.
 type Manager interface {
 	RequestSequencer
+	ReadLatchBarrierProvider
 	ContentionHandler
 	LockManager
 	TransactionManager
 	RangeStateListener
 	MetricExporter
 	TestStateExporter
+}
+
+// ReadLatchBarrierProvider provides a barrier on a specified span.
+type ReadLatchBarrierProvider interface {
+	// WaitFor waits for existing latches on the specified span
+	// to be released, but does not add any new latches for this span.
+	WaitFor(context.Context, spanset.Span) *Error
 }
 
 // RequestSequencer is concerned with the sequencing of concurrent requests. It
@@ -446,6 +454,11 @@ type latchManager interface {
 	// returned false, or some other occurrence (like conflicting locks) is
 	// causing this request to switch to pessimistic latching.
 	WaitUntilAcquired(ctx context.Context, lg latchGuard) (latchGuard, *Error)
+
+	// WaitFor waits for write latches on the specified spans without adding any
+	// latches itself. Fast path for operations that only require flushing out old
+	// operations without blocking any new ones.
+	WaitFor(ctx context.Context, spans *spanset.SpanSet) *Error
 
 	// Releases latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)

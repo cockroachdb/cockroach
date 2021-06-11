@@ -115,6 +115,22 @@ var StrictGCEnforcement = settings.RegisterBoolSetting(
 	true,
 )
 
+// SeparatedIntentMigrationScanRate wraps "kv.separated_intent_migration.max_scan_rate".
+var SeparatedIntentMigrationScanRate = settings.RegisterByteSizeSetting(
+	"kv.separated_intent_migration.max_scan_rate",
+	"maximum bytes to scan per second per range as part of the separated intent migration",
+	1<<20,
+	func(size int64) error {
+		if size <= 0 {
+			return errors.New("max_scan_rate must be greater than 0")
+		}
+		return nil
+	},
+)
+
+// Scan rate burst value for the separated intent migration.
+const separatedIntentMigrationBurst = 4 << 20 // 4 MB
+
 type proposalReevaluationReason int
 
 const (
@@ -816,6 +832,11 @@ func (r *Replica) Clock() *hlc.Clock {
 // evaluation Batch should be used instead.
 func (r *Replica) Engine() storage.Engine {
 	return r.store.Engine()
+}
+
+// NewLongLivedSnapshot returns a new snapshot of the underlying Engine.
+func (r *Replica) NewLongLivedSnapshot() storage.Reader {
+	return r.store.Engine().NewSnapshot()
 }
 
 // AbortSpan returns the Replica's AbortSpan.
