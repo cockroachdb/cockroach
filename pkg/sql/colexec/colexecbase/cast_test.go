@@ -51,6 +51,12 @@ func TestRandomizedCast(t *testing.T) {
 	datumAsInt := func(d tree.Datum) interface{} {
 		return int(tree.MustBeDInt(d))
 	}
+	datumAsInt4 := func(d tree.Datum) interface{} {
+		return int32(tree.MustBeDInt(d))
+	}
+	datumAsInt2 := func(d tree.Datum) interface{} {
+		return int16(tree.MustBeDInt(d))
+	}
 	datumAsFloat := func(d tree.Datum) interface{} {
 		return float64(tree.MustBeDFloat(d))
 	}
@@ -99,25 +105,47 @@ func TestRandomizedCast(t *testing.T) {
 		//bool -> t tests
 		{fromTyp: types.Bool, fromPhysType: datumAsBool, toTyp: types.Bool, toPhysType: datumAsBool},
 		{fromTyp: types.Bool, fromPhysType: datumAsBool, toTyp: types.Int, toPhysType: datumAsInt},
+		{fromTyp: types.Bool, fromPhysType: datumAsBool, toTyp: types.Int4, toPhysType: datumAsInt4},
+		{fromTyp: types.Bool, fromPhysType: datumAsBool, toTyp: types.Int2, toPhysType: datumAsInt2},
 		{fromTyp: types.Bool, fromPhysType: datumAsBool, toTyp: types.Float, toPhysType: datumAsFloat},
 		// decimal -> t tests
 		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Bool, toPhysType: datumAsBool},
+		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Int, toPhysType: datumAsInt, retryGeneration: true},
+		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Int4, toPhysType: datumAsInt4, retryGeneration: true},
+		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
+		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Float, toPhysType: datumAsFloat, retryGeneration: true},
 		// int -> t tests
 		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Bool, toPhysType: datumAsBool},
+		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Int4, toPhysType: datumAsInt4, retryGeneration: true},
+		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
 		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Float, toPhysType: datumAsFloat},
 		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Decimal, toPhysType: datumAsDecimal},
+		// int4 -> t tests
+		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Bool, toPhysType: datumAsBool},
+		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Int, toPhysType: datumAsInt},
+		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
+		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Float, toPhysType: datumAsFloat},
+		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Decimal, toPhysType: datumAsDecimal},
+		// int2 -> t tests
+		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Bool, toPhysType: datumAsBool},
+		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Int, toPhysType: datumAsInt},
+		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Int4, toPhysType: datumAsInt},
+		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Float, toPhysType: datumAsFloat},
+		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Decimal, toPhysType: datumAsDecimal},
 		// float -> t tests
 		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Bool, toPhysType: datumAsBool},
 		// We can sometimes generate a float outside of the range of the integers,
 		// so we want to retry with generation if that occurs.
 		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Int, toPhysType: datumAsInt, retryGeneration: true},
+		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Int4, toPhysType: datumAsInt4, retryGeneration: true},
+		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
 		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Decimal, toPhysType: datumAsDecimal},
 		// datum-backed type -> t tests
 		{fromTyp: collatedStringType, fromPhysType: makeDatumVecAdapter(collatedStringVec), toTyp: types.Bool, toPhysType: datumAsBool, getValidSet: getCollatedStringsThatCanBeCastAsBools},
 	}
 
 	for _, c := range tc {
-		log.Infof(ctx, "%sTo%s", c.fromTyp.String(), c.toTyp.String())
+		log.Infof(ctx, "%s to %s", c.fromTyp.String(), c.toTyp.String())
 		n := 100
 		// Make an input vector of length n.
 		input := colexectestutils.Tuples{}
@@ -150,6 +178,9 @@ func TestRandomizedCast(t *testing.T) {
 			input = append(input, colexectestutils.Tuple{c.fromPhysType(fromDatum)})
 			output = append(output, colexectestutils.Tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
 		}
+		// TODO(yuzefovich): once the test harness is updated to allow for
+		// expected errors to occur, check that the expected errors when casting
+		// do, in fact, occur rather than "retrying the generation" above.
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{input}, [][]*types.T{{c.fromTyp}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
@@ -216,11 +247,8 @@ func createTestCastOperator(
 	fromTyp *types.T,
 	toTyp *types.T,
 ) (colexecop.Operator, error) {
-	// We currently don't support casting to decimal type (other than when
-	// casting from decimal with the same precision), so we will allow falling
-	// back to row-by-row engine.
 	return colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, input, []*types.T{fromTyp},
-		fmt.Sprintf("@1::%s", toTyp.Name()), true /* canFallbackToRowexec */, testMemAcc,
+		fmt.Sprintf("@1::%s", toTyp.Name()), false /* canFallbackToRowexec */, testMemAcc,
 	)
 }

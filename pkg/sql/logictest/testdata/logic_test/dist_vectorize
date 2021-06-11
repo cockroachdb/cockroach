@@ -489,19 +489,19 @@ NULL
 # width of an integer column during a cast and the vectorized engine not
 # performing the cast to the integer of the desired width (#66306).
 statement ok
-CREATE TABLE t66306 (k DECIMAL PRIMARY KEY);
-INSERT INTO t66306 VALUES (1);
+CREATE TABLE t66306 (s STRING);
+INSERT INTO t66306 VALUES ('foo');
 ALTER TABLE t66306 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1);
 
-query II
-SELECT 1::INT2, k::INT8 FROM t66306;
+query IT
+SELECT 1::INT2, s COLLATE en FROM t66306;
 ----
-1 1
+1  foo
 
 # Sanity check that the wrapped processor is planned for the query above. If it
 # no longer is, we should adjust the query here and above.
 query T
-EXPLAIN (VEC) SELECT 1::INT2, k::INT8 FROM t66306;
+EXPLAIN (VEC) SELECT 1::INT2, s COLLATE en FROM t66306;
 ----
 │
 ├ Node 1
