@@ -49,6 +49,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
