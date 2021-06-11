@@ -12,10 +12,8 @@ package scmutationexec
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -25,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,7 +59,7 @@ type Catalog interface {
 // MutationJobs encapsulates the logic to create different types
 // of jobs.
 type MutationJobs interface {
-	AddNewGCJob(job jobspb.SchemaChangeGCDetails, description string)
+	AddNewGCJobForDescriptor(descriptor catalog.Descriptor)
 }
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
@@ -214,18 +211,13 @@ func (m *visitor) RemoveTypeBackRef(ctx context.Context, op scop.RemoveTypeBackR
 }
 
 func (m *visitor) CreateGcJobForDescriptor(
-	_ context.Context, op scop.CreateGcJobForDescriptor,
+	ctx context.Context, op scop.CreateGcJobForDescriptor,
 ) error {
-	// Setup a GC job for this object
-	tablesToDrop := []jobspb.SchemaChangeGCDetails_DroppedID{{
-		ID:       op.DescID,
-		DropTime: timeutil.Now().UnixNano(),
-	},
+	desc, err := m.catalog.GetAnyDescriptorByID(ctx, op.DescID)
+	if err != nil {
+		return err
 	}
-	job := jobspb.SchemaChangeGCDetails{
-		Tables: tablesToDrop,
-	}
-	m.jobs.AddNewGCJob(job, fmt.Sprintf("DROP %s %d", "TABLE", op.DescID))
+	m.jobs.AddNewGCJobForDescriptor(desc)
 	return nil
 }
 
