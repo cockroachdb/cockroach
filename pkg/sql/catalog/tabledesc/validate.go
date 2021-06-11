@@ -519,18 +519,10 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// We maintain forward compatibility, so if you see this error message with a
 	// version older that what this client supports, then there's a
 	// maybeFillInDescriptor missing from some codepath.
-	if v := desc.GetFormatVersion(); v != descpb.FamilyFormatVersion && v != descpb.InterleavedFormatVersion {
-		// TODO(dan): We're currently switching from FamilyFormatVersion to
-		// InterleavedFormatVersion. After a beta is released with this dual version
-		// support, then:
-		// - Upgrade the bidirectional reference version to that beta
-		// - Start constructing all TableDescriptors with InterleavedFormatVersion
-		// - Change maybeUpgradeFormatVersion to output InterleavedFormatVersion
-		// - Change this check to only allow InterleavedFormatVersion
+	if desc.GetFormatVersion() != descpb.InterleavedFormatVersion {
 		vea.Report(errors.AssertionFailedf(
-			"table %q is encoded using using version %d, but this client only supports version %d and %d",
-			desc.Name, errors.Safe(desc.GetFormatVersion()),
-			errors.Safe(descpb.FamilyFormatVersion), errors.Safe(descpb.InterleavedFormatVersion)))
+			"table is encoded using using version %d, but this client only supports version %d",
+			desc.GetFormatVersion(), descpb.InterleavedFormatVersion))
 		return
 	}
 

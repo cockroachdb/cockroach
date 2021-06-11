@@ -72,7 +72,7 @@ func TestAllocateIDs(t *testing.T) {
 			}(),
 		},
 		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
-		FormatVersion: descpb.FamilyFormatVersion,
+		FormatVersion: descpb.InterleavedFormatVersion,
 	}).BuildCreatedMutableTable()
 	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func TestAllocateIDs(t *testing.T) {
 		NextFamilyID:   1,
 		NextIndexID:    5,
 		NextMutationID: 1,
-		FormatVersion:  descpb.FamilyFormatVersion,
+		FormatVersion:  descpb.InterleavedFormatVersion,
 	}).BuildCreatedMutableTable()
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
@@ -435,7 +435,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "a", Type: types.Int},
 			{Name: "b", Type: types.Int},
 			{Name: "c", Type: types.Int}},
-		FormatVersion: descpb.FamilyFormatVersion,
+		FormatVersion: descpb.InterleavedFormatVersion,
 		Indexes:       []descpb.IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
 		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
