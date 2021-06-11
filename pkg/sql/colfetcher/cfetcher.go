@@ -1354,7 +1354,7 @@ func (rf *cFetcher) processValueSingle(
 			if len(val.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := table.cols[idx].GetType()
+			typ := rf.typs[idx]
 			err := colencoding.UnmarshalColumnValueToCol(
 				&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
 			)
@@ -1454,7 +1454,7 @@ func (rf *cFetcher) processValueBytes(
 
 		vec := rf.machine.colvecs[idx]
 
-		valTyp := table.cols[idx].GetType()
+		valTyp := rf.typs[idx]
 		valueBytes, err = colencoding.DecodeTableValueToCol(
 			&table.da, vec, rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes,
 		)
