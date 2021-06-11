@@ -134,7 +134,7 @@ func (c *Cluster) ForEveryNode(
 func (c *Cluster) IterateRangeDescriptors(
 	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
 ) error {
-	return c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return c.c.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Inform the caller that we're starting a fresh attempt to page in
 		// range descriptors.
 		init()
@@ -180,9 +180,4 @@ func (c *Cluster) IterateRangeDescriptors(
 				return fn(descriptors...)
 			})
 	})
-}
-
-// DB provides exposes the underlying *kv.DB instance.
-func (c *Cluster) DB() *kv.DB {
-	return c.c.DB
 }

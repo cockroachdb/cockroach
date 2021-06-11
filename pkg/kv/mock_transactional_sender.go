@@ -218,6 +218,7 @@ func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(cont
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error)
+	nonTxnSenderFunc Sender
 }
 
 var _ TxnSenderFactory = MockTxnSenderFactory{}
@@ -235,6 +236,21 @@ func MakeMockTxnSenderFactory(
 	}
 }
 
+// MakeMockTxnSenderFactoryWithNonTxnSender creates a MockTxnSenderFactory from
+// two sender functions: one for transactional and one for non-transactional
+// requests.
+func MakeMockTxnSenderFactoryWithNonTxnSender(
+	senderFunc func(
+		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error),
+	nonTxnSenderFunc SenderFunc,
+) MockTxnSenderFactory {
+	return MockTxnSenderFactory{
+		senderFunc:       senderFunc,
+		nonTxnSenderFunc: nonTxnSenderFunc,
+	}
+}
+
 // RootTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) RootTransactionalSender(
 	txn *roachpb.Transaction, _ roachpb.UserPriority,
@@ -249,5 +265,5 @@ func (f MockTxnSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputS
 
 // NonTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) NonTransactionalSender() Sender {
-	return nil
+	return f.nonTxnSenderFunc
 }
