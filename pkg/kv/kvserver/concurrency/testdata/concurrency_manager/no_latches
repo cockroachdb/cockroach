@@ -49,3 +49,29 @@ finish req=leaseReq
 
 reset
 ----
+
+# -------------------------------------------------------------
+# Barrier requests do not acquire latches
+# -------------------------------------------------------------
+
+new-request name=barrier txn=none ts=10,1
+  barrier key=a endKey=f
+----
+
+sequence req=barrier
+----
+[1] sequence barrier: sequencing request
+[1] sequence barrier: waiting on latches without acquiring
+[1] sequence barrier: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 0
+
+finish req=barrier
+----
+[-] finish barrier: finishing request
+
+reset
+----

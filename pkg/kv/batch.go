@@ -246,6 +246,17 @@ func (b *Batch) fillResults(ctx context.Context) {
 				if result.Err == nil {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
+			case *roachpb.ScanInterleavedIntentsRequest:
+				if result.Err == nil {
+					t := reply.(*roachpb.ScanInterleavedIntentsResponse)
+					result.Rows = make([]KeyValue, len(t.IntentRows))
+					for j := range t.IntentRows {
+						src := &t.IntentRows[j]
+						dst := &result.Rows[j]
+						dst.Key = src.Key
+						dst.Value = &src.Value
+					}
+				}
 			// Nothing to do for all methods below as they do not generate
 			// any rows.
 			case *roachpb.EndTxnRequest:
@@ -271,6 +282,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.AddSSTableRequest:
 			case *roachpb.MigrateRequest:
 			case *roachpb.QueryResolvedTimestampRequest:
+			case *roachpb.BarrierRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -835,6 +847,48 @@ func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
 		return
 	}
 	req := &roachpb.QueryResolvedTimestampRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) scanInterleavedIntents(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.ScanInterleavedIntentsRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) barrier(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.BarrierRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    begin,
 			EndKey: end,

@@ -264,6 +264,12 @@ const (
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
+	// SeparatedIntentsMigration adds the migration to move over all remaining
+	// intents to the separated lock table space.
+	SeparatedIntentsMigration
+	// PostSeparatedIntentsMigration runs a cleanup migration after the main
+	// SeparatedIntentsMigration.
+	PostSeparatedIntentsMigration
 
 	// Step (1): Add new versions here.
 )
@@ -421,6 +427,15 @@ var versionsSingleton = keyedVersions{
 		Key:     DatabaseRoleSettings,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
 	},
+	{
+		Key:     SeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
+	},
+	{
+		Key:     PostSeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
+	},
+
 	// Step (2): Add new versions here.
 }
 

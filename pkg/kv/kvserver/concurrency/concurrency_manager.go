@@ -223,6 +223,13 @@ func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Respo
 		return nil, nil
 	}
 
+	// Check if this is a request that waits on latches, but does not acquire
+	// them.
+	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
+		log.Event(ctx, "waiting on latches without acquiring")
+		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans)
+	}
+
 	// Provide the manager with an opportunity to intercept the request. It
 	// may be able to serve the request directly, and even if not, it may be
 	// able to update its internal state based on the request.
@@ -346,10 +353,18 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 	return nil, nil
 }
 
+// shouldWaitOnLatchesWithoutAcquiring determines if this is a request that
+// only waits on existing latches without acquiring any new ones.
+func shouldWaitOnLatchesWithoutAcquiring(req Request) bool {
+	return req.isSingle(roachpb.Barrier)
+}
+
 // shouldAcquireLatches determines whether the request should acquire latches
 // before proceeding to evaluate. Latches are used to synchronize with other
 // conflicting requests, based on the Spans collected for the request. Most
-// request types will want to acquire latches.
+// request types will want to acquire latches. Note that any requests that
+// return true for shouldWaitOnLatchesWithoutAcquiring could also return true
+// here, even though latches won't be acquired there.
 func shouldAcquireLatches(req Request) bool {
 	switch {
 	case req.ReadConsistency != roachpb.CONSISTENT:
@@ -628,7 +643,7 @@ func (g *Guard) HoldingLatches() bool {
 // AssertLatches asserts that the guard is non-nil and holding latches, if the
 // request is supposed to hold latches while evaluating in the first place.
 func (g *Guard) AssertLatches() {
-	if shouldAcquireLatches(g.Req) && !g.HoldingLatches() {
+	if shouldAcquireLatches(g.Req) && !shouldWaitOnLatchesWithoutAcquiring(g.Req) && !g.HoldingLatches() {
 		panic("expected latches held, found none")
 	}
 }
