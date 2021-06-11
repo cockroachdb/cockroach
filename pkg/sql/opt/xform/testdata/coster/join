@@ -869,39 +869,43 @@ insert c
  ├── insert-mapping:
  │    ├── column1:4 => c:1
  │    └── column2:5 => c.p:2
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 6.08
+ ├── cost: 5.13
  ├── values
  │    ├── columns: column1:4!null column2:5!null
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │    ├── stats: [rows=1]
  │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(4,5)
  │    └── (1, 1)
  └── f-k-checks
       └── f-k-checks-item: c(p) -> p(p)
-           └── anti-join (lookup p)
+           └── anti-join (cross)
                 ├── columns: p:6!null
-                ├── key columns: [6] = [7]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
-                ├── cost: 6.05
+                ├── cost: 5.1
                 ├── key: ()
                 ├── fd: ()-->(6)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: p:6!null
-                │    ├── mapping:
-                │    │    └──  column2:5 => p:6
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1, distinct(6)=1, null(6)=0]
-                │    ├── cost: 0.01
+                │    ├── stats: [rows=1]
+                │    ├── cost: 0.02
                 │    ├── key: ()
-                │    └── fd: ()-->(6)
+                │    ├── fd: ()-->(6)
+                │    └── (1,)
+                ├── scan p
+                │    ├── columns: p.p:7!null
+                │    ├── constraint: /7: [/1 - /1]
+                │    ├── cardinality: [0 - 1]
+                │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+                │    ├── cost: 5.03
+                │    ├── key: ()
+                │    └── fd: ()-->(7)
                 └── filters (true)
 
 # Avoid performing a lookup join with virtual tables if the filter is

@@ -32,6 +32,54 @@ insert child
                 └── filters
                      └── p:6 = parent.p:7
 
+# Build a Values expression instead of a WithScan when the INSERT FK columns are
+# constant.
+build
+INSERT INTO child VALUES (100, 1)
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => c:1
+ │    └── column2:5 => child.p:2
+ ├── values
+ │    ├── columns: column1:4!null column2:5!null
+ │    └── (100, 1)
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:6!null
+                ├── values
+                │    ├── columns: p:6!null
+                │    └── (1,)
+                ├── scan parent
+                │    └── columns: parent.p:7!null
+                └── filters
+                     └── p:6 = parent.p:7
+
+build
+INSERT INTO child VALUES ((floor(random() * 100))::INT, 1)
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => c:1
+ │    └── column2:5 => child.p:2
+ ├── values
+ │    ├── columns: column1:4 column2:5!null
+ │    └── (floor(random() * 100.0)::INT8, 1)
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:6!null
+                ├── values
+                │    ├── columns: p:6!null
+                │    └── (1,)
+                ├── scan parent
+                │    └── columns: parent.p:7!null
+                └── filters
+                     └── p:6 = parent.p:7
+
 build
 INSERT INTO child VALUES (100, 1), (200, 1) ON CONFLICT DO NOTHING
 ----
@@ -354,7 +402,6 @@ insert multi_col_child
  │    ├── column2:7 => multi_col_child.p:2
  │    ├── column3:8 => multi_col_child.q:3
  │    └── column4:9 => multi_col_child.r:4
- ├── input binding: &1
  ├── values
  │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
  │    └── (1, 10, 10, 10)
@@ -362,12 +409,9 @@ insert multi_col_child
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
                 ├── columns: p:10!null q:11!null r:12!null
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: p:10!null q:11!null r:12!null
-                │    └── mapping:
-                │         ├──  column2:7 => p:10
-                │         ├──  column3:8 => q:11
-                │         └──  column4:9 => r:12
+                │    └── (10, 10, 10)
                 ├── scan multi_col_parent
                 │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
                 └── filters
@@ -479,7 +523,6 @@ insert multi_col_child_full
  │    ├── column2:7 => multi_col_child_full.p:2
  │    ├── column3:8 => multi_col_child_full.q:3
  │    └── column4:9 => multi_col_child_full.r:4
- ├── input binding: &1
  ├── values
  │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
  │    └── (1, 10, 10, 10)
@@ -487,12 +530,9 @@ insert multi_col_child_full
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
                 ├── columns: p:10!null q:11!null r:12!null
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: p:10!null q:11!null r:12!null
-                │    └── mapping:
-                │         ├──  column2:7 => p:10
-                │         ├──  column3:8 => q:11
-                │         └──  column4:9 => r:12
+                │    └── (10, 10, 10)
                 ├── scan multi_col_parent
                 │    └── columns: multi_col_parent.p:13!null multi_col_parent.q:14!null multi_col_parent.r:15!null
                 └── filters

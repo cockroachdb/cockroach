@@ -71,12 +71,6 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 		return
 	}
 
-	// TODO(radu): if the input is a VALUES with constant expressions, we don't
-	// need to buffer it. This could be a normalization rule, but it's probably
-	// more efficient if we did it in here (or we'd end up building the entire FK
-	// subtrees twice).
-	mb.ensureWithID()
-
 	h := &mb.fkCheckHelper
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
 		if h.initWithOutboundFK(mb, i) {
@@ -170,7 +164,6 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 			continue
 		}
 
-		mb.ensureWithID()
 		withScanScope, _ := mb.buildCheckInputScan(checkInputScanFetchedVals, h.tabOrdinals)
 		mb.fkChecks = append(mb.fkChecks, h.buildDeletionCheck(withScanScope.expr, withScanScope.colList()))
 	}
@@ -239,8 +232,6 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		return
 	}
 
-	mb.ensureWithID()
-
 	// An Update can be thought of an insertion paired with a deletion, so for an
 	// Update we can emit both semi-joins and anti-joins.
 
@@ -288,6 +279,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
+			mb.ensureWithID()
 			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a)
 
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
@@ -384,8 +376,6 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		return
 	}
 
-	mb.ensureWithID()
-
 	h := &mb.fkCheckHelper
 	for i := 0; i < numOutbound; i++ {
 		if h.initWithOutboundFK(mb, i) {
@@ -407,6 +397,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
+			mb.ensureWithID()
 			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a)
 
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
