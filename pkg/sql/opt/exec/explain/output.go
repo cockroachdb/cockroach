@@ -13,6 +13,7 @@ package explain
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -394,5 +395,14 @@ func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
 		RedactVolatile,
 		"network usage",
 		fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
+	)
+}
+
+// AddRegionsStats adds a top-level field for regions executed on statistics.
+func (ob *OutputBuilder) AddRegionsStats(regions []string) {
+	ob.AddRedactableTopLevelField(
+		RedactNodes,
+		"regions",
+		strings.Join(regions, ", "),
 	)
 }
