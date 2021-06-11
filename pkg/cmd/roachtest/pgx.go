@@ -52,7 +52,7 @@ func registerPgx(r *testRegistry) {
 		t.Status("getting pgx")
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/jackc/pgx.git",
 			"/mnt/data1/pgx",
@@ -62,7 +62,7 @@ func registerPgx(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		latestTag, err := repeatGetLatestTag(ctx, c, "jackc", "pgx", pgxReleaseTagRegex)
+		latestTag, err := repeatGetLatestTag(ctx, t, "jackc", "pgx", pgxReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +71,7 @@ func registerPgx(r *testRegistry) {
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
-			ctx, c, node, "install go-junit-report", "go get -u github.com/jstemmer/go-junit-report",
+			ctx, t, c, node, "install go-junit-report", "go get -u github.com/jstemmer/go-junit-report",
 		); err != nil {
 			t.Fatal(err)
 		}

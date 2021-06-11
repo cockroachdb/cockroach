@@ -40,7 +40,7 @@ func registerPop(r *testRegistry) {
 
 		t.Status("cloning pop and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "gobuffalo", "pop", popReleaseTag)
+			ctx, t, "gobuffalo", "pop", popReleaseTag)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -55,14 +55,14 @@ func registerPop(r *testRegistry) {
 
 		// Remove any old pop installations
 		if err := repeatRunE(
-			ctx, c, node, "remove old pop", fmt.Sprintf("rm -rf %s", popPath),
+			ctx, t, c, node, "remove old pop", fmt.Sprintf("rm -rf %s", popPath),
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/gobuffalo/pop.git",
 			popPath,

@@ -58,7 +58,7 @@ func registerGopg(r *testRegistry) {
 		}
 
 		t.Status("cloning gopg and installing prerequisites")
-		gopgLatestTag, err := repeatGetLatestTag(ctx, c, "go-pg", "pg", gopgReleaseTagRegex)
+		gopgLatestTag, err := repeatGetLatestTag(ctx, t, "go-pg", "pg", gopgReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +68,7 @@ func registerGopg(r *testRegistry) {
 		installGolang(ctx, t, c, node)
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old gopg",
+			ctx, t, c, node, "remove old gopg",
 			fmt.Sprintf(`sudo rm -rf %s`, destPath),
 		); err != nil {
 			t.Fatal(err)
@@ -76,7 +76,7 @@ func registerGopg(r *testRegistry) {
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/go-pg/pg.git",
 			destPath,

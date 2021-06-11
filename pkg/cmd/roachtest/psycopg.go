@@ -45,7 +45,7 @@ func registerPsycopg(r *testRegistry) {
 		}
 
 		t.Status("cloning psycopg and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "psycopg", "psycopg2", psycopgReleaseTagRegex)
+		latestTag, err := repeatGetLatestTag(ctx, t, "psycopg", "psycopg2", psycopgReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -53,13 +53,14 @@ func registerPsycopg(r *testRegistry) {
 		c.l.Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -69,14 +70,14 @@ func registerPsycopg(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old Psycopg", `sudo rm -rf /mnt/data1/psycopg`,
+			ctx, t, c, node, "remove old Psycopg", `sudo rm -rf /mnt/data1/psycopg`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/psycopg/psycopg2.git",
 			"/mnt/data1/psycopg",
@@ -88,7 +89,7 @@ func registerPsycopg(r *testRegistry) {
 
 		t.Status("building Psycopg")
 		if err := repeatRunE(
-			ctx, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make`,
+			ctx, t, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make`,
 		); err != nil {
 			t.Fatal(err)
 		}

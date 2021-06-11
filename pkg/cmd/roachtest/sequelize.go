@@ -60,7 +60,7 @@ func registerSequelize(r *testRegistry) {
 		}
 
 		t.Status("cloning Sequelize and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "cockroachdb", "sequelize-cockroachdb", sequelizeReleaseTagRegex)
+		latestTag, err := repeatGetLatestTag(ctx, t, "cockroachdb", "sequelize-cockroachdb", sequelizeReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,13 +68,14 @@ func registerSequelize(r *testRegistry) {
 		c.l.Printf("Supported Sequelize release is %s.", supportedSequelizeRelease)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -86,6 +87,7 @@ func registerSequelize(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"add nodesource repository",
@@ -95,26 +97,26 @@ func registerSequelize(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
+			ctx, t, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "update npm", `sudo npm i -g npm`,
+			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old sequelize", `sudo rm -rf /mnt/data1/sequelize`,
+			ctx, t, c, node, "remove old sequelize", `sudo rm -rf /mnt/data1/sequelize`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/cockroachdb/sequelize-cockroachdb.git",
 			"/mnt/data1/sequelize",
@@ -125,7 +127,7 @@ func registerSequelize(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "install dependencies", `cd /mnt/data1/sequelize && sudo npm i`,
+			ctx, t, c, node, "install dependencies", `cd /mnt/data1/sequelize && sudo npm i`,
 		); err != nil {
 			t.Fatal(err)
 		}

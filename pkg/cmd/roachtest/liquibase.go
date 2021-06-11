@@ -39,14 +39,14 @@ func registerLiquibase(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("cloning liquibase test harness and installing prerequisites")
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -54,6 +54,7 @@ func registerLiquibase(r *testRegistry) {
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -63,7 +64,7 @@ func registerLiquibase(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old liquibase test harness",
+			ctx, t, c, node, "remove old liquibase test harness",
 			`rm -rf /mnt/data1/liquibase-test-harness`,
 		); err != nil {
 			t.Fatal(err)
@@ -71,7 +72,7 @@ func registerLiquibase(r *testRegistry) {
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/liquibase/liquibase-test-harness.git",
 			"/mnt/data1/liquibase-test-harness",
