@@ -58,6 +58,7 @@ func DecodeIndexKeyToCols(
 			// Our input key had its first table id / index id chopped off, so
 			// don't try to decode those for the first ancestor.
 			if i != 0 {
+				lastKeyComponentLength := len(key)
 				key, decodedTableID, decodedIndexID, err = rowenc.DecodePartialTableIDIndexID(key)
 				if err != nil {
 					return nil, false, false, err
@@ -65,7 +66,7 @@ func DecodeIndexKeyToCols(
 				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
 					// We don't match. Return a key with the table ID / index ID we're
 					// searching for, so the caller knows what to seek to.
-					curPos := len(origKey) - len(key)
+					curPos := len(origKey) - lastKeyComponentLength
 					// Prevent unwanted aliasing on the origKey by setting the capacity.
 					key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], ancestor.TableID, ancestor.IndexID)
 					return key, false, false, nil
@@ -99,6 +100,7 @@ func DecodeIndexKeyToCols(
 			}
 		}
 
+		lastKeyComponentLength := len(key)
 		key, decodedTableID, decodedIndexID, err = rowenc.DecodePartialTableIDIndexID(key)
 		if err != nil {
 			return nil, false, false, err
@@ -106,7 +108,7 @@ func DecodeIndexKeyToCols(
 		if decodedTableID != desc.GetID() || decodedIndexID != index.GetID() {
 			// We don't match. Return a key with the table ID / index ID we're
 			// searching for, so the caller knows what to seek to.
-			curPos := len(origKey) - len(key)
+			curPos := len(origKey) - lastKeyComponentLength
 			// Prevent unwanted aliasing on the origKey by setting the capacity.
 			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], desc.GetID(), index.GetID())
 			return key, false, false, nil
@@ -125,8 +127,9 @@ func DecodeIndexKeyToCols(
 	// We're expecting a column family id next (a varint). If
 	// interleavedSentinel is actually next, then this key is for a child
 	// table.
+	lastKeyComponentLength := len(key)
 	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
-		curPos := len(origKey) - len(key)
+		curPos := len(origKey) - lastKeyComponentLength
 		// Prevent unwanted aliasing on the origKey by setting the capacity.
 		key = encoding.EncodeNullDescending(origKey[:curPos:curPos])
 		return key, false, false, nil

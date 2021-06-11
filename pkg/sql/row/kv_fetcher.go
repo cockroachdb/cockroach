@@ -125,9 +125,9 @@ func (f *KVFetcher) NextKV(
 				f.batchResponse = nil
 			}
 			return true, roachpb.KeyValue{
-				Key: key,
+				Key: key[:len(key):len(key)],
 				Value: roachpb.Value{
-					RawBytes:  rawBytes,
+					RawBytes:  rawBytes[:len(rawBytes):len(rawBytes)],
 					Timestamp: ts,
 				},
 			}, newSpan, nil
