@@ -718,7 +718,7 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 		eqMap.Set(left, right)
 		eqMap.Set(right, left)
 	}
-	filterSetup, filterPerRow := c.computeFiltersCost(*on, util.FastIntMap{})
+	filterSetup, filterPerRow := c.computeFiltersCost(*on, eqMap)
 	cost += filterSetup
 
 	// Add the CPU cost of emitting the rows.
