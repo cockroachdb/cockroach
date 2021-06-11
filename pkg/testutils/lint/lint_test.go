@@ -1951,6 +1951,7 @@ func TestLint(t *testing.T) {
 			"../../sql/colexec/colexecsel",
 			"../../sql/colexec/colexecwindow",
 			"../../sql/colfetcher",
+			"../../sql/row",
 		); err != nil {
 			t.Fatal(err)
 		}
