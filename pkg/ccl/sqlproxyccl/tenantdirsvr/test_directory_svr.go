@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenant
+package tenantdirsvr
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -28,7 +29,7 @@ import (
 )
 
 // Making sure that TestDirectoryServer implements the DirectoryServer interface.
-var _ DirectoryServer = (*TestDirectoryServer)(nil)
+var _ tenant.DirectoryServer = (*TestDirectoryServer)(nil)
 
 // Process stores information about a running tenant process.
 type Process struct {
@@ -83,6 +84,26 @@ type TestDirectoryServer struct {
 	}
 }
 
+// New will create a new server.
+func New(stopper *stop.Stopper) (*TestDirectoryServer, error) {
+	// Determine the path to cockroach executable.
+	cockroachExecutable, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	dir := &TestDirectoryServer{
+		grpcServer:          grpc.NewServer(),
+		stopper:             stopper,
+		cockroachExecutable: cockroachExecutable,
+	}
+	dir.TenantStarterFunc = dir.startTenantLocked
+	dir.proc.processByAddrByTenantID = map[uint64]map[net.Addr]*Process{}
+	dir.listen.eventListeners = list.New()
+	stopper.AddCloser(stop.CloserFn(func() { dir.grpcServer.GracefulStop() }))
+	tenant.RegisterDirectoryServer(dir.grpcServer, dir)
+	return dir, nil
+}
+
 // Get a tenant's list of endpoints and the process information for each endpoint.
 func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Process) {
 	result = make(map[net.Addr]*Process)
@@ -100,9 +121,9 @@ func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Pro
 // GetTenant returns tenant metadata for a given ID. Hard coded to return
 // every tenant's cluster name as "tenant-cluster"
 func (s *TestDirectoryServer) GetTenant(
-	_ context.Context, _ *GetTenantRequest,
-) (*GetTenantResponse, error) {
-	return &GetTenantResponse{
+	_ context.Context, _ *tenant.GetTenantRequest,
+) (*tenant.GetTenantResponse, error) {
+	return &tenant.GetTenantResponse{
 		ClusterName: "tenant-cluster",
 	}, nil
 }
@@ -110,8 +131,8 @@ func (s *TestDirectoryServer) GetTenant(
 // ListEndpoints returns a list of tenant process endpoints as well as status of the
 // processes.
 func (s *TestDirectoryServer) ListEndpoints(
-	ctx context.Context, req *ListEndpointsRequest,
-) (*ListEndpointsResponse, error) {
+	ctx context.Context, req *tenant.ListEndpointsRequest,
+) (*tenant.ListEndpointsResponse, error) {
 	ctx = logtags.AddTag(ctx, "tenant", req.TenantID)
 	s.proc.RLock()
 	defer s.proc.RUnlock()
@@ -120,7 +141,7 @@ func (s *TestDirectoryServer) ListEndpoints(
 
 // WatchEndpoints returns a new stream, that can be used to monitor server activity.
 func (s *TestDirectoryServer) WatchEndpoints(
-	_ *WatchEndpointsRequest, server Directory_WatchEndpointsServer,
+	_ *tenant.WatchEndpointsRequest, server tenant.Directory_WatchEndpointsServer,
 ) error {
 	select {
 	case <-s.stopper.ShouldQuiesce():
@@ -129,7 +150,7 @@ func (s *TestDirectoryServer) WatchEndpoints(
 	}
 	// Make the channel with a small buffer to allow for a burst of notifications
 	// and a slow receiver.
-	c := make(chan *WatchEndpointsResponse, 10)
+	c := make(chan *tenant.WatchEndpointsResponse, 10)
 	s.listen.Lock()
 	elem := s.listen.eventListeners.PushBack(c)
 	s.listen.Unlock()
@@ -161,17 +182,17 @@ func (s *TestDirectoryServer) WatchEndpoints(
 	return err
 }
 
-func (s *TestDirectoryServer) notifyEventListenersLocked(req *WatchEndpointsResponse) {
+func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchEndpointsResponse) {
 	for e := s.listen.eventListeners.Front(); e != nil; {
 		select {
-		case e.Value.(chan *WatchEndpointsResponse) <- req:
+		case e.Value.(chan *tenant.WatchEndpointsResponse) <- req:
 			e = e.Next()
 		default:
 			// The receiver is unable to consume fast enough. Close the channel and
 			// remove it from the list.
 			eToClose := e
 			e = e.Next()
-			close(eToClose.Value.(chan *WatchEndpointsResponse))
+			close(eToClose.Value.(chan *tenant.WatchEndpointsResponse))
 			s.listen.eventListeners.Remove(eToClose)
 		}
 	}
@@ -181,8 +202,8 @@ func (s *TestDirectoryServer) notifyEventListenersLocked(req *WatchEndpointsResp
 // it will start a new one. It will return an error if starting a new tenant
 // process is impossible.
 func (s *TestDirectoryServer) EnsureEndpoint(
-	ctx context.Context, req *EnsureEndpointRequest,
-) (*EnsureEndpointResponse, error) {
+	ctx context.Context, req *tenant.EnsureEndpointRequest,
+) (*tenant.EnsureEndpointResponse, error) {
 	select {
 	case <-s.stopper.ShouldQuiesce():
 		return nil, context.Canceled
@@ -194,7 +215,7 @@ func (s *TestDirectoryServer) EnsureEndpoint(
 	s.proc.Lock()
 	defer s.proc.Unlock()
 
-	lst, err := s.listLocked(ctx, &ListEndpointsRequest{TenantID: req.TenantID})
+	lst, err := s.listLocked(ctx, &tenant.ListEndpointsRequest{TenantID: req.TenantID})
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +230,7 @@ func (s *TestDirectoryServer) EnsureEndpoint(
 		}))
 	}
 
-	return &EnsureEndpointResponse{}, nil
+	return &tenant.EnsureEndpointResponse{}, nil
 }
 
 // Serve requests on the given listener.
@@ -217,36 +238,16 @@ func (s *TestDirectoryServer) Serve(listener net.Listener) error {
 	return s.grpcServer.Serve(listener)
 }
 
-// NewTestDirectoryServer will create a new server.
-func NewTestDirectoryServer(stopper *stop.Stopper) (*TestDirectoryServer, error) {
-	// Determine the path to cockroach executable.
-	cockroachExecutable, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
-	dir := &TestDirectoryServer{
-		grpcServer:          grpc.NewServer(),
-		stopper:             stopper,
-		cockroachExecutable: cockroachExecutable,
-	}
-	dir.TenantStarterFunc = dir.startTenantLocked
-	dir.proc.processByAddrByTenantID = map[uint64]map[net.Addr]*Process{}
-	dir.listen.eventListeners = list.New()
-	stopper.AddCloser(stop.CloserFn(func() { dir.grpcServer.GracefulStop() }))
-	RegisterDirectoryServer(dir.grpcServer, dir)
-	return dir, nil
-}
-
 func (s *TestDirectoryServer) listLocked(
-	_ context.Context, req *ListEndpointsRequest,
-) (*ListEndpointsResponse, error) {
+	_ context.Context, req *tenant.ListEndpointsRequest,
+) (*tenant.ListEndpointsResponse, error) {
 	processByAddr, ok := s.proc.processByAddrByTenantID[req.TenantID]
 	if !ok {
-		return &ListEndpointsResponse{}, nil
+		return &tenant.ListEndpointsResponse{}, nil
 	}
-	resp := ListEndpointsResponse{}
+	resp := tenant.ListEndpointsResponse{}
 	for addr := range processByAddr {
-		resp.Endpoints = append(resp.Endpoints, &Endpoint{IP: addr.String()})
+		resp.Endpoints = append(resp.Endpoints, &tenant.Endpoint{IP: addr.String()})
 	}
 	return &resp, nil
 }
@@ -261,8 +262,8 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 
 	s.listen.RLock()
 	defer s.listen.RUnlock()
-	s.notifyEventListenersLocked(&WatchEndpointsResponse{
-		Typ:      ADDED,
+	s.notifyEventListenersLocked(&tenant.WatchEndpointsResponse{
+		Typ:      tenant.ADDED,
 		IP:       process.SQL.String(),
 		TenantID: tenantID,
 	})
@@ -281,8 +282,8 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 
 		s.listen.RLock()
 		defer s.listen.RUnlock()
-		s.notifyEventListenersLocked(&WatchEndpointsResponse{
-			Typ:      DELETED,
+		s.notifyEventListenersLocked(&tenant.WatchEndpointsResponse{
+			Typ:      tenant.DELETED,
 			IP:       sql.String(),
 			TenantID: tenantID,
 		})

@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenantdirsvr
+package tenant_test
 
 import (
 	"os"
