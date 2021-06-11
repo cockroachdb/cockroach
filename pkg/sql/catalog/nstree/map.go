@@ -17,8 +17,8 @@ import (
 )
 
 // Map is a lookup structure for descriptors. It is used to provide
-// indexed access to a set of descriptors either by name or by ID. The
-// descriptor's properties are index; these names must not change or else the
+// indexed access to a set of entries either by name or by ID. The
+// entries' properties are indexed; they must not change or else the
 // index will be corrupted.
 type Map struct {
 	byID   byIDMap
@@ -29,7 +29,7 @@ type Map struct {
 // If an error is returned, iteration is stopped and will be propagated
 // up the stack. If the error is iterutil.StopIteration, iteration will
 // stop but no error will be returned.
-type EntryIterator func(descriptor catalog.NameEntry) error
+type EntryIterator func(entry catalog.NameEntry) error
 
 // MakeMap makes a new Map.
 func MakeMap() Map {
