@@ -17,6 +17,7 @@ go_library(
         "race_off.go",
         "race_on.go",
         "reflect.go",
+        "slices.go",
         "smalltrace.go",
         "strings.go",
         "testaddr_default.go",
