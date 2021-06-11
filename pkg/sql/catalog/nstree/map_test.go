@@ -62,7 +62,6 @@ func TestMapDataDriven(t *testing.T) {
 }
 
 func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr Map) string {
-	const notFound = "not found"
 	switch d.Cmd {
 	case "add":
 		a := parseArgs(t, d, argID|argName, argParentID|argParentSchemaID)
@@ -135,6 +134,5 @@ func makeNameEntryFromArgs(a args) nameEntry {
 }
 
 func formatNameEntry(ne catalog.NameEntry) string {
-	return fmt.Sprintf("(%d, %d, %s): %d",
-		ne.GetParentID(), ne.GetParentSchemaID(), ne.GetName(), ne.GetID())
+	return fmt.Sprintf("%s: %d", formatNameInfo(ne), ne.GetID())
 }
