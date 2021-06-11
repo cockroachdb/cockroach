@@ -109,8 +109,8 @@ func testMapDataDriven(t *testing.T, d *datadriven.TestData, tr Map) string {
 		return ""
 	case "remove":
 		a := parseArgs(t, d, argID, 0)
-		_, removed := tr.Remove(a.id)
-		return strconv.FormatBool(removed)
+		removed := tr.Remove(a.id)
+		return strconv.FormatBool(removed != nil)
 	default:
 		t.Fatalf("unknown command %q", d.Cmd)
 		panic("unreachable")

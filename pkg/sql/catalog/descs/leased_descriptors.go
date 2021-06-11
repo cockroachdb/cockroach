@@ -181,7 +181,7 @@ func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
 
 func (ld *leasedDescriptors) release(ctx context.Context, descs []lease.IDVersion) {
 	for _, idv := range descs {
-		if removed, ok := ld.cache.Remove(idv.ID); ok {
+		if removed := ld.cache.Remove(idv.ID); removed != nil {
 			removed.(lease.LeasedDescriptor).Release(ctx)
 		}
 	}
