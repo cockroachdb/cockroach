@@ -367,3 +367,22 @@ subtest regression_62369
 
 query error "10000000000000000000000000000000000": value out of range
 SELECT INTERVAL '10000000000000000000000000000000000 year'
+
+statement ok
+CREATE TABLE regression_66118 (
+    "id" serial NOT NULL PRIMARY KEY,
+    "duration" interval NOT NULL
+)
+
+statement ok
+INSERT INTO regression_66118 ("duration") VALUES ('0 days 0.253000 seconds'::interval)
+
+query T
+SELECT ("duration" / 3.2) FROM regression_66118
+----
+00:00:00.079062
+
+query T
+SELECT (INTERVAL '0.000001' / 2)
+----
+00:00:00

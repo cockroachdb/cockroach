@@ -621,7 +621,7 @@ func (d Duration) DivFloat(x float64) Duration {
 	dayInt, dayFrac := math.Modf((float64(d.Days) / x) + (monthFrac * DaysPerMonth))
 
 	return MakeDuration(
-		int64((float64(d.nanos)/x)+(dayFrac*float64(nanosInDay))),
+		int64(float64((time.Duration(float64(d.nanos)/x) * time.Nanosecond).Truncate(time.Microsecond).Nanoseconds())+(dayFrac*float64(nanosInDay))),
 		int64(dayInt),
 		int64(monthInt),
 	)
