@@ -694,6 +694,12 @@ func (*AdminVerifyProtectedTimestampRequest) Method() Method { return AdminVerif
 // Method implements the Request interface.
 func (*QueryResolvedTimestampRequest) Method() Method { return QueryResolvedTimestamp }
 
+// Method implements the Request interface.
+func (*ScanInterleavedIntentsRequest) Method() Method { return ScanInterleavedIntents }
+
+// Method implements the Request interface.
+func (*BarrierRequest) Method() Method { return Barrier }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -954,6 +960,18 @@ func (r *AdminVerifyProtectedTimestampRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *QueryResolvedTimestampRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *ScanInterleavedIntentsRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *BarrierRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1302,6 +1320,8 @@ func (r *RefreshRangeRequest) flags() int {
 func (*SubsumeRequest) flags() int                { return isRead | isAlone | updatesTSCache }
 func (*RangeStatsRequest) flags() int             { return isRead }
 func (*QueryResolvedTimestampRequest) flags() int { return isRead | isRange }
+func (*ScanInterleavedIntentsRequest) flags() int { return isRead | isRange }
+func (*BarrierRequest) flags() int                { return isWrite | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about

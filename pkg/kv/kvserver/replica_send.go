@@ -343,6 +343,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 		}
 	}()
+
 	for {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {

@@ -4,6 +4,7 @@ go_library(
     name = "batcheval",
     srcs = [
         "cmd_add_sstable.go",
+        "cmd_barrier.go",
         "cmd_clear_range.go",
         "cmd_compute_checksum.go",
         "cmd_conditional_put.go",
@@ -36,6 +37,7 @@ go_library(
         "cmd_reverse_scan.go",
         "cmd_revert_range.go",
         "cmd_scan.go",
+        "cmd_scan_interleaved_intents.go",
         "cmd_subsume.go",
         "cmd_truncate_log.go",
         "command.go",
