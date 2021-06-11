@@ -26,7 +26,7 @@ func registerDjango(r *testRegistry) {
 	runDjango := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -109,8 +109,8 @@ func registerDjango(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Django release is %s.", djangoLatestTag)
-		c.l.Printf("Supported Django release is %s.", djangoSupportedTag)
+		t.l.Printf("Latest Django release is %s.", djangoLatestTag)
+		t.l.Printf("Supported Django release is %s.", djangoSupportedTag)
 
 		if err := repeatGitCloneE(
 			ctx,
@@ -130,8 +130,8 @@ func registerDjango(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
-		c.l.Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
+		t.l.Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
+		t.l.Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
 
 		if err := repeatGitCloneE(
 			ctx,
@@ -181,7 +181,7 @@ func registerDjango(r *testRegistry) {
 		if ignoredlist == nil {
 			t.Fatalf("No django ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 			version, blocklistName, ignoredlistName)
 
 		// TODO (rohany): move this to a file backed buffer if the output becomes
@@ -193,8 +193,8 @@ func registerDjango(r *testRegistry) {
 			rawResults, _ := c.RunWithBuffer(
 				ctx, t.l, node, fmt.Sprintf(djangoRunTestCmd, testName))
 			fullTestResults = append(fullTestResults, rawResults...)
-			c.l.Printf("Test results for app %s: %s", testName, rawResults)
-			c.l.Printf("Test stdout for app %s:", testName)
+			t.l.Printf("Test results for app %s: %s", testName, rawResults)
+			t.l.Printf("Test stdout for app %s:", testName)
 			if err := c.RunL(
 				ctx, t.l, node, fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
 			); err != nil {
@@ -216,7 +216,7 @@ func registerDjango(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1, cpu(16)),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runDjango(ctx, t, c)
 		},
 	})

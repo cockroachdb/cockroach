@@ -25,7 +25,7 @@ func registerPgx(r *testRegistry) {
 	runPgx := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -66,8 +66,8 @@ func registerPgx(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest jackc/pgx release is %s.", latestTag)
-		c.l.Printf("Supported release is %s.", supportedPGXTag)
+		t.l.Printf("Latest jackc/pgx release is %s.", latestTag)
+		t.l.Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
@@ -86,7 +86,7 @@ func registerPgx(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		c.l.Printf("%s", status)
+		t.l.Printf("%s", status)
 
 		t.Status("setting up test db")
 		db, err := c.ConnE(ctx, node[0])
@@ -109,7 +109,7 @@ func registerPgx(r *testRegistry) {
 		t.Status("running pgx test suite")
 		// Running the test suite is expected to error out, so swallow the error.
 		xmlResults, _ := repeatRunWithBuffer(
-			ctx, c, t.l, node,
+			ctx, c, t, node,
 			"run pgx test suite",
 			"cd /mnt/data1/pgx && "+
 				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
@@ -129,7 +129,7 @@ func registerPgx(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runPgx(ctx, t, c)
 		},
 	})

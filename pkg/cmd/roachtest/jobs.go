@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type jobStarter func(c *cluster) (string, error)
+type jobStarter func(c clusterI) (string, error)
 
 // jobSurvivesNodeShutdown is a helper that tests that a given job,
 // running on the specified gatewayNode will still complete successfully
@@ -32,9 +32,9 @@ type jobStarter func(c *cluster) (string, error)
 // - That the statement running the job is a detached statement, and does not
 // block until the job completes.
 func jobSurvivesNodeShutdown(
-	ctx context.Context, t *test, c *cluster, nodeToShutdown int, startJob jobStarter,
+	ctx context.Context, t *test, c clusterI, nodeToShutdown int, startJob jobStarter,
 ) {
-	watcherNode := 1 + (nodeToShutdown)%c.spec.NodeCount
+	watcherNode := 1 + (nodeToShutdown)%c.Spec().NodeCount
 	target := c.Node(nodeToShutdown)
 	t.l.Printf("test has chosen shutdown target node %d, and watcher node %d",
 		nodeToShutdown, watcherNode)

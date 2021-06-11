@@ -36,14 +36,16 @@ import (
 // proposals, liveness problems, or whatever else might get added in the
 // future.
 type HealthChecker struct {
-	c      *cluster
+	t      *test
+	c      clusterI
 	nodes  nodeListOption
 	doneCh chan struct{}
 }
 
 // NewHealthChecker returns a populated HealthChecker.
-func NewHealthChecker(c *cluster, nodes nodeListOption) *HealthChecker {
+func NewHealthChecker(t *test, c clusterI, nodes nodeListOption) *HealthChecker {
 	return &HealthChecker{
+		t:      t,
 		c:      c,
 		nodes:  nodes,
 		doneCh: make(chan struct{}),
@@ -78,7 +80,7 @@ func (g gossipAlerts) String() string {
 //
 // TODO(tschottdorf): actually let this fail the test instead of logging complaints.
 func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
-	logger, err := hc.c.l.ChildLogger("health")
+	logger, err := hc.t.l.ChildLogger("health")
 	if err != nil {
 		return err
 	}
@@ -141,13 +143,15 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 
 // DiskUsageLogger regularly logs the disk spaced used by the nodes in the cluster.
 type DiskUsageLogger struct {
-	c      *cluster
+	t      *test
+	c      clusterI
 	doneCh chan struct{}
 }
 
 // NewDiskUsageLogger populates a DiskUsageLogger.
-func NewDiskUsageLogger(c *cluster) *DiskUsageLogger {
+func NewDiskUsageLogger(t *test, c clusterI) *DiskUsageLogger {
 	return &DiskUsageLogger{
+		t:      t,
 		c:      c,
 		doneCh: make(chan struct{}),
 	}
@@ -161,11 +165,11 @@ func (dul *DiskUsageLogger) Done() {
 // Runner runs in a loop until Done() is called and prints the cluster-wide per
 // node disk usage in descending order.
 func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
-	logger, err := dul.c.l.ChildLogger("diskusage")
+	logger, err := dul.t.l.ChildLogger("diskusage")
 	if err != nil {
 		return err
 	}
-	quietLogger, err := dul.c.l.ChildLogger("diskusage-exec", quietStdout, quietStderr)
+	quietLogger, err := dul.t.l.ChildLogger("diskusage-exec", quietStdout, quietStderr)
 	if err != nil {
 		return err
 	}
@@ -211,8 +215,8 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 	}
 }
 func registerRestoreNodeShutdown(r *testRegistry) {
-	makeRestoreStarter := func(ctx context.Context, t *test, c *cluster, gatewayNode int) jobStarter {
-		return func(c *cluster) (string, error) {
+	makeRestoreStarter := func(ctx context.Context, t *test, c clusterI, gatewayNode int) jobStarter {
+		return func(c clusterI) (string, error) {
 			t.l.Printf("connecting to gateway")
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
@@ -280,7 +284,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, cockroach, "./cockroach")
@@ -295,7 +299,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, cockroach, "./cockroach")
@@ -311,7 +315,7 @@ type testDataSet interface {
 	// runRestore does any setup that's required and restores the dataset into
 	// the given cluster. Any setup shouldn't take a long amount of time since
 	// perf artifacts are based on how long this takes.
-	runRestore(ctx context.Context, c *cluster)
+	runRestore(ctx context.Context, c clusterI)
 }
 
 type dataBank2TB struct{}
@@ -320,7 +324,7 @@ func (dataBank2TB) name() string {
 	return "2TB"
 }
 
-func (dataBank2TB) runRestore(ctx context.Context, c *cluster) {
+func (dataBank2TB) runRestore(ctx context.Context, c clusterI) {
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
@@ -334,7 +338,7 @@ func (tpccIncData) name() string {
 	return "TPCCInc"
 }
 
-func (tpccIncData) runRestore(ctx context.Context, c *cluster) {
+func (tpccIncData) runRestore(ctx context.Context, c clusterI) {
 	// This data set restores a 1.80TB (replicated) backup consisting of 50
 	// incremental backup layers taken every 15 minutes. 8000 warehouses
 	// were imported and then a workload of 1000 warehouses was run against
@@ -378,18 +382,18 @@ func registerRestore(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				// Randomize starting with encryption-at-rest enabled.
-				c.encryptAtRandom = true
+				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx, t)
 				m := newMonitor(ctx, c)
 
 				// Run the disk usage logger in the monitor to guarantee its
 				// having terminated when the test ends.
-				dul := NewDiskUsageLogger(c)
+				dul := NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
-				hc := NewHealthChecker(c, c.All())
+				hc := NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
 				// TODO(peter): This currently causes the test to fail because we see a
@@ -428,7 +432,7 @@ func registerRestore(r *testRegistry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					if err := c.PutE(ctx, t.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil
@@ -444,12 +448,12 @@ func registerRestore(r *testRegistry) {
 // specified in m. This is particularly useful for verifying that a counter
 // metric does not exceed some threshold during a test. For example, the
 // restore and import tests verify that the range merge queue is inactive.
-func verifyMetrics(ctx context.Context, c *cluster, m map[string]float64) error {
+func verifyMetrics(ctx context.Context, c clusterI, m map[string]float64) error {
 	const sample = 10 * time.Second
 	// Query needed information over the timespan of the query.
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
 	if err != nil {
-		c.t.Fatal(err)
+		return err
 	}
 	url := "http://" + adminUIAddrs[0] + "/ts/query"
 

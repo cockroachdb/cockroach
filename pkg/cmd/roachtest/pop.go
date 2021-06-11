@@ -22,7 +22,7 @@ var popReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<po
 var popSupportedTag = "v5.3.3"
 
 func registerPop(r *testRegistry) {
-	runPop := func(ctx context.Context, t *test, c *cluster) {
+	runPop := func(ctx context.Context, t *test, c clusterI) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -44,8 +44,8 @@ func registerPop(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest pop release is %s.", latestTag)
-		c.l.Printf("Supported pop release is %s.", popSupportedTag)
+		t.l.Printf("Latest pop release is %s.", latestTag)
+		t.l.Printf("Supported pop release is %s.", popSupportedTag)
 
 		installGolang(ctx, t, c, node)
 

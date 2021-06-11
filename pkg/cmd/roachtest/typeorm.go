@@ -25,7 +25,7 @@ func registerTypeORM(r *testRegistry) {
 	runTypeORM := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -51,8 +51,8 @@ func registerTypeORM(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest TypeORM release is %s.", latestTag)
-		c.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
+		t.l.Printf("Latest TypeORM release is %s.", latestTag)
+		t.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -153,7 +153,7 @@ func registerTypeORM(r *testRegistry) {
 			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
 		)
 		rawResultsStr := string(rawResults)
-		c.l.Printf("Test Results: %s", rawResultsStr)
+		t.l.Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			// Ignore the failure discussed in #38180 and in
 			// https://github.com/typeorm/typeorm/pull/4298.
@@ -175,7 +175,7 @@ func registerTypeORM(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runTypeORM(ctx, t, c)
 		},
 	})

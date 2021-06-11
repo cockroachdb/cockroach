@@ -32,7 +32,7 @@ import (
 )
 
 func registerGossip(r *testRegistry) {
-	runGossipChaos := func(ctx context.Context, t *test, c *cluster) {
+	runGossipChaos := func(ctx context.Context, t *test, c clusterI) {
 		args := startArgs("--args=--vmodule=*=1")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All(), args)
@@ -94,11 +94,11 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 					continue
 				}
 
-				c.l.Printf("%d: checking gossip\n", i)
+				t.l.Printf("%d: checking gossip\n", i)
 				liveNodes, gossipNetwork := nodesInNetworkAccordingTo(i)
 				for _, id := range liveNodes {
 					if id == deadNode {
-						c.l.Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
+						t.l.Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
 							i, deadNode, gossipNetwork, timeutil.Since(start).Seconds())
 						return false
 					}
@@ -111,20 +111,20 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 				}
 
 				if len(liveNodes) != len(expLiveNodes) {
-					c.l.Printf("%d: gossip not ok (mismatched size of network: %s); expected %d, got %d (%.0fs)\n",
+					t.l.Printf("%d: gossip not ok (mismatched size of network: %s); expected %d, got %d (%.0fs)\n",
 						i, gossipNetwork, len(expLiveNodes), len(liveNodes), timeutil.Since(start).Seconds())
 					return false
 				}
 
 				for i := range liveNodes {
 					if liveNodes[i] != expLiveNodes[i] {
-						c.l.Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
+						t.l.Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
 							i, gossipNetwork, expLiveNodes, liveNodes, timeutil.Since(start).Seconds())
 						return false
 					}
 				}
 			}
-			c.l.Printf("gossip ok: %s (size: %d) (%0.0fs)\n", expGossipNetwork, len(expLiveNodes), timeutil.Since(start).Seconds())
+			t.l.Printf("gossip ok: %s (size: %d) (%0.0fs)\n", expGossipNetwork, len(expLiveNodes), timeutil.Since(start).Seconds())
 			return true
 		}
 
@@ -153,7 +153,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(9),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runGossipChaos(ctx, t, c)
 		},
 	})

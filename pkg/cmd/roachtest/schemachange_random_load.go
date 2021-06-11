@@ -42,7 +42,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			maxOps := 5000
 			concurrency := 20
 			if local {
@@ -85,13 +85,13 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
 		},
 	})
 }
 
-func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps, concurrency int) {
+func runSchemaChangeRandomLoad(ctx context.Context, t *test, c clusterI, maxOps, concurrency int) {
 	validate := func(db *gosql.DB) {
 		var (
 			id           int
@@ -133,9 +133,9 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 	c.Start(ctx, t, roachNodes)
 	c.Run(ctx, loadNode, "./workload init schemachange")
 
-	storeDirectory, err := c.RunWithBuffer(ctx, c.l, c.Node(1), "echo", "-n", "{store-dir}")
+	storeDirectory, err := c.RunWithBuffer(ctx, t.l, c.Node(1), "echo", "-n", "{store-dir}")
 	if err != nil {
-		c.l.Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
+		t.l.Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
 	}
 
 	runCmd := []string{
@@ -150,8 +150,8 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, loadNode, runCmd...)
 	if err != nil {
-		saveArtifacts(ctx, c, string(storeDirectory))
-		c.t.Fatal(err)
+		saveArtifacts(ctx, t, c, string(storeDirectory))
+		t.Fatal(err)
 	}
 
 	// Drop the database to test the correctness of DROP DATABASE CASCADE, which
@@ -177,29 +177,29 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 }
 
 // saveArtifacts saves important test artifacts in the artifacts directory.
-func saveArtifacts(ctx context.Context, c *cluster, storeDirectory string) {
+func saveArtifacts(ctx context.Context, t *test, c clusterI, storeDirectory string) {
 	db := c.Conn(ctx, 1)
 
 	// Save a backup file called schemachange to the store directory.
 	_, err := db.Exec("BACKUP DATABASE schemachange to 'nodelocal://1/schemachange'")
 	if err != nil {
-		c.l.Printf("Failed execute backup command on node 1: %v\n", err.Error())
+		t.l.Printf("Failed execute backup command on node 1: %v\n", err.Error())
 	}
 
 	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange")
-	localBackupFilePath := filepath.Join(c.t.ArtifactsDir(), "backup")
+	localBackupFilePath := filepath.Join(t.ArtifactsDir(), "backup")
 	remoteTransactionsFilePath := filepath.Join(storeDirectory, "transactions.ndjson")
-	localTransactionsFilePath := filepath.Join(c.t.ArtifactsDir(), "transactions.ndjson")
+	localTransactionsFilePath := filepath.Join(t.ArtifactsDir(), "transactions.ndjson")
 
 	// Copy the backup from the store directory to the artifacts directory.
-	err = c.Get(ctx, c.l, remoteBackupFilePath, localBackupFilePath, c.Node(1))
+	err = c.Get(ctx, t.l, remoteBackupFilePath, localBackupFilePath, c.Node(1))
 	if err != nil {
-		c.l.Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
+		t.l.Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 
 	// Copy the txn log from the store directory to the artifacts directory.
-	err = c.Get(ctx, c.l, remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
+	err = c.Get(ctx, t.l, remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
 	if err != nil {
-		c.l.Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
+		t.l.Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 }

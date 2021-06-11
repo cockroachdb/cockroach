@@ -27,13 +27,13 @@ func registerQueue(r *testRegistry) {
 		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runQueue(ctx, t, c)
 		},
 	})
 }
 
-func runQueue(ctx context.Context, t *test, c *cluster) {
+func runQueue(ctx context.Context, t *test, c clusterI) {
 	dbNodeCount := c.Spec().NodeCount - 1
 	workloadNode := c.Spec().NodeCount
 

@@ -37,7 +37,7 @@ func registerTLP(r *testRegistry) {
 	})
 }
 
-func runTLP(ctx context.Context, t *test, c *cluster) {
+func runTLP(ctx context.Context, t *test, c clusterI) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.
@@ -61,7 +61,7 @@ func runTLP(ctx context.Context, t *test, c *cluster) {
 	conn := c.Conn(ctx, 1)
 
 	rnd, seed := randutil.NewPseudoRand()
-	c.l.Printf("seed: %d", seed)
+	t.l.Printf("seed: %d", seed)
 
 	c.Put(ctx, cockroach, "./cockroach")
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
@@ -72,7 +72,7 @@ func runTLP(ctx context.Context, t *test, c *cluster) {
 	setup := sqlsmith.Setups["rand-tables"](rnd)
 
 	t.Status("executing setup")
-	c.l.Printf("setup:\n%s", setup)
+	t.l.Printf("setup:\n%s", setup)
 	if _, err := conn.Exec(setup); err != nil {
 		t.Fatal(err)
 	} else {
@@ -81,7 +81,7 @@ func runTLP(ctx context.Context, t *test, c *cluster) {
 
 	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
 	t.Status("setting statement_timeout")
-	c.l.Printf("statement timeout:\n%s", setStmtTimeout)
+	t.l.Printf("statement timeout:\n%s", setStmtTimeout)
 	if _, err := conn.Exec(setStmtTimeout); err != nil {
 		t.Fatal(err)
 	}

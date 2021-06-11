@@ -34,13 +34,13 @@ func registerSQLAlchemy(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runSQLAlchemy(ctx, t, c)
 		},
 	})
 }
 
-func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
+func runSQLAlchemy(ctx context.Context, t *test, c clusterI) {
 	if c.isLocal() {
 		t.Fatal("cannot be run in local mode")
 	}
@@ -52,8 +52,8 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.l.Printf("Latest sqlalchemy release is %s.", latestTag)
-	c.l.Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
+	t.l.Printf("Latest sqlalchemy release is %s.", latestTag)
+	t.l.Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
 	if err := repeatRunE(ctx, t, c, node, "update apt-get", `
 		sudo add-apt-repository ppa:deadsnakes/ppa &&
@@ -147,7 +147,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	if expectedFailures == nil {
 		t.Fatalf("No sqlalchemy blocklist defined for cockroach version %s", version)
 	}
-	c.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+	t.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 		version, blocklistName, ignoredlistName)
 
 	t.Status("running sqlalchemy test suite")
@@ -161,7 +161,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	`)
 
 	t.Status("collating the test results")
-	c.l.Printf("Test Results: %s", rawResults)
+	t.l.Printf("Test Results: %s", rawResults)
 
 	// Find all the failed and errored tests.
 	results := newORMTestsResults()

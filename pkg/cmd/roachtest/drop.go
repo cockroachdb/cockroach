@@ -29,7 +29,7 @@ func registerDrop(r *testRegistry) {
 	// by a truncation for the `stock` table (which contains warehouses*100k
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
-	runDrop := func(ctx context.Context, t *test, c *cluster, warehouses, nodes int) {
+	runDrop := func(ctx context.Context, t *test, c clusterI, warehouses, nodes int) {
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, t, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
@@ -94,7 +94,7 @@ func registerDrop(r *testRegistry) {
 				run(false, "DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
 				elapsed := timeutil.Since(tBegin)
 				// TODO(tschottdorf): check what's reasonable here and make sure we don't drop below it.
-				c.l.Printf("deleted from tpcc.stock for warehouse %d (100k rows) in %s (%.2f rows/sec)\n", i, elapsed, 100000.0/elapsed.Seconds())
+				t.l.Printf("deleted from tpcc.stock for warehouse %d (100k rows) in %s (%.2f rows/sec)\n", i, elapsed, 100000.0/elapsed.Seconds())
 			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
@@ -159,7 +159,7 @@ func registerDrop(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: `v2.1.0`,
 		Cluster:    makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.
 			if local {

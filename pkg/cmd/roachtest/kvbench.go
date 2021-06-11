@@ -89,7 +89,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 		Tags:    []string{"manual"},
 		Owner:   OwnerKV,
 		Cluster: nodes,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runKVBench(ctx, t, c, b)
 		},
 	})

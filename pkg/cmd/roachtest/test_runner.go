@@ -765,10 +765,10 @@ func (r *testRunner) runTest(
 		if t.Failed() {
 			s = "failure"
 		}
-		c.l.Printf("tearing down after %s; see teardown.log", s)
+		t.l.Printf("tearing down after %s; see teardown.log", s)
 		l, c.l, t.l = teardownL, teardownL, teardownL
 	case <-time.After(timeout):
-		c.l.Printf("tearing down after timeout; see teardown.log")
+		t.l.Printf("tearing down after timeout; see teardown.log")
 		l, c.l, t.l = teardownL, teardownL, teardownL
 		// Timeouts are often opaque. Improve our changes by dumping the stack
 		// so that at least we can piece together what the test is trying to
@@ -823,7 +823,7 @@ func (r *testRunner) runTest(
 			// everything.
 			const msg = "test timed out and afterwards failed to respond to cancelation"
 			t.l.PrintfCtx(ctx, msg)
-			r.collectClusterLogs(ctx, c, t.l)
+			r.collectClusterLogs(ctx, c, t)
 			// We return an error here because the test goroutine is still running, so
 			// we want to alert the caller of this unusual situation.
 			return false, errors.New(msg)
@@ -851,7 +851,7 @@ func (r *testRunner) runTest(
 	}
 
 	if t.Failed() {
-		r.collectClusterLogs(ctx, c, t.l)
+		r.collectClusterLogs(ctx, c, t)
 		return false, nil
 	}
 	return true, nil
@@ -916,7 +916,7 @@ caffeinate ./roachstress.sh %s
 	}
 }
 
-func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
+func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, t *test) {
 	// NB: fetch the logs even when we have a debug zip because
 	// debug zip can't ever get the logs for down nodes.
 	// We only save artifacts for failed tests in CI, so this
@@ -925,30 +925,30 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	// below has problems. For example, `debug zip` is known to
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
-	l.PrintfCtx(ctx, "collecting cluster logs")
-	if err := c.FetchLogs(ctx); err != nil {
-		l.Printf("failed to download logs: %s", err)
+	t.l.PrintfCtx(ctx, "collecting cluster logs")
+	if err := c.FetchLogs(ctx, t); err != nil {
+		t.l.Printf("failed to download logs: %s", err)
 	}
-	if err := c.FetchDmesg(ctx); err != nil {
-		l.Printf("failed to fetch dmesg: %s", err)
+	if err := c.FetchDmesg(ctx, t); err != nil {
+		t.l.Printf("failed to fetch dmesg: %s", err)
 	}
-	if err := c.FetchJournalctl(ctx); err != nil {
-		l.Printf("failed to fetch journalctl: %s", err)
+	if err := c.FetchJournalctl(ctx, t); err != nil {
+		t.l.Printf("failed to fetch journalctl: %s", err)
 	}
-	if err := c.FetchCores(ctx); err != nil {
-		l.Printf("failed to fetch cores: %s", err)
+	if err := c.FetchCores(ctx, t); err != nil {
+		t.l.Printf("failed to fetch cores: %s", err)
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
-		l.Printf("failed to copy roachprod state: %s", err)
+		t.l.Printf("failed to copy roachprod state: %s", err)
 	}
-	if err := c.FetchDiskUsage(ctx); err != nil {
-		l.Printf("failed to fetch disk uage summary: %s", err)
+	if err := c.FetchDiskUsage(ctx, t); err != nil {
+		t.l.Printf("failed to fetch disk uage summary: %s", err)
 	}
-	if err := c.FetchTimeseriesData(ctx); err != nil {
-		l.Printf("failed to fetch timeseries data: %s", err)
+	if err := c.FetchTimeseriesData(ctx, t); err != nil {
+		t.l.Printf("failed to fetch timeseries data: %s", err)
 	}
-	if err := c.FetchDebugZip(ctx); err != nil {
-		l.Printf("failed to collect zip: %s", err)
+	if err := c.FetchDebugZip(ctx, t); err != nil {
+		t.l.Printf("failed to collect zip: %s", err)
 	}
 }
 

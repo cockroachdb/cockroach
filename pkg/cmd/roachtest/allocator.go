@@ -74,7 +74,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/up/1to3`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
@@ -82,7 +82,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
@@ -250,8 +250,8 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 	}
 }
 
-func runWideReplication(ctx context.Context, t *test, c *cluster) {
-	nodes := c.spec.NodeCount
+func runWideReplication(ctx context.Context, t *test, c clusterI) {
+	nodes := c.Spec().NodeCount
 	if nodes != 9 {
 		t.Fatalf("9-node cluster required")
 	}

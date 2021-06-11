@@ -23,7 +23,7 @@ import (
 
 func registerImportNodeShutdown(r *testRegistry) {
 	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
-		startImport := func(c *cluster) (jobID string, err error) {
+		startImport := func(c clusterI) (jobID string, err error) {
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"
 			if local {
@@ -59,7 +59,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx, t)
 			gatewayNode := 2
@@ -74,7 +74,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx, t)
 			gatewayNode := 2
@@ -87,10 +87,10 @@ func registerImportNodeShutdown(r *testRegistry) {
 }
 
 func registerImportTPCC(r *testRegistry) {
-	runImportTPCC := func(ctx context.Context, t *test, c *cluster, testName string,
+	runImportTPCC := func(ctx context.Context, t *test, c clusterI, testName string,
 		timeout time.Duration, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
-		c.encryptAtRandom = true
+		c.EncryptAtRandom(true)
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
@@ -99,9 +99,9 @@ func registerImportTPCC(r *testRegistry) {
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c)
-		dul := NewDiskUsageLogger(c)
+		dul := NewDiskUsageLogger(t, c)
 		m.Go(dul.Runner)
-		hc := NewHealthChecker(c, c.All())
+		hc := NewHealthChecker(t, c, c.All())
 		m.Go(hc.Runner)
 
 		tick := initBulkJobPerfArtifacts(ctx, testName, timeout)
@@ -119,7 +119,7 @@ func registerImportTPCC(r *testRegistry) {
 
 			// Upload the perf artifacts to any one of the nodes so that the test
 			// runner copies it into an appropriate directory path.
-			if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+			if err := c.PutE(ctx, t.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
 				log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 			}
 			return nil
@@ -136,7 +136,7 @@ func registerImportTPCC(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: makeClusterSpec(numNodes),
 			Timeout: timeout,
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
 			},
 		})
@@ -149,7 +149,7 @@ func registerImportTPCC(r *testRegistry) {
 		Owner:   OwnerBulkIO,
 		Cluster: makeClusterSpec(8, cpu(16), geo(), zones(geoZones)),
 		Timeout: 5 * time.Hour,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 				5*time.Hour, geoWarehouses)
 		},
@@ -178,11 +178,11 @@ func registerImportTPCH(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
 
 				// Randomize starting with encryption-at-rest enabled.
-				c.encryptAtRandom = true
+				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx, t)
 				conn := c.Conn(ctx, 1)
@@ -212,9 +212,9 @@ func registerImportTPCH(r *testRegistry) {
 					t.Fatal(err)
 				}
 				m := newMonitor(ctx, c)
-				dul := NewDiskUsageLogger(c)
+				dul := NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
-				hc := NewHealthChecker(c, c.All())
+				hc := NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
 				// TODO(peter): This currently causes the test to fail because we see a
@@ -259,7 +259,7 @@ func registerImportTPCH(r *testRegistry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					if err := c.PutE(ctx, t.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil
@@ -279,7 +279,7 @@ func successfulImportStep(warehouses, nodeID int) versionStep {
 }
 
 func runImportMixedVersion(
-	ctx context.Context, t *test, c *cluster, warehouses int, predecessorVersion string,
+	ctx context.Context, t *test, c clusterI, warehouses int, predecessorVersion string,
 ) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
@@ -309,7 +309,7 @@ func registerImportMixedVersion(r *testRegistry) {
 		// Mixed-version support was added in 21.1.
 		MinVersion: "v21.1.0",
 		Cluster:    makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
@@ -324,7 +324,7 @@ func registerImportMixedVersion(r *testRegistry) {
 }
 
 func registerImportDecommissioned(r *testRegistry) {
-	runImportDecommissioned := func(ctx context.Context, t *test, c *cluster) {
+	runImportDecommissioned := func(ctx context.Context, t *test, c clusterI) {
 		warehouses := 100
 		if local {
 			warehouses = 10

@@ -32,7 +32,7 @@ func registerMultiTenantUpgrade(r *testRegistry) {
 		Cluster:           makeClusterSpec(2),
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runMultiTenantUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -154,7 +154,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c clusterI, binary str
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 13 and make sure it still works.
 //  * Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
-func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.Version) {
+func runMultiTenantUpgrade(ctx context.Context, t *test, c clusterI, v version.Version) {
 	predecessor, err := PredecessorVersion(v)
 	require.NoError(t, err)
 

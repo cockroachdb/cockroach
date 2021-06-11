@@ -72,7 +72,8 @@ until nc -z localhost $1; do sleep 0.1; echo "waiting for toxiproxy-server..."; 
 // A ToxiCluster wraps a cluster and sets it up for use with toxiproxy.
 // See Toxify() for details.
 type ToxiCluster struct {
-	*cluster
+	t *test
+	clusterI
 	toxClients map[int]*toxiproxy.Client
 	toxProxies map[int]*toxiproxy.Proxy
 }
@@ -83,7 +84,7 @@ type ToxiCluster struct {
 // wraps the original cluster, whose returned addresses will all go through
 // toxiproxy. The upstream (i.e. non-intercepted) addresses are accessible via
 // getters prefixed with "External".
-func Toxify(ctx context.Context, c *cluster, node nodeListOption) (*ToxiCluster, error) {
+func Toxify(ctx context.Context, t *test, c clusterI, node nodeListOption) (*ToxiCluster, error) {
 	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
 	if local && runtime.GOOS == "darwin" {
 		toxiURL = "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-darwin-amd64"
@@ -108,7 +109,8 @@ func Toxify(ctx context.Context, c *cluster, node nodeListOption) (*ToxiCluster,
 	}
 
 	tc := &ToxiCluster{
-		cluster:    c,
+		t:          t,
+		clusterI:   c,
 		toxClients: make(map[int]*toxiproxy.Client),
 		toxProxies: make(map[int]*toxiproxy.Proxy),
 	}
@@ -125,7 +127,7 @@ func Toxify(ctx context.Context, c *cluster, node nodeListOption) (*ToxiCluster,
 		if err != nil {
 			return nil, err
 		}
-		externalAddr, port, err := addrToHostPort(c, externalAddrs[0])
+		externalAddr, port, err := addrToHostPort(externalAddrs[0])
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +152,7 @@ func (tc *ToxiCluster) poisonedPort(port int) int {
 func (tc *ToxiCluster) Proxy(i int) *toxiproxy.Proxy {
 	proxy, found := tc.toxProxies[i]
 	if !found {
-		tc.cluster.t.Fatalf("proxy for node %d not found", i)
+		tc.t.Fatalf("proxy for node %d not found", i)
 	}
 	return proxy
 }
@@ -158,7 +160,7 @@ func (tc *ToxiCluster) Proxy(i int) *toxiproxy.Proxy {
 // ExternalAddr gives the external host:port of the node(s), bypassing the
 // toxiproxy interception.
 func (tc *ToxiCluster) ExternalAddr(ctx context.Context, node nodeListOption) ([]string, error) {
-	return tc.cluster.ExternalAddr(ctx, node)
+	return tc.clusterI.ExternalAddr(ctx, node)
 }
 
 // PoisonedExternalAddr gives the external host:port of the toxiproxy process
@@ -173,7 +175,7 @@ func (tc *ToxiCluster) PoisonedExternalAddr(
 		return nil, err
 	}
 	for _, addr := range extAddrs {
-		host, port, err := addrToHostPort(tc.cluster, addr)
+		host, port, err := addrToHostPort(addr)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +199,7 @@ func (tc *ToxiCluster) PoisonedPGAddr(ctx context.Context, node nodeListOption) 
 	for i, s := range urls {
 		u, err := url.Parse(s)
 		if err != nil {
-			tc.cluster.t.Fatal(err)
+			tc.t.Fatal(err)
 		}
 		u.Host = exts[i]
 		out = append(out, u.String())
@@ -207,13 +209,13 @@ func (tc *ToxiCluster) PoisonedPGAddr(ctx context.Context, node nodeListOption) 
 
 // PoisonedConn returns an SQL connection to the specified node through toxiproxy.
 func (tc *ToxiCluster) PoisonedConn(ctx context.Context, node int) *gosql.DB {
-	urls, err := tc.PoisonedPGAddr(ctx, tc.cluster.Node(node))
+	urls, err := tc.PoisonedPGAddr(ctx, tc.clusterI.Node(node))
 	if err != nil {
-		tc.cluster.t.Fatal(err)
+		tc.t.Fatal(err)
 	}
 	db, err := gosql.Open("postgres", urls[0])
 	if err != nil {
-		tc.cluster.t.Fatal(err)
+		tc.t.Fatal(err)
 	}
 	return db
 }
@@ -231,24 +233,24 @@ var measureRE = regexp.MustCompile(`real[^0-9]+([0-9.]+)`)
 func (tc *ToxiCluster) Measure(ctx context.Context, fromNode int, stmt string) time.Duration {
 	externalAddrs, err := tc.ExternalAddr(ctx, tc.Node(fromNode))
 	if err != nil {
-		tc.cluster.t.Fatal(err)
+		tc.t.Fatal(err)
 	}
-	_, port, err := addrToHostPort(tc.cluster, externalAddrs[0])
+	_, port, err := addrToHostPort(externalAddrs[0])
 	if err != nil {
-		tc.cluster.t.Fatal(err)
+		tc.t.Fatal(err)
 	}
-	b, err := tc.cluster.RunWithBuffer(ctx, tc.cluster.l, tc.cluster.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
-	tc.cluster.l.Printf("%s\n", b)
+	b, err := tc.clusterI.RunWithBuffer(ctx, tc.t.l, tc.clusterI.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
+	tc.t.l.Printf("%s\n", b)
 	if err != nil {
-		tc.cluster.t.Fatal(err)
+		tc.t.Fatal(err)
 	}
 	matches := measureRE.FindSubmatch(b)
 	if len(matches) != 2 {
-		tc.cluster.t.Fatalf("unable to extract duration from output: %s", b)
+		tc.t.Fatalf("unable to extract duration from output: %s", b)
 	}
 	f, err := strconv.ParseFloat(string(matches[1]), 64)
 	if err != nil {
-		tc.cluster.t.Fatalf("unable to parse %s as float: %s", b, err)
+		tc.t.Fatalf("unable to parse %s as float: %s", b, err)
 	}
 	return time.Duration(f * 1e9)
 }

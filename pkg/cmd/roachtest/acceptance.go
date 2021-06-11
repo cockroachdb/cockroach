@@ -97,7 +97,7 @@ func registerAcceptance(r *testRegistry) {
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}
-			spec.Run = func(ctx context.Context, t *test, c *cluster) {
+			spec.Run = func(ctx context.Context, t *test, c clusterI) {
 				tc.fn(ctx, t, c)
 			}
 			r.Add(spec)

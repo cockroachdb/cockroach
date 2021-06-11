@@ -16,7 +16,7 @@ const goPath = `/mnt/data1/go`
 
 // installGolang installs a specific version of Go on all nodes in
 // "node".
-func installGolang(ctx context.Context, t *test, c *cluster, node nodeListOption) {
+func installGolang(ctx context.Context, t *test, c clusterI, node nodeListOption) {
 	if err := repeatRunE(
 		ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 	); err != nil {

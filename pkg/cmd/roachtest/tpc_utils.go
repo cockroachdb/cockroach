@@ -26,7 +26,7 @@ import (
 // scale factor at least as large as the provided scale factor), performing an
 // expensive dataset restore only if it doesn't.
 func loadTPCHDataset(
-	ctx context.Context, t *test, c *cluster, sf int, m *monitor, roachNodes nodeListOption,
+	ctx context.Context, t *test, c clusterI, sf int, m *monitor, roachNodes nodeListOption,
 ) error {
 	db := c.Conn(ctx, roachNodes[0])
 	defer db.Close()
@@ -57,7 +57,7 @@ func loadTPCHDataset(
 
 		// If the scale factor was smaller than the required scale factor, wipe the
 		// cluster and restore.
-		m.ExpectDeaths(int32(c.spec.NodeCount))
+		m.ExpectDeaths(int32(c.Spec().NodeCount))
 		c.Wipe(ctx, roachNodes)
 		c.Start(ctx, t, roachNodes)
 		m.ResetDeaths()

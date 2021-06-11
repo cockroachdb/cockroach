@@ -51,7 +51,7 @@ func registerFollowerReads(r *testRegistry) {
 				// us-west1, and 1 (or 2) in europe-west2.
 				zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runFollowerReadsTest(ctx, t, c, survival, locality)
 			},
 		})
@@ -99,7 +99,7 @@ const (
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
 func runFollowerReadsTest(
-	ctx context.Context, t *test, c *cluster, survival survivalGoal, locality localitySetting,
+	ctx context.Context, t *test, c clusterI, survival survivalGoal, locality localitySetting,
 ) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Wipe(ctx)
@@ -396,7 +396,7 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 // ignoring the first 20s.
 func verifySQLLatency(
 	ctx context.Context,
-	c *cluster,
+	c clusterI,
 	t *test,
 	adminNode nodeListOption,
 	start, end time.Time,
@@ -445,7 +445,7 @@ const followerReadsMetric = "follower_reads_success_count"
 
 // getFollowerReadCounts returns a slice from node to follower read count
 // according to the metric.
-func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
+func getFollowerReadCounts(ctx context.Context, c clusterI) ([]int, error) {
 	followerReadCounts := make([]int, c.Spec().NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
