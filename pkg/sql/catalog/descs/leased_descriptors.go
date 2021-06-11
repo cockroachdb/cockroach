@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptortree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -44,7 +44,7 @@ type deadlineHolder interface {
 func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 	return leasedDescriptors{
 		lm:    lm,
-		cache: descriptortree.Make(),
+		cache: nstree.Make(),
 	}
 }
 
@@ -52,7 +52,7 @@ func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
 	lm    leaseManager
-	cache descriptortree.Tree
+	cache nstree.Tree
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
