@@ -39,7 +39,7 @@ import (
 // Manager is the instance responsible for executing migrations across the
 // cluster.
 type Manager struct {
-	c        migration.Cluster
+	deps     migration.SystemDeps
 	ie       sqlutil.InternalExecutor
 	jr       *jobs.Registry
 	codec    keys.SQLCodec
@@ -57,16 +57,16 @@ func (m *Manager) GetMigration(key clusterversion.ClusterVersion) (migration.Mig
 	return migrations.GetMigration(key)
 }
 
-// Cluster returns the cluster associated with this manager. It may be nil
-// in a secondary tenant.
-func (m *Manager) Cluster() migration.Cluster {
-	return m.c
+// SystemDeps returns dependencies to run system migrations for the cluster
+// associated with this manager. It may be the zero value in a secondary tenant.
+func (m *Manager) SystemDeps() migration.SystemDeps {
+	return m.deps
 }
 
-// NewManager constructs a new Manager. The Cluster parameter may be nil in
+// NewManager constructs a new Manager. The SystemDeps parameter may be zero in
 // secondary tenants. The testingKnobs parameter may be nil.
 func NewManager(
-	c migration.Cluster,
+	deps migration.SystemDeps,
 	ie sqlutil.InternalExecutor,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
@@ -78,7 +78,7 @@ func NewManager(
 		knobs = *testingKnobs
 	}
 	return &Manager{
-		c:        c,
+		deps:     deps,
 		ie:       ie,
 		jr:       jr,
 		codec:    codec,
@@ -114,7 +114,7 @@ func (m *Manager) Migrate(
 	// that might be doomed to fail.
 	{
 		finalVersion := clusterVersions[len(clusterVersions)-1]
-		if err := validateTargetClusterVersion(ctx, m.c, finalVersion); err != nil {
+		if err := validateTargetClusterVersion(ctx, m.deps.Cluster, finalVersion); err != nil {
 			return err
 		}
 	}
@@ -206,19 +206,19 @@ func (m *Manager) Migrate(
 			// version, and by design also supports the actual version (which is
 			// the direct successor of the fence).
 			fenceVersion := migration.FenceVersionFor(ctx, clusterVersion)
-			if err := bumpClusterVersion(ctx, m.c, fenceVersion); err != nil {
+			if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
 				return err
 			}
 		}
 
 		// Now sanity check that we'll actually be able to perform the real
 		// cluster version bump, cluster-wide.
-		if err := validateTargetClusterVersion(ctx, m.c, clusterVersion); err != nil {
+		if err := validateTargetClusterVersion(ctx, m.deps.Cluster, clusterVersion); err != nil {
 			return err
 		}
 
 		// Finally, bump the real version cluster-wide.
-		if err := bumpClusterVersion(ctx, m.c, clusterVersion); err != nil {
+		if err := bumpClusterVersion(ctx, m.deps.Cluster, clusterVersion); err != nil {
 			return err
 		}
 	}
@@ -289,7 +289,7 @@ func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context, user security.SQLUsername, version clusterversion.ClusterVersion,
 ) (alreadyCompleted bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
-	if err := m.c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		alreadyCompleted, err = migrationjob.CheckIfMigrationCompleted(ctx, txn, m.ie, version)
 		if err != nil && ctx.Err() == nil {
 			log.Warningf(ctx, "failed to check if migration already completed: %v", err)
