@@ -34,7 +34,8 @@ func TestRunWithTimeout(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		return ctx.Err()
 	})
-	expectedMsg := "operation \"foo\" timed out after 1ns"
+	baseExpectedMsg := "operation \"foo\" timed out after 1ns"
+	expectedMsg := baseExpectedMsg + ": context deadline exceeded"
 	if err.Error() != expectedMsg {
 		t.Fatalf("expected %s, actual %s", expectedMsg, err.Error())
 	}
@@ -53,7 +54,7 @@ func TestRunWithTimeout(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		return errors.Wrap(ctx.Err(), "custom error")
 	})
-	expExtended := expectedMsg + ": custom error: context deadline exceeded"
+	expExtended := baseExpectedMsg + ": custom error: context deadline exceeded"
 	if err.Error() != expExtended {
 		t.Fatalf("expected %q, actual %q", expExtended, err.Error())
 	}

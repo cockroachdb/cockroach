@@ -12,8 +12,6 @@ package contextutil
 
 import (
 	"context"
-	"fmt"
-	"net"
 	"runtime/debug"
 	"sync/atomic"
 	"time"
@@ -78,55 +76,6 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 		}
 		cancel()
 	}
-}
-
-// TimeoutError is a wrapped ContextDeadlineExceeded error. It indicates that
-// an operation didn't complete within its designated timeout.
-type TimeoutError struct {
-	operation string
-	duration  time.Duration
-	cause     error
-}
-
-var _ error = (*TimeoutError)(nil)
-var _ fmt.Formatter = (*TimeoutError)(nil)
-var _ errors.Formatter = (*TimeoutError)(nil)
-
-// We implement net.Error the same way that context.DeadlineExceeded does, so
-// that people looking for net.Error attributes will still find them.
-var _ net.Error = (*TimeoutError)(nil)
-
-// Operation returns the name of the operation that timed out.
-func (t *TimeoutError) Operation() string {
-	return t.operation
-}
-
-func (t *TimeoutError) Error() string { return fmt.Sprintf("%v", t) }
-
-// Format implements fmt.Formatter.
-func (t *TimeoutError) Format(s fmt.State, verb rune) { errors.FormatError(t, s, verb) }
-
-// FormatError implements errors.Formatter.
-func (t *TimeoutError) FormatError(p errors.Printer) error {
-	p.Printf("operation %q timed out after %s", t.operation, t.duration)
-	if errors.UnwrapOnce(t.cause) != nil {
-		// If there were details (wrappers, stack trace etc.) ensure
-		// they get printed.
-		return t.cause
-	}
-	// We omit the "context deadline exceeded" suffix in the common case.
-	return nil
-}
-
-// Timeout implements net.Error.
-func (*TimeoutError) Timeout() bool { return true }
-
-// Temporary implements net.Error.
-func (*TimeoutError) Temporary() bool { return true }
-
-// Cause implements Causer.
-func (t *TimeoutError) Cause() error {
-	return t.cause
 }
 
 // RunWithTimeout runs a function with a timeout, the same way you'd do with
