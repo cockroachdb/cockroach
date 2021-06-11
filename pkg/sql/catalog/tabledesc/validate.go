@@ -519,10 +519,10 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// We maintain forward compatibility, so if you see this error message with a
 	// version older that what this client supports, then there's a
 	// maybeFillInDescriptor missing from some codepath.
-	if desc.GetFormatVersion() != descpb.InterleavedFormatVersion {
+	if desc.GetFormatVersion() != descpb.PrimaryIndexStoredColumnsFormatVersion {
 		vea.Report(errors.AssertionFailedf(
 			"table is encoded using using version %d, but this client only supports version %d",
-			desc.GetFormatVersion(), descpb.InterleavedFormatVersion))
+			desc.GetFormatVersion(), descpb.PrimaryIndexStoredColumnsFormatVersion))
 		return
 	}
 
@@ -1042,6 +1042,21 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			if len(foundIn) > 1 {
 				return errors.AssertionFailedf("index %q has column ID %d present in: %v",
 					idx.GetName(), colID, foundIn)
+			}
+		}
+		// Check presence of all deletable column IDs in primary index.
+		if idx.Primary() {
+			primaryIDs := idx.CollectKeyColumnIDs()
+			primaryIDs.UnionWith(idx.CollectPrimaryStoredColumnIDs())
+			var missingIDs []descpb.ColumnID
+			for _, col := range desc.DeletableColumns() {
+				if !col.IsVirtual() && !primaryIDs.Contains(col.GetID()) {
+					missingIDs = append(missingIDs, col.GetID())
+				}
+			}
+			if missingIDs != nil {
+				return errors.AssertionFailedf("index %q is missing public column IDs: %v",
+					idx.GetName(), missingIDs)
 			}
 		}
 	}

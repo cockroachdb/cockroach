@@ -404,20 +404,25 @@ func maybeUpgradeForeignKeyRepOnIndex(
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
 // This method should be called through maybeFillInDescriptor, not directly.
-func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) bool {
-	if desc.FormatVersion >= descpb.InterleavedFormatVersion {
-		return false
+func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) (wasUpgraded bool) {
+	for _, pair := range []struct {
+		targetVersion descpb.FormatVersion
+		upgradeFn     func(*descpb.TableDescriptor)
+	}{
+		{descpb.FamilyFormatVersion, upgradeToFamilyFormatVersion},
+		{descpb.InterleavedFormatVersion, func(_ *descpb.TableDescriptor) {}},
+		{descpb.PrimaryIndexStoredColumnsFormatVersion, upgradeToPrimaryIndexStoredColumnsFormatVersion},
+	} {
+		if desc.FormatVersion < pair.targetVersion {
+			pair.upgradeFn(desc)
+			desc.FormatVersion = pair.targetVersion
+			wasUpgraded = true
+		}
 	}
-	maybeUpgradeToFamilyFormatVersion(desc)
-	desc.FormatVersion = descpb.InterleavedFormatVersion
-	return true
+	return wasUpgraded
 }
 
-func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
-	if desc.FormatVersion >= descpb.FamilyFormatVersion {
-		return false
-	}
-
+func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 	var primaryIndexColumnIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
 		primaryIndexColumnIDs.Add(colID)
@@ -456,10 +461,29 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 			addFamilyForCol(c)
 		}
 	}
+}
 
-	desc.FormatVersion = descpb.FamilyFormatVersion
+func upgradeToPrimaryIndexStoredColumnsFormatVersion(desc *descpb.TableDescriptor) {
+	var primaryIndexColumnIDs catalog.TableColSet
+	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
+		primaryIndexColumnIDs.Add(colID)
+	}
+	desc.PrimaryIndex.StoreColumnIDs = make([]descpb.ColumnID, 0, len(desc.Columns)+len(desc.Mutations))
+	desc.PrimaryIndex.StoreColumnNames = make([]string, 0, len(desc.Columns)+len(desc.Mutations))
+	maybeAddToStored := func(col *descpb.ColumnDescriptor) {
+		if col == nil || primaryIndexColumnIDs.Contains(col.ID) || col.Virtual {
+			return
+		}
+		desc.PrimaryIndex.StoreColumnIDs = append(desc.PrimaryIndex.StoreColumnIDs, col.ID)
+		desc.PrimaryIndex.StoreColumnNames = append(desc.PrimaryIndex.StoreColumnNames, col.Name)
+	}
 
-	return true
+	for _, col := range desc.Columns {
+		maybeAddToStored(&col)
+	}
+	for _, m := range desc.Mutations {
+		maybeAddToStored(m.GetColumn())
+	}
 }
 
 // maybeUpgradeIndexFormatVersion tries to promote an index to version
