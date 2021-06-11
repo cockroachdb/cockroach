@@ -361,9 +361,10 @@ func (s *Stopper) RunAsyncTask(
 // stopper using AddCloser.
 func (s *Stopper) RunLimitedAsyncTask(
 	ctx context.Context, taskName string, sem *quotapool.IntPool, wait bool, f func(context.Context),
-) (err error) {
+) error {
 	// Wait for permission to run from the semaphore.
 	var alloc *quotapool.IntAlloc
+	var err error
 	if wait {
 		alloc, err = sem.Acquire(ctx, 1)
 	} else {
@@ -377,11 +378,10 @@ func (s *Stopper) RunLimitedAsyncTask(
 	if err != nil {
 		return err
 	}
+	taskStarted := false
 	defer func() {
-		// If the err is non-nil then we know that we did not start the async task
-		// and thus we need to release the acquired quota. If it is nil then we
-		// did start the task and it will release the quota.
-		if err != nil {
+		// If the task is started, the alloc will be released async.
+		if !taskStarted {
 			alloc.Release()
 		}
 	}()
@@ -391,20 +391,14 @@ func (s *Stopper) RunLimitedAsyncTask(
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if !s.runPrelude() {
-		return ErrUnavailable
-	}
 
-	ctx, span := tracing.ForkSpan(ctx, taskName)
-
-	go func() {
-		defer s.Recover(ctx)
-		defer s.runPostlude()
+	if err := s.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
 		defer alloc.Release()
-		defer span.Finish()
-
 		f(ctx)
-	}()
+	}); err != nil {
+		return err
+	}
+	taskStarted = true
 	return nil
 }
 
