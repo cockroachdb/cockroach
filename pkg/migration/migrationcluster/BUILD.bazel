@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
@@ -19,6 +20,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//pkg/util/quotapool",
+        "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@org_golang_google_grpc//:go_default_library",
