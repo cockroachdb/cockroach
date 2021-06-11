@@ -233,9 +233,9 @@ stringer(
 
 genrule(
     name = "gen-batch-generated",
-    srcs = ["//pkg/roachpb/gen"],
     outs = ["batch_generated-gen.go"],
     cmd = """
      $(location //pkg/roachpb/gen) --filename=$(location batch_generated-gen.go)
        """,
+    exec_tools = ["//pkg/roachpb/gen"],
 )

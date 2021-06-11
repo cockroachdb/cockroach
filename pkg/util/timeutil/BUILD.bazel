@@ -53,9 +53,7 @@ go_test(
 genrule(
     name = "gen-lowercase-timezones",
     srcs = [
-        "//pkg/util/timeutil/gen",
         "@go_sdk//:lib/time/zoneinfo.zip",
-        "@com_github_cockroachdb_crlfmt//:crlfmt",
     ],
     outs = ["lowercase_timezones_generated.go"],
     cmd = """
@@ -64,4 +62,8 @@ genrule(
       --zoneinfo=$(location @go_sdk//:lib/time/zoneinfo.zip) \
       --crlfmt=$(location @com_github_cockroachdb_crlfmt//:crlfmt)
        """,
+    exec_tools = [
+        "//pkg/util/timeutil/gen",
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
+    ],
 )

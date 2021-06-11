@@ -13,9 +13,6 @@ run_bazel() {
         exit 1
     fi
 
-    # Bazel configuration for CI.
-    cp $root/.bazelrc.ci $root/.bazelrc.user
-
     # Set up volumes.
     vols="--volume /home/agent/.bazelcache:/root/.cache/bazel"
 
