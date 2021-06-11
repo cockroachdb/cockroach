@@ -24,7 +24,7 @@ type byNameItem struct {
 	v                        interface{}
 }
 
-func makeByNameItem(d catalog.NameKeyComponents) byNameItem {
+func makeByNameItem(d catalog.NameKey) byNameItem {
 	return byNameItem{
 		parentID:       d.GetParentID(),
 		parentSchemaID: d.GetParentSchemaID(),

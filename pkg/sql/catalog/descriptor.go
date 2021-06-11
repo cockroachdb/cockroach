@@ -103,11 +103,11 @@ type IndexOpts struct {
 	AddMutations bool
 }
 
-// NameKeyComponents is an interface for objects which have all the components
+// NameKey is an interface for objects which have all the components
 // of their corresponding namespace table entry.
 // Typically these objects are either Descriptor implementations or
 // descpb.NameInfo structs.
-type NameKeyComponents interface {
+type NameKey interface {
 	GetName() string
 	GetParentID() descpb.ID
 	GetParentSchemaID() descpb.ID
@@ -115,11 +115,11 @@ type NameKeyComponents interface {
 
 // NameEntry corresponds to an entry in the namespace table.
 type NameEntry interface {
-	NameKeyComponents
+	NameKey
 	GetID() descpb.ID
 }
 
-var _ NameKeyComponents = descpb.NameInfo{}
+var _ NameKey = descpb.NameInfo{}
 
 // Descriptor is an interface to be shared by individual descriptor
 // types.
