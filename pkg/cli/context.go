@@ -245,6 +245,10 @@ var sqlCtx = struct {
 	// Only valid if inputFile is empty.
 	execStmts statementsValue
 
+	// quitAfterExecStmts tells the shell whether to quit
+	// after processing the execStmts.
+	quitAfterExecStmts bool
+
 	// inputFile is the file to read from.
 	// If empty, os.Stdin is used.
 	// Only valid if execStmts is empty.
@@ -302,6 +306,7 @@ var sqlCtx = struct {
 func setSQLContextDefaults() {
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
+	sqlCtx.quitAfterExecStmts = false
 	sqlCtx.inputFile = ""
 	sqlCtx.repeatDelay = 0
 	sqlCtx.safeUpdates = false
