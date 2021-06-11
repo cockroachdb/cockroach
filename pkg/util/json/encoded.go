@@ -428,18 +428,18 @@ func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
 		// or maybe there's something fancier we could do if we know the locations
 		// of the offsets by strategically positioning our binary search guesses to
 		// land on them.
-		var err error
+		var searchErr error
 		i := sort.Search(j.containerLen, func(idx int) bool {
 			data, _, err := j.objectGetNthDataRange(idx)
 			if err != nil {
+				searchErr = err
 				return false
 			}
 			return string(data) >= key
 		})
-		if err != nil {
-			return nil, err
+		if searchErr != nil {
+			return nil, searchErr
 		}
-
 		// The sort.Search API implies that we have to double-check if the key we
 		// landed on is the one we were searching for in the first place.
 		if i >= j.containerLen {

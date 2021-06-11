@@ -88,7 +88,7 @@ SELECT
 FROM %s S
 WHERE next_run < %s
 ORDER BY random()
-%s 
+%s
 FOR UPDATE`, env.SystemJobsTableName(), CreatedByScheduledJobs,
 		StatusSucceeded, StatusCanceled, StatusFailed,
 		env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
@@ -313,7 +313,7 @@ func (s *jobScheduler) executeSchedules(
 			return s.processSchedule(ctx, schedule, numRunning, stats, txn)
 		}); processErr != nil {
 			if errors.HasType(processErr, (*savePointError)(nil)) {
-				return errors.Wrapf(err, "savepoint error for schedule %d", schedule.ScheduleID())
+				return errors.Wrapf(processErr, "savepoint error for schedule %d", schedule.ScheduleID())
 			}
 
 			// Failed to process schedule.
