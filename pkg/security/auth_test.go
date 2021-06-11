@@ -11,6 +11,7 @@
 package security_test
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -204,6 +205,8 @@ func TestAuthenticationHook(t *testing.T) {
 		{false, "foo,bar", blahUser, "bar:blah", true, true, false},
 	}
 
+	ctx := context.Background()
+
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			err := security.SetCertPrincipalMap(strings.Split(tc.principalMap, ","))
@@ -217,11 +220,11 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				return
 			}
-			_, err = hook(tc.username, true /* clientConnection */)
+			_, err = hook(ctx, tc.username, true /* clientConnection */)
 			if (err == nil) != tc.publicHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.publicHookSuccess, err)
 			}
-			_, err = hook(tc.username, false /* clientConnection */)
+			_, err = hook(ctx, tc.username, false /* clientConnection */)
 			if (err == nil) != tc.privateHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.privateHookSuccess, err)
 			}

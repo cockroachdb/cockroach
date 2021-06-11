@@ -127,7 +127,7 @@ func (c *conn) handleAuthentication(
 		return nil, sendError(err)
 	}
 
-	if connClose, err = authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
+	if connClose, err = authenticationHook(ctx, c.sessionArgs.User, true /* public */); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 		return connClose, sendError(err)
 	}
