@@ -13,6 +13,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -30,12 +32,12 @@ type Cluster interface {
 
 	// Uploading and downloading from/to nodes.
 
-	Get(ctx context.Context, l *logger, src, dest string, opts ...option) error
+	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option) error
 	Put(ctx context.Context, src, dest string, opts ...option)
-	PutE(ctx context.Context, l *logger, src, dest string, opts ...option) error
+	PutE(ctx context.Context, l *logger.Logger, src, dest string, opts ...option) error
 	PutLibraries(ctx context.Context, libraryDir string) error
 	Stage(
-		ctx context.Context, l *logger, application, versionOrSHA, dir string, opts ...option,
+		ctx context.Context, l *logger.Logger, application, versionOrSHA, dir string, opts ...option,
 	) error
 	PutString(
 		ctx context.Context, content, dest string, mode os.FileMode, opts ...option,
@@ -81,9 +83,9 @@ type Cluster interface {
 
 	Run(ctx context.Context, node nodeListOption, args ...string)
 	RunE(ctx context.Context, node nodeListOption, args ...string) error
-	RunL(ctx context.Context, l *logger, node nodeListOption, args ...string) error
+	RunL(ctx context.Context, l *logger.Logger, node nodeListOption, args ...string) error
 	RunWithBuffer(
-		ctx context.Context, l *logger, node nodeListOption, args ...string,
+		ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
 	) ([]byte, error)
 
 	// Metadata about the provisioned nodes.
@@ -94,7 +96,7 @@ type Cluster interface {
 
 	// Deleting CockroachDB data and logs on nodes.
 
-	WipeE(ctx context.Context, l *logger, opts ...option) error
+	WipeE(ctx context.Context, l *logger.Logger, opts ...option) error
 	Wipe(ctx context.Context, opts ...option)
 
 	// Toggling encryption-at-rest settings for starting CockroachDB.
@@ -107,7 +109,7 @@ type Cluster interface {
 	Reset(ctx context.Context) error
 	Reformat(ctx context.Context, node nodeListOption, args ...string)
 	Install(
-		ctx context.Context, l *logger, node nodeListOption, args ...string,
+		ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
 	) error
 
 	// Methods whose inclusion on this interface is purely historical.
@@ -117,6 +119,6 @@ type Cluster interface {
 	CheckReplicaDivergenceOnDB(context.Context, *test, *gosql.DB) error
 	FetchDiskUsage(ctx context.Context, t *test) error
 	GitClone(
-		ctx context.Context, l *logger, src, dest, branch string, node nodeListOption,
+		ctx context.Context, l *logger.Logger, src, dest, branch string, node nodeListOption,
 	) error
 }

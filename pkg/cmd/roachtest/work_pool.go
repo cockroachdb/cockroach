@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -88,7 +89,7 @@ func (p *workPool) getTestToRun(
 	qp *quotapool.IntPool,
 	cr *clusterRegistry,
 	onDestroy func(),
-	l *logger,
+	l *logger.Logger,
 ) (testToRunRes, error) {
 	// If we've been given a cluster, see if we can reuse it.
 	if c != nil {

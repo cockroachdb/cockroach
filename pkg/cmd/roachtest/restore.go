@@ -22,6 +22,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -165,11 +166,11 @@ func (dul *DiskUsageLogger) Done() {
 // Runner runs in a loop until Done() is called and prints the cluster-wide per
 // node disk usage in descending order.
 func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
-	logger, err := dul.t.l.ChildLogger("diskusage")
+	l, err := dul.t.l.ChildLogger("diskusage")
 	if err != nil {
 		return err
 	}
-	quietLogger, err := dul.t.l.ChildLogger("diskusage-exec", quietStdout, quietStderr)
+	quietLogger, err := dul.t.l.ChildLogger("diskusage-exec", logger.QuietStdout, logger.QuietStderr)
 	if err != nil {
 		return err
 	}
@@ -196,7 +197,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 			cur, err := getDiskUsageInBytes(ctx, dul.c, quietLogger, i)
 			if err != nil {
 				// This can trigger spuriously as compactions remove files out from under `du`.
-				logger.Printf("%s", errors.Wrapf(err, "node #%d", i))
+				l.Printf("%s", errors.Wrapf(err, "node #%d", i))
 				cur = -1
 			}
 			bytesUsed = append(bytesUsed, usage{
@@ -211,7 +212,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 			s = append(s, fmt.Sprintf("n#%d: %s", usage.nodeNum, humanizeutil.IBytes(int64(usage.bytes))))
 		}
 
-		logger.Printf("%s\n", strings.Join(s, ", "))
+		l.Printf("%s\n", strings.Join(s, ", "))
 	}
 }
 func registerRestoreNodeShutdown(r *testRegistry) {

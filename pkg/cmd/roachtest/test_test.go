@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -64,12 +65,12 @@ func TestMatchOrSkip(t *testing.T) {
 	}
 }
 
-func nilLogger() *logger {
-	lcfg := loggerConfig{
-		stdout: ioutil.Discard,
-		stderr: ioutil.Discard,
+func nilLogger() *logger.Logger {
+	lcfg := logger.Config{
+		Stdout: ioutil.Discard,
+		Stderr: ioutil.Discard,
 	}
-	l, err := lcfg.newLogger("" /* path */)
+	l, err := lcfg.NewLogger("" /* path */)
 	if err != nil {
 		panic(err)
 	}
@@ -116,7 +117,7 @@ func TestRunnerRun(t *testing.T) {
 
 			lopt := loggingOpt{
 				l:            nilLogger(),
-				tee:          noTee,
+				tee:          logger.NoTee,
 				stdout:       ioutil.Discard,
 				stderr:       ioutil.Discard,
 				artifactsDir: "",
@@ -163,7 +164,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	var buf syncedBuffer
 	lopt := loggingOpt{
 		l:            nilLogger(),
-		tee:          noTee,
+		tee:          logger.NoTee,
 		stdout:       &buf,
 		stderr:       &buf,
 		artifactsDir: "",
@@ -307,7 +308,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			var buf syncedBuffer
 			lopt := loggingOpt{
 				l:            nilLogger(),
-				tee:          noTee,
+				tee:          logger.NoTee,
 				stdout:       &buf,
 				stderr:       &buf,
 				artifactsDir: "",
@@ -354,7 +355,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	tests := testsToRun(ctx, r, newFilter(nil))
 	lopt := loggingOpt{
 		l:            nilLogger(),
-		tee:          noTee,
+		tee:          logger.NoTee,
 		stdout:       ioutil.Discard,
 		stderr:       ioutil.Discard,
 		artifactsDir: "",
