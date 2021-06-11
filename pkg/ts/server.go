@@ -223,7 +223,7 @@ func (s *Server) Query(
 	}
 
 	// Start a task which is itself responsible for starting per-query worker
-	// tasks. This is needed because RunLimitedAsyncTask can block; in the
+	// tasks. This is needed because RunAsyncTaskEx can block; in the
 	// case where a single request has more queries than the semaphore limit,
 	// a deadlock would occur because queries cannot complete until
 	// they have written their result to the "output" channel, which is
@@ -233,11 +233,13 @@ func (s *Server) Query(
 			queryIdx := queryIdx
 			query := query
 
-			if err := s.stopper.RunLimitedAsyncTask(
+			if err := s.stopper.RunAsyncTaskEx(
 				ctx,
-				"ts.Server: query",
-				s.workerSem,
-				true, /* wait */
+				stop.TaskOpts{
+					TaskName:   "ts.Server: query",
+					Sem:        s.workerSem,
+					WaitForSem: true,
+				},
 				func(ctx context.Context) {
 					// Estimated source count is either the count of requested sources
 					// *or* the estimated cluster node count if no sources are specified.

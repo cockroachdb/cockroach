@@ -1051,7 +1051,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 			//
 			// We need to be careful about the case where the ctx has been canceled
-			// prior to the call to (*Stopper).RunLimitedAsyncTask(). In that case,
+			// prior to the call to (*Stopper).RunAsyncTaskEx(). In that case,
 			// the goroutine is not even spawned. However, we don't want to
 			// mis-count the missing goroutine as the lack of transfer attempted.
 			// So what we do here is immediately increase numTransfersAttempted
@@ -1060,8 +1060,13 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 			// not raft leader).
 			atomic.AddInt32(&numTransfersAttempted, 1)
 			wg.Add(1)
-			if err := s.stopper.RunLimitedAsyncTask(
-				r.AnnotateCtx(ctx), "storage.Store: draining replica", sem, true, /* wait */
+			if err := s.stopper.RunAsyncTaskEx(
+				r.AnnotateCtx(ctx),
+				stop.TaskOpts{
+					TaskName:   "storage.Store: draining replica",
+					Sem:        sem,
+					WaitForSem: true,
+				},
 				func(ctx context.Context) {
 					defer wg.Done()
 
