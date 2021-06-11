@@ -211,7 +211,7 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 func (s *SpanSet) SortAndDedup() {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
 		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-			s.spans[sa][ss], _ /* distinct */ = mergeSpans(s.spans[sa][ss])
+			s.spans[sa][ss], _ /* distinct */ = mergeSpans(&s.spans[sa][ss])
 		}
 	}
 }
