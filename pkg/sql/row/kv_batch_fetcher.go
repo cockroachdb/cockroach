@@ -531,10 +531,18 @@ func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
 // keys returned.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, origSpan roachpb.Span, err error) {
+) (
+	ok bool,
+	kvs []roachpb.KeyValue,
+	batchResp []byte,
+	origSpan roachpb.Span,
+	atBatchBoundary bool,
+	err error,
+) {
 	if len(f.remainingBatches) > 0 {
 		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
-		return true, nil, batchResp, f.origSpan, nil
+		atBatchBoundary = len(f.remainingBatches) == 0 && !f.fetchEnd
+		return true, nil, batchResp, f.origSpan, atBatchBoundary, nil
 	}
 	for len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
@@ -548,15 +556,17 @@ func (f *txnKVFetcher) nextBatch(
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			return true, t.Rows, batchResp, origSpan, nil
+			atBatchBoundary = len(f.responses) == 0 && len(f.remainingBatches) == 0 && !f.fetchEnd
+			return true, t.Rows, batchResp, origSpan, atBatchBoundary, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			return true, t.Rows, batchResp, origSpan, nil
+			atBatchBoundary = len(f.responses) == 0 && len(f.remainingBatches) == 0 && !f.fetchEnd
+			return true, t.Rows, batchResp, origSpan, atBatchBoundary, nil
 		case *roachpb.GetResponse:
 			if t.IntentValue != nil {
-				return false, nil, nil, origSpan,
+				return false, nil, nil, origSpan, false,
 					errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
 			}
 			if t.Value == nil {
@@ -564,14 +574,15 @@ func (f *txnKVFetcher) nextBatch(
 				// one.
 				continue
 			}
-			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, origSpan, nil
+			atBatchBoundary = len(f.responses) == 0 && len(f.remainingBatches) == 0 && !f.fetchEnd
+			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, origSpan, atBatchBoundary, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil, roachpb.Span{}, nil
+		return false, nil, nil, roachpb.Span{}, false, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, nil, roachpb.Span{}, err
+		return false, nil, nil, roachpb.Span{}, false, err
 	}
 	return f.nextBatch(ctx)
 }
