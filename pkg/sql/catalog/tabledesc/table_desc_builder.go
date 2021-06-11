@@ -464,25 +464,45 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 }
 
 func upgradeToPrimaryIndexStoredColumnsFormatVersion(desc *descpb.TableDescriptor) {
-	var primaryIndexColumnIDs catalog.TableColSet
-	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
-		primaryIndexColumnIDs.Add(colID)
-	}
-	desc.PrimaryIndex.StoreColumnIDs = make([]descpb.ColumnID, 0, len(desc.Columns)+len(desc.Mutations))
-	desc.PrimaryIndex.StoreColumnNames = make([]string, 0, len(desc.Columns)+len(desc.Mutations))
-	maybeAddToStored := func(col *descpb.ColumnDescriptor) {
-		if col == nil || primaryIndexColumnIDs.Contains(col.ID) || col.Virtual {
+	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
+	nonVirtualCols := make([]*descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+	maybeAddCol := func(col *descpb.ColumnDescriptor) {
+		if col == nil || col.Virtual {
 			return
 		}
-		desc.PrimaryIndex.StoreColumnIDs = append(desc.PrimaryIndex.StoreColumnIDs, col.ID)
-		desc.PrimaryIndex.StoreColumnNames = append(desc.PrimaryIndex.StoreColumnNames, col.Name)
+		nonVirtualCols = append(nonVirtualCols, col)
 	}
-
-	for _, col := range desc.Columns {
-		maybeAddToStored(&col)
+	for i := range desc.Columns {
+		maybeAddCol(&desc.Columns[i])
 	}
 	for _, m := range desc.Mutations {
-		maybeAddToStored(m.GetColumn())
+		maybeAddCol(m.GetColumn())
+	}
+
+	maybePopulateStoreSlices := func(idx *descpb.IndexDescriptor) {
+		if idx == nil || idx.EncodingType != descpb.PrimaryIndexEncoding {
+			return
+		}
+		keyColIDs := catalog.TableColSet{}
+		for _, colID := range idx.KeyColumnIDs {
+			keyColIDs.Add(colID)
+		}
+		idx.StoreColumnIDs = make([]descpb.ColumnID, 0, len(nonVirtualCols))
+		idx.StoreColumnNames = make([]string, 0, len(nonVirtualCols))
+		for _, col := range nonVirtualCols {
+			if keyColIDs.Contains(col.ID) {
+				continue
+			}
+			idx.StoreColumnIDs = append(idx.StoreColumnIDs, col.ID)
+			idx.StoreColumnNames = append(idx.StoreColumnNames, col.Name)
+		}
+	}
+	maybePopulateStoreSlices(&desc.PrimaryIndex)
+	for i := range desc.Indexes {
+		maybePopulateStoreSlices(&desc.Indexes[i])
+	}
+	for _, m := range desc.Mutations {
+		maybePopulateStoreSlices(m.GetIndex())
 	}
 }
 

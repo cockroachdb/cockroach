@@ -926,39 +926,37 @@ func resolveTargetDB(
 	return database.Name, nil
 }
 
-// maybeUpgradeTableDescsInSlice updates the passed slice of table descriptors
-// to use the newer 19.2-style foreign key representation, if they are not
-// already upgraded. This requires resolving cross-table FK references, which is
-// done by looking up all table descriptors in the slice provided.
+// maybeUpgradeDescriptors performs post-deserialization upgrades on the
+// descriptors.
+//
+// This is done, for instance, to use the newer 19.2-style foreign key
+// representation, if they are not already upgraded.
 //
 // if skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
 // the set provided are omitted during the upgrade, instead of causing an error
 // to be returned.
-func maybeUpgradeTableDescsInSlice(
+func maybeUpgradeDescriptors(
 	ctx context.Context, descs []catalog.Descriptor, skipFKsWithNoMatchingTable bool,
 ) error {
 	descGetter := catalog.MakeMapDescGetter()
 
-	// Populate the protoGetter with all table descriptors in all backup
-	// descriptors so that they can be looked up.
+	// Populate the catalog.DescGetter with all table descriptors in the backup.
 	for _, desc := range descs {
 		descGetter.Descriptors[desc.GetID()] = desc
 	}
 
 	for j, desc := range descs {
-		tableDesc, isTable := desc.(catalog.TableDescriptor)
-		if !isTable {
-			continue
+		var b catalog.DescriptorBuilder
+		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
+			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
+		} else {
+			b = catalogkv.NewBuilder(desc.DescriptorProto())
 		}
-		if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(tableDesc.TableDesc()) {
-			continue
-		}
-		b := tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
 		err := b.RunPostDeserializationChanges(ctx, descGetter)
 		if err != nil {
 			return err
 		}
-		descs[j] = b.BuildExistingMutableTable()
+		descs[j] = b.BuildExistingMutable()
 	}
 	return nil
 }
@@ -1897,7 +1895,7 @@ func doRestorePlan(
 		}
 	}
 
-	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
+	if err := maybeUpgradeDescriptors(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
 		return err
 	}
 
