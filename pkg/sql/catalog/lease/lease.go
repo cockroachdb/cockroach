@@ -1043,8 +1043,14 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 	for i := range ids {
 		id := ids[i]
 		wg.Add(1)
-		if err := m.stopper.RunLimitedAsyncTask(
-			ctx, fmt.Sprintf("refresh descriptor: %d lease", id), m.sem, true /*wait*/, func(ctx context.Context) {
+		if err := m.stopper.RunAsyncTaskEx(
+			ctx,
+			stop.TaskOpts{
+				TaskName:   fmt.Sprintf("refresh descriptor: %d lease", id),
+				Sem:        m.sem,
+				WaitForSem: true,
+			},
+			func(ctx context.Context) {
 				defer wg.Done()
 				if _, err := acquireNodeLease(ctx, m, id); err != nil {
 					log.Infof(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
@@ -1107,8 +1113,14 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 				version:    int(tree.MustBeDInt(row[1])),
 				expiration: tree.MustBeDTimestamp(row[2]),
 			}
-			if err := m.stopper.RunLimitedAsyncTask(
-				ctx, fmt.Sprintf("release lease %+v", lease), m.sem, true /*wait*/, func(ctx context.Context) {
+			if err := m.stopper.RunAsyncTaskEx(
+				ctx,
+				stop.TaskOpts{
+					TaskName:   fmt.Sprintf("release lease %+v", lease),
+					Sem:        m.sem,
+					WaitForSem: true,
+				},
+				func(ctx context.Context) {
 					m.storage.release(ctx, m.stopper, &lease)
 					log.Infof(ctx, "released orphaned lease: %+v", lease)
 					wg.Done()
