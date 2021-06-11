@@ -498,6 +498,18 @@ func TestFloatMath(t *testing.T) {
 			Duration{Months: 2, Days: 34, nanos: nanosInHour * 4},
 			Duration{Days: 23, nanos: nanosInHour * 13},
 		},
+		{
+			Duration{Months: 0, Days: 0, nanos: nanosInSecond * 0.253000},
+			3.2,
+			Duration{Months: 0, Days: 0, nanos: nanosInSecond * 0.8096},
+			Duration{Months: 0, Days: 0, nanos: nanosInSecond * 0.079062},
+		},
+		{
+			Duration{Months: 0, Days: 0, nanos: nanosInSecond * 0.000001},
+			2.0,
+			Duration{Months: 0, Days: 0, nanos: nanosInSecond * 0.000002},
+			Duration{Months: 0, Days: 0, nanos: nanosInSecond * 0},
+		},
 	}
 
 	for i, test := range tests {

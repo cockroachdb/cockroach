@@ -367,3 +367,14 @@ subtest regression_62369
 
 query error "10000000000000000000000000000000000": value out of range
 SELECT INTERVAL '10000000000000000000000000000000000 year'
+
+query T
+SELECT i / 2 FROM ( VALUES
+  ('0 days 0.253000 seconds'::interval),
+  (INTERVAL '0.000001'::interval),
+  (INTERVAL '0.000002'::interval)
+) regression_66118(i)
+----
+00:00:00.1265
+00:00:00
+00:00:00.000001
