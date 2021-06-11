@@ -14,6 +14,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/roachpb:with-mocks",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/sqlutil",
         "//pkg/util/log",
+        "//pkg/util/stop",
         "@com_github_cockroachdb_logtags//:logtags",
     ],
 )

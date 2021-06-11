@@ -127,11 +127,6 @@ func NewTenantCluster(db *kv.DB) *TenantCluster {
 	return &TenantCluster{db: db}
 }
 
-// DB is part of the migration.Cluster interface.
-func (t *TenantCluster) DB() *kv.DB {
-	return t.db
-}
-
 // ForEveryNode is part of the migration.Cluster interface.
 func (t *TenantCluster) ForEveryNode(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
