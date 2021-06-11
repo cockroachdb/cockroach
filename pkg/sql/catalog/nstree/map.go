@@ -57,12 +57,12 @@ func (dt *Map) Upsert(d catalog.NameEntry) {
 
 // Remove removes the descriptor with the given ID from the tree and
 // returns it if it exists.
-func (dt *Map) Remove(id descpb.ID) (catalog.NameEntry, bool) {
+func (dt *Map) Remove(id descpb.ID) catalog.NameEntry {
 	if d := dt.byID.delete(id); d != nil {
 		dt.byName.delete(d)
-		return d, true
+		return d
 	}
-	return nil, false
+	return nil
 }
 
 // GetByID gets a descriptor from the tree by id.
