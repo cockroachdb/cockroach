@@ -21,8 +21,8 @@ import (
 )
 
 // tenantEntry is an entry in the tenant directory that records information
-// about a single tenant, including its ID, cluster name, and the IP addresses for
-// available endpoints.
+// about a single tenant, including its ID, cluster name, and the IP addresses
+// for available endpoints.
 type tenantEntry struct {
 	// These fields can be read by callers without synchronization, since
 	// they're written once during initialization, and are immutable thereafter.
@@ -35,7 +35,8 @@ type tenantEntry struct {
 	ClusterName string
 
 	// RefreshDelay is the minimum amount of time that must elapse between
-	// attempts to refresh endpoints for this tenant after ReportFailure is called.
+	// attempts to refresh endpoints for this tenant after ReportFailure is
+	// called.
 	RefreshDelay time.Duration
 
 	// initialized is set to true once Initialized has been called.
@@ -45,27 +46,27 @@ type tenantEntry struct {
 	// error occurred).
 	initError error
 
-	// endpoints synchronizes access to information about the tenant's SQL endpoints.
-	// These fields can be updated over time, so a lock must be obtained before
-	// accessing them.
+	// endpoints synchronizes access to information about the tenant's SQL
+	// endpoints. These fields can be updated over time, so a lock must be
+	// obtained before accessing them.
 	endpoints struct {
 		syncutil.Mutex
 		ips []string
 	}
 
 	// calls synchronizes calls to the K8s API for this tenant (e.g. calls to
-	// RefreshEndpoints). Synchronization is needed to ensure that only one thread at
-	// a time is calling on behalf of a tenant, and that calls are rate limited
-	// to prevent storms.
+	// RefreshEndpoints). Synchronization is needed to ensure that only one
+	// thread at a time is calling on behalf of a tenant, and that calls are rate
+	// limited to prevent storms.
 	calls struct {
 		syncutil.Mutex
 		lastRefresh time.Time
 	}
 }
 
-// Initialize fetches metadata about a tenant, such as its cluster name, and stores
-// that in the entry. After this is called once, all future calls return the
-// same result (and do nothing).
+// Initialize fetches metadata about a tenant, such as its cluster name, and
+// stores that in the entry. After this is called once, all future calls return
+// the same result (and do nothing).
 func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) error {
 	// Synchronize multiple threads trying to initialize. Only the first thread
 	// does the initialization.
@@ -90,8 +91,9 @@ func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) er
 	return nil
 }
 
-// RefreshEndpoints makes a synchronous directory server call to fetch the latest information
-// about the tenant's available endpoints, such as their IP addresses.
+// RefreshEndpoints makes a synchronous directory server call to fetch the
+// latest information about the tenant's available endpoints, such as their IP
+// addresses.
 func (e *tenantEntry) RefreshEndpoints(ctx context.Context, client DirectoryClient) error {
 	if !e.initialized {
 		return errors.AssertionFailedf("entry for tenant %d is not initialized", e.TenantID)
@@ -114,14 +116,15 @@ func (e *tenantEntry) RefreshEndpoints(ctx context.Context, client DirectoryClie
 	return err
 }
 
-// ChooseEndpointIP returns the IP address of one of this tenant's available endpoints.
-// If a tenant has multiple endpoints, then ChooseEndpointIP returns the IP address of one
-// of those endpoints. If the tenant is suspended and no endpoints are available, then
-// ChooseEndpointIP will trigger resumption of the tenant and return the IP address
-// of the new endpoint. Note that resuming a tenant requires directory server calls, so
-// ChooseEndpointIP can block for some time, until the resumption process is
-// complete. However, if errorIfNoEndpoints is true, then ChooseEndpointIP returns an
-// error if there are no endpoints available rather than blocking.
+// ChooseEndpointIP returns the IP address of one of this tenant's available
+// endpoints. If a tenant has multiple endpoints, then ChooseEndpointIP returns
+// the IP address of one of those endpoints. If the tenant is suspended and no
+// endpoints are available, then ChooseEndpointIP will trigger resumption of the
+// tenant and return the IP address of the new endpoint. Note that resuming a
+// tenant requires directory server calls, so ChooseEndpointIP can block for
+// some time, until the resumption process is complete. However, if
+// errorIfNoEndpoints is true, then ChooseEndpointIP returns an error if there
+// are no endpoints available rather than blocking.
 //
 // TODO(andyk): Use better load-balancing algorithm once tenants can have more
 // than one endpoint.
@@ -134,9 +137,9 @@ func (e *tenantEntry) ChooseEndpointIP(
 
 	ips := e.getEndpointIPs()
 	if len(ips) == 0 {
-		// There are no known endpoint IP addresses, so fetch endpoint information from
-		// the directory server. Resume the tenant if it is suspended; that will
-		// always result in at least one endpoint IP address (or an error).
+		// There are no known endpoint IP addresses, so fetch endpoint information
+		// from the directory server. Resume the tenant if it is suspended; that
+		// will always result in at least one endpoint IP address (or an error).
 		var err error
 		if ips, err = e.ensureTenantEndpoint(ctx, client, errorIfNoEndpoints); err != nil {
 			return "", err
@@ -145,8 +148,8 @@ func (e *tenantEntry) ChooseEndpointIP(
 	return ips[0], nil
 }
 
-// AddEndpointIP inserts the given IP address into the tenant's list of Endpoint IPs. If
-// it is already present, then AddEndpointIP returns false.
+// AddEndpointIP inserts the given IP address into the tenant's list of Endpoint
+// IPs. If it is already present, then AddEndpointIP returns false.
 func (e *tenantEntry) AddEndpointIP(ip string) bool {
 	e.endpoints.Lock()
 	defer e.endpoints.Unlock()
@@ -161,8 +164,8 @@ func (e *tenantEntry) AddEndpointIP(ip string) bool {
 	return true
 }
 
-// RemoveEndpointIP removes the given IP address from the tenant's list of Endpoint IPs.
-// If it was not present, RemoveEndpointIP returns false.
+// RemoveEndpointIP removes the given IP address from the tenant's list of
+// Endpoint IPs. If it was not present, RemoveEndpointIP returns false.
 func (e *tenantEntry) RemoveEndpointIP(ip string) bool {
 	e.endpoints.Lock()
 	defer e.endpoints.Unlock()
@@ -177,8 +180,8 @@ func (e *tenantEntry) RemoveEndpointIP(ip string) bool {
 	return false
 }
 
-// getEndpointIPs gets the current list of endpoint IP addresses within scope of lock and
-// returns them.
+// getEndpointIPs gets the current list of endpoint IP addresses within scope of
+// lock and returns them.
 func (e *tenantEntry) getEndpointIPs() []string {
 	e.endpoints.Lock()
 	defer e.endpoints.Unlock()
@@ -187,8 +190,8 @@ func (e *tenantEntry) getEndpointIPs() []string {
 
 // ensureTenantEndpoint ensures that at least one SQL process exists for this
 // tenant, and is ready for connection attempts to its IP address. If
-// errorIfNoEndpoints is true, then ensureTenantEndpoint returns an error if there are no
-// endpoints available rather than blocking.
+// errorIfNoEndpoints is true, then ensureTenantEndpoint returns an error if
+// there are no endpoints available rather than blocking.
 func (e *tenantEntry) ensureTenantEndpoint(
 	ctx context.Context, client DirectoryClient, errorIfNoEndpoints bool,
 ) (ips []string, err error) {
@@ -228,9 +231,10 @@ func (e *tenantEntry) ensureTenantEndpoint(
 			}
 		}
 
-		// Get endpoint information for the newly resumed tenant. Except in rare race
-		// conditions, this is expected to immediately find an IP address, since
-		// the above call started a tenant process that already has an IP address.
+		// Get endpoint information for the newly resumed tenant. Except in rare
+		// race conditions, this is expected to immediately find an IP address,
+		// since the above call started a tenant process that already has an IP
+		// address.
 		ips, err = e.fetchEndpointsLocked(ctx, client)
 		if err != nil {
 			return nil, err
@@ -250,8 +254,9 @@ func (e *tenantEntry) ensureTenantEndpoint(
 	return ips, nil
 }
 
-// fetchEndpointsLocked makes a synchronous directory server call to get the latest
-// information about the tenant's available endpoints, such as their IP addresses.
+// fetchEndpointsLocked makes a synchronous directory server call to get the
+// latest information about the tenant's available endpoints, such as their IP
+// addresses.
 //
 // NOTE: Caller must lock the "calls" mutex before calling fetchEndpointsLocked.
 func (e *tenantEntry) fetchEndpointsLocked(
@@ -263,7 +268,8 @@ func (e *tenantEntry) fetchEndpointsLocked(
 		return nil, err
 	}
 
-	// Get updated list of running process endpoint IP addresses and save it to the entry.
+	// Get updated list of running process endpoint IP addresses and save it to
+	// the entry.
 	ips = make([]string, 0, len(list.Endpoints))
 	for i := range list.Endpoints {
 		endpoint := list.Endpoints[i]
@@ -284,8 +290,8 @@ func (e *tenantEntry) fetchEndpointsLocked(
 }
 
 // canRefreshLocked returns true if it's been at least X milliseconds since the
-// last time the tenant endpoint information was refreshed. This has the effect of
-// rate limiting RefreshEndpoints calls.
+// last time the tenant endpoint information was refreshed. This has the effect
+// of rate limiting RefreshEndpoints calls.
 //
 // NOTE: Caller must lock the "calls" mutex before calling canRefreshLocked.
 func (e *tenantEntry) canRefreshLocked() bool {

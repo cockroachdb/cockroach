@@ -42,8 +42,8 @@ var backendDial = func(
 	return conn, nil
 }
 
-// sslOverlay attempts to upgrade the PG connection to use SSL
-// if a tls.Config is specified..
+// sslOverlay attempts to upgrade the PG connection to use SSL if a tls.Config
+// is specified.
 func sslOverlay(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
 	if tlsConfig == nil {
 		return conn, nil

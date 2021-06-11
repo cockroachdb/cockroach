@@ -13,8 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// metrics contains pointers to the metrics for monitoring proxy
-// operations.
+// metrics contains pointers to the metrics for monitoring proxy operations.
 type metrics struct {
 	BackendDisconnectCount *metric.Counter
 	IdleDisconnectCount    *metric.Counter
@@ -112,8 +111,8 @@ func makeProxyMetrics() metrics {
 	}
 }
 
-// updateForError updates the metrics relevant for the type of the
-// error message.
+// updateForError updates the metrics relevant for the type of the error
+// message.
 func (metrics *metrics) updateForError(err error) {
 	if err == nil {
 		return

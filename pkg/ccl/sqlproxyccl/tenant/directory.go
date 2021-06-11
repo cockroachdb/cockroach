@@ -34,9 +34,9 @@ type dirOptions struct {
 type DirOption func(opts *dirOptions)
 
 // RefreshDelay specifies the minimum amount of time that must elapse between
-// attempts to refresh endpoints for a given tenant after ReportFailure is called.
-// This delay has the effect of throttling calls to directory server, in order to
-// avoid overloading it.
+// attempts to refresh endpoints for a given tenant after ReportFailure is
+// called. This delay has the effect of throttling calls to directory server, in
+// order to avoid overloading it.
 //
 // RefreshDelay defaults to 100ms. Use -1 to never throttle.
 func RefreshDelay(delay time.Duration) func(opts *dirOptions) {
@@ -45,14 +45,15 @@ func RefreshDelay(delay time.Duration) func(opts *dirOptions) {
 	}
 }
 
-// Directory tracks the network locations of SQL tenant processes. It is used by the
-// sqlproxy to route incoming traffic to the correct backend process. Process
-// information is populated and kept relatively up-to-date using a streaming watcher.
-// However, since watchers deliver slightly stale information, the directory will also make
-// direct server calls to fetch the latest information about a process that is not yet
-// in the cache, or when a process is suspected to have failed. When a new tenant is
-// created, or is resumed from suspension, this capability allows the directory
-// to immediately return the IP address for the new process.
+// Directory tracks the network locations of SQL tenant processes. It is used by
+// the sqlproxy to route incoming traffic to the correct backend process.
+// Process information is populated and kept relatively up-to-date using a
+// streaming watcher. However, since watchers deliver slightly stale
+// information, the directory will also make direct server calls to fetch the
+// latest information about a process that is not yet in the cache, or when a
+// process is suspected to have failed. When a new tenant is created, or is
+// resumed from suspension, this capability allows the directory to immediately
+// return the IP address for the new process.
 //
 // All methods in the directory are thread-safe. Methods are intended to be
 // called concurrently by many threads at once, and so locking is carefully
@@ -61,7 +62,8 @@ func RefreshDelay(delay time.Duration) func(opts *dirOptions) {
 // has its own locks that are used to synchronize per-tenant operations such as
 // making directory server calls to fetch updated tenant information.
 type Directory struct {
-	// client is the directory client instance used to make directory server calls.
+	// client is the directory client instance used to make directory server
+	// calls.
 	client DirectoryClient
 
 	// stopper use used for graceful shutdown of the endpoint watcher.
@@ -71,8 +73,8 @@ type Directory struct {
 	options dirOptions
 
 	// mut synchronizes access to the in-memory tenant entry caches. Take care
-	// to never hold this lock during directory server calls - it should only be used
-	// while adding and removing tenant entries to/from the caches.
+	// to never hold this lock during directory server calls - it should only be
+	// used while adding and removing tenant entries to/from the caches.
 	mut struct {
 		syncutil.Mutex
 
@@ -83,11 +85,12 @@ type Directory struct {
 	}
 }
 
-// NewDirectory constructs a new Directory instance that tracks SQL tenant processes
-// managed by a given Directory server. The given context is used for tracing
-// endpoint watcher activity.
+// NewDirectory constructs a new Directory instance that tracks SQL tenant
+// processes managed by a given Directory server. The given context is used for
+// tracing endpoint watcher activity.
 //
-// NOTE: stopper.Stop must be called on the directory when it is no longer needed.
+// NOTE: stopper.Stop must be called on the directory when it is no longer
+// needed.
 func NewDirectory(
 	ctx context.Context, stopper *stop.Stopper, client DirectoryClient, opts ...DirOption,
 ) (*Directory, error) {
@@ -110,16 +113,16 @@ func NewDirectory(
 	return dir, nil
 }
 
-// EnsureTenantIP returns the IP address of one of the given tenant's SQL processes.
-// If the tenant was just created or is suspended, such that there are no
-// available processes, then EnsureTenantIP will trigger resumption of a new instance and
-// block until the process is ready. If there are multiple processes for
-// the tenant, then LookupTenantIPs will choose one of them (note that currently
-// there is always at most one SQL process per tenant).
+// EnsureTenantIP returns the IP address of one of the given tenant's SQL
+// processes. If the tenant was just created or is suspended, such that there
+// are no available processes, then EnsureTenantIP will trigger resumption of a
+// new instance and block until the process is ready. If there are multiple
+// processes for the tenant, then LookupTenantIPs will choose one of them (note
+// that currently there is always at most one SQL process per tenant).
 //
-// If clusterName is non-empty, then an error is returned if no endpoints match the
-// cluster name. This can be used to ensure that the incoming SQL connection "knows"
-// some additional information about the tenant, such as the name of the
+// If clusterName is non-empty, then an error is returned if no endpoints match
+// the cluster name. This can be used to ensure that the incoming SQL connection
+// "knows" some additional information about the tenant, such as the name of the
 // cluster, before being allowed to connect.
 func (d *Directory) EnsureTenantIP(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
@@ -145,10 +148,10 @@ func (d *Directory) EnsureTenantIP(
 	return ip, err
 }
 
-// LookupTenantIPs returns the IP addresses for all available SQL processes for the
-// given tenant. It returns an error if the tenant has not yet been created. If
-// no processes are available for the tenant, LookupTenantIPs will return the empty
-// set (unlike EnsureTenantIP).
+// LookupTenantIPs returns the IP addresses for all available SQL processes for
+// the given tenant. It returns an error if the tenant has not yet been created.
+// If no processes are available for the tenant, LookupTenantIPs will return the
+// empty set (unlike EnsureTenantIP).
 func (d *Directory) LookupTenantIPs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
@@ -169,9 +172,9 @@ func (d *Directory) LookupTenantIPs(
 // ReportFailure will attempt to refresh the cache with the latest information
 // about available tenant processes.
 // TODO(andyk): In the future, the ip parameter will be used to mark a
-// particular endpoint as "unhealthy" so that it's less likely to be chosen. However,
-// today there can be at most one endpoint for a given tenant, so it must always be
-// chosen. Keep the parameter as a placeholder for the future.
+// particular endpoint as "unhealthy" so that it's less likely to be chosen.
+// However, today there can be at most one endpoint for a given tenant, so it
+// must always be chosen. Keep the parameter as a placeholder for the future.
 func (d *Directory) ReportFailure(ctx context.Context, tenantID roachpb.TenantID, ip string) error {
 	entry, err := d.getEntry(ctx, tenantID, false /* allowCreate */)
 	if err != nil {
@@ -251,16 +254,16 @@ func (d *Directory) deleteEntry(tenantID roachpb.TenantID) {
 	delete(d.mut.tenants, tenantID)
 }
 
-// watchEndpoints establishes a watcher that looks for changes to tenant endpoint addresses.
-// Whenever tenant processes start or terminate, the watcher will get
-// a notification and update the directory to reflect that change.
+// watchEndpoints establishes a watcher that looks for changes to tenant
+// endpoint addresses. Whenever tenant processes start or terminate, the watcher
+// will get a notification and update the directory to reflect that change.
 func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) error {
 	req := WatchEndpointsRequest{}
 
-	// The loop that processes the event stream is running in a separate go routine.
-	// It is desirable however, before we return, to have a guarantee that the
-	// separate go routine started processing events. This wait group helps us
-	// achieve this. Without the wait group, it will be possible to:
+	// The loop that processes the event stream is running in a separate go
+	// routine. It is desirable however, before we return, to have a guarantee
+	// that the separate go routine started processing events. This wait group
+	// helps us achieve this. Without the wait group, it will be possible to:
 	//
 	// 1. call watchEndpoints
 	// 2. call EnsureTenantIP

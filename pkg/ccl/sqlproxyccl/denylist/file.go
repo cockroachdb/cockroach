@@ -70,11 +70,12 @@ type Denylist struct {
 	ctx context.Context
 }
 
-// NewDenylistWithFile returns a new denylist that automatically watches updates to a file.
-// Note: this currently does not return an error. This is by design, since even if we trouble
-// initiating a denylist with file, we can always update the file with correct content during
-// runtime. We don't want sqlproxy fail to start just because there's something wrong with
-// contents of a denylist file.
+// NewDenylistWithFile returns a new denylist that automatically watches updates
+// to a file.
+// Note: this currently does not return an error. This is by design, since even
+// if we trouble initiating a denylist with file, we can always update the file
+// with correct content during runtime. We don't want sqlproxy fail to start
+// just because there's something wrong with contents of a denylist file.
 func NewDenylistWithFile(ctx context.Context, filename string, opts ...Option) *Denylist {
 	ret := &Denylist{
 		pollingInterval: defaultPollingInterval,
@@ -89,9 +90,10 @@ func NewDenylistWithFile(ctx context.Context, filename string, opts ...Option) *
 	}
 	err := ret.update(filename)
 	if err != nil {
-		// don't return just yet; sqlproxy should be able to carry on without a proper denylist
-		// and we still have a chance to recover.
-		// TODO(ye): add monitoring for failed updates; we don't want silent failures
+		// don't return just yet; sqlproxy should be able to carry on without a
+		// proper denylist and we still have a chance to recover.
+		// TODO(ye): add monitoring for failed updates; we don't want silent
+		// failures.
 		log.Errorf(ctx, "error when reading from file %s: %v", filename, err)
 	}
 
@@ -103,7 +105,8 @@ func NewDenylistWithFile(ctx context.Context, filename string, opts ...Option) *
 // Option allows configuration of a denylist service.
 type Option func(*Denylist)
 
-// WithPollingInterval specifies interval between polling for config file changes.
+// WithPollingInterval specifies interval between polling for config file
+// changes.
 func WithPollingInterval(d time.Duration) Option {
 	return func(dl *Denylist) {
 		dl.pollingInterval = d
@@ -163,7 +166,8 @@ func (dl *Denylist) Denied(entity DenyEntity) (*Entry, error) {
 func (dl *Denylist) watchForUpdate(filename string) {
 	go func() {
 		// TODO(ye): use notification via SIGHUP instead.
-		// TODO(ye): use inotify or similar mechanism for watching file updates instead of polling.
+		// TODO(ye): use inotify or similar mechanism for watching file updates
+		// instead of polling.
 		t := timeutil.NewTimer()
 		defer t.Stop()
 		for {
