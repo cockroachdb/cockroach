@@ -166,6 +166,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.AdminVerifyProtectedTimestamp
 	case *RequestUnion_Migrate:
 		return t.Migrate
+	case *RequestUnion_MigrateLockTable:
+		return t.MigrateLockTable
 	default:
 		return nil
 	}
@@ -258,6 +260,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.AdminVerifyProtectedTimestamp
 	case *ResponseUnion_Migrate:
 		return t.Migrate
+	case *ResponseUnion_MigrateLockTable:
+		return t.MigrateLockTable
 	default:
 		return nil
 	}
@@ -425,6 +429,8 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_AdminVerifyProtectedTimestamp{t}
 	case *MigrateRequest:
 		union = &RequestUnion_Migrate{t}
+	case *MigrateLockTableRequest:
+		union = &RequestUnion_MigrateLockTable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
@@ -520,13 +526,15 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_AdminVerifyProtectedTimestamp{t}
 	case *MigrateResponse:
 		union = &ResponseUnion_Migrate{t}
+	case *MigrateLockTableResponse:
+		union = &ResponseUnion_MigrateLockTable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
 
-type reqCounts [43]int32
+type reqCounts [44]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -620,6 +628,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[41]++
 		case *RequestUnion_Migrate:
 			counts[42]++
+		case *RequestUnion_MigrateLockTable:
+			counts[43]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -671,6 +681,7 @@ var requestNames = []string{
 	"RngStats",
 	"AdmVerifyProtectedTimestamp",
 	"Migrate",
+	"MigrateLockTable",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -874,6 +885,10 @@ type migrateResponseAlloc struct {
 	union ResponseUnion_Migrate
 	resp  MigrateResponse
 }
+type migrateLockTableResponseAlloc struct {
+	union ResponseUnion_MigrateLockTable
+	resp  MigrateLockTableResponse
+}
 
 // CreateReply creates replies for each of the contained requests, wrapped in a
 // BatchResponse. The response objects are batch allocated to minimize
@@ -927,6 +942,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf40 []rangeStatsResponseAlloc
 	var buf41 []adminVerifyProtectedTimestampResponseAlloc
 	var buf42 []migrateResponseAlloc
+	var buf43 []migrateLockTableResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1231,6 +1247,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf42[0].union.Migrate = &buf42[0].resp
 			br.Responses[i].Value = &buf42[0].union
 			buf42 = buf42[1:]
+		case *RequestUnion_MigrateLockTable:
+			if buf43 == nil {
+				buf43 = make([]migrateLockTableResponseAlloc, counts[43])
+			}
+			buf43[0].union.MigrateLockTable = &buf43[0].resp
+			br.Responses[i].Value = &buf43[0].union
+			buf43 = buf43[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -1327,6 +1350,8 @@ func CreateRequest(method Method) Request {
 		return &AdminVerifyProtectedTimestampRequest{}
 	case Migrate:
 		return &MigrateRequest{}
+	case MigrateLockTable:
+		return &MigrateLockTableRequest{}
 	default:
 		panic(fmt.Sprintf("unsupported method: %+v", method))
 	}

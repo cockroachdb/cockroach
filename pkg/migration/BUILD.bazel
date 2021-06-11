@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/sqlutil",
         "//pkg/util/log",
+        "//pkg/util/stop",
         "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
