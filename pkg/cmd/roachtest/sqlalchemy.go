@@ -48,27 +48,27 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	node := c.Node(1)
 
 	t.Status("cloning sqlalchemy and installing prerequisites")
-	latestTag, err := repeatGetLatestTag(ctx, c, "sqlalchemy", "sqlalchemy", sqlAlchemyReleaseTagRegex)
+	latestTag, err := repeatGetLatestTag(ctx, t, "sqlalchemy", "sqlalchemy", sqlAlchemyReleaseTagRegex)
 	if err != nil {
 		t.Fatal(err)
 	}
 	c.l.Printf("Latest sqlalchemy release is %s.", latestTag)
 	c.l.Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
-	if err := repeatRunE(ctx, c, node, "update apt-get", `
+	if err := repeatRunE(ctx, t, c, node, "update apt-get", `
 		sudo add-apt-repository ppa:deadsnakes/ppa &&
 		sudo apt-get -qq update
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, c, node, "install dependencies", `
+	if err := repeatRunE(ctx, t, c, node, "install dependencies", `
 		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, c, node, "set python3.7 as default", `
+	if err := repeatRunE(ctx, t, c, node, "set python3.7 as default", `
 		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
 		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
 		sudo update-alternatives --config python3
@@ -76,51 +76,51 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, c, node, "install pip", `
+	if err := repeatRunE(ctx, t, c, node, "install pip", `
 		curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, c, node, "install pytest", `
+	if err := repeatRunE(ctx, t, c, node, "install pytest", `
 		sudo pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, c, node, "remove old sqlalchemy-cockroachdb", `
+	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy-cockroachdb", `
 		sudo rm -rf /mnt/data1/sqlalchemy-cockroachdb
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatGitCloneE(ctx, t.l, c,
+	if err := repeatGitCloneE(ctx, t, c,
 		"https://github.com/cockroachdb/sqlalchemy-cockroachdb.git", "/mnt/data1/sqlalchemy-cockroachdb",
 		"master", node); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Status("installing sqlalchemy-cockroachdb")
-	if err := repeatRunE(ctx, c, node, "installing sqlalchemy=cockroachdb", `
+	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=cockroachdb", `
 		cd /mnt/data1/sqlalchemy-cockroachdb && sudo pip3 install .
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, c, node, "remove old sqlalchemy", `
+	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy", `
 		sudo rm -rf /mnt/data1/sqlalchemy
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatGitCloneE(ctx, t.l, c,
+	if err := repeatGitCloneE(ctx, t, c,
 		"https://github.com/sqlalchemy/sqlalchemy.git", "/mnt/data1/sqlalchemy",
 		supportedSQLAlchemyTag, node); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Status("building sqlalchemy")
-	if err := repeatRunE(ctx, c, node, "building sqlalchemy", `
+	if err := repeatRunE(ctx, t, c, node, "building sqlalchemy", `
 		cd /mnt/data1/sqlalchemy && python3 setup.py build
 	`); err != nil {
 		t.Fatal(err)

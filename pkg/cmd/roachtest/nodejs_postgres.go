@@ -47,19 +47,19 @@ func registerNodeJSPostgres(r *testRegistry) {
 		localCertsDir, err := filepathAbs("./certs")
 		require.NoError(t, err)
 
-		err = repeatRunE(ctx, c, node, "create sql user",
+		err = repeatRunE(ctx, t, c, node, "create sql user",
 			fmt.Sprintf(
 				`./cockroach sql --certs-dir %s -e "CREATE USER %s CREATEDB"`,
 				certsDir, user,
 			))
 		require.NoError(t, err)
 
-		err = repeatRunE(ctx, c, c.All(), "create user certs",
+		err = repeatRunE(ctx, t, c, c.All(), "create user certs",
 			fmt.Sprintf(`./cockroach cert create-client testuser --certs-dir %s --ca-key=%s/ca.key`,
 				certsDir, certsDir))
 		require.NoError(t, err)
 
-		err = repeatRunE(ctx, c, node, "create test database",
+		err = repeatRunE(ctx, t, c, node, "create test database",
 			fmt.Sprintf(`./cockroach sql --certs-dir %s -e "CREATE DATABASE postgres_node_test"`, certsDir),
 		)
 		require.NoError(t, err)
@@ -96,6 +96,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 
 		err = repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"add nodesource repository",
@@ -104,33 +105,33 @@ func registerNodeJSPostgres(r *testRegistry) {
 		require.NoError(t, err)
 
 		err = repeatRunE(
-			ctx, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
+			ctx, t, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
 		)
 		require.NoError(t, err)
 
 		err = repeatRunE(
-			ctx, c, node, "update npm", `sudo npm i -g npm`,
+			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
 		)
 		require.NoError(t, err)
 
 		err = repeatRunE(
-			ctx, c, node, "install yarn", `sudo npm i -g yarn`,
+			ctx, t, c, node, "install yarn", `sudo npm i -g yarn`,
 		)
 		require.NoError(t, err)
 
 		err = repeatRunE(
-			ctx, c, node, "install lerna", `sudo npm i --g lerna`,
+			ctx, t, c, node, "install lerna", `sudo npm i --g lerna`,
 		)
 		require.NoError(t, err)
 
 		err = repeatRunE(
-			ctx, c, node, "remove old node-postgres", `sudo rm -rf /mnt/data1/node-postgres`,
+			ctx, t, c, node, "remove old node-postgres", `sudo rm -rf /mnt/data1/node-postgres`,
 		)
 		require.NoError(t, err)
 
 		err = repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			fmt.Sprintf("https://github.com/%s/node-postgres.git", repoOwner),
 			"/mnt/data1/node-postgres",
@@ -141,6 +142,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 
 		err = repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"building node-postgres",

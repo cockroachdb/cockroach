@@ -51,7 +51,7 @@ func registerDjango(r *testRegistry) {
 		t.Status("cloning django and installing prerequisites")
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get",
+			ctx, t, c, node, "update apt-get",
 			`
 				sudo add-apt-repository ppa:deadsnakes/ppa &&
 				sudo apt-get -qq update`,
@@ -61,6 +61,7 @@ func registerDjango(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -70,7 +71,7 @@ func registerDjango(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "set python3.7 as default", `
+			ctx, t, c, node, "set python3.7 as default", `
     		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
     		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
     		sudo update-alternatives --config python3`,
@@ -79,7 +80,7 @@ func registerDjango(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "install pip",
+			ctx, t, c, node, "install pip",
 			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7`,
 		); err != nil {
 			t.Fatal(err)
@@ -87,6 +88,7 @@ func registerDjango(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install pytest",
@@ -96,13 +98,13 @@ func registerDjango(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old django", `rm -rf /mnt/data1/django`,
+			ctx, t, c, node, "remove old django", `rm -rf /mnt/data1/django`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		djangoLatestTag, err := repeatGetLatestTag(
-			ctx, c, "django", "django", djangoReleaseTagRegex,
+			ctx, t, "django", "django", djangoReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -112,7 +114,7 @@ func registerDjango(r *testRegistry) {
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/timgraham/django/",
 			"/mnt/data1/django",
@@ -123,7 +125,7 @@ func registerDjango(r *testRegistry) {
 		}
 
 		djangoCockroachDBLatestTag, err := repeatGetLatestTag(
-			ctx, c, "cockroachdb", "django-cockroachdb", djangoCockroachDBReleaseTagRegex,
+			ctx, t, "cockroachdb", "django-cockroachdb", djangoCockroachDBReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -133,7 +135,7 @@ func registerDjango(r *testRegistry) {
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/cockroachdb/django-cockroachdb",
 			"/mnt/data1/django/tests/django-cockroachdb",
@@ -144,7 +146,7 @@ func registerDjango(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "install django's dependencies", `
+			ctx, t, c, node, "install django's dependencies", `
 				cd /mnt/data1/django/tests &&
 				sudo pip3 install -e .. &&
 				sudo pip3 install -r requirements/py3.txt &&
@@ -154,7 +156,7 @@ func registerDjango(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "install django-cockroachdb", `
+			ctx, t, c, node, "install django-cockroachdb", `
 					cd /mnt/data1/django/tests/django-cockroachdb/ &&
 					sudo pip3 install .`,
 		); err != nil {
@@ -163,7 +165,7 @@ func registerDjango(r *testRegistry) {
 
 		// Write the cockroach config into the test suite to use.
 		if err := repeatRunE(
-			ctx, c, node, "configuring tests to use cockroach",
+			ctx, t, c, node, "configuring tests to use cockroach",
 			fmt.Sprintf(
 				"echo \"%s\" > /mnt/data1/django/tests/cockroach_settings.py",
 				cockroachDjangoSettings,

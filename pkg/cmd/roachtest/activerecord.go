@@ -29,7 +29,7 @@ func registerActiveRecord(r *testRegistry) {
 	runActiveRecord := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -76,23 +76,24 @@ func registerActiveRecord(r *testRegistry) {
 		// Report the latest tag, but do not use it. The newest versions produces output that breaks our xml parser,
 		// and we want to pin to the working version for now.
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "rails", "rails", railsReleaseTagRegex,
+			ctx, t, "rails", "rails", railsReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest rails release is %s.", latestTag)
-		c.l.Printf("Supported rails release is %s.", supportedRailsVersion)
-		c.l.Printf("Supported adapter version is %s.", activerecordAdapterVersion)
+		t.l.Printf("Latest rails release is %s.", latestTag)
+		t.l.Printf("Supported rails release is %s.", supportedRailsVersion)
+		t.l.Printf("Supported adapter version is %s.", activerecordAdapterVersion)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -103,6 +104,7 @@ func registerActiveRecord(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install ruby 2.7",
@@ -116,14 +118,14 @@ func registerActiveRecord(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old activerecord adapter", `rm -rf /mnt/data1/activerecord-cockroachdb-adapter`,
+			ctx, t, c, node, "remove old activerecord adapter", `rm -rf /mnt/data1/activerecord-cockroachdb-adapter`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/cockroachdb/activerecord-cockroachdb-adapter.git",
 			"/mnt/data1/activerecord-cockroachdb-adapter",
@@ -136,6 +138,7 @@ func registerActiveRecord(r *testRegistry) {
 		t.Status("installing bundler")
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"installing bundler",
@@ -147,6 +150,7 @@ func registerActiveRecord(r *testRegistry) {
 		t.Status("installing gems")
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"installing gems",
@@ -166,7 +170,7 @@ func registerActiveRecord(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		c.l.Printf("%s", status)
+		t.l.Printf("%s", status)
 
 		t.Status("running activerecord test suite")
 		// Note that this is expected to return an error, since the test suite
@@ -176,7 +180,7 @@ func registerActiveRecord(r *testRegistry) {
 				`sudo RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`,
 		)
 
-		c.l.Printf("Test Results:\n%s", rawResults)
+		t.l.Printf("Test Results:\n%s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
