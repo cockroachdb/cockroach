@@ -23,18 +23,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type capturedCLIFlags struct {
+	targetDatabase string
+}
+
 // runImportCLICommand runs the import CLI command in a special way for the
 // purpose of unit testing. Since import requires a CCL binary and the CLI test
 // infrastructure has not yet been ported to test ccl backed CLI commands, we
 // use this method to test everything except the actual IMPORT, which we
 // consider a well tested feature on its own.
 // Instead of running the import, test knobs return the complete IMPORT query
-// that would have been run. Apart from checking the query's correctness, this
-// method ensures that the upload and deletion semantics to userfile are working
-// as expected.
+// that would have been run, as well as the target database of the IMPORT query.
+// Apart from checking the query's correctness, this method ensures that
+// the upload and deletion semantics to userfile are working as expected.
 func runImportCLICommand(
 	ctx context.Context, t *testing.T, cliCmd string, dumpFilePath string, c TestCLI,
-) string {
+) (string, capturedCLIFlags) {
 	knobs, unsetImportCLIKnobs := setImportCLITestingKnobs()
 	defer unsetImportCLIKnobs()
 
@@ -53,7 +57,7 @@ func runImportCLICommand(
 	select {
 	case <-knobs.uploadComplete:
 	case err := <-errCh:
-		t.Fatalf("import command returned before expected: %v", err)
+		t.Fatalf("import command returned before expected: output: %v, error: %v", out, err)
 	}
 	data, err := ioutil.ReadFile(dumpFilePath)
 	require.NoError(t, err)
@@ -82,8 +86,8 @@ func runImportCLICommand(
 		output = strings.Split(out, "\n")
 	}
 
-	require.Equal(t, 2, len(output))
-	return output[1]
+	require.Equal(t, 3, len(output))
+	return output[1], capturedCLIFlags{targetDatabase: output[2]}
 }
 
 func TestImportCLI(t *testing.T) {
@@ -101,6 +105,7 @@ func TestImportCLI(t *testing.T) {
 		args                     string
 		expectedImportQuery      string
 		expectedImportTableQuery string
+		expectedTargetDatabase   string
 	}{
 		{
 			"pgdump",
@@ -111,6 +116,7 @@ func TestImportCLI(t *testing.T) {
 				"sql' WITH max_row_size='524288'",
 			"IMPORT TABLE foo FROM PGDUMP " +
 				"'userfile://defaultdb.public.userfiles_root/db.sql' WITH max_row_size='524288'",
+			"",
 		},
 		{
 			"pgdump-with-options",
@@ -124,6 +130,18 @@ func TestImportCLI(t *testing.T) {
 			"IMPORT TABLE foo FROM PGDUMP " +
 				"'userfile://defaultdb.public.userfiles_root/db.sql' WITH max_row_size='1000', " +
 				"skip_foreign_keys, row_limit='10', ignore_unsupported_statements, log_ignored_statements='foo://bar'",
+			"",
+		},
+		{
+			"pgdump-to-target-database",
+			"PGDUMP",
+			"testdata/import/db.sql",
+			"--ignore-unsupported-statements=true --url=postgresql:///baz",
+			"IMPORT PGDUMP 'userfile://defaultdb.public.userfiles_root/db." +
+				"sql' WITH max_row_size='524288', ignore_unsupported_statements",
+			"IMPORT TABLE foo FROM PGDUMP " +
+				"'userfile://defaultdb.public.userfiles_root/db.sql' WITH max_row_size='524288', ignore_unsupported_statements",
+			"baz",
 		},
 		{
 			"mysql",
@@ -132,6 +150,7 @@ func TestImportCLI(t *testing.T) {
 			"",
 			"IMPORT MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'",
 			"IMPORT TABLE foo FROM MYSQLDUMP 'userfile://defaultdb.public.userfiles_root/db.sql'",
+			"",
 		},
 		{
 			"mysql-with-options",
@@ -142,6 +161,7 @@ func TestImportCLI(t *testing.T) {
 				"sql' WITH skip_foreign_keys, row_limit='10'",
 			"IMPORT TABLE foo FROM MYSQLDUMP " +
 				"'userfile://defaultdb.public.userfiles_root/db.sql' WITH skip_foreign_keys, row_limit='10'",
+			"",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,9 +170,10 @@ func TestImportCLI(t *testing.T) {
 				importDumpCLICmd += " " + tc.args
 			}
 
-			output := runImportCLICommand(ctx, t, importDumpCLICmd, tc.dumpFilePath, c)
+			outputImportQuery, capturedFlags := runImportCLICommand(ctx, t, importDumpCLICmd, tc.dumpFilePath, c)
 
-			require.Equal(t, tc.expectedImportQuery, output)
+			require.Equal(t, tc.expectedImportQuery, outputImportQuery)
+			require.Equal(t, tc.expectedTargetDatabase, capturedFlags.targetDatabase)
 		})
 
 		t.Run(tc.name+"_table", func(t *testing.T) {
@@ -161,9 +182,10 @@ func TestImportCLI(t *testing.T) {
 				importDumpCLICmd += " " + tc.args
 			}
 
-			output := runImportCLICommand(ctx, t, importDumpCLICmd, tc.dumpFilePath, c)
+			outputImportQuery, capturedFlags := runImportCLICommand(ctx, t, importDumpCLICmd, tc.dumpFilePath, c)
 
-			require.Equal(t, tc.expectedImportTableQuery, output)
+			require.Equal(t, tc.expectedImportTableQuery, outputImportQuery)
+			require.Equal(t, tc.expectedTargetDatabase, capturedFlags.targetDatabase)
 		})
 	}
 }

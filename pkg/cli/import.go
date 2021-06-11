@@ -207,7 +207,8 @@ func runImport(
 	}
 
 	if importCLIKnobs.returnQuery {
-		fmt.Print(importQuery)
+		fmt.Print(importQuery + "\n")
+		fmt.Print(cliCtx.sqlConnDBName)
 		return nil
 	}
 
