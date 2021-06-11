@@ -164,7 +164,7 @@ func (p *planner) addColumnImpl(
 		col.ComputeExpr = &serializedExpr
 	}
 
-	{
+	if !col.Virtual {
 		primaryIndex := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
 		primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, col.Name)
 		primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, col.ID)

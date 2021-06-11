@@ -483,7 +483,7 @@ func maybeCreateAndAddShardCol(
 		} else {
 			desc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_ADD)
 		}
-		{
+		if !shardColDesc.Virtual {
 			primaryIndex := desc.GetPrimaryIndex().IndexDescDeepCopy()
 			primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, shardColDesc.ID)
 			primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, shardColDesc.Name)

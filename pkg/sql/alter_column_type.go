@@ -384,6 +384,12 @@ func alterColumnTypeGeneral(
 	}
 
 	tableDesc.AddColumnMutation(&newCol, descpb.DescriptorMutation_ADD)
+	if !newCol.Virtual {
+		primaryIndex := tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
+		primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, newCol.Name)
+		primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, newCol.ID)
+		tableDesc.SetPrimaryIndex(primaryIndex)
+	}
 
 	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
