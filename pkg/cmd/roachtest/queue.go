@@ -34,8 +34,8 @@ func registerQueue(r *testRegistry) {
 }
 
 func runQueue(ctx context.Context, t *test, c *cluster) {
-	dbNodeCount := c.spec.NodeCount - 1
-	workloadNode := c.spec.NodeCount
+	dbNodeCount := c.Spec().NodeCount - 1
+	workloadNode := c.Spec().NodeCount
 
 	// Distribute programs to the correct nodes and start CockroachDB.
 	c.Put(ctx, cockroach, "./cockroach", c.Range(1, dbNodeCount))

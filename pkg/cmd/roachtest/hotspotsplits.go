@@ -27,8 +27,8 @@ func registerHotSpotSplits(r *testRegistry) {
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.
 	runHotSpot := func(ctx context.Context, t *test, c *cluster, duration time.Duration, concurrency int) {
-		roachNodes := c.Range(1, c.spec.NodeCount-1)
-		appNode := c.Node(c.spec.NodeCount)
+		roachNodes := c.Range(1, c.Spec().NodeCount-1)
+		appNode := c.Node(c.Spec().NodeCount)
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		c.Start(ctx, t, roachNodes)

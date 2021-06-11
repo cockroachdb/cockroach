@@ -21,8 +21,8 @@ import (
 func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
-	if c.spec.NodeCount != 1 {
-		t.Fatalf("Expected num nodes to be 1, got: %d", c.spec.NodeCount)
+	if c.Spec().NodeCount != 1 {
+		t.Fatalf("Expected num nodes to be 1, got: %d", c.Spec().NodeCount)
 	}
 
 	t.Status("deploying offset injector")
@@ -37,7 +37,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	c.Wipe(ctx)
 	c.Start(ctx, t)
 
-	db := c.Conn(ctx, c.spec.NodeCount)
+	db := c.Conn(ctx, c.Spec().NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(
@@ -59,7 +59,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	// clock offset is reset or the node will crash again.
 	var aliveAfterOffset bool
 	defer func() {
-		offsetInjector.recover(ctx, c.spec.NodeCount)
+		offsetInjector.recover(ctx, c.Spec().NodeCount)
 		// Resetting the clock is a jump in the opposite direction which
 		// can cause a crash even if the original jump didn't. Wait a few
 		// seconds before checking whether the node is alive and
@@ -69,8 +69,8 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 			c.Start(ctx, t, c.Node(1))
 		}
 	}()
-	defer offsetInjector.recover(ctx, c.spec.NodeCount)
-	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
+	defer offsetInjector.recover(ctx, c.Spec().NodeCount)
+	offsetInjector.offset(ctx, c.Spec().NodeCount, tc.offset)
 
 	// Wait a few seconds to let it crash if it's going to crash.
 	time.Sleep(3 * time.Second)

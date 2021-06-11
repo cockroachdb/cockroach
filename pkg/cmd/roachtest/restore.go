@@ -188,7 +188,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 		}
 
 		var bytesUsed []usage
-		for i := 1; i <= dul.c.spec.NodeCount; i++ {
+		for i := 1; i <= dul.c.Spec().NodeCount; i++ {
 			cur, err := getDiskUsageInBytes(ctx, dul.c, quietLogger, i)
 			if err != nil {
 				// This can trigger spuriously as compactions remove files out from under `du`.

@@ -47,7 +47,7 @@ var deadNodeAttr = "deadnode"
 // node. It expects the downed node to discover the new replica placement and gc
 // its replicas.
 func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRestart bool) {
-	if c.spec.NodeCount != 6 {
+	if c.Spec().NodeCount != 6 {
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 

@@ -21,8 +21,8 @@ import (
 func registerAlterPK(r *testRegistry) {
 
 	setupTest := func(ctx context.Context, t *test, c *cluster) (nodeListOption, nodeListOption) {
-		roachNodes := c.Range(1, c.spec.NodeCount-1)
-		loadNode := c.Node(c.spec.NodeCount)
+		roachNodes := c.Range(1, c.Spec().NodeCount-1)
+		loadNode := c.Node(c.Spec().NodeCount)
 		t.Status("copying binaries")
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		c.Put(ctx, workload, "./workload", loadNode)

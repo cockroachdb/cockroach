@@ -84,9 +84,9 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 }
 
 func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions) {
-	allNodes := c.Range(1, c.spec.NodeCount)
-	roachNodes := c.Range(1, c.spec.NodeCount-1)
-	loadNode := c.Node(c.spec.NodeCount)
+	allNodes := c.Range(1, c.Spec().NodeCount)
+	roachNodes := c.Range(1, c.Spec().NodeCount-1)
+	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("installing cockroach")
 	c.Put(ctx, cockroach, "./cockroach", allNodes)

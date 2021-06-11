@@ -25,7 +25,7 @@ import (
 // to make a much better one, much more easily.
 func registerVersion(r *testRegistry) {
 	runVersion := func(ctx context.Context, t *test, c *cluster, binaryVersion string) {
-		nodes := c.spec.NodeCount - 1
+		nodes := c.Spec().NodeCount - 1
 
 		if err := c.Stage(ctx, c.l, "release", "v"+binaryVersion, "", c.Range(1, nodes)); err != nil {
 			t.Fatal(err)

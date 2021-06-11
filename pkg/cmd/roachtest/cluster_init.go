@@ -26,7 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func runClusterInit(ctx context.Context, t *test, c *cluster) {
+func runClusterInit(ctx context.Context, t *test, c clusterI) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	addrs, err := c.InternalAddr(ctx, c.All())
@@ -48,7 +48,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 
 		func() {
 			var g errgroup.Group
-			for i := 1; i <= c.spec.NodeCount; i++ {
+			for i := 1; i <= c.Spec().NodeCount; i++ {
 				i := i
 				g.Go(func() error {
 					return c.RunE(ctx, c.Node(i),
@@ -73,7 +73,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 
 			// Wait for the servers to bind their ports.
 			if err := retry.ForDuration(10*time.Second, func() error {
-				for i := 1; i <= c.spec.NodeCount; i++ {
+				for i := 1; i <= c.Spec().NodeCount; i++ {
 					resp, err := httputil.Get(ctx, urlMap[i]+"/health")
 					if err != nil {
 						return err
@@ -86,7 +86,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 			}
 
 			var dbs []*gosql.DB
-			for i := 1; i <= c.spec.NodeCount; i++ {
+			for i := 1; i <= c.Spec().NodeCount; i++ {
 				db := c.Conn(ctx, i)
 				defer db.Close()
 				dbs = append(dbs, db)
@@ -169,7 +169,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 				args = append(args, extraArgs...)
 				args = append(args, "--insecure")
 				args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-				buf, err := c.RunWithBuffer(ctx, c.l, c.Node(runNode), args...)
+				buf, err := c.RunWithBuffer(ctx, t.l, c.Node(runNode), args...)
 				t.l.Printf("%s\n", buf)
 				return string(buf), err
 			}

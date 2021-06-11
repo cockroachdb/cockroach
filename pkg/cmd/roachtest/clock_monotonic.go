@@ -21,8 +21,8 @@ import (
 func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMonotonicityTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when introducing offset
-	if c.spec.NodeCount != 1 {
-		t.Fatalf("Expected num nodes to be 1, got: %d", c.spec.NodeCount)
+	if c.Spec().NodeCount != 1 {
+		t.Fatalf("Expected num nodes to be 1, got: %d", c.Spec().NodeCount)
 	}
 
 	t.Status("deploying offset injector")
@@ -37,7 +37,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	c.Wipe(ctx)
 	c.Start(ctx, t)
 
-	db := c.Conn(ctx, c.spec.NodeCount)
+	db := c.Conn(ctx, c.Spec().NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(`SET CLUSTER SETTING server.clock.persist_upper_bound_interval = '%v'`,
@@ -64,12 +64,12 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		}
 		// Stop cockroach node before recovering from clock offset as this clock
 		// jump can crash the node.
-		c.Stop(ctx, c.Node(c.spec.NodeCount))
+		c.Stop(ctx, c.Node(c.Spec().NodeCount))
 		t.l.Printf("recovering from injected clock offset")
 
-		offsetInjector.recover(ctx, c.spec.NodeCount)
+		offsetInjector.recover(ctx, c.Spec().NodeCount)
 
-		c.Start(ctx, t, c.Node(c.spec.NodeCount))
+		c.Start(ctx, t, c.Node(c.Spec().NodeCount))
 		if !isAlive(db, c.l) {
 			t.Fatal("Node unexpectedly crashed")
 		}
@@ -77,11 +77,11 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 
 	// Inject a clock offset after stopping a node
 	t.Status("stopping cockroach")
-	c.Stop(ctx, c.Node(c.spec.NodeCount))
+	c.Stop(ctx, c.Node(c.Spec().NodeCount))
 	t.Status("injecting offset")
-	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
+	offsetInjector.offset(ctx, c.Spec().NodeCount, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, t, c.Node(c.spec.NodeCount))
+	c.Start(ctx, t, c.Node(c.Spec().NodeCount))
 
 	if !isAlive(db, c.l) {
 		t.Fatal("Node unexpectedly crashed")

@@ -19,6 +19,7 @@ type clusterI interface {
 	makeNodes(opts ...option) string // TODO(tbg): this should go away
 	isLocal() bool
 	EncryptAtRandom(on bool)
+	EncryptDefault(on bool)
 	Spec() clusterSpec
 	StopCockroachGracefullyOnNode(ctx context.Context, node int) error
 	All() nodeListOption
