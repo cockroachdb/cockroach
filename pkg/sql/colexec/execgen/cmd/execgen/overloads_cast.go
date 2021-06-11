@@ -159,6 +159,61 @@ func decimalToBool(to, from, _, _ string) string {
 	return fmt.Sprintf("%[1]s = %[2]s.Sign() != 0", to, from)
 }
 
+func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
+	if toIntWidth == anyWidth {
+		toIntWidth = 64
+	}
+	return func(to, from, fromCol, toType string) string {
+		// convStr is a format string expecting three arguments:
+		// 1. the code snippet that performs an assigment of int64 local
+		//    variable named '_i' to the result, possibly performing the bounds
+		//    checks
+		// 2. the original value variable name
+		// 3. the name of the global variable storing the error to be emitted
+		//    when the decimal is out of range for the desired int width.
+		//
+		// NOTE: when updating the code below, make sure to update tree/casts.go
+		// as well.
+		convStr := `
+		{
+			tmpDec := &_overloadHelper.TmpDec1
+			_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &%[2]s)
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			_i, err := tmpDec.Int64()
+			if err != nil {
+				colexecerror.ExpectedError(%[3]s)
+			}
+			%[1]s
+		}
+	`
+		errOutOfRange := "tree.ErrIntOutOfRange"
+		if toIntWidth != 64 {
+			errOutOfRange = fmt.Sprintf("tree.ErrInt%dOutOfRange", toIntWidth/8)
+		}
+		return fmt.Sprintf(
+			convStr,
+			getIntToIntCastFunc(64 /* fromWidth */, toIntWidth)(to, "_i" /* from */, fromCol, toType),
+			from,
+			errOutOfRange,
+		)
+	}
+}
+
+func decimalToFloat(to, from, _, _ string) string {
+	convStr := `
+		{
+			f, err := %[2]s.Float64()
+			if err != nil {
+				colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+			}
+			%[1]s = f
+		}
+`
+	return fmt.Sprintf(convStr, to, from)
+}
+
 func decimalToDecimal(to, from, _, toType string) string {
 	return toDecimal(fmt.Sprintf(`%[1]s.Set(&%[2]s)`, to, from), to, toType)
 }
@@ -240,6 +295,10 @@ func registerCastTypeCustomizers() {
 
 	// Casts from decimal.
 	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.BoolFamily, anyWidth}, decimalCastCustomizer{toFamily: types.BoolFamily})
+	for _, toIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.IntFamily, toIntWidth}, decimalCastCustomizer{toFamily: types.IntFamily, toWidth: toIntWidth})
+	}
+	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.FloatFamily, anyWidth}, decimalCastCustomizer{toFamily: types.FloatFamily})
 	// Note that we have the decimal "identity" cast here in order to handle
 	// possible rounding of the precision.
 	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}, decimalCastCustomizer{toFamily: types.DecimalFamily})
@@ -276,6 +335,7 @@ type boolCastCustomizer struct{}
 // decimalCastCustomizer specifies casts from decimals.
 type decimalCastCustomizer struct {
 	toFamily types.Family
+	toWidth  int32
 }
 
 // floatCastCustomizer specifies casts from floats.
@@ -313,6 +373,10 @@ func (c decimalCastCustomizer) getCastFunc() castFunc {
 	switch c.toFamily {
 	case types.BoolFamily:
 		return decimalToBool
+	case types.IntFamily:
+		return getDecimalToIntCastFunc(c.toWidth)
+	case types.FloatFamily:
+		return decimalToFloat
 	case types.DecimalFamily:
 		return decimalToDecimal
 	}

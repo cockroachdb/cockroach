@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -119,6 +120,46 @@ func GetCastOperator(
 				case -1:
 				default:
 					return &castDecimalBoolOp{
+						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+						allocator:                allocator,
+						colIdx:                   colIdx,
+						outputIdx:                resultIdx,
+						toType:                   toType,
+					}, nil
+				}
+			case types.IntFamily:
+				switch rightType.Width() {
+				case 16:
+					return &castDecimalInt16Op{
+						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+						allocator:                allocator,
+						colIdx:                   colIdx,
+						outputIdx:                resultIdx,
+						toType:                   toType,
+					}, nil
+				case 32:
+					return &castDecimalInt32Op{
+						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+						allocator:                allocator,
+						colIdx:                   colIdx,
+						outputIdx:                resultIdx,
+						toType:                   toType,
+					}, nil
+				case -1:
+				default:
+					return &castDecimalInt64Op{
+						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+						allocator:                allocator,
+						colIdx:                   colIdx,
+						outputIdx:                resultIdx,
+						toType:                   toType,
+					}, nil
+				}
+			case types.FloatFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return &castDecimalFloat64Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -492,6 +533,22 @@ func IsCastSupported(fromType, toType *types.T) bool {
 		default:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 			case types.BoolFamily:
+				switch rightType.Width() {
+				case -1:
+				default:
+					return true
+				}
+			case types.IntFamily:
+				switch rightType.Width() {
+				case 16:
+					return true
+				case 32:
+					return true
+				case -1:
+				default:
+					return true
+				}
+			case types.FloatFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
@@ -1386,6 +1443,658 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v.Sign() != 0
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalInt16Op struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator      *colmem.Allocator
+	colIdx         int
+	outputIdx      int
+	toType         *types.T
+	overloadHelper execgen.OverloadHelper
+}
+
+var _ colexecop.ResettableOperator = &castDecimalInt16Op{}
+var _ colexecop.ClosableOperator = &castDecimalInt16Op{}
+
+func (c *castDecimalInt16Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDecimalInt16Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
+	_overloadHelper := c.overloadHelper
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			outputCol := outputVec.Int16()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+
+							shifted := _i >> uint(15)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(_i)
+
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+
+							shifted := _i >> uint(15)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(_i)
+
+						}
+
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+
+							shifted := _i >> uint(15)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(_i)
+
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int16
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+
+							shifted := _i >> uint(15)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+							}
+							r = int16(_i)
+
+						}
+
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalInt32Op struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator      *colmem.Allocator
+	colIdx         int
+	outputIdx      int
+	toType         *types.T
+	overloadHelper execgen.OverloadHelper
+}
+
+var _ colexecop.ResettableOperator = &castDecimalInt32Op{}
+var _ colexecop.ClosableOperator = &castDecimalInt32Op{}
+
+func (c *castDecimalInt32Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDecimalInt32Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
+	_overloadHelper := c.overloadHelper
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			outputCol := outputVec.Int32()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+
+							shifted := _i >> uint(31)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(_i)
+
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+
+							shifted := _i >> uint(31)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(_i)
+
+						}
+
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+
+							shifted := _i >> uint(31)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(_i)
+
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int32
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+
+							shifted := _i >> uint(31)
+							if (_i >= 0 && shifted > 0) || (_i < 0 && shifted < -1) {
+								colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+							}
+							r = int32(_i)
+
+						}
+
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalInt64Op struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator      *colmem.Allocator
+	colIdx         int
+	outputIdx      int
+	toType         *types.T
+	overloadHelper execgen.OverloadHelper
+}
+
+var _ colexecop.ResettableOperator = &castDecimalInt64Op{}
+var _ colexecop.ClosableOperator = &castDecimalInt64Op{}
+
+func (c *castDecimalInt64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDecimalInt64Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
+	_overloadHelper := c.overloadHelper
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			outputCol := outputVec.Int64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(_i)
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(_i)
+						}
+
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(_i)
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r int64
+
+						{
+							tmpDec := &_overloadHelper.TmpDec1
+							_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							_i, err := tmpDec.Int64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(_i)
+						}
+
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalFloat64Op struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	toType    *types.T
+}
+
+var _ colexecop.ResettableOperator = &castDecimalFloat64Op{}
+var _ colexecop.ClosableOperator = &castDecimalFloat64Op{}
+
+func (c *castDecimalFloat64Op) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+}
+
+func (c *castDecimalFloat64Op) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			outputCol := outputVec.Float64()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							f, err := v.Float64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+							}
+							r = f
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						if inputNulls.NullAt(tupleIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							f, err := v.Float64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+							}
+							r = f
+						}
+
+						//gcassert:bce
+						outputCol[tupleIdx] = r
+					}
+				}
+			} else {
+				// We need to make sure that there are no left over null values
+				// in the output vector.
+				outputNulls.UnsetNulls()
+				if sel != nil {
+					sel = sel[:n]
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = sel[i]
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							f, err := v.Float64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+							}
+							r = f
+						}
+
+						outputCol[tupleIdx] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					var tupleIdx int
+					for i := 0; i < n; i++ {
+						tupleIdx = i
+						//gcassert:bce
+						v := inputCol.Get(tupleIdx)
+						var r float64
+
+						{
+							f, err := v.Float64()
+							if err != nil {
+								colexecerror.ExpectedError(tree.ErrFloatOutOfRange)
+							}
+							r = f
+						}
+
 						//gcassert:bce
 						outputCol[tupleIdx] = r
 					}
