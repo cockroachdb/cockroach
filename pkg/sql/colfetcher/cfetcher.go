@@ -275,8 +275,6 @@ type cFetcher struct {
 		// within the current batch. It's incremented as soon as we detect that a row
 		// is finished.
 		rowIdx int
-		// curSpan is the current span that the kv fetcher just returned data from.
-		curSpan roachpb.Span
 		// nextKV is the kv to process next.
 		nextKV roachpb.KeyValue
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
@@ -804,6 +802,29 @@ func (rf *cFetcher) nextAdapter() {
 	rf.adapter.batch, rf.adapter.err = rf.nextBatch(rf.adapter.ctx)
 }
 
+// setNextKV sets the next KV to process to the input KV. needsCopy, if true,
+// causes the input kv to be deep copied. needsCopy should be set to true if
+// the input KV is pointing to the last KV of a batch, so that the batch can
+// be garbage collected before fetching the next one.
+// gcassert:inline
+func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
+	if !needsCopy {
+		rf.machine.nextKV = kv
+		return
+	}
+
+	// If we've made it to the very last key in the batch, copy out the key
+	// so that the GC can reclaim the large backing slice before we call
+	// NextKV() again.
+	kvCopy := roachpb.KeyValue{}
+	kvCopy.Key = make(roachpb.Key, len(kv.Key))
+	copy(kvCopy.Key, kv.Key)
+	kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
+	copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
+	kvCopy.Value.Timestamp = kv.Value.Timestamp
+	rf.machine.nextKV = kvCopy
+}
+
 // nextBatch processes keys until we complete one batch of rows,
 // coldata.BatchSize() in length, which are returned in columnar format as a
 // coldata.Batch. The batch contains one Vec per table column, regardless of
@@ -819,38 +840,37 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKeys, kv, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			ok, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
-			if !moreKeys {
+			if !ok {
 				rf.machine.state[0] = stateEmitLastBatch
 				continue
 			}
-			if newSpan {
-				rf.machine.curSpan = rf.fetcher.Span
-				// TODO(jordan): parse the logical longest common prefix of the span
-				// into a buffer. The logical longest common prefix is the longest
-				// common prefix that contains only full key components. For example,
-				// the keys /Table/53/1/foo/bar/10 and /Table/53/1/foo/bop/10 would
-				// have LLCS of /Table/53/1/foo, even though they share a b prefix of
-				// the next key, since that prefix isn't a complete key component.
-				/*
-					lcs := rf.fetcher.span.LongestCommonPrefix()
-					// parse lcs into stuff
-					key, matches, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-						rf.table.desc, rf.table.info.index, rf.table.info.keyValTypes,
-						rf.table.keyVals, rf.table.info.indexColumnDirs, kv.Key[rf.table.info.knownPrefixLength:],
-					)
-					if err != nil {
-						// This is expected - the longest common prefix of the keyspan might
-						// end half way through a key. Suppress the error and set the actual
-						// LCS we'll use later to the decodable components of the key.
-					}
-				*/
-			}
+			// TODO(jordan): parse the logical longest common prefix of the span
+			// into a buffer. The logical longest common prefix is the longest
+			// common prefix that contains only full key components. For example,
+			// the keys /Table/53/1/foo/bar/10 and /Table/53/1/foo/bop/10 would
+			// have LLCS of /Table/53/1/foo, even though they share a b prefix of
+			// the next key, since that prefix isn't a complete key component.
+			/*
+				if newSpan {
+				lcs := rf.fetcher.span.LongestCommonPrefix()
+				// parse lcs into stuff
+				key, matches, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
+					rf.table.desc, rf.table.info.index, rf.table.info.keyValTypes,
+					rf.table.keyVals, rf.table.info.indexColumnDirs, kv.Key[rf.table.info.knownPrefixLength:],
+				)
+				if err != nil {
+					// This is expected - the longest common prefix of the keyspan might
+					// end half way through a key. Suppress the error and set the actual
+					// LCS we'll use later to the decodable components of the key.
+				}
+				}
+			*/
 
-			rf.machine.nextKV = kv
+			rf.setNextKV(kv, finalReferenceToBatch)
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
@@ -976,15 +996,16 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 		case stateSeekPrefix:
+			// Note: seekPrefix is only used for interleaved tables.
 			for {
-				moreRows, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+				ok, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 				if err != nil {
 					return nil, rf.convertFetchError(ctx, err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
 				}
-				if !moreRows {
+				if !ok {
 					// We ran out of data, so ignore whatever our next state was going to
 					// be and emit the final batch.
 					rf.machine.state[1] = stateEmitLastBatch
@@ -1002,18 +1023,18 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				// TODO(jordan): if nextKV returns newSpan = true, set the new span
 				//  prefix and indicate that it needs decoding.
 				if comparison >= 0 {
-					rf.machine.nextKV = kv
+					rf.setNextKV(kv, finalReferenceToBatch)
 					break
 				}
 			}
 			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			ok, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, rf.convertFetchError(ctx, err)
 			}
-			if !moreKVs {
+			if !ok {
 				// No more data. Finalize the row and exit.
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateEmitLastBatch
@@ -1021,7 +1042,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
-			rf.machine.nextKV = kv
+			rf.setNextKV(kv, finalReferenceToBatch)
 			if debugState {
 				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
