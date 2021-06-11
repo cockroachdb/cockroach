@@ -8,6 +8,7 @@ go_library(
         "by_name.go",
         "by_name_map.go",
         "map.go",
+        "set.go",
         "tree.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree",
@@ -25,6 +26,7 @@ go_test(
     srcs = [
         "datadriven_test.go",
         "map_test.go",
+        "set_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":nstree"],

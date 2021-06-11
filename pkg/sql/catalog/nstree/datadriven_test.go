@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
+const notFound = "not found"
+
 type argType int
 
 const (
