@@ -857,6 +857,7 @@ func init() {
 		intFlag(d, &importCtx.rowLimit, cliflags.ImportRowLimit)
 		boolFlag(d, &importCtx.ignoreUnsupported, cliflags.ImportIgnoreUnsupportedStatements)
 		stringFlag(d, &importCtx.ignoreUnsupportedLog, cliflags.ImportLogIgnoredStatements)
+		stringFlag(d, &cliCtx.sqlConnDBName, cliflags.Database)
 
 		t := importDumpTableCmd.Flags()
 		boolFlag(t, &importCtx.skipForeignKeys, cliflags.ImportSkipForeignKeys)
@@ -864,6 +865,7 @@ func init() {
 		intFlag(t, &importCtx.rowLimit, cliflags.ImportRowLimit)
 		boolFlag(t, &importCtx.ignoreUnsupported, cliflags.ImportIgnoreUnsupportedStatements)
 		stringFlag(t, &importCtx.ignoreUnsupportedLog, cliflags.ImportLogIgnoredStatements)
+		stringFlag(t, &cliCtx.sqlConnDBName, cliflags.Database)
 	}
 
 	// sqlfmt command.

@@ -243,6 +243,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	anySQL := []string{"sql"}
 	sqlShell := []string{"sql"}
 	anyNonSQLShell := []string{"quit"}
+	anyImportCmd := []string{"import db pgdump", "import table pgdump"}
 
 	testData := []struct {
 		cmds       []string
@@ -260,6 +261,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--url=postgresql://:12345"}, []string{"--port=12345"}, "", ""},
 
 		{sqlShell, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, "", ""},
+		{anyImportCmd, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, "", ""},
 		{anyNonSQLShell, []string{"--url=postgresql://foo/bar"}, []string{"--host=foo" /*db ignored*/}, "", ""},
 
 		{anySQL, []string{"--url=postgresql://foo@"}, []string{"--user=foo"}, "", ""},
@@ -288,6 +290,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--port=12345", "--url=postgresql://foo"}, []string{"--host=foo", "--port=12345"}, "", ""},
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--port=baz"}, "", `invalid port ":baz" after host`},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--database=baz"}, "", ""},
+		{anyImportCmd, []string{"--database=baz", "--url=postgresql://"}, []string{"--database=baz"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--user=baz"}, "", ""},
 
 		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure=false"}, "", ""},
@@ -299,6 +302,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:12345"}, []string{"--host=foo", "--port=12345"}, "", ""},
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:bar"}, nil, `invalid port ":bar" after host`, ""},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo/bar"}, []string{"--host=foo", "--database=bar"}, "", ""},
+		{anyImportCmd, []string{"--database=baz", "--url=postgresql:///bar"}, []string{"--database=bar"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://bar@foo"}, []string{"--host=foo", "--user=bar"}, "", ""},
 
 		{anyNonSQL, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
@@ -357,7 +361,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	for testNum, test := range testData {
 		for _, cmdName := range test.cmds {
 			t.Run(fmt.Sprintf("%d/%s/%s", testNum+1, cmdName, strings.Join(test.flags, " ")), func(t *testing.T) {
-				cmd, _, _ := cockroachCmd.Find([]string{cmdName})
+				cmd, _, _ := cockroachCmd.Find(strings.Split(cmdName, " "))
 
 				// Parse using the URL.
 				// This checks the URL parser works and/or that it produces the expected error.
