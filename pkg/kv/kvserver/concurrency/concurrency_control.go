@@ -188,6 +188,10 @@ type RequestSequencer interface {
 	// does so, it will not return a request guard.
 	SequenceReq(context.Context, *Guard, Request, RequestEvalKind) (*Guard, Response, *Error)
 
+	// WaitWithoutAcquiring waits for existing latches that conflict with Request
+	// to be released, but does not acquire any latches in the Request itself.
+	WaitWithoutAcquiring(context.Context, Request) *Error
+
 	// FinishReq marks the request as complete, releasing any protection
 	// the request had against conflicting requests and allowing conflicting
 	// requests that are blocked on this one to proceed. The guard should not
@@ -442,6 +446,11 @@ type latchManager interface {
 	// returned false, or some other occurrence (like conflicting locks) is
 	// causing this request to switch to pessimistic latching.
 	WaitUntilAcquired(ctx context.Context, lg latchGuard) (latchGuard, *Error)
+
+	// WaitWithoutAcquiring waits for conflicting latches without adding any
+	// latches itself. Fast path for operations that only require flushing out old
+	// operations without blocking any new ones.
+	WaitWithoutAcquiring(ctx context.Context, req Request) *Error
 
 	// Releases latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)

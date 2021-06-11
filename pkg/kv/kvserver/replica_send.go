@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -41,6 +42,11 @@ func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	return r.sendWithRangeID(ctx, r.RangeID, &ba)
+}
+
+type keyAndIntent struct {
+	key    roachpb.Key
+	intent enginepb.MVCCMetadata
 }
 
 // sendWithRangeID takes an unused rangeID argument so that the range
@@ -121,6 +127,17 @@ func (r *Replica) sendWithRangeID(
 	} else {
 		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
 			pErr = filter(ctx, *ba, br)
+		}
+	}
+	if br != nil && len(br.Responses) > 0 {
+		// A batch corresponding to a MigrateLockTable command would have that as
+		// the only response. Check it here and run the migration before sending
+		// the result.
+		if mlt := br.Responses[0].GetMigrateLockTable(); mlt != nil {
+			err := r.migrateLockTable(ctx, ba.Requests[0].GetMigrateLockTable(), mlt)
+			if err != nil {
+				return nil, roachpb.NewError(errors.Wrap(err, "error when migrating lock table"))
+			}
 		}
 	}
 
@@ -343,6 +360,22 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 		}
 	}()
+
+	if ba.IsSingleRequest() {
+		if mlt := ba.Requests[0].GetMigrateLockTable(); mlt != nil {
+			// Special case: We do not need to go through SequenceReq to acquire latches
+			// for this request. We only need to wait for conflicting write latches to
+			// be complete. Call WaitWithoutAcquiring instead of SequenceReq. The
+			// subsequent SequenceReq call will not grab any latches as this request
+			// has been excluded in shouldAcquireLatches.
+			pErr = r.concMgr.WaitWithoutAcquiring(ctx, concurrency.Request{
+				LatchSpans: latchSpans,
+			})
+			if pErr != nil {
+				return nil, pErr
+			}
+		}
+	}
 	for {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {

@@ -662,6 +662,9 @@ func (*AddSSTableRequest) Method() Method { return AddSSTable }
 func (*MigrateRequest) Method() Method { return Migrate }
 
 // Method implements the Request interface.
+func (*MigrateLockTableRequest) Method() Method { return MigrateLockTable }
+
+// Method implements the Request interface.
 func (*RecomputeStatsRequest) Method() Method { return RecomputeStats }
 
 // Method implements the Request interface.
@@ -903,6 +906,12 @@ func (r *AddSSTableRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *MigrateRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *MigrateLockTableRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1241,6 +1250,7 @@ func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*MergeRequest) flags() int              { return isWrite | canBackpressure }
+func (r *MigrateLockTableRequest) flags() int { return isRead | isRange }
 func (*RequestLeaseRequest) flags() int       { return isWrite | isAlone | skipLeaseCheck }
 
 // LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the

@@ -51,6 +51,14 @@ func (m *latchManagerImpl) WaitUntilAcquired(
 	return lg, nil
 }
 
+func (m *latchManagerImpl) WaitWithoutAcquiring(ctx context.Context, req Request) *Error {
+	err := m.m.WaitWithoutAcquiring(ctx, req.LatchSpans)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	return nil
+}
+
 func (m *latchManagerImpl) Release(lg latchGuard) {
 	m.m.Release(lg.(*spanlatch.Guard))
 }

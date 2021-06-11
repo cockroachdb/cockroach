@@ -304,6 +304,12 @@ const (
 	ExpressionIndexes
 	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
 	DeleteDeprecatedNamespaceTableDescriptorMigration
+	// SeparatedIntentsMigration adds the migration to move over all remaining
+	// intents to the separated lock table space.
+	SeparatedIntentsMigration
+	// PostSeparatedIntentsMigration runs a cleanup migration after the main
+	// SeparatedIntentsMigration.
+	PostSeparatedIntentsMigration
 
 	// Step (1): Add new versions here.
 )
@@ -516,6 +522,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 112},
+	},
+	{
+		Key:     SeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 114},
+	},
+	{
+		Key:     PostSeparatedIntentsMigration,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 116},
 	},
 
 	// Step (2): Add new versions here.

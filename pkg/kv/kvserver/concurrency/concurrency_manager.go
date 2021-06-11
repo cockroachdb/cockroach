@@ -130,6 +130,11 @@ func NewManager(cfg Config) Manager {
 	return m
 }
 
+// WaitWithoutAcquiring implements the RequestSequencer interface.
+func (m *managerImpl) WaitWithoutAcquiring(ctx context.Context, req Request) *Error {
+	return m.lm.WaitWithoutAcquiring(ctx, req)
+}
+
 // SequenceReq implements the RequestSequencer interface.
 func (m *managerImpl) SequenceReq(
 	ctx context.Context, prev *Guard, req Request, evalKind RequestEvalKind,
@@ -307,6 +312,11 @@ func shouldAcquireLatches(req Request) bool {
 		// Do not acquire latches for lease requests. These requests are run on
 		// replicas that do not hold the lease, so acquiring latches wouldn't
 		// help synchronize with other requests.
+		return false
+	case req.isSingle(roachpb.MigrateLockTable):
+		// MigrateLockTable requests have already had WaitWithoutAcquiring
+		// called on them, with their set of latches. None of these latches actually
+		// need to be acquired for request evaluation.
 		return false
 	}
 	return true

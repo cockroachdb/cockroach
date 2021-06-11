@@ -1314,6 +1314,71 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix, o.keepRedactable)
 }
 
+var debugIntentCount = &cobra.Command{
+	Use:   "intent-count <store directory>",
+	Short: "return a count of intents in directory",
+	Long: `
+Returns a count of interleaved and separated intents in the store directory.
+Used to investigate stores with lots of unresolved intents, or to confirm
+if the migration away from interleaved intents was successful.
+`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: runDebugIntentCount,
+}
+
+func runDebugIntentCount(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
+	if err != nil {
+		return err
+	}
+	var interleavedIntentCount, separatedIntentCount int
+
+	iter := db.NewEngineIterator(storage.IterOptions{
+		LowerBound: roachpb.KeyMin,
+		UpperBound: roachpb.KeyMax,
+	})
+	defer iter.Close()
+	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+	for ; valid && err == nil; valid, err = iter.NextEngineKey() {
+		key, err := iter.EngineKey()
+		if err != nil {
+			return err
+		}
+		if key.IsLockTableKey() {
+			separatedIntentCount++
+			continue
+		}
+		if !key.IsMVCCKey() {
+			continue
+		}
+		mvccKey, err := key.ToMVCCKey()
+		if err != nil {
+			return err
+		}
+		if !mvccKey.Timestamp.IsEmpty() {
+			continue
+		}
+		val := iter.Value()
+		meta := enginepb.MVCCMetadata{}
+		if err := protoutil.Unmarshal(val, &meta); err != nil {
+			return err
+		}
+		if meta.IsInline() {
+			continue
+		}
+		interleavedIntentCount++
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Printf("interleaved intents: %d\nseparated intents: %d\n",
+		interleavedIntentCount, separatedIntentCount)
+	return nil
+}
+
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
 // and need encryption flags (injected by CCL code).
 // Note: do NOT include commands that just call rocksdb code without setting up an engine.
@@ -1325,6 +1390,7 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
+	debugIntentCount,
 }
 
 // All other debug commands go here.

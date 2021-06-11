@@ -712,6 +712,16 @@ func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roach
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// MigrateLockTable is a special command that leaks an engine snapshot to a
+// local map. At send time, the replica(s) conduct a migration to convert all
+// interleaved intents to separated intents. This command is called with the
+// assumption that no more interleaved intents will be written after this point.
+func (db *DB) MigrateLockTable(ctx context.Context, begin, end interface{}) error {
+	b := &Batch{}
+	b.migrateLockTable(begin, end)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.

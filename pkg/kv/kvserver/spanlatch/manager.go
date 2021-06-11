@@ -234,6 +234,23 @@ func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet) *Guard {
 	return lg
 }
 
+// WaitWithoutAcquiring waits for conflicting latches on the span without adding
+// any latches itself. Fast path for operations that only require past latches
+// to be released without blocking new latches.
+func (m *Manager) WaitWithoutAcquiring(ctx context.Context, spans *spanset.SpanSet) error {
+	// The guard is only used to store latches by this request. These latches
+	// are not actually inserted using insertLocked.
+	lg := newGuard(spans)
+
+	m.mu.Lock()
+	snap := m.snapshotLocked(spans)
+	defer snap.close()
+	m.mu.Unlock()
+
+	err := m.wait(ctx, lg, snap)
+	return err
+}
+
 // CheckOptimisticNoConflicts returns true iff the spans in the provided
 // spanset do not conflict with any existing latches (in the snapshot created
 // in AcquireOptimistic). It must only be called after AcquireOptimistic, and
