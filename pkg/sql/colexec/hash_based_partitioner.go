@@ -370,12 +370,10 @@ func (op *hashBasedPartitioner) partitionBatch(
 			colVecs := scratchBatch.ColVecs()
 			op.unlimitedAllocator.PerformOperation(colVecs, func() {
 				for i, colvec := range colVecs {
-					colvec.Copy(coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:       batch.ColVec(i),
-							Sel:       sel,
-							SrcEndIdx: len(sel),
-						},
+					colvec.Copy(coldata.SliceArgs{
+						Src:       batch.ColVec(i),
+						Sel:       sel,
+						SrcEndIdx: len(sel),
 					})
 				}
 				scratchBatch.SetLength(len(sel))

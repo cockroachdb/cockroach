@@ -397,12 +397,10 @@ func (hj *hashJoiner) emitRight(matched bool) {
 			outCol := outCols[i]
 			valCol := hj.ht.Vals.ColVec(i)
 			outCol.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:       valCol,
-						SrcEndIdx: nResults,
-						Sel:       hj.probeState.buildIdx,
-					},
+				coldata.SliceArgs{
+					Src:       valCol,
+					SrcEndIdx: nResults,
+					Sel:       hj.probeState.buildIdx,
 				},
 			)
 		}
@@ -587,12 +585,10 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 				outCol := outCols[i]
 				valCol := batch.ColVec(i)
 				outCol.Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:       valCol,
-							Sel:       hj.probeState.probeIdx,
-							SrcEndIdx: nResults,
-						},
+					coldata.SliceArgs{
+						Src:       valCol,
+						Sel:       hj.probeState.probeIdx,
+						SrcEndIdx: nResults,
 					},
 				)
 			}
@@ -611,12 +607,10 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 					// hj.buildIdx[i] == 0 which will copy the garbage zeroth row of the
 					// hash table, but we will set the NULL value below.
 					outCol.Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:       valCol,
-								SrcEndIdx: nResults,
-								Sel:       hj.probeState.buildIdx,
-							},
+						coldata.SliceArgs{
+							Src:       valCol,
+							SrcEndIdx: nResults,
+							Sel:       hj.probeState.buildIdx,
 						},
 					)
 				}

@@ -1467,13 +1467,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1496,13 +1494,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1525,13 +1521,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1553,13 +1547,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1578,13 +1570,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1604,13 +1594,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1633,13 +1621,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1662,13 +1648,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1691,13 +1675,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1720,13 +1702,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}
@@ -1749,13 +1729,11 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									}
 								} else {
 									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: b.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
-											},
+										coldata.SliceArgs{
+											Src:         src,
+											DestIdx:     outStartIdx,
+											SrcStartIdx: b.builderState.right.curSrcStartIdx,
+											SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
 										},
 									)
 								}

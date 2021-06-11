@@ -257,12 +257,10 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 						continue
 					}
 					b.currentBatch.ColVec(colIdx).Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:       vec,
-								Sel:       sel,
-								SrcEndIdx: n,
-							},
+						coldata.SliceArgs{
+							Src:       vec,
+							Sel:       sel,
+							SrcEndIdx: n,
 						},
 					)
 				}

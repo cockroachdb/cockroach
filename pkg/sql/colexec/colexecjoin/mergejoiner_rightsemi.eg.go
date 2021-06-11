@@ -8775,14 +8775,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -8844,14 +8842,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -8913,14 +8909,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -8981,14 +8975,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9046,14 +9038,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9112,14 +9102,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9181,14 +9169,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9250,14 +9236,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9319,14 +9303,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9388,14 +9370,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9457,14 +9437,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9536,14 +9514,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9605,14 +9581,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9674,14 +9648,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9742,14 +9714,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9807,14 +9777,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9873,14 +9841,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -9942,14 +9908,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -10011,14 +9975,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -10080,14 +10042,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -10149,14 +10109,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
@@ -10218,14 +10176,12 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											}
 										} else {
 											out.Copy(
-												coldata.CopySliceArgs{
-													SliceArgs: coldata.SliceArgs{
-														Src:         src,
-														Sel:         sel,
-														DestIdx:     outStartIdx,
-														SrcStartIdx: o.builderState.right.curSrcStartIdx,
-														SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-													},
+												coldata.SliceArgs{
+													Src:         src,
+													Sel:         sel,
+													DestIdx:     outStartIdx,
+													SrcStartIdx: o.builderState.right.curSrcStartIdx,
+													SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 												},
 											)
 										}
