@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -239,8 +240,8 @@ func (r *testRunner) Run(
 		if existingClusterName != "" {
 			// Logs for attaching to a cluster go to a dedicated log file.
 			logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
-			clusterL, err := rootLogger(logPath, lopt.tee)
-			defer clusterL.close()
+			clusterL, err := logger.RootLogger(logPath, lopt.tee)
+			defer clusterL.Close()
 			if err != nil {
 				return nil, err
 			}
@@ -375,11 +376,11 @@ func (r *testRunner) runWorker(
 	debug bool,
 	artifactsRootDir string,
 	testRunnerLogPath string,
-	teeOpt teeOptType,
+	teeOpt logger.TeeOptType,
 	stdout io.Writer,
 	allocateCluster clusterAllocatorFn,
 	topt testOpts,
-	l *logger,
+	l *logger.Logger,
 ) error {
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
 	wStatus := r.addWorker(ctx, name)
@@ -468,7 +469,7 @@ func (r *testRunner) runWorker(
 			// comes).
 			artifactsSpec = fmt.Sprintf("%s/** => %s", base, escapedTestName)
 		}
-		testL, err := rootLogger(logPath, teeOpt)
+		testL, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
 			return err
 		}
@@ -504,7 +505,7 @@ func (r *testRunner) runWorker(
 			}
 			l.PrintfCtx(ctx, msg)
 		}
-		testL.close()
+		testL.Close()
 		if err != nil || t.Failed() {
 			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
 			if err != nil {
@@ -540,7 +541,7 @@ func (r *testRunner) runWorker(
 // getPerfArtifacts retrieves the perf artifacts for the test.
 // If there's an error, oh well, don't do anything rash like fail a test
 // which already passed.
-func getPerfArtifacts(ctx context.Context, l *logger, c *cluster, t *test) {
+func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *cluster, t *test) {
 	g := ctxgroup.WithContext(ctx)
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
@@ -600,7 +601,7 @@ func (r *testRunner) runTest(
 	c *cluster,
 	testRunnerLogPath string,
 	stdout io.Writer,
-	l *logger,
+	l *logger.Logger,
 ) (bool, error) {
 	if t.spec.Skip != "" {
 		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.spec.Skip)
@@ -755,7 +756,7 @@ func (r *testRunner) runTest(
 		t.spec.Run(runCtx, t, c)
 	}()
 
-	teardownL, err := c.l.ChildLogger("teardown", quietStderr, quietStdout)
+	teardownL, err := c.l.ChildLogger("teardown", logger.QuietStderr, logger.QuietStdout)
 	if err != nil {
 		return false, err
 	}
@@ -782,7 +783,7 @@ func (r *testRunner) runTest(
 		// Do this before we cancel the context, which might (hopefully) unblock
 		// the test. We want to see where it got stuck.
 		const stacksFile = "__stacks"
-		if cl, err := t.l.ChildLogger(stacksFile, quietStderr, quietStdout); err == nil {
+		if cl, err := t.l.ChildLogger(stacksFile, logger.QuietStderr, logger.QuietStdout); err == nil {
 			cl.PrintfCtx(ctx, "all stacks:\n\n%s\n", allStacks())
 			t.l.PrintfCtx(ctx, "dumped stacks to %s", stacksFile)
 		}
@@ -864,7 +865,7 @@ func (r *testRunner) shouldPostGithubIssue(t *test) bool {
 }
 
 func (r *testRunner) maybePostGithubIssue(
-	ctx context.Context, l *logger, t *test, stdout io.Writer, output string,
+	ctx context.Context, l *logger.Logger, t *test, stdout io.Writer, output string,
 ) {
 	if !r.shouldPostGithubIssue(t) {
 		return
@@ -1000,7 +1001,7 @@ func (r *testRunner) getWork(
 	qp *quotapool.IntPool,
 	c *cluster,
 	interrupt <-chan struct{},
-	l *logger,
+	l *logger.Logger,
 	callbacks getWorkCallbacks,
 ) (testToRunRes, *cluster, error) {
 

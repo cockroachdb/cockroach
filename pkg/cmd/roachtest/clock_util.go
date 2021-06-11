@@ -15,10 +15,12 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 )
 
 // isAlive returns whether the node queried by db is alive.
-func isAlive(db *gosql.DB, l *logger) bool {
+func isAlive(db *gosql.DB, l *logger.Logger) bool {
 	// The cluster might have just restarted, in which case the first call to db
 	// might return an error. In fact, the first db.Ping() reliably returns an
 	// error (but a db.Exec() only seldom returns an error). So, we're gonna

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -56,7 +57,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					defer l.close()
+					defer l.Close()
 					_ = execCmd(ctx, t.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
 				}()
 			}
@@ -71,7 +72,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 	})
 }
 
-func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
+func waitForSchemaChanges(ctx context.Context, l *logger.Logger, db *gosql.DB) error {
 	start := timeutil.Now()
 
 	// These schema changes are over a table that is not actively
@@ -133,7 +134,9 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 	return runValidationQueries(ctx, l, db, start, validationQueries, indexValidationQueries)
 }
 
-func runSchemaChanges(ctx context.Context, l *logger, db *gosql.DB, schemaChanges []string) error {
+func runSchemaChanges(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, schemaChanges []string,
+) error {
 	for _, cmd := range schemaChanges {
 		start := timeutil.Now()
 		l.Printf("starting schema change: %s\n", cmd)
@@ -151,7 +154,7 @@ func runSchemaChanges(ctx context.Context, l *logger, db *gosql.DB, schemaChange
 // The validationQueries all return the same result.
 func runValidationQueries(
 	ctx context.Context,
-	l *logger,
+	l *logger.Logger,
 	db *gosql.DB,
 	start time.Time,
 	validationQueries []string,
@@ -215,7 +218,7 @@ type timeSpan struct {
 // problems are seen.
 func checkIndexOverTimeSpan(
 	ctx context.Context,
-	l *logger,
+	l *logger.Logger,
 	db *gosql.DB,
 	s timeSpan,
 	nowString string,
@@ -239,7 +242,7 @@ func checkIndexOverTimeSpan(
 // inconsistencies are seen.
 func findIndexProblem(
 	ctx context.Context,
-	l *logger,
+	l *logger.Logger,
 	db *gosql.DB,
 	s timeSpan,
 	nowString string,

@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -374,7 +375,7 @@ func getUser(userFlag string) string {
 // respond to the cancelation and return, and so the process will be dead by the
 // time the 5s elapse.
 // If a 2nd signal is received, it calls os.Exit(2).
-func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
+func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegistry) {
 	// Shut down test clusters when interrupted (for example CTRL-C).
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -414,24 +415,24 @@ func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
 // runnerLogPath is the path to the file that will contain the runner's log.
 func testRunnerLogger(
 	ctx context.Context, parallelism int, runnerLogPath string,
-) (*logger, teeOptType) {
-	teeOpt := noTee
+) (*logger.Logger, logger.TeeOptType) {
+	teeOpt := logger.NoTee
 	if parallelism == 1 {
-		teeOpt = teeToStdout
+		teeOpt = logger.TeeToStdout
 	}
 
-	var l *logger
-	if teeOpt == teeToStdout {
-		verboseCfg := loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
+	var l *logger.Logger
+	if teeOpt == logger.TeeToStdout {
+		verboseCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 		var err error
-		l, err = verboseCfg.newLogger(runnerLogPath)
+		l, err = verboseCfg.NewLogger(runnerLogPath)
 		if err != nil {
 			panic(err)
 		}
 	} else {
-		verboseCfg := loggerConfig{}
+		verboseCfg := logger.Config{}
 		var err error
-		l, err = verboseCfg.newLogger(runnerLogPath)
+		l, err = verboseCfg.NewLogger(runnerLogPath)
 		if err != nil {
 			panic(err)
 		}
