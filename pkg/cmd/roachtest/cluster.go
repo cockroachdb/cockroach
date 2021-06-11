@@ -1160,6 +1160,17 @@ type cluster struct {
 	destroyState destroyState
 }
 
+// EncryptAtRandom sets whether the cluster will start new nodes with
+// encryption enabled.
+func (c *cluster) EncryptAtRandom(b bool) {
+	c.encryptAtRandom = true
+}
+
+// Spec returns the spec underlying the cluster.
+func (c *cluster) Spec() clusterSpec {
+	return c.spec
+}
+
 // status is used to communicate the test's status. It's a no-op until the
 // cluster is passed to a test, at which point it's hooked up to test.Status().
 func (c *cluster) status(args ...interface{}) {
@@ -2816,7 +2827,8 @@ type monitor struct {
 	expDeaths int32 // atomically
 }
 
-func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
+func newMonitor(ctx context.Context, ci clusterI, opts ...option) *monitor {
+	c := ci.(*cluster) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `makeNodes`
 	m := &monitor{
 		t:     c.t,
 		l:     c.l,

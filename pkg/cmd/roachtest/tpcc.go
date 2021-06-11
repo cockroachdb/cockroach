@@ -56,7 +56,7 @@ type tpccOptions struct {
 	// TODO(tbg): for better coverage at scale of the migration process, we should
 	// also be doing a rolling-restart into the new binary while the cluster
 	// is running, but that feels like jamming too much into the tpcc setup.
-	Start func(context.Context, *test, *cluster)
+	Start func(context.Context, *test, clusterI)
 }
 
 // tpccImportCmd generates the command string to load tpcc data for the
@@ -79,18 +79,18 @@ func tpccImportCmdWithCockroachBinary(
 }
 
 func setupTPCC(
-	ctx context.Context, t *test, c *cluster, opts tpccOptions,
+	ctx context.Context, t *test, c clusterI, opts tpccOptions,
 ) (crdbNodes, workloadNode nodeListOption) {
 	// Randomize starting with encryption-at-rest enabled.
-	c.encryptAtRandom = true
-	crdbNodes = c.Range(1, c.spec.NodeCount-1)
-	workloadNode = c.Node(c.spec.NodeCount)
+	c.EncryptAtRandom(true)
+	crdbNodes = c.Range(1, c.Spec().NodeCount-1)
+	workloadNode = c.Node(c.Spec().NodeCount)
 	if c.isLocal() {
 		opts.Warehouses = 1
 	}
 
 	if opts.Start == nil {
-		opts.Start = func(ctx context.Context, t *test, c *cluster) {
+		opts.Start = func(ctx context.Context, t *test, c clusterI) {
 			// NB: workloadNode also needs ./cockroach because
 			// of `./cockroach workload` for usingImport.
 			c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -131,7 +131,7 @@ func setupTPCC(
 	return crdbNodes, workloadNode
 }
 
-func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
+func runTPCC(ctx context.Context, t *test, c clusterI, opts tpccOptions) {
 	rampDuration := 5 * time.Minute
 	if c.isLocal() {
 		opts.Warehouses = 1
@@ -148,7 +148,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		cmd := fmt.Sprintf(
 			"./cockroach workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
 				opts.ExtraRunArgs+" --ramp=%s --duration=%s {pgurl:1-%d}",
-			opts.Warehouses, rampDuration, opts.Duration, c.spec.NodeCount-1)
+			opts.Warehouses, rampDuration, opts.Duration, c.Spec().NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
 		return nil
 	})
@@ -263,7 +263,7 @@ func registerTPCC(r *testRegistry) {
 						Warehouses: headroomWarehouses,
 						Duration:   duration,
 						SetupType:  usingExistingData,
-						Start: func(ctx context.Context, t *test, c *cluster) {
+						Start: func(ctx context.Context, t *test, c clusterI) {
 							// Noop - we don't let tpcc upload or start binaries in this test.
 						},
 					})
@@ -666,7 +666,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 // function is idempotent and first checks whether a compatible dataset exists,
 // performing an expensive dataset restore only if it doesn't.
 func loadTPCCBench(
-	ctx context.Context, t *test, c *cluster, b tpccBenchSpec, roachNodes, loadNode nodeListOption,
+	ctx context.Context, t *test, c clusterI, b tpccBenchSpec, roachNodes, loadNode nodeListOption,
 ) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -749,7 +749,7 @@ func loadTPCCBench(
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
 		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s}",
 		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes)
-	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
+	if out, err := c.RunWithBuffer(ctx, t.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
 
