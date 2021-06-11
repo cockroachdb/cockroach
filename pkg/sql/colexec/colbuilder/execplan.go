@@ -532,12 +532,8 @@ func takeOverMetaInfo(target *colexecargs.OpWithMetaInfo, inputs []colexecargs.O
 // createAndWrapRowSource takes a processor spec, creating the row source and
 // wrapping it using wrapRowSources. Note that the post process spec is included
 // in the processor creation, so make sure to clear it if it will be inspected
-// again. NewColOperatorResult is updated with the new OutputTypes and the
-// resulting Columnarizer if there is no error. The result is also annotated as
-// streaming because the resulting operator is not a buffering operator (even if
-// it is a buffering processor). This is not a problem for memory accounting
-// because each processor does that on its own, so the used memory will be
-// accounted for.
+// again. opResult is updated with the new ColumnTypes and the resulting
+// Columnarizer if there is no error.
 // - causeToWrap is an error that prompted us to wrap a processor core into the
 // vectorized plan (for example, it could be an unsupported processor core, an
 // unsupported function, etc).
@@ -1520,14 +1516,11 @@ func (r opResult) wrapPostProcessSpec(
 	}
 	inputToMaterializer := colexecargs.OpWithMetaInfo{Root: r.Root}
 	takeOverMetaInfo(&inputToMaterializer, args.Inputs)
-	if err := r.createAndWrapRowSource(
+	// createAndWrapRowSource updates r.ColumnTypes accordingly.
+	return r.createAndWrapRowSource(
 		ctx, flowCtx, args, []colexecargs.OpWithMetaInfo{inputToMaterializer},
 		[][]*types.T{r.ColumnTypes}, noopSpec, factory, causeToWrap,
-	); err != nil {
-		return err
-	}
-	r.ColumnTypes = resultTypes
-	return nil
+	)
 }
 
 // planPostProcessSpec plans the post processing stage specified in post on top
