@@ -70,7 +70,7 @@ func makeNameInfo(a args) descpb.NameInfo {
 	}
 }
 
-func formatNameInfo(ni catalog.NameKeyComponents) string {
+func formatNameInfo(ni catalog.NameKey) string {
 	return fmt.Sprintf("(%d, %d, %s)",
 		ni.GetParentID(), ni.GetParentSchemaID(), ni.GetName())
 }

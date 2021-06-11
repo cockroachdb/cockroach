@@ -3015,16 +3015,14 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
-func (p *planner) getAllNames(
-	ctx context.Context,
-) (map[descpb.ID]catalog.NameKeyComponents, error) {
+func (p *planner) getAllNames(ctx context.Context) (map[descpb.ID]catalog.NameKey, error) {
 	return getAllNames(ctx, p.txn, p.ExtendedEvalContext().ExecCfg.InternalExecutor)
 }
 
 // TestingGetAllNames is a wrapper for getAllNames.
 func TestingGetAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]catalog.NameKeyComponents, error) {
+) (map[descpb.ID]catalog.NameKey, error) {
 	return getAllNames(ctx, txn, executor)
 }
 
@@ -3032,8 +3030,8 @@ func TestingGetAllNames(
 // It is public so that it can be tested outside the sql package.
 func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]catalog.NameKeyComponents, error) {
-	namespace := map[descpb.ID]catalog.NameKeyComponents{}
+) (map[descpb.ID]catalog.NameKey, error) {
+	namespace := map[descpb.ID]catalog.NameKey{}
 	it, err := executor.QueryIterator(
 		ctx, "get-all-names", txn,
 		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,

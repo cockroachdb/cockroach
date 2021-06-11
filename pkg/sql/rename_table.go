@@ -495,9 +495,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 }
 
 // writeNameKey writes a name key to a batch and runs the batch.
-func (p *planner) writeNameKey(
-	ctx context.Context, nameKey catalog.NameKeyComponents, ID descpb.ID,
-) error {
+func (p *planner) writeNameKey(ctx context.Context, nameKey catalog.NameKey, ID descpb.ID) error {
 	marshalledKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, nameKey)
 	b := &kv.Batch{}
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {

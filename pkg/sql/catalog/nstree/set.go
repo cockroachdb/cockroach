@@ -20,7 +20,7 @@ type Set struct {
 	t *btree.BTree
 }
 
-// MakeSet makes a Set of namespace entries.
+// MakeSet makes a Set of namespace keys.
 func MakeSet() Set {
 	const (
 		degree       = 8 // arbitrary
@@ -32,15 +32,15 @@ func MakeSet() Set {
 	}
 }
 
-// Add will add the relevant namespace entry to the set.
-func (s *Set) Add(components catalog.NameKeyComponents) {
+// Add will add the relevant namespace key to the set.
+func (s *Set) Add(components catalog.NameKey) {
 	item := makeByNameItem(components).get()
 	item.v = item // the value needs to be non-nil
 	upsert(s.t, item)
 }
 
-// Contains will test whether the relevant namespace entry was added.
-func (s *Set) Contains(components catalog.NameKeyComponents) bool {
+// Contains will test whether the relevant namespace key was added.
+func (s *Set) Contains(components catalog.NameKey) bool {
 	return get(s.t, makeByNameItem(components).get()) != nil
 }
 
