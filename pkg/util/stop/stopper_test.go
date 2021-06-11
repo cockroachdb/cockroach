@@ -719,3 +719,55 @@ func TestStopperRunAsyncTaskTracing(t *testing.T) {
 			span: [async] async child same trace
 				event: async 2`))
 }
+
+func TestStopperRunAsyncTaskCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutils.RunTrueAndFalse(t, "inherit cancel", func(t *testing.T, inheritCancel bool) {
+		s := stop.NewStopper()
+		ctx, cancel := context.WithCancel(context.Background())
+		var taskFinished bool
+		ch := make(chan struct{})
+		require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
+			TaskName:                "test",
+			DontInheritCancellation: !inheritCancel,
+		}, func(ctx context.Context) {
+			<-ch
+			if ctx.Err() != nil {
+				return
+			}
+			taskFinished = true
+		}))
+
+		cancel()
+		close(ch)
+		s.Stop(context.Background())
+		require.Equal(t, !inheritCancel, taskFinished)
+	})
+}
+
+func TestStopperRunAsyncTaskCancelOnQuiesce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// To cover more surface, we test in conjunction with the
+	// DontInheritCancellation option. We always set that option, and we test with
+	// both a cancelled parent and non-cancelled one. Because we set
+	// DontInheritCancellation, the parent shouldn't matter.
+	testutils.RunTrueAndFalse(t, "canceled parent", func(t *testing.T, canceledParent bool) {
+		s := stop.NewStopper()
+		ctx := context.Background()
+		if canceledParent {
+			var cancel func()
+			ctx, cancel = context.WithCancel(context.Background())
+			cancel()
+		}
+		require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
+			TaskName:                "test",
+			CancelOnQuiesce:         true,
+			DontInheritCancellation: true,
+		}, func(ctx context.Context) {
+			<-ctx.Done()
+		}))
+		// We check that the test doesn't time out, meaning that the task was
+		// signalled by the quiescence.
+		s.Stop(context.Background())
+	})
+}

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -265,6 +266,9 @@ func (s *Stopper) AddCloser(c Closer) {
 // returned cancel function is called or when the Stopper begins to quiesce,
 // whichever happens first.
 //
+// This method can be called after the stopper quiesced, in which case it will
+// return a canceled context.
+//
 // Canceling this context releases resources associated with it, so code should
 // call cancel as soon as the operations running in this Context complete.
 func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
@@ -349,6 +353,15 @@ type TaskOpts struct {
 	// the tracing span.
 	TaskName string
 
+	// DontInheritCancellation runs the task in a context that doesn't inherit the
+	// caller's cancellation.
+	DontInheritCancellation bool
+	// CancelOnQuiesce runs the task in a context that gets canceled when the
+	// stopper quiesces. If DontInheritCancellation is not set, then the tasks
+	// context inherits the parent's cancelation, as well as the stopper's
+	// quiescence.
+	CancelOnQuiesce bool
+
 	// SameTrace, if set, makes the tracing span created for the task be a child
 	// of the caller's span (if the caller has a span in the passed-in ctx). If
 	// not set, the task's span is not a child span (technically, the task's span
@@ -429,6 +442,14 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		ctx, span = tracing.ForkSpan(ctx, taskName)
 	}
 
+	if opt.DontInheritCancellation {
+		ctx = contextutil.WithoutCancel(ctx)
+	}
+	var cancel func()
+	if opt.CancelOnQuiesce {
+		ctx, cancel = s.WithCancelOnQuiesce(ctx)
+	}
+
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
 	go func() {
@@ -437,6 +458,9 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		defer span.Finish()
 		if alloc != nil {
 			defer alloc.Release()
+		}
+		if cancel != nil {
+			defer cancel()
 		}
 
 		f(ctx)
