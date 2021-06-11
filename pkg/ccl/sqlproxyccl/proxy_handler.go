@@ -65,13 +65,14 @@ type ProxyOptions struct {
 	Denylist string
 	// ListenAddr is the listen address for incoming connections.
 	ListenAddr string
-	// ListenCert is the file containing PEM-encoded x509 certificate for listen address.
-	// Set to "*" to auto-generate self-signed cert.
+	// ListenCert is the file containing PEM-encoded x509 certificate for listen
+	// address. Set to "*" to auto-generate self-signed cert.
 	ListenCert string
 	// ListenKey is the file containing PEM-encoded x509 key for listen address.
 	// Set to "*" to auto-generate self-signed cert.
 	ListenKey string
-	// MetricsAddress is the listen address for incoming connections for metrics retrieval.
+	// MetricsAddress is the listen address for incoming connections for metrics
+	// retrieval.
 	MetricsAddress string
 	// SkipVerify if set will skip the identity verification of the
 	// backend. This is for testing only.
@@ -82,9 +83,9 @@ type ProxyOptions struct {
 	// connection. Optionally use '{{clusterName}}'
 	// which will be substituted with the cluster name.
 	RoutingRule string
-	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does the resolution
-	// from backend id to IP address. If specified - it will be used instead of the
-	// routing rule above.
+	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does
+	// the resolution from backend id to IP address. If specified - it will be
+	// used instead of the routing rule above.
 	DirectoryAddr string
 	// RatelimitBaseDelay is the initial backoff after a failed login attempt.
 	// Set to 0 to disable rate limiting.
@@ -92,9 +93,11 @@ type ProxyOptions struct {
 	// ValidateAccessInterval is the time interval between validations, confirming
 	// that current connections are still valid.
 	ValidateAccessInterval time.Duration
-	// PollConfigInterval defines polling interval for pickup up changes in config file.
+	// PollConfigInterval defines polling interval for pickup up changes in
+	// config file.
 	PollConfigInterval time.Duration
-	// IdleTimeout if set, will close connections that have been idle for that duration.
+	// IdleTimeout if set, will close connections that have been idle for that
+	// duration.
 	IdleTimeout time.Duration
 }
 
@@ -311,9 +314,9 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// TODO(darinpp): starting a new go routine for every connection here is inefficient.
-	// Change to maintain a map of connections by IP/tenant and have single
-	// go routine that closes connections that are blocklisted.
+	// TODO(darinpp): starting a new go routine for every connection here is
+	// inefficient. Change to maintain a map of connections by IP/tenant and
+	// have single go routine that closes connections that are blocklisted.
 	go func() {
 		errExpired <- func(ctx context.Context) error {
 			t := timeutil.NewTimer()
@@ -378,7 +381,8 @@ func (handler *proxyHandler) outgoingAddress(
 		return addr, nil
 	}
 
-	// This doesn't verify the name part of the tenant and relies just on the int id.
+	// This doesn't verify the name part of the tenant and relies just on the
+	// int id.
 	addr, err := handler.directory.EnsureTenantIP(ctx, tenID, name)
 	if err != nil {
 		return "", err
