@@ -16,6 +16,7 @@ import (
 )
 
 type clusterI interface {
+	makeNodes(opts ...option) string // TODO(tbg): this should go away
 	isLocal() bool
 	EncryptAtRandom(on bool)
 	Spec() clusterSpec
