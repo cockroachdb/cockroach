@@ -461,6 +461,11 @@ type latchManager interface {
 	// causing this request to switch to pessimistic latching.
 	WaitUntilAcquired(ctx context.Context, lg latchGuard) (latchGuard, *Error)
 
+	// WaitFor waits for conflicting latches on the specified spans without adding
+	// any latches itself. Fast path for operations that only require flushing out
+	// old operations without blocking any new ones.
+	WaitFor(ctx context.Context, spans *spanset.SpanSet) *Error
+
 	// Releases latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)
 
