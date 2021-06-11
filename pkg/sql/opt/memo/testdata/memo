@@ -150,7 +150,7 @@ memo (optimized, ~20KB, required=[presentation: y:2,x:5,c:10] [ordering: +2])
  │    │    └── cost: 1744.33
  │    └── []
  │         ├── best: (inner-join G8 G7 G9)
- │         └── cost: 2137.10
+ │         └── cost: 2137.09
  ├── G5: (const 10)
  ├── G6: (plus G11 G12)
  ├── G7: (project G13 G14 y)

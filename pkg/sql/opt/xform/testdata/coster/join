@@ -17,14 +17,14 @@ project
  ├── columns: k:1!null x:7!null
  ├── immutable
  ├── stats: [rows=99]
- ├── cost: 2153.725
+ ├── cost: 2153.715
  ├── fd: (1)==(7), (7)==(1)
  └── inner-join (hash)
       ├── columns: k:1!null d:4!null x:7!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── immutable
       ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(7)=10, null(7)=0]
-      ├── cost: 2152.725
+      ├── cost: 2152.715
       ├── fd: ()-->(4), (1)==(7), (7)==(1)
       ├── scan b
       │    ├── columns: x:7
