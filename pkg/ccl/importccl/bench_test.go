@@ -43,8 +43,9 @@ type tableSSTable struct {
 	sstData []byte
 }
 
+//BenchmarkImportWorkload/tpcc/warehouses=1/WriteAndLink-8         18        74032204 ns/op     324.94 MB/s
+//BenchmarkImportWorkload/tpcc/warehouses=1/AddSStable-8           1       2230451598 ns/op      10.79 MB/s
 func BenchmarkImportWorkload(b *testing.B) {
-	skip.WithIssue(b, 41932, "broken due to adding keys out-of-order to an sstable")
 	skip.UnderShort(b, "skipping long benchmark")
 
 	dir, cleanup := testutils.TempDir(b)
@@ -150,6 +151,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 	b.SetBytes(totalBytes / int64(b.N))
 }
 
+//BenchmarkConvertToKVs/tpcc/warehouses=1-8         1        3558824936 ns/op          22.46 MB/s
 func BenchmarkConvertToKVs(b *testing.B) {
 	skip.UnderShort(b, "skipping long benchmark")
 
@@ -178,7 +180,10 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			defer close(kvCh)
 			wc := importccl.NewWorkloadKVConverter(
 				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
-			evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
+			evalCtx := &tree.EvalContext{
+				SessionData: &sessiondata.SessionData{},
+				Codec:       keys.SystemSQLCodec,
+			}
 			return wc.Worker(ctx, evalCtx)
 		})
 		for kvBatch := range kvCh {
@@ -193,32 +198,4 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 	}
 	b.StopTimer()
 	b.SetBytes(bytes)
-}
-
-func BenchmarkConvertToSSTable(b *testing.B) {
-	skip.UnderShort(b, "skipping long benchmark")
-
-	tpccGen := tpcc.FromWarehouses(1)
-	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
-		benchmarkConvertToSSTable(b, tpccGen)
-	})
-}
-
-func benchmarkConvertToSSTable(b *testing.B, g workload.Generator) {
-	const tableID = descpb.ID(keys.MinUserDescID)
-	now := timeutil.Now()
-
-	var totalBytes int64
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for _, table := range g.Tables() {
-			sst, err := format.ToSSTable(table, tableID, now)
-			if err != nil {
-				b.Fatal(err)
-			}
-			totalBytes += int64(len(sst))
-		}
-	}
-	b.StopTimer()
-	b.SetBytes(totalBytes / int64(b.N))
 }
