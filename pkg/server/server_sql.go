@@ -780,19 +780,26 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// tenant. Regular tenants are disallowed from changing cluster
 		// versions.
 		var c migration.Cluster
+		var systemDeps migration.SystemDeps
 		if codec.ForSystemTenant() {
 			c = migrationcluster.New(migrationcluster.ClusterConfig{
 				NodeLiveness: nodeLiveness,
 				Dialer:       cfg.nodeDialer,
 				DB:           cfg.db,
 			})
+			systemDeps = migration.SystemDeps{
+				Cluster:    c,
+				DB:         cfg.db,
+				DistSender: cfg.distSender,
+				Stopper:    cfg.stopper,
+			}
 		} else {
 			c = migrationcluster.NewTenantCluster(cfg.db)
 		}
 
 		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migrationmanager.TestingKnobs)
 		migrationMgr := migrationmanager.NewManager(
-			c, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,
+			systemDeps, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,
 		)
 		execCfg.MigrationJobDeps = migrationMgr
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
