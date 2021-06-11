@@ -147,6 +147,20 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
         width: 64
     familyName: primary
     tableId: 52
+- ADD Column:{DescID: 52, ColumnID: 3, ElementName: "k"}
+  state: ABSENT
+  details:
+    column:
+      defaultExpr: 456:::INT8
+      id: 3
+      name: k
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 52
 - ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
@@ -194,20 +208,6 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       unique: true
       version: 3
     otherPrimaryIndexId: 2
-    tableId: 52
-- ADD Column:{DescID: 52, ColumnID: 3, ElementName: "k"}
-  state: ABSENT
-  details:
-    column:
-      defaultExpr: 456:::INT8
-      id: 3
-      name: k
-      nullable: true
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    familyName: primary
     tableId: 52
 
 build
@@ -295,6 +295,19 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
         width: 64
     familyName: primary
     tableId: 52
+- ADD Column:{DescID: 53, ColumnID: 3, ElementName: "b"}
+  state: ABSENT
+  details:
+    column:
+      id: 3
+      name: b
+      nullable: true
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyName: primary
+    tableId: 53
 - ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
@@ -320,40 +333,6 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     storeColumnNames:
     - a
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
-  state: PUBLIC
-  details:
-    index:
-      foreignKey: {}
-      geoConfig: {}
-      id: 1
-      interleave: {}
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      keyColumnNames:
-      - i
-      name: primary
-      partitioning: {}
-      sharded: {}
-      unique: true
-      version: 3
-    otherPrimaryIndexId: 2
-    tableId: 52
-- ADD Column:{DescID: 53, ColumnID: 3, ElementName: "b"}
-  state: ABSENT
-  details:
-    column:
-      id: 3
-      name: b
-      nullable: true
-      type:
-        family: IntFamily
-        oid: 20
-        width: 64
-    familyName: primary
-    tableId: 53
 - ADD PrimaryIndex:{DescID: 53, ElementName: "new_primary_key", IndexID: 2}
   state: ABSENT
   details:
@@ -380,6 +359,27 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     - j
     - b
     tableId: 53
+- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+  state: PUBLIC
+  details:
+    index:
+      foreignKey: {}
+      geoConfig: {}
+      id: 1
+      interleave: {}
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      keyColumnNames:
+      - i
+      name: primary
+      partitioning: {}
+      sharded: {}
+      unique: true
+      version: 3
+    otherPrimaryIndexId: 2
+    tableId: 52
 - DROP PrimaryIndex:{DescID: 53, ElementName: "primary", IndexID: 1}
   state: PUBLIC
   details:

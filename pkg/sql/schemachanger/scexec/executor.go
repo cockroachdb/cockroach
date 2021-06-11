@@ -271,6 +271,9 @@ func UpdateDescriptorJobIDs(
 				Required:       true,
 				IncludeDropped: true},
 		)
+		if err != nil {
+			return err
+		}
 		if desc.DescriptorType() != catalog.Table {
 			continue
 		}

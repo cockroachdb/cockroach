@@ -13,19 +13,23 @@ package scexec
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type mutationJobs struct {
-	jobs        []jobs.Record
-	jobIDs      []jobspb.JobID
-	jobRegistry *jobs.Registry
+	jobs             []jobs.Record
+	jobIDs           []jobspb.JobID
+	jobRegistry      *jobs.Registry
+	descriptorGCJobs []jobspb.SchemaChangeGCDetails_DroppedID
 }
 
 // CreateGCJobRecord creates the job record for a GC job, setting some
@@ -54,7 +58,15 @@ func CreateGCJobRecord(
 	}
 }
 
-func (m *mutationJobs) AddNewGCJob(job jobspb.SchemaChangeGCDetails, description string) {
+func (m *mutationJobs) AddNewGCJobForDescriptor(descriptor catalog.Descriptor) {
+	m.descriptorGCJobs = append(m.descriptorGCJobs,
+		jobspb.SchemaChangeGCDetails_DroppedID{
+			ID:       descriptor.GetID(),
+			DropTime: timeutil.Now().UnixNano(),
+		})
+}
+
+func (m *mutationJobs) addNewGCJob(job jobspb.SchemaChangeGCDetails, description string) {
 	record := CreateGCJobRecord(description, security.NodeUserName(), job)
 	jobID := m.jobRegistry.MakeJobID()
 	m.jobs = append(m.jobs, record)
@@ -62,6 +74,18 @@ func (m *mutationJobs) AddNewGCJob(job jobspb.SchemaChangeGCDetails, description
 }
 
 func (m *mutationJobs) SubmitAllJobs(ctx context.Context, txn *kv.Txn) (bool, error) {
+	if len(m.descriptorGCJobs) > 0 {
+		job := jobspb.SchemaChangeGCDetails{
+			Tables: m.descriptorGCJobs,
+		}
+		descriptorList := strings.Builder{}
+		descriptorList.WriteString("Dropping descriptors ")
+		for _, table := range m.descriptorGCJobs {
+			descriptorList.WriteString(fmt.Sprintf("%d ", table.ID))
+		}
+		m.addNewGCJob(job, descriptorList.String())
+		m.descriptorGCJobs = nil
+	}
 	for idx := range m.jobIDs {
 		_, err := m.jobRegistry.CreateJobWithTxn(ctx, m.jobs[idx], m.jobIDs[idx], txn)
 		if err != nil {

@@ -535,7 +535,8 @@ ALTER TABLE t8 DROP COLUMN x;
 statement ok
 DROP TYPE typ8
 
-# DROP TYPE in a singe transaction
+subtest drop-type-in-single-transaction
+
 statement ok
 CREATE TYPE defaultdb.typ AS ENUM('a');
 
@@ -555,12 +556,13 @@ statement ok
 COMMIT;
 
 # Drop schema testing
+subtest drop-schema
+
 statement ok
 CREATE DATABASE db1;
 
 statement ok
 CREATE SCHEMA db1.sc1
-
 
 statement ok
 CREATE SEQUENCE db1.sc1.sq1
@@ -593,6 +595,8 @@ statement ok
 DROP DATABASE db1
 
 # Drop database testing
+subtest drop-database
+
 statement ok
 CREATE DATABASE db1;
 

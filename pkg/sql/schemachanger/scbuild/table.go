@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // alterTable builds targets and transforms the provided schema change nodes
@@ -666,6 +667,32 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
 			b.addNode(scpb.Target_DROP, defaultExpr)
 		}
+		// Get all available type references and create nodes
+		// for dropping these type references.
+		visitor := &tree.TypeCollectorVisitor{
+			OIDs: make(map[oid.Oid]struct{}),
+		}
+		if col.HasDefault() && !col.ColumnDesc().HasNullDefault() {
+			expr, err := parser.ParseExpr(col.GetDefaultExpr())
+			if err != nil {
+				panic(err)
+			}
+			tree.WalkExpr(visitor, expr)
+			for oid := range visitor.OIDs {
+				typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
+				if err != nil {
+					panic(err)
+				}
+				typeRef := &scpb.TypeReference{
+					TypeID: typeID,
+					DescID: table.GetID(),
+				}
+				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
+					b.addNode(scpb.Target_DROP, typeRef)
+				}
+			}
+		}
+
 		// If there was a sequence dependency clean that up next.
 		if col.NumUsesSequences() > 0 {
 			// Drop the depends on within the sequence side.
