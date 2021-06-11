@@ -87,10 +87,10 @@ func connectionCopy(crdbConn, conn net.Conn) error {
 	select {
 	// NB: when using pgx, we see a nil errIncoming first on clean connection
 	// termination. Using psql I see a nil errOutgoing first. I think the PG
-	// protocol stipulates sending a message to the server at which point
-	// the server closes the connection (errIncoming), but presumably the
-	// client gets to close the connection once it's sent that message,
-	// meaning either case is possible.
+	// protocol stipulates sending a message to the server at which point the
+	// server closes the connection (errIncoming), but presumably the client
+	// gets to close the connection once it's sent that message, meaning either
+	// case is possible.
 	case err := <-errIncoming:
 		if err == nil {
 			return nil

@@ -28,7 +28,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Making sure that TestDirectoryServer implements the DirectoryServer interface.
+// Make sure that TestDirectoryServer implements the DirectoryServer interface.
 var _ tenant.DirectoryServer = (*TestDirectoryServer)(nil)
 
 // Process stores information about a running tenant process.
@@ -38,12 +38,11 @@ type Process struct {
 	SQL     net.Addr
 }
 
-// NewSubStopper creates a new stopper that will be stopped
-// when either the parent is stopped or its own Stop is called.
-// The code is slightly more complicated that simply calling
-// NewStopper followed by AddCloser since there is a possibility that between
-// the two calls, the parent stopper completes a stop and then the leak detection
-// may find a leaked stopper.
+// NewSubStopper creates a new stopper that will be stopped when either the
+// parent is stopped or its own Stop is called. The code is slightly more
+// complicated that simply calling NewStopper followed by AddCloser since there
+// is a possibility that between the two calls, the parent stopper completes a
+// stop and then the leak detection may find a leaked stopper.
 func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
 	mu := &syncutil.Mutex{}
 	var subStopper *stop.Stopper
@@ -63,8 +62,8 @@ func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
 	return subStopper
 }
 
-// TestDirectoryServer is a directory server implementation that is used
-// for testing.
+// TestDirectoryServer is a directory server implementation that is used for
+// testing.
 type TestDirectoryServer struct {
 	stopper             *stop.Stopper
 	grpcServer          *grpc.Server
@@ -72,8 +71,8 @@ type TestDirectoryServer struct {
 	// TenantStarterFunc will be used to launch a new tenant process.
 	TenantStarterFunc func(ctx context.Context, tenantID uint64) (*Process, error)
 
-	// When both mutexes need to be held, the locking should always be
-	// proc first and listen second.
+	// When both mutexes need to be held, the locking should always be proc
+	// first and listen second.
 	proc struct {
 		syncutil.RWMutex
 		processByAddrByTenantID map[uint64]map[net.Addr]*Process
@@ -104,7 +103,8 @@ func New(stopper *stop.Stopper) (*TestDirectoryServer, error) {
 	return dir, nil
 }
 
-// Get a tenant's list of endpoints and the process information for each endpoint.
+// Get a tenant's list of endpoints and the process information for each
+// endpoint.
 func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Process) {
 	result = make(map[net.Addr]*Process)
 	s.proc.RLock()
@@ -118,8 +118,8 @@ func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Pro
 	return
 }
 
-// GetTenant returns tenant metadata for a given ID. Hard coded to return
-// every tenant's cluster name as "tenant-cluster"
+// GetTenant returns tenant metadata for a given ID. Hard coded to return every
+// tenant's cluster name as "tenant-cluster"
 func (s *TestDirectoryServer) GetTenant(
 	_ context.Context, _ *tenant.GetTenantRequest,
 ) (*tenant.GetTenantResponse, error) {
@@ -128,8 +128,8 @@ func (s *TestDirectoryServer) GetTenant(
 	}, nil
 }
 
-// ListEndpoints returns a list of tenant process endpoints as well as status of the
-// processes.
+// ListEndpoints returns a list of tenant process endpoints as well as status of
+// the processes.
 func (s *TestDirectoryServer) ListEndpoints(
 	ctx context.Context, req *tenant.ListEndpointsRequest,
 ) (*tenant.ListEndpointsResponse, error) {
@@ -139,7 +139,8 @@ func (s *TestDirectoryServer) ListEndpoints(
 	return s.listLocked(ctx, req)
 }
 
-// WatchEndpoints returns a new stream, that can be used to monitor server activity.
+// WatchEndpoints returns a new stream, that can be used to monitor server
+// activity.
 func (s *TestDirectoryServer) WatchEndpoints(
 	_ *tenant.WatchEndpointsRequest, server tenant.Directory_WatchEndpointsServer,
 ) error {
@@ -198,9 +199,9 @@ func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchEndpoi
 	}
 }
 
-// EnsureEndpoint will ensure that there is either an already active tenant process or
-// it will start a new one. It will return an error if starting a new tenant
-// process is impossible.
+// EnsureEndpoint will ensure that there is either an already active tenant
+// process or it will start a new one. It will return an error if starting a new
+// tenant process is impossible.
 func (s *TestDirectoryServer) EnsureEndpoint(
 	ctx context.Context, req *tenant.EnsureEndpointRequest,
 ) (*tenant.EnsureEndpointResponse, error) {

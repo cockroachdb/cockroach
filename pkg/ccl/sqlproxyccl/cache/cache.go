@@ -39,7 +39,8 @@ type cappedConnCache struct {
 	}
 }
 
-// NewCappedConnCache returns a cache service that has a limit on the total entries.
+// NewCappedConnCache returns a cache service that has a limit on the total
+// entries.
 func NewCappedConnCache(maxMapSize int) ConnCache {
 	c := &cappedConnCache{
 		maxMapSize: maxMapSize,
