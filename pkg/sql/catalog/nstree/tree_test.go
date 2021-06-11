@@ -17,31 +17,33 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/datadriven"
 )
 
-// TestDescTreeDataDriven tests the Map using a data-driven
+type nameEntry struct {
+	descpb.NameInfo
+	id descpb.ID
+}
+
+func (ne nameEntry) GetID() descpb.ID { return ne.id }
+
+// TestMapDataDriven tests the Map using a data-driven
 // exposition format. The tests support the following commands:
 //
-//   add [parent-id=...] [parent-schema-id=...] name=... id=... owner=...
-//     Calls the add method with a descriptor matching the spec
-//     Prints the entry
+//   add [parent-id=...] [parent-schema-id=...] name=... id=...
+//     Calls the add method with an entry matching the spec.
+//     Prints the entry.
 //
 //   remove id=...
 //     Calls the Remove method on the specified id.
 //     Prints whether it was removed.
 //
 //   iterate-by-id [stop-after=<int>]
-//     Iterates and prints the descriptors, ordered by ID.
-//     If stop-after is specified, after that many descriptors have been
+//     Iterates and prints the entries, ordered by ID.
+//     If stop-after is specified, after that many entries have been
 //     iterated, then an error will be returned. If there is an input,
 //     it will be used as the error message, otherwise, the error will
 //     be iterutil.StopIteration.
@@ -50,27 +52,26 @@ import (
 //     Clears the tree.
 //
 //   get-by-id id=...
-//     Gets the descriptor with the given ID and prints its entry.
-//     If no such descriptor exists, "not found" will be printed.
+//     Gets the entry with the given ID and prints its entry.
+//     If no such entry exists, "not found" will be printed.
 //
 //   get-by-name [parent-id=...] [parent-schema-id=...] name=...
-//     Gets the descriptor with the given name and prints its entry.
-//     If no such descriptor exists, "not found" will be printed.
+//     Gets the entry with the given name and prints its entry.
+//     If no such entry exists, "not found" will be printed.
 //
-func TestDescTreeDataDriven(t *testing.T) {
+func TestMapDataDriven(t *testing.T) {
 	type argType int
 	const (
 		argParentID = 1 << iota
 		argParentSchemaID
 		argID
 		argName
-		argOwner
 		argStopAfter
 	)
 	type args struct {
 		set                          argType
 		parentID, parentSchemaID, id descpb.ID
-		name, owner                  string
+		name                         string
 		stopAfter                    int
 	}
 	type setFunc func(t *testing.T, d *datadriven.TestData, key string, a *args) bool
@@ -118,10 +119,6 @@ func TestDescTreeDataDriven(t *testing.T) {
 			"name",
 			setStringFunc(func(a *args) *string { return &a.name }),
 		},
-		argOwner: {
-			"owner",
-			setStringFunc(func(a *args) *string { return &a.owner }),
-		},
 		argStopAfter: {
 			"stop-after",
 			setIntFunc(func(a *args) *int { return &a.stopAfter }),
@@ -143,35 +140,17 @@ func TestDescTreeDataDriven(t *testing.T) {
 		}
 		return a
 	}
-	constructDescriptorFromArgs := func(t *testing.T, a args) catalog.Descriptor {
-		owner := security.MakeSQLUsernameFromPreNormalizedString(a.owner)
-		switch {
-		case a.parentID != descpb.InvalidID &&
-			a.parentSchemaID != descpb.InvalidID:
-			// Object case, create a table.
-			return tabledesc.NewBuilder(&descpb.TableDescriptor{
-				Name:                    a.name,
-				ID:                      a.id,
-				ParentID:                a.parentID,
-				UnexposedParentSchemaID: a.parentSchemaID,
-				Privileges:              descpb.NewPrivilegeDescriptor(owner, privilege.TablePrivileges, owner),
-			}).BuildCreatedMutable()
-		case a.parentID != descpb.InvalidID:
-			// Schema case, create a schema.
-			return schemadesc.NewBuilder(&descpb.SchemaDescriptor{
-				Name:       a.name,
-				ID:         a.id,
-				Version:    1,
-				ParentID:   a.parentID,
-				Privileges: descpb.NewPrivilegeDescriptor(owner, privilege.SchemaPrivileges, owner),
-			}).BuildCreatedMutable()
-		default:
-			return dbdesc.NewInitial(a.id, a.name, owner)
-		}
+	constructDescriptorFromArgs := func(t *testing.T, a args) catalog.NameEntry {
+		ne := nameEntry{}
+		ne.ParentID = a.parentID
+		ne.ParentSchemaID = a.parentSchemaID
+		ne.Name = a.name
+		ne.id = a.id
+		return ne
 	}
-	formatDesc := func(d catalog.Descriptor) string {
-		return fmt.Sprintf("(%d, %d, %s): %d(%s)",
-			d.GetParentID(), d.GetParentSchemaID(), d.GetName(), d.GetID(), d.GetPrivileges().Owner())
+	formatEntry := func(d catalog.NameEntry) string {
+		return fmt.Sprintf("(%d, %d, %s): %d",
+			d.GetParentID(), d.GetParentSchemaID(), d.GetName(), d.GetID())
 	}
 	datadriven.Walk(t, "testdata/desc_tree", func(t *testing.T, path string) {
 		tr := MakeMap()
@@ -179,29 +158,29 @@ func TestDescTreeDataDriven(t *testing.T) {
 			const notFound = "not found"
 			switch d.Cmd {
 			case "add":
-				a := parseArgs(t, d, argID|argName|argOwner, argParentID|argParentSchemaID)
+				a := parseArgs(t, d, argID|argName, argParentID|argParentSchemaID)
 				desc := constructDescriptorFromArgs(t, a)
 				tr.Upsert(desc)
-				return formatDesc(desc)
+				return formatEntry(desc)
 			case "get-by-id":
 				a := parseArgs(t, d, argID, 0)
 				got := tr.GetByID(a.id)
 				if got == nil {
 					return notFound
 				}
-				return formatDesc(got.(catalog.Descriptor))
+				return formatEntry(got.(catalog.NameEntry))
 			case "get-by-name":
 				a := parseArgs(t, d, argName, argParentID|argParentSchemaID)
 				got := tr.GetByName(a.parentID, a.parentSchemaID, a.name)
 				if got == nil {
 					return notFound
 				}
-				return formatDesc(got.(catalog.Descriptor))
+				return formatEntry(got.(catalog.NameEntry))
 			case "iterate-by-id":
 				a := parseArgs(t, d, 0, argStopAfter)
 				var buf strings.Builder
 				var i int
-				err := tr.IterateByID(func(descriptor catalog.NameEntry) error {
+				err := tr.IterateByID(func(entry catalog.NameEntry) error {
 					defer func() { i++ }()
 					if a.set&argStopAfter != 0 && i == a.stopAfter {
 						if d.Input != "" {
@@ -209,7 +188,7 @@ func TestDescTreeDataDriven(t *testing.T) {
 						}
 						return iterutil.StopIteration()
 					}
-					buf.WriteString(formatDesc(descriptor.(catalog.Descriptor)))
+					buf.WriteString(formatEntry(entry))
 					buf.WriteString("\n")
 					return nil
 				})
