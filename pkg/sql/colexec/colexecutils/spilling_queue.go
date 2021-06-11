@@ -197,12 +197,10 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 			q.unlimitedAllocator.PerformOperation(q.diskQueueDeselectionScratch.ColVecs(), func() {
 				for i := range q.typs {
 					q.diskQueueDeselectionScratch.ColVec(i).Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:       batch.ColVec(i),
-								Sel:       sel,
-								SrcEndIdx: n,
-							},
+						coldata.SliceArgs{
+							Src:       batch.ColVec(i),
+							Sel:       sel,
+							SrcEndIdx: n,
 						},
 					)
 				}
@@ -252,14 +250,12 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 			q.unlimitedAllocator.PerformOperation(tailBatch.ColVecs(), func() {
 				for i := range q.typs {
 					tailBatch.ColVec(i).Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:         batch.ColVec(i),
-								Sel:         batch.Selection(),
-								DestIdx:     l,
-								SrcStartIdx: 0,
-								SrcEndIdx:   alreadyCopied,
-							},
+						coldata.SliceArgs{
+							Src:         batch.ColVec(i),
+							Sel:         batch.Selection(),
+							DestIdx:     l,
+							SrcStartIdx: 0,
+							SrcEndIdx:   alreadyCopied,
 						},
 					)
 				}
@@ -303,13 +299,11 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 	q.unlimitedAllocator.PerformOperation(newBatch.ColVecs(), func() {
 		for i := range q.typs {
 			newBatch.ColVec(i).Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:         batch.ColVec(i),
-						Sel:         batch.Selection(),
-						SrcStartIdx: alreadyCopied,
-						SrcEndIdx:   n,
-					},
+				coldata.SliceArgs{
+					Src:         batch.ColVec(i),
+					Sel:         batch.Selection(),
+					SrcStartIdx: alreadyCopied,
+					SrcEndIdx:   n,
 				},
 			)
 		}

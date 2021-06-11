@@ -873,14 +873,12 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 							}
 						} else {
 							out.Copy(
-								coldata.CopySliceArgs{
-									SliceArgs: coldata.SliceArgs{
-										Src:         src,
-										Sel:         sel,
-										DestIdx:     outStartIdx,
-										SrcStartIdx: o.builderState.right.curSrcStartIdx,
-										SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-									},
+								coldata.SliceArgs{
+									Src:         src,
+									Sel:         sel,
+									DestIdx:     outStartIdx,
+									SrcStartIdx: o.builderState.right.curSrcStartIdx,
+									SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
 								},
 							)
 						}
