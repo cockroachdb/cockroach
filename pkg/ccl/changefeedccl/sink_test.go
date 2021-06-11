@@ -180,6 +180,10 @@ func TestKafkaSink(t *testing.T) {
 	sink, cleanup := makeTestKafkaSink(t, p, memoryUnlimited, "t")
 	defer cleanup()
 
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `t`}
+	sink.setTargets(targets)
+
 	// No inflight
 	if err := sink.Flush(ctx); err != nil {
 		t.Fatal(err)
@@ -259,6 +263,10 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	sink, cleanup := makeTestKafkaSink(t, p, memoryUnlimited, `☃`)
 	defer cleanup()
 
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `☃`}
+	sink.setTargets(targets)
+
 	if err := sink.EmitRow(ctx, table(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +291,8 @@ func TestSQLSink(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	table := func(name string) *tabledesc.Immutable {
-		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
+		id, _ := strconv.ParseUint(name, 36, 64)
+		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name, ID: descpb.ID(id)})
 	}
 
 	ctx := context.Background()
@@ -297,8 +306,8 @@ func TestSQLSink(t *testing.T) {
 	sinkURL.Path = `d`
 
 	targets := jobspb.ChangefeedTargets{
-		0: jobspb.ChangefeedTarget{StatementTimeName: `foo`},
-		1: jobspb.ChangefeedTarget{StatementTimeName: `bar`},
+		table(`foo`).GetID(): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
+		table(`bar`).GetID(): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
 	}
 	sink, err := makeSQLSink(sinkURL.String(), `sink`, targets)
 	require.NoError(t, err)
@@ -309,7 +318,7 @@ func TestSQLSink(t *testing.T) {
 
 	// Undeclared topic
 	require.EqualError(t,
-		sink.EmitRow(ctx, table(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: nope`)
+		sink.EmitRow(ctx, table(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: `)
 
 	// With one row, nothing flushes until Flush is called.
 	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`k1`), []byte(`v0`), zeroTS))
@@ -432,6 +441,10 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 		cleanup()
 	}()
 
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `t`}
+	sink.setTargets(targets)
+
 	// No inflight
 	require.NoError(t, sink.Flush(ctx))
 
@@ -469,7 +482,7 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 		changefeedbase.OptEnvelope:                string(changefeedbase.OptEnvelopeWrapped),
 		changefeedbase.OptConfluentSchemaRegistry: reg.server.URL,
 	}
-	encoder, err := newConfluentAvroEncoder(opts)
+	encoder, err := newConfluentAvroEncoder(opts, jobspb.ChangefeedTargets{})
 	require.NoError(t, err)
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "t", hlc.Timestamp{})
 	require.NoError(t, err)

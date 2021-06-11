@@ -16,11 +16,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -214,7 +216,13 @@ func TestEncoders(t *testing.T) {
 				t.Fatalf(`unknown format: %s`, o[changefeedbase.OptFormat])
 			}
 
-			e, err := getEncoder(o)
+			target := jobspb.ChangefeedTarget{
+				StatementTimeName: tableDesc.GetName(),
+			}
+			targets := jobspb.ChangefeedTargets{}
+			targets[tableDesc.GetID()] = target
+
+			e, err := getEncoder(o, targets)
 			if len(expected.err) > 0 {
 				require.EqualError(t, err, expected.err)
 				return
@@ -261,14 +269,16 @@ type testSchemaRegistry struct {
 	server *httptest.Server
 	mu     struct {
 		syncutil.Mutex
-		idAlloc int32
-		schemas map[int32]string
+		idAlloc  int32
+		schemas  map[int32]string
+		subjects map[string]int32
 	}
 }
 
 func makeTestSchemaRegistry() *testSchemaRegistry {
 	r := &testSchemaRegistry{}
 	r.mu.schemas = make(map[int32]string)
+	r.mu.subjects = make(map[string]int32)
 	r.server = httptest.NewServer(http.HandlerFunc(r.Register))
 	return r
 }
@@ -292,9 +302,11 @@ func (r *testSchemaRegistry) Register(hw http.ResponseWriter, hr *http.Request) 
 		}
 
 		r.mu.Lock()
+		subject := strings.Split(hr.URL.Path, "/")[2]
 		id := r.mu.idAlloc
 		r.mu.idAlloc++
 		r.mu.schemas[id] = req.Schema
+		r.mu.subjects[subject] = id
 		r.mu.Unlock()
 
 		res, err := gojson.Marshal(confluentSchemaVersionResponse{ID: id})
@@ -385,6 +397,195 @@ func TestAvroEncoder(t *testing.T) {
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroSchemaNaming(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE DATABASE movr`)
+		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t,
+			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
+		)
+
+		movrFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, movrFeed)
+
+		assertPayloadsAvro(t, reg, movrFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		assertRegisteredSubjects(t, reg, []string{
+			`drivers-key`,
+			`drivers-value`,
+		})
+
+		fqnFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, full_table_name`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, fqnFeed)
+
+		assertPayloadsAvro(t, reg, fqnFeed, []string{
+			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		assertRegisteredSubjects(t, reg, []string{
+			`drivers-key`,
+			`drivers-value`,
+			`movr.public.drivers-key`,
+			`movr.public.drivers-value`,
+		})
+
+		prefixFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, prefixFeed)
+
+		assertPayloadsAvro(t, reg, prefixFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		assertRegisteredSubjects(t, reg, []string{
+			`drivers-key`,
+			`drivers-value`,
+			`movr.public.drivers-key`,
+			`movr.public.drivers-value`,
+			`superdrivers-key`,
+			`superdrivers-value`,
+		})
+
+		prefixFQNFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super, full_table_name`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, prefixFQNFeed)
+
+		assertPayloadsAvro(t, reg, prefixFQNFeed, []string{
+			`movr.public.drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		assertRegisteredSubjects(t, reg, []string{
+			`drivers-key`,
+			`drivers-value`,
+			`movr.public.drivers-key`,
+			`movr.public.drivers-value`,
+			`superdrivers-key`,
+			`superdrivers-value`,
+			`supermovr.public.drivers-key`,
+			`supermovr.public.drivers-value`,
+		})
+
+		//Both changes to the subject are also reflected in the schema name in the posted schemas
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`supermovr.public.drivers-key`]], `supermovr`)
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`supermovr.public.drivers-value`]], `supermovr`)
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroSchemaNamespace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE DATABASE movr`)
+		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t,
+			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
+		)
+
+		noNamespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, noNamespaceFeed)
+
+		assertPayloadsAvro(t, reg, noNamespaceFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		namespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, namespaceFeed)
+
+		assertPayloadsAvro(t, reg, namespaceFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		require.NotContains(t, reg.mu.schemas[reg.mu.subjects[`drivers-key`]], `namespace`)
+		require.NotContains(t, reg.mu.schemas[reg.mu.subjects[`drivers-value`]], `namespace`)
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`superdrivers-key`]], `"namespace":"super"`)
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`superdrivers-value`]], `"namespace":"super"`)
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestTableNameCollision(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE DATABASE movr`)
+		sqlDB.Exec(t, `CREATE DATABASE printr`)
+		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE printr.drivers (id INT PRIMARY KEY, version INT)`)
+		sqlDB.Exec(t,
+			`INSERT INTO movr.drivers VALUES (1, 'Alice'), (2, NULL)`,
+		)
+		sqlDB.Exec(t,
+			`INSERT INTO printr.drivers VALUES (1, 100), (2, NULL)`,
+		)
+
+		movrFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, movrFeed)
+
+		printrFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, printrFeed)
+
+		comboFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers, movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved, full_table_name`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, comboFeed)
+
+		assertPayloadsAvro(t, reg, movrFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}},"before":null}`,
+			`drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"name":null}},"before":null}`,
+		})
+
+		assertPayloadsAvro(t, reg, printrFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"version":{"long":100}}},"before":null}`,
+			`drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"version":null}},"before":null}`,
+		})
+
+		assertPayloadsAvro(t, reg, comboFeed, []string{
+			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}},"before":null}`,
+			`movr.public.drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"name":null}},"before":null}`,
+			`printr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"version":{"long":100}}},"before":null}`,
+			`printr.public.drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"version":null}},"before":null}`,
+		})
+	}
+
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 

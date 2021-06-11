@@ -83,7 +83,10 @@ func avroUnionKey(t avroSchemaType) string {
 	case avroLogicalType:
 		return avroUnionKey(s.SchemaType) + `.` + s.LogicalType
 	case *avroRecord:
-		return s.Name
+		if s.Namespace == "" {
+			return s.Name
+		}
+		return s.Namespace + `.` + s.Name
 	default:
 		panic(errors.AssertionFailedf(`unsupported type %T %v`, t, t))
 	}
@@ -96,6 +99,7 @@ type avroSchemaField struct {
 	Name       string         `json:"name"`
 	Default    *string        `json:"default"`
 	Metadata   string         `json:"__crdb__,omitempty"`
+	Namespace  string         `json:"namespace,omitempty"`
 
 	typ *types.T
 
@@ -109,6 +113,7 @@ type avroRecord struct {
 	SchemaType string             `json:"type"`
 	Name       string             `json:"name"`
 	Fields     []*avroSchemaField `json:"fields"`
+	Namespace  string             `json:"namespace,omitempty"`
 	codec      *goavro.Codec
 }
 
@@ -388,13 +393,18 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 
 // indexToAvroSchema converts a column descriptor into its corresponding avro
 // record schema. The fields are kept in the same order as columns in the index.
+// sqlName can be any string but should uniquely identify a schema.
 func indexToAvroSchema(
-	tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
+	tableDesc catalog.TableDescriptor,
+	indexDesc *descpb.IndexDescriptor,
+	sqlName string,
+	namespace string,
 ) (*avroDataRecord, error) {
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
-			Name:       SQLNameToAvroName(tableDesc.GetName()),
+			Name:       SQLNameToAvroName(sqlName),
 			SchemaType: `record`,
+			Namespace:  namespace,
 		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
@@ -436,7 +446,7 @@ const (
 // If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
 // appended to the end of the avro record's name.
 func tableToAvroSchema(
-	tableDesc catalog.TableDescriptor, nameSuffix string,
+	tableDesc catalog.TableDescriptor, nameSuffix string, namespace string,
 ) (*avroDataRecord, error) {
 	name := SQLNameToAvroName(tableDesc.GetName())
 	if nameSuffix != avroSchemaNoSuffix {
@@ -446,6 +456,7 @@ func tableToAvroSchema(
 		avroRecord: avroRecord{
 			Name:       name,
 			SchemaType: `record`,
+			Namespace:  namespace,
 		},
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
@@ -553,12 +564,13 @@ func (r *avroDataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, 
 // envelopeToAvroSchema creates an avro record schema for an envelope containing
 // before and after versions of a row change and metadata about that row change.
 func envelopeToAvroSchema(
-	topic string, opts avroEnvelopeOpts, before, after *avroDataRecord,
+	topic string, opts avroEnvelopeOpts, before, after *avroDataRecord, namespace string,
 ) (*avroEnvelopeRecord, error) {
 	schema := &avroEnvelopeRecord{
 		avroRecord: avroRecord{
 			Name:       SQLNameToAvroName(topic) + `_envelope`,
 			SchemaType: `record`,
+			Namespace:  namespace,
 		},
 		opts: opts,
 	}

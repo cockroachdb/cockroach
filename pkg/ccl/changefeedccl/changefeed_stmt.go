@@ -33,8 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -182,8 +184,13 @@ func changefeedPlanHook(
 				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 					return err
 				}
+				_, qualified := opts[changefeedbase.OptFullTableName]
+				name, err := getChangefeedTargetName(ctx, table, *p.ExecCfg(), p.Txn(), qualified)
+				if err != nil {
+					return err
+				}
 				targets[table.GetID()] = jobspb.ChangefeedTarget{
-					StatementTimeName: table.GetName(),
+					StatementTimeName: name,
 				}
 				if err := validateChangefeedTable(targets, table); err != nil {
 					return err
@@ -237,7 +244,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if _, err := getEncoder(details.Opts); err != nil {
+		if _, err := getEncoder(details.Opts, details.Targets); err != nil {
 			return err
 		}
 		if isCloudStorageSink(parsedSink) {
@@ -531,9 +538,6 @@ func validateChangefeedTable(
 	if tableDesc.GetState() == descpb.DescriptorState_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
-	if tableDesc.GetName() != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
-	}
 
 	// TODO(mrtracy): re-enable this when allow-backfill option is added.
 	// if tableDesc.HasColumnBackfillMutation() {
@@ -717,4 +721,40 @@ func (b *changefeedResumer) OnPauseRequest(
 	pts := planHookState.(sql.PlanHookState).ExecCfg().ProtectedTimestampProvider
 	return createProtectedTimestampRecord(ctx, pts, txn, *b.job.ID(),
 		details.Targets, *resolved, cp)
+}
+
+// getQualifiedTableName returns the database-qualified name of the table
+// or view represented by the provided descriptor.
+func getQualifiedTableName(
+	ctx context.Context, execCfg sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
+) (string, error) {
+	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, execCfg.Codec, desc.GetParentID())
+	if err != nil {
+		return "", err
+	}
+	schemaID := desc.GetParentSchemaID()
+	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID)
+	if err != nil {
+		return "", err
+	}
+	tbName := tree.MakeTableNameWithSchema(
+		tree.Name(dbDesc.GetName()),
+		tree.Name(schemaName),
+		tree.Name(desc.GetName()),
+	)
+	return tbName.String(), nil
+}
+
+// getChangefeedTargetName gets a table name with or without the dots
+func getChangefeedTargetName(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	execCfg sql.ExecutorConfig,
+	txn *kv.Txn,
+	qualified bool,
+) (string, error) {
+	if qualified {
+		return getQualifiedTableName(ctx, execCfg, txn, desc)
+	}
+	return desc.GetName(), nil
 }

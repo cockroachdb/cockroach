@@ -152,6 +152,23 @@ func assertPayloadsAvro(
 	}
 }
 
+func assertRegisteredSubjects(t testing.TB, reg *testSchemaRegistry, expected []string) {
+	t.Helper()
+
+	actual := make([]string, 0, len(reg.mu.subjects))
+
+	for subject := range reg.mu.subjects {
+		actual = append(actual, subject)
+	}
+
+	sort.Strings(expected)
+	sort.Strings(actual)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("expected\n  %s\ngot\n  %s",
+			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
+	}
+}
+
 func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 	t.Helper()
 	d, _, err := apd.NewFromString(s)
