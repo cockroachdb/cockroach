@@ -22,7 +22,10 @@ go_library(
 
 go_test(
     name = "nstree_test",
-    srcs = ["tree_test.go"],
+    srcs = [
+        "datadriven_test.go",
+        "map_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":nstree"],
     deps = [
