@@ -1522,8 +1522,8 @@ ORDER BY
 ----
 01:00:00               00:30:00          02:00:00                00:30:00          02:00:00                04:14:01.320914                 00:14:10.32
 1 day                  12:00:00          2 days                  12:00:00          2 days                  4 days 05:36:31.701948          05:40:07.68
-1 mon                  15 days           2 mons                  15 days           2 mons                  4 mons 7 days 00:15:51.058425   7 days 02:03:50.4
-1 mon 2 days 04:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  4 mons 15 days 28:24:59.745978  7 days 14:20:47.04
+1 mon                  15 days           2 mons                  15 days           2 mons                  4 mons 7 days 00:15:51.0912     7 days 02:03:50.4
+1 mon 2 days 04:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  4 mons 15 days 28:24:59.778753  7 days 14:20:47.04
 
 subtest tz_utc_normalization
 
