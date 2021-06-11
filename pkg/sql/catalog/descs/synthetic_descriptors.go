@@ -13,15 +13,15 @@ package descs
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptortree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 )
 
 type syntheticDescriptors struct {
-	descs descriptortree.Tree
+	descs nstree.Tree
 }
 
 func makeSyntheticDescriptors() syntheticDescriptors {
-	return syntheticDescriptors{descs: descriptortree.Make()}
+	return syntheticDescriptors{descs: nstree.Make()}
 }
 
 func (sd *syntheticDescriptors) set(descs []catalog.Descriptor) {

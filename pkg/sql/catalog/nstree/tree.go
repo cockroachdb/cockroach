@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package descriptortree provides a data structure for storing and retrieving
-// descriptors.
-package descriptortree
+// Package nstree provides a data structure for storing and retrieving
+// descriptors namespace entry-like data.
+package nstree
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
