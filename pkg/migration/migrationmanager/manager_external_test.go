@@ -213,9 +213,9 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 							return nil, false
 						}
 						return migration.NewSystemMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, c migration.Cluster,
+							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps,
 						) error {
-							return c.DB().Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
+							return d.DB.Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
 						}), true
 					},
 				},
@@ -328,7 +328,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					},
 					RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
 						return migration.NewSystemMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, c migration.Cluster,
+							ctx context.Context, version clusterversion.ClusterVersion, d migration.SystemDeps,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
 								t.Error("unexpected concurrency")

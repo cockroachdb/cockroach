@@ -79,7 +79,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	}
 	switch m := m.(type) {
 	case *migration.SystemMigration:
-		err = m.Run(ctx, cv, mc.Cluster())
+		err = m.Run(ctx, cv, mc.SystemDeps())
 	case *migration.TenantMigration:
 		err = m.Run(ctx, cv, migration.TenantDeps{
 			DB:                execCtx.ExecCfg().DB,
