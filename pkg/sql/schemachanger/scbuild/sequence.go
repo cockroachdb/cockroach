@@ -53,6 +53,7 @@ func (b *buildContext) dropSequenceDesc(
 				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
 					b.addNode(scpb.Target_DROP, defaultExpr)
 				}
+				b.removeColumnTypeBackRefs(desc, col.GetID())
 			}
 		}
 		return nil

@@ -50,26 +50,25 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 build
 DROP DATABASE db1 CASCADE
 ----
-- DROP DefaultExpression:{DescID: 57, ColumnID: 3}
+- DROP Database:{DescID: 52}
   state: PUBLIC
   details:
-    columnId: 3
-    tableId: 57
-    usesSequenceIDs:
+    databaseId: 52
+    dependentObjects:
+    - 29
+    - 53
     - 54
-- DROP Sequence:{DescID: 54}
+    - 57
+- DROP DefaultExpression:{DescID: 56, ColumnID: 1}
   state: PUBLIC
   details:
-    sequenceId: 54
-- DROP RelationDependedOnBy:{DescID: 54, DepID: 57}
+    columnId: 1
+    tableId: 56
+- DROP DefaultExpression:{DescID: 56, ColumnID: 2}
   state: PUBLIC
   details:
-    dependedOn: 57
-    tableId: 54
-- DROP Table:{DescID: 57}
-  state: PUBLIC
-  details:
-    tableId: 57
+    columnId: 2
+    tableId: 56
 - DROP DefaultExpression:{DescID: 56, ColumnID: 3}
   state: PUBLIC
   details:
@@ -77,10 +76,81 @@ DROP DATABASE db1 CASCADE
     tableId: 56
     usesSequenceIDs:
     - 55
+- DROP DefaultExpression:{DescID: 57, ColumnID: 1}
+  state: PUBLIC
+  details:
+    columnId: 1
+    tableId: 57
+- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 57
+- DROP DefaultExpression:{DescID: 57, ColumnID: 3}
+  state: PUBLIC
+  details:
+    columnId: 3
+    tableId: 57
+    usesSequenceIDs:
+    - 54
+- DROP RelationDependedOnBy:{DescID: 54, DepID: 57}
+  state: PUBLIC
+  details:
+    dependedOn: 57
+    tableId: 54
+- DROP RelationDependedOnBy:{DescID: 55, DepID: 56}
+  state: PUBLIC
+  details:
+    dependedOn: 56
+    tableId: 55
+- DROP Schema:{DescID: 53}
+  state: PUBLIC
+  details:
+    dependentObjects:
+    - 63
+    - 55
+    - 56
+    - 62
+    - 58
+    - 59
+    - 60
+    - 61
+    - 64
+    schemaId: 53
+- DROP Sequence:{DescID: 54}
+  state: PUBLIC
+  details:
+    sequenceId: 54
 - DROP Sequence:{DescID: 55}
   state: PUBLIC
   details:
     sequenceId: 55
+- DROP Table:{DescID: 56}
+  state: PUBLIC
+  details:
+    tableId: 56
+- DROP Table:{DescID: 57}
+  state: PUBLIC
+  details:
+    tableId: 57
+- DROP Type:{DescID: 62}
+  state: PUBLIC
+  details:
+    typeId: 62
+- DROP Type:{DescID: 63}
+  state: PUBLIC
+  details:
+    typeId: 63
+- DROP TypeReference:{DescID: 64, DepID: 62}
+  state: PUBLIC
+  details:
+    descriptorId: 64
+    typeId: 62
+- DROP TypeReference:{DescID: 64, DepID: 63}
+  state: PUBLIC
+  details:
+    descriptorId: 64
+    typeId: 63
 - DROP View:{DescID: 58}
   state: PUBLIC
   details:
@@ -122,53 +192,3 @@ DROP DATABASE db1 CASCADE
     dependsOn:
     - 61
     tableId: 64
-- DROP TypeReference:{DescID: 64, DepID: 62}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    typeId: 62
-- DROP TypeReference:{DescID: 64, DepID: 63}
-  state: PUBLIC
-  details:
-    descriptorId: 64
-    typeId: 63
-- DROP RelationDependedOnBy:{DescID: 55, DepID: 56}
-  state: PUBLIC
-  details:
-    dependedOn: 56
-    tableId: 55
-- DROP Table:{DescID: 56}
-  state: PUBLIC
-  details:
-    tableId: 56
-- DROP Type:{DescID: 62}
-  state: PUBLIC
-  details:
-    typeId: 62
-- DROP Type:{DescID: 63}
-  state: PUBLIC
-  details:
-    typeId: 63
-- DROP Schema:{DescID: 53}
-  state: PUBLIC
-  details:
-    dependentObjects:
-    - 63
-    - 55
-    - 56
-    - 62
-    - 58
-    - 59
-    - 60
-    - 61
-    - 64
-    schemaId: 53
-- DROP Database:{DescID: 52}
-  state: PUBLIC
-  details:
-    databaseId: 52
-    dependentObjects:
-    - 29
-    - 54
-    - 57
-    - 53
