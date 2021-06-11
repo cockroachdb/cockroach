@@ -208,7 +208,7 @@ SELECT * FROM orders LEFT JOIN customers ON customer_id = customers.id
 ----
 ================================================================================
 Initial expression
-  Cost: 2239.65
+  Cost: 2239.64
 ================================================================================
   project
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
@@ -240,7 +240,7 @@ Initial expression
                   └── variable: customers.id:6 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 2239.65
+  Cost: 2239.64
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
@@ -274,7 +274,7 @@ NormalizeInConst
                    └── variable: customers.id:6 [type=int]
 ================================================================================
 PruneJoinLeftCols
-  Cost: 2219.45
+  Cost: 2219.44
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
@@ -310,7 +310,7 @@ PruneJoinLeftCols
                    └── variable: customers.id:6 [type=int]
 ================================================================================
 PruneJoinRightCols
-  Cost: 2199.25
+  Cost: 2199.24
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
@@ -346,7 +346,7 @@ PruneJoinRightCols
                    └── variable: customers.id:6 [type=int]
 ================================================================================
 EliminateProject
-  Cost: 2189.24
+  Cost: 2189.23
 ================================================================================
   -project
   +left-join (hash)
@@ -517,7 +517,7 @@ GenerateMergeJoins (higher cost)
     └── filters (true)
 ================================================================================
 Final best expression
-  Cost: 2189.24
+  Cost: 2189.23
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:6(int) name:7(string) address:8(string)
