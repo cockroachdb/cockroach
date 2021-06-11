@@ -53,7 +53,7 @@ func runImportCLICommand(
 	select {
 	case <-knobs.uploadComplete:
 	case err := <-errCh:
-		t.Fatalf("import command returned before expected: %v", err)
+		t.Fatalf("import command returned before expected: output: %v, error: %v", out, err)
 	}
 	data, err := ioutil.ReadFile(dumpFilePath)
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestImportCLI(t *testing.T) {
 			"PGDUMP",
 			"testdata/import/db.sql",
 			"--max-row-size=1000 --skip-foreign-keys=true --row-limit=10 " +
-				"--ignore-unsupported-statements=true --log-ignored-statements='foo://bar'",
+				"--ignore-unsupported-statements=true --log-ignored-statements='foo://bar' --url=postgresql:///foo",
 			"IMPORT PGDUMP 'userfile://defaultdb.public.userfiles_root/db." +
 				"sql' WITH max_row_size='1000', skip_foreign_keys, row_limit='10', ignore_unsupported_statements, " +
 				"log_ignored_statements='foo://bar'",
