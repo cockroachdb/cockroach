@@ -47,12 +47,14 @@ func TestSampledStatsCollection(t *testing.T) {
 			stmt string,
 			implicitTxn bool,
 			database string,
+			txnID string,
 		) *roachpb.CollectedStatementStatistics {
 			t.Helper()
 			key := roachpb.StatementStatisticsKey{
 				Query:       stmt,
 				ImplicitTxn: implicitTxn,
 				Database:    database,
+				TxnID:       txnID,
 				Failed:      false,
 			}
 			stats, err := server.SQLServer().(*Server).sqlStats.GetStatementStats(&key)
@@ -85,7 +87,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		queryDB(t, db, selectOrderBy)
 
-		stats := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb")
+		stats := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb", "00000000-0000-0000-0000-000000000000")
 
 		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), stats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
@@ -110,8 +112,8 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		doTxn(t)
 
-		aggStats := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb")
-		selectStats := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb")
+		aggStats := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb", "00000000-0000-0000-0000-000000000000")
+		selectStats := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb", "00000000-0000-0000-0000-000000000000")
 
 		require.Equal(t, int64(2), aggStats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), aggStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")

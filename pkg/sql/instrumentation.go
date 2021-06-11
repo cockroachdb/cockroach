@@ -73,6 +73,7 @@ type instrumentationHelper struct {
 	// Query fingerprint (anonymized statement).
 	fingerprint string
 	implicitTxn bool
+	txnID       string
 	codec       keys.SQLCodec
 
 	// -- The following fields are initialized by Setup() --
@@ -144,9 +145,11 @@ func (ih *instrumentationHelper) Setup(
 	fingerprint string,
 	implicitTxn bool,
 	collectTxnExecStats bool,
+	txnID string,
 ) (newCtx context.Context, needFinish bool) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
+	ih.txnID = txnID
 	ih.codec = cfg.Codec
 
 	switch ih.outputMode {
@@ -169,7 +172,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
 	ih.savePlanForStats =
-		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database)
+		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database, txnID)
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if sp.IsVerbose() {
@@ -266,8 +269,10 @@ func (ih *instrumentationHelper) Finish(
 			Query:       ih.fingerprint,
 			ImplicitTxn: ih.implicitTxn,
 			Database:    p.SessionData().Database,
+			TxnID:       ih.txnID,
 			Failed:      retErr != nil,
 		}
+		// TODO marylia
 		err = statsCollector.RecordStatementExecStats(stmtStatsKey, queryLevelStats)
 		if err != nil {
 			if log.V(2 /* level */) {

@@ -22,13 +22,25 @@ import { PrintTime } from "src/views/reports/containers/range/print";
 
 import { TransactionsPage } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import { util } from "@cockroachlabs/cluster-ui";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
 export const selectData = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
-    return state.data || null;
+    if (!state.data) {
+      return null;
+    }
+    return {
+      internal_app_name_prefix: state.data.internal_app_name_prefix,
+      last_reset: state.data.last_reset,
+      statements: state.data.statements,
+      transactions: util.aggregateTransactions(
+        state.data.statements,
+        state.data.transactions,
+      ),
+    };
   },
 );
 

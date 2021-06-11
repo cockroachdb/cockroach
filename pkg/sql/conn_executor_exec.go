@@ -435,6 +435,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
 		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
+		ex.state.mu.txn.ID().String(),
 	)
 	if needFinish {
 		sql := stmt.SQL
@@ -939,9 +940,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
+	// TODO marylia check here
 	ex.recordStatementSummary(
 		ctx, planner,
 		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), stats,
+		ex.state.mu.txn.ID().String(),
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -1595,6 +1598,7 @@ func (ex *connExecutor) recordTransaction(
 		BytesRead:               ex.extraTxnState.bytesRead,
 	}
 
+	// TODO marylia
 	return ex.statsCollector.RecordTransaction(
 		ctx,
 		sqlstats.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum()),

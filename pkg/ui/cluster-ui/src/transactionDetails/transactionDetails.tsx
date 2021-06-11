@@ -23,14 +23,9 @@ import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
 import { Button } from "../button";
-import {
-  collectStatementsText,
-  generateRegionNode,
-} from "src/transactionsPage/utils";
 import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 import { SqlBox } from "../sql";
 import { aggregateStatements } from "../transactionsPage/utils";
-import Long from "long";
 import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
 import {
@@ -55,7 +50,7 @@ const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
+type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
@@ -63,12 +58,9 @@ const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
 interface TransactionDetailsProps {
   statements?: Statement[];
   nodeRegions: { [nodeId: string]: string };
-  transactionStats?: TransactionStats;
+  transaction?: Transaction;
   lastReset?: string | Date;
-  handleDetails: (
-    statementFingerprintIds: Long[] | null,
-    transactionStats: TransactionStats | null,
-  ) => void;
+  handleDetails: (transaction: Transaction | null) => void;
   error?: Error | null;
   resetSQLStats: () => void;
 }
@@ -107,18 +99,19 @@ export class TransactionDetails extends React.Component<
 
   render() {
     const {
-      statements,
-      transactionStats,
+      transaction,
       handleDetails,
       error,
       resetSQLStats,
       nodeRegions,
     } = this.props;
+    const transactionStats = transaction.stats_data.stats;
+    const statements = transaction.statements;
     return (
       <div>
         <section className={baseHeadingClasses.wrapper}>
           <Button
-            onClick={() => handleDetails(null, null)}
+            onClick={() => handleDetails(null)}
             type="unstyled-link"
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
@@ -132,9 +125,8 @@ export class TransactionDetails extends React.Component<
           error={error}
           loading={!statements || !transactionStats}
           render={() => {
-            const { statements, transactionStats, lastReset } = this.props;
+            const { lastReset } = this.props;
             const { sortSetting, pagination } = this.state;
-            const statementsSummary = collectStatementsText(statements);
             const aggregatedStatements = aggregateStatements(statements);
             const totalWorkload = calculateTotalWorkload(statements);
             populateRegionNodeForStatements(aggregatedStatements, nodeRegions);
@@ -148,7 +140,7 @@ export class TransactionDetails extends React.Component<
                   >
                     <Col span={16}>
                       <SqlBox
-                        value={statementsSummary}
+                        value={transaction.fingerprint}
                         className={transactionDetailsStylesCx("summary-card")}
                       />
                     </Col>
@@ -239,7 +231,9 @@ export class TransactionDetails extends React.Component<
                     pagination={pagination}
                     totalCount={statements.length}
                     lastReset={lastReset}
-                    arrayItemName={"statements for this transaction"}
+                    arrayItemName={
+                      "statements for all executions of this transaction"
+                    }
                     activeFilters={0}
                     resetSQLStats={resetSQLStats}
                   />

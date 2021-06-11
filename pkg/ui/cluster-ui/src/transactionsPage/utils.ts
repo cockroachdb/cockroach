@@ -17,19 +17,32 @@ import {
 } from "../queryFilter";
 import { AggregateStatistics } from "../statementsTable";
 import Long from "long";
-import _ from "lodash";
 import {
   addExecStats,
   aggregateNumericStats,
-  containAny,
+  CollectedStatementStatistics,
+  combineStatementStats,
   FixLong,
+  ICollectedTransactionStatistics,
   longToInt,
-  unique,
+  StatementStatistics,
+  Transaction,
 } from "../util";
+import _ from "lodash";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
-type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type IExtendedStatementStatisticsKey = protos.cockroach.server.serverpb.StatementsResponse.IExtendedStatementStatisticsKey;
+
+export interface StatementsCount {
+  query: string;
+  count: number;
+}
+
+export interface SummaryData {
+  key: IExtendedStatementStatisticsKey;
+  stats: StatementStatistics[];
+}
 
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
@@ -50,9 +63,6 @@ export const getTrxAppFilterOptions = (
     }));
 };
 
-export const collectStatementsText = (statements: Statement[]): string =>
-  statements.map(s => s.key.key_data.query).join("\n");
-
 export const getStatementsByFingerprintId = (
   statementFingerprintIds: Long[],
   statements: Statement[],
@@ -63,7 +73,7 @@ export const getStatementsByFingerprintId = (
 };
 
 export const aggregateStatements = (
-  statements: Statement[],
+  statements: ICollectedStatementStatistics[],
 ): AggregateStatistics[] =>
   statements.map((s: Statement) => ({
     label: s.key.key_data.query,
@@ -76,19 +86,11 @@ export const aggregateStatements = (
 export const searchTransactionsData = (
   search: string,
   transactions: Transaction[],
-  statements: Statement[],
 ): Transaction[] => {
   return transactions.filter((t: Transaction) =>
-    search.split(" ").every(val =>
-      collectStatementsText(
-        getStatementsByFingerprintId(
-          t.stats_data.statement_fingerprint_ids,
-          statements,
-        ),
-      )
-        .toLowerCase()
-        .includes(val.toLowerCase()),
-    ),
+    search
+      .split(" ")
+      .every(val => t.fingerprint.toLowerCase().includes(val.toLowerCase())),
   );
 };
 
@@ -207,101 +209,144 @@ export const generateRegionNode = (
   return regionNodes;
 };
 
-type TransactionWithFingerprint = Transaction & { fingerprint: string };
+// Returns a string with the fingerprint of each statement executed
+// in order and with the repetitions count (when is more than one)
+// joined by a new line `\n`.
+// E.g. `SELECT * FROM test\nINSERT INTO test VALUES (_) (x3)\nSELECT * FROM test`
+export const collectStatementsTextWithReps = (
+  statements: CollectedStatementStatistics[],
+): string => {
+  const statementsInfo: StatementsCount[] = [];
+  let index = 0;
 
-// withFingerprint adds the concatenated statement fingerprints to the Transaction object since it
-// only comes with statement_fingerprint_ids
-const withFingerprint = function(
-  t: Transaction,
-  stmts: Statement[],
-): TransactionWithFingerprint {
-  return {
-    ...t,
-    fingerprint: collectStatementsText(
-      getStatementsByFingerprintId(
-        t.stats_data.statement_fingerprint_ids,
-        stmts,
-      ),
-    ),
-  };
+  statements.forEach(s => {
+    if (index > 0 && statementsInfo[index - 1].query === s.key.key_data.query) {
+      statementsInfo[index - 1].count++;
+    } else {
+      statementsInfo.push({ query: s.key.key_data.query, count: 1 });
+      index++;
+    }
+  });
+
+  return statementsInfo
+    .map(s => {
+      if (s.count > 1) return s.query + " (x" + s.count + ")";
+      return s.query;
+    })
+    .join("\n");
+};
+
+// Returns a complete list (including repetition) of all statements
+// from a transaction in their order of execution.
+export const getTransactionStatementsByIdInOrder = (
+  statementsIds: Long[],
+  statements: CollectedStatementStatistics[],
+): CollectedStatementStatistics[] => {
+  const allStatements: CollectedStatementStatistics[] = [];
+  statementsIds.forEach(id => {
+    allStatements.push(statements.filter(s => id.eq(s.id))[0]);
+  });
+  return allStatements;
 };
 
 // addTransactionStats adds together two stat objects into one using their counts to compute a new
 // average for the numeric statistics. It's modeled after the similar `addStatementStats` function
 function addTransactionStats(
-  a: TransactionStats,
-  b: TransactionStats,
-): Required<TransactionStats> {
-  const countA = FixLong(a.count).toInt();
-  const countB = FixLong(b.count).toInt();
+  a: ICollectedTransactionStatistics,
+  b: ICollectedTransactionStatistics,
+): Required<ICollectedTransactionStatistics> {
+  const countA = FixLong(a.stats.count).toInt();
+  const countB = FixLong(b.stats.count).toInt();
   return {
-    count: a.count.add(b.count),
-    max_retries: a.max_retries.greaterThan(b.max_retries)
-      ? a.max_retries
-      : b.max_retries,
-    num_rows: aggregateNumericStats(a.num_rows, b.num_rows, countA, countB),
-    service_lat: aggregateNumericStats(
-      a.service_lat,
-      b.service_lat,
-      countA,
-      countB,
+    app: a.app,
+    statement_fingerprint_ids: a.statement_fingerprint_ids.concat(
+      b.statement_fingerprint_ids,
     ),
-    retry_lat: aggregateNumericStats(a.retry_lat, b.retry_lat, countA, countB),
-    commit_lat: aggregateNumericStats(
-      a.commit_lat,
-      b.commit_lat,
-      countA,
-      countB,
-    ),
-    rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
-    bytes_read: aggregateNumericStats(
-      a.bytes_read,
-      b.bytes_read,
-      countA,
-      countB,
-    ),
-    exec_stats: addExecStats(a.exec_stats, b.exec_stats),
+    stats: {
+      bytes_read: aggregateNumericStats(
+        a.stats.bytes_read,
+        b.stats.bytes_read,
+        countA,
+        countB,
+      ),
+      commit_lat: aggregateNumericStats(
+        a.stats.commit_lat,
+        b.stats.commit_lat,
+        countA,
+        countB,
+      ),
+      count: a.stats.count.add(b.stats.count),
+      max_retries: a.stats.max_retries.greaterThan(b.stats.max_retries)
+        ? a.stats.max_retries
+        : b.stats.max_retries,
+      num_rows: aggregateNumericStats(
+        a.stats.num_rows,
+        b.stats.num_rows,
+        countA,
+        countB,
+      ),
+      retry_lat: aggregateNumericStats(
+        a.stats.retry_lat,
+        b.stats.retry_lat,
+        countA,
+        countB,
+      ),
+      rows_read: aggregateNumericStats(
+        a.stats.rows_read,
+        b.stats.rows_read,
+        countA,
+        countB,
+      ),
+      service_lat: aggregateNumericStats(
+        a.stats.service_lat,
+        b.stats.service_lat,
+        countA,
+        countB,
+      ),
+      exec_stats: addExecStats(a.stats.exec_stats, b.stats.exec_stats),
+    },
   };
 }
 
-function combineTransactionStats(
-  txnStats: TransactionStats[],
-): TransactionStats {
-  return _.reduce(txnStats, addTransactionStats);
+export function combineTransactionStatsData(
+  statsData: ICollectedTransactionStatistics[],
+): ICollectedTransactionStatistics {
+  return _.reduce(statsData, addTransactionStats);
 }
 
-// mergeTransactionStats takes a list of transactions (assuming they're all for the same fingerprint
-// and returns a copy of the first element with its `stats_data.stats` object replaced with a
-// merged stats object that aggregates statistics from every copy of the fingerprint in the list
-// provided
-const mergeTransactionStats = function(txns: Transaction[]): Transaction {
-  if (txns.length === 0) {
-    return null;
-  }
-  const txn = { ...txns[0] };
-  txn.stats_data.stats = combineTransactionStats(
-    txns.map(t => t.stats_data.stats),
+function collectedStatementKey(stmt: CollectedStatementStatistics): string {
+  return (
+    stmt.key.key_data.query +
+    stmt.key.key_data.implicit_txn +
+    stmt.key.key_data.database
   );
-  return txn;
-};
+}
 
-// aggregateAcrossNodeIDs takes a list of transactions and a list of statements that those
-// transactions reference and returns a list of transactions that have been grouped by their
-// fingerprints and had their statistics aggregated across copies of the transaction. This is used
-// to deduplicate identical copies of the transaction that are run on different nodes. CRDB returns
-// different objects to represent those transactions.
-//
-// The function uses the fingerprint and the `app` that ran the transaction as the key to group the
-// transactions when deduping.
-//
-export const aggregateAcrossNodeIDs = function(
-  t: Transaction[],
-  stmts: Statement[],
-): Transaction[] {
-  return _.chain(t)
-    .map(t => withFingerprint(t, stmts))
-    .groupBy(t => t.fingerprint + t.stats_data.app)
-    .mapValues(mergeTransactionStats)
-    .values()
-    .value();
-};
+// Returns a list of CollectedStatementStatistics,
+// combining the stats for statements with the same fingerprint
+// to be used on Transaction aggregation.
+export function combineStatements(
+  statements: CollectedStatementStatistics[],
+): CollectedStatementStatistics[] {
+  const statsByStatementKey: {
+    [statement: string]: SummaryData;
+  } = {};
+  statements.forEach((stmt: CollectedStatementStatistics) => {
+    const key = collectedStatementKey(stmt);
+    if (!(key in statsByStatementKey)) {
+      statsByStatementKey[key] = {
+        key: stmt.key,
+        stats: [],
+      };
+    }
+    statsByStatementKey[key].stats.push(stmt.stats);
+  });
+
+  return Object.keys(statsByStatementKey).map(key => {
+    const stmt = statsByStatementKey[key];
+    return {
+      key: stmt.key,
+      stats: combineStatementStats(stmt.stats),
+    };
+  });
+}

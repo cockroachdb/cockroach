@@ -20,7 +20,6 @@ import { limitText } from "../utils";
 import classNames from "classnames/bind";
 import statementsStyles from "../../statementsTable/statementsTableContent.module.scss";
 import transactionsCellsStyles from "./transactionsCells.module.scss";
-import Long from "long";
 
 const statementsCx = classNames.bind(statementsStyles);
 const ownCellStyles = classNames.bind(transactionsCellsStyles);
@@ -29,23 +28,18 @@ const descriptionClassName = statementsCx("cl-table-link__description");
 const textWrapper = ownCellStyles("text-wrapper");
 const hoverAreaClassName = ownCellStyles("hover-area");
 
-type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
+type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
 interface TextCellProps {
   transactionText: string;
-  transactionFingerprintIds: Long[];
-  transactionStats: TransactionStats;
-  handleDetails: (
-    transactionFingerprintIds: Long[],
-    transactionStats: TransactionStats,
-  ) => void;
+  transaction: Transaction;
+  handleDetails: (transaction: Transaction) => void;
   search: string;
 }
 
 export const textCell = ({
   transactionText,
-  transactionFingerprintIds,
-  transactionStats,
+  transaction,
   handleDetails,
   search,
 }: TextCellProps) => {
@@ -62,9 +56,7 @@ export const textCell = ({
       >
         <div className={textWrapper}>
           <div
-            onClick={() =>
-              handleDetails(transactionFingerprintIds, transactionStats)
-            }
+            onClick={() => handleDetails(transaction)}
             className={hoverAreaClassName}
           >
             {getHighlightedText(

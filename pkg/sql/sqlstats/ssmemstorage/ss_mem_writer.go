@@ -52,7 +52,7 @@ func (s *Container) RecordStatement(
 
 	// Get the statistics object.
 	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
-		key.Query, key.ImplicitTxn, key.Database,
+		key.Query, key.ImplicitTxn, key.Database, key.TxnID,
 		key.Failed, createIfNonExistent,
 	)
 
@@ -108,6 +108,7 @@ func (s *Container) RecordStatement(
 	stats.mu.distSQLUsed = key.DistSQL
 	stats.mu.fullScan = key.FullScan
 	stats.mu.database = key.Database
+	stats.mu.txnID = key.TxnID
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
@@ -129,8 +130,9 @@ func (s *Container) RecordStatement(
 func (s *Container) RecordStatementExecStats(
 	key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
+	// TODO marylia
 	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(key.Query, key.ImplicitTxn, key.Database, key.Failed, false /* createIfNotExists */)
+		s.getStatsForStmt(key.Query, key.ImplicitTxn, key.Database, key.TxnID, key.Failed, false /* createIfNotExists */)
 	if stmtStats == nil {
 		return errors.New("stmtStats flushed before execution stats can be recorded")
 	}
@@ -140,10 +142,10 @@ func (s *Container) RecordStatementExecStats(
 
 // ShouldSaveLogicalPlanDesc implements sqlstats.Writer interface.
 func (s *Container) ShouldSaveLogicalPlanDesc(
-	fingerprint string, implicitTxn bool, database string,
+	fingerprint string, implicitTxn bool, database string, txnID string,
 ) bool {
 	stmtStats, _, _, _, _ :=
-		s.getStatsForStmt(fingerprint, implicitTxn, database, false /* failed */, false /* createIfNotExists */)
+		s.getStatsForStmt(fingerprint, implicitTxn, database, txnID, false /* failed */, false /* createIfNotExists */)
 	return s.shouldSaveLogicalPlanDescription(stmtStats)
 }
 

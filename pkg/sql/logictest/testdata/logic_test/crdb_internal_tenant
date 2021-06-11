@@ -556,8 +556,9 @@ query ITTTI colnames
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
 node_id  application_name     key                   statement_ids                                                  count
+0        test_txn_statistics  267509152303052392    {12454105967756427703}                                         1
+0        test_txn_statistics  2502564436000912353   {1095052291121066950,1095052291121066950,1095052291121066950}  1
+0        test_txn_statistics  2834352450637873029   {8713024362650853442,8713024362650853442}                      1
 0        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
-0        test_txn_statistics  12762606372390135532  {8833422719858486605,8833422719858486605,8833422719858486605}  1
-0        test_txn_statistics  15417266716795083410  {8833422719858486605}                                          1
 0        test_txn_statistics  15417266716795083422  {8833422719858486593}                                          1
-0        test_txn_statistics  17236010932163349339  {8833422719858486605,8833422719858486605}                      2
+0        test_txn_statistics  16112185559664985733  {14347419291132274060,14347419291132274060}                    1

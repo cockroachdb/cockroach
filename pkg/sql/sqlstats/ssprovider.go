@@ -36,7 +36,7 @@ type StatementWriter interface {
 
 	// ShouldSaveLogicalPlanDesc returns whether we should save the logical plan
 	// description for a given combination of statement metadata.
-	ShouldSaveLogicalPlanDesc(fingerprint string, implicitTxn bool, database string) bool
+	ShouldSaveLogicalPlanDesc(fingerprint string, implicitTxn bool, database string, txnID string) bool
 }
 
 // TransactionWriter is the interface that provides methods to record
