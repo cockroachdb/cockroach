@@ -301,8 +301,8 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
 				filepath.Join(outputDir, file))
-			cmd.Stdout = t.l.stdout
-			cmd.Stderr = t.l.stderr
+			cmd.Stdout = t.l.Stdout
+			cmd.Stderr = t.l.Stderr
 			if err := cmd.Run(); err != nil {
 				t.l.Printf("failed to retrieve %s: %s", file, err)
 			}
@@ -312,8 +312,8 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
 				filepath.Join(outputDir, "invoke.log"))
-			cmd.Stdout = t.l.stdout
-			cmd.Stderr = t.l.stderr
+			cmd.Stdout = t.l.Stdout
+			cmd.Stderr = t.l.Stderr
 			if err := cmd.Run(); err != nil {
 				t.l.Printf("failed to retrieve invoke.log: %s", err)
 			}

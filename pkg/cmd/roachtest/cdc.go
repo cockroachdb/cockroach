@@ -32,6 +32,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -141,7 +142,7 @@ func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer changefeedLogger.close()
+	defer changefeedLogger.Close()
 	verifier := makeLatencyVerifier(
 		args.targetInitialScanLatency,
 		args.targetSteadyLatency,
@@ -318,7 +319,7 @@ func runCDCBank(ctx context.Context, t *test, c Cluster) {
 		if err != nil {
 			return err
 		}
-		defer l.close()
+		defer l.Close()
 
 		tc, err := kafka.consumer(ctx, "bank")
 		if err != nil {
@@ -1431,7 +1432,7 @@ type latencyVerifier struct {
 	targetSteadyLatency      time.Duration
 	targetInitialScanLatency time.Duration
 	tolerateErrors           bool
-	logger                   *logger
+	logger                   *logger.Logger
 	setTestStatus            func(...interface{})
 
 	initialScanLatency   time.Duration
@@ -1445,7 +1446,7 @@ type latencyVerifier struct {
 func makeLatencyVerifier(
 	targetInitialScanLatency time.Duration,
 	targetSteadyLatency time.Duration,
-	l *logger,
+	l *logger.Logger,
 	setTestStatus func(...interface{}),
 	tolerateErrors bool,
 ) *latencyVerifier {

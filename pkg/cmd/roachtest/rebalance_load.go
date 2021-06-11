@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
@@ -153,7 +154,7 @@ func registerRebalanceLoad(r *testRegistry) {
 	})
 }
 
-func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error) {
+func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool, error) {
 	rows, err := db.Query(
 		`select lease_holder, count(*) ` +
 			`from [show ranges from table kv.kv] ` +
