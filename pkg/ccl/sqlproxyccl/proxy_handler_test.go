@@ -71,12 +71,12 @@ func newSecureProxyServer(
 ) (server *Server, addr string) {
 	// Created via:
 	const _ = `
-openssl genrsa -out testserver.key 2048
-openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt \
-  -days 3650 -config testserver_config.cnf	
+openssl genrsa -out testdata/testserver.key 2048
+openssl req -new -x509 -sha256 -key testdata/testserver.key -out testdata/testserver.crt \
+  -days 3650 -config testdata/testserver_config.cnf	
 `
-	opts.ListenKey = "testserver.key"
-	opts.ListenCert = "testserver.crt"
+	opts.ListenKey = "testdata/testserver.key"
+	opts.ListenCert = "testdata/testserver.crt"
 
 	return newProxyServer(ctx, t, stopper, opts)
 }

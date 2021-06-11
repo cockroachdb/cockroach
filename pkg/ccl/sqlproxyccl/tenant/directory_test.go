@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenantdirsvr
+package tenant_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -193,7 +194,7 @@ func TestResume(t *testing.T) {
 		}(i)
 	}
 
-	var processes map[net.Addr]*tenant.Process
+	var processes map[net.Addr]*tenantdirsvr.Process
 	// Eventually the tenant process will be resumed.
 	require.Eventually(t, func() bool {
 		processes = tds.Get(tenantID)
@@ -330,9 +331,9 @@ func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) err
 
 func startTenant(
 	ctx context.Context, srv serverutils.TestServerInterface, id uint64,
-) (*tenant.Process, error) {
+) (*tenantdirsvr.Process, error) {
 	log.TestingClearServerIdentifiers()
-	tenantStopper := tenant.NewSubStopper(srv.Stopper())
+	tenantStopper := tenantdirsvr.NewSubStopper(srv.Stopper())
 	t, err := srv.StartTenant(
 		ctx,
 		base.TestTenantArgs{
@@ -348,7 +349,7 @@ func startTenant(
 	if err != nil {
 		return nil, err
 	}
-	return &tenant.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
+	return &tenantdirsvr.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
 }
 
 // Setup directory that uses a client connected to a test directory server
@@ -358,7 +359,7 @@ func newTestDirectory(
 ) (
 	tc serverutils.TestClusterInterface,
 	directory *tenant.Directory,
-	tds *tenant.TestDirectoryServer,
+	tds *tenantdirsvr.TestDirectoryServer,
 ) {
 	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		// We need to start the cluster insecure in order to not
@@ -369,9 +370,9 @@ func newTestDirectory(
 	})
 	clusterStopper := tc.Stopper()
 	var err error
-	tds, err = tenant.NewTestDirectoryServer(clusterStopper)
+	tds, err = tenantdirsvr.New(clusterStopper)
 	require.NoError(t, err)
-	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenant.Process, error) {
+	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenantdirsvr.Process, error) {
 		t.Logf("starting tenant %d", tenantID)
 		process, err := startTenant(ctx, tc.Server(0), tenantID)
 		if err != nil {
