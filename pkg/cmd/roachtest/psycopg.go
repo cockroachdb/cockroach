@@ -23,7 +23,7 @@ func registerPsycopg(r *testRegistry) {
 	runPsycopg := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -49,8 +49,8 @@ func registerPsycopg(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Psycopg release is %s.", latestTag)
-		c.l.Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
+		t.l.Printf("Latest Psycopg release is %s.", latestTag)
+		t.l.Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -101,7 +101,7 @@ func registerPsycopg(r *testRegistry) {
 		if ignoredlist == nil {
 			t.Fatalf("No psycopg ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 			version, blocklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
@@ -117,7 +117,7 @@ func registerPsycopg(r *testRegistry) {
 		)
 
 		t.Status("collating the test results")
-		c.l.Printf("Test Results: %s", rawResults)
+		t.l.Printf("Test Results: %s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
@@ -134,7 +134,7 @@ func registerPsycopg(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runPsycopg(ctx, t, c)
 		},
 	})

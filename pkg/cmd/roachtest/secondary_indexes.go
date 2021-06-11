@@ -19,7 +19,7 @@ import (
 // runIndexUpgrade runs a test that creates an index before a version upgrade,
 // and modifies it in a mixed version setting. It aims to test the changes made
 // to index encodings done to allow secondary indexes to respect column families.
-func runIndexUpgrade(ctx context.Context, t *test, c *cluster, predecessorVersion string) {
+func runIndexUpgrade(ctx context.Context, t *test, c clusterI, predecessorVersion string) {
 	firstExpected := [][]int{
 		{2, 3, 4},
 		{6, 7, 8},
@@ -135,7 +135,7 @@ func registerSecondaryIndexesMultiVersionCluster(r *testRegistry) {
 		Owner:      OwnerSQLSchema,
 		Cluster:    makeClusterSpec(3),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)

@@ -57,7 +57,7 @@ func registerSQLSmith(r *testRegistry) {
 		"no-ddl":       sqlsmith.Settings["no-ddl"],
 	}
 
-	runSQLSmith := func(ctx context.Context, t *test, c *cluster, setupName, settingName string) {
+	runSQLSmith := func(ctx context.Context, t *test, c clusterI, setupName, settingName string) {
 		// Set up a statement logger for easy reproduction. We only
 		// want to log successful statements and statements that
 		// produced a final error or panic.
@@ -79,7 +79,7 @@ func registerSQLSmith(r *testRegistry) {
 		}
 
 		rng, seed := randutil.NewPseudoRand()
-		c.l.Printf("seed: %d", seed)
+		t.l.Printf("seed: %d", seed)
 
 		c.Put(ctx, cockroach, "./cockroach")
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
@@ -101,7 +101,7 @@ func registerSQLSmith(r *testRegistry) {
 
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")
-		c.l.Printf("setup:\n%s", setup)
+		t.l.Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
 			t.Fatal(err)
 		} else {
@@ -111,7 +111,7 @@ func registerSQLSmith(r *testRegistry) {
 		const timeout = time.Minute
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
 		t.Status("setting statement_timeout")
-		c.l.Printf("statement timeout:\n%s", setStmtTimeout)
+		t.l.Printf("statement timeout:\n%s", setStmtTimeout)
 		if _, err := conn.Exec(setStmtTimeout); err != nil {
 			t.Fatal(err)
 		}
@@ -192,7 +192,7 @@ func registerSQLSmith(r *testRegistry) {
 					// just timing out.
 					// TODO (rohany): once #45463 and #45461 have been resolved, return
 					//  to calling t.Fatalf here.
-					c.l.Printf("query timed out, but did not cancel execution:\n%s;", stmt)
+					t.l.Printf("query timed out, but did not cancel execution:\n%s;", stmt)
 					return nil
 				case err := <-done:
 					return err
@@ -247,7 +247,7 @@ func registerSQLSmith(r *testRegistry) {
 			Cluster:    makeClusterSpec(4),
 			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
 		})

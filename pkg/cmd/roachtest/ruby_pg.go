@@ -29,7 +29,7 @@ func registerRubyPG(r *testRegistry) {
 	runRubyPGTest := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -53,7 +53,7 @@ func registerRubyPG(r *testRegistry) {
 
 		t.Status("cloning rails and installing prerequisites")
 
-		c.l.Printf("Supported ruby-pg version is %s.", rubyPGVersion)
+		t.l.Printf("Supported ruby-pg version is %s.", rubyPGVersion)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -136,7 +136,7 @@ func registerRubyPG(r *testRegistry) {
 		}
 
 		// Write the cockroach config into the test suite to use.
-		err = c.PutE(ctx, c.l, "./pkg/cmd/roachtest/ruby_pg_helpers.rb", "/mnt/data1/ruby-pg/spec/helpers.rb", c.All())
+		err = c.PutE(ctx, t.l, "./pkg/cmd/roachtest/ruby_pg_helpers.rb", "/mnt/data1/ruby-pg/spec/helpers.rb", c.All())
 		require.NoError(t, err)
 
 		t.Status("running ruby-pg test suite")
@@ -146,7 +146,7 @@ func registerRubyPG(r *testRegistry) {
 			`cd /mnt/data1/ruby-pg/ && sudo rake`,
 		)
 
-		c.l.Printf("Test Results:\n%s", rawResults)
+		t.l.Printf("Test Results:\n%s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
@@ -202,7 +202,7 @@ func registerRubyPG(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runRubyPGTest(ctx, t, c)
 		},
 	})

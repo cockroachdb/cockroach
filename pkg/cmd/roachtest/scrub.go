@@ -50,7 +50,7 @@ func makeScrubTPCCTest(
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
 		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,
 				ExtraRunArgs: "--wait=false --tolerate-errors",
@@ -68,12 +68,12 @@ func makeScrubTPCCTest(
 					conn := c.Conn(ctx, 1)
 					defer conn.Close()
 
-					c.l.Printf("Starting %d SCRUB checks", numScrubRuns)
+					t.l.Printf("Starting %d SCRUB checks", numScrubRuns)
 					for i := 0; i < numScrubRuns; i++ {
-						c.l.Printf("Running SCRUB check %d\n", i+1)
+						t.l.Printf("Running SCRUB check %d\n", i+1)
 						before := timeutil.Now()
 						err := sqlutils.RunScrubWithOptions(conn, "tpcc", "order", stmtOptions)
-						c.l.Printf("SCRUB check %d took %v\n", i+1, timeutil.Since(before))
+						t.l.Printf("SCRUB check %d took %v\n", i+1, timeutil.Since(before))
 
 						if err != nil {
 							t.Fatal(err)

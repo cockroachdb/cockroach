@@ -18,7 +18,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMonotonicityTestCase) {
+func runClockMonotonicity(ctx context.Context, t *test, c clusterI, tc clockMonotonicityTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when introducing offset
 	if c.Spec().NodeCount != 1 {
@@ -26,7 +26,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	}
 
 	t.Status("deploying offset injector")
-	offsetInjector := newOffsetInjector(c)
+	offsetInjector := newOffsetInjector(t, c)
 	if err := offsetInjector.deploy(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	// Wait for Cockroach to process the above cluster setting
 	time.Sleep(10 * time.Second)
 
-	if !isAlive(db, c.l) {
+	if !isAlive(db, t.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -59,7 +59,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 
 	// Recover from the injected clock offset after validation completes.
 	defer func() {
-		if !isAlive(db, c.l) {
+		if !isAlive(db, t.l) {
 			t.Fatal("Node unexpectedly crashed")
 		}
 		// Stop cockroach node before recovering from clock offset as this clock
@@ -70,7 +70,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		offsetInjector.recover(ctx, c.Spec().NodeCount)
 
 		c.Start(ctx, t, c.Node(c.Spec().NodeCount))
-		if !isAlive(db, c.l) {
+		if !isAlive(db, t.l) {
 			t.Fatal("Node unexpectedly crashed")
 		}
 	}()
@@ -83,7 +83,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	t.Status("starting cockroach post offset")
 	c.Start(ctx, t, c.Node(c.Spec().NodeCount))
 
-	if !isAlive(db, c.l) {
+	if !isAlive(db, t.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -134,7 +134,7 @@ func registerClockMonotonicTests(r *testRegistry) {
 			// These tests muck with NTP, therefor we don't want the cluster reused by
 			// others.
 			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},
 		}

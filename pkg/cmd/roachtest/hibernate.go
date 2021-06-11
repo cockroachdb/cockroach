@@ -25,7 +25,7 @@ type hibernateOptions struct {
 	buildCmd,
 	testCmd string
 	blocklists  blocklistsForVersion
-	dbSetupFunc func(ctx context.Context, t *test, c *cluster)
+	dbSetupFunc func(ctx context.Context, t *test, c clusterI)
 }
 
 var (
@@ -46,7 +46,7 @@ var (
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
 		blocklists: hibernateSpatialBlocklists,
-		dbSetupFunc: func(ctx context.Context, t *test, c *cluster) {
+		dbSetupFunc: func(ctx context.Context, t *test, c clusterI) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(
@@ -66,7 +66,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -101,8 +101,8 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Hibernate release is %s.", latestTag)
-		c.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
+		t.l.Printf("Latest Hibernate release is %s.", latestTag)
+		t.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -172,7 +172,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
+		t.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// Note that this will take upwards of 3 hours.
@@ -213,7 +213,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		output, err := repeatRunWithBuffer(
 			ctx,
 			c,
-			t.l,
+			t,
 			node,
 			"get list of test files",
 			fmt.Sprintf(`ls /mnt/data1/hibernate/%s/target/test-results/test/*.xml`, opt.testDir),
@@ -237,7 +237,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		MinVersion: "v20.2.0",
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runHibernate(ctx, t, c)
 		},
 	})

@@ -39,7 +39,7 @@ var jepsenNemeses = []struct {
 	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
 
-func initJepsen(ctx context.Context, t *test, c *cluster) {
+func initJepsen(ctx context.Context, t *test, c clusterI) {
 	// NB: comment this out to see the commands jepsen would run locally.
 	if c.isLocal() {
 		t.Fatal("local execution not supported")
@@ -118,7 +118,7 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
+	cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	// work around JSCH auth error: https://github.com/jepsen-io/jepsen/blob/master/README.md
 	ips, err := c.InternalIP(ctx, workers)
 	if err != nil {
-		c.t.Fatal(err)
+		t.Fatal(err)
 	}
 	for _, ip := range ips {
 		c.Run(ctx, controller, "sh", "-c", fmt.Sprintf(`"ssh-keyscan -t rsa %s >> .ssh/known_hosts"`, ip))
@@ -139,7 +139,7 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 }
 
-func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis string) {
+func runJepsen(ctx context.Context, t *test, c clusterI, testName, nemesis string) {
 	initJepsen(ctx, t, c)
 
 	controller := c.Node(c.Spec().NodeCount)
@@ -148,14 +148,14 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	var nodeFlags []string
 	ips, err := c.InternalIP(ctx, c.Range(1, c.Spec().NodeCount-1))
 	if err != nil {
-		c.t.Fatal(err)
+		t.Fatal(err)
 	}
 	for _, ip := range ips {
 		nodeFlags = append(nodeFlags, "-n "+ip)
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	run := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) {
+	run := func(c clusterI, ctx context.Context, node nodeListOption, args ...string) {
 		if !c.isLocal() {
 			c.Run(ctx, node, args...)
 			return
@@ -163,7 +163,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
 		t.l.Printf("> %s\n", strings.Join(args, " "))
 	}
-	runE := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) error {
+	runE := func(c clusterI, ctx context.Context, node nodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}
@@ -298,7 +298,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		anyFailed := false
 		for _, file := range collectFiles {
-			cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller),
+			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
 				filepath.Join(outputDir, file))
 			cmd.Stdout = t.l.stdout
@@ -309,7 +309,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		if anyFailed {
 			// Try to figure out why this is so common.
-			cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller),
+			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
 				filepath.Join(outputDir, "invoke.log"))
 			cmd.Stdout = t.l.stdout
@@ -351,7 +351,7 @@ func registerJepsen(r *testRegistry) {
 				// if they detect that the machines have already been properly
 				// initialized.
 				Cluster: makeClusterSpec(6, reuseTagged("jepsen")),
-				Run: func(ctx context.Context, t *test, c *cluster) {
+				Run: func(ctx context.Context, t *test, c clusterI) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}

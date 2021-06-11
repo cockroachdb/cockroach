@@ -42,7 +42,7 @@ func registerRebalanceLoad(r *testRegistry) {
 	rebalanceLoadRun := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 		rebalanceMode string,
 		maxDuration time.Duration,
 		concurrency int,
@@ -130,7 +130,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(4), // the last node is just used to generate load
 		MinVersion: "v2.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			if local {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
@@ -143,7 +143,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(7), // the last node is just used to generate load
 		MinVersion: "v2.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			if local {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)

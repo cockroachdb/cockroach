@@ -30,7 +30,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 	runNodeJSPostgres := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -161,7 +161,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 			),
 		)
 		rawResultsStr := string(rawResults)
-		c.l.Printf("Test Results: %s", rawResultsStr)
+		t.l.Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			// The one failing test is `pool size of 1` which
 			// fails because it does SELECT count(*) FROM pg_stat_activity which is
@@ -184,7 +184,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.1.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runNodeJSPostgres(ctx, t, c)
 		},
 	})

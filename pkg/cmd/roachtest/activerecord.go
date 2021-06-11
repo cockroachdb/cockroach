@@ -241,8 +241,6 @@ func registerActiveRecord(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runActiveRecord(ctx, t, c)
-		},
+		Run:        runActiveRecord,
 	})
 }

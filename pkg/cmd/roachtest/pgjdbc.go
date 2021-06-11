@@ -25,7 +25,7 @@ func registerPgjdbc(r *testRegistry) {
 	runPgjdbc := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -55,8 +55,8 @@ func registerPgjdbc(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest pgjdbc release is %s.", latestTag)
-		c.l.Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
+		t.l.Printf("Latest pgjdbc release is %s.", latestTag)
+		t.l.Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -134,7 +134,7 @@ func registerPgjdbc(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		c.l.Printf("%s", status)
+		t.l.Printf("%s", status)
 
 		t.Status("running pgjdbc test suite")
 		// Note that this is expected to return an error, since the test suite
@@ -168,7 +168,7 @@ func registerPgjdbc(r *testRegistry) {
 		output, err := repeatRunWithBuffer(
 			ctx,
 			c,
-			t.l,
+			t,
 			node,
 			"get list of test files",
 			`ls /mnt/data1/pgjdbc/pgjdbc/build/test-results/test/*.xml`,
@@ -192,7 +192,7 @@ func registerPgjdbc(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runPgjdbc(ctx, t, c)
 		},
 	})

@@ -23,7 +23,7 @@ var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 var libPQSupportedTag = "v1.10.0"
 
 func registerLibPQ(r *testRegistry) {
-	runLibPQ := func(ctx context.Context, t *test, c *cluster) {
+	runLibPQ := func(ctx context.Context, t *test, c clusterI) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -46,8 +46,8 @@ func registerLibPQ(r *testRegistry) {
 		latestTag, err := repeatGetLatestTag(
 			ctx, t, "lib", "pq", libPQReleaseTagRegex)
 		require.NoError(t, err)
-		c.l.Printf("Latest lib/pq release is %s.", latestTag)
-		c.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
+		t.l.Printf("Latest lib/pq release is %s.", latestTag)
+		t.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -87,7 +87,7 @@ func registerLibPQ(r *testRegistry) {
 		if expectedFailures == nil {
 			t.Fatalf("No lib/pq blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		t.Status("running lib/pq test suite and collecting results")
 

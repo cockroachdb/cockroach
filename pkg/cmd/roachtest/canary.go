@@ -163,7 +163,7 @@ func repeatRunE(
 // repeatRunWithBuffer is the same function as c.RunWithBuffer but with an
 // automatic retry loop.
 func repeatRunWithBuffer(
-	ctx context.Context, c *cluster, l *logger, node nodeListOption, operation string, args ...string,
+	ctx context.Context, c clusterI, t *test, node nodeListOption, operation string, args ...string,
 ) ([]byte, error) {
 	var (
 		lastResult []byte
@@ -173,14 +173,14 @@ func repeatRunWithBuffer(
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		if c.t.Failed() {
+		if t.Failed() {
 			return nil, fmt.Errorf("test has failed")
 		}
 		attempt++
-		c.l.Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithBuffer(ctx, l, node, args...)
+		t.l.Printf("attempt %d - %s", attempt, operation)
+		lastResult, lastError = c.RunWithBuffer(ctx, t.l, node, args...)
 		if lastError != nil {
-			c.l.Printf("error - retrying: %s\n%s", lastError, string(lastResult))
+			t.l.Printf("error - retrying: %s\n%s", lastError, string(lastResult))
 			continue
 		}
 		return lastResult, nil

@@ -85,13 +85,13 @@ func TestRunnerRun(t *testing.T) {
 	r.Add(testSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
-		Run:     func(ctx context.Context, t *test, c *cluster) {},
+		Run:     func(ctx context.Context, t *test, c clusterI) {},
 		Cluster: makeClusterSpec(0),
 	})
 	r.Add(testSpec{
 		Name:  "fail",
 		Owner: OwnerUnitTest,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			t.Fatal("failed")
 		},
 		Cluster: makeClusterSpec(0),
@@ -179,7 +179,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
 		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			<-ctx.Done()
 		},
 	}
@@ -197,7 +197,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {
-	dummyRun := func(context.Context, *test, *cluster) {}
+	dummyRun := func(context.Context, *test, clusterI) {}
 
 	var listTests = func(t *testSpec) []string {
 		return []string{t.Name}
@@ -286,7 +286,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
 				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c *cluster) {
+				Run: func(ctx context.Context, t *test, c clusterI) {
 					runA = true
 				},
 			})
@@ -295,7 +295,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c *cluster) {
+				Run: func(ctx context.Context, t *test, c clusterI) {
 					runB = true
 				},
 			})
@@ -345,7 +345,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
 		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			if injectedError != nil {
 				t.Fatal(injectedError)
 			}

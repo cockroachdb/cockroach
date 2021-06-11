@@ -20,7 +20,7 @@ import (
 
 func registerAlterPK(r *testRegistry) {
 
-	setupTest := func(ctx context.Context, t *test, c *cluster) (nodeListOption, nodeListOption) {
+	setupTest := func(ctx context.Context, t *test, c clusterI) (nodeListOption, nodeListOption) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		t.Status("copying binaries")
@@ -33,7 +33,7 @@ func registerAlterPK(r *testRegistry) {
 	}
 
 	// runAlterPKBank runs a primary key change while the bank workload runs.
-	runAlterPKBank := func(ctx context.Context, t *test, c *cluster) {
+	runAlterPKBank := func(ctx context.Context, t *test, c clusterI) {
 		const numRows = 1000000
 		const duration = 1 * time.Minute
 
@@ -88,7 +88,7 @@ func registerAlterPK(r *testRegistry) {
 	}
 
 	// runAlterPKTPCC runs a primary key change while the TPCC workload runs.
-	runAlterPKTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, expensiveChecks bool) {
+	runAlterPKTPCC := func(ctx context.Context, t *test, c clusterI, warehouses int, expensiveChecks bool) {
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
@@ -180,7 +180,7 @@ func registerAlterPK(r *testRegistry) {
 		// workload driver node.
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(4, cpu(32)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
 	})
@@ -191,7 +191,7 @@ func registerAlterPK(r *testRegistry) {
 		// workload driver node.
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runAlterPKTPCC(ctx, t, c, 500 /* warehouses */, false /* expensiveChecks */)
 		},
 	})

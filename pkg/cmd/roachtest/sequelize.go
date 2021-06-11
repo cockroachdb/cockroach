@@ -23,7 +23,7 @@ func registerSequelize(r *testRegistry) {
 	runSequelize := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -64,8 +64,8 @@ func registerSequelize(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Sequelize release is %s.", latestTag)
-		c.l.Printf("Supported Sequelize release is %s.", supportedSequelizeRelease)
+		t.l.Printf("Latest Sequelize release is %s.", latestTag)
+		t.l.Printf("Supported Sequelize release is %s.", supportedSequelizeRelease)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -137,7 +137,7 @@ func registerSequelize(r *testRegistry) {
 			`cd /mnt/data1/sequelize/ && npm test`,
 		)
 		rawResultsStr := string(rawResults)
-		c.l.Printf("Test Results: %s", rawResultsStr)
+		t.l.Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -149,7 +149,7 @@ func registerSequelize(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runSequelize(ctx, t, c)
 		},
 	})

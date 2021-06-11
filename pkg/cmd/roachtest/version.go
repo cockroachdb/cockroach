@@ -24,10 +24,10 @@ import (
 // TODO(tbg): remove this test. Use the harness in versionupgrade.go
 // to make a much better one, much more easily.
 func registerVersion(r *testRegistry) {
-	runVersion := func(ctx context.Context, t *test, c *cluster, binaryVersion string) {
+	runVersion := func(ctx context.Context, t *test, c clusterI, binaryVersion string) {
 		nodes := c.Spec().NodeCount - 1
 
-		if err := c.Stage(ctx, c.l, "release", "v"+binaryVersion, "", c.Range(1, nodes)); err != nil {
+		if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Range(1, nodes)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -98,7 +98,7 @@ func registerVersion(r *testRegistry) {
 					//
 					// https://github.com/cockroachdb/cockroach/issues/37737#issuecomment-496026918
 					if !strings.HasPrefix(binaryVersion, "2.") {
-						if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
+						if err := c.CheckReplicaDivergenceOnDB(ctx, t, db); err != nil {
 							return errors.Wrapf(err, "node %d", i)
 						}
 					}
@@ -172,7 +172,7 @@ func registerVersion(r *testRegistry) {
 				if err := stop(i); err != nil {
 					return err
 				}
-				if err := c.Stage(ctx, c.l, "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
+				if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
 				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
@@ -214,7 +214,7 @@ func registerVersion(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v2.1.0",
 			Cluster:    makeClusterSpec(n + 1),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				pred, err := PredecessorVersion(r.buildVersion)
 				if err != nil {
 					t.Fatal(err)
