@@ -182,6 +182,27 @@ func UpdateIndexPartitioning(
 	idx.KeyColumnIDs = append(newColumnIDs, idx.KeyColumnIDs[oldNumImplicitCols:]...)
 	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
 	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
+
+	newStoreColumnIDs := make([]descpb.ColumnID, 0, len(idx.StoreColumnIDs))
+	newStoreColumnNames := make([]string, 0, len(idx.StoreColumnNames))
+	for i := range idx.StoreColumnIDs {
+		id := idx.StoreColumnIDs[i]
+		name := idx.StoreColumnNames[i]
+		found := false
+		for _, newColumnName := range newColumnNames {
+			if newColumnName == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			newStoreColumnIDs = append(newStoreColumnIDs, id)
+			newStoreColumnNames = append(newStoreColumnNames, name)
+		}
+	}
+	idx.StoreColumnIDs = newStoreColumnIDs
+	idx.StoreColumnNames = newStoreColumnNames
+
 	idx.Partitioning = newPartitioning
 	return true
 }
