@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -27,6 +28,9 @@ type Cluster interface {
 
 	// DB returns access to the kv.
 	DB() *kv.DB
+
+	// Stopper returns a reference to a Stopper for spawning new tasks.
+	Stopper() *stop.Stopper
 
 	// ForEveryNode is a short hand to execute the given closure (named by the
 	// informational parameter op) against every node in the cluster at a given

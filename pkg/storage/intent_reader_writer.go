@@ -42,6 +42,9 @@ import (
 // running with this flag set to true for some time, most ranges will only
 // have separated intents. Similarly, setting this to false will gradually
 // cause most ranges to only have interleaved intents.
+//
+// TODO(bilal): Remove this setting and replace it with a testing knob, as we
+// no longer expect this setting to be toggled to false outside of tests.
 var SeparatedIntentsEnabled = settings.RegisterBoolSetting(
 	"storage.transaction.separated_intents.enabled",
 	"if enabled, intents will be written to a separate lock table, instead of being "+
