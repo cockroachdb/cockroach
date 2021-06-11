@@ -36,13 +36,13 @@ type singleKVFetcher struct {
 
 // nextBatch implements the kvBatchFetcher interface.
 func (f *singleKVFetcher) nextBatch(
-	_ context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
+	ctx context.Context,
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
 	if f.done {
-		return false, nil, nil, roachpb.Span{}, nil
+		return false, nil, nil, nil
 	}
 	f.done = true
-	return true, f.kvs[:], nil, roachpb.Span{}, nil
+	return true, f.kvs[:], nil, nil
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
