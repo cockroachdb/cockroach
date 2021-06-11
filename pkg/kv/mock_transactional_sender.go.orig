@@ -241,8 +241,8 @@ func MakeMockTxnSenderFactory(
 // requests.
 func MakeMockTxnSenderFactoryWithNonTxnSender(
 	senderFunc func(
-		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error),
+	context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error),
 	nonTxnSenderFunc SenderFunc,
 ) MockTxnSenderFactory {
 	return MockTxnSenderFactory{

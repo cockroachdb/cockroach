@@ -50,6 +50,14 @@ func (m *latchManagerImpl) WaitUntilAcquired(
 	return lg, nil
 }
 
+func (m *latchManagerImpl) WaitFor(ctx context.Context, ss *spanset.SpanSet) *Error {
+	err := m.m.WaitFor(ctx, ss)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	return nil
+}
+
 func (m *latchManagerImpl) Release(lg latchGuard) {
 	m.m.Release(lg.(*spanlatch.Guard))
 }
