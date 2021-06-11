@@ -66,6 +66,11 @@ const (
 	// InterleavedFormatVersion corresponds to the encoding described in
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160624_sql_interleaved_tables.md
 	InterleavedFormatVersion
+	// PrimaryIndexStoredColumnsFormatVersion is like the previous
+	// InterleavedFormatVersion encoding but with all column IDs and names being
+	// explicitly encoded in the primary index. Previously only the columns in the
+	// primary key were encoded.
+	PrimaryIndexStoredColumnsFormatVersion
 )
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
