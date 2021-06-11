@@ -14,8 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -130,6 +132,16 @@ func NewTenantCluster(db *kv.DB) *TenantCluster {
 // DB is part of the migration.Cluster interface.
 func (t *TenantCluster) DB() *kv.DB {
 	return t.db
+}
+
+// DistSender is part of the migration.Cluster interface.
+func (t *TenantCluster) DistSender() *kvcoord.DistSender {
+	return nil
+}
+
+// Stopper is part of the migration.Cluster interface.
+func (t *TenantCluster) Stopper() *stop.Stopper {
+	return nil
 }
 
 // ForEveryNode is part of the migration.Cluster interface.
