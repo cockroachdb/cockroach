@@ -338,6 +338,7 @@ func (s *Stopper) RunAsyncTask(
 	return s.RunAsyncTaskEx(ctx,
 		TaskOpts{
 			TaskName:   taskName,
+			ChildSpan:  false,
 			Sem:        nil,
 			WaitForSem: false,
 		},
@@ -349,6 +350,26 @@ type TaskOpts struct {
 	// TaskName is a human-readable name for the operation. Used as the name of
 	// the tracing span.
 	TaskName string
+
+	// ChildSpan, if set, creates the tracing span for the task via
+	// tracing.ChildSpan() instead of tracing.ForkSpan. This makes the task's span
+	// be part of the parent span's recording (it is created with the
+	// WithParentAndAutoCollection option instead of
+	// WithParentAndManualCollection). It also leads to a ChildOf relationship
+	// instead of a FollowsFrom relationship to be used for the task's span, which
+	// typically implies a non-binding expectation that the parent span will
+	// outlive the task's span, i.e. that the parent will wait for the task to
+	// complete.
+	//
+	// Regardless of this setting, if the caller doesn't have a span, the task
+	// doesn't get a span either.
+	//
+	// Setting ChildSpan can have consequences on memory usage. The lifetime of
+	// the task's span becomes tied to the lifetime of the parent. Generally
+	// ChildSpan should be used when the parent waits for the task to complete,
+	// and the parent is not a long-running process.
+	ChildSpan bool
+
 	// If set, Sem is used as a semaphore limiting the concurrency (each task has
 	// weight 1).
 	//
@@ -404,7 +425,13 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		return ErrUnavailable
 	}
 
-	ctx, span := tracing.ForkSpan(ctx, opt.TaskName)
+	// If the caller has a span, the task gets a child span.
+	var span *tracing.Span
+	if opt.ChildSpan {
+		ctx, span = tracing.ChildSpan(ctx, opt.TaskName)
+	} else {
+		ctx, span = tracing.ForkSpan(ctx, opt.TaskName)
+	}
 
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
