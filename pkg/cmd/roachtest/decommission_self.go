@@ -15,7 +15,7 @@ import "context"
 // runDecommissionSelf decommissions n2 through n2. This is an acceptance test.
 //
 // See https://github.com/cockroachdb/cockroach/issues/56718
-func runDecommissionSelf(ctx context.Context, t *test, c clusterI) {
+func runDecommissionSelf(ctx context.Context, t *test, c Cluster) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
 	const mainVersion = ""

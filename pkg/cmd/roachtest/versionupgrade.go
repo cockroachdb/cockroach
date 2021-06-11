@@ -77,7 +77,7 @@ DROP TABLE test.t;
 	`),
 }
 
-func runVersionUpgrade(ctx context.Context, t *test, c clusterI, buildVersion version.Version) {
+func runVersionUpgrade(ctx context.Context, t *test, c Cluster, buildVersion version.Version) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
@@ -215,7 +215,7 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 
 type versionUpgradeTest struct {
 	goOS  string
-	c     clusterI
+	c     Cluster
 	steps []versionStep
 
 	// Cache conns because opening one takes hundreds of ms, and we do it quite
@@ -223,7 +223,7 @@ type versionUpgradeTest struct {
 	conns []*gosql.DB
 }
 
-func newVersionUpgradeTest(c clusterI, steps ...versionStep) *versionUpgradeTest {
+func newVersionUpgradeTest(c Cluster, steps ...versionStep) *versionUpgradeTest {
 	return &versionUpgradeTest{
 		goOS:  ifLocal(runtime.GOOS, "linux"),
 		c:     c,
@@ -252,7 +252,7 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 // path of the uploaded binaries on the nodes, suitable to be used with
 // `roachdprod start --binary=<path>`.
 func uploadVersion(
-	ctx context.Context, t *test, c clusterI, nodes nodeListOption, newVersion string,
+	ctx context.Context, t *test, c Cluster, nodes nodeListOption, newVersion string,
 ) (binaryName string) {
 	binaryName = "./cockroach"
 	if newVersion == "" {
@@ -531,7 +531,7 @@ func stmtFeatureTest(
 // test will then fail on purpose when it's done with instructions on where to
 // move the files.
 func makeVersionFixtureAndFatal(
-	ctx context.Context, t *test, c clusterI, makeFixtureVersion string,
+	ctx context.Context, t *test, c Cluster, makeFixtureVersion string,
 ) {
 	var useLocalBinary bool
 	if makeFixtureVersion == "" {
