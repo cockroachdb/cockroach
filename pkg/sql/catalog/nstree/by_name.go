@@ -18,44 +18,18 @@ import (
 	"github.com/google/btree"
 )
 
-type byName struct {
-	t *btree.BTree
-}
-
-func (t byName) upsert(d catalog.NameEntry) (replaced catalog.NameEntry) {
-	return upsert(t.t, makeByNameItem(d).get())
-}
-
-func (t byName) getByName(
-	parentID, parentSchemaID descpb.ID, name string,
-) (catalog.NameEntry, bool) {
-	return get(t.t, byNameItem{
-		parentID:       parentID,
-		parentSchemaID: parentSchemaID,
-		name:           name,
-	}.get())
-}
-
-func (t byName) delete(d catalog.NameEntry) {
-	delete(t.t, makeByNameItem(d).get())
-}
-
-func (t byName) clear() {
-	clear(t.t)
-}
-
 type byNameItem struct {
 	parentID, parentSchemaID descpb.ID
 	name                     string
-	d                        catalog.NameEntry
+	v                        interface{}
 }
 
-func makeByNameItem(d catalog.NameEntry) byNameItem {
+func makeByNameItem(d catalog.NameKeyComponents) byNameItem {
 	return byNameItem{
 		parentID:       d.GetParentID(),
 		parentSchemaID: d.GetParentSchemaID(),
 		name:           d.GetName(),
-		d:              d,
+		v:              d,
 	}
 }
 
@@ -72,8 +46,8 @@ func (b *byNameItem) Less(thanItem btree.Item) bool {
 	return b.name < than.name
 }
 
-func (b *byNameItem) descriptor() catalog.NameEntry {
-	return b.d
+func (b *byNameItem) value() interface{} {
+	return b.v
 }
 
 var byNameItemPool = sync.Pool{
