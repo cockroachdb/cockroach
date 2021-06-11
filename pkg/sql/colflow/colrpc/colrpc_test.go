@@ -351,11 +351,9 @@ func TestOutboxInbox(t *testing.T) {
 					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
 						for i := range typs {
 							batchCopy.ColVec(i).Copy(
-								coldata.CopySliceArgs{
-									SliceArgs: coldata.SliceArgs{
-										Src:       outputBatch.ColVec(i),
-										SrcEndIdx: outputBatch.Length(),
-									},
+								coldata.SliceArgs{
+									Src:       outputBatch.ColVec(i),
+									SrcEndIdx: outputBatch.Length(),
 								},
 							)
 						}

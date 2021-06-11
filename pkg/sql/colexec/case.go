@@ -178,13 +178,11 @@ func (c *caseOp) copyIntoScratch(batch coldata.Batch, inputColIdx int, numAlread
 	// vector to copy only the elements that we actually wrote according to the
 	// current projection arm.
 	c.scratch.output.Copy(
-		coldata.CopySliceArgs{
-			SliceArgs: coldata.SliceArgs{
-				Src:       inputCol,
-				Sel:       batch.Selection()[:n],
-				DestIdx:   numAlreadyMatched,
-				SrcEndIdx: n,
-			},
+		coldata.SliceArgs{
+			Src:       inputCol,
+			Sel:       batch.Selection()[:n],
+			DestIdx:   numAlreadyMatched,
+			SrcEndIdx: n,
 		})
 	for j, tupleIdx := range batch.Selection()[:n] {
 		c.scratch.order[tupleIdx] = numAlreadyMatched + j
@@ -330,11 +328,9 @@ func (c *caseOp) Next() coldata.Batch {
 		batch := c.elseOp.Next()
 		c.allocator.PerformOperation([]coldata.Vec{outputCol}, func() {
 			outputCol.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:       batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1]),
-						SrcEndIdx: origLen,
-					},
+				coldata.SliceArgs{
+					Src:       batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1]),
+					SrcEndIdx: origLen,
 				})
 		})
 		outputReady = true
@@ -357,12 +353,10 @@ func (c *caseOp) Next() coldata.Batch {
 				outputCol.CopyWithReorderedSource(c.scratch.output, c.origSel, c.scratch.order)
 			} else {
 				outputCol.Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:       c.scratch.output,
-							Sel:       c.scratch.order,
-							SrcEndIdx: origLen,
-						},
+					coldata.SliceArgs{
+						Src:       c.scratch.output,
+						Sel:       c.scratch.order,
+						SrcEndIdx: origLen,
 					})
 			}
 		})

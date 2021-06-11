@@ -116,11 +116,9 @@ func (s *RepeatableBatchSource) Next() coldata.Batch {
 		// This Copy is outside of the allocator since the RepeatableBatchSource is
 		// a test utility which is often used in the benchmarks, and we want to
 		// reduce the performance impact of this operator.
-		s.output.ColVec(i).Copy(coldata.CopySliceArgs{
-			SliceArgs: coldata.SliceArgs{
-				Src:       colVec,
-				SrcEndIdx: s.numToCopy,
-			},
+		s.output.ColVec(i).Copy(coldata.SliceArgs{
+			Src:       colVec,
+			SrcEndIdx: s.numToCopy,
 		})
 	}
 	s.output.SetLength(s.batchLen)

@@ -585,14 +585,12 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		o.unlimitedAllocator.PerformOperation(bufferedGroup.firstTuple, func() {
 			for colIdx := range sourceTypes {
 				bufferedGroup.firstTuple[colIdx].Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:         batch.ColVec(colIdx),
-							Sel:         sel,
-							DestIdx:     0,
-							SrcStartIdx: groupStartIdx,
-							SrcEndIdx:   groupStartIdx + 1,
-						},
+					coldata.SliceArgs{
+						Src:         batch.ColVec(colIdx),
+						Sel:         sel,
+						DestIdx:     0,
+						SrcStartIdx: groupStartIdx,
+						SrcEndIdx:   groupStartIdx + 1,
 					},
 				)
 			}
@@ -608,14 +606,12 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	o.unlimitedAllocator.PerformOperation(bufferedGroup.scratchBatch.ColVecs(), func() {
 		for colIdx := range input.sourceTypes {
 			bufferedGroup.scratchBatch.ColVec(colIdx).Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:         batch.ColVec(colIdx),
-						Sel:         sel,
-						DestIdx:     0,
-						SrcStartIdx: groupStartIdx,
-						SrcEndIdx:   groupStartIdx + groupLength,
-					},
+				coldata.SliceArgs{
+					Src:         batch.ColVec(colIdx),
+					Sel:         sel,
+					DestIdx:     0,
+					SrcStartIdx: groupStartIdx,
+					SrcEndIdx:   groupStartIdx + groupLength,
 				},
 			)
 		}
