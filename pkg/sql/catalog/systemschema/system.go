@@ -608,6 +608,14 @@ CREATE TABLE system.sql_instances (
     session_id   BYTES,
     FAMILY "primary" (id, addr, session_id)
 )`
+
+	SpanConfigurationsTableSchema = `
+CREATE TABLE system.span_configurations (
+    start_key    BYTES NOT NULL PRIMARY KEY,
+    end_key      BYTES NOT NULL,
+    config        BYTES NOT NULL,
+    FAMILY "primary" (start_key, end_key, config)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2193,6 +2201,29 @@ var (
 				},
 			},
 			pk("id"),
+		))
+
+	// SpanConfigurationsTable is the descriptor for the system tenant's span
+	// configurations table.
+	SpanConfigurationsTable = registerSystemTable(
+		SpanConfigurationsTableSchema,
+		systemTable(
+			catconstants.SpanConfigurationsTableName,
+			keys.SpanConfigurationsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "start_key", ID: 1, Type: types.Bytes},
+				{Name: "end_key", ID: 2, Type: types.Bytes},
+				{Name: "config", ID: 3, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"start_key", "end_key", "config"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			pk("start_key"),
 		))
 
 	// UnleasableSystemDescriptors contains the system descriptors which cannot

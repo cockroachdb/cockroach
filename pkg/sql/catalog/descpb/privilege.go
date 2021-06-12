@@ -385,6 +385,7 @@ func (p PrivilegeDescriptor) AnyPrivilege(user security.SQLUsername) bool {
 	return userPriv.Privileges != 0
 }
 
+// keys.SQLInstancesTableID
 // SetOwner sets the owner of the privilege descriptor to the provided string.
 func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUsername) {
 	p.OwnerProto = owner.EncodeProto()

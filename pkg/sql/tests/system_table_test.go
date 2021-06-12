@@ -172,7 +172,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	const expectedNumberOfSystemTables = 36
+	const expectedNumberOfSystemTables = 37
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
 
 	for name, test := range testcases {
