@@ -15,16 +15,17 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/spf13/cobra"
 )
 
 var mtTestDirectorySvr = &cobra.Command{
 	Use:   "test-directory",
-	Short: "Run a test directory service.",
+	Short: "run a test directory service",
 	Long: `
-Run a test directory service.
+Run a test directory service that starts and manages tenant SQL instances as
+processes on the local machine.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runDirectorySvr),
@@ -40,7 +41,7 @@ func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {
 	}
 	defer stopper.Stop(ctx)
 
-	tds, err := tenant.NewTestDirectoryServer(stopper)
+	tds, err := tenantdirsvr.New(stopper)
 	if err != nil {
 		return err
 	}

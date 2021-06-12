@@ -38,6 +38,8 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )
 
@@ -51,17 +53,13 @@ go_test(
         "proxy_handler_test.go",
         "server_test.go",
     ],
-    data = [
-        ":testserver.crt",
-        ":testserver.key",
-        ":testserver_config.cnf",
-    ],
+    data = [":testdata"],
     embed = [":sqlproxyccl"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/denylist",
-        "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security",
