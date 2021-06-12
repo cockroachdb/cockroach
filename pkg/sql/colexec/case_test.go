@@ -48,8 +48,8 @@ func TestCaseOp(t *testing.T) {
 		{
 			// Basic test.
 			tuples:     colexectestutils.Tuples{{1}, {2}, {nil}, {3}},
-			renderExpr: "CASE WHEN @1 = 2 THEN 1 ELSE 0 END",
-			expected:   colexectestutils.Tuples{{0}, {1}, {0}, {0}},
+			renderExpr: "CASE WHEN @1 = 2 THEN 1 ELSE 42 END",
+			expected:   colexectestutils.Tuples{{42}, {1}, {42}, {42}},
 			inputTypes: []*types.T{types.Int},
 		},
 		{
@@ -65,6 +65,16 @@ func TestCaseOp(t *testing.T) {
 			renderExpr: "CASE WHEN @1 = 2 THEN 0::FLOAT WHEN @1 / @2 = 1 THEN 1::FLOAT END",
 			expected:   colexectestutils.Tuples{{nil}, {0.0}, {nil}, {1.0}},
 			inputTypes: []*types.T{types.Int, types.Int},
+		},
+		{
+			// Test when only the ELSE arm matches.
+			//
+			// Note that all input values are NULLs so that the "all nulls
+			// injection" subtest is skipped.
+			tuples:     colexectestutils.Tuples{{nil}, {nil}, {nil}, {nil}},
+			renderExpr: "CASE WHEN @1 = 42 THEN 1 WHEN @1 IS NOT NULL THEN 2 ELSE 42 END",
+			expected:   colexectestutils.Tuples{{42}, {42}, {42}, {42}},
+			inputTypes: []*types.T{types.Int},
 		},
 	} {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {

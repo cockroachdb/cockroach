@@ -31,6 +31,9 @@ func genVec(inputFileContents string, wr io.Writer) error {
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 6)
 	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "Sliceable" .Sliceable "SelOnDest" $6}}`)
 
+	copyWithReorderedSource := makeFunctionRegex("_COPY_WITH_REORDERED_SOURCE", 1)
+	s = copyWithReorderedSource.ReplaceAllString(s, `{{template "copyWithReorderedSource" buildDict "SrcHasNulls" $1}}`)
+
 	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.

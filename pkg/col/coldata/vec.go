@@ -119,6 +119,12 @@ type Vec interface {
 	// Refer to the CopySliceArgs comment for specifics and TestCopy for examples.
 	Copy(CopySliceArgs)
 
+	// CopyWithReorderedSource copies a value at position order[sel[i]] in src
+	// into the receiver at position sel[i]. len(sel) elements are copied.
+	// Resulting values of elements not mentioned in sel are undefined after
+	// this function.
+	CopyWithReorderedSource(src Vec, sel, order []int)
+
 	// Window returns a "window" into the Vec. A "window" is similar to Golang's
 	// slice of the current Vec from [start, end), but the returned object is NOT
 	// allowed to be modified (the modification might result in an undefined

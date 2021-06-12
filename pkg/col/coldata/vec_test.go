@@ -415,6 +415,44 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 	require.True(t, dst.Nulls().NullAt(4))
 }
 
+func TestCopyWithReorderedSource(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+	var typ = types.Int
+
+	for _, hasNulls := range []bool{false, true} {
+		src := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)
+		srcInts := src.Int64()
+		sel := make([]int, 0, coldata.BatchSize())
+		for i := range srcInts {
+			srcInts[i] = rng.Int63()
+			if rng.Float64() < 0.5 {
+				sel = append(sel, i)
+			}
+			if hasNulls && rng.Float64() < 0.1 {
+				src.Nulls().SetNull(i)
+			}
+		}
+
+		order := make([]int, coldata.BatchSize())
+		for i, o := range rng.Perm(len(sel)) {
+			order[sel[i]] = o
+		}
+
+		dest := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)
+		dest.CopyWithReorderedSource(src, sel, order)
+		destInts := dest.Int64()
+
+		for _, idx := range sel {
+			srcIdx := order[idx]
+			if hasNulls && src.Nulls().NullAt(srcIdx) {
+				require.True(t, dest.Nulls().NullAt(idx))
+				continue
+			}
+			require.Equal(t, srcInts[srcIdx], destInts[idx])
+		}
+	}
+}
+
 func BenchmarkAppend(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	sel := rng.Perm(coldata.BatchSize())
