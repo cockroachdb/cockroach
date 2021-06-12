@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1119,4 +1120,300 @@ func TestDefaultRangeSizesAreSane(t *testing.T) {
 		DefaultSystemZoneConfigRef().String())
 	require.Regexp(t, "range_min_bytes:134217728 range_max_bytes:536870912",
 		DefaultZoneConfigRef().String())
+}
+
+// TestZoneConfigToSpanConfigConversion tests zone configurations are correctly
+// translated to span configurations using `toSpanConfig`.
+func TestZoneConfigToSpanConfigConversion(t *testing.T) {
+	testCases := []struct {
+		zoneConfig       ZoneConfig
+		errorStr         string
+		expectSpanConfig roachpb.SpanConfig
+	}{
+		{
+			zoneConfig: ZoneConfig{},
+			errorStr:   "expected hydrated zone config: RangeMaxBytes, RangeMinBytes, GCPolicy, NumReplicas unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				NumReplicas: proto.Int32(3),
+			},
+			errorStr: "expected hydrated zone config: RangeMaxBytes unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMaxBytes: proto.Int64(200000),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				NumReplicas: proto.Int32(3),
+			},
+			errorStr: "expected hydrated zone config: RangeMinBytes unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+			},
+			errorStr: "expected hydrated zone config: GCPolicy unset",
+		},
+		{
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			errorStr: "expected hydrated zone config: NumReplicas unset",
+		},
+		{
+			// Basic sanity check test.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes:    100000,
+				RangeMaxBytes:    200000,
+				GCTTL:            2400,
+				GlobalReads:      false,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test GlobalReads set to true.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GlobalReads:   proto.Bool(true),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes:    100000,
+				RangeMaxBytes:    200000,
+				GCTTL:            2400,
+				GlobalReads:      true,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test GlobalReads set to false (explicitly).
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GlobalReads:   proto.Bool(false),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes:    100000,
+				RangeMaxBytes:    200000,
+				GCTTL:            2400,
+				GlobalReads:      false,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test `DEPRECATED_POSITIVE` constraints throw an error.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GlobalReads:   proto.Bool(false),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				Constraints: []ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []Constraint{
+							{Type: Constraint_DEPRECATED_POSITIVE, Key: "region", Value: "region_a"},
+						},
+					},
+				},
+			},
+			errorStr: "unknown constraint type",
+		},
+		{
+			// Test Constraints are translated correctly, both positive and negative.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				Constraints: []ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCTTL:         2400,
+				GlobalReads:   false,
+				NumVoters:     0,
+				NumReplicas:   3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test VoterConstraints are translated properly.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				VoterConstraints: []ConstraintsConjunction{
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes: 100000,
+				RangeMaxBytes: 200000,
+				GCTTL:         2400,
+				GlobalReads:   false,
+				NumVoters:     0,
+				NumReplicas:   3,
+				Constraints:   []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_PROHIBITED, Key: "region", Value: "region_b"},
+						},
+					},
+				},
+				LeasePreferences: []roachpb.LeasePreference{},
+			},
+		},
+		{
+			// Test LeasePreferences are translated properly.
+			zoneConfig: ZoneConfig{
+				RangeMinBytes: proto.Int64(100000),
+				RangeMaxBytes: proto.Int64(200000),
+				NumReplicas:   proto.Int32(3),
+				GC: &GCPolicy{
+					TTLSeconds: 2400,
+				},
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						Constraints: []Constraint{
+							{Type: Constraint_PROHIBITED, Key: "region", Value: "region_c"},
+						},
+					},
+				},
+			},
+			expectSpanConfig: roachpb.SpanConfig{
+				RangeMinBytes:    100000,
+				RangeMaxBytes:    200000,
+				GCTTL:            2400,
+				GlobalReads:      false,
+				NumVoters:        0,
+				NumReplicas:      3,
+				Constraints:      []roachpb.ConstraintsConjunction{},
+				VoterConstraints: []roachpb.ConstraintsConjunction{},
+				LeasePreferences: []roachpb.LeasePreference{
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+						},
+					},
+					{
+						Constraints: []roachpb.Constraint{
+							{Type: roachpb.Constraint_PROHIBITED, Key: "region", Value: "region_c"},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		spanConfig, err := tc.zoneConfig.toSpanConfig()
+		if tc.errorStr != "" {
+			require.Truef(t, testutils.IsError(err, tc.errorStr), "mismatched errors: expected %q got %q", tc.errorStr, err.Error())
+		}
+		require.Equal(t, tc.expectSpanConfig, spanConfig)
+	}
 }

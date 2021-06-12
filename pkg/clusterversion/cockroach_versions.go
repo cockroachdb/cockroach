@@ -307,6 +307,10 @@ const (
 	// GeneratedAsIdentity is the syntax support for `GENERATED {ALWAYS | BY
 	// DEFAULT} AS IDENTITY` under `CREATE TABLE` syntax.
 	GeneratedAsIdentity
+	// SpanConfigurationsTable adds the span configurations system table, to
+	// store all KV span configs.
+	SpanConfigurationsTable
+
 	// Step (1): Add new versions here.
 )
 
@@ -525,6 +529,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     GeneratedAsIdentity,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 150},
+	},
+	{
+		Key:     SpanConfigurationsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 152},
 	},
 
 	// Step (2): Add new versions here.
