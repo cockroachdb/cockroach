@@ -90,6 +90,8 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
 
+var _ config.SpanConfigAccessor = (*Connector)(nil)
+
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
 func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
@@ -434,4 +436,47 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	if c.mu.client == client {
 		c.mu.client = nil
 	}
+}
+
+// GetSpanConfigsFor implements the config.SpanConfigAccessor interface.
+func (c *Connector) GetSpanConfigsFor(
+	ctx context.Context, span roachpb.Span,
+) ([]roachpb.SpanConfigEntry, error) {
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		resp, err := client.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
+			Span: span,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resp.SpanConfigs, nil
+	}
+	return nil, ctx.Err()
+}
+
+// UpdateSpanConfigEntries implements the config.SpanConfigAccessor interface.
+func (c *Connector) UpdateSpanConfigEntries(
+	ctx context.Context, upsert, delete []roachpb.SpanConfigEntry,
+) error {
+	// TODO(zcfgs-pod): Wire this up to the reconciliation job for it to be able
+	// to write out span config entries.
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		_, err = client.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
+			SpanConfigsToUpsert: upsert,
+			SpanConfigsToDelete: delete,
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return ctx.Err()
 }

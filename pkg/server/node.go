@@ -32,11 +32,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -45,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1317,4 +1321,160 @@ func (n *Node) Join(
 		StoreID:       int32(storeID),
 		ActiveVersion: &activeVersion.Version,
 	}, nil
+}
+
+// GetSpanConfigs implements the roachpb.InternalServer interface.
+func (n *Node) GetSpanConfigs(
+	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
+) (resp *roachpb.GetSpanConfigsResponse, err error) {
+	if req.Span.Valid() || len(req.Span.EndKey) == 0 {
+		return nil, errors.Newf("invalid span: %s", req.Span)
+	}
+
+	var res []roachpb.SpanConfigEntry
+	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		res = res[:0]
+
+		it, err := n.sqlExec.QueryIteratorEx(ctx, "get-span-cfgs", txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			`SELECT start_key, end_key, config FROM system.span_configurations
+			WHERE $1 < end_key AND start_key < $2`,
+			req.Span.Key, req.Span.EndKey,
+		)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if closeErr := it.Close(); closeErr != nil {
+				resp, err = nil, errors.CombineErrors(err, closeErr)
+			}
+		}()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
+
+			span := roachpb.Span{
+				Key:    []byte(*row[0].(*tree.DBytes)),
+				EndKey: []byte(*row[1].(*tree.DBytes)),
+			}
+			var scfg roachpb.SpanConfig
+			if err := protoutil.Unmarshal(([]byte)(*row[2].(*tree.DBytes)), &scfg); err != nil {
+				return err
+			}
+
+			res = append(res, roachpb.SpanConfigEntry{
+				Span:   span,
+				Config: scfg,
+			})
+		}
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &roachpb.GetSpanConfigsResponse{SpanConfigs: res}, nil
+}
+
+// UpdateSpanConfigs implements the roachpb.InternalServer interface.
+func (n *Node) UpdateSpanConfigs(
+	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	for _, list := range [][]roachpb.SpanConfigEntry{
+		req.SpanConfigsToDelete,
+		req.SpanConfigsToUpsert,
+	} {
+		for _, scfg := range list {
+			if scfg.Span.Valid() || len(scfg.Span.EndKey) == 0 {
+				// TODO(zcfgs-pod): Should we consider spans with empty end
+				// keys as invalid?
+				return nil, errors.Newf("invalid span: %s", scfg.Span)
+			}
+		}
+
+		for i := range list {
+			for j := range list {
+				if i == j {
+					continue
+				}
+
+				if list[i].Span.Overlaps(list[j].Span) {
+					return nil, errors.Newf("found overlapping spans %s and %s in same list",
+						list[i].Span, list[j].Span)
+				}
+			}
+		}
+	}
+
+	sort.Slice(req.SpanConfigsToDelete, func(i, j int) bool {
+		return req.SpanConfigsToDelete[i].Span.Key.Compare(req.SpanConfigsToDelete[j].Span.Key) < 0
+	})
+	sort.Slice(req.SpanConfigsToUpsert, func(i, j int) bool {
+		return req.SpanConfigsToUpsert[i].Span.Key.Compare(req.SpanConfigsToUpsert[j].Span.Key) < 0
+	})
+
+	// TODO(zcfgs-pod): Instead of simply upserting/deleting into the table, we
+	// could "merge" into the existing state -- it would make for simpler
+	// client-side operations. Given an initial state, and sets of span configs
+	// to delete and upsert, we could do the following:
+	//
+	// Initial      [--------A-------)     [-------B------)[---------C---------)
+	// -------------------------------------------------------------------------
+	// Upsert(+)         [----D------)         [-------B------)
+	// Delete(-)                                                         [-----)
+	// -------------------------------------------------------------------------
+	//              [-A-)[----D------)     [---------B--------)[----C----)
+
+	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		for _, scfg := range req.SpanConfigsToDelete {
+			n, err := n.sqlExec.ExecEx(ctx, "update-span-cfgs", txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				"DELETE FROM system.span_configurations WHERE start_key = $1 AND end_key = $2",
+				scfg.Span.Key, scfg.Span.EndKey,
+			)
+			if err != nil {
+				return err
+			}
+			if n != 1 {
+				return errors.AssertionFailedf("expected to delete single row, deleted %d", n)
+			}
+		}
+
+		for _, scfg := range req.SpanConfigsToUpsert {
+			buf, err := protoutil.Marshal(&scfg.Config)
+			if err != nil {
+				return err
+			}
+			if _, err := n.sqlExec.ExecEx(ctx, "update-span-cfgs", txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				"UPSERT INTO system.span_configurations (start_key, end_key, config) VALUES ($1, $2, $3)",
+				scfg.Span.Key, scfg.Span.EndKey, buf,
+			); err != nil {
+				return err
+			}
+
+		}
+
+		for _, scfg := range req.SpanConfigsToUpsert {
+			datums, err := n.sqlExec.QueryRowEx(ctx, "check-span-cfgs", txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				`SELECT count(*) FROM system.span_configurations WHERE $1 < end_key AND start_key < $2`,
+				scfg.Span.Key, scfg.Span.EndKey,
+			)
+			if err != nil {
+				return err
+			}
+			if count := int64(tree.MustBeDInt(datums[0])); count != 1 {
+				return errors.AssertionFailedf("expected to find single row containing %s, found %d", scfg.Span, count)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &roachpb.UpdateSpanConfigsResponse{}, nil
 }

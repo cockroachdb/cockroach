@@ -52,6 +52,12 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*roachpb.GossipSubscriptionRequest))
 
+	case "/cockroach.roachpb.Internal/GetSpanConfigs":
+		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
+
+	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
+		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
+
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no authorization
 
@@ -164,6 +170,52 @@ var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
 	"system-db",
+}
+
+// authGetSpanConfigs authorizes the provided tenant to invoke the
+// GetSpanConfigs RPC with the provided args.
+func (a tenantAuthorizer) authGetSpanConfigs(
+	tenID roachpb.TenantID, args *roachpb.GetSpanConfigsRequest,
+) error {
+	rSpan, err := keys.SpanAddr(args.Span)
+	if err != nil {
+		return authError(err.Error())
+	}
+	tenSpan := tenantPrefix(tenID)
+	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+	}
+	return nil
+}
+
+// authUpdateSpanConfigs authorizes the provided tenant to invoke the
+// UpdateSpanConfigs RPC with the provided args.
+func (a tenantAuthorizer) authUpdateSpanConfigs(
+	tenID roachpb.TenantID, args *roachpb.UpdateSpanConfigsRequest,
+) error {
+	tenSpan := tenantPrefix(tenID)
+	validate := func(sp roachpb.Span) error {
+		rSpan, err := keys.SpanAddr(sp)
+		if err != nil {
+			return authError(err.Error())
+		}
+		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+		}
+		return nil
+	}
+
+	for _, entries := range [][]roachpb.SpanConfigEntry{
+		args.SpanConfigsToUpsert,
+		args.SpanConfigsToDelete,
+	} {
+		for _, entry := range entries {
+			if err := validate(entry.Span); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {

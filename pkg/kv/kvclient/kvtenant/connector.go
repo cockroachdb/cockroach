@@ -40,24 +40,31 @@ type Connector interface {
 	// Start starts the connector.
 	Start(context.Context) error
 
-	// Connector is capable of providing information on each of the KV nodes in
-	// the cluster in the form of NodeDescriptors. This obviates the need for
-	// SQL-only tenant processes to join the cluster-wide gossip network.
+	// NodeDescStore provides information on each of the KV nodes in the cluster
+	// in the form of NodeDescriptors. This obviates the need for SQL-only
+	// tenant processes to join the cluster-wide gossip network.
 	kvcoord.NodeDescStore
 
-	// Connector is capable of providing Range addressing information in the
-	// form of RangeDescriptors through delegated RangeLookup requests. This is
+	// RangeDescriptorDB provides range addressing information in the form of
+	// RangeDescriptors through delegated RangeLookup requests. This is
 	// necessary because SQL-only tenants are restricted from reading Range
 	// Metadata keys directly. Instead, the RangeLookup requests are proxied
 	// through existing KV nodes while being subject to additional validation
 	// (e.g. is the Range being requested owned by the requesting tenant?).
 	rangecache.RangeDescriptorDB
 
-	// Connector is capable of providing a filtered view of the SystemConfig
+	// SystemConfigProvider provides a filtered view of the SystemConfig
 	// containing only information applicable to secondary tenants. This
 	// obviates the need for SQL-only tenant processes to join the cluster-wide
 	// gossip network.
 	config.SystemConfigProvider
+
+	// SpanConfigAccessor mediates access to the subset of the cluster's span
+	// configs applicable to secondary tenants. Attempts to set span
+	// configurations are subject to admission control by KV (e.g. is the tenant
+	// attempting to configure a number of spans greater than what they're
+	// allowed to?).
+	config.SpanConfigAccessor
 }
 
 // ConnectorConfig encompasses the configuration required to create a Connector.

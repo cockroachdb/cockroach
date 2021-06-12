@@ -186,8 +186,23 @@ func (m *mockInternalClient) GossipSubscription(
 	return nil, fmt.Errorf("unsupported GossipSubscripion call")
 }
 
+// Join is part of the roachpb.InternalClient interface.
 func (m *mockInternalClient) Join(
 	context.Context, *roachpb.JoinNodeRequest, ...grpc.CallOption,
 ) (*roachpb.JoinNodeResponse, error) {
 	return nil, fmt.Errorf("unsupported Join call")
+}
+
+// GetSpanConfigs is part of the roachpb.InternalClient interface.
+func (*mockInternalClient) GetSpanConfigs(
+	context.Context, *roachpb.GetSpanConfigsRequest, ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported GetSpanConfigs call")
+}
+
+// UpdateSpanConfigs is part of the roachpb.InternalClient interface.
+func (*mockInternalClient) UpdateSpanConfigs(
+	context.Context, *roachpb.UpdateSpanConfigsRequest, ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported UpdateSpanConfigs call")
 }
