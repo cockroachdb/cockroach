@@ -193,3 +193,18 @@ CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE
 exec-ddl
 DROP TABLE self
 ----
+
+# Verify that we can use "ALTER TABLE ... ADD FOREIGN KEY" syntax to reference
+# a primary key without specifying the referenced column(s).
+
+exec-ddl
+CREATE TABLE child_implied_ref(ref INT, INDEX (ref))
+----
+
+exec-ddl
+ALTER TABLE child_implied_ref ADD FOREIGN KEY (ref) REFERENCES parent
+----
+
+exec-ddl
+DROP TABLE child_implied_ref
+----
