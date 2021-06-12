@@ -213,6 +213,60 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	}
 }
 
+// {{/*
+func _COPY_WITH_REORDERED_SOURCE(_SRC_HAS_NULLS bool) { // */}}
+	// {{define "copyWithReorderedSource" -}}
+	for i := 0; i < n; i++ {
+		//gcassert:bce
+		destIdx := sel[i]
+		srcIdx := order[destIdx]
+		// {{if .SrcHasNulls}}
+		if nulls.NullAt(srcIdx) {
+			m.nulls.SetNull(destIdx)
+		} else
+		// {{end}}
+		{
+			v := fromCol.Get(srcIdx)
+			toCol.Set(destIdx, v)
+		}
+	}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
+	if len(sel) == 0 {
+		return
+	}
+	if m.nulls.MaybeHasNulls() {
+		m.nulls.UnsetNulls()
+	}
+	switch m.CanonicalTypeFamily() {
+	// {{range .}}
+	case _CANONICAL_TYPE_FAMILY:
+		switch m.t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			fromCol := src.TemplateType()
+			toCol := m.TemplateType()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				_COPY_WITH_REORDERED_SOURCE(true)
+			} else {
+				_COPY_WITH_REORDERED_SOURCE(false)
+			}
+			// {{end}}
+		}
+		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %s", m.t))
+	}
+}
+
 func (m *memColumn) Window(start int, end int) Vec {
 	switch m.CanonicalTypeFamily() {
 	// {{range .}}
