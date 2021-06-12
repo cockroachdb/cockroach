@@ -381,8 +381,26 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		targetTable = tc.Table(&d.Table)
 	}
 
-	toCols := make([]int, len(d.ToCols))
-	for i, c := range d.ToCols {
+	referencedColNames := d.ToCols
+	if len(referencedColNames) == 0 {
+		// If no columns are specified, attempt to default to PK, ignoring implicit
+		// columns.
+		idx := targetTable.Index(cat.PrimaryIndex)
+		numImplicitCols := idx.ImplicitPartitioningColumnCount()
+		referencedColNames = make(
+			tree.NameList,
+			0,
+			idx.KeyColumnCount()-numImplicitCols,
+		)
+		for i := numImplicitCols; i < idx.KeyColumnCount(); i++ {
+			referencedColNames = append(
+				referencedColNames,
+				idx.Column(i).ColName(),
+			)
+		}
+	}
+	toCols := make([]int, len(referencedColNames))
+	for i, c := range referencedColNames {
 		toCols[i] = targetTable.FindOrdinal(string(c))
 	}
 
