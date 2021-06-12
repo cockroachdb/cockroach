@@ -146,8 +146,9 @@ func TestInitialKeysAndSplits(t *testing.T) {
 // statement strings that describe each system table with the TableDescriptor
 // literals that are actually used at runtime. This ensures we can use the hand-
 // written literals instead of having to evaluate the `CREATE TABLE` statements
-// before initialization and with limited SQL machinery bootstraped, while still
-// confident that the result is the same as if `CREATE TABLE` had been run.
+// before initialization and with limited SQL machinery bootstrapped, while
+// still confident that the result is the same as if `CREATE TABLE` had been
+// run.
 //
 // This test may also be useful when writing a new system table:
 // adding the new schema along with a trivial, empty TableDescriptor literal
@@ -172,7 +173,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	const expectedNumberOfSystemTables = 36
+	const expectedNumberOfSystemTables = 37
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
 
 	for name, test := range testcases {

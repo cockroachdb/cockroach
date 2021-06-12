@@ -112,6 +112,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigjob",
+        "//pkg/spanconfig/spanconfigkvaccessor",
         "//pkg/spanconfig/spanconfigmanager",
         "//pkg/sql",
         "//pkg/sql/catalog/bootstrap",

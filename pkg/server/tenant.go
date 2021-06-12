@@ -431,6 +431,7 @@ func makeTenantSQLServerArgs(
 		rpcContext:               rpcContext,
 		nodeDescs:                tenantConnect,
 		systemConfigProvider:     tenantConnect,
+		spanConfigAccessor:       tenantConnect,
 		nodeDialer:               nodeDialer,
 		distSender:               ds,
 		db:                       db,
