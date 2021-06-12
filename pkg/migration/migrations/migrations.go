@@ -115,6 +115,12 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.RetryJobsWithExponentialBackoff),
 		NoPrecondition,
 		retryJobsWithExponentialBackoff),
+	migration.NewTenantMigration(
+		"add the system.span_configurations table",
+		toCV(clusterversion.SpanConfigurationsTable),
+		NoPrecondition,
+		spanConfigurationsTableMigration,
+	),
 }
 
 func init() {
