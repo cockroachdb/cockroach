@@ -89,7 +89,7 @@ func (p *scanRequestScanner) Scan(
 
 		g.GoCtx(func(ctx context.Context) error {
 			defer limAlloc.Release()
-			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.knobs)
+			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if log.V(2) {
 				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
@@ -105,8 +105,8 @@ func (p *scanRequestScanner) exportSpan(
 	span roachpb.Span,
 	ts hlc.Timestamp,
 	withDiff bool,
-	sink kvevent.Writer,,
-	knobs testingKnobs,
+	sink kvevent.Writer,
+	knobs TestingKnobs,
 ) error {
 	txn := p.db.NewTxn(ctx, "changefeed backfill")
 	if log.V(2) {
@@ -126,8 +126,8 @@ func (p *scanRequestScanner) exportSpan(
 		// the MVCC timestamps which are encoded in the response but are filtered
 		// during result parsing.
 		b.AddRawRequest(r)
-		if knobs.beforeScanRequest != nil {
-			knobs.beforeScanRequest(b)
+		if knobs.BeforeScanRequest != nil {
+			knobs.BeforeScanRequest(b)
 		}
 
 		if err := txn.Run(ctx, b); err != nil {

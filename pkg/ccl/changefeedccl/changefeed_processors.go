@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -265,9 +266,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
 	buf := kvevent.MakeChanBuffer()
-	schemaFeed := newSchemaFeed(ctx, ca.flowCtx.Cfg, ca.spec, ca.metrics)
-	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, ca.kvFeedMemMon, ca.spec,
-		spans, buf, ca.metrics, schemaFeed)
+	kvfeedCfg := makeKVFeedCfg(ctx, ca.flowCtx.Cfg, ca.kvFeedMemMon,
+		ca.spec, spans, buf, ca.metrics, ca.knobs.FeedKnobs)
 	cfg := ca.flowCtx.Cfg
 
 	ca.eventProducer = &bufEventProducer{buf}
@@ -323,13 +323,14 @@ func newSchemaFeed(
 }
 
 func makeKVFeedCfg(
+	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	mm *mon.BytesMonitor,
 	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
 	buf kvevent.Buffer,
 	metrics *Metrics,
-	sf schemafeed.SchemaFeed,
+	knobs kvfeed.TestingKnobs,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
@@ -338,7 +339,7 @@ func makeKVFeedCfg(
 	_, withDiff := spec.Feed.Opts[changefeedbase.OptDiff]
 	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
 
-	kvfeedCfg := kvfeed.Config{
+	return kvfeed.Config{
 		Sink:               buf,
 		Settings:           cfg.Settings,
 		DB:                 cfg.DB,
@@ -355,9 +356,9 @@ func makeKVFeedCfg(
 		NeedsInitialScan:   needsInitialScan,
 		SchemaChangeEvents: schemaChangeEvents,
 		SchemaChangePolicy: schemaChangePolicy,
-		SchemaFeed:         sf,
+		SchemaFeed:         newSchemaFeed(ctx, cfg, spec, metrics),
+		Knobs:              knobs,
 	}
-	return kvfeedCfg
 }
 
 // getKVFeedInitialParameters determines the starting timestamp for the kv and
@@ -497,11 +498,13 @@ func (ca *changeAggregator) tick() error {
 		}
 	case kvevent.TypeResolved:
 		resolved := event.Resolved()
-		if _, err := ca.frontier.ForwardResolvedSpan(*resolved); err != nil {
-			return err
+		if ca.knobs.ShouldSkipResolved == nil || !ca.knobs.ShouldSkipResolved(resolved) {
+			if _, err := ca.frontier.ForwardResolvedSpan(*resolved); err != nil {
+				return err
+			}
+			ca.numFrontierUpdates++
+			forceFlush = resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 		}
-		ca.numFrontierUpdates++
-		forceFlush = resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 	}
 
 	return ca.maybeFlush(forceFlush)
@@ -903,8 +906,18 @@ const (
 )
 
 type jobState struct {
-	job                 *jobs.Job
-	lastRunStatusUpdate time.Time
+	job                    *jobs.Job
+	lastRunStatusUpdate    time.Time
+	lastFrontierCheckpoint time.Time
+	settings               *cluster.Settings
+}
+
+func (j *jobState) canCheckpointFrontier() bool {
+	freq := changefeedbase.FrontierCheckpointFrequency.Get(&j.settings.SV)
+	if freq == 0 {
+		return false
+	}
+	return timeutil.Since(j.lastFrontierCheckpoint) > freq
 }
 
 var _ execinfra.Processor = &changeFrontier{}
@@ -1016,7 +1029,16 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			cf.MoveToDraining(err)
 			return
 		}
-		cf.js = &jobState{job: job}
+		cf.js = &jobState{
+			job:                    job,
+			lastFrontierCheckpoint: timeutil.Now(),
+			settings:               cf.flowCtx.Cfg.Settings,
+		}
+
+		if changefeedbase.FrontierCheckpointFrequency.Get(&cf.flowCtx.Cfg.Settings.SV) == 0 {
+			log.Warning(ctx,
+				"Frontier checkpointing disabled; set changefeed.frontier_checkpoint_frequency to non-zero value to re-enable")
+		}
 
 		p := job.Progress()
 		if ts := p.GetHighWater(); ts != nil {
@@ -1179,56 +1201,85 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 		return nil
 	}
 
+	return cf.forwardFrontier(resolved)
+}
+
+func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	frontierChanged, err := cf.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
+
 	isBehind := cf.maybeLogBehindSpan(frontierChanged)
-	if frontierChanged {
-		if err := cf.handleFrontierChanged(isBehind); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
-func (cf *changeFrontier) handleFrontierChanged(isBehind bool) error {
-	newResolved := cf.frontier.Frontier()
-	cf.metrics.mu.Lock()
-	if cf.metricsID != -1 {
-		cf.metrics.mu.resolved[cf.metricsID] = newResolved
-	}
-	cf.metrics.mu.Unlock()
-
-	checkpointStart := timeutil.Now()
-	if err := cf.checkpointResolvedTimestamp(newResolved, isBehind); err != nil {
-		return err
-	}
-	cf.metrics.CheckpointHistNanos.RecordValue(timeutil.Since(checkpointStart).Nanoseconds())
-
-	if err := cf.maybeEmitResolved(newResolved); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkpointResolvedTimestamp checkpoints a changefeed-level resolved timestamp
-// to the jobs record. It additionally manages the protected timestamp state
-// which is stored in the job progress details. It is only called if the new
-// resolved timestamp is later than the current one. The isBehind argument is
-// used to determine whether an existing protected timestamp should be released.
-func (cf *changeFrontier) checkpointResolvedTimestamp(
-	resolved hlc.Timestamp, isBehind bool,
-) (err error) {
+	// Checkpoint job record progress if needed.
 	// NB: Sinkless changefeeds will not have a job state (js). In fact, they
 	// have no distributed state whatsoever. Because of this they also do not
 	// use protected timestamps.
-	if cf.js == nil {
-		return nil
+	if cf.js != nil {
+		if err := cf.maybeCheckpointJob(frontierChanged, isBehind); err != nil {
+			return err
+		}
 	}
 
-	runStatusUpdated := false
-	if err := cf.js.job.Update(cf.Ctx, nil, func(
+	if frontierChanged {
+		// Keeping this after the checkpointJobProgress call will avoid
+		// some duplicates if a restart happens.
+		newResolved := cf.frontier.Frontier()
+		cf.metrics.mu.Lock()
+		if cf.metricsID != -1 {
+			cf.metrics.mu.resolved[cf.metricsID] = newResolved
+		}
+		cf.metrics.mu.Unlock()
+
+		return cf.maybeEmitResolved(newResolved)
+	}
+
+	return nil
+}
+
+func (cf *changeFrontier) maybeCheckpointJob(frontierChanged, isBehind bool) error {
+	// Update checkpoint if the frontier has not changed, but it is time to checkpoint.
+	// If the frontier has changed, we want to write an empty checkpoint record indicating
+	// that all spans have reached the frontier.
+	updateCheckpoint := !frontierChanged && cf.js.canCheckpointFrontier()
+
+	var checkpoint jobspb.ChangefeedProgress_Checkpoint
+	if updateCheckpoint {
+		cf.frontier.computeCheckpoint(&checkpoint)
+	}
+
+	if frontierChanged || updateCheckpoint {
+		cf.js.lastFrontierCheckpoint = timeutil.Now()
+		checkpointStart := timeutil.Now()
+		if err := cf.checkpointJobProgress(
+			cf.frontier.Frontier(), frontierChanged, checkpoint, isBehind,
+		); err != nil {
+			return err
+		}
+		cf.metrics.CheckpointHistNanos.RecordValue(timeutil.Since(checkpointStart).Nanoseconds())
+	}
+
+	return nil
+}
+
+// checkpointJobProgress checkpoints a changefeed-level job information.
+// In addition, if 'manageProtected' is true, which only happens when frontier advanced,
+// this method manages the protected timestamp state.
+// The isBehind argument is used to determine whether an existing protected timestamp
+// should be released.
+func (cf *changeFrontier) checkpointJobProgress(
+	frontier hlc.Timestamp,
+	manageProtected bool,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	isBehind bool,
+) (err error) {
+	updateRunStatus := timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
+	if updateRunStatus {
+		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
+	}
+
+	return cf.js.job.Update(cf.Ctx, nil, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
@@ -1238,31 +1289,26 @@ func (cf *changeFrontier) checkpointResolvedTimestamp(
 		// Advance resolved timestamp.
 		progress := md.Progress
 		progress.Progress = &jobspb.Progress_HighWater{
-			HighWater: &resolved,
+			HighWater: &frontier,
 		}
 
 		// Manage protected timestamps.
 		changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
-		if err := cf.manageProtectedTimestamps(cf.Ctx, changefeedProgress, txn, resolved, isBehind); err != nil {
-			return err
+		if manageProtected {
+			if err := cf.manageProtectedTimestamps(cf.Ctx, changefeedProgress, txn, frontier, isBehind); err != nil {
+				return err
+			}
 		}
 
-		// Update running status if needed.
-		if timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency {
-			md.Progress.RunningStatus = fmt.Sprintf("running: resolved=%s", resolved)
-			runStatusUpdated = true
+		changefeedProgress.Checkpoint = &checkpoint
+
+		if updateRunStatus {
+			md.Progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
 		}
 
 		ju.UpdateProgress(progress)
 		return nil
-	}); err != nil {
-		return err
-	}
-
-	if runStatusUpdated {
-		cf.js.lastRunStatusUpdate = timeutil.Now()
-	}
-	return nil
+	})
 }
 
 // manageProtectedTimestamps is called when the resolved timestamp is being
@@ -1347,8 +1393,6 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 	if !shouldEmit {
 		return nil
 	}
-	// Keeping this after the checkpointResolvedTimestamp call will avoid
-	// some duplicates if a restart happens.
 	if err := emitResolvedTimestamp(cf.Ctx, cf.encoder, cf.sink, newResolved); err != nil {
 		return err
 	}
@@ -1494,6 +1538,26 @@ func (f *schemaChangeFrontier) Frontier() hlc.Timestamp {
 // SpanFrontier returns underlying span.Frontier.
 func (f *schemaChangeFrontier) SpanFrontier() *span.Frontier {
 	return f.spanFrontier.Frontier
+}
+
+func (f *schemaChangeFrontier) computeCheckpoint(c *jobspb.ChangefeedProgress_Checkpoint) {
+	// Checkpoint record could be fairly large.
+	// Assume we have a 10T table, and a 1/2G max range size: 20K spans.
+	// Span frontier merges adjacent spans, so worst case we have 10K spans.
+	// Each span is a pair of keys.  Those could be large.  Assume 1/2K per key.
+	// So, 1KB per span.  We could be looking at 10MB checkpoint record.
+	// Since we checkpoint infrequently, a 10MB write might be okay.
+	// We could run into trouble if we have a single changefeed over multiple mega tables.
+	// TODO(yevgeniy): We might have to further compress our checkpoint.
+	// TODO(yevgeniy): We might have to differentiate between resolved spans during initial
+	//  scan
+	frontier := f.frontierTimestamp()
+	f.Entries(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		if frontier.Less(ts) {
+			c.Spans = append(c.Spans, s)
+		}
+		return span.ContinueMatch
+	})
 }
 
 // schemaChangeBoundaryReached returns true if the schema change boundary has been reached.
