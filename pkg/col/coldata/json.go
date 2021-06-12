@@ -60,7 +60,7 @@ func (js *JSONs) Set(i int, j json.JSON) {
 		colexecerror.ExpectedError(err)
 	}
 	b.offsets[i+1] = int32(len(b.data))
-	b.maxSetIndex = i
+	b.maxSetLength = i + 1
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to
@@ -100,8 +100,8 @@ func (js *JSONs) AppendVal(j json.JSON) {
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	b.maxSetIndex = b.Len()
 	b.offsets = append(b.offsets, int32(len(b.data)))
+	b.maxSetLength = b.Len()
 }
 
 // String is used for debugging purposes.
