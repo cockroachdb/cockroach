@@ -401,6 +401,7 @@ const (
 	SqllivenessID                       = 39
 	MigrationsID                        = 40
 	JoinTokensTableID                   = 41
+	SpanConfigurationsTableID           = 42
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
