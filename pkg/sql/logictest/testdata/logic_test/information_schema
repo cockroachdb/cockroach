@@ -1365,6 +1365,7 @@ system         public              transaction_statistics                 BASE T
 system         public              database_role_settings                 BASE TABLE   YES                 1
 system         public              tenant_usage                           BASE TABLE   YES                 1
 system         public              sql_instances                          BASE TABLE   YES                 1
+system         public              span_configurations                    BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1530,6 +1531,11 @@ system              public             630200280_6_1_not_null                   
 system              public             630200280_6_2_not_null                                                               system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_3_not_null                                                               system         public        settings                         CHECK            NO             NO
 system              public             primary                                                                              system         public        settings                         PRIMARY KEY      NO             NO
+system              public             630200280_47_1_not_null                                                              system         public        span_configurations              CHECK            NO             NO
+system              public             630200280_47_2_not_null                                                              system         public        span_configurations              CHECK            NO             NO
+system              public             630200280_47_3_not_null                                                              system         public        span_configurations              CHECK            NO             NO
+system              public             check_bounds                                                                         system         public        span_configurations              CHECK            NO             NO
+system              public             primary                                                                              system         public        span_configurations              PRIMARY KEY      NO             NO
 system              public             630200280_46_1_not_null                                                              system         public        sql_instances                    CHECK            NO             NO
 system              public             primary                                                                              system         public        sql_instances                    PRIMARY KEY      NO             NO
 system              public             630200280_39_1_not_null                                                              system         public        sqlliveness                      CHECK            NO             NO
@@ -1750,6 +1756,9 @@ system              public             630200280_45_2_not_null                  
 system              public             630200280_45_3_not_null                                                              next_instance_id IS NOT NULL
 system              public             630200280_45_4_not_null                                                              last_update IS NOT NULL
 system              public             630200280_46_1_not_null                                                              id IS NOT NULL
+system              public             630200280_47_1_not_null                                                              start_key IS NOT NULL
+system              public             630200280_47_2_not_null                                                              end_key IS NOT NULL
+system              public             630200280_47_3_not_null                                                              config IS NOT NULL
 system              public             630200280_4_1_not_null                                                               username IS NOT NULL
 system              public             630200280_4_3_not_null                                                               isRole IS NOT NULL
 system              public             630200280_5_1_not_null                                                               id IS NOT NULL
@@ -1758,6 +1767,7 @@ system              public             630200280_6_2_not_null                   
 system              public             630200280_6_3_not_null                                                               lastUpdated IS NOT NULL
 system              public             630200280_8_1_not_null                                                               id IS NOT NULL
 system              public             630200280_8_2_not_null                                                               active IS NOT NULL
+system              public             check_bounds                                                                         ((start_key < end_key))
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8  ((crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)))
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8            ((crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)))
 system              public             check_singleton                                                                      ((singleton))
@@ -1812,6 +1822,9 @@ system         public        role_options                     option            
 system         public        role_options                     username                                                                       system              public             primary
 system         public        scheduled_jobs                   schedule_id                                                                    system              public             primary
 system         public        settings                         name                                                                           system              public             primary
+system         public        span_configurations              end_key                                                                        system              public             check_bounds
+system         public        span_configurations              start_key                                                                      system              public             check_bounds
+system         public        span_configurations              start_key                                                                      system              public             primary
 system         public        sql_instances                    id                                                                             system              public             primary
 system         public        sqlliveness                      session_id                                                                     system              public             primary
 system         public        statement_bundle_chunks          id                                                                             system              public             primary
@@ -2043,6 +2056,9 @@ system         public        settings                         lastUpdated       
 system         public        settings                         name                                                                           1
 system         public        settings                         value                                                                          2
 system         public        settings                         valueType                                                                      4
+system         public        span_configurations              config                                                                         3
+system         public        span_configurations              end_key                                                                        2
+system         public        span_configurations              start_key                                                                      1
 system         pg_extension  spatial_ref_sys                  auth_name                                                                      2
 system         pg_extension  spatial_ref_sys                  auth_srid                                                                      3
 system         pg_extension  spatial_ref_sys                  proj4text                                                                      5
@@ -3047,6 +3063,16 @@ NULL     root     system         public              settings                   
 NULL     root     system         public              settings                               INSERT          NULL          NO
 NULL     root     system         public              settings                               SELECT          NULL          YES
 NULL     root     system         public              settings                               UPDATE          NULL          NO
+NULL     admin    system         public              span_configurations                    DELETE          NULL          NO
+NULL     admin    system         public              span_configurations                    GRANT           NULL          NO
+NULL     admin    system         public              span_configurations                    INSERT          NULL          NO
+NULL     admin    system         public              span_configurations                    SELECT          NULL          YES
+NULL     admin    system         public              span_configurations                    UPDATE          NULL          NO
+NULL     root     system         public              span_configurations                    DELETE          NULL          NO
+NULL     root     system         public              span_configurations                    GRANT           NULL          NO
+NULL     root     system         public              span_configurations                    INSERT          NULL          NO
+NULL     root     system         public              span_configurations                    SELECT          NULL          YES
+NULL     root     system         public              span_configurations                    UPDATE          NULL          NO
 NULL     admin    system         public              sql_instances                          DELETE          NULL          NO
 NULL     admin    system         public              sql_instances                          GRANT           NULL          NO
 NULL     admin    system         public              sql_instances                          INSERT          NULL          NO
@@ -3759,6 +3785,16 @@ NULL     root     system         public              sql_instances              
 NULL     root     system         public              sql_instances                          INSERT          NULL          NO
 NULL     root     system         public              sql_instances                          SELECT          NULL          YES
 NULL     root     system         public              sql_instances                          UPDATE          NULL          NO
+NULL     admin    system         public              span_configurations                    DELETE          NULL          NO
+NULL     admin    system         public              span_configurations                    GRANT           NULL          NO
+NULL     admin    system         public              span_configurations                    INSERT          NULL          NO
+NULL     admin    system         public              span_configurations                    SELECT          NULL          YES
+NULL     admin    system         public              span_configurations                    UPDATE          NULL          NO
+NULL     root     system         public              span_configurations                    DELETE          NULL          NO
+NULL     root     system         public              span_configurations                    GRANT           NULL          NO
+NULL     root     system         public              span_configurations                    INSERT          NULL          NO
+NULL     root     system         public              span_configurations                    SELECT          NULL          YES
+NULL     root     system         public              span_configurations                    UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

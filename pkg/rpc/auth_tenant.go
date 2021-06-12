@@ -71,6 +71,12 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/ListSessions":
 		return a.authTenant(tenID)
 
+	case "/cockroach.roachpb.Internal/GetSpanConfigs":
+		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
+
+	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
+		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
@@ -203,6 +209,55 @@ func (a tenantAuthorizer) authTokenBucket(
 	if argTenant := roachpb.MakeTenantID(args.TenantID); argTenant != tenID {
 		return authErrorf("token bucket request for tenant %s not permitted", argTenant)
 	}
+	return nil
+}
+
+// authGetSpanConfigs authorizes the provided tenant to invoke the
+// GetSpanConfigs RPC with the provided args.
+func (a tenantAuthorizer) authGetSpanConfigs(
+	tenID roachpb.TenantID, args *roachpb.GetSpanConfigsRequest,
+) error {
+	tenSpan := tenantPrefix(tenID)
+	for _, sp := range args.Spans {
+		rSpan, err := keys.SpanAddr(sp)
+		if err != nil {
+			return authError(err.Error())
+		}
+		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+		}
+	}
+	return nil
+}
+
+// authUpdateSpanConfigs authorizes the provided tenant to invoke the
+// UpdateSpanConfigs RPC with the provided args.
+func (a tenantAuthorizer) authUpdateSpanConfigs(
+	tenID roachpb.TenantID, args *roachpb.UpdateSpanConfigsRequest,
+) error {
+	tenSpan := tenantPrefix(tenID)
+	validate := func(sp roachpb.Span) error {
+		rSpan, err := keys.SpanAddr(sp)
+		if err != nil {
+			return authError(err.Error())
+		}
+		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+		}
+		return nil
+	}
+
+	for _, entry := range args.ToUpsert {
+		if err := validate(entry.Span); err != nil {
+			return err
+		}
+	}
+	for _, span := range args.ToDelete {
+		if err := validate(span); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
