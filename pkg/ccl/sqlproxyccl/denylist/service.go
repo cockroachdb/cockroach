@@ -10,8 +10,6 @@ package denylist
 
 import "strings"
 
-//go:generate mockgen -package=denylist -destination=mocks_generated.go -source=service.go . Service
-
 // Entry records the reason for putting an item on the denylist.
 // TODO(spaskob): add codes for different denial reasons.
 type Entry struct {

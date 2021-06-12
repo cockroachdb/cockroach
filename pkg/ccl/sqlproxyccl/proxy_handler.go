@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -65,13 +67,14 @@ type ProxyOptions struct {
 	Denylist string
 	// ListenAddr is the listen address for incoming connections.
 	ListenAddr string
-	// ListenCert is the file containing PEM-encoded x509 certificate for listen address.
-	// Set to "*" to auto-generate self-signed cert.
+	// ListenCert is the file containing PEM-encoded x509 certificate for listen
+	// address. Set to "*" to auto-generate self-signed cert.
 	ListenCert string
 	// ListenKey is the file containing PEM-encoded x509 key for listen address.
 	// Set to "*" to auto-generate self-signed cert.
 	ListenKey string
-	// MetricsAddress is the listen address for incoming connections for metrics retrieval.
+	// MetricsAddress is the listen address for incoming connections for metrics
+	// retrieval.
 	MetricsAddress string
 	// SkipVerify if set will skip the identity verification of the
 	// backend. This is for testing only.
@@ -82,9 +85,9 @@ type ProxyOptions struct {
 	// connection. Optionally use '{{clusterName}}'
 	// which will be substituted with the cluster name.
 	RoutingRule string
-	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does the resolution
-	// from backend id to IP address. If specified - it will be used instead of the
-	// routing rule above.
+	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does
+	// the resolution from backend id to IP address. If specified - it will be
+	// used instead of the routing rule above.
 	DirectoryAddr string
 	// RatelimitBaseDelay is the initial backoff after a failed login attempt.
 	// Set to 0 to disable rate limiting.
@@ -92,9 +95,11 @@ type ProxyOptions struct {
 	// ValidateAccessInterval is the time interval between validations, confirming
 	// that current connections are still valid.
 	ValidateAccessInterval time.Duration
-	// PollConfigInterval defines polling interval for pickup up changes in config file.
+	// PollConfigInterval defines polling interval for pickup up changes in
+	// config file.
 	PollConfigInterval time.Duration
-	// IdleTimeout if set, will close connections that have been idle for that duration.
+	// IdleTimeout if set, will close connections that have been idle for that
+	// duration.
 	IdleTimeout time.Duration
 }
 
@@ -147,8 +152,12 @@ func newProxyHandler(
 	}
 
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
-	handler.denyListService = denylist.NewDenylistWithFile(ctx, options.Denylist,
-		denylist.WithPollingInterval(options.PollConfigInterval))
+
+	// If denylist functionality is requested, create the denylist service.
+	if options.Denylist != "" {
+		handler.denyListService = denylist.NewDenylistWithFile(ctx, options.Denylist,
+			denylist.WithPollingInterval(options.PollConfigInterval))
+	}
 
 	handler.throttleService = throttler.NewLocalService(throttler.WithBaseDelay(options.RatelimitBaseDelay))
 	handler.connCache = cache.NewCappedConnCache(maxKnownConnCacheSize)
@@ -181,7 +190,7 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 	}
 
 	// This currently only happens for CancelRequest type of startup messages
-	// that we don't support
+	// that we don't support.
 	if msg == nil {
 		return nil
 	}
@@ -221,15 +230,30 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 
 	var crdbConn net.Conn
 	var outgoingAddress string
-	retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond, MaxBackoff: time.Second}
+
+	// Repeatedly try to make a connection. Any failures are assumed to be
+	// transient unless the tenant cannot be found (e.g. because it was
+	// deleted). We will simply loop forever, or until the context is canceled
+	// (e.g. by client disconnect). This is preferable to terminating client
+	// connections, because in most cases those connections will simply be
+	// retried, further increasing load on the system.
+	retryOpts := retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+	}
+
 	outgoingAddressErr := log.Every(time.Minute)
 	backendDialErr := log.Every(time.Minute)
 	reportFailureErr := log.Every(time.Minute)
 	var outgoingAddressErrs, codeBackendDownErrs, reportFailureErrs int
+
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		// Get the DNS/IP address of the backend server to dial.
 		outgoingAddress, err = handler.outgoingAddress(ctx, clusterName, tenID)
 		if err != nil {
-			if err.Error() != "not found" {
+			// Failure is assumed to be transient (and should be retried) except
+			// in case where the server was not found.
+			if status.Code(err) != codes.NotFound {
 				outgoingAddressErrs++
 				if outgoingAddressErr.ShouldLog() {
 					log.Ops.Errorf(ctx,
@@ -241,19 +265,24 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 				}
 				continue
 			}
-			clientErr := newErrorf(codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
-			updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+
+			// Remap error for external consumption.
+			err = newErrorf(
+				codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
 			break
 		}
 
+		// Now actually dial the backend server.
 		crdbConn, err = backendDial(backendStartupMsg, outgoingAddress, TLSConf)
-		// If we get a backend down error and are using the directory - report the
-		// error to the directory and retry the connection.
-		codeErr := (*codeError)(nil)
-		if err != nil &&
-			errors.As(err, &codeErr) &&
-			codeErr.code == codeBackendDown &&
-			handler.directory != nil {
+
+		// If we get a backend down error, retry the connection.
+		var codeErr *codeError
+		if err != nil && errors.As(err, &codeErr) && codeErr.code == codeBackendDown {
+			if handler.directory == nil {
+				// Don't retry unless directory is enabled (for now).
+				break
+			}
+
 			codeBackendDownErrs++
 			if backendDialErr.ShouldLog() {
 				log.Ops.Errorf(ctx,
@@ -263,6 +292,9 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 				)
 				codeBackendDownErrs = 0
 			}
+
+			// Report the failure to the directory so that it can refresh any
+			// stale information that may have caused the problem.
 			err = handler.directory.ReportFailure(ctx, tenID, outgoingAddress)
 			if err != nil {
 				reportFailureErrs++
@@ -285,10 +317,12 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 		return err
 	}
 
+	// Set up the idle timeout monitor.
 	crdbConn = idle.DisconnectOverlay(crdbConn, handler.IdleTimeout)
 
 	defer func() { _ = crdbConn.Close() }()
 
+	// Perform user authentication.
 	if err := authenticate(conn, crdbConn); err != nil {
 		handler.metrics.updateForError(err)
 		log.Ops.Errorf(ctx, "authenticate: %s", err)
@@ -307,9 +341,9 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// TODO(darinpp): starting a new go routine for every connection here is inefficient.
-	// Change to maintain a map of connections by IP/tenant and have single
-	// go routine that closes connections that are blocklisted.
+	// TODO(darinpp): starting a new go routine for every connection here is
+	// inefficient. Change to maintain a map of connections by IP/tenant and
+	// have single go routine that closes connections that are blocklisted.
 	go func() {
 		errExpired <- func(ctx context.Context) error {
 			t := timeutil.NewTimer()
@@ -336,6 +370,8 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
+	// Copy all pgwire messages from frontend to backend connection until we
+	// encounter an error or shutdown signal.
 	go func() {
 		err := connectionCopy(crdbConn, conn)
 		errConnectionCopy <- err
@@ -374,7 +410,7 @@ func (handler *proxyHandler) outgoingAddress(
 		return addr, nil
 	}
 
-	// This doesn't verify the name part of the tenant and relies just on the int id.
+	// Lookup tenant in directory.
 	addr, err := handler.directory.EnsureTenantIP(ctx, tenID, name)
 	if err != nil {
 		return "", err
@@ -406,8 +442,12 @@ func (handler *proxyHandler) validateAccessAndThrottle(
 func (handler *proxyHandler) validateAccess(
 	ctx context.Context, tenID roachpb.TenantID, ipAddr string,
 ) error {
-	// First validate against the deny list service
+	// Validate against the denylist service if it exists.
 	list := handler.denyListService
+	if list == nil {
+		return nil
+	}
+
 	if entry, err := list.Denied(denylist.DenyEntity{Item: tenID.String(), Type: denylist.ClusterType}); err != nil {
 		// Log error but don't return since this could be transient.
 		log.Errorf(ctx, "could not consult denied list for tenant: %d", tenID.ToUint64())

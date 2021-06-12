@@ -29,9 +29,9 @@ import (
 // individual new incoming connection.
 type proxyConnHandler func(ctx context.Context, proxyConn *conn) error
 
-// Server is a TCP server that proxies SQL connections to a
-// configurable backend. It may also run an HTTP server to expose a
-// health check and prometheus metrics.
+// Server is a TCP server that proxies SQL connections to a configurable
+// backend. It may also run an HTTP server to expose a health check and
+// prometheus metrics.
 type Server struct {
 	Stopper         *stop.Stopper
 	connHandler     proxyConnHandler

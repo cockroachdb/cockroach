@@ -82,7 +82,8 @@ func benchmarkSocketRead(timeout time.Duration, b *testing.B) {
 }
 
 // No statistically significant difference in a single roundtrip time between
-// using and not using deadline as implemented above. Both show the same value in my tests.
+// using and not using deadline as implemented above. Both show the same value
+// in my tests.
 // SocketReadWithDeadline-32     11.1µs ± 1%
 // SocketReadWithoutDeadline-32  11.0µs ± 3%
 func BenchmarkSocketReadWithoutDeadline(b *testing.B) {
