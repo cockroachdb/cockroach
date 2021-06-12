@@ -1055,6 +1055,374 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	}
 }
 
+func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
+	if len(sel) == 0 {
+		return
+	}
+	if m.nulls.MaybeHasNulls() {
+		m.nulls.UnsetNulls()
+	}
+	switch m.CanonicalTypeFamily() {
+	case types.BoolFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.Bool()
+			toCol := m.Bool()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case types.BytesFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.Bytes()
+			toCol := m.Bytes()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case types.DecimalFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.Decimal()
+			toCol := m.Decimal()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case types.IntFamily:
+		switch m.t.Width() {
+		case 16:
+			fromCol := src.Int16()
+			toCol := m.Int16()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		case 32:
+			fromCol := src.Int32()
+			toCol := m.Int32()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		case -1:
+		default:
+			fromCol := src.Int64()
+			toCol := m.Int64()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case types.FloatFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.Float64()
+			toCol := m.Float64()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case types.TimestampTZFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.Timestamp()
+			toCol := m.Timestamp()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case types.IntervalFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.Interval()
+			toCol := m.Interval()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case types.JsonFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.JSON()
+			toCol := m.JSON()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch m.t.Width() {
+		case -1:
+		default:
+			fromCol := src.Datum()
+			toCol := m.Datum()
+			n := len(sel)
+			_ = sel[n-1]
+			if src.MaybeHasNulls() {
+				nulls := src.Nulls()
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					if nulls.NullAt(srcIdx) {
+						m.nulls.SetNull(destIdx)
+					} else {
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			} else {
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					destIdx := sel[i]
+					srcIdx := order[destIdx]
+					{
+						v := fromCol.Get(srcIdx)
+						toCol.Set(destIdx, v)
+					}
+				}
+			}
+		}
+	default:
+		panic(fmt.Sprintf("unhandled type %s", m.t))
+	}
+}
+
 func (m *memColumn) Window(start int, end int) Vec {
 	switch m.CanonicalTypeFamily() {
 	case types.BoolFamily:
