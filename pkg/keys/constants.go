@@ -412,6 +412,7 @@ const (
 	DatabaseRoleSettingsTableID         = 44
 	TenantUsageTableID                  = 45
 	SQLInstancesTableID                 = 46
+	SpanConfigurationsTableID           = 47
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

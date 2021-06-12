@@ -114,6 +114,10 @@ type TestServerInterface interface {
 	// MigrationServer returns the internal *migrationServer as in interface{}
 	MigrationServer() interface{}
 
+	// SpanConfigAccessor returns the underlying spanconfig.KVAccessor as an
+	// interface{}.
+	SpanConfigAccessor() interface{}
+
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 

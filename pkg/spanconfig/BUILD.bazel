@@ -10,6 +10,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/settings",
+        "//pkg/roachpb:with-mocks",
     ],
 )

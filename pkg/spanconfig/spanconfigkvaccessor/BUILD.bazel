@@ -1,18 +1,13 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "spanconfigmanager",
-    srcs = [
-        "manager.go",
-        "test_helpers.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager",
+    name = "spanconfigkvaccessor",
+    srcs = ["kvaccessor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
-        "//pkg/jobs",
-        "//pkg/jobs/jobspb",
         "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -20,34 +15,32 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
-        "//pkg/util/log",
-        "//pkg/util/stop",
-        "//pkg/util/timeutil",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
-    name = "spanconfigmanager_test",
+    name = "spanconfigkvaccessor_test",
     srcs = [
+        "kvaccessor_test.go",
         "main_test.go",
-        "manager_test.go",
+        "validation_test.go",
     ],
+    embed = [":spanconfigkvaccessor"],
     deps = [
-        ":spanconfigmanager",
         "//pkg/base",
-        "//pkg/jobs",
-        "//pkg/jobs/jobspb",
+        "//pkg/config/zonepb",
+        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/spanconfig",
-        "//pkg/sql",
+        "//pkg/sql/sqlutil",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
-        "//pkg/util/protoutil",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
-        "@org_golang_x_sync//errgroup",
     ],
 )
