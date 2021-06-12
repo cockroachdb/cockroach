@@ -181,8 +181,8 @@ func newProxyHandler(
 
 // handle is called by the proxy server to handle a single incoming client
 // connection.
-func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error {
-	conn, msg, err := frontendAdmit(proxyConn, handler.incomingTLSConfig())
+func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn) error {
+	conn, msg, err := frontendAdmit(incomingConn, handler.incomingTLSConfig())
 	defer func() { _ = conn.Close() }()
 	if err != nil {
 		sendErrToClient(conn, err)
@@ -278,11 +278,6 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 		// If we get a backend down error, retry the connection.
 		var codeErr *codeError
 		if err != nil && errors.As(err, &codeErr) && codeErr.code == codeBackendDown {
-			if handler.directory == nil {
-				// Don't retry unless directory is enabled (for now).
-				break
-			}
-
 			codeBackendDownErrs++
 			if backendDialErr.ShouldLog() {
 				log.Ops.Errorf(ctx,
@@ -293,18 +288,20 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 				codeBackendDownErrs = 0
 			}
 
-			// Report the failure to the directory so that it can refresh any
-			// stale information that may have caused the problem.
-			err = handler.directory.ReportFailure(ctx, tenID, outgoingAddress)
-			if err != nil {
-				reportFailureErrs++
-				if reportFailureErr.ShouldLog() {
-					log.Ops.Errorf(ctx,
-						"report failure (%d errors skipped): %v",
-						reportFailureErrs,
-						err,
-					)
-					reportFailureErrs = 0
+			if handler.directory != nil {
+				// Report the failure to the directory so that it can refresh any
+				// stale information that may have caused the problem.
+				err = reportFailureToDirectory(ctx, tenID, outgoingAddress, handler.directory)
+				if err != nil {
+					reportFailureErrs++
+					if reportFailureErr.ShouldLog() {
+						log.Ops.Errorf(ctx,
+							"report failure (%d errors skipped): %v",
+							reportFailureErrs,
+							err,
+						)
+						reportFailureErrs = 0
+					}
 				}
 			}
 			continue
@@ -394,26 +391,35 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 	case <-handler.stopper.ShouldQuiesce():
 		return nil
 	}
-
 }
 
-// outgoingAddress resolves a tenant ID and a tenant cluster name to an IP of
-// the backend.
+// outgoingAddress resolves a tenant ID and a tenant cluster name to the address
+// of a backend endpoint.
 func (handler *proxyHandler) outgoingAddress(
 	ctx context.Context, name string, tenID roachpb.TenantID,
 ) (string, error) {
-	if handler.directory == nil {
-		addr := strings.ReplaceAll(
-			handler.RoutingRule, "{{clusterName}}", fmt.Sprintf("%s-%d", name, tenID.ToUint64()),
-		)
-		log.Infof(ctx, "backend %s resolved to '%s'", name, addr)
-		return addr, nil
+	// First try to lookup tenant in the directory (if available).
+	if handler.directory != nil {
+		addr, err := handler.directory.EnsureTenantIP(ctx, tenID, name)
+		if err != nil {
+			if status.Code(err) != codes.NotFound {
+				return "", err
+			}
+			// Fallback to old resolution rule.
+		} else {
+			return addr, nil
+		}
 	}
 
-	// Lookup tenant in directory.
-	addr, err := handler.directory.EnsureTenantIP(ctx, tenID, name)
+	// Derive DNS address and then try to resolve it. If it does not exist, then
+	// map to a GRPC NotFound error.
+	// TODO(andyk): Remove this once we've fully switched over to the directory.
+	addr := strings.ReplaceAll(
+		handler.RoutingRule, "{{clusterName}}", fmt.Sprintf("%s-%d", name, tenID.ToUint64()),
+	)
+	_, err := backendLookupAddr(addr)
 	if err != nil {
-		return "", err
+		return "", status.Error(codes.NotFound, err.Error())
 	}
 	return addr, nil
 }
@@ -465,6 +471,64 @@ func (handler *proxyHandler) validateAccess(
 	}
 
 	return nil
+}
+
+// incomingTLSConfig gets back the current TLS config for the incoiming client
+// connection endpoint.
+func (handler *proxyHandler) incomingTLSConfig() *tls.Config {
+	if handler.incomingCert == nil {
+		return nil
+	}
+
+	cert := handler.incomingCert.TLSCert()
+	if cert == nil {
+		return nil
+	}
+
+	return &tls.Config{Certificates: []tls.Certificate{*cert}}
+}
+
+// setupIncomingCert will setup a managed cert for the incoming connections.
+// They can either be unencrypted (in case a cert and key names are empty),
+// using self-signed, runtime generated cert (if cert is set to *) or
+// using file based cert where the cert/key values refer to file names
+// containing the information.
+func (handler *proxyHandler) setupIncomingCert() error {
+	if (handler.ListenKey == "") != (handler.ListenCert == "") {
+		return errors.New("must specify either both or neither of cert and key")
+	}
+
+	if handler.ListenCert == "" {
+		return nil
+	}
+
+	// TODO(darin): change the cert manager so it uses the stopper.
+	ctx, _ := handler.stopper.WithCancelOnQuiesce(context.Background())
+	certMgr := certmgr.NewCertManager(ctx)
+	var cert certmgr.Cert
+	if handler.ListenCert == "*" {
+		cert = certmgr.NewSelfSignedCert(0, 3, 0, 0)
+	} else if handler.ListenCert != "" {
+		cert = certmgr.NewFileCert(handler.ListenCert, handler.ListenKey)
+	}
+	cert.Reload(ctx)
+	err := cert.Err()
+	if err != nil {
+		return err
+	}
+	certMgr.ManageCert("client", cert)
+	handler.certManager = certMgr
+	handler.incomingCert = cert
+
+	return nil
+}
+
+// reportFailureToDirectory is a hookable function that calls the given tenant
+// directory's ReportFailure method.
+var reportFailureToDirectory = func(
+	ctx context.Context, tenantID roachpb.TenantID, ip string, directory *tenant.Directory,
+) error {
+	return directory.ReportFailure(ctx, tenantID, ip)
 }
 
 // clusterNameAndTenantFromParams extracts the cluster name from the connection
@@ -606,54 +670,4 @@ func parseOptionsParam(optionsParam string) (string, error) {
 	}
 
 	return matches[0][1], nil
-}
-
-// incomingTLSConfig gets back the current TLS config for the incoiming client
-// connection endpoint.
-func (handler *proxyHandler) incomingTLSConfig() *tls.Config {
-	if handler.incomingCert == nil {
-		return nil
-	}
-
-	cert := handler.incomingCert.TLSCert()
-	if cert == nil {
-		return nil
-	}
-
-	return &tls.Config{Certificates: []tls.Certificate{*cert}}
-}
-
-// setupIncomingCert will setup a managed cert for the incoming connections.
-// They can either be unencrypted (in case a cert and key names are empty),
-// using self-signed, runtime generated cert (if cert is set to *) or
-// using file based cert where the cert/key values refer to file names
-// containing the information.
-func (handler *proxyHandler) setupIncomingCert() error {
-	if (handler.ListenKey == "") != (handler.ListenCert == "") {
-		return errors.New("must specify either both or neither of cert and key")
-	}
-
-	if handler.ListenCert == "" {
-		return nil
-	}
-
-	// TODO(darin): change the cert manager so it uses the stopper.
-	ctx, _ := handler.stopper.WithCancelOnQuiesce(context.Background())
-	certMgr := certmgr.NewCertManager(ctx)
-	var cert certmgr.Cert
-	if handler.ListenCert == "*" {
-		cert = certmgr.NewSelfSignedCert(0, 3, 0, 0)
-	} else if handler.ListenCert != "" {
-		cert = certmgr.NewFileCert(handler.ListenCert, handler.ListenKey)
-	}
-	cert.Reload(ctx)
-	err := cert.Err()
-	if err != nil {
-		return err
-	}
-	certMgr.ManageCert("client", cert)
-	handler.certManager = certMgr
-	handler.incomingCert = cert
-
-	return nil
 }
