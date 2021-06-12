@@ -285,6 +285,9 @@ const (
 	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
 	// type.
 	AutoSpanConfigReconciliationJob
+	// SpanConfigurationsTable adds the span configurations system table, to
+	// store all KV span configs.
+	SpanConfigurationsTable
 
 	// Step (1): Add new versions here.
 )
@@ -473,6 +476,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AutoSpanConfigReconciliationJob,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 134},
+	},
+	{
+		Key:     SpanConfigurationsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 136},
 	},
 
 	// Step (2): Add new versions here.
