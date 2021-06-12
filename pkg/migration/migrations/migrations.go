@@ -127,6 +127,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		zonesTableForSecondaryTenants,
 	),
+	migration.NewTenantMigration(
+		"add the system.span_configurations table to system tenant",
+		toCV(clusterversion.SpanConfigurationsTable),
+		NoPrecondition,
+		spanConfigurationsTableMigration,
+	),
 }
 
 func init() {
