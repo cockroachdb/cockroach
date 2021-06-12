@@ -53,3 +53,11 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 	0,
 	settings.NonNegativeDuration,
 )
+
+// FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
+var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
+	"changefeed.frontier_checkpoint_frequency",
+	"controls the frequency with which span level checkpoints will be written; if 0, disabled.",
+	10*time.Minute,
+	settings.NonNegativeDuration,
+)

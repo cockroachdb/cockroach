@@ -73,8 +73,8 @@ INSERT INTO t VALUES (1), (2), (3);
 	cfg := physicalConfig{
 		Spans:     []roachpb.Span{span},
 		Timestamp: exportTime,
-		knobs: testingKnobs{
-			beforeScanRequest: func(b *kv.Batch) {
+		Knobs: TestingKnobs{
+			BeforeScanRequest: func(b *kv.Batch) {
 				b.Header.MaxSpanRequestKeys = 1
 			},
 		},

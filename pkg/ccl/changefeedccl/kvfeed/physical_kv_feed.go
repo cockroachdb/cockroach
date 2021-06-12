@@ -12,7 +12,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,16 +24,11 @@ type physicalFeedFactory interface {
 	Run(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error
 }
 
-type testingKnobs struct {
-	beforeScanRequest func(b *kv.Batch)
-}
-
 type physicalConfig struct {
 	Spans     []roachpb.Span
 	Timestamp hlc.Timestamp
 	WithDiff  bool
-
-	knobs testingKnobs
+	Knobs     TestingKnobs
 }
 
 type rangefeedFactory func(
