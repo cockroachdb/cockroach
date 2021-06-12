@@ -15,7 +15,21 @@ import (
 	"net"
 
 	"github.com/jackc/pgproto3/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+// backendLookupAddr looks up the given address using usual DNS resolution
+// mechanisms. It returns the first resolved address, or an error if the lookup
+// failed in some way. This can be overridden in tests.
+var backendLookupAddr = func(addr string) (string, error) {
+	names, err := net.LookupAddr(addr)
+	if err != nil || len(names) == 0 {
+		// Assume that any errors are due to missing or mismatched tenant.
+		return "", status.Errorf(codes.NotFound, "DNS lookup failed for '%s': %v", addr, err)
+	}
+	return names[0], nil
+}
 
 // backendDial is an example backend dialer that does a TCP/IP connection
 // to a backend, SSL and forwards the start message. It is defined as a variable
