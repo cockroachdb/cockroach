@@ -69,7 +69,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
@@ -652,11 +654,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	tenantUsage := NewTenantUsageServer(db, internalExecutor)
 	registry.AddMetricStruct(tenantUsage.Metrics())
+
+	spanConfigAccessor := spanconfigkvaccessor.New(
+		db, internalExecutor, cfg.Settings,
+		systemschema.SpanConfigurationsTableName.FQString(),
+	)
+
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
-		tenantUsage,
+		tenantUsage, spanConfigAccessor,
 	)
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
@@ -752,6 +760,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
 		systemConfigProvider:     g,
+		spanConfigAccessor:       spanConfigAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,

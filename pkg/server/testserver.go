@@ -928,6 +928,11 @@ func (ts *TestServer) MigrationServer() interface{} {
 	return ts.migrationServer
 }
 
+// SpanConfigAccessor is part of TestServerInterface.
+func (ts *TestServer) SpanConfigAccessor() interface{} {
+	return ts.Server.node.spanConfigAccessor
+}
+
 // SQLServer is part of TestServerInterface.
 func (ts *TestServer) SQLServer() interface{} {
 	return ts.PGServer().SQLServer
