@@ -328,9 +328,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementStatisticsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.TransactionStatisticsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.DatabaseRoleSettingsTable)
-
 	if target.codec.ForSystemTenant() {
 		target.AddDescriptor(keys.SystemDatabaseID, systemschema.TenantUsageTable)
+		target.AddDescriptor(keys.SystemDatabaseID, systemschema.SpanConfigurationsTable)
 	}
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SQLInstancesTable)
 }
