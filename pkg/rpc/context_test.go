@@ -256,6 +256,18 @@ func (*internalServer) Join(
 	panic("unimplemented")
 }
 
+func (*internalServer) GetSpanConfigs(
+	context.Context, *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
+func (*internalServer) UpdateSpanConfigs(
+	context.Context, *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	panic("unimplemented")
+}
+
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
 //
