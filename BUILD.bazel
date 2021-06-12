@@ -67,6 +67,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb:with-mocks
 # gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb:with-mocks
 # gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb:with-mocks
 # gazelle:exclude pkg/roachpb/batch_generated.go
 # gazelle:exclude pkg/roachpb/batch_generated-gen.go
 

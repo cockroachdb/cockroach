@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -607,6 +608,16 @@ CREATE TABLE system.sql_instances (
     addr         STRING,
     session_id   BYTES,
     FAMILY "primary" (id, addr, session_id)
+)`
+
+	SpanConfigurationsTableSchema = `
+CREATE TABLE system.span_configurations (
+    start_key    BYTES NOT NULL PRIMARY KEY,
+    end_key      BYTES NOT NULL,
+    config        BYTES NOT NULL,
+    UNIQUE INDEX end_key_idx (end_key),
+    CONSTRAINT check_bounds CHECK (start_key < end_key),
+    FAMILY "primary" (start_key, end_key, config)
 )`
 )
 
@@ -2195,6 +2206,47 @@ var (
 			pk("id"),
 		))
 
+	// SpanConfigurationsTable is the descriptor for the system tenant's span
+	// configurations table.
+	SpanConfigurationsTable = registerSystemTable(
+		SpanConfigurationsTableSchema,
+		systemTable(
+			catconstants.SpanConfigurationsTableName,
+			keys.SpanConfigurationsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "start_key", ID: 1, Type: types.Bytes},
+				{Name: "end_key", ID: 2, Type: types.Bytes},
+				{Name: "config", ID: 3, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"start_key", "end_key", "config"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			pk("start_key"),
+			descpb.IndexDescriptor{
+				Name:                "end_key_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"end_key"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:      "check_bounds",
+				Expr:      "start_key < end_key",
+				ColumnIDs: []descpb.ColumnID{1, 2},
+			}}
+		},
+	)
+
 	// UnleasableSystemDescriptors contains the system descriptors which cannot
 	// be leased. This includes the lease table itself, among others.
 	UnleasableSystemDescriptors = func(s []catalog.Descriptor) map[descpb.ID]catalog.Descriptor {
@@ -2211,3 +2263,6 @@ var (
 		RangeEventTable,
 	})
 )
+
+// SpanConfigurationsTableName represents system.span_configurations.
+var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))
