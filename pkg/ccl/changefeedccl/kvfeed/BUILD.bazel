@@ -8,6 +8,7 @@ go_library(
         "metrics.go",
         "physical_kv_feed.go",
         "scanner.go",
+        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed",
     visibility = ["//visibility:public"],
