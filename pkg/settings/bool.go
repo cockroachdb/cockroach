@@ -98,9 +98,6 @@ func (b *BoolSetting) WithSystemOnly() *BoolSetting {
 	return b
 }
 
-// Defeat the linter.
-var _ = (*BoolSetting).WithSystemOnly
-
 // RegisterBoolSetting defines a new setting with type bool.
 func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
 	setting := &BoolSetting{defaultValue: defaultValue}
