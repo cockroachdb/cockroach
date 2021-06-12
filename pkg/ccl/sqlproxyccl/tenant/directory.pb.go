@@ -277,7 +277,8 @@ var xxx_messageInfo_Endpoint proto.InternalMessageInfo
 // ListEndpointsResponse is sent back as a result of requesting the list of
 // endpoints for a given tenant.
 type ListEndpointsResponse struct {
-	// Endpoints is the list of endpoints currently active for the requested tenant.
+	// Endpoints is the list of endpoints currently active for the requested
+	// tenant.
 	Endpoints []*Endpoint `protobuf:"bytes,1,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
 }
 
@@ -453,11 +454,14 @@ type DirectoryClient interface {
 	// WatchEndpoints is used to get a stream, that is used to receive notifications
 	// about changes in tenant backend's state - added, modified and deleted.
 	WatchEndpoints(ctx context.Context, in *WatchEndpointsRequest, opts ...grpc.CallOption) (Directory_WatchEndpointsClient, error)
-	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there
-	// is an active backend then the server doesn't have to do anything. If there
-	// isn't an active backend, then the server has to bring a new one up.
+	// EnsureEndpoint is used to ensure that a tenant's backend is active. If
+	// there is an active backend then the server doesn't have to do anything. If
+	// there isn't an active backend, then the server has to bring a new one up.
+	// If the requested tenant does not exist, EnsureEndpoint returns a GRPC
+	// NotFound error.
 	EnsureEndpoint(ctx context.Context, in *EnsureEndpointRequest, opts ...grpc.CallOption) (*EnsureEndpointResponse, error)
-	// GetTenant is used to fetch the metadata of a specific tenant.
+	// GetTenant is used to fetch the metadata of a specific tenant. If the tenant
+	// does not exist, GetTenant returns a GRPC NotFound error.
 	GetTenant(ctx context.Context, in *GetTenantRequest, opts ...grpc.CallOption) (*GetTenantResponse, error)
 }
 
@@ -536,11 +540,14 @@ type DirectoryServer interface {
 	// WatchEndpoints is used to get a stream, that is used to receive notifications
 	// about changes in tenant backend's state - added, modified and deleted.
 	WatchEndpoints(*WatchEndpointsRequest, Directory_WatchEndpointsServer) error
-	// EnsureEndpoint is used to ensure that a tenant's backend is active. If there
-	// is an active backend then the server doesn't have to do anything. If there
-	// isn't an active backend, then the server has to bring a new one up.
+	// EnsureEndpoint is used to ensure that a tenant's backend is active. If
+	// there is an active backend then the server doesn't have to do anything. If
+	// there isn't an active backend, then the server has to bring a new one up.
+	// If the requested tenant does not exist, EnsureEndpoint returns a GRPC
+	// NotFound error.
 	EnsureEndpoint(context.Context, *EnsureEndpointRequest) (*EnsureEndpointResponse, error)
-	// GetTenant is used to fetch the metadata of a specific tenant.
+	// GetTenant is used to fetch the metadata of a specific tenant. If the tenant
+	// does not exist, GetTenant returns a GRPC NotFound error.
 	GetTenant(context.Context, *GetTenantRequest) (*GetTenantResponse, error)
 }
 
