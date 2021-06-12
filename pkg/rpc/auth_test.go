@@ -175,6 +175,17 @@ func TestTenantAuthRequest(t *testing.T) {
 		}
 		return ru
 	}
+	makeGetSpanConfigsReq := func(key, endKey string) *roachpb.GetSpanConfigsRequest {
+		sp := makeSpan(key, endKey)
+		return &roachpb.GetSpanConfigsRequest{Spans: []roachpb.Span{sp}}
+	}
+	makeUpdateSpanConfigsReq := func(key, endKey string, delete bool) *roachpb.UpdateSpanConfigsRequest {
+		sp := makeSpan(key, endKey)
+		if delete {
+			return &roachpb.UpdateSpanConfigsRequest{ToDelete: []roachpb.Span{sp}}
+		}
+		return &roachpb.UpdateSpanConfigsRequest{ToUpsert: []roachpb.SpanConfigEntry{{Span: sp}}}
+	}
 
 	const noError = ""
 	for method, tests := range map[string][]struct {
@@ -374,6 +385,91 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: `token bucket request with unspecified tenant not permitted`,
 			},
 		},
+		"/cockroach.roachpb.Internal/GetSpanConfigs": {
+			{
+				req:    &roachpb.GetSpanConfigsRequest{},
+				expErr: noError,
+			},
+			{
+				req:    makeGetSpanConfigsReq("a", "b"),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeGetSpanConfigsReq(prefix(5, "a"), prefix(5, "b")),
+				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeGetSpanConfigsReq(prefix(10, "a"), prefix(10, "b")),
+				expErr: noError,
+			},
+			{
+				req:    makeGetSpanConfigsReq(prefix(50, "a"), prefix(50, "b")),
+				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeGetSpanConfigsReq("a", prefix(10, "b")),
+				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeGetSpanConfigsReq(prefix(10, "a"), prefix(20, "b")),
+				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+		},
+		"/cockroach.roachpb.Internal/UpdateSpanConfigs": {
+			{
+				req:    &roachpb.UpdateSpanConfigsRequest{},
+				expErr: noError,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq("a", "b", true),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(5, "a"), prefix(5, "b"), true),
+				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(10, "a"), prefix(10, "b"), true),
+				expErr: noError,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(50, "a"), prefix(50, "b"), true),
+				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq("a", prefix(10, "b"), true),
+				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(10, "a"), prefix(20, "b"), true),
+				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq("a", "b", false),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(5, "a"), prefix(5, "b"), false),
+				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(10, "a"), prefix(10, "b"), false),
+				expErr: noError,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(50, "a"), prefix(50, "b"), false),
+				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq("a", prefix(10, "b"), false),
+				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(prefix(10, "a"), prefix(20, "b"), false),
+				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+		},
+
 		"/cockroach.rpc.Heartbeat/Ping": {
 			{req: &PingRequest{}, expErr: noError},
 		},

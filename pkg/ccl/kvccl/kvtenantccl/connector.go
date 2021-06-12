@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -107,6 +108,9 @@ var _ config.SystemConfigProvider = (*Connector)(nil)
 // This is necessary for region validation for zone configurations and
 // multi-region primitives.
 var _ serverpb.RegionsServer = (*Connector)(nil)
+
+// Connector is capable of accessing span configurations for secondary tenants.
+var _ spanconfig.KVAccessor = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -367,16 +371,16 @@ func (c *Connector) RangeLookup(
 // Regions implements the serverpb.RegionsServer interface.
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
-) (*serverpb.RegionsResponse, error) {
-	ctx = c.AnnotateCtx(ctx)
-	for ctx.Err() == nil {
-		client, err := c.getClient(ctx)
-		if err != nil {
-			continue
-		}
-		return client.Regions(ctx, req)
+) (resp *serverpb.RegionsResponse, _ error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.Regions(ctx, req)
+		return err
+	}); err != nil {
+		return nil, err
 	}
-	return nil, ctx.Err()
+
+	return resp, nil
 }
 
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
@@ -413,6 +417,56 @@ func (c *Connector) TokenBucket(
 		return resp, nil
 	}
 	return nil, ctx.Err()
+}
+
+// GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface.
+func (c *Connector) GetSpanConfigEntriesFor(
+	ctx context.Context, spans []roachpb.Span,
+) (entries []roachpb.SpanConfigEntry, _ error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
+			Spans: spans,
+		})
+		if err != nil {
+			return err
+		}
+
+		entries = resp.SpanConfigEntries
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// UpdateSpanConfigEntries implements the spanconfig.KVAccessor
+// interface.
+func (c *Connector) UpdateSpanConfigEntries(
+	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+) error {
+	return c.withClient(ctx, func(ctx context.Context, c *client) error {
+		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
+			ToDelete: toDelete,
+			ToUpsert: toUpsert,
+		})
+		return err
+	})
+}
+
+// withClient is a convenience wrapper that executes the given closure while
+// papering over InternalClient retrieval errors.
+func (c *Connector) withClient(
+	ctx context.Context, f func(ctx context.Context, c *client) error,
+) error {
+	ctx = c.AnnotateCtx(ctx)
+	for ctx.Err() == nil {
+		c, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		return f(ctx, c)
+	}
+	return ctx.Err()
 }
 
 // getClient returns the singleton InternalClient if one is currently active. If
