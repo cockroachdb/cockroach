@@ -304,6 +304,10 @@ const (
 	// DatabasePlacementPolicy setting PLACEMENT for databases is supported in this
 	// version.
 	DatabasePlacementPolicy
+	// SpanConfigurationsTable adds the span configurations system table, to
+	// store all KV span configs.
+	SpanConfigurationsTable
+
 	// Step (1): Add new versions here.
 )
 
@@ -519,6 +523,11 @@ var versionsSingleton = keyedVersions{
 		Key:     DatabasePlacementPolicy,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 148},
 	},
+	{
+		Key:     SpanConfigurationsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 150},
+	},
+
 	// Step (2): Add new versions here.
 }
 

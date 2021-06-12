@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/server/serverpb",
+        "//pkg/spanconfig",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/log",

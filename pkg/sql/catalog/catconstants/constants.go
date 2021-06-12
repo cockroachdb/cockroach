@@ -78,6 +78,7 @@ const (
 	DatabaseRoleSettingsTableName          SystemTableName = "database_role_settings"
 	TenantUsageTableName                   SystemTableName = "tenant_usage"
 	SQLInstancesTableName                  SystemTableName = "sql_instances"
+	SpanConfigurationsTableName            SystemTableName = "span_configurations"
 )
 
 // Oid for virtual database and table.
