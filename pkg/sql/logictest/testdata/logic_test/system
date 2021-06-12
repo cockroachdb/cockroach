@@ -31,6 +31,7 @@ public  role_members                     table  NULL  0  NULL
 public  role_options                     table  NULL  0  NULL
 public  scheduled_jobs                   table  NULL  0  NULL
 public  settings                         table  NULL  0  NULL
+public  span_configurations              table  NULL  0  NULL
 public  sql_instances                    table  NULL  0  NULL
 public  sqlliveness                      table  NULL  0  NULL
 public  statement_bundle_chunks          table  NULL  0  NULL
@@ -85,6 +86,7 @@ SELECT id FROM system.descriptor
 44
 45
 46
+47
 50
 51
 52
@@ -392,6 +394,16 @@ system  public  settings                         root    GRANT
 system  public  settings                         root    INSERT
 system  public  settings                         root    SELECT
 system  public  settings                         root    UPDATE
+system  public  span_configurations              admin   DELETE
+system  public  span_configurations              admin   GRANT
+system  public  span_configurations              admin   INSERT
+system  public  span_configurations              admin   SELECT
+system  public  span_configurations              admin   UPDATE
+system  public  span_configurations              root    DELETE
+system  public  span_configurations              root    GRANT
+system  public  span_configurations              root    INSERT
+system  public  span_configurations              root    SELECT
+system  public  span_configurations              root    UPDATE
 system  public  sql_instances                    admin   DELETE
 system  public  sql_instances                    admin   GRANT
 system  public  sql_instances                    admin   INSERT

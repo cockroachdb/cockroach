@@ -531,6 +531,14 @@ CREATE TABLE system.sql_instances (
     session_id   BYTES,
     FAMILY "primary" (id, addr, session_id)
 )`
+
+	SpanConfigurationsTableSchema = `
+CREATE TABLE system.span_configurations (
+    start_key    BYTES NOT NULL PRIMARY KEY,
+    end_key      BYTES NOT NULL,
+    config        BYTES NOT NULL,
+    FAMILY "primary" (start_key, end_key, config)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2322,6 +2330,37 @@ var (
 		NextIndexID:  2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.SQLInstancesTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// SpanConfigurationsTable is the descriptor for the system tenant's span
+	// configurations table.
+	SpanConfigurationsTable = makeTable(descpb.TableDescriptor{
+		Name:                    "span_configurations",
+		ID:                      keys.SpanConfigurationsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "start_key", ID: 1, Type: types.Bytes},
+			{Name: "end_key", ID: 2, Type: types.Bytes},
+			{Name: "config", ID: 3, Type: types.Bytes},
+		},
+		NextColumnID: 4,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"start_key", "end_key", "config"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("start_key"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.SpanConfigurationsTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
