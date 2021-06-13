@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -668,16 +669,25 @@ func (r *Registry) Start(
 	}
 
 	removeClaimsFromDeadSessions := func(ctx context.Context, s sqlliveness.Session) {
-		if _, err := r.ex.QueryRowEx(
-			ctx, "expire-sessions", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Run the expiration transaction at low priority to ensure that it does
+			// not contend with foreground reads. Note that the adoption and cancellation
+			// queries also use low priority so they will interact nicely.
+			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+				return errors.WithAssertionFailure(err)
+			}
+			_, err := r.ex.ExecEx(
+				ctx, "expire-sessions", nil,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id <> $1
    AND status IN `+claimableStatusTupleString+`
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
-			s.ID().UnsafeBytes(),
-		); err != nil {
+				s.ID().UnsafeBytes(),
+			)
+			return err
+		}); err != nil {
 			log.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
