@@ -199,8 +199,8 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 	// we should be careful with the details that we want to expose.
 	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(msg)
 	if err != nil {
-		clientErr := &codeError{codeParamsRoutingFailed, err}
-		log.Errorf(ctx, "unable to extract cluster name and tenant id: %s", clientErr.Error())
+		clientErr := newErrorf(codeParamsRoutingFailed, "Invalid cluster name")
+		log.Errorf(ctx, "unable to extract cluster name and tenant id: %s", err.Error())
 		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
 		return clientErr
 	}
@@ -212,8 +212,8 @@ func (handler *proxyHandler) handle(ctx context.Context, proxyConn *conn) error 
 
 	ipAddr, _, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err != nil {
-		clientErr := &codeError{codeParamsRoutingFailed, err}
-		log.Errorf(ctx, "could not parse address: %v", clientErr.Error())
+		clientErr := newErrorf(codeParamsRoutingFailed, "Unexpected connection address")
+		log.Errorf(ctx, "could not parse address: %v", err.Error())
 		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
 		return clientErr
 	}
@@ -502,12 +502,13 @@ func clusterNameAndTenantFromParams(
 	}
 
 	sepIdx := strings.LastIndex(clusterNameFromDB, clusterTenantSep)
+
 	// Cluster name provided without a tenant ID in the end.
 	if sepIdx == -1 || sepIdx == len(clusterNameFromDB)-1 {
-		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name %s", clusterNameFromDB)
+		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
 	}
-	clusterNameSansTenant, tenantIDStr := clusterNameFromDB[:sepIdx], clusterNameFromDB[sepIdx+1:]
 
+	clusterNameSansTenant, tenantIDStr := clusterNameFromDB[:sepIdx], clusterNameFromDB[sepIdx+1:]
 	if !clusterNameRegex.MatchString(clusterNameSansTenant) {
 		return msg, "", roachpb.MaxTenantID, errors.Errorf("invalid cluster name '%s'", clusterNameFromDB)
 	}
@@ -515,6 +516,9 @@ func clusterNameAndTenantFromParams(
 	tenID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
 		return msg, "", roachpb.MaxTenantID, errors.Wrapf(err, "cannot parse %s as uint64", tenantIDStr)
+	}
+	if tenID < roachpb.MinTenantID.ToUint64() {
+		return msg, "", roachpb.MaxTenantID, errors.Newf("cannot parse %s as a valid tenant ID", tenantIDStr)
 	}
 
 	// Make and return a copy of the startup msg so the original is not modified.
@@ -545,7 +549,7 @@ func parseDatabaseParam(databaseParam string) (clusterName, databaseName string,
 		return "", "", nil
 	}
 
-	parts := strings.SplitN(databaseParam, ".", 2)
+	parts := strings.Split(databaseParam, ".")
 
 	// Database param provided without cluster name.
 	if len(parts) <= 1 {
