@@ -349,42 +349,54 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 				IgnoreEmpty bool
 				Store       string
 				Port        int
+				Local       bool
 			}{
 				OneShot:     oneShot,
 				IgnoreEmpty: ignoreEmptyNodes,
 				Store:       Cockroach{}.NodeDir(c, nodes[i], 1 /* storeIndex */),
 				Port:        Cockroach{}.NodePort(c, nodes[i]),
+				Local:       c.IsLocal(),
 			}
 
 			snippet := `
-lastpid=0
-{{ if .IgnoreEmpty}}
+{{ if .IgnoreEmpty }}
 if [ ! -f "{{.Store}}/CURRENT" ]; then
   echo "skipped"
   exit 0
 fi
 {{- end}}
+
+lastpid=""
 while :; do
+{{ if .Local }}
   pid=$(lsof -i :{{.Port}} -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
+	pid=${pid:-0} # default to 0
+	status=unknown
+{{- else }}
+	pid=$(systemctl show cockroach --property MainPID --value)
+	status=$(systemctl show cockroach --property ExecMainStatus --value)
+{{- end }}
+
   if [ "${pid}" != "${lastpid}" ]; then
-    if [ -n "${lastpid}" -a -z "${pid}" ]; then
-      echo dead
+		# Output a dead event on every PID change, except if initial PID is live.
+		if [[ ! ("${lastpid}" == "" && "${pid}" != 0) ]]; then
+    	echo "dead (exit status ${status})"
+		fi
+		if [ "${pid}" != 0 ]; then
+			echo "${pid}"
     fi
     lastpid=${pid}
-    if [ -n "${pid}" ]; then
-      echo ${pid}
-    fi
   fi
-{{if .OneShot }}
+
+{{ if .OneShot }}
   exit 0
-{{- end}}
-  if [ -n "${lastpid}" ]; then
-    while kill -0 "${lastpid}"; do
+{{- end }}
+
+  sleep 1
+  if [ "${pid}" != 0 ]; then
+    while kill -0 "${pid}"; do
       sleep 1
     done
-    echo "kill exited nonzero"
-  else
-    sleep 1
   fi
 done
 `
