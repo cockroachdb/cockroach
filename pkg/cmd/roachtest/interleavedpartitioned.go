@@ -31,7 +31,7 @@ func registerInterleaved(r *testRegistry) {
 	runInterleaved := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 		config config,
 	) {
 		numZones, numRoachNodes, numLoadNodes := 3, 9, 3
@@ -45,8 +45,8 @@ func registerInterleaved(r *testRegistry) {
 		cockroachNodes := loadGroups.roachNodes()
 		workloadNodes := loadGroups.loadNodes()
 
-		c.l.Printf("cockroach nodes: %s", cockroachNodes.String()[1:])
-		c.l.Printf("workload nodes: %s", workloadNodes.String()[1:])
+		t.l.Printf("cockroach nodes: %s", cockroachNodes.String()[1:])
+		t.l.Printf("workload nodes: %s", workloadNodes.String()[1:])
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
@@ -121,7 +121,7 @@ func registerInterleaved(r *testRegistry) {
 		Name:    "interleavedpartitioned",
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(12, geo(), zones("us-east1-b,us-west1-b,europe-west2-b")),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runInterleaved(ctx, t, c,
 				config{
 					eastName:        `europe-west2-b`,

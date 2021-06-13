@@ -38,7 +38,7 @@ func registerDecommission(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Cluster:    makeClusterSpec(4),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				if local {
 					duration = 5 * time.Minute
 					t.l.Printf("running with duration=%s in local mode\n", duration)
@@ -55,7 +55,7 @@ func registerDecommission(r *testRegistry) {
 			MinVersion: "v20.2.0",
 			Timeout:    10 * time.Minute,
 			Cluster:    makeClusterSpec(numNodes),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runDecommissionRandomized(ctx, t, c)
 			},
 		})
@@ -67,7 +67,7 @@ func registerDecommission(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Cluster:    makeClusterSpec(numNodes),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
 			},
 		})
@@ -83,7 +83,7 @@ func registerDecommission(r *testRegistry) {
 // that would spam the log before #23605. I wonder if we should really
 // start grepping the logs. An alternative is to introduce a metric
 // that would have signaled this and check that instead.
-func runDecommission(ctx context.Context, t *test, c *cluster, nodes int, duration time.Duration) {
+func runDecommission(ctx context.Context, t *test, c clusterI, nodes int, duration time.Duration) {
 	const defaultReplicationFactor = 3
 	if defaultReplicationFactor > nodes {
 		t.Fatal("improper configuration: replication factor greater than number of nodes in the test")
@@ -297,7 +297,7 @@ func runDecommission(ctx context.Context, t *test, c *cluster, nodes int, durati
 // through partial decommissioning of random nodes, ensuring we're able to undo
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
-func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
+func runDecommissionRandomized(ctx context.Context, t *test, c clusterI) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
@@ -352,7 +352,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			numCols, err := cli.GetCsvNumCols(o)
 			require.NoError(t, err)
 			exp := h.expectCell(targetNode-1, /* node IDs are 1-indexed */
-				statusHeaderMembershipColumnIdx, `decommissioning`, c.spec.NodeCount, numCols)
+				statusHeaderMembershipColumnIdx, `decommissioning`, c.Spec().NodeCount, numCols)
 			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
@@ -382,7 +382,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			numCols, err := cli.GetCsvNumCols(o)
 			require.NoError(t, err)
 			exp := h.expectCell(targetNode-1, /* node IDs are 1-indexed */
-				statusHeaderMembershipColumnIdx, `active`, c.spec.NodeCount, numCols)
+				statusHeaderMembershipColumnIdx, `active`, c.Spec().NodeCount, numCols)
 			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
@@ -411,7 +411,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				}
 
 				exp := [][]string{decommissionHeader}
-				for i := 1; i <= c.spec.NodeCount; i++ {
+				for i := 1; i <= c.Spec().NodeCount; i++ {
 					rowRegex := []string{strconv.Itoa(i), "true", `\d+`, "true", "decommissioning", "false"}
 					exp = append(exp, rowRegex)
 				}
@@ -437,10 +437,10 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			numCols, err := cli.GetCsvNumCols(o)
 			require.NoError(t, err)
 			var colRegex []string
-			for i := 1; i <= c.spec.NodeCount; i++ {
+			for i := 1; i <= c.Spec().NodeCount; i++ {
 				colRegex = append(colRegex, `decommissioning`)
 			}
-			exp := h.expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.spec.NodeCount, numCols)
+			exp := h.expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.Spec().NodeCount, numCols)
 			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
@@ -482,10 +482,10 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			numCols, err := cli.GetCsvNumCols(o)
 			require.NoError(t, err)
 			var colRegex []string
-			for i := 1; i <= c.spec.NodeCount; i++ {
+			for i := 1; i <= c.Spec().NodeCount; i++ {
 				colRegex = append(colRegex, `active`)
 			}
-			exp := h.expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.spec.NodeCount, numCols)
+			exp := h.expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.Spec().NodeCount, numCols)
 			if err := cli.MatchCSV(o, exp); err != nil {
 				t.Fatal(err)
 			}
@@ -553,7 +553,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 					t.Fatalf("node-ls failed: %v", err)
 				}
 				exp := [][]string{{"id"}}
-				for i := 1; i <= c.spec.NodeCount; i++ {
+				for i := 1; i <= c.Spec().NodeCount; i++ {
 					if _, ok := h.randNodeBlocklist[i]; ok {
 						// Decommissioned, so should go away in due time.
 						continue
@@ -580,7 +580,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				require.NoError(t, err)
 
 				colRegex := []string{}
-				for i := 1; i <= c.spec.NodeCount; i++ {
+				for i := 1; i <= c.Spec().NodeCount; i++ {
 					if _, ok := h.randNodeBlocklist[i]; ok {
 						continue // decommissioned
 					}
@@ -731,7 +731,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 
 				var exp [][]string
 				// We expect an entry for every node we haven't decommissioned yet.
-				for i := 1; i <= c.spec.NodeCount-len(h.randNodeBlocklist); i++ {
+				for i := 1; i <= c.Spec().NodeCount-len(h.randNodeBlocklist); i++ {
 					exp = append(exp, []string{fmt.Sprintf("[^%d]", targetNode)})
 				}
 
@@ -751,7 +751,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 				numCols, err := cli.GetCsvNumCols(o)
 				require.NoError(t, err)
 				var expC []string
-				for i := 1; i <= c.spec.NodeCount-len(h.randNodeBlocklist); i++ {
+				for i := 1; i <= c.Spec().NodeCount-len(h.randNodeBlocklist); i++ {
 					expC = append(expC, fmt.Sprintf("[^%d].*", targetNode))
 				}
 				exp := h.expectIDsInStatusOut(expC, numCols)
@@ -795,7 +795,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			re += `].*`
 			// We expect to all the decommissioned nodes to
 			// disappear, but we let one rejoin as a fresh node.
-			for i := 1; i <= c.spec.NodeCount-len(h.randNodeBlocklist)+1; i++ {
+			for i := 1; i <= c.Spec().NodeCount-len(h.randNodeBlocklist)+1; i++ {
 				expC = append(expC, re)
 			}
 			exp := h.expectIDsInStatusOut(expC, numCols)
@@ -897,16 +897,16 @@ const statusHeaderMembershipColumnIdx = 11
 
 type decommTestHelper struct {
 	t       *test
-	c       *cluster
+	c       clusterI
 	nodeIDs []int
 	// randNodeBlocklist are the nodes that won't be returned from randNode().
 	// populated via blockFromRandNode().
 	randNodeBlocklist map[int]struct{}
 }
 
-func newDecommTestHelper(t *test, c *cluster) *decommTestHelper {
+func newDecommTestHelper(t *test, c clusterI) *decommTestHelper {
 	var nodeIDs []int
-	for i := 1; i <= c.spec.NodeCount; i++ {
+	for i := 1; i <= c.Spec().NodeCount; i++ {
 		nodeIDs = append(nodeIDs, i)
 	}
 	return &decommTestHelper{
@@ -1055,7 +1055,7 @@ func (h *decommTestHelper) getRandNodeOtherThan(ids ...int) int {
 }
 
 func execCLI(
-	ctx context.Context, t *test, c *cluster, runNode int, extraArgs ...string,
+	ctx context.Context, t *test, c clusterI, runNode int, extraArgs ...string,
 ) (string, error) {
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)

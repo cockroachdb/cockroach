@@ -25,7 +25,7 @@ func registerTypeORM(r *testRegistry) {
 	runTypeORM := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -47,21 +47,22 @@ func registerTypeORM(r *testRegistry) {
 		}
 
 		t.Status("cloning TypeORM and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "typeorm", "typeorm", typeORMReleaseTagRegex)
+		latestTag, err := repeatGetLatestTag(ctx, t, "typeorm", "typeorm", typeORMReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest TypeORM release is %s.", latestTag)
-		c.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
+		t.l.Printf("Latest TypeORM release is %s.", latestTag)
+		t.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -73,6 +74,7 @@ func registerTypeORM(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"add nodesource repository",
@@ -82,26 +84,26 @@ func registerTypeORM(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
+			ctx, t, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "update npm", `sudo npm i -g npm`,
+			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old TypeORM", `sudo rm -rf /mnt/data1/typeorm`,
+			ctx, t, c, node, "remove old TypeORM", `sudo rm -rf /mnt/data1/typeorm`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/typeorm/typeorm.git",
 			"/mnt/data1/typeorm",
@@ -115,6 +117,7 @@ func registerTypeORM(r *testRegistry) {
 		// it will return a file not found error.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"configuring tests for cockroach only",
@@ -125,6 +128,7 @@ func registerTypeORM(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"patch TypeORM test script to run all tests even on failure",
@@ -135,6 +139,7 @@ func registerTypeORM(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"building TypeORM",
@@ -148,7 +153,7 @@ func registerTypeORM(r *testRegistry) {
 			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
 		)
 		rawResultsStr := string(rawResults)
-		c.l.Printf("Test Results: %s", rawResultsStr)
+		t.l.Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			// Ignore the failure discussed in #38180 and in
 			// https://github.com/typeorm/typeorm/pull/4298.
@@ -170,7 +175,7 @@ func registerTypeORM(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runTypeORM(ctx, t, c)
 		},
 	})

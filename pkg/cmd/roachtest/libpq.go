@@ -23,7 +23,7 @@ var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 var libPQSupportedTag = "v1.10.0"
 
 func registerLibPQ(r *testRegistry) {
-	runLibPQ := func(ctx context.Context, t *test, c *cluster) {
+	runLibPQ := func(ctx context.Context, t *test, c clusterI) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -44,10 +44,10 @@ func registerLibPQ(r *testRegistry) {
 
 		t.Status("cloning lib/pq and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "lib", "pq", libPQReleaseTagRegex)
+			ctx, t, "lib", "pq", libPQReleaseTagRegex)
 		require.NoError(t, err)
-		c.l.Printf("Latest lib/pq release is %s.", latestTag)
-		c.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
+		t.l.Printf("Latest lib/pq release is %s.", latestTag)
+		t.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -60,20 +60,20 @@ func registerLibPQ(r *testRegistry) {
 
 		// Remove any old lib/pq installations
 		err = repeatRunE(
-			ctx, c, node, "remove old lib/pq", fmt.Sprintf("rm -rf %s", libPQPath),
+			ctx, t, c, node, "remove old lib/pq", fmt.Sprintf("rm -rf %s", libPQPath),
 		)
 		require.NoError(t, err)
 
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
-		err = repeatRunE(ctx, c, node, "install go-junit-report",
+		err = repeatRunE(ctx, t, c, node, "install go-junit-report",
 			fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
 		)
 		require.NoError(t, err)
 
 		err = repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			fmt.Sprintf("https://%s.git", libPQRepo),
 			libPQPath,
@@ -87,7 +87,7 @@ func registerLibPQ(r *testRegistry) {
 		if expectedFailures == nil {
 			t.Fatalf("No lib/pq blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		t.Status("running lib/pq test suite and collecting results")
 

@@ -22,7 +22,7 @@ import (
 )
 
 func registerAllocator(r *testRegistry) {
-	runAllocator := func(ctx context.Context, t *test, c *cluster, start int, maxStdDev float64) {
+	runAllocator := func(ctx context.Context, t *test, c clusterI, start int, maxStdDev float64) {
 		c.Put(ctx, cockroach, "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
@@ -44,10 +44,10 @@ func registerAllocator(r *testRegistry) {
 		m.Wait()
 
 		// Start the remaining nodes to kick off upreplication/rebalancing.
-		c.Start(ctx, t, c.Range(start+1, c.spec.NodeCount), args)
+		c.Start(ctx, t, c.Range(start+1, c.Spec().NodeCount), args)
 
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv --drop`)
-		for node := 1; node <= c.spec.NodeCount; node++ {
+		for node := 1; node <= c.Spec().NodeCount; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
 			// but we can't put it in monitor as-is because the test deadlocks.
@@ -74,7 +74,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/up/1to3`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
@@ -82,7 +82,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
@@ -250,8 +250,8 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 	}
 }
 
-func runWideReplication(ctx context.Context, t *test, c *cluster) {
-	nodes := c.spec.NodeCount
+func runWideReplication(ctx context.Context, t *test, c clusterI) {
+	nodes := c.Spec().NodeCount
 	if nodes != 9 {
 		t.Fatalf("9-node cluster required")
 	}

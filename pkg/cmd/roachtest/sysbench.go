@@ -83,10 +83,10 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 	)
 }
 
-func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions) {
-	allNodes := c.Range(1, c.spec.NodeCount)
-	roachNodes := c.Range(1, c.spec.NodeCount-1)
-	loadNode := c.Node(c.spec.NodeCount)
+func runSysbench(ctx context.Context, t *test, c clusterI, opts sysbenchOptions) {
+	allNodes := c.Range(1, c.Spec().NodeCount)
+	roachNodes := c.Range(1, c.Spec().NodeCount-1)
+	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("installing cockroach")
 	c.Put(ctx, cockroach, "./cockroach", allNodes)
@@ -118,7 +118,7 @@ func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions)
 		if err != nil && !strings.Contains(err.Error(), "Segmentation fault") {
 			return err
 		}
-		c.l.Printf("sysbench segfaulted; passing test anyway")
+		t.l.Printf("sysbench segfaulted; passing test anyway")
 		return nil
 	})
 	m.Wait()
@@ -141,7 +141,7 @@ func registerSysbench(r *testRegistry) {
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Owner:   OwnerKV,
 			Cluster: makeClusterSpec(n+1, cpu(cpus)),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runSysbench(ctx, t, c, opts)
 			},
 		})

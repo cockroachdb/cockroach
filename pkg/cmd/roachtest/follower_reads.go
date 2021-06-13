@@ -51,7 +51,7 @@ func registerFollowerReads(r *testRegistry) {
 				// us-west1, and 1 (or 2) in europe-west2.
 				zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runFollowerReadsTest(ctx, t, c, survival, locality)
 			},
 		})
@@ -99,14 +99,14 @@ const (
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
 func runFollowerReadsTest(
-	ctx context.Context, t *test, c *cluster, survival survivalGoal, locality localitySetting,
+	ctx context.Context, t *test, c clusterI, survival survivalGoal, locality localitySetting,
 ) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Wipe(ctx)
 	c.Start(ctx, t)
 
 	var conns []*gosql.DB
-	for i := 0; i < c.spec.NodeCount; i++ {
+	for i := 0; i < c.Spec().NodeCount; i++ {
 		conns = append(conns, c.Conn(ctx, i+1))
 		defer conns[i].Close()
 	}
@@ -321,7 +321,7 @@ func runFollowerReadsTest(
 	// few times on each follower to give caches time to warm up.
 	g, gCtx = errgroup.WithContext(ctx)
 	k, v := chooseKV()
-	for i := 1; i <= c.spec.NodeCount; i++ {
+	for i := 1; i <= c.Spec().NodeCount; i++ {
 		fn := verifySelect(gCtx, i, k, v)
 		g.Go(func() error {
 			for j := 0; j < 100; j++ {
@@ -359,7 +359,7 @@ func runFollowerReadsTest(
 	defer cancel()
 	g, gCtx = errgroup.WithContext(timeoutCtx)
 	for i := 0; i < concurrency; i++ {
-		g.Go(doSelects(gCtx, rand.Intn(c.spec.NodeCount)+1))
+		g.Go(doSelects(gCtx, rand.Intn(c.Spec().NodeCount)+1))
 	}
 	start := timeutil.Now()
 	if err := g.Wait(); err != nil && timeoutCtx.Err() == nil {
@@ -396,7 +396,7 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 // ignoring the first 20s.
 func verifySQLLatency(
 	ctx context.Context,
-	c *cluster,
+	c clusterI,
 	t *test,
 	adminNode nodeListOption,
 	start, end time.Time,
@@ -445,8 +445,8 @@ const followerReadsMetric = "follower_reads_success_count"
 
 // getFollowerReadCounts returns a slice from node to follower read count
 // according to the metric.
-func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
-	followerReadCounts := make([]int, c.spec.NodeCount)
+func getFollowerReadCounts(ctx context.Context, c clusterI) ([]int, error) {
+	followerReadCounts := make([]int, c.Spec().NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
 			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(node))
@@ -479,7 +479,7 @@ func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
 		}
 	}
 	g, gCtx := errgroup.WithContext(ctx)
-	for i := 1; i <= c.spec.NodeCount; i++ {
+	for i := 1; i <= c.Spec().NodeCount; i++ {
 		g.Go(getFollowerReadCount(gCtx, i))
 	}
 	if err := g.Wait(); err != nil {

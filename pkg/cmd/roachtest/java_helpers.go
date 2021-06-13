@@ -174,7 +174,7 @@ func (r *ormTestsResults) parseJUnitXML(
 func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
 	t *test,
-	c *cluster,
+	c clusterI,
 	node nodeListOption,
 	ormName string,
 	testOutput []byte,
@@ -201,7 +201,7 @@ func parseAndSummarizeJavaORMTestsResults(
 		fileOutput, err := repeatRunWithBuffer(
 			ctx,
 			c,
-			t.l,
+			t,
 			node,
 			fmt.Sprintf("fetching results file %s", file),
 			fmt.Sprintf("cat %s", file),

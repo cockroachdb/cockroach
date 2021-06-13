@@ -30,16 +30,16 @@ func registerClearRange(r *testRegistry) {
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
 			Cluster:    makeClusterSpec(10, cpu(16)),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runClearRange(ctx, t, c, checks)
 			},
 		})
 	}
 }
 
-func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bool) {
+func runClearRange(ctx context.Context, t *test, c clusterI, aggressiveChecks bool) {
 	// Randomize starting with encryption-at-rest enabled.
-	c.encryptAtRandom = true
+	c.EncryptAtRandom(true)
 	c.Put(ctx, cockroach, "./cockroach")
 
 	t.Status("restoring fixture")
@@ -49,7 +49,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	tBegin := timeutil.Now()
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
-	c.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
+	t.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 	c.Stop(ctx)
 	t.Status()
 

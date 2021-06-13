@@ -22,7 +22,7 @@ var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<p
 var gormSupportedTag = "v1.21.8"
 
 func registerGORM(r *testRegistry) {
-	runGORM := func(ctx context.Context, t *test, c *cluster) {
+	runGORM := func(ctx context.Context, t *test, c clusterI) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -40,12 +40,12 @@ func registerGORM(r *testRegistry) {
 
 		t.Status("cloning gorm and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "go-gorm", "gorm", gormReleaseTag)
+			ctx, t, "go-gorm", "gorm", gormReleaseTag)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest gorm release is %s.", latestTag)
-		c.l.Printf("Supported gorm release is %s.", gormSupportedTag)
+		t.l.Printf("Latest gorm release is %s.", latestTag)
+		t.l.Printf("Supported gorm release is %s.", gormSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -59,7 +59,7 @@ func registerGORM(r *testRegistry) {
 
 		// Remove any old gorm installations
 		if err := repeatRunE(
-			ctx, c, node, "remove old gorm", fmt.Sprintf("rm -rf %s", gormPath),
+			ctx, t, c, node, "remove old gorm", fmt.Sprintf("rm -rf %s", gormPath),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -67,14 +67,14 @@ func registerGORM(r *testRegistry) {
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
 		if err := repeatRunE(
-			ctx, c, node, "install go-junit-report", fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
+			ctx, t, c, node, "install go-junit-report", fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			fmt.Sprintf("https://%s.git", gormRepo),
 			gormPath,
@@ -90,11 +90,11 @@ func registerGORM(r *testRegistry) {
 		if expectedFailures == nil {
 			t.Fatalf("No gorm blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		// Write the cockroach config into the test suite to use.
 		if err := repeatRunE(
-			ctx, c, node, fmt.Sprintf(`echo "%s" > %s/tests_test.go`, gormTestHelperGoFile, gormTestPath),
+			ctx, t, c, node, fmt.Sprintf(`echo "%s" > %s/tests_test.go`, gormTestHelperGoFile, gormTestPath),
 		); err != nil {
 			t.Fatal(err)
 		}

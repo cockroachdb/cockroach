@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Duration) {
-	crdbNodes := c.Range(1, c.spec.NodeCount)
+func runRestart(ctx context.Context, t *test, c clusterI, downDuration time.Duration) {
+	crdbNodes := c.Range(1, c.Spec().NodeCount)
 	workloadNode := c.Node(1)
 	const restartNode = 3
 
@@ -78,7 +78,7 @@ func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Dura
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {
-		c.l.Printf(`connecting and query finished in %s`, took)
+		t.l.Printf(`connecting and query finished in %s`, took)
 	}
 }
 
@@ -89,7 +89,7 @@ func registerRestart(r *testRegistry) {
 		Cluster: makeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runRestart(ctx, t, c, 2*time.Minute)
 		},
 	})

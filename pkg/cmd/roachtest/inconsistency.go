@@ -27,10 +27,10 @@ func registerInconsistency(r *testRegistry) {
 	})
 }
 
-func runInconsistency(ctx context.Context, t *test, c *cluster) {
+func runInconsistency(ctx context.Context, t *test, c clusterI) {
 	// With encryption on, our attempt below to manually introduce an inconsistency
 	// will fail.
-	c.encryptDefault = false
+	c.EncryptDefault(false)
 
 	nodes := c.Range(1, 3)
 	c.Put(ctx, cockroach, "./cockroach", nodes)

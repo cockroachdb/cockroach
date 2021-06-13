@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runStatusServer(ctx context.Context, t *test, c *cluster) {
+func runStatusServer(ctx context.Context, t *test, c clusterI) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t)
 
@@ -101,7 +101,7 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 	}
 
 	// Check local response for the every node.
-	for i := 1; i <= c.spec.NodeCount; i++ {
+	for i := 1; i <= c.Spec().NodeCount; i++ {
 		id := idMap[i]
 		checkNode(urlMap[i], id, id, id)
 		get(urlMap[i], "/_status/nodes")
@@ -109,7 +109,7 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 
 	// Proxy from the first node to the last node.
 	firstNode := 1
-	lastNode := c.spec.NodeCount
+	lastNode := c.Spec().NodeCount
 	firstID := idMap[firstNode]
 	lastID := idMap[lastNode]
 	checkNode(urlMap[firstNode], firstID, lastID, lastID)

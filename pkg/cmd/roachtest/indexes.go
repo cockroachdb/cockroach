@@ -33,7 +33,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		MinVersion: `v19.1.0`,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			firstAZ := geoZones[0]
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)

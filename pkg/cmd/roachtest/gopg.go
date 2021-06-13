@@ -37,7 +37,7 @@ func registerGopg(r *testRegistry) {
 	runGopg := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -58,17 +58,17 @@ func registerGopg(r *testRegistry) {
 		}
 
 		t.Status("cloning gopg and installing prerequisites")
-		gopgLatestTag, err := repeatGetLatestTag(ctx, c, "go-pg", "pg", gopgReleaseTagRegex)
+		gopgLatestTag, err := repeatGetLatestTag(ctx, t, "go-pg", "pg", gopgReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest gopg release is %s.", gopgLatestTag)
-		c.l.Printf("Supported gopg release is %s.", gopgSupportedTag)
+		t.l.Printf("Latest gopg release is %s.", gopgLatestTag)
+		t.l.Printf("Supported gopg release is %s.", gopgSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old gopg",
+			ctx, t, c, node, "remove old gopg",
 			fmt.Sprintf(`sudo rm -rf %s`, destPath),
 		); err != nil {
 			t.Fatal(err)
@@ -76,7 +76,7 @@ func registerGopg(r *testRegistry) {
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/go-pg/pg.git",
 			destPath,
@@ -93,7 +93,7 @@ func registerGopg(r *testRegistry) {
 		if ignorelist == nil {
 			t.Fatalf("No gopg ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, blocklistName, ignorelistName)
 
 		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath))
@@ -112,7 +112,7 @@ func registerGopg(r *testRegistry) {
 		)
 
 		t.Status("collating the test results")
-		c.l.Printf("Test Results: %s", rawResults)
+		t.l.Printf("Test Results: %s", rawResults)
 		results := newORMTestsResults()
 
 		// gopg test suite consists of multiple tests, some of them being a full
@@ -150,7 +150,7 @@ func registerGopg(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runGopg(ctx, t, c)
 		},
 	})

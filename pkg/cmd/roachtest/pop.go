@@ -22,7 +22,7 @@ var popReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<po
 var popSupportedTag = "v5.3.3"
 
 func registerPop(r *testRegistry) {
-	runPop := func(ctx context.Context, t *test, c *cluster) {
+	runPop := func(ctx context.Context, t *test, c clusterI) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -40,12 +40,12 @@ func registerPop(r *testRegistry) {
 
 		t.Status("cloning pop and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "gobuffalo", "pop", popReleaseTag)
+			ctx, t, "gobuffalo", "pop", popReleaseTag)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest pop release is %s.", latestTag)
-		c.l.Printf("Supported pop release is %s.", popSupportedTag)
+		t.l.Printf("Latest pop release is %s.", latestTag)
+		t.l.Printf("Supported pop release is %s.", popSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -55,14 +55,14 @@ func registerPop(r *testRegistry) {
 
 		// Remove any old pop installations
 		if err := repeatRunE(
-			ctx, c, node, "remove old pop", fmt.Sprintf("rm -rf %s", popPath),
+			ctx, t, c, node, "remove old pop", fmt.Sprintf("rm -rf %s", popPath),
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/gobuffalo/pop.git",
 			popPath,
