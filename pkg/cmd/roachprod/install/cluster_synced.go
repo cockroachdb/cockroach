@@ -343,12 +343,7 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 				return
 			}
 
-			// On each monitored node, we loop looking for a cockroach process. In
-			// order to avoid polling with lsof, if we find a live process we use nc
-			// (netcat) to connect to the rpc port which will block until the server
-			// either decides to kill the connection or the process is killed.
-			// In one-shot we don't use nc and return after the first assessment
-			// of the process' health.
+			// On each monitored node, we loop looking for a cockroach process.
 			data := struct {
 				OneShot     bool
 				IgnoreEmpty bool
@@ -401,22 +396,12 @@ done
 				return
 			}
 
-			// Request a PTY so that the script will receive will receive a SIGPIPE
-			// when the session is closed.
+			// Request a PTY so that the script will receive a SIGPIPE when the
+			// session is closed.
 			if err := sess.RequestPty(); err != nil {
 				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
-			// Give the session a valid stdin pipe so that nc won't exit immediately.
-			// When nc does exit, we write to stdout, which has a side effect of
-			// checking whether the stdout pipe has broken. This allows us to detect
-			// when the roachprod process is killed.
-			inPipe, err := sess.StdinPipe()
-			if err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
-				return
-			}
-			defer inPipe.Close()
 
 			var readerWg sync.WaitGroup
 			readerWg.Add(1)
