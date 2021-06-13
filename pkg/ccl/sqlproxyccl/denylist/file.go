@@ -155,7 +155,8 @@ func (dl *Denylist) Denied(entity DenyEntity) (*Entry, error) {
 	dl.mu.RLock()
 	defer dl.mu.RUnlock()
 
-	if ent, ok := dl.mu.entries[entity]; ok && !ent.Expiration.Before(dl.timeSource.Now()) {
+	if ent, ok := dl.mu.entries[entity]; ok &&
+		(ent.Expiration.IsZero() || !ent.Expiration.Before(dl.timeSource.Now())) {
 		return &Entry{ent.Reason}, nil
 	}
 	return nil, nil
