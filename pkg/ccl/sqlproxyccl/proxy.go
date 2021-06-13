@@ -66,6 +66,13 @@ var sendErrToClient = func(conn net.Conn, err error) {
 			Code:     pgCode,
 			Message:  msg,
 		}).Encode(nil))
+	} else {
+		// Return a generic "internal server error" message.
+		_, _ = conn.Write((&pgproto3.ErrorResponse{
+			Severity: "FATAL",
+			Code:     "08004", // rejected connection
+			Message:  "internal server error",
+		}).Encode(nil))
 	}
 }
 
