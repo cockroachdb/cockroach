@@ -23,9 +23,9 @@ import (
 )
 
 func registerEngineSwitch(r *testRegistry) {
-	runEngineSwitch := func(ctx context.Context, t *test, c *cluster, additionalArgs ...string) {
-		roachNodes := c.Range(1, c.spec.NodeCount-1)
-		loadNode := c.Node(c.spec.NodeCount)
+	runEngineSwitch := func(ctx context.Context, t *test, c clusterI, additionalArgs ...string) {
+		roachNodes := c.Range(1, c.Spec().NodeCount-1)
+		loadNode := c.Node(c.Spec().NodeCount)
 		c.Put(ctx, workload, "./workload", loadNode)
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		pebbleArgs := startArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
@@ -88,7 +88,7 @@ func registerEngineSwitch(r *testRegistry) {
 					if err := rows.Close(); err != nil {
 						return err
 					}
-					if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
+					if err := c.CheckReplicaDivergenceOnDB(ctx, t, db); err != nil {
 						return errors.Wrapf(err, "node %d", i)
 					}
 				}
@@ -143,7 +143,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(n + 1),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runEngineSwitch(ctx, t, c)
 		},
 	})
@@ -153,7 +153,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(n + 1),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runEngineSwitch(ctx, t, c, "--encrypt=true")
 		},
 	})

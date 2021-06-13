@@ -23,7 +23,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 		Name:    "schemachange/invertedindex",
 		Owner:   OwnerSQLSchema,
 		Cluster: makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
 	})
@@ -31,9 +31,9 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 
 // runInvertedIndex tests the correctness and performance of building an
 // inverted index on randomly generated JSON data (from the JSON workload).
-func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c *cluster) {
-	crdbNodes := c.Range(1, c.spec.NodeCount-1)
-	workloadNode := c.Node(c.spec.NodeCount)
+func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c clusterI) {
+	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
+	workloadNode := c.Node(c.Spec().NodeCount)
 
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
@@ -56,7 +56,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c *cluster) {
 
 	cmdWrite := fmt.Sprintf(
 		"./workload run json --read-percent=0 --duration %s {pgurl:1-%d} --batch 1000 --sequential",
-		initialDataDuration.String(), c.spec.NodeCount-1,
+		initialDataDuration.String(), c.Spec().NodeCount-1,
 	)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, workloadNode, cmdWrite)
@@ -80,7 +80,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c *cluster) {
 
 	cmdWriteAndRead := fmt.Sprintf(
 		"./workload run json --read-percent=50 --duration %s {pgurl:1-%d} --sequential",
-		indexDuration.String(), c.spec.NodeCount-1,
+		indexDuration.String(), c.Spec().NodeCount-1,
 	)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, workloadNode, cmdWriteAndRead)

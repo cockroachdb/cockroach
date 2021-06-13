@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 )
 
-func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
+func runCLINodeStatus(ctx context.Context, t *test, c clusterI) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, c.Range(1, 3))
 

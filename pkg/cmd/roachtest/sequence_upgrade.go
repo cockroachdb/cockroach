@@ -21,7 +21,7 @@ func registerSequenceUpgrade(r *testRegistry) {
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v21.1.0",
 		Cluster:    makeClusterSpec(1),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runSequenceUpgradeMigration(ctx, t, c)
 		},
 	})
@@ -78,7 +78,7 @@ func verifySequences(node int) versionStep {
 	}
 }
 
-func runSequenceUpgradeMigration(ctx context.Context, t *test, c *cluster) {
+func runSequenceUpgradeMigration(ctx context.Context, t *test, c clusterI) {
 	const (
 		v20_2 = "20.2.4"
 		// An empty string means that the cockroach binary specified by flag

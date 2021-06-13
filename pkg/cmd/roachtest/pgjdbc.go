@@ -25,7 +25,7 @@ func registerPgjdbc(r *testRegistry) {
 	runPgjdbc := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -50,16 +50,16 @@ func registerPgjdbc(r *testRegistry) {
 		// Report the latest tag, but do not use it. The newest versions produces output that breaks our xml parser,
 		// and we want to pin to the working version for now.
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "pgjdbc", "pgjdbc", pgjdbcReleaseTagRegex,
+			ctx, t, "pgjdbc", "pgjdbc", pgjdbcReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest pgjdbc release is %s.", latestTag)
-		c.l.Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
+		t.l.Printf("Latest pgjdbc release is %s.", latestTag)
+		t.l.Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -67,6 +67,7 @@ func registerPgjdbc(r *testRegistry) {
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -76,14 +77,14 @@ func registerPgjdbc(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old pgjdbc", `rm -rf /mnt/data1/pgjdbc`,
+			ctx, t, c, node, "remove old pgjdbc", `rm -rf /mnt/data1/pgjdbc`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/pgjdbc/pgjdbc.git",
 			"/mnt/data1/pgjdbc",
@@ -97,6 +98,7 @@ func registerPgjdbc(r *testRegistry) {
 		// to override settings in build.local.properties
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"configuring tests for cockroach only",
@@ -114,6 +116,7 @@ func registerPgjdbc(r *testRegistry) {
 		// single test is invoked.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"building pgjdbc (without tests)",
@@ -131,7 +134,7 @@ func registerPgjdbc(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		c.l.Printf("%s", status)
+		t.l.Printf("%s", status)
 
 		t.Status("running pgjdbc test suite")
 		// Note that this is expected to return an error, since the test suite
@@ -151,6 +154,7 @@ func registerPgjdbc(r *testRegistry) {
 		// Copy the individual test result files.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"copy test result files",
@@ -164,7 +168,7 @@ func registerPgjdbc(r *testRegistry) {
 		output, err := repeatRunWithBuffer(
 			ctx,
 			c,
-			t.l,
+			t,
 			node,
 			"get list of test files",
 			`ls /mnt/data1/pgjdbc/pgjdbc/build/test-results/test/*.xml`,
@@ -188,7 +192,7 @@ func registerPgjdbc(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runPgjdbc(ctx, t, c)
 		},
 	})

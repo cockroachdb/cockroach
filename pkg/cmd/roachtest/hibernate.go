@@ -25,7 +25,7 @@ type hibernateOptions struct {
 	buildCmd,
 	testCmd string
 	blocklists  blocklistsForVersion
-	dbSetupFunc func(ctx context.Context, t *test, c *cluster)
+	dbSetupFunc func(ctx context.Context, t *test, c clusterI)
 }
 
 var (
@@ -46,7 +46,7 @@ var (
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
 		blocklists: hibernateSpatialBlocklists,
-		dbSetupFunc: func(ctx context.Context, t *test, c *cluster) {
+		dbSetupFunc: func(ctx context.Context, t *test, c clusterI) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(
@@ -66,7 +66,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -96,16 +96,16 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 
 		t.Status("cloning hibernate and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
+			ctx, t, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Hibernate release is %s.", latestTag)
-		c.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
+		t.l.Printf("Latest Hibernate release is %s.", latestTag)
+		t.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -113,6 +113,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -122,14 +123,14 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old Hibernate", `rm -rf /mnt/data1/hibernate`,
+			ctx, t, c, node, "remove old Hibernate", `rm -rf /mnt/data1/hibernate`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/hibernate/hibernate-orm.git",
 			"/mnt/data1/hibernate",
@@ -146,6 +147,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		// single test is invoked.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"building hibernate (without tests)",
@@ -157,6 +159,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		// Delete the test result; the test will be executed again later.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"delete test result from build output",
@@ -169,7 +172,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
+		t.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// Note that this will take upwards of 3 hours.
@@ -184,6 +187,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		// Copy the html report for the test.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"copy html report",
@@ -195,6 +199,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		// Copy the individual test result files.
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"copy test result files",
@@ -208,7 +213,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		output, err := repeatRunWithBuffer(
 			ctx,
 			c,
-			t.l,
+			t,
 			node,
 			"get list of test files",
 			fmt.Sprintf(`ls /mnt/data1/hibernate/%s/target/test-results/test/*.xml`, opt.testDir),
@@ -232,7 +237,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		MinVersion: "v20.2.0",
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runHibernate(ctx, t, c)
 		},
 	})

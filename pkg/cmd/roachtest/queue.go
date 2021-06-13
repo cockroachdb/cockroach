@@ -27,15 +27,15 @@ func registerQueue(r *testRegistry) {
 		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runQueue(ctx, t, c)
 		},
 	})
 }
 
-func runQueue(ctx context.Context, t *test, c *cluster) {
-	dbNodeCount := c.spec.NodeCount - 1
-	workloadNode := c.spec.NodeCount
+func runQueue(ctx context.Context, t *test, c clusterI) {
+	dbNodeCount := c.Spec().NodeCount - 1
+	workloadNode := c.Spec().NodeCount
 
 	// Distribute programs to the correct nodes and start CockroachDB.
 	c.Put(ctx, cockroach, "./cockroach", c.Range(1, dbNodeCount))

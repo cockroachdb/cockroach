@@ -23,7 +23,7 @@ func registerFlowable(r *testRegistry) {
 	runFlowable := func(
 		ctx context.Context,
 		t *test,
-		c *cluster,
+		c clusterI,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -35,7 +35,7 @@ func registerFlowable(r *testRegistry) {
 
 		t.Status("cloning flowable and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
-			ctx, c, "flowable", "flowable-engine", flowableReleaseTagRegex,
+			ctx, t, "flowable", "flowable-engine", flowableReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -43,13 +43,14 @@ func registerFlowable(r *testRegistry) {
 		t.l.Printf("Latest Flowable release is %s.", latestTag)
 
 		if err := repeatRunE(
-			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"install dependencies",
@@ -59,14 +60,14 @@ func registerFlowable(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old Flowable", `rm -rf /mnt/data1/flowable-engine`,
+			ctx, t, c, node, "remove old Flowable", `rm -rf /mnt/data1/flowable-engine`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatGitCloneE(
 			ctx,
-			t.l,
+			t,
 			c,
 			"https://github.com/flowable/flowable-engine.git",
 			"/mnt/data1/flowable-engine",
@@ -79,6 +80,7 @@ func registerFlowable(r *testRegistry) {
 		t.Status("building Flowable")
 		if err := repeatRunE(
 			ctx,
+			t,
 			c,
 			node,
 			"building Flowable",
@@ -99,7 +101,7 @@ func registerFlowable(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runFlowable(ctx, t, c)
 		},
 	})

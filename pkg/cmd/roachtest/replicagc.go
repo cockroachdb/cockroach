@@ -26,7 +26,7 @@ func registerReplicaGC(r *testRegistry) {
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
 			Owner:   OwnerKV,
 			Cluster: makeClusterSpec(6),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
 		})
@@ -46,8 +46,8 @@ var deadNodeAttr = "deadnode"
 // replicas off of them, and after having done so, it recommissions the downed
 // node. It expects the downed node to discover the new replica placement and gc
 // its replicas.
-func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRestart bool) {
-	if c.spec.NodeCount != 6 {
+func runReplicaGCChangedPeers(ctx context.Context, t *test, c clusterI, withRestart bool) {
+	if c.Spec().NodeCount != 6 {
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 
@@ -138,7 +138,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 
 type replicagcTestHelper struct {
 	t *test
-	c *cluster
+	c clusterI
 }
 
 func (h *replicagcTestHelper) waitForFullReplication(ctx context.Context) {
@@ -190,7 +190,7 @@ func (h *replicagcTestHelper) numReplicas(ctx context.Context, db *gosql.DB, tar
 	).Scan(&n); err != nil {
 		h.t.Fatal(err)
 	}
-	h.c.l.Printf("found %d replicas found on n%d\n", n, targetNode)
+	h.t.l.Printf("found %d replicas found on n%d\n", n, targetNode)
 	return n
 }
 
@@ -236,7 +236,7 @@ func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int)
 		"RANGE default", "RANGE meta", "RANGE system", "RANGE liveness", "DATABASE system", "TABLE system.jobs",
 	} {
 		stmt := `ALTER ` + change + ` CONFIGURE ZONE = 'constraints: {"-` + deadNodeAttr + `"}'`
-		h.c.l.Printf(stmt + "\n")
+		h.t.l.Printf(stmt + "\n")
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			h.t.Fatal(err)
 		}

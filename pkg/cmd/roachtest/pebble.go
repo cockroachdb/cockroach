@@ -24,7 +24,7 @@ func registerPebble(r *testRegistry) {
 		pebble = "./pebble.linux"
 	}
 
-	run := func(ctx context.Context, t *test, c *cluster, size int) {
+	run := func(ctx context.Context, t *test, c clusterI, size int) {
 		c.Put(ctx, pebble, "./pebble")
 
 		const initialKeys = 10_000_000
@@ -35,11 +35,11 @@ func registerPebble(r *testRegistry) {
 		const benchDir = dataDir + "/bench"
 
 		runCmd := func(cmd string) {
-			c.l.PrintfCtx(ctx, "> %s", cmd)
-			err := c.RunL(ctx, c.l, c.All(), cmd)
-			c.l.Printf("> result: %+v", err)
+			t.l.PrintfCtx(ctx, "> %s", cmd)
+			err := c.RunL(ctx, t.l, c.All(), cmd)
+			t.l.Printf("> result: %+v", err)
 			if err := ctx.Err(); err != nil {
-				c.l.Printf("(note: incoming context was canceled: %s", err)
+				t.l.Printf("(note: incoming context was canceled: %s", err)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -84,13 +84,13 @@ func registerPebble(r *testRegistry) {
 			runCmd(fmt.Sprintf("tar cvPf profiles_%s.tar *.prof", workload))
 
 			dest := filepath.Join(t.artifactsDir, fmt.Sprintf("ycsb_%s.log", workload))
-			if err := c.Get(ctx, c.l, "ycsb.log", dest, c.All()); err != nil {
+			if err := c.Get(ctx, t.l, "ycsb.log", dest, c.All()); err != nil {
 				t.Fatal(err)
 			}
 
 			profilesName := fmt.Sprintf("profiles_%s.tar", workload)
 			dest = filepath.Join(t.artifactsDir, profilesName)
-			if err := c.Get(ctx, c.l, profilesName, dest, c.All()); err != nil {
+			if err := c.Get(ctx, t.l, profilesName, dest, c.All()); err != nil {
 				t.Fatal(err)
 			}
 
@@ -107,7 +107,7 @@ func registerPebble(r *testRegistry) {
 			MinVersion: "v20.1.0",
 			Cluster:    makeClusterSpec(5, cpu(16)),
 			Tags:       []string{"pebble"},
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				run(ctx, t, c, size)
 			},
 		})

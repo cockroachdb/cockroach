@@ -26,7 +26,7 @@ import (
 
 type quitTest struct {
 	t    *test
-	c    *cluster
+	c    clusterI
 	args option
 }
 
@@ -37,9 +37,9 @@ type quitTest struct {
 func runQuitTransfersLeases(
 	ctx context.Context,
 	t *test,
-	c *cluster,
+	c clusterI,
 	methodName string,
-	method func(ctx context.Context, t *test, c *cluster, nodeID int),
+	method func(ctx context.Context, t *test, c clusterI, nodeID int),
 ) {
 	q := quitTest{t: t, c: c}
 	q.init(ctx)
@@ -64,7 +64,7 @@ func (q *quitTest) Fatalf(format string, args ...interface{}) {
 }
 
 func (q *quitTest) runTest(
-	ctx context.Context, method func(ctx context.Context, t *test, c *cluster, nodeID int),
+	ctx context.Context, method func(ctx context.Context, t *test, c clusterI, nodeID int),
 ) {
 	q.waitForUpReplication(ctx)
 	q.createRanges(ctx)
@@ -80,7 +80,7 @@ func (q *quitTest) runTest(
 	q.t.l.Printf("now running restart loop\n")
 	for i := 0; i < 3; i++ {
 		q.t.l.Printf("iteration %d\n", i)
-		for nodeID := 1; nodeID <= q.c.spec.NodeCount; nodeID++ {
+		for nodeID := 1; nodeID <= q.c.Spec().NodeCount; nodeID++ {
 			q.t.l.Printf("stopping node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { method(ctx, q.t, q.c, nodeID) })
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.checkNoLeases(ctx, nodeID) })
@@ -192,7 +192,7 @@ ALTER TABLE t SPLIT AT TABLE generate_series(%[1]d,%[1]d-99,-1)`, i)); err != ni
 func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 	// We need to use SQL against a node that's not the one we're
 	// shutting down.
-	otherNodeID := 1 + nodeID%q.c.spec.NodeCount
+	otherNodeID := 1 + nodeID%q.c.Spec().NodeCount
 
 	// Now we're going to check two things:
 	//
@@ -226,7 +226,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 		// For condition (2) we accumulate the unwanted leases in
 		// invLeaseMap, then check at the end that the map is empty.
 		invLeaseMap := map[int][]string{}
-		for i := 1; i <= q.c.spec.NodeCount; i++ {
+		for i := 1; i <= q.c.Spec().NodeCount; i++ {
 			if i == nodeID {
 				// Can't request this node. Ignore.
 				continue
@@ -334,13 +334,13 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 }
 
 func registerQuitTransfersLeases(r *testRegistry) {
-	registerTest := func(name, minver string, method func(context.Context, *test, *cluster, int)) {
+	registerTest := func(name, minver string, method func(context.Context, *test, clusterI, int)) {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("transfer-leases/%s", name),
 			Owner:      OwnerKV,
 			Cluster:    makeClusterSpec(3),
 			MinVersion: minver,
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
 			},
 		})
@@ -348,7 +348,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 
 	// Uses 'roachprod stop --sig 15 --wait', ie send SIGTERM and wait
 	// until the process exits.
-	registerTest("signal", "v19.2.0", func(ctx context.Context, t *test, c *cluster, nodeID int) {
+	registerTest("signal", "v19.2.0", func(ctx context.Context, t *test, c clusterI, nodeID int) {
 		c.Stop(ctx, c.Node(nodeID),
 			roachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
 		)
@@ -356,14 +356,14 @@ func registerQuitTransfersLeases(r *testRegistry) {
 
 	// Uses 'cockroach quit' which should drain and then request a
 	// shutdown. It then waits for the process to self-exit.
-	registerTest("quit", "v19.2.0", func(ctx context.Context, t *test, c *cluster, nodeID int) {
+	registerTest("quit", "v19.2.0", func(ctx context.Context, t *test, c clusterI, nodeID int) {
 		_ = runQuit(ctx, t, c, nodeID)
 	})
 
 	// Uses 'cockroach drain', followed by a non-graceful process
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
-	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c *cluster, nodeID int) {
+	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c clusterI, nodeID int) {
 		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
@@ -395,7 +395,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	})
 }
 
-func runQuit(ctx context.Context, t *test, c *cluster, nodeID int, extraArgs ...string) []byte {
+func runQuit(ctx context.Context, t *test, c clusterI, nodeID int, extraArgs ...string) []byte {
 	args := append([]string{
 		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
 		fmt.Sprintf("--port={pgport:%d}", nodeID)},
@@ -420,7 +420,7 @@ func registerQuitAllNodes(r *testRegistry) {
 		Owner:      OwnerServer,
 		Cluster:    makeClusterSpec(5),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			q := quitTest{t: t, c: c}
 
 			// Start the cluster.

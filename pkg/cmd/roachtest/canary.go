@@ -84,7 +84,7 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 }
 
 func fetchCockroachVersion(
-	ctx context.Context, c *cluster, nodeIndex int, dbConnectionParams *SecureDBConnectionParams,
+	ctx context.Context, c clusterI, nodeIndex int, dbConnectionParams *SecureDBConnectionParams,
 ) (string, error) {
 	var db *gosql.DB
 	var err error
@@ -138,21 +138,21 @@ var canaryRetryOptions = retry.Options{
 
 // repeatRunE is the same function as c.RunE but with an automatic retry loop.
 func repeatRunE(
-	ctx context.Context, c *cluster, node nodeListOption, operation string, args ...string,
+	ctx context.Context, t *test, c clusterI, node nodeListOption, operation string, args ...string,
 ) error {
 	var lastError error
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if c.t.Failed() {
+		if t.Failed() {
 			return fmt.Errorf("test has failed")
 		}
 		attempt++
-		c.l.Printf("attempt %d - %s", attempt, operation)
+		t.l.Printf("attempt %d - %s", attempt, operation)
 		lastError = c.RunE(ctx, node, args...)
 		if lastError != nil {
-			c.l.Printf("error - retrying: %s", lastError)
+			t.l.Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return nil
@@ -163,7 +163,7 @@ func repeatRunE(
 // repeatRunWithBuffer is the same function as c.RunWithBuffer but with an
 // automatic retry loop.
 func repeatRunWithBuffer(
-	ctx context.Context, c *cluster, l *logger, node nodeListOption, operation string, args ...string,
+	ctx context.Context, c clusterI, t *test, node nodeListOption, operation string, args ...string,
 ) ([]byte, error) {
 	var (
 		lastResult []byte
@@ -173,14 +173,14 @@ func repeatRunWithBuffer(
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		if c.t.Failed() {
+		if t.Failed() {
 			return nil, fmt.Errorf("test has failed")
 		}
 		attempt++
-		c.l.Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithBuffer(ctx, l, node, args...)
+		t.l.Printf("attempt %d - %s", attempt, operation)
+		lastResult, lastError = c.RunWithBuffer(ctx, t.l, node, args...)
 		if lastError != nil {
-			c.l.Printf("error - retrying: %s\n%s", lastError, string(lastResult))
+			t.l.Printf("error - retrying: %s\n%s", lastError, string(lastResult))
 			continue
 		}
 		return lastResult, nil
@@ -191,21 +191,21 @@ func repeatRunWithBuffer(
 // repeatGitCloneE is the same function as c.GitCloneE but with an automatic
 // retry loop.
 func repeatGitCloneE(
-	ctx context.Context, l *logger, c *cluster, src, dest, branch string, node nodeListOption,
+	ctx context.Context, t *test, c clusterI, src, dest, branch string, node nodeListOption,
 ) error {
 	var lastError error
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if c.t.Failed() {
+		if t.Failed() {
 			return fmt.Errorf("test has failed")
 		}
 		attempt++
-		l.Printf("attempt %d - clone %s", attempt, src)
-		lastError = c.GitClone(ctx, l, src, dest, branch, node)
+		t.l.Printf("attempt %d - clone %s", attempt, src)
+		lastError = c.GitClone(ctx, t.l, src, dest, branch, node)
 		if lastError != nil {
-			c.l.Printf("error - retrying: %s", lastError)
+			t.l.Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return nil
@@ -220,7 +220,7 @@ func repeatGitCloneE(
 // may contain "minor", "point" and "subpoint" in order of decreasing importance
 // for sorting purposes.
 func repeatGetLatestTag(
-	ctx context.Context, c *cluster, user string, repo string, releaseRegex *regexp.Regexp,
+	ctx context.Context, t *test, user string, repo string, releaseRegex *regexp.Regexp,
 ) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags", user, repo)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
@@ -251,16 +251,16 @@ func repeatGetLatestTag(
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		if c.t.Failed() {
+		if t.Failed() {
 			return "", fmt.Errorf("test has failed")
 		}
 		attempt++
 
-		c.l.Printf("attempt %d - fetching %s", attempt, url)
+		t.l.Printf("attempt %d - fetching %s", attempt, url)
 		var resp *http.Response
 		resp, lastError = httpClient.Get(url)
 		if lastError != nil {
-			c.l.Printf("error fetching - retrying: %s", lastError)
+			t.l.Printf("error fetching - retrying: %s", lastError)
 			continue
 		}
 		defer resp.Body.Close()
@@ -268,7 +268,7 @@ func repeatGetLatestTag(
 		var tags Tags
 		lastError = json.NewDecoder(resp.Body).Decode(&tags)
 		if lastError != nil {
-			c.l.Printf("error decoding - retrying: %s", lastError)
+			t.l.Printf("error decoding - retrying: %s", lastError)
 			continue
 		}
 		if len(tags) == 0 {

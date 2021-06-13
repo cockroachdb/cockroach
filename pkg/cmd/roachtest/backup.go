@@ -48,10 +48,10 @@ const (
 	rows3GiB   = rows30GiB / 10
 )
 
-func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *cluster) string {
-	dest := c.name
+func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c clusterI) string {
+	dest := c.Name()
 	// Randomize starting with encryption-at-rest enabled.
-	c.encryptAtRandom = true
+	c.EncryptAtRandom(true)
 
 	if local {
 		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
@@ -76,7 +76,7 @@ func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *clus
 	return dest
 }
 
-func importBankData(ctx context.Context, rows int, t *test, c *cluster) string {
+func importBankData(ctx context.Context, rows int, t *test, c clusterI) string {
 	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
 }
 
@@ -84,7 +84,7 @@ func registerBackupNodeShutdown(r *testRegistry) {
 	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
 	// the backup.
 	backupNodeRestartSpec := makeClusterSpec(4)
-	loadBackupData := func(ctx context.Context, t *test, c *cluster) string {
+	loadBackupData := func(ctx context.Context, t *test, c clusterI) string {
 		// This aught to be enough since this isn't a performance test.
 		rows := rows15GiB
 		if local {
@@ -100,12 +100,12 @@ func registerBackupNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    backupNodeRestartSpec,
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c *cluster) (jobID string, err error) {
+			startBackup := func(c clusterI) (jobID string, err error) {
 				gatewayDB := c.Conn(ctx, gatewayNode)
 				defer gatewayDB.Close()
 
@@ -121,12 +121,12 @@ func registerBackupNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    backupNodeRestartSpec,
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c *cluster) (jobID string, err error) {
+			startBackup := func(c clusterI) (jobID string, err error) {
 				gatewayDB := c.Conn(ctx, gatewayNode)
 				defer gatewayDB.Close()
 
@@ -183,7 +183,7 @@ func registerBackup(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    backup2TBSpec,
 		MinVersion: "v2.1.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			rows := rows2TiB
 			if local {
 				rows = 100
@@ -204,7 +204,7 @@ func registerBackup(r *testRegistry) {
 
 				// Upload the perf artifacts to any one of the nodes so that the test
 				// runner copies it into an appropriate directory path.
-				if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+				if err := c.PutE(ctx, t.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
 					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 				}
 				return nil
@@ -219,7 +219,7 @@ func registerBackup(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    KMSSpec,
 		MinVersion: "v20.2.0",
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			if cloud == gce {
 				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
 			}
@@ -338,9 +338,9 @@ func registerBackup(r *testRegistry) {
 		Owner:   OwnerBulkIO,
 		Cluster: makeClusterSpec(3),
 		Timeout: 1 * time.Hour,
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			// Randomize starting with encryption-at-rest enabled.
-			c.encryptAtRandom = true
+			c.EncryptAtRandom(true)
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
 			c.Start(ctx, t)
@@ -352,10 +352,10 @@ func registerBackup(r *testRegistry) {
 			}
 			warehouses := 10
 
-			backupDir := "gs://cockroachdb-backup-testing/" + c.name + "?AUTH=implicit"
+			backupDir := "gs://cockroachdb-backup-testing/" + c.Name() + "?AUTH=implicit"
 			// Use inter-node file sharing on 20.1+.
 			if r.buildVersion.AtLeast(version.MustParse(`v20.1.0-0`)) {
-				backupDir = "nodelocal://1/" + c.name
+				backupDir = "nodelocal://1/" + c.Name()
 			}
 			fullDir := backupDir + "/full"
 			incDir := backupDir + "/inc"
@@ -363,7 +363,7 @@ func registerBackup(r *testRegistry) {
 			t.Status(`workload initialization`)
 			cmd := []string{fmt.Sprintf(
 				"./workload init tpcc --warehouses=%d {pgurl:1-%d}",
-				warehouses, c.spec.NodeCount,
+				warehouses, c.Spec().NodeCount,
 			)}
 			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
 				cmd = append(cmd, "--deprecated-fk-indexes")
@@ -388,7 +388,7 @@ func registerBackup(r *testRegistry) {
 			go func() {
 				cmd := fmt.Sprintf(
 					"./workload run tpcc --warehouses=%d {pgurl:1-%d}",
-					warehouses, c.spec.NodeCount,
+					warehouses, c.Spec().NodeCount,
 				)
 
 				cmdDone <- c.RunE(ctx, c.Node(1), cmd)

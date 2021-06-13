@@ -18,15 +18,15 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase) {
+func runClockJump(ctx context.Context, t *test, c clusterI, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
-	if c.spec.NodeCount != 1 {
-		t.Fatalf("Expected num nodes to be 1, got: %d", c.spec.NodeCount)
+	if c.Spec().NodeCount != 1 {
+		t.Fatalf("Expected num nodes to be 1, got: %d", c.Spec().NodeCount)
 	}
 
 	t.Status("deploying offset injector")
-	offsetInjector := newOffsetInjector(c)
+	offsetInjector := newOffsetInjector(t, c)
 	if err := offsetInjector.deploy(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	c.Wipe(ctx)
 	c.Start(ctx, t)
 
-	db := c.Conn(ctx, c.spec.NodeCount)
+	db := c.Conn(ctx, c.Spec().NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(
@@ -49,7 +49,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	// Wait for Cockroach to process the above cluster setting
 	time.Sleep(10 * time.Second)
 
-	if !isAlive(db, c.l) {
+	if !isAlive(db, t.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -59,24 +59,24 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	// clock offset is reset or the node will crash again.
 	var aliveAfterOffset bool
 	defer func() {
-		offsetInjector.recover(ctx, c.spec.NodeCount)
+		offsetInjector.recover(ctx, c.Spec().NodeCount)
 		// Resetting the clock is a jump in the opposite direction which
 		// can cause a crash even if the original jump didn't. Wait a few
 		// seconds before checking whether the node is alive and
 		// restarting it if not.
 		time.Sleep(3 * time.Second)
-		if !isAlive(db, c.l) {
+		if !isAlive(db, t.l) {
 			c.Start(ctx, t, c.Node(1))
 		}
 	}()
-	defer offsetInjector.recover(ctx, c.spec.NodeCount)
-	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
+	defer offsetInjector.recover(ctx, c.Spec().NodeCount)
+	offsetInjector.offset(ctx, c.Spec().NodeCount, tc.offset)
 
 	// Wait a few seconds to let it crash if it's going to crash.
 	time.Sleep(3 * time.Second)
 
 	t.Status("validating health")
-	aliveAfterOffset = isAlive(db, c.l)
+	aliveAfterOffset = isAlive(db, t.l)
 	if aliveAfterOffset != tc.aliveAfterOffset {
 		t.Fatalf("Expected node health %v, got %v", tc.aliveAfterOffset, aliveAfterOffset)
 	}
@@ -134,7 +134,7 @@ func registerClockJumpTests(r *testRegistry) {
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
 			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
-			Run: func(ctx context.Context, t *test, c *cluster) {
+			Run: func(ctx context.Context, t *test, c clusterI) {
 				runClockJump(ctx, t, c, tc)
 			},
 		}

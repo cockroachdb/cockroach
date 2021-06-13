@@ -25,7 +25,7 @@ const (
 )
 
 func runConnectionLatencyTest(
-	ctx context.Context, t *test, c *cluster, numNodes int, numZones int,
+	ctx context.Context, t *test, c clusterI, numNodes int, numZones int,
 ) {
 	err := c.PutE(ctx, t.l, cockroach, "./cockroach")
 	require.NoError(t, err)
@@ -95,7 +95,7 @@ func registerConnectionLatencyTest(r *testRegistry) {
 		Name:       fmt.Sprintf("connection_latency/nodes=%d", numNodes),
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(numNodes + 1), // Add one for load node.
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1)
 		},
 	})
@@ -110,7 +110,7 @@ func registerConnectionLatencyTest(r *testRegistry) {
 		Name:       fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(numMultiRegionNodes+loadNodes, geo(), zones(geoZonesStr)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
+		Run: func(ctx context.Context, t *test, c clusterI) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones)
 		},
 	})
