@@ -34,6 +34,13 @@ const OwnerUnitTest Owner = `unowned`
 
 const defaultParallelism = 10
 
+func mkReg(t *testing.T) testRegistry {
+	t.Helper()
+	r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+	require.NoError(t, err)
+	return r
+}
+
 func TestMatchOrSkip(t *testing.T) {
 	testCases := []struct {
 		filter       []string
@@ -80,10 +87,7 @@ func nilLogger() *logger.Logger {
 
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
-	r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := mkReg(t)
 	r.Add(testSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
@@ -245,7 +249,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
+			r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -279,10 +283,7 @@ func TestRegistryMinVersion(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.buildVersion, func(t *testing.T) {
 			var runA, runB bool
-			r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
-			if err != nil {
-				t.Fatal(err)
-			}
+			r := mkReg(t)
 			r.Add(testSpec{
 				Name:       "a",
 				Owner:      OwnerUnitTest,
@@ -322,7 +323,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			}
 			cr := newClusterRegistry()
 			runner := newTestRunner(cr, r.buildVersion)
-			err = runner.Run(ctx, tests, 1, /* count */
+			err := runner.Run(ctx, tests, 1, /* count */
 				defaultParallelism, copt, testOpts{}, lopt)
 			if !testutils.IsError(err, c.expErr) {
 				t.Fatalf("expected err: %q, got: %v", c.expErr, err)
@@ -341,8 +342,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	t.Helper()
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, version.Version{})
-	r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
-	require.NoError(t, err)
+	r := mkReg(t)
 	r.Add(testSpec{
 		Name:    "boom",
 		Owner:   OwnerUnitTest,

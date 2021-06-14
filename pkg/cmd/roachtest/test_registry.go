@@ -51,16 +51,20 @@ type testRegistry struct {
 	m            map[string]*testSpec
 	cloud        string
 	instanceType string // optional
+	zones        string
 	preferSSD    bool
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
 }
 
 // makeTestRegistry constructs a testRegistry and configures it with opts.
-func makeTestRegistry(cloud string, instanceType string, preferSSD bool) (testRegistry, error) {
+func makeTestRegistry(
+	cloud string, instanceType string, zones string, preferSSD bool,
+) (testRegistry, error) {
 	r := testRegistry{
 		cloud:        cloud,
 		instanceType: instanceType,
+		zones:        zones,
 		preferSSD:    preferSSD,
 		m:            make(map[string]*testSpec),
 	}
@@ -100,6 +104,9 @@ func (*preferSSDOption) apply(spec *clusterSpec) {
 func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
 	if r.preferSSD {
 		opts = append(opts, &preferSSDOption{})
+	}
+	if r.zones != "" {
+		opts = append(opts, zones(r.zones))
 	}
 	return makeClusterSpec(r.cloud, r.instanceType, nodeCount, opts...)
 }
