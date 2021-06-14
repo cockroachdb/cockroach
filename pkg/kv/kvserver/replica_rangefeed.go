@@ -178,8 +178,8 @@ func (r *Replica) RangeFeed(
 	var iterSemRelease func()
 	if !args.Timestamp.IsEmpty() {
 		usingCatchupIter = true
-		lim := &r.store.limiters.ConcurrentRangefeedIters
-		if err := lim.Begin(ctx); err != nil {
+		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
+		if err != nil {
 			return roachpb.NewError(err)
 		}
 		// Finish the iterator limit if we exit before the iterator finishes.
@@ -192,7 +192,7 @@ func (r *Replica) RangeFeed(
 		// scan.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
-			iterSemReleaseOnce.Do(lim.Finish)
+			iterSemReleaseOnce.Do(alloc.Release)
 		}
 		defer iterSemRelease()
 	}

@@ -40,7 +40,8 @@ func TestConcurrentRequestLimiter(t *testing.T) {
 			req := 0
 			for {
 				//t.Logf("waiting to make request %d... (%d / %d)", req+1, l.sem.GetCount(), l.sem.GetLimit())
-				if err := l.Begin(ctx); err != nil {
+				alloc, err := l.Begin(ctx)
+				if err != nil {
 					if errors.Is(err, ctx.Err()) {
 						break
 					} else {
@@ -52,7 +53,7 @@ func TestConcurrentRequestLimiter(t *testing.T) {
 					cancel()
 				}
 				req++
-				l.Finish()
+				alloc.Release()
 			}
 			t.Logf("thread done after handling %d requests", req)
 			return nil
