@@ -925,6 +925,18 @@ var (
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaGCResolveFailed = metric.Metadata{
+		Name:        "queue.gc.info.resolvefailed",
+		Help:        "Number of cleanup intent failures during GC",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaGCTxnIntentsResolveFailed = metric.Metadata{
+		Name:        "queue.gc.info.transactionresolvefailed",
+		Help:        "Number of intent cleanup failures for local transactions during GC",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Slow request metrics.
 	metaLatchRequests = metric.Metadata{
@@ -1001,6 +1013,19 @@ var (
 		Help:        "Largest latency between realtime and replica max closed timestamp",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaConflictingIntentsResolveRejected = metric.Metadata{
+		Name:        "intents.resolve_conflicting.rejected",
+		Help:        "Number of conflicting intents resolutions rejected",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaFinalizedTxnCleanupTimedOut = metric.Metadata{
+		Name:        "intents.finalized_txns.timed_out",
+		Help:        "Number of finalized transaction resolution timeouts",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
 	}
 )
 
@@ -1165,6 +1190,10 @@ type StoreMetrics struct {
 	GCPushTxn                    *metric.Counter
 	GCResolveTotal               *metric.Counter
 	GCResolveSuccess             *metric.Counter
+	// Failures resolving intents that belong to transactions in other ranges.
+	GCResolveFailed *metric.Counter
+	// Failures resolving intents that belong to local transactions.
+	GCTxnIntentsResolveFailed *metric.Counter
 
 	// Slow request counts.
 	SlowLatchRequests *metric.Gauge
@@ -1191,6 +1220,10 @@ type StoreMetrics struct {
 
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos *metric.Gauge
+
+	// Intent cleanup failures
+	ConflictingIntentsResolveRejected *metric.Counter
+	FinalizedTxnCleanupTimedOut       *metric.Counter
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1538,6 +1571,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
+		GCTxnIntentsResolveFailed:    metric.NewCounter(metaGCTxnIntentsResolveFailed),
 
 		// Wedge request counters.
 		SlowLatchRequests: metric.NewGauge(metaLatchRequests),
@@ -1562,6 +1596,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
+
+		// Intent leak metrics
+		ConflictingIntentsResolveRejected: metric.NewCounter(metaConflictingIntentsResolveRejected),
+		FinalizedTxnCleanupTimedOut:       metric.NewCounter(metaFinalizedTxnCleanupTimedOut),
+		GCResolveFailed:                   metric.NewCounter(metaGCResolveFailed),
 	}
 	storeRegistry.AddMetricStruct(sm)
 

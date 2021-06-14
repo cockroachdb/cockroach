@@ -224,6 +224,8 @@ func (r *Replica) executeWriteBatch(
 					ctx, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
 					log.Warningf(ctx, "intent cleanup failed: %v", err)
+					r.store.metrics.ConflictingIntentsResolveRejected.Inc(
+						int64(len(propResult.EncounteredIntents)))
 				}
 			}
 			return propResult.Reply, nil, propResult.Err
@@ -262,10 +264,11 @@ func (r *Replica) executeWriteBatch(
 								case <-shouldQuiesce:
 								case <-ctx.Done():
 								}
-								return nil
+								return ctx.Err()
 							})
 						if err != nil {
 							log.Warningf(ctx, "transaction cleanup failed: %v", err)
+							r.store.metrics.FinalizedTxnCleanupTimedOut.Inc(1)
 						}
 					})
 			}
