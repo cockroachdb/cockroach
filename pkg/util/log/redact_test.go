@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -170,7 +171,14 @@ func TestRedactedDecodeFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer reader.Close()
-			decoder := NewEntryDecoder(reader, tc.redactMode)
+			data, err := ioutil.ReadAll(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoder, err := NewEntryDecoder(data, tc.redactMode)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			// Now verify we have what we want in the file.
 			foundMessage := false
