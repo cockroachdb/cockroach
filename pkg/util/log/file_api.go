@@ -11,6 +11,7 @@
 package log
 
 import (
+	"bytes"
 	"io"
 	"io/ioutil"
 	"os"
@@ -286,6 +287,7 @@ func FetchEntriesFromFiles(
 	maxEntries int,
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
+	format string,
 ) ([]logpb.Entry, error) {
 	logGroups, err := listLogGroups()
 	if err != nil {
@@ -305,7 +307,8 @@ func FetchEntriesFromFiles(
 				endTimestamp,
 				maxEntries-len(entries),
 				pattern,
-				editMode)
+				editMode,
+				format)
 			if err != nil {
 				return nil, err
 			}
@@ -358,14 +361,14 @@ func readAllEntriesFromFile(
 	maxEntries int,
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
+	format string,
 ) ([]logpb.Entry, bool, error) {
-	reader, err := GetLogReader(file.Name, true /* restricted */)
-	if reader == nil || err != nil {
+	entries := []logpb.Entry{}
+	data, err := ioutil.ReadFile(file.Name)
+	if err != nil {
 		return nil, false, err
 	}
-	defer reader.Close()
-	entries := []logpb.Entry{}
-	decoder := NewEntryDecoder(reader, editMode)
+	decoder := NewEntryDecoder(data, bytes.NewReader(data), editMode, format)
 	entryBeforeStart := false
 	for {
 		entry := logpb.Entry{}

@@ -1000,15 +1000,12 @@ func (s *statusServer) LogFile(
 	// Ensure that the latest log entries are available in files.
 	log.Flush()
 
-	// Read the logs.
-	reader, err := log.GetLogReader(req.File, true /* restricted */)
-	if reader == nil || err != nil {
-		return nil, fmt.Errorf("log file %s could not be opened: %s", req.File, err)
-	}
-	defer reader.Close()
-
 	var resp serverpb.LogEntriesResponse
-	decoder := log.NewEntryDecoder(reader, inputEditMode)
+	data, err := ioutil.ReadFile(req.File)
+	if err != nil {
+		return nil, err
+	}
+	decoder := log.NewEntryDecoder(data, bytes.NewReader(data), inputEditMode, "")
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
@@ -1116,7 +1113,7 @@ func (s *statusServer) Logs(
 
 	// Read the logs.
 	entries, err := log.FetchEntriesFromFiles(
-		startTimestamp, endTimestamp, int(maxEntries), regex, inputEditMode)
+		startTimestamp, endTimestamp, int(maxEntries), regex, inputEditMode, "")
 	if err != nil {
 		return nil, err
 	}

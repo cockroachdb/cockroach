@@ -194,7 +194,7 @@ func TestRotateCerts(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		log.Flush()
 		entries, err := log.FetchEntriesFromFiles(beforeReload.UnixNano(),
-			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
+			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData, "")
 		if err != nil {
 			t.Fatal(err)
 		}

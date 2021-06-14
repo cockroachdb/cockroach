@@ -47,7 +47,7 @@ func TestStructuredEventLogging(t *testing.T) {
 	log.Flush()
 
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
-		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
+		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData, "")
 	if err != nil {
 		t.Fatal(err)
 	}

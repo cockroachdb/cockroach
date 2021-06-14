@@ -11,9 +11,11 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -165,12 +167,11 @@ func TestRedactedDecodeFile(t *testing.T) {
 
 			// Prepare reading the entries from the file.
 			infoName := filepath.Base(info.file.Name())
-			reader, err := GetLogReader(infoName, true /* restricted */)
+			data, err := ioutil.ReadFile(infoName)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer reader.Close()
-			decoder := NewEntryDecoder(reader, tc.redactMode)
+			decoder := NewEntryDecoder(data, bytes.NewReader(data), tc.redactMode, "")
 
 			// Now verify we have what we want in the file.
 			foundMessage := false
