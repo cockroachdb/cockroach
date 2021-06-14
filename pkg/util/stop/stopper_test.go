@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -396,6 +397,36 @@ func TestStopperWithCancelConcurrent(t *testing.T) {
 			t.Errorf("should be canceled: %v", err)
 		}
 	}
+}
+
+// Test that WithCancelOnQuiesce is a no-op when the passed-in ctx is already
+// being canceled on quiescence.
+func TestStopperWithCancelNoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+	ctx := context.Background()
+	defer s.Stop(ctx)
+
+	ctx1, _ := s.WithCancelOnQuiesce(ctx)
+	// Sanity check.
+	require.NotEqual(t, ctx, ctx1)
+
+	// Create a derived ctx that still inherits the quiescence cancellation.
+	ctx2, _ := context.WithCancel(ctx1)
+	// Check that calling WithCancelOnQuiesce on ctx2 is a no-op.
+	ctx3, _ := s.WithCancelOnQuiesce(ctx2)
+	require.Equal(t, ctx2, ctx3)
+
+	// Test the interaction between WithCancelOnQuiesce and WithoutCancel.
+
+	// ctx4 no longer inherits the quiescence cancellation.
+	ctx4 := contextutil.WithoutCancel(ctx2)
+	// ctx5 is expected to not be a no-op.
+	ctx5, _ := s.WithCancelOnQuiesce(ctx2)
+	require.NotEqual(t, ctx4, ctx5)
+	// ctx6 is once again expected to be a no-op.
+	ctx6, _ := s.WithCancelOnQuiesce(ctx5)
+	require.Equal(t, ctx5, ctx6)
 }
 
 func TestStopperShouldQuiesce(t *testing.T) {

@@ -260,6 +260,8 @@ func (s *Stopper) AddCloser(c Closer) {
 	s.mu.closers = append(s.mu.closers, c)
 }
 
+func noop() {}
+
 // WithCancelOnQuiesce returns a child context which is canceled when the
 // returned cancel function is called or when the Stopper begins to quiesce,
 // whichever happens first.
@@ -269,14 +271,27 @@ func (s *Stopper) AddCloser(c Closer) {
 //
 // Canceling this context releases resources associated with it, so code should
 // call cancel as soon as the operations running in this Context complete.
+//
+// Calling WithCancelOnQuiesce again on the result of a WithCancelOnQuiesce is
+// an efficient no-op.
 func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
+	// If ctx is already being canceled by s's quiescence, there's nothing more to
+	// do.
+	if contextutil.Tagged(ctx, s, contextutil.CancellationParents) {
+		return ctx, noop
+	}
+
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
+	// Tag the context with this stopper instance so that, if WithCancelOnQuiesce
+	// is called again on it (or on a child), that call can be a no-op (see check
+	// above).
+	ctx = contextutil.WithTag(ctx, s)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.refuseRLocked() {
 		cancel()
-		return ctx, func() {}
+		return ctx, noop
 	}
 	id := atomic.AddInt64(&s.mu.idAlloc, 1)
 	s.mu.qCancels.Store(id, cancel)
