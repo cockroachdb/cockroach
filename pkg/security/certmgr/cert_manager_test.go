@@ -59,7 +59,7 @@ var cmLogRe = regexp.MustCompile(`event_log\.go`)
 func checkLogStructEntry(t *testing.T, expectSuccess bool, beforeReload time.Time) error {
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(beforeReload.UnixNano(),
-		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
+		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData, "")
 	if err != nil {
 		t.Fatal(err)
 	}

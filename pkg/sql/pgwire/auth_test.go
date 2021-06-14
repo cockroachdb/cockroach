@@ -296,7 +296,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						// See: https://github.com/cockroachdb/cockroach/issues/45745
 						// So instead we need to do the filtering ourselves.
 						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe,
-							log.WithMarkedSensitiveData)
+							log.WithMarkedSensitiveData, "")
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -600,7 +600,7 @@ func TestClientAddrOverride(t *testing.T) {
 				testutils.SucceedsSoon(t, func() error {
 					log.Flush()
 					entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, sessionTerminatedRe,
-						log.WithMarkedSensitiveData)
+						log.WithMarkedSensitiveData, "")
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -613,7 +613,7 @@ func TestClientAddrOverride(t *testing.T) {
 				// Now we want to check that the logging tags are also updated.
 				log.Flush()
 				entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, authLogFileRe,
-					log.WithMarkedSensitiveData)
+					log.WithMarkedSensitiveData, "")
 				if err != nil {
 					t.Fatal(err)
 				}

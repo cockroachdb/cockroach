@@ -75,7 +75,7 @@ func TestAdminAuditLogBasic(t *testing.T) {
 	log.Flush()
 
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, selectAdminRe,
-		log.WithMarkedSensitiveData)
+		log.WithMarkedSensitiveData, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 	log.Flush()
 
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, selectRe,
-		log.WithMarkedSensitiveData)
+		log.WithMarkedSensitiveData, "")
 
 	if err != nil {
 		t.Fatal(err)
