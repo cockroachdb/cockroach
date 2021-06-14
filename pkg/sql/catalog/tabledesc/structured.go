@@ -1101,6 +1101,9 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		names[col.GetName()] = struct{}{}
 		idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
 	}
+	if len(idx.StoreColumnNames) == 0 {
+		idx.StoreColumnNames = nil
+	}
 	desc.SetPrimaryIndex(idx)
 	return nil
 }

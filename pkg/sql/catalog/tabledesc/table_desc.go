@@ -202,6 +202,10 @@ func UpdateIndexPartitioning(
 	}
 	idx.StoreColumnIDs = newStoreColumnIDs
 	idx.StoreColumnNames = newStoreColumnNames
+	if len(idx.StoreColumnNames) == 0 {
+		idx.StoreColumnIDs = nil
+		idx.StoreColumnNames = nil
+	}
 
 	idx.Partitioning = newPartitioning
 	return true

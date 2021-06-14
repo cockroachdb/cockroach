@@ -480,18 +480,26 @@ func upgradeToPrimaryIndexStoredColumnsFormatVersion(desc *descpb.TableDescripto
 	}
 
 	maybePopulateStoreSlices := func(idx *descpb.IndexDescriptor) {
-		if idx == nil || idx.EncodingType != descpb.PrimaryIndexEncoding {
+		if idx == nil {
+			return
+		}
+		if idx.EncodingType != descpb.PrimaryIndexEncoding {
+			return
+		}
+		if idx.StoreColumnNames != nil {
 			return
 		}
 		keyColIDs := catalog.TableColSet{}
 		for _, colID := range idx.KeyColumnIDs {
 			keyColIDs.Add(colID)
 		}
-		idx.StoreColumnIDs = make([]descpb.ColumnID, 0, len(nonVirtualCols))
-		idx.StoreColumnNames = make([]string, 0, len(nonVirtualCols))
 		for _, col := range nonVirtualCols {
 			if keyColIDs.Contains(col.ID) {
 				continue
+			}
+			if idx.StoreColumnIDs == nil {
+				idx.StoreColumnIDs = make([]descpb.ColumnID, 0, len(nonVirtualCols))
+				idx.StoreColumnNames = make([]string, 0, len(nonVirtualCols))
 			}
 			idx.StoreColumnIDs = append(idx.StoreColumnIDs, col.ID)
 			idx.StoreColumnNames = append(idx.StoreColumnNames, col.Name)

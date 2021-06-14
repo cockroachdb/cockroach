@@ -253,6 +253,9 @@ func (p *planner) AlterPrimaryKey(
 			}
 			newPrimaryIndexDesc.StoreColumnNames = append(newPrimaryIndexDesc.StoreColumnNames, col.GetName())
 		}
+		if len(newPrimaryIndexDesc.StoreColumnNames) == 0 {
+			newPrimaryIndexDesc.StoreColumnNames = nil
+		}
 	}
 	if err := tableDesc.AddIndexMutation(newPrimaryIndexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err

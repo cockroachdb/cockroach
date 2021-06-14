@@ -57,6 +57,7 @@ Stage 4
     TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
+      EncodingType: 1
       ID: 2
       KeyColumnDirections:
       - 0
@@ -147,6 +148,7 @@ Stage 4
     TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
+      EncodingType: 1
       ID: 2
       KeyColumnDirections:
       - 0
@@ -255,6 +257,7 @@ Stage 4
     TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
+      EncodingType: 1
       ID: 2
       KeyColumnDirections:
       - 0
@@ -348,6 +351,7 @@ Stage 4
     TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
+      EncodingType: 1
       ID: 2
       KeyColumnDirections:
       - 0
@@ -486,6 +490,7 @@ Stage 4
     TableID: 52
   *scop.MakeAddedPrimaryIndexPublic
     Index:
+      EncodingType: 1
       ID: 2
       KeyColumnDirections:
       - 0
@@ -516,6 +521,7 @@ Stage 4
     TableID: 53
   *scop.MakeAddedPrimaryIndexPublic
     Index:
+      EncodingType: 1
       ID: 2
       KeyColumnDirections:
       - 0

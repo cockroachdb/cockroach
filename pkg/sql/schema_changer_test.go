@@ -2307,7 +2307,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	y INT8 NOT NULL,
 	z INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (y ASC),
-	UNIQUE INDEX test_x_key (x ASC),
+	UNIQUE INDEX test_x_key (x ASC) STORING (y, z),
 	INDEX i (z ASC),
 	FAMILY "primary" (x, y, z)
 )`

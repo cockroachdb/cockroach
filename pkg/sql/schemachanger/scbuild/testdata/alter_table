@@ -22,6 +22,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -47,6 +48,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -86,6 +88,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -111,6 +114,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -151,6 +155,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -178,6 +183,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -231,6 +237,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -256,6 +263,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -299,6 +307,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -324,6 +333,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -358,6 +368,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -388,6 +399,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
