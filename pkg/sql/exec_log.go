@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -161,12 +162,21 @@ func (p *planner) maybeLogStatementInternal(
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
 
+	// Record the first query timestamp for non-internal statements, if
+	// not already known.
+	logFirstQuery := false
+	if isInternal := execType == executorTypeInternal; !isInternal {
+		if swapped := atomic.CompareAndSwapInt64(&p.execCfg.firstQueryTimestamp, 0, startTime.UnixNano()); swapped {
+			logFirstQuery = true
+		}
+	}
+
 	// Only log to adminAuditLog if the statement is executed by
 	// a user and the user has admin privilege (is directly or indirectly a
 	// member of the admin role).
 
 	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled &&
-		!shouldLogToAdminAuditLog {
+		!shouldLogToAdminAuditLog && !logFirstQuery {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -346,6 +356,11 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+	}
+
+	if logFirstQuery {
+		p.logEventsOnlyExternally(ctx,
+			eventLogEntry{event: &eventpb.FirstQuery{CommonSQLExecDetails: execDetails}})
 	}
 }
 

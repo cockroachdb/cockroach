@@ -5277,7 +5277,7 @@ type loggerTelemetry struct{}
 
 // Telemetry is a logger that logs to the TELEMETRY channel.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 var Telemetry loggerTelemetry
@@ -5293,12 +5293,12 @@ var _ ChannelLogger = Telemetry
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerTelemetry) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.TELEMETRY, format, args...)
 }
@@ -5309,12 +5309,12 @@ func (loggerTelemetry) Infof(ctx context.Context, format string, args ...interfa
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerTelemetry) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.TELEMETRY, format, args...)
@@ -5325,12 +5325,12 @@ func (loggerTelemetry) VInfof(ctx context.Context, level Level, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerTelemetry) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.TELEMETRY, msg)
 }
@@ -5340,12 +5340,12 @@ func (loggerTelemetry) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerTelemetry) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.TELEMETRY, format, args...)
 }
@@ -5354,12 +5354,12 @@ func (loggerTelemetry) InfofDepth(ctx context.Context, depth int, format string,
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerTelemetry) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.TELEMETRY, format, args...)
 }
@@ -5370,12 +5370,12 @@ func (loggerTelemetry) Warningf(ctx context.Context, format string, args ...inte
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerTelemetry) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.TELEMETRY, format, args...)
@@ -5386,12 +5386,12 @@ func (loggerTelemetry) VWarningf(ctx context.Context, level Level, format string
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerTelemetry) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.TELEMETRY, msg)
 }
@@ -5401,12 +5401,12 @@ func (loggerTelemetry) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerTelemetry) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.TELEMETRY, format, args...)
 }
@@ -5415,12 +5415,12 @@ func (loggerTelemetry) WarningfDepth(ctx context.Context, depth int, format stri
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerTelemetry) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.TELEMETRY, format, args...)
@@ -5432,12 +5432,12 @@ func (loggerTelemetry) Errorf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerTelemetry) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -5449,12 +5449,12 @@ func (loggerTelemetry) VErrorf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerTelemetry) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.TELEMETRY, msg)
@@ -5465,12 +5465,12 @@ func (loggerTelemetry) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerTelemetry) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.TELEMETRY, format, args...)
@@ -5480,11 +5480,11 @@ func (loggerTelemetry) ErrorfDepth(ctx context.Context, depth int, format string
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -5497,11 +5497,11 @@ func (loggerTelemetry) Fatalf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -5514,11 +5514,11 @@ func (loggerTelemetry) VFatalf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) Fatal(ctx context.Context, msg string) {
@@ -5530,11 +5530,11 @@ func (loggerTelemetry) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerTelemetry) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -5544,7 +5544,7 @@ func (loggerTelemetry) FatalfDepth(ctx context.Context, depth int, format string
 // Shout logs to channel TELEMETRY, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
@@ -5555,7 +5555,7 @@ func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The TELEMETRY channel reports telemetry events. Telemetry events describe
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {

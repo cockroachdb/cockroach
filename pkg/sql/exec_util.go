@@ -955,6 +955,18 @@ type ExecutorConfig struct {
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector
+
+	// firstQueryTimestamp is the timestamp at which the process
+	// executed a non-internal query for the first time. This
+	// is used to gate the emission of a FirstQuery telemetry event.
+	// This is accessed atomically.
+	//
+	// TODO(knz): Find a better location for this variable.
+	// It needs to be common to all executor instances and so
+	// cannot be stored on the planner. However it is internal
+	// to the exec log machinery and therefore does not deserve
+	// to be owned by the SQL stats package.
+	firstQueryTimestamp int64
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.
