@@ -85,6 +85,12 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 4
     referenceId: 55
+- DROP DefaultExpression:{DescID: 55, ColumnID: 1}
+  state: PUBLIC
+  details:
+    columnId: 1
+    defaultExpr: gen_random_uuid()
+    tableId: 55
 - DROP Sequence:{DescID: 56}
   state: PUBLIC
   details:
@@ -94,6 +100,21 @@ DROP TABLE defaultdb.shipments CASCADE;
   details:
     ownerTableId: 55
     sequenceId: 56
+- DROP DefaultExpression:{DescID: 55, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 55
+- DROP DefaultExpression:{DescID: 55, ColumnID: 3}
+  state: PUBLIC
+  details:
+    columnId: 3
+    tableId: 55
+- DROP DefaultExpression:{DescID: 55, ColumnID: 4}
+  state: PUBLIC
+  details:
+    columnId: 4
+    tableId: 55
 - DROP DefaultExpression:{DescID: 55, ColumnID: 5}
   state: PUBLIC
   details:

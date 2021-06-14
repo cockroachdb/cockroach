@@ -125,6 +125,16 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   details:
     descriptorId: 63
     typeId: 61
+- DROP DefaultExpression:{DescID: 55, ColumnID: 1}
+  state: PUBLIC
+  details:
+    columnId: 1
+    tableId: 55
+- DROP DefaultExpression:{DescID: 55, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 55
 - DROP RelationDependedOnBy:{DescID: 54, DepID: 55}
   state: PUBLIC
   details:
