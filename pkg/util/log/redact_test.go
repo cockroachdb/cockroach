@@ -170,7 +170,10 @@ func TestRedactedDecodeFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer reader.Close()
-			decoder := NewEntryDecoder(reader, tc.redactMode)
+			decoder, err := NewEntryDecoder(reader, tc.redactMode)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			// Now verify we have what we want in the file.
 			foundMessage := false
