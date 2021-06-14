@@ -257,20 +257,22 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 				Name: "db",
 			}})
 
+			// Don't write the descriptor, just write the namespace entry.
+			// This will mean that resolution still is based on the old name.
 			b := &kv.Batch{}
 			b.CPut(catalogkeys.MakeDatabaseNameKey(lm.Codec(), mut.Name), mut.GetID(), nil)
 			err = txn.Run(ctx, b)
 			require.NoError(t, err)
 
-			// Try to get the database descriptor by the old name and fail.
-			failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
-			require.Regexp(t, `database "db" does not exist`, err)
+			// Try to get the database descriptor by the new name and fail.
+			failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			require.Regexp(t, `database "new_name" does not exist`, err)
 			require.Nil(t, failedToResolve)
 
-			// Try to get the database descriptor by the new name and succeed but get
-			// the old version with the old name (this is bizarre but is the
-			// contract now).
-			immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			// Try to get the database descriptor by the old name and succeed but get
+			// the old version with the old name because the new version has not yet
+			// been written.
+			immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
 

@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -32,6 +34,24 @@ type uncommittedDescriptor struct {
 	immutable catalog.Descriptor
 }
 
+func (u *uncommittedDescriptor) GetName() string {
+	return u.immutable.GetName()
+}
+
+func (u *uncommittedDescriptor) GetParentID() descpb.ID {
+	return u.immutable.GetParentID()
+}
+
+func (u uncommittedDescriptor) GetParentSchemaID() descpb.ID {
+	return u.immutable.GetParentSchemaID()
+}
+
+func (u uncommittedDescriptor) GetID() descpb.ID {
+	return u.immutable.GetID()
+}
+
+var _ catalog.NameEntry = (*uncommittedDescriptor)(nil)
+
 type kvDescriptors struct {
 	codec keys.SQLCodec
 
@@ -41,12 +61,14 @@ type kvDescriptors struct {
 	// own transaction to read the descriptor and will hang waiting for the
 	// uncommitted changes to the descriptor. These descriptors are local to this
 	// Collection and invisible to other transactions.
-	// TODO (lucy): Replace this with a data structure for faster lookups.
-	// Currently, the order in which descriptors are inserted matters, since we
-	// look at the draining names to account for descriptors being renamed. Any
-	// replacement data structure may have to store the name information in some
-	// different, more explicit way.
-	uncommittedDescriptors []*uncommittedDescriptor
+	uncommittedDescriptors nstree.Map
+	// uncommittedDescriptorNames is the set of names which a read or written
+	// descriptor took on at some point in its lifetime. Everything added to
+	// uncommittedDescriptors is added to uncommittedDescriptorNames as well
+	// as all of the known draining names. The idea is that if we find that
+	// a name is not in the above map but is in the set, then we can avoid
+	// doing a lookup.
+	uncommittedDescriptorNames nstree.Set
 
 	// allDescriptors is a slice of all available descriptors. The descriptors
 	// are cached to avoid repeated lookups by users like virtual tables. The
@@ -104,15 +126,18 @@ func (d *allDescriptors) contains(id descpb.ID) bool {
 	return exists
 }
 
-func makeReadDescriptors(codec keys.SQLCodec) kvDescriptors {
+func makeKVDescriptors(codec keys.SQLCodec) kvDescriptors {
 	return kvDescriptors{
-		codec: codec,
+		codec:                      codec,
+		uncommittedDescriptors:     nstree.MakeMap(),
+		uncommittedDescriptorNames: nstree.MakeSet(),
 	}
 }
 
 func (kd *kvDescriptors) reset() {
 	kd.releaseAllDescriptors()
-	kd.uncommittedDescriptors = nil
+	kd.uncommittedDescriptors.Clear()
+	kd.uncommittedDescriptorNames.Clear()
 }
 
 // releaseAllDescriptors releases the cached slice of all descriptors
@@ -203,33 +228,17 @@ func (kd *kvDescriptors) getByName(
 func (kd *kvDescriptors) getUncommittedByName(
 	dbID descpb.ID, schemaID descpb.ID, name string,
 ) (refuseFurtherLookup bool, desc *uncommittedDescriptor) {
+
 	// Walk latest to earliest so that a DROP followed by a CREATE with the same
 	// name will result in the CREATE being seen.
-	for i := len(kd.uncommittedDescriptors) - 1; i >= 0; i-- {
-		desc := kd.uncommittedDescriptors[i]
-		mutDesc := desc.mutable
-		// If a descriptor has gotten renamed we'd like to disallow using the old
-		// names. The renames could have happened in another transaction but it's
-		// still okay to disallow the use of the old name in this transaction
-		// because the other transaction has already committed and this transaction
-		// is seeing the effect of it.
-		for _, drain := range mutDesc.GetDrainingNames() {
-			if drain.Name == name &&
-				drain.ParentID == dbID &&
-				drain.ParentSchemaID == schemaID {
-				return true, nil
-			}
-		}
-
-		// Otherwise, if the name matches, we return it. It's up to the caller to
-		// filter descriptors in non-public states.
-		// TODO (lucy): Is it possible to return dropped descriptors at this point,
-		// after the previous draining names check?
-		if lease.NameMatchesDescriptor(mutDesc, dbID, schemaID, name) {
-			return false, desc
-		}
+	if got := kd.uncommittedDescriptors.GetByName(dbID, schemaID, name); got != nil {
+		return false, got.(*uncommittedDescriptor)
 	}
-	return false, nil
+	return kd.uncommittedDescriptorNames.Contains(descpb.NameInfo{
+		ParentID:       dbID,
+		ParentSchemaID: schemaID,
+		Name:           name,
+	}), nil
 }
 
 func (kd *kvDescriptors) getAllDescriptors(
@@ -290,39 +299,40 @@ func (kd *kvDescriptors) getSchemasForDatabase(
 }
 
 func (kd *kvDescriptors) getUncommittedByID(id descpb.ID) *uncommittedDescriptor {
-	for _, desc := range kd.uncommittedDescriptors {
-		if desc.mutable.GetID() == id {
-			return desc
-		}
-	}
-	return nil
+	ud, _ := kd.uncommittedDescriptors.GetByID(id).(*uncommittedDescriptor)
+	return ud
 }
 
 func (kd *kvDescriptors) getDescriptorsWithNewVersion() []lease.IDVersion {
 	var descs []lease.IDVersion
-	for _, desc := range kd.uncommittedDescriptors {
+	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+		desc := entry.(*uncommittedDescriptor)
 		if mut := desc.mutable; !mut.IsNew() && mut.IsUncommittedVersion() {
 			descs = append(descs, lease.NewIDVersionPrev(mut.OriginalName(), mut.OriginalID(), mut.OriginalVersion()))
 		}
-	}
+		return nil
+	})
 	return descs
 }
 
 func (kd *kvDescriptors) getUncommittedTables() (tables []catalog.TableDescriptor) {
-	for _, desc := range kd.uncommittedDescriptors {
+	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+		desc := entry.(*uncommittedDescriptor)
 		table, ok := desc.immutable.(catalog.TableDescriptor)
 		if ok && desc.immutable.IsUncommittedVersion() {
 			tables = append(tables, table)
 		}
-	}
+		return nil
+	})
 	return tables
 }
 
 func (kd *kvDescriptors) validateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
-	descs := make([]catalog.Descriptor, len(kd.uncommittedDescriptors))
-	for i, ud := range kd.uncommittedDescriptors {
-		descs[i] = ud.immutable
-	}
+	descs := make([]catalog.Descriptor, 0, kd.uncommittedDescriptors.Len())
+	_ = kd.uncommittedDescriptors.IterateByID(func(descriptor catalog.NameEntry) error {
+		descs = append(descs, descriptor.(*uncommittedDescriptor).immutable)
+		return nil
+	})
 	if len(descs) == 0 {
 		return nil
 	}
@@ -337,22 +347,24 @@ func (kd *kvDescriptors) validateUncommittedDescriptors(ctx context.Context, txn
 	).CombinedError()
 }
 
-func (kd *kvDescriptors) hasUncommittedTables() bool {
-	for _, desc := range kd.uncommittedDescriptors {
-		if _, isTable := desc.immutable.(catalog.TableDescriptor); isTable {
-			return true
+func (kd *kvDescriptors) hasUncommittedTables() (has bool) {
+	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+		if _, has = entry.(*uncommittedDescriptor).immutable.(catalog.TableDescriptor); has {
+			return iterutil.StopIteration()
 		}
-	}
-	return false
+		return nil
+	})
+	return has
 }
 
-func (kd *kvDescriptors) hasUncommittedTypes() bool {
-	for _, desc := range kd.uncommittedDescriptors {
-		if _, isType := desc.immutable.(catalog.TypeDescriptor); isType {
-			return true
+func (kd *kvDescriptors) hasUncommittedTypes() (has bool) {
+	_ = kd.uncommittedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+		if _, has = entry.(*uncommittedDescriptor).immutable.(catalog.TypeDescriptor); has {
+			return iterutil.StopIteration()
 		}
-	}
-	return false
+		return nil
+	})
+	return has
 }
 
 func (kd *kvDescriptors) addUncommittedDescriptor(
@@ -375,17 +387,10 @@ func (kd *kvDescriptors) addUncommittedDescriptor(
 		mutable:   mutable,
 		immutable: desc.ImmutableCopy(),
 	}
-
-	var found bool
-	for i, d := range kd.uncommittedDescriptors {
-		if d.mutable.GetID() == desc.GetID() {
-			kd.uncommittedDescriptors[i], found = ud, true
-			break
-		}
+	for _, n := range desc.GetDrainingNames() {
+		kd.uncommittedDescriptorNames.Add(n)
 	}
-	if !found {
-		kd.uncommittedDescriptors = append(kd.uncommittedDescriptors, ud)
-	}
+	kd.uncommittedDescriptors.Upsert(ud)
 	kd.releaseAllDescriptors()
 	return ud, nil
 }

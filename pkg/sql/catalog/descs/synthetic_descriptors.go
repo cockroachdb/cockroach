@@ -13,15 +13,15 @@ package descs
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptortree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 )
 
 type syntheticDescriptors struct {
-	descs descriptortree.Tree
+	descs nstree.Map
 }
 
 func makeSyntheticDescriptors() syntheticDescriptors {
-	return syntheticDescriptors{descs: descriptortree.Make()}
+	return syntheticDescriptors{descs: nstree.MakeMap()}
 }
 
 func (sd *syntheticDescriptors) set(descs []catalog.Descriptor) {
@@ -41,11 +41,15 @@ func (sd *syntheticDescriptors) reset() {
 func (sd *syntheticDescriptors) getByName(
 	dbID descpb.ID, schemaID descpb.ID, name string,
 ) (found bool, desc catalog.Descriptor) {
-	desc, found = sd.descs.GetByName(dbID, schemaID, name)
-	return found, desc
+	if entry := sd.descs.GetByName(dbID, schemaID, name); entry != nil {
+		return true, entry.(catalog.Descriptor)
+	}
+	return false, nil
 }
 
 func (sd *syntheticDescriptors) getByID(id descpb.ID) (found bool, desc catalog.Descriptor) {
-	desc, found = sd.descs.GetByID(id)
-	return found, desc
+	if entry := sd.descs.GetByID(id); entry != nil {
+		return true, entry.(catalog.Descriptor)
+	}
+	return false, nil
 }
