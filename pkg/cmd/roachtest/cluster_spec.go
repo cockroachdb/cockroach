@@ -62,7 +62,7 @@ func firstZone(zones string) string {
 	return strings.SplitN(zones, ",", 2)[0]
 }
 
-func (s *clusterSpec) args() []string {
+func (s *clusterSpec) args(extra ...string) []string {
 	var args []string
 
 	switch s.Cloud {
@@ -159,8 +159,8 @@ func (s *clusterSpec) args() []string {
 	if s.Lifetime != 0 {
 		args = append(args, "--lifetime="+s.Lifetime.String())
 	}
-	if len(createArgs) > 0 {
-		args = append(args, createArgs...)
+	if len(extra) > 0 {
+		args = append(args, extra...)
 	}
 	return args
 }

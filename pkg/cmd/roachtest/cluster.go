@@ -994,7 +994,7 @@ func (f *clusterFactory) newCluster(
 	}
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
-	sargs = append(sargs, cfg.spec.args()...)
+	sargs = append(sargs, cfg.spec.args(createArgs...)...)
 	if !cfg.useIOBarrier && localSSDArg {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
