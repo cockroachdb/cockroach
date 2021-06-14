@@ -86,11 +86,11 @@ func (s *clusterSpec) args(extra ...string) []string {
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case spec.AWS:
-				machineType = awsMachineType(s.CPUs)
+				machineType = spec.AWSMachineType(s.CPUs)
 			case spec.GCE:
-				machineType = gceMachineType(s.CPUs)
+				machineType = spec.GCEMachineType(s.CPUs)
 			case spec.Azure:
-				machineType = azureMachineType(s.CPUs)
+				machineType = spec.AzureMachineType(s.CPUs)
 			}
 		}
 
