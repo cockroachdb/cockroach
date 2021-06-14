@@ -63,20 +63,16 @@ func (gs *txnLockGatekeeper) SendLocked(
 	// particular since refreshing is invalid if done concurrently with requests
 	// in flight whose spans haven't been accounted for.
 	//
-	// As a special case, allow for async rollbacks and heartbeats to be sent
-	// whenever.
-	if !gs.allowConcurrentRequests {
-		asyncRequest := ba.IsSingleAbortTxnRequest() || ba.IsSingleHeartbeatTxnRequest()
-		if !asyncRequest {
-			if gs.requestInFlight {
-				return nil, roachpb.NewError(
-					errors.AssertionFailedf("concurrent txn use detected. ba: %s", ba))
-			}
-			gs.requestInFlight = true
-			defer func() {
-				gs.requestInFlight = false
-			}()
+	// As a special case, allow for async heartbeats to be sent whenever.
+	if !gs.allowConcurrentRequests && !ba.IsSingleHeartbeatTxnRequest() {
+		if gs.requestInFlight {
+			return nil, roachpb.NewError(
+				errors.AssertionFailedf("concurrent txn use detected. ba: %s", ba))
 		}
+		gs.requestInFlight = true
+		defer func() {
+			gs.requestInFlight = false
+		}()
 	}
 
 	// Note the funky locking here: we unlock for the duration of the call and the
