@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -560,6 +561,11 @@ func (expr *StrVal) ResolveAsType(
 				expr.resString = DString(strings.TrimRight(expr.s, " "))
 				return &expr.resString, nil
 			}
+			// "char" is supposed to truncate long values
+			if typ.Oid() == oid.T_char {
+				expr.resString = DString(util.TruncateString(expr.s, 1))
+				return &expr.resString, nil
+			}
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
@@ -576,6 +582,11 @@ func (expr *StrVal) ResolveAsType(
 		// bpchar types truncate trailing whitespace.
 		if typ.Oid() == oid.T_bpchar {
 			expr.resString = DString(strings.TrimRight(expr.s, " "))
+			return &expr.resString, nil
+		}
+		// "char" is supposed to truncate long values
+		if typ.Oid() == oid.T_char {
+			expr.resString = DString(util.TruncateString(expr.s, 1))
 			return &expr.resString, nil
 		}
 		expr.resString = DString(expr.s)

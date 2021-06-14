@@ -507,3 +507,17 @@ query T
 SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
 ----
 Bbb
+
+# Test "char" is supposed to truncate long values
+subtest char_long_values
+
+statement ok
+CREATE TABLE t65631(a "char", b "char" COLLATE en)
+
+statement ok
+INSERT INTO t65631 VALUES ('abc', 'abc' COLLATE en)
+
+query TT
+SELECT a, b FROM t65631
+----
+a a

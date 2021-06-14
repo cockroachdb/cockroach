@@ -420,6 +420,8 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 
 		if typ.Oid() == oid.T_bpchar {
 			sv = strings.TrimRight(sv, " ")
+		} else if typ.Oid() == oid.T_char {
+			sv = util.TruncateString(sv, 1)
 		}
 
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
@@ -433,6 +435,12 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				return NewDString(strings.TrimRight(sv, " ")), nil
 			} else if _, ok := inVal.(*DCollatedString); ok {
 				return NewDCollatedString(strings.TrimRight(sv, " "), typ.Locale(), &CollationEnvironment{})
+			}
+		} else if typ.Oid() == oid.T_char {
+			if _, ok := AsDString(inVal); ok {
+				return NewDString(util.TruncateString(sv, 1)), nil
+			} else if _, ok := inVal.(*DCollatedString); ok {
+				return NewDCollatedString(util.TruncateString(sv, 1), typ.Locale(), &CollationEnvironment{})
 			}
 		}
 	case types.IntFamily:
