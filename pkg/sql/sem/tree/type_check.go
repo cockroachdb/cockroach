@@ -416,26 +416,47 @@ func (expr *CaseExpr) TypeCheck(
 	return expr, nil
 }
 
-func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter, Volatility) {
+// resolveCast checks that the cast from the two types is valid. If allowStable
+// is false, it also checks that the cast has VolatilityImmutable.
+//
+// On success, any relevant telemetry counters are incremented.
+func resolveCast(context string, castFrom, castTo *types.T, allowStable bool) error {
 	toFamily := castTo.Family()
 	fromFamily := castFrom.Family()
 	switch {
 	case toFamily == types.ArrayFamily && fromFamily == types.ArrayFamily:
-		ok, c, v := isCastDeepValid(castFrom.ArrayContents(), castTo.ArrayContents())
-		if ok {
-			telemetry.Inc(sqltelemetry.ArrayCastCounter)
+		err := resolveCast(context, castFrom.ArrayContents(), castTo.ArrayContents(), allowStable)
+		if err != nil {
+			return err
 		}
-		return ok, c, v
-	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
-		// Casts from ENUM to ENUM type can only succeed if the two enums
-		return castFrom.Equivalent(castTo), sqltelemetry.EnumCastCounter, VolatilityImmutable
-	}
+		telemetry.Inc(sqltelemetry.ArrayCastCounter)
+		return nil
 
-	cast := lookupCast(fromFamily, toFamily)
-	if cast == nil {
-		return false, nil, 0
+	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
+		// Casts from ENUM to ENUM type can only succeed if the two types are the
+		// same.
+		if !castFrom.Equivalent(castTo) {
+			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
+		}
+		telemetry.Inc(sqltelemetry.EnumCastCounter)
+		return nil
+
+	default:
+		cast := lookupCast(fromFamily, toFamily)
+		if cast == nil {
+			return pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, castTo)
+		}
+		if !allowStable && cast.volatility >= VolatilityStable {
+			err := NewContextDependentOpsNotAllowedError(context)
+			err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, castTo)
+			if cast.volatilityHint != "" {
+				err = errors.WithHint(err, cast.volatilityHint)
+			}
+			return err
+		}
+		telemetry.Inc(cast.counter)
+		return nil
 	}
-	return true, cast.counter, cast.volatility
 }
 
 func isEmptyArray(expr Expr) bool {
@@ -494,22 +515,16 @@ func (expr *CastExpr) TypeCheck(
 	}
 
 	castFrom := typedSubExpr.ResolvedType()
-
-	ok, c, volatility := isCastDeepValid(castFrom, exprType)
-	if !ok {
-		return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, exprType)
+	allowStable := true
+	context := ""
+	if semaCtx != nil && semaCtx.Properties.required.rejectFlags&RejectStableOperators != 0 {
+		allowStable = false
+		context = semaCtx.Properties.required.context
 	}
-	if err := semaCtx.checkVolatility(volatility); err != nil {
-		err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, exprType)
-		// Special cases where we can provide useful hints.
-		if castFrom.Family() == types.StringFamily && exprType.Family() == types.TimestampFamily {
-			err = errors.WithHint(err, "string to timestamp casts are context-dependent because "+
-				"of relative timestamp strings like 'now'; use parse_timestamp() instead.")
-		}
+	err = resolveCast(context, castFrom, exprType, allowStable)
+	if err != nil {
 		return nil, err
 	}
-
-	telemetry.Inc(c)
 	expr.Expr = typedSubExpr
 	expr.Type = exprType
 	expr.typ = exprType
