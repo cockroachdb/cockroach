@@ -161,9 +161,6 @@ func (s *clusterSpec) args(extra ...string) []string {
 
 	if s.Cloud != spec.Local {
 		zones := s.Zones
-		if zones == "" {
-			zones = zonesF
-		}
 		if zones != "" {
 			if !s.Geo {
 				zones = firstZone(zones)
