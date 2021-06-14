@@ -21,6 +21,7 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -30,6 +31,14 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+)
+
+// gcsChunkingEnabled is used to enable and disable chunking of file upload to
+// Google Cloud Storage.
+var gcsChunkingEnabled = settings.RegisterBoolSetting(
+	"cloudstorage.gs.chunking.enabled",
+	"enable chunking of file upload to Google Cloud Storage",
+	true, /* default */
 )
 
 func gcsQueryParams(conf *roachpb.ExternalStorage_GCS) string {
@@ -162,6 +171,9 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 		return contextutil.RunWithTimeout(ctx, "put gcs file", timeoutSetting.Get(&g.settings.SV),
 			func(ctx context.Context) error {
 				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+				if !gcsChunkingEnabled.Get(&g.settings.SV) {
+					w.ChunkSize = 0
+				}
 				if _, err := io.Copy(w, content); err != nil {
 					_ = w.Close()
 					return err
