@@ -3040,14 +3040,11 @@ may increase either contention or retry errors, or both.`,
 
 	// Fuzzy String Matching
 	"soundex": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: categoryString},
+		tree.FunctionProperties{Category: categoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return tree.NewDString(""), nil
-				}
 				s := string(tree.MustBeDString(args[0]))
 				t := fuzzystrmatch.Soundex(s)
 				return tree.NewDString(t), nil
@@ -3060,14 +3057,11 @@ may increase either contention or retry errors, or both.`,
 	// but this name matches the name in PostgreSQL.
 	// See https://www.postgresql.org/docs/current/fuzzystrmatch.html"
 	"difference": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: categoryString},
+		tree.FunctionProperties{Category: categoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull || args[1] == tree.DNull {
-					return tree.NewDString(""), nil
-				}
 				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
 				diff := fuzzystrmatch.Difference(s, t)
 				return tree.NewDString(strconv.Itoa(diff)), nil
