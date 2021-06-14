@@ -2071,6 +2071,14 @@ func (m *DropView) AppendJSONFields(printComma bool, b redact.RedactableBytes) (
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *Dummy) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *FinishSchemaChange) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

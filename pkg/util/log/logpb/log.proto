@@ -179,6 +179,11 @@ enum Channel {
   // channel so as to not pollute the `SQL_PERF` logging output with
   // internal troubleshooting details.
   SQL_INTERNAL_PERF = 11;
+
+  // TELEMETRY reports telemetry events. Telemetry events describe
+  // feature usage within CockroachDB and anonymizes any application-
+  // specific data.
+  TELEMETRY = 12;
 }
 
 // Entry represents a cockroach log entry in the following two cases:
