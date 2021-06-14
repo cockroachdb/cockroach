@@ -204,7 +204,7 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
            WHEN 'u' THEN 'UNIQUE'
            WHEN 'c' THEN 'CHECK'
            WHEN 'f' THEN 'FOREIGN KEY'
-           ELSE c.contype
+           ELSE c.contype::TEXT
         END AS constraint_type,
         c.condef AS details,
         c.convalidated AS validated
