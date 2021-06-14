@@ -18,7 +18,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func runClockJump(ctx context.Context, t *test, c clusterI, tc clockJumpTestCase) {
+func runClockJump(ctx context.Context, t *test, c Cluster, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
 	if c.Spec().NodeCount != 1 {
@@ -134,7 +134,7 @@ func registerClockJumpTests(r *testRegistry) {
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
 			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
 		}

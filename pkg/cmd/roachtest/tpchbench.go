@@ -48,7 +48,7 @@ type tpchBenchSpec struct {
 //
 // This benchmark runs with a single load generator node running a single
 // worker.
-func runTPCHBench(ctx context.Context, t *test, c clusterI, b tpchBenchSpec) {
+func runTPCHBench(ctx context.Context, t *test, c Cluster, b tpchBenchSpec) {
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	loadNode := c.Node(c.Spec().NodeCount)
 
@@ -167,7 +167,7 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(numNodes),
 		MinVersion: minVersion,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
 	})

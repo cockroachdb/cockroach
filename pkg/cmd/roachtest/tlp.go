@@ -37,7 +37,7 @@ func registerTLP(r *testRegistry) {
 	})
 }
 
-func runTLP(ctx context.Context, t *test, c clusterI) {
+func runTLP(ctx context.Context, t *test, c Cluster) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.

@@ -22,7 +22,7 @@ var popReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<po
 var popSupportedTag = "v5.3.3"
 
 func registerPop(r *testRegistry) {
-	runPop := func(ctx context.Context, t *test, c clusterI) {
+	runPop := func(ctx context.Context, t *test, c Cluster) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
 		}

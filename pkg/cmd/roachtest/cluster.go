@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/armon/circbuf"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -323,7 +324,7 @@ func (r *clusterRegistry) savedClusters() []clusterWithMsg {
 // blocks until they're destroyed. It responds to context cancelation by
 // interrupting the waiting; the cluster destruction itself does not inherit the
 // cancelation.
-func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger) {
+func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger.Logger) {
 	// Fire off a goroutine to destroy all of the clusters.
 	done := make(chan struct{})
 	go func() {
@@ -363,7 +364,7 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger) {
 }
 
 // execCmd is like execCmdEx, but doesn't return the command's output.
-func execCmd(ctx context.Context, l *logger, args ...string) error {
+func execCmd(ctx context.Context, l *logger.Logger, args ...string) error {
 	return execCmdEx(ctx, l, args...).err
 }
 
@@ -379,7 +380,7 @@ type cmdRes struct {
 // Note that the output is truncated; only a tail is returned.
 // Also note that if the command exits with an error code, its output is also
 // included in cmdRes.err.
-func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
+func execCmdEx(ctx context.Context, l *logger.Logger, args ...string) cmdRes {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
@@ -462,11 +463,11 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = io.Copy(l.stdout, io.TeeReader(rOut, debugStdoutBuffer))
+			_, _ = io.Copy(l.Stdout, io.TeeReader(rOut, debugStdoutBuffer))
 		}()
 
-		if l.stderr == l.stdout {
-			// If l.stderr == l.stdout, we use only one pipe to avoid
+		if l.Stderr == l.Stdout {
+			// If l.Stderr == l.Stdout, we use only one pipe to avoid
 			// duplicating everything.
 			cmd.Stderr = wOut
 		} else {
@@ -474,7 +475,7 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_, _ = io.Copy(l.stderr, io.TeeReader(rErr, debugStderrBuffer))
+				_, _ = io.Copy(l.Stderr, io.TeeReader(rErr, debugStderrBuffer))
 			}()
 		}
 	}
@@ -557,7 +558,7 @@ func GetStderr(err error) string {
 // execCmdWithBuffer executes the given command and returns its stdout/stderr
 // output. If the return code is not 0, an error is also returned.
 // l is used to log the command before running it. No output is logged.
-func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, error) {
+func execCmdWithBuffer(ctx context.Context, l *logger.Logger, args ...string) ([]byte, error) {
 	l.Printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
@@ -749,7 +750,7 @@ type testI interface {
 	// Path to a directory where the test is supposed to store its log and other
 	// artifacts.
 	ArtifactsDir() string
-	logger() *logger
+	logger() *logger.Logger
 	Status(args ...interface{})
 }
 
@@ -1144,7 +1145,7 @@ type cluster struct {
 	// l is the logger used to log various cluster operations.
 	// DEPRECATED for use outside of cluster methods: Use a test's t.l instead.
 	// This is generally set to the current test's logger.
-	l          *logger
+	l          *logger.Logger
 	expiration time.Time
 	// encryptDefault is true if the cluster should default to having encryption
 	// at rest enabled. The default only applies if encryption is not explicitly
@@ -1237,7 +1238,7 @@ func (c *cluster) closeLogger() {
 		return
 	}
 	c.destroyState.mu.loggerClosed = true
-	c.l.close()
+	c.l.Close()
 }
 
 type clusterConfig struct {
@@ -1301,7 +1302,7 @@ func (f *clusterFactory) releaseSem() {
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
-	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt teeOptType,
+	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType,
 ) (*cluster, error) {
 	if ctx.Err() != nil {
 		return nil, errors.Wrap(ctx.Err(), "newCluster")
@@ -1360,7 +1361,7 @@ func (f *clusterFactory) newCluster(
 
 	// Logs for creating a new cluster go to a dedicated log file.
 	logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", name+".log")
-	l, err := rootLogger(logPath, teeOpt)
+	l, err := logger.RootLogger(logPath, teeOpt)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -1409,7 +1410,12 @@ type attachOpt struct {
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func attachToExistingCluster(
-	ctx context.Context, name string, l *logger, spec clusterSpec, opt attachOpt, r *clusterRegistry,
+	ctx context.Context,
+	name string,
+	l *logger.Logger,
+	spec clusterSpec,
+	opt attachOpt,
+	r *clusterRegistry,
 ) (*cluster, error) {
 	exp := spec.expiration()
 	if name == "local" {
@@ -1490,7 +1496,7 @@ func (c *cluster) StopCockroachGracefullyOnNode(ctx context.Context, node int) e
 }
 
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
-func (c *cluster) Save(ctx context.Context, msg string, l *logger) {
+func (c *cluster) Save(ctx context.Context, msg string, l *logger.Logger) {
 	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)
 	// TODO(andrei): should we extend the cluster here? For how long?
 	if c.destroyState.owned { // we won't have an alloc for an unowned cluster
@@ -1507,7 +1513,7 @@ func (c *cluster) Save(ctx context.Context, msg string, l *logger) {
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
-func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger) error {
+func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger.Logger) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
@@ -1965,7 +1971,7 @@ const (
 // l is the logger that will log this destroy operation.
 //
 // This method generally does not react to ctx cancelation.
-func (c *cluster) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger) {
+func (c *cluster) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger.Logger) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -1985,7 +1991,7 @@ func (c *cluster) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger) {
 	}
 }
 
-func (c *cluster) doDestroy(ctx context.Context, l *logger) <-chan struct{} {
+func (c *cluster) doDestroy(ctx context.Context, l *logger.Logger) <-chan struct{} {
 	var inFlight <-chan struct{}
 	c.destroyState.mu.Lock()
 	if c.destroyState.mu.saved {
@@ -2039,10 +2045,10 @@ func (c *cluster) doDestroy(ctx context.Context, l *logger) <-chan struct{} {
 // loggedCommand runs a command with output redirected to the logs instead of to os.Stdout
 // (which doesn't go anywhere I've been able to find) Don't use this if you're
 // going to call cmd.CombinedOutput or cmd.Output.
-func loggedCommand(ctx context.Context, l *logger, arg0 string, args ...string) *exec.Cmd {
+func loggedCommand(ctx context.Context, l *logger.Logger, arg0 string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, arg0, args...)
-	cmd.Stdout = l.stdout
-	cmd.Stderr = l.stderr
+	cmd.Stdout = l.Stdout
+	cmd.Stderr = l.Stderr
 	return cmd
 }
 
@@ -2055,7 +2061,9 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 }
 
 // PutE puts a local file to all of the machines in a cluster.
-func (c *cluster) PutE(ctx context.Context, l *logger, src, dest string, opts ...option) error {
+func (c *cluster) PutE(
+	ctx context.Context, l *logger.Logger, src, dest string, opts ...option,
+) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
@@ -2099,7 +2107,7 @@ func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
 
 // Stage stages a binary to the cluster.
 func (c *cluster) Stage(
-	ctx context.Context, l *logger, application, versionOrSHA, dir string, opts ...option,
+	ctx context.Context, l *logger.Logger, application, versionOrSHA, dir string, opts ...option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Stage")
@@ -2120,7 +2128,9 @@ func (c *cluster) Stage(
 }
 
 // Get gets files from remote hosts.
-func (c *cluster) Get(ctx context.Context, l *logger, src, dest string, opts ...option) error {
+func (c *cluster) Get(
+	ctx context.Context, l *logger.Logger, src, dest string, opts ...option,
+) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Get error")
 	}
@@ -2168,7 +2178,7 @@ func (c *cluster) PutString(
 // version of the given branch. The src, dest, and branch arguments must not
 // contain shell special characters.
 func (c *cluster) GitClone(
-	ctx context.Context, l *logger, src, dest, branch string, node nodeListOption,
+	ctx context.Context, l *logger.Logger, src, dest, branch string, node nodeListOption,
 ) error {
 	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
 if ! test -d %s; then
@@ -2354,7 +2364,7 @@ func (c *cluster) Reset(ctx context.Context) error {
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *cluster) WipeE(ctx context.Context, l *logger, opts ...option) error {
+func (c *cluster) WipeE(ctx context.Context, l *logger.Logger, opts ...option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -2400,7 +2410,7 @@ var _ = (&cluster{}).Reformat
 
 // Install a package in a node
 func (c *cluster) Install(
-	ctx context.Context, l *logger, node nodeListOption, args ...string,
+	ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
 ) error {
 	return execCmd(ctx, l,
 		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
@@ -2441,7 +2451,7 @@ func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string)
 	logFile := cmdLogFileName(timeutil.Now(), node, args...)
 
 	// NB: we set no prefix because it's only going to a file anyway.
-	l, err := c.l.ChildLogger(logFile, quietStderr, quietStdout)
+	l, err := c.l.ChildLogger(logFile, logger.QuietStderr, logger.QuietStdout)
 	if err != nil {
 		return err
 	}
@@ -2450,8 +2460,8 @@ func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string)
 	if err := ctx.Err(); err != nil {
 		l.Printf("(note: incoming context was canceled: %s", err)
 	}
-	physicalFileName := l.file.Name()
-	l.close()
+	physicalFileName := l.File.Name()
+	l.Close()
 	if err != nil {
 		failedPhysicalFileName := strings.TrimSuffix(physicalFileName, ".log") + ".failed"
 		if failedFile, err2 := os.Create(failedPhysicalFileName); err2 != nil {
@@ -2463,7 +2473,9 @@ func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string)
 }
 
 // RunL runs a command on the specified node, returning an error.
-func (c *cluster) RunL(ctx context.Context, l *logger, node nodeListOption, args ...string) error {
+func (c *cluster) RunL(
+	ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
+) error {
 	if err := errors.Wrap(ctx.Err(), "cluster.RunL"); err != nil {
 		return err
 	}
@@ -2474,7 +2486,7 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node nodeListOption, args
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
 // and stdout or an error.
 func (c *cluster) RunWithBuffer(
-	ctx context.Context, l *logger, node nodeListOption, args ...string,
+	ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
 ) ([]byte, error) {
 	if err := errors.Wrap(ctx.Err(), "cluster.RunWithBuffer"); err != nil {
 		return nil, err
@@ -2756,7 +2768,7 @@ func (c *cluster) isLocal() bool {
 
 // Extend extends the cluster's expiration by d, after truncating d to minute
 // granularity.
-func (c *cluster) Extend(ctx context.Context, d time.Duration, l *logger) error {
+func (c *cluster) Extend(ctx context.Context, d time.Duration, l *logger.Logger) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Extend")
 	}
@@ -2775,7 +2787,7 @@ func (c *cluster) Extend(ctx context.Context, d time.Duration, l *logger) error 
 
 // getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
 func getDiskUsageInBytes(
-	ctx context.Context, c clusterI, logger *logger, nodeIdx int,
+	ctx context.Context, c Cluster, logger *logger.Logger, nodeIdx int,
 ) (int, error) {
 	var out []byte
 	for {
@@ -2824,7 +2836,7 @@ func getDiskUsageInBytes(
 
 type monitor struct {
 	t         testI
-	l         *logger
+	l         *logger.Logger
 	nodes     string
 	ctx       context.Context
 	cancel    func()
@@ -2832,7 +2844,7 @@ type monitor struct {
 	expDeaths int32 // atomically
 }
 
-func newMonitor(ctx context.Context, ci clusterI, opts ...option) *monitor {
+func newMonitor(ctx context.Context, ci Cluster, opts ...option) *monitor {
 	c := ci.(*cluster) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `makeNodes`
 	m := &monitor{
 		t:     c.t,
@@ -2970,11 +2982,11 @@ func (m *monitor) wait(args ...string) error {
 			setMonitorCmdErr(err)
 			return
 		}
-		defer monL.close()
+		defer monL.Close()
 
 		cmd := exec.CommandContext(m.ctx, args[0], args[1:]...)
-		cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
-		cmd.Stderr = monL.stderr
+		cmd.Stdout = io.MultiWriter(pipeW, monL.Stdout)
+		cmd.Stderr = monL.Stderr
 		if err := cmd.Run(); err != nil {
 			if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "killed") {
 				// The expected reason for an error is that the monitor was killed due
@@ -3097,7 +3109,7 @@ func (lg loadGroupList) loadNodes() nodeListOption {
 // makeLoadGroups create a loadGroupList that has an equal number of cockroach
 // nodes per zone. It assumes that numLoadNodes <= numZones and that numZones is
 // divisible by numLoadNodes.
-func makeLoadGroups(c clusterI, numZones, numRoachNodes, numLoadNodes int) loadGroupList {
+func makeLoadGroups(c Cluster, numZones, numRoachNodes, numLoadNodes int) loadGroupList {
 	if numLoadNodes > numZones {
 		panic("cannot have more than one load node per zone")
 	} else if numZones%numLoadNodes != 0 {

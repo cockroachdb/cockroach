@@ -23,7 +23,7 @@ func registerPsycopg(r *testRegistry) {
 	runPsycopg := func(
 		ctx context.Context,
 		t *test,
-		c clusterI,
+		c Cluster,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -134,7 +134,7 @@ func registerPsycopg(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runPsycopg(ctx, t, c)
 		},
 	})

@@ -22,7 +22,7 @@ func registerLedger(r *testRegistry) {
 		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(azs)),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)

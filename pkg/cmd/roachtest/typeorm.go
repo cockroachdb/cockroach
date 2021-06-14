@@ -25,7 +25,7 @@ func registerTypeORM(r *testRegistry) {
 	runTypeORM := func(
 		ctx context.Context,
 		t *test,
-		c clusterI,
+		c Cluster,
 	) {
 		if c.isLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -175,7 +175,7 @@ func registerTypeORM(r *testRegistry) {
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTypeORM(ctx, t, c)
 		},
 	})

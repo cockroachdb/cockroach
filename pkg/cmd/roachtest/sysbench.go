@@ -83,7 +83,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 	)
 }
 
-func runSysbench(ctx context.Context, t *test, c clusterI, opts sysbenchOptions) {
+func runSysbench(ctx context.Context, t *test, c Cluster, opts sysbenchOptions) {
 	allNodes := c.Range(1, c.Spec().NodeCount)
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	loadNode := c.Node(c.Spec().NodeCount)
@@ -141,7 +141,7 @@ func registerSysbench(r *testRegistry) {
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Owner:   OwnerKV,
 			Cluster: makeClusterSpec(n+1, cpu(cpus)),
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},
 		})

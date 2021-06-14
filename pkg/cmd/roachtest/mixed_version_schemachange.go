@@ -26,7 +26,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 		// order to prevent bugs during upgrades.
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			maxOps := 100
 			concurrency := 5
 			if local {
@@ -71,7 +71,7 @@ func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep 
 func runSchemaChangeMixedVersions(
 	ctx context.Context,
 	t *test,
-	c clusterI,
+	c Cluster,
 	maxOps int,
 	concurrency int,
 	buildVersion version.Version,

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -81,7 +82,7 @@ type testSpec struct {
 	RequiresLicense bool
 
 	// Run is the test function.
-	Run func(ctx context.Context, t *test, c clusterI)
+	Run func(ctx context.Context, t *test, c Cluster)
 }
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
@@ -125,7 +126,7 @@ type test struct {
 	buildVersion version.Version
 
 	// l is the logger that the test will use for its output.
-	l *logger
+	l *logger.Logger
 
 	runner string
 	// runnerID is the test's main goroutine ID.
@@ -176,7 +177,7 @@ func (t *test) Name() string {
 	return t.spec.Name
 }
 
-func (t *test) logger() *logger {
+func (t *test) logger() *logger.Logger {
 	return t.l
 }
 
@@ -196,7 +197,7 @@ func (t *test) status(ctx context.Context, id int64, args ...interface{}) {
 		msg:  msg,
 		time: timeutil.Now(),
 	}
-	if !t.l.closed() {
+	if !t.l.Closed() {
 		if id == t.runnerID {
 			t.l.PrintfCtxDepth(ctx, 3, "test status: %s", msg)
 		} else {
@@ -508,10 +509,10 @@ const (
 type loggingOpt struct {
 	// l is the test runner logger.
 	// Note that individual test runs will use a different logger.
-	l *logger
+	l *logger.Logger
 	// tee controls whether test logs (not test runner logs) also go to stdout or
 	// not.
-	tee            teeOptType
+	tee            logger.TeeOptType
 	stdout, stderr io.Writer
 	// artifactsDir is that path to the dir that will contain the artifacts for
 	// all the tests.
@@ -580,7 +581,9 @@ func (w *workerStatus) SetTest(t *test, ttr testToRunRes) {
 
 // shout logs a message both to a logger and to an io.Writer.
 // If format doesn't end with a new line, one will be automatically added.
-func shout(ctx context.Context, l *logger, stdout io.Writer, format string, args ...interface{}) {
+func shout(
+	ctx context.Context, l *logger.Logger, stdout io.Writer, format string, args ...interface{},
+) {
 	if len(format) == 0 || format[len(format)-1] != '\n' {
 		format += "\n"
 	}

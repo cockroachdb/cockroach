@@ -26,7 +26,7 @@ func registerReplicaGC(r *testRegistry) {
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
 			Owner:   OwnerKV,
 			Cluster: makeClusterSpec(6),
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
 		})
@@ -46,7 +46,7 @@ var deadNodeAttr = "deadnode"
 // replicas off of them, and after having done so, it recommissions the downed
 // node. It expects the downed node to discover the new replica placement and gc
 // its replicas.
-func runReplicaGCChangedPeers(ctx context.Context, t *test, c clusterI, withRestart bool) {
+func runReplicaGCChangedPeers(ctx context.Context, t *test, c Cluster, withRestart bool) {
 	if c.Spec().NodeCount != 6 {
 		t.Fatal("test needs to be run with 6 nodes")
 	}
@@ -138,7 +138,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c clusterI, withRest
 
 type replicagcTestHelper struct {
 	t *test
-	c clusterI
+	c Cluster
 }
 
 func (h *replicagcTestHelper) waitForFullReplication(ctx context.Context) {

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -66,7 +67,7 @@ func (t testWrapper) ArtifactsDir() string {
 }
 
 // logger is part of the testI interface.
-func (t testWrapper) logger() *logger {
+func (t testWrapper) logger() *logger.Logger {
 	return nil
 }
 
@@ -74,8 +75,8 @@ func (t testWrapper) logger() *logger {
 func (t testWrapper) Status(args ...interface{}) {}
 
 func TestExecCmd(t *testing.T) {
-	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
-	logger, err := cfg.newLogger("" /* path */)
+	cfg := &logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	logger, err := cfg.NewLogger("" /* path */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,8 +124,8 @@ func TestExecCmd(t *testing.T) {
 }
 
 func TestClusterMonitor(t *testing.T) {
-	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
-	logger, err := cfg.newLogger("" /* path */)
+	cfg := &logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	logger, err := cfg.NewLogger("" /* path */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,8 +305,8 @@ func TestClusterMachineType(t *testing.T) {
 }
 
 func TestLoadGroups(t *testing.T) {
-	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
-	logger, err := cfg.newLogger("" /* path */)
+	cfg := &logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	logger, err := cfg.NewLogger("" /* path */)
 	if err != nil {
 		t.Fatal(err)
 	}

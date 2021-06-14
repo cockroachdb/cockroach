@@ -51,7 +51,7 @@ func registerTPCDSVec(r *testRegistry) {
 		`web_sales`, `web_site`,
 	}
 
-	runTPCDSVec := func(ctx context.Context, t *test, c clusterI) {
+	runTPCDSVec := func(ctx context.Context, t *test, c Cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t)
 
@@ -174,7 +174,7 @@ func registerTPCDSVec(r *testRegistry) {
 		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(3),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCDSVec(ctx, t, c)
 		},
 	})

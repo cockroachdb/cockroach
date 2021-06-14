@@ -61,7 +61,6 @@ go_library(
         "libpq.go",
         "libpq_blocklist.go",
         "liquibase.go",
-        "log.go",
         "main.go",
         "many_splits.go",
         "mixed_version_decommission.go",
@@ -135,6 +134,7 @@ go_library(
         "//pkg/cli",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/internal/issues",
+        "//pkg/cmd/roachtest/logger",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
         "//pkg/internal/team",
@@ -214,6 +214,7 @@ go_test(
     embed = [":roachtest_lib"],
     tags = ["broken_in_bazel"],
     deps = [
+        "//pkg/cmd/roachtest/logger",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/syncutil",

@@ -174,7 +174,7 @@ func (r *ormTestsResults) parseJUnitXML(
 func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
 	t *test,
-	c clusterI,
+	c Cluster,
 	node nodeListOption,
 	ormName string,
 	testOutput []byte,
