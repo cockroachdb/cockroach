@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -52,26 +53,10 @@ func (s *Store) Send(
 		}
 	}
 
-	// Limit the number of concurrent AddSSTable requests, since they're expensive
-	// and block all other writes to the same span.
-	if ba.IsSingleAddSSTableRequest() {
-		before := timeutil.Now()
-		if err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx); err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		defer s.limiters.ConcurrentAddSSTableRequests.Finish()
-
-		beforeEngineDelay := timeutil.Now()
-		s.engine.PreIngestDelay(ctx)
-		after := timeutil.Now()
-
-		waited, waitedEngine := after.Sub(before), after.Sub(beforeEngineDelay)
-		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
-		s.metrics.AddSSTableProposalEngineDelay.Inc(waitedEngine.Nanoseconds())
-		if waited > time.Second {
-			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
-				waited, waitedEngine)
-		}
+	if res, err := s.maybeThrottleBatch(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	} else if res != nil {
+		defer res.Release()
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
@@ -253,4 +238,70 @@ func (s *Store) Send(
 		pErr = roachpb.NewError(err)
 	}
 	return nil, pErr
+}
+
+// maybeThrottleBatch inspects the provided batch and determines whether
+// throttling should be applied to avoid overloading the Store. If so, the
+// method blocks and returns a reservation that must be released after the
+// request has completed.
+//
+// Of note is that request throttling is all performed above evaluation and
+// before a request acquires latches on a range. Otherwise, the request could
+// inadvertently block others while being throttled.
+func (s *Store) maybeThrottleBatch(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (limit.Reservation, error) {
+	if !ba.IsSingleRequest() {
+		return nil, nil
+	}
+
+	switch t := ba.Requests[0].GetInner().(type) {
+	case *roachpb.AddSSTableRequest:
+		// Limit the number of concurrent AddSSTable requests, since they're
+		// expensive and block all other writes to the same span. However, don't
+		// limit AddSSTable requests that are going to ingest as a WriteBatch.
+		if t.IngestAsWrites {
+			return nil, nil
+		}
+
+		before := timeutil.Now()
+		res, err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		beforeEngineDelay := timeutil.Now()
+		s.engine.PreIngestDelay(ctx)
+		after := timeutil.Now()
+
+		waited, waitedEngine := after.Sub(before), after.Sub(beforeEngineDelay)
+		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
+		s.metrics.AddSSTableProposalEngineDelay.Inc(waitedEngine.Nanoseconds())
+		if waited > time.Second {
+			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
+				waited, waitedEngine)
+		}
+		return res, nil
+
+	case *roachpb.ExportRequest:
+		// Limit the number of concurrent Export requests, as these often scan and
+		// entire Range at a time and place significant read load on a Store.
+		before := timeutil.Now()
+		res, err := s.limiters.ConcurrentExportRequests.Begin(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		waited := timeutil.Since(before)
+		if waited > time.Second {
+			log.Infof(ctx, "Export request was delayed by %v", waited)
+		}
+		return res, nil
+
+	case *roachpb.ImportRequest:
+		return s.limiters.ConcurrentImportRequests.Begin(ctx)
+
+	default:
+		return nil, nil
+	}
 }

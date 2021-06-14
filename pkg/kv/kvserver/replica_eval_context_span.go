@@ -211,11 +211,6 @@ func (rec SpanSetReplicaEvalContext) GetDescAndLease(
 	return rec.i.GetDescAndLease(ctx)
 }
 
-// GetLimiters returns the per-store limiters.
-func (rec *SpanSetReplicaEvalContext) GetLimiters() *batcheval.Limiters {
-	return rec.i.GetLimiters()
-}
-
 // GetExternalStorage returns an ExternalStorage object, based on
 // information parsed from a URI, stored in `dest`.
 func (rec *SpanSetReplicaEvalContext) GetExternalStorage(
