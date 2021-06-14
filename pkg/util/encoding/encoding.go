@@ -1180,9 +1180,6 @@ func EncodeGeoDescending(b []byte, curveIndex uint64, so *geopb.SpatialObject) (
 	}
 	n := len(b)
 	b = encodeBytesAscendingWithTerminator(b, data, ascendingGeoEscapes.escapedTerm)
-	if err != nil {
-		return nil, err
-	}
 	onesComplement(b[n:])
 	return b, nil
 }

@@ -1477,10 +1477,6 @@ func (o KVOptions) ToRoleOptions(
 				if err != nil {
 					return nil, err
 				}
-
-				if err != nil {
-					return nil, err
-				}
 				roleOptions[i] = roleoption.RoleOption{
 					Option: option, Value: strFn, HasValue: true,
 				}
