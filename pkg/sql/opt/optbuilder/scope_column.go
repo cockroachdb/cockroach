@@ -35,7 +35,7 @@ type scopeColumn struct {
 	// columns in the query.
 	id opt.ColumnID
 
-	visibility cat.ColumnVisibility
+	visibility columnVisibility
 
 	// tableOrdinal is set to the table ordinal corresponding to this column, if
 	// this is a column from a scan.
@@ -63,6 +63,45 @@ type scopeColumn struct {
 	// exprStr contains a stringified representation of expr, or the original
 	// column name if expr is nil. It is populated lazily inside getExprStr().
 	exprStr string
+}
+
+// columnVisibility is an extension of cat.ColumnVisibility.
+// cat.ColumnVisibility values can be converted directly.
+type columnVisibility uint8
+
+const (
+	// visible columns are part of the presentation of a query. Visible columns
+	// contribute to star expansions.
+	visible = columnVisibility(cat.Visible)
+
+	// accessibleByQualifiedStar columns are accessible by name or by a qualified
+	// star "<table>.*". This is a rare case, occurring in joins:
+	//   ab NATURAL LEFT JOIN ac
+	// Here ac.a is not visible (or part of the unqualified star expansion) but it
+	// is accessible via ac.*.
+	accessibleByQualifiedStar = columnVisibility(10)
+
+	// accessibleByName columns are accessible by name but are otherwise not
+	// visible; they do not contribute to star expansions.
+	accessibleByName = columnVisibility(cat.Hidden)
+
+	// inaccessible columns cannot be referred to by name (or any other means).
+	inaccessible = columnVisibility(cat.Inaccessible)
+)
+
+func (cv columnVisibility) String() string {
+	switch cv {
+	case visible:
+		return "visible"
+	case accessibleByQualifiedStar:
+		return "accessible-by-qualified-star"
+	case accessibleByName:
+		return "accessible-by-name"
+	case inaccessible:
+		return "inaccessible"
+	default:
+		return "invalid-column-visibility"
+	}
 }
 
 // clearName sets the empty table and column name. This is used to make the

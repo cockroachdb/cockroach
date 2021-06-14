@@ -357,7 +357,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 					))
 				}
 				col := &scope.cols[colIdx]
-				if col.visibility != cat.Visible {
+				if col.visibility != visible {
 					continue
 				}
 				col.name = colAlias[aliasIdx]
@@ -484,7 +484,7 @@ func (b *Builder) buildScan(
 			name:         name,
 			table:        tabMeta.Alias,
 			typ:          col.DatumType(),
-			visibility:   col.Visibility(),
+			visibility:   columnVisibility(col.Visibility()),
 			kind:         kind,
 			mutation:     kind == cat.WriteOnly || kind == cat.DeleteOnly,
 			tableOrdinal: ord,
