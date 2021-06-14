@@ -78,6 +78,55 @@ a SIMILAR TO '.*'
 Remaining filter: a SIMILAR TO '.*'
 
 index-constraints vars=(a string) index=(a)
+a ~ '^foo'
+----
+[/'foo' - /'fop')
+
+# This could be converted to simple equality.
+index-constraints vars=(a string) index=(a)
+a ~ '^foo$'
+----
+[/'foo' - /'fop')
+Remaining filter: a ~ '^foo$'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^foo[a-z]'
+----
+[/'foo' - /'fop')
+Remaining filter: a ~ '^foo[a-z]'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^foo.*bar'
+----
+[/'foo' - /'fop')
+Remaining filter: a ~ '^foo.*bar'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^(abx|aby|abz)'
+----
+[/'ab' - /'ac')
+Remaining filter: a ~ '^(abx|aby|abz)'
+
+index-constraints vars=(a string) index=(a)
+a ~ '^?fo*'
+----
+(/NULL - ]
+Remaining filter: a ~ '^?fo*'
+
+index-constraints vars=(a string) index=(a)
+a ~ 'foo'
+----
+(/NULL - ]
+Remaining filter: a ~ 'foo'
+
+# Case insensitive matches cannot get a span.
+index-constraints vars=(a string) index=(a)
+a ~* '^foo'
+----
+(/NULL - ]
+Remaining filter: a ~* '^foo'
+
+index-constraints vars=(a string) index=(a)
 a = 'eu' OR (a > 'eu' AND a < 'us')
 ----
 [/'eu' - /'us')
