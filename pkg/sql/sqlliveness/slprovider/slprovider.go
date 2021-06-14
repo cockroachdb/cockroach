@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
@@ -33,13 +34,42 @@ func New(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
+	si slinstance.ShutdownInstance,
 ) sqlliveness.Provider {
 	storage := slstorage.NewStorage(stopper, clock, db, codec, settings)
-	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings)
+	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, si)
 	return &provider{
 		Storage:  storage,
 		Instance: instance,
 	}
+}
+
+// InitAndStartSlProvider initializes and starts the
+// sqlliveness subsystem
+func InitAndStartSlProvider(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	clock *hlc.Clock,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	tenantConnect kvtenant.Connector,
+	si slinstance.ShutdownInstance,
+) (sqlliveness.Provider, error) {
+	sqlLivenessProvider := New(
+		stopper, clock, db, codec, settings, si,
+	)
+	// If necessary, start the tenant proxy first, to ensure all other
+	// components can properly route to KV nodes. The Start method will block
+	// until a connection is established to the cluster and its ID has been
+	// determined.
+	if tenantConnect != nil {
+		if err := tenantConnect.Start(ctx); err != nil {
+			return nil, err
+		}
+	}
+	sqlLivenessProvider.Start(ctx)
+	return sqlLivenessProvider, nil
 }
 
 func (p *provider) Start(ctx context.Context) {

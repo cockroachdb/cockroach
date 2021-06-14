@@ -74,6 +74,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancemanager"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -691,7 +693,25 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
-
+	codec := keys.SystemSQLCodec
+	if knobs := cfg.TestingKnobs.TenantTestingKnobs; knobs != nil {
+		override := knobs.(*sql.TenantTestingKnobs).TenantIDCodecOverride
+		if override != (roachpb.TenantID{}) {
+			codec = keys.MakeSQLCodec(override)
+		}
+	}
+	sqlInstanceManager := instancemanager.NewSQLInstanceManager(st, stopper)
+	sqlLivenessProvider, err := slprovider.InitAndStartSlProvider(ctx,
+		stopper,
+		clock,
+		db,
+		codec,
+		st,
+		nil,
+		sqlInstanceManager.ShutdownInstance)
+	if err != nil {
+		return nil, err
+	}
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer:      serverpb.MakeOptionalNodesStatusServer(sStatus),
@@ -725,6 +745,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:      protectedtsProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
+		sqlLivenessProvider:      sqlLivenessProvider,
+		sqlInstanceManager:       sqlInstanceManager,
+		codec:                    codec,
 	})
 	if err != nil {
 		return nil, err
