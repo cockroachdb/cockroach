@@ -1121,6 +1121,7 @@ func TestLint(t *testing.T) {
 			":!sql/pgwire/pgerror/with_candidate_code.go",
 			":!sql/pgwire/pgwirebase/too_big_error.go",
 			":!sql/colexecerror/error.go",
+			":!util/contextutil/timeout_error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -2039,6 +2040,8 @@ func TestLint(t *testing.T) {
 			// that function to a different file to limit the scope
 			// of the exception.
 			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
+			// Cast in decode handler.
+			stream.GrepNot(`pkg/util/contextutil/timeout_error\.go:.*invalid direct cast on error object`),
 			// The logging package translates log.Fatal calls into errors.
 			// We can't use the regular exception mechanism via functions.go
 			// because addStructured takes its positional argument as []interface{},
