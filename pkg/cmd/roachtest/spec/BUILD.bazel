@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "spec",
-    srcs = ["cloud.go"],
+    srcs = [
+        "cloud.go",
+        "machine_type.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec",
     visibility = ["//visibility:public"],
 )
