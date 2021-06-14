@@ -10,6 +10,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -24,7 +25,9 @@ const (
 )
 
 var (
-	artifactsDir string
+	artifactsDir    string
+	configs         []string
+	compilationMode string
 
 	rootCmd = &cobra.Command{
 		Use:   "bazci",
@@ -47,6 +50,16 @@ func init() {
 		"artifacts_dir",
 		"/artifacts",
 		"path where artifacts should be staged")
+	rootCmd.Flags().StringVar(
+		&compilationMode,
+		"compilation_mode",
+		"dbg",
+		"compilation mode to pass down to Bazel (dbg or opt)")
+	rootCmd.Flags().StringSliceVar(
+		&configs,
+		"config",
+		[]string{},
+		"list of build configs to apply to bazel calls")
 }
 
 // parsedArgs looks basically like the `args` slice that Cobra gives us, but
@@ -115,9 +128,15 @@ type buildInfo struct {
 	tests []string
 }
 
-func runBazelReturningStdout(arg ...string) (string, error) {
+func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
+	if subcmd != "query" {
+		arg = append(configArgList(), arg...)
+		arg = append(arg, "-c", compilationMode)
+	}
+	arg = append([]string{subcmd}, arg...)
 	buf, err := exec.Command("bazel", arg...).Output()
 	if err != nil {
+		fmt.Println("Failed to run Bazel with args: ", arg)
 		return "", err
 	}
 	return strings.TrimSpace(string(buf)), nil
@@ -188,7 +207,10 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	go func() {
 		processArgs := []string{parsedArgs.subcmd}
 		processArgs = append(processArgs, parsedArgs.targets...)
+		processArgs = append(processArgs, configArgList()...)
+		processArgs = append(processArgs, "-c", compilationMode)
 		processArgs = append(processArgs, parsedArgs.additional...)
+		fmt.Println("running bazel w/ args: ", processArgs)
 		cmd := exec.Command("bazel", processArgs...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -201,4 +223,21 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}()
 
 	return makeWatcher(completion, info).Watch()
+}
+
+func configArgList() []string {
+	ret := []string{}
+	for _, config := range configs {
+		ret = append(ret, "--config="+config)
+	}
+	return ret
+}
+
+func usingCrossWindowsConfig() bool {
+	for _, config := range configs {
+		if config == "crosswindows" {
+			return true
+		}
+	}
+	return false
 }
