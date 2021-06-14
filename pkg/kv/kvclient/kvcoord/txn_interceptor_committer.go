@@ -221,6 +221,7 @@ func (tc *txnCommitter) SendLocked(
 		// the EndTxn request, either because canCommitInParallel returned false
 		// or because there were no unproven in-flight writes (see txnPipeliner)
 		// and there were no writes in the batch request.
+		assertTxnCleanWhenCommitted(ctx, br.Txn)
 		return br, nil
 	default:
 		return nil, roachpb.NewErrorf("unexpected response status without error: %v", br.Txn)
@@ -239,6 +240,8 @@ func (tc *txnCommitter) SendLocked(
 		return nil, pErr
 	}
 
+	assertTxnCleanWhenCommitted(ctx, br.Txn)
+
 	// If the transaction doesn't need to retry then it is implicitly committed!
 	// We're the only ones who know that though -- other concurrent transactions
 	// will need to go through the full status resolution process to make a
@@ -253,6 +256,29 @@ func (tc *txnCommitter) SendLocked(
 	// transaction proto in the STAGING state.
 	br.Txn = cloneWithStatus(br.Txn, roachpb.COMMITTED)
 	return br, nil
+}
+
+// assertTxnCleanWhenCommitted checks that a COMMITTED or STAGING txn is sane.
+//
+// In particular, in the STAGING state, the WriteTooOld flag shouldn't be set.
+// If the wto flag were set, it'd be a problem since the refresher interceptor
+// would attempt to retry the request, which is problematic after a txn is
+// implicitly committed (which it now is since the EndTxn batch succeeded). The
+// WriteTooOld flag shouldn't be set, however, even if the batch was split by
+// the DistSender and some of the sub-batches returned with this flag set: since
+// needTxnRetryAfterStaging() above didn't force a retry, we know that, even if
+// some sub-batches were pushed, the EndTxn sub-batch was pushed higher than all
+// the others and it also succeeded in performing a server-side refresh - so it
+// couldn't return the wto flag. Having the highest read timestamp, the response
+// from the EndTxn sub-batch gets to dictate the wto flag of the combined
+// response (see Transaction.Update()).
+func assertTxnCleanWhenCommitted(ctx context.Context, txn *roachpb.Transaction) {
+	if txn.WriteTooOld {
+		log.Fatalf(ctx, "unexpected WriteTooOld set on %s txn: %s", txn.Status, txn)
+	}
+	if !txn.ReadTimestamp.Equal(txn.WriteTimestamp) {
+		log.Fatalf(ctx, "unexpected diverged timestamps on %s txn: %s", txn.Status, txn)
+	}
 }
 
 // sendLockedWithElidedEndTxn sends the provided batch without its EndTxn
