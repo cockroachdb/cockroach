@@ -502,10 +502,17 @@ func (expr *CastExpr) TypeCheck(
 	}
 	if err := semaCtx.checkVolatility(volatility); err != nil {
 		err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, exprType)
-		// Special cases where we can provide useful hints.
-		if castFrom.Family() == types.StringFamily && exprType.Family() == types.TimestampFamily {
-			err = errors.WithHint(err, "string to timestamp casts are context-dependent because "+
+		// Check for special cases where we can provide useful hints.
+		fromFamily := castFrom.Family()
+		toFamily := exprType.Family()
+		switch {
+		case fromFamily == types.StringFamily && toFamily == types.TimestampFamily:
+			err = errors.WithHint(err, "STRING to TIMESTAMP casts are context-dependent because "+
 				"of relative timestamp strings like 'now'; use parse_timestamp() instead.")
+
+		case fromFamily == types.TimestampTZFamily && toFamily == types.StringFamily:
+			err = errors.WithHint(err, "TIMESTAMPTZ to STRING casts depend on the current timezone; "+
+				"consider using (t AT TIME ZONE 'UTC')::STRING instead.")
 		}
 		return nil, err
 	}
