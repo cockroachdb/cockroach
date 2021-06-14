@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptortree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -44,7 +44,7 @@ type deadlineHolder interface {
 func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 	return leasedDescriptors{
 		lm:    lm,
-		cache: descriptortree.Make(),
+		cache: nstree.MakeMap(),
 	}
 }
 
@@ -52,7 +52,7 @@ func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
 	lm    leaseManager
-	cache descriptortree.Tree
+	cache nstree.Map
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
@@ -70,7 +70,7 @@ func (ld *leasedDescriptors) getByName(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	if cached, ok := ld.cache.GetByName(parentID, parentSchemaID, name); ok {
+	if cached := ld.cache.GetByName(parentID, parentSchemaID, name); cached != nil {
 		if log.V(2) {
 			log.Eventf(ctx, "found descriptor in collection for (%d, %d, '%s'): %d",
 				parentID, parentSchemaID, name, cached.GetID())
@@ -92,7 +92,7 @@ func (ld *leasedDescriptors) getByID(
 	ctx context.Context, txn deadlineHolder, id descpb.ID, setTxnDeadline bool,
 ) (_ catalog.Descriptor, shouldReadFromStore bool, _ error) {
 	// First, look to see if we already have the table in the shared cache.
-	if cached, ok := ld.cache.GetByID(id); ok {
+	if cached := ld.cache.GetByID(id); cached != nil {
 		if log.V(2) {
 			log.Eventf(ctx, "found descriptor in collection for (%d, %d, '%s'): %d",
 				cached.GetParentID(), cached.GetParentSchemaID(), cached.GetName(), id)
@@ -160,7 +160,7 @@ func (ld *leasedDescriptors) maybeUpdateDeadline(ctx context.Context, txn deadli
 }
 
 func (ld *leasedDescriptors) getDeadline() (deadline hlc.Timestamp, haveDeadline bool) {
-	_ = ld.cache.IterateByID(func(descriptor catalog.Descriptor) error {
+	_ = ld.cache.IterateByID(func(descriptor catalog.NameEntry) error {
 		expiration := descriptor.(lease.LeasedDescriptor).Expiration()
 		if !haveDeadline || expiration.Less(deadline) {
 			deadline, haveDeadline = expiration, true
@@ -172,7 +172,7 @@ func (ld *leasedDescriptors) getDeadline() (deadline hlc.Timestamp, haveDeadline
 
 func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
 	log.VEventf(ctx, 2, "releasing %d descriptors", ld.numDescriptors())
-	_ = ld.cache.IterateByID(func(descriptor catalog.Descriptor) error {
+	_ = ld.cache.IterateByID(func(descriptor catalog.NameEntry) error {
 		descriptor.(lease.LeasedDescriptor).Release(ctx)
 		return nil
 	})
@@ -181,7 +181,7 @@ func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
 
 func (ld *leasedDescriptors) release(ctx context.Context, descs []lease.IDVersion) {
 	for _, idv := range descs {
-		if removed, ok := ld.cache.Remove(idv.ID); ok {
+		if removed := ld.cache.Remove(idv.ID); removed != nil {
 			removed.(lease.LeasedDescriptor).Release(ctx)
 		}
 	}

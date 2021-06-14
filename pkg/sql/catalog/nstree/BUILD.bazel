@@ -1,13 +1,17 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "descriptortree",
+    name = "nstree",
     srcs = [
         "by_id.go",
+        "by_id_map.go",
         "by_name.go",
+        "by_name_map.go",
+        "map.go",
+        "set.go",
         "tree.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptortree",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog",
@@ -18,18 +22,17 @@ go_library(
 )
 
 go_test(
-    name = "descriptortree_test",
-    srcs = ["tree_test.go"],
+    name = "nstree_test",
+    srcs = [
+        "datadriven_test.go",
+        "map_test.go",
+        "set_test.go",
+    ],
     data = glob(["testdata/**"]),
-    embed = [":descriptortree"],
+    embed = [":nstree"],
     deps = [
-        "//pkg/security",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/schemadesc",
-        "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/privilege",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descriptortree
+package nstree
 
 import (
 	"sync"
@@ -18,44 +18,18 @@ import (
 	"github.com/google/btree"
 )
 
-type byName struct {
-	t *btree.BTree
-}
-
-func (t byName) upsert(d catalog.Descriptor) (replaced catalog.Descriptor) {
-	return upsert(t.t, makeByNameItem(d).get())
-}
-
-func (t byName) getByName(
-	parentID, parentSchemaID descpb.ID, name string,
-) (catalog.Descriptor, bool) {
-	return get(t.t, byNameItem{
-		parentID:       parentID,
-		parentSchemaID: parentSchemaID,
-		name:           name,
-	}.get())
-}
-
-func (t byName) delete(d catalog.Descriptor) {
-	delete(t.t, makeByNameItem(d).get())
-}
-
-func (t byName) clear() {
-	clear(t.t)
-}
-
 type byNameItem struct {
 	parentID, parentSchemaID descpb.ID
 	name                     string
-	d                        catalog.Descriptor
+	v                        interface{}
 }
 
-func makeByNameItem(d catalog.Descriptor) byNameItem {
+func makeByNameItem(d catalog.NameKey) byNameItem {
 	return byNameItem{
 		parentID:       d.GetParentID(),
 		parentSchemaID: d.GetParentSchemaID(),
 		name:           d.GetName(),
-		d:              d,
+		v:              d,
 	}
 }
 
@@ -72,8 +46,8 @@ func (b *byNameItem) Less(thanItem btree.Item) bool {
 	return b.name < than.name
 }
 
-func (b *byNameItem) descriptor() catalog.Descriptor {
-	return b.d
+func (b *byNameItem) value() interface{} {
+	return b.v
 }
 
 var byNameItemPool = sync.Pool{

@@ -8,51 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descriptortree
+package nstree
 
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/google/btree"
 )
 
-type byID struct {
-	t *btree.BTree
-}
-
-func (t byID) upsert(d catalog.Descriptor) (replaced catalog.Descriptor) {
-	return upsert(t.t, makeByIDItem(d).get())
-}
-
-func (t byID) get(id descpb.ID) (catalog.Descriptor, bool) {
-	return get(t.t, byIDItem{id: id}.get())
-}
-
-func (t byID) delete(id descpb.ID) (removed catalog.Descriptor) {
-	return delete(t.t, byIDItem{id: id}.get())
-}
-
-func (t byID) clear() {
-	clear(t.t)
-}
-
-func (t byID) ascend(f Iterator) error {
-	return ascend(t.t, f)
-}
-
-func (t byID) len() int {
+func (t byIDMap) len() int {
 	return t.t.Len()
 }
 
 type byIDItem struct {
 	id descpb.ID
-	d  catalog.Descriptor
+	v  interface{}
 }
 
-func makeByIDItem(d catalog.Descriptor) byIDItem {
-	return byIDItem{id: d.GetID(), d: d}
+func makeByIDItem(d interface{ GetID() descpb.ID }) byIDItem {
+	return byIDItem{id: d.GetID(), v: d}
 }
 
 var _ btree.Item = (*byIDItem)(nil)
@@ -72,8 +47,8 @@ func (b byIDItem) get() *byIDItem {
 	return alloc
 }
 
-func (b *byIDItem) descriptor() catalog.Descriptor {
-	return b.d
+func (b *byIDItem) value() interface{} {
+	return b.v
 }
 
 func (b *byIDItem) put() {

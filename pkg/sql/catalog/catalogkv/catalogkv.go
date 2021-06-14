@@ -51,7 +51,7 @@ func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (
 // GetDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
 func GetDescriptorID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey catalog.NameKeyComponents,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, plainKey catalog.NameKey,
 ) (descpb.ID, error) {
 	key := catalogkeys.EncodeNameKey(codec, plainKey)
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", key)

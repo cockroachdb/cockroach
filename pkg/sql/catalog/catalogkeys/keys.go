@@ -151,11 +151,11 @@ func PrettySpans(index catalog.Index, spans []roachpb.Span, skip int) string {
 	return b.String()
 }
 
-// NewNameKeyComponents returns a new catalog.NameKeyComponents instance for the given object
+// NewNameKeyComponents returns a new catalog.NameKey instance for the given object
 // name scoped under the given parent schema and parent database.
 func NewNameKeyComponents(
 	parentID descpb.ID, parentSchemaID descpb.ID, name string,
-) catalog.NameKeyComponents {
+) catalog.NameKey {
 	return descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 }
 
@@ -192,7 +192,7 @@ func MakeDatabaseNameKey(codec keys.SQLCodec, name string) roachpb.Key {
 }
 
 // EncodeNameKey encodes nameKey using codec.
-func EncodeNameKey(codec keys.SQLCodec, nameKey catalog.NameKeyComponents) roachpb.Key {
+func EncodeNameKey(codec keys.SQLCodec, nameKey catalog.NameKey) roachpb.Key {
 	r := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
 	r = encoding.EncodeUvarintAscending(r, uint64(nameKey.GetParentID()))
 	r = encoding.EncodeUvarintAscending(r, uint64(nameKey.GetParentSchemaID()))

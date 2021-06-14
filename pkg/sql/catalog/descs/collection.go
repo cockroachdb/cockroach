@@ -57,7 +57,7 @@ func MakeCollection(
 		virtualSchemas: virtualSchemas,
 		leased:         makeLeasedDescriptors(leaseMgr),
 		synthetic:      makeSyntheticDescriptors(),
-		kv:             makeReadDescriptors(codec),
+		kv:             makeKVDescriptors(codec),
 	}
 }
 
