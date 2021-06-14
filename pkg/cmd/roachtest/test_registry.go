@@ -48,17 +48,21 @@ func ownerToAlias(o Owner) team.Alias {
 const defaultTag = "default"
 
 type testRegistry struct {
-	m     map[string]*testSpec
-	cloud string
+	m            map[string]*testSpec
+	cloud        string
+	instanceType string // optional
+	preferSSD    bool
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
 }
 
 // makeTestRegistry constructs a testRegistry and configures it with opts.
-func makeTestRegistry(cloud string) (testRegistry, error) {
+func makeTestRegistry(cloud string, instanceType string, preferSSD bool) (testRegistry, error) {
 	r := testRegistry{
-		cloud: cloud,
-		m:     make(map[string]*testSpec),
+		cloud:        cloud,
+		instanceType: instanceType,
+		preferSSD:    preferSSD,
+		m:            make(map[string]*testSpec),
 	}
 	v := buildTag
 	if v == "" {
@@ -87,8 +91,17 @@ func (r *testRegistry) Add(spec testSpec) {
 	r.m[spec.Name] = &spec
 }
 
+type preferSSDOption struct{}
+
+func (*preferSSDOption) apply(spec *clusterSpec) {
+	spec.PreferLocalSSD = true
+}
+
 func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
-	return makeClusterSpec(r.cloud, nodeCount, opts...)
+	if r.preferSSD {
+		opts = append(opts, &preferSSDOption{})
+	}
+	return makeClusterSpec(r.cloud, r.instanceType, nodeCount, opts...)
 }
 
 // prepareSpec validates a spec and does minor massaging of its fields.

@@ -26,16 +26,16 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 		buildVersion *version.Version
 		expected     int
 	}{
-		{"gce", makeClusterSpec(spec.GCE, 4, cpu(16)), version.MustParse(`v2.1.0`), 1300},
-		{"gce", makeClusterSpec(spec.GCE, 4, cpu(16)), version.MustParse(`v19.1.0-rc.1`), 1250},
-		{"gce", makeClusterSpec(spec.GCE, 4, cpu(16)), version.MustParse(`v19.1.0`), 1250},
+		{"gce", makeClusterSpec(spec.GCE, "", 4, cpu(16)), version.MustParse(`v2.1.0`), 1300},
+		{"gce", makeClusterSpec(spec.GCE, "", 4, cpu(16)), version.MustParse(`v19.1.0-rc.1`), 1250},
+		{"gce", makeClusterSpec(spec.GCE, "", 4, cpu(16)), version.MustParse(`v19.1.0`), 1250},
 
-		{"aws", makeClusterSpec(spec.GCE, 4, cpu(16)), version.MustParse(`v19.1.0-rc.1`), 2100},
-		{"aws", makeClusterSpec(spec.GCE, 4, cpu(16)), version.MustParse(`v19.1.0`), 2100},
+		{"aws", makeClusterSpec(spec.GCE, "", 4, cpu(16)), version.MustParse(`v19.1.0-rc.1`), 2100},
+		{"aws", makeClusterSpec(spec.GCE, "", 4, cpu(16)), version.MustParse(`v19.1.0`), 2100},
 
-		{"nope", makeClusterSpec(spec.GCE, 4, cpu(16)), version.MustParse(`v2.1.0`), expectPanic},
-		{"gce", makeClusterSpec(spec.GCE, 5, cpu(160)), version.MustParse(`v2.1.0`), expectPanic},
-		{"gce", makeClusterSpec(spec.GCE, 4, cpu(16)), version.MustParse(`v1.0.0`), expectPanic},
+		{"nope", makeClusterSpec(spec.GCE, "", 4, cpu(16)), version.MustParse(`v2.1.0`), expectPanic},
+		{"gce", makeClusterSpec(spec.GCE, "", 5, cpu(160)), version.MustParse(`v2.1.0`), expectPanic},
+		{"gce", makeClusterSpec(spec.GCE, "", 4, cpu(16)), version.MustParse(`v1.0.0`), expectPanic},
 	}
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {

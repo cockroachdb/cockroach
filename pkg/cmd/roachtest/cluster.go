@@ -706,43 +706,6 @@ func azureMachineType(cpus int) string {
 	}
 }
 
-func machineTypeFlag(machineType string) string {
-	switch cloud {
-	case spec.AWS:
-		if isSSD(machineType) {
-			return "--aws-machine-type-ssd"
-		}
-		return "--aws-machine-type"
-	case spec.GCE:
-		return "--gce-machine-type"
-	case spec.Azure:
-		return "--azure-machine-type"
-	default:
-		panic(fmt.Sprintf("unsupported cloud: %s\n", cloud))
-	}
-}
-
-func isSSD(machineType string) bool {
-	if cloud != spec.AWS {
-		panic("can only differentiate SSDs based on machine type on AWS")
-	}
-	if !localSSDArg {
-		// Overridden by the user using a cmd arg.
-		return false
-	}
-
-	typeAndSize := strings.Split(machineType, ".")
-	if len(typeAndSize) == 2 {
-		awsType := typeAndSize[0]
-		// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
-		return strings.HasPrefix(awsType, "i3") || strings.HasSuffix(awsType, "d")
-	}
-
-	fmt.Fprint(os.Stderr, "aws machine type does not match expected format 'type.size' (e.g. c5d.4xlarge)", machineType)
-	os.Exit(1)
-	return false
-}
-
 type testI interface {
 	Name() string
 	Fatal(args ...interface{})
