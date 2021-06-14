@@ -223,7 +223,7 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 			table:      *alias,
 			typ:        tabCol.DatumType(),
 			id:         tabMeta.MetaID.ColumnID(i),
-			visibility: tabCol.Visibility(),
+			visibility: columnVisibility(tabCol.Visibility()),
 		})
 	}
 }
@@ -358,7 +358,7 @@ func (s *scope) makePresentation() physical.Presentation {
 	presentation := make(physical.Presentation, 0, len(s.cols))
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.visibility == cat.Visible {
+		if col.visibility == visible {
 			presentation = append(presentation, opt.AliasedColumn{
 				Alias: string(col.name.ReferenceName()),
 				ID:    col.id,
@@ -539,7 +539,7 @@ func (s *scope) hasSameColumns(other *scope) bool {
 func (s *scope) removeHiddenCols() {
 	n := 0
 	for i := range s.cols {
-		if s.cols[i].visibility != cat.Visible {
+		if s.cols[i].visibility != visible {
 			s.extraCols = append(s.extraCols, s.cols[i])
 		} else {
 			if n != i {
@@ -696,27 +696,74 @@ func (*scopeColumn) ColumnSourceMeta() {}
 // ColumnResolutionResult implements the tree.ColumnResolutionResult interface.
 func (*scopeColumn) ColumnResolutionResult() {}
 
+// candidateColumn keeps track of a candidate *scopeColumn (or of whether we had
+// multiple candidates).
+type candidateColumn struct {
+	col *scopeColumn
+}
+
+// ambiguousCandidate is used as a special sentinel value to indicate multiple
+// candidates.
+var ambiguousCandidate = &scopeColumn{}
+
+func (c *candidateColumn) Set(col *scopeColumn) {
+	if c.col == nil {
+		c.col = col
+	} else {
+		c.col = ambiguousCandidate
+	}
+}
+
+func (c candidateColumn) IsAmbiguous() bool {
+	return c.col == ambiguousCandidate
+}
+
+func (c candidateColumn) Get() *scopeColumn {
+	if c.IsAmbiguous() {
+		return nil
+	}
+	return c.col
+}
+
+// columnMatchClass identifies a class of column matches.
+//
+// We have three classes of column matches:
+//  1. Anonymous source columns
+//  2. Qualified source columns
+//  3. Hidden columns
+//
+// The classes have strict precedence; within a given scope, the resolution
+// outcome is determined by the first class that has at least one match. If
+// there is exactly one match in that class, resolution is successful. If there
+// are more matches, it is an ambiguity error.
+type columnMatchClass int
+
+const (
+	anonymousSourceMatch columnMatchClass = iota
+	qualifiedSourceMatch
+	hiddenMatch
+)
+
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (s *scope) FindSourceProvidingColumn(
 	_ context.Context, colName tree.Name,
 ) (prefix *tree.TableName, srcMeta colinfo.ColumnSourceMeta, colHint int, err error) {
-	var candidateFromAnonSource *scopeColumn
-	var candidateWithPrefix *scopeColumn
-	var hiddenCandidate *scopeColumn
-	var moreThanOneCandidateFromAnonSource bool
-	var moreThanOneCandidateWithPrefix bool
-	var moreThanOneHiddenCandidate bool
+	// We start from the current scope; if we find at least one match we are done
+	// (either with a result or an ambiguity error). Otherwise, we search the
+	// parent scope.
+
+	// In case we find no matches anywhere, we remember if we saw an inaccessible
+	// mutation column on the way, in which case we can present a more useful
+	// error.
+	reportBackfillError := false
 
 	// We only allow hidden columns in the current scope. Hidden columns
 	// in parent scopes are not accessible.
 	allowHidden := true
-
-	// If multiple columns match c in the same scope, we return an error
-	// due to ambiguity. If no columns match in the current scope, we
-	// search the parent scope. If the column is not found in any of the
-	// ancestor scopes, we return an error.
-	reportBackfillError := false
 	for ; s != nil; s, allowHidden = s.parent, false {
+		// Keep track of a candidate for each class. See columnMatchClass.
+		var candidates [hiddenMatch + 1]candidateColumn
+
 		for i := range s.cols {
 			col := &s.cols[i]
 			if !col.name.MatchesReferenceName(colName) {
@@ -724,65 +771,35 @@ func (s *scope) FindSourceProvidingColumn(
 			}
 
 			switch col.visibility {
-			case cat.Inaccessible:
-				// Act as if this column is not present so that matches in higher scopes
-				// can be found. However, if no match is found in higher scopes and this
-				// is a mutation column, report a backfill error rather than a "not
-				// found" error.
+			case inaccessible:
 				if col.mutation {
 					reportBackfillError = true
 				}
 
-			case cat.Visible:
+			case visible:
 				if col.table.ObjectName == "" {
-					if candidateFromAnonSource != nil {
-						moreThanOneCandidateFromAnonSource = true
-					}
-					candidateFromAnonSource = col
+					candidates[anonymousSourceMatch].Set(col)
 				} else {
-					if candidateWithPrefix != nil {
-						moreThanOneCandidateWithPrefix = true
-					}
-					candidateWithPrefix = col
+					candidates[qualifiedSourceMatch].Set(col)
 				}
 
-			case cat.Hidden:
+			case accessibleByName, accessibleByQualifiedStar:
 				if allowHidden {
-					if hiddenCandidate != nil {
-						moreThanOneHiddenCandidate = true
-					}
-					hiddenCandidate = col
+					candidates[hiddenMatch].Set(col)
 				}
 			}
 		}
 
-		// The table name was unqualified, so if a single anonymous source exists
-		// with a matching non-hidden column, use that.
-		if moreThanOneCandidateFromAnonSource {
-			return nil, nil, -1, s.newAmbiguousColumnError(
-				colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
-			)
-		}
-		if candidateFromAnonSource != nil {
-			return &candidateFromAnonSource.table, candidateFromAnonSource, int(candidateFromAnonSource.id), nil
+		for class, candidate := range candidates {
+			if candidate.IsAmbiguous() {
+				return nil, nil, -1, s.newAmbiguousColumnError(colName, columnMatchClass(class))
+			}
+			if col := candidate.Get(); col != nil {
+				return &col.table, col, int(col.id), nil
+			}
 		}
 
-		// Else if a single named source exists with a matching non-hidden column,
-		// use that.
-		if candidateWithPrefix != nil && !moreThanOneCandidateWithPrefix {
-			return &candidateWithPrefix.table, candidateWithPrefix, int(candidateWithPrefix.id), nil
-		}
-		if moreThanOneCandidateWithPrefix || moreThanOneHiddenCandidate {
-			return nil, nil, -1, s.newAmbiguousColumnError(
-				colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
-			)
-		}
-
-		// One last option: if a single source exists with a matching hidden
-		// column, use that.
-		if hiddenCandidate != nil {
-			return &hiddenCandidate.table, hiddenCandidate, int(hiddenCandidate.id), nil
-		}
+		// No matches in this scope; proceed to the parent scope.
 	}
 
 	// Make a copy of colName so that passing a reference to tree.ErrString does
@@ -1521,38 +1538,38 @@ func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // newAmbiguousColumnError returns an error with a helpful error message to be
 // used in case of an ambiguous column reference.
-func (s *scope) newAmbiguousColumnError(
-	n tree.Name,
-	allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate bool,
-) error {
+func (s *scope) newAmbiguousColumnError(n tree.Name, typ columnMatchClass) error {
 	colString := tree.ErrString(&n)
 	var msgBuf bytes.Buffer
-	sep := ""
-	fmtCandidate := func(tn tree.TableName) {
-		name := tree.ErrString(&tn)
-		if len(name) == 0 {
-			name = "<anonymous>"
-		}
-		fmt.Fprintf(&msgBuf, "%s%s.%s", sep, name, colString)
-		sep = ", "
-	}
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.name.MatchesReferenceName(n) && (col.visibility == cat.Visible || (col.visibility == cat.Hidden && allowHidden)) {
-			if col.table.ObjectName == "" && col.visibility == cat.Visible {
-				if moreThanOneCandidateFromAnonSource {
-					// Only print first anonymous source, since other(s) are identical.
-					fmtCandidate(col.table)
-					break
-				}
-			} else if col.visibility == cat.Visible {
-				if moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
-					fmtCandidate(col.table)
-				}
-			} else {
-				if moreThanOneHiddenCandidate && !moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
-					fmtCandidate(col.table)
-				}
+		if !col.name.MatchesReferenceName(n) {
+			continue
+		}
+		var match bool
+		switch typ {
+		case anonymousSourceMatch:
+			match = (col.visibility == visible && col.table.ObjectName == "")
+
+		case qualifiedSourceMatch:
+			match = (col.visibility == visible && col.table.ObjectName != "")
+
+		case hiddenMatch:
+			match = (col.visibility == accessibleByName || col.visibility == accessibleByQualifiedStar)
+		}
+
+		if match {
+			srcName := tree.ErrString(&col.table)
+			if len(srcName) == 0 {
+				srcName = "<anonymous>"
+			}
+			if msgBuf.Len() > 0 {
+				msgBuf.WriteString(", ")
+			}
+			fmt.Fprintf(&msgBuf, "%s.%s", srcName, colString)
+			if typ == anonymousSourceMatch {
+				// All anonymous sources are identical; only print the first one.
+				break
 			}
 		}
 	}
