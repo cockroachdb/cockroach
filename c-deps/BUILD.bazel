@@ -11,6 +11,7 @@ configure_make(
         "--enable-prof",
     ] + select({
         "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
+        "@io_bazel_rules_go//go/platform:darwin": ["--host=x86_64-apple-darwin19"],
         "//conditions:default": [],
     }),
     lib_source = "@jemalloc//:all",
@@ -38,6 +39,11 @@ cmake(
         # way to do it?
         # https://github.com/bazelbuild/bazel/issues/12457 would help.
         "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "@io_bazel_rules_go//go/platform:darwin": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_SYSTEM_NAME": "Generic",
