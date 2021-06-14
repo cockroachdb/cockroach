@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -375,7 +374,7 @@ func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
 	var seenCols opt.ColSet
 	for i := range jb.leftScope.cols {
 		leftCol := &jb.leftScope.cols[i]
-		if leftCol.visibility != cat.Visible {
+		if leftCol.visibility != visible {
 			continue
 		}
 		if seenCols.Contains(leftCol.id) {
@@ -444,7 +443,7 @@ func (jb *usingJoinBuilder) addRemainingCols(cols []scopeColumn) {
 		col := &cols[i]
 		if _, ok := jb.hideCols[col]; ok {
 			jb.outScope.cols = append(jb.outScope.cols, *col)
-			jb.outScope.cols[len(jb.outScope.cols)-1].visibility = cat.Hidden
+			jb.outScope.cols[len(jb.outScope.cols)-1].visibility = accessibleByName
 		} else if _, ok := jb.showCols[col]; !ok {
 			jb.outScope.cols = append(jb.outScope.cols, *col)
 		}
@@ -461,7 +460,7 @@ func (jb *usingJoinBuilder) findUsingColumn(
 	var foundCol *scopeColumn
 	for i := range cols {
 		col := &cols[i]
-		if col.visibility == cat.Visible && col.name.MatchesReferenceName(name) {
+		if col.visibility == visible && col.name.MatchesReferenceName(name) {
 			if foundCol != nil {
 				jb.raiseDuplicateColError(name, context)
 			}

@@ -223,7 +223,7 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 			table:      *alias,
 			typ:        tabCol.DatumType(),
 			id:         tabMeta.MetaID.ColumnID(i),
-			visibility: tabCol.Visibility(),
+			visibility: columnVisibility(tabCol.Visibility()),
 		})
 	}
 }
@@ -358,7 +358,7 @@ func (s *scope) makePresentation() physical.Presentation {
 	presentation := make(physical.Presentation, 0, len(s.cols))
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.visibility == cat.Visible {
+		if col.visibility == visible {
 			presentation = append(presentation, opt.AliasedColumn{
 				Alias: string(col.name.ReferenceName()),
 				ID:    col.id,
@@ -539,7 +539,7 @@ func (s *scope) hasSameColumns(other *scope) bool {
 func (s *scope) removeHiddenCols() {
 	n := 0
 	for i := range s.cols {
-		if s.cols[i].visibility != cat.Visible {
+		if s.cols[i].visibility != visible {
 			s.extraCols = append(s.extraCols, s.cols[i])
 		} else {
 			if n != i {
@@ -724,7 +724,7 @@ func (s *scope) FindSourceProvidingColumn(
 			}
 
 			switch col.visibility {
-			case cat.Inaccessible:
+			case inaccessible:
 				// Act as if this column is not present so that matches in higher scopes
 				// can be found. However, if no match is found in higher scopes and this
 				// is a mutation column, report a backfill error rather than a "not
@@ -733,7 +733,7 @@ func (s *scope) FindSourceProvidingColumn(
 					reportBackfillError = true
 				}
 
-			case cat.Visible:
+			case visible:
 				if col.table.ObjectName == "" {
 					if candidateFromAnonSource != nil {
 						moreThanOneCandidateFromAnonSource = true
@@ -746,7 +746,7 @@ func (s *scope) FindSourceProvidingColumn(
 					candidateWithPrefix = col
 				}
 
-			case cat.Hidden:
+			case accessibleByName, accessibleByQualifiedStar:
 				if allowHidden {
 					if hiddenCandidate != nil {
 						moreThanOneHiddenCandidate = true
@@ -1538,18 +1538,20 @@ func (s *scope) newAmbiguousColumnError(
 	}
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.name.MatchesReferenceName(n) && (col.visibility == cat.Visible || (col.visibility == cat.Hidden && allowHidden)) {
-			if col.table.ObjectName == "" && col.visibility == cat.Visible {
-				if moreThanOneCandidateFromAnonSource {
-					// Only print first anonymous source, since other(s) are identical.
+		if col.name.MatchesReferenceName(n) {
+			if col.visibility == visible {
+				if col.table.ObjectName == "" {
+					// Visible, anonymous source.  Only print the first one, since
+					// other(s) are identical.
 					fmtCandidate(col.table)
 					break
 				}
-			} else if col.visibility == cat.Visible {
+				// Visible, qualified source.
 				if moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
 					fmtCandidate(col.table)
 				}
-			} else {
+			} else if allowHidden && (col.visibility == accessibleByName || col.visibility == accessibleByQualifiedStar) {
+				// Hidden.
 				if moreThanOneHiddenCandidate && !moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
 					fmtCandidate(col.table)
 				}
