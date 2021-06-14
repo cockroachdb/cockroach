@@ -287,6 +287,16 @@ func FetchEntriesFromFiles(
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
 ) ([]logpb.Entry, error) {
+	return FetchEntriesFromFilesf(startTimestamp, endTimestamp, maxEntries, pattern, editMode, "" /*format*/)
+}
+
+func FetchEntriesFromFilesf(
+	startTimestamp, endTimestamp int64,
+	maxEntries int,
+	pattern *regexp.Regexp,
+	editMode EditSensitiveData,
+	format string,
+) ([]logpb.Entry, error) {
 	logGroups, err := listLogGroups()
 	if err != nil {
 		return nil, err
@@ -305,7 +315,8 @@ func FetchEntriesFromFiles(
 				endTimestamp,
 				maxEntries-len(entries),
 				pattern,
-				editMode)
+				editMode,
+				format)
 			if err != nil {
 				return nil, err
 			}
@@ -358,6 +369,7 @@ func readAllEntriesFromFile(
 	maxEntries int,
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
+	format string,
 ) ([]logpb.Entry, bool, error) {
 	reader, err := GetLogReader(file.Name, true /* restricted */)
 	if reader == nil || err != nil {
@@ -365,7 +377,10 @@ func readAllEntriesFromFile(
 	}
 	defer reader.Close()
 	entries := []logpb.Entry{}
-	decoder := NewEntryDecoder(reader, editMode)
+	decoder, err := NewEntryDecoderf(reader, editMode, format)
+	if err != nil {
+		return nil, false, err
+	}
 	entryBeforeStart := false
 	for {
 		entry := logpb.Entry{}
