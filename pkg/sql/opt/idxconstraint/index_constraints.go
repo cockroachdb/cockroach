@@ -311,6 +311,24 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 				return false
 			}
 		}
+
+	case opt.RegMatchOp:
+		// As opposed to LIKE or SIMILAR TO, the match can be a substring (unless we
+		// specifically anchor with ^ and $). To see if the regexp restricts a
+		// prefix, we look specifically for ^. We cannot look for an $ at the end
+		// because it might be part of an escape.
+		if pattern, ok := tree.AsDString(datum); ok && len(pattern) > 0 &&
+			pattern[0] == '^' {
+			if re, err := regexp.Compile(string(pattern[1:])); err == nil {
+				prefix, complete := re.LiteralPrefix()
+				// If complete is true, we have a case like `^foo` which means that the
+				// prefix of the string must be `foo`. Note that complete is not true
+				// for `^foo$` (which is good - the span would not be tight in that
+				// case; we would need an eqSpan).
+				c.makeStringPrefixSpan(offset, prefix, out)
+				return complete
+			}
+		}
 	}
 	c.unconstrained(offset, out)
 	return false

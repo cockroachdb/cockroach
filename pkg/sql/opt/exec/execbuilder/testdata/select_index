@@ -1137,6 +1137,18 @@ vectorized: true
       table: str@str_v_idx
       spans: /"ABC"-/"ABD"
 
+query T
+EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v ~ '^ABC'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (k, v)
+  estimated row count: 330 (missing stats)
+  table: str@str_v_idx
+  spans: /"ABC"-/"ABD"
+
 # Test that we generate spans for IS (NOT) DISTINCT FROM.
 statement ok
 CREATE TABLE xy (x INT, y INT, INDEX (y))
