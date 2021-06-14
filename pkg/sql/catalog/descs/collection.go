@@ -52,12 +52,12 @@ func MakeCollection(
 	return Collection{
 		leaseMgr:       leaseMgr,
 		settings:       settings,
-		sessionData:    sessionData,
 		hydratedTables: hydratedTables,
 		virtualSchemas: virtualSchemas,
 		leased:         makeLeasedDescriptors(leaseMgr),
 		synthetic:      makeSyntheticDescriptors(),
 		kv:             makeKVDescriptors(codec),
+		temporary:      makeTemporaryDescriptors(codec, sessionData),
 	}
 }
 
@@ -80,6 +80,10 @@ func NewCollection(
 type Collection struct {
 	// leaseMgr manages acquiring and releasing per-descriptor leases.
 	leaseMgr *lease.Manager
+
+	// settings dictate whether we validate descriptors on write.
+	settings *cluster.Settings
+
 	// virtualSchemas optionally holds the virtual schemas.
 	virtualSchemas catalog.VirtualSchemas
 
@@ -99,13 +103,8 @@ type Collection struct {
 	// exists is illegal.
 	synthetic syntheticDescriptors
 
-	// settings dictate whether we validate descriptors on write.
-	settings *cluster.Settings
-
-	// sessionData is the SessionData of the current session, if this Collection
-	// is being used in the context of a session. It is stored so that the Collection
-	// knows about state of temporary schemas (name and ID) for resolution.
-	sessionData *sessiondata.SessionData
+	// temporary contains logic to access temporary schema descriptors.
+	temporary temporaryDescriptors
 
 	// hydratedTables is node-level cache of table descriptors which utlize
 	// user-defined types.

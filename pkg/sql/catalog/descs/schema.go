@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -71,37 +70,8 @@ func (tc *Collection) getSchemaByName(
 			return sc.Desc(), nil
 		}
 	}
-
-	// If a temp schema is requested, check if it's for the current session, or
-	// else fall back to reading from the store.
 	if strings.HasPrefix(schemaName, catconstants.PgTempSchemaName) {
-		if tc.sessionData != nil {
-			if schemaName == catconstants.PgTempSchemaName ||
-				schemaName == tc.sessionData.SearchPath.GetTemporarySchemaName() {
-				schemaID, found := tc.sessionData.GetTemporarySchemaIDForDb(uint32(dbID))
-				if found {
-					return schemadesc.NewTemporarySchema(
-						tc.sessionData.SearchPath.GetTemporarySchemaName(),
-						descpb.ID(schemaID),
-						dbID,
-					), nil
-				}
-			}
-		}
-		exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
-		if err != nil {
-			return nil, err
-		} else if !exists {
-			if flags.Required {
-				return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
-			}
-			return nil, nil
-		}
-		return schemadesc.NewTemporarySchema(
-			schemaName,
-			schemaID,
-			dbID,
-		), nil
+		return tc.temporary.getSchemaByName(ctx, txn, dbID, schemaName, flags)
 	}
 
 	// Otherwise, the schema is user-defined. Get the descriptor.
@@ -235,15 +205,8 @@ func (tc *Collection) getSchemaByID(
 
 	// If this collection is attached to a session and the session has created
 	// a temporary schema, then check if the schema ID matches.
-	if tc.sessionData != nil {
-		dbID, exists := tc.sessionData.MaybeGetDatabaseForTemporarySchemaID(uint32(schemaID))
-		if exists {
-			return schemadesc.NewTemporarySchema(
-				tc.sessionData.SearchPath.GetTemporarySchemaName(),
-				schemaID,
-				descpb.ID(dbID),
-			), nil
-		}
+	if sc := tc.temporary.getSchemaByID(ctx, schemaID); sc != nil {
+		return sc, nil
 	}
 
 	// Otherwise, fall back to looking up the descriptor with the desired ID.
