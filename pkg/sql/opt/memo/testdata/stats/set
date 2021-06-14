@@ -241,7 +241,8 @@ intersect
  ├── left columns: a.x:1(int!null) y:2(int) a.x:1(int!null)
  ├── right columns: z:7(int) b.x:6(int) rowid:9(int)
  ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0]
- ├── key: (1,2)
+ ├── key: (1)
+ ├── fd: ()-->(2)
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0]
@@ -283,6 +284,8 @@ intersect-all
  ├── left columns: a.x:1(int!null) y:2(int) a.x:1(int!null)
  ├── right columns: z:7(int) b.x:6(int) rowid:9(int)
  ├── stats: [rows=2]
+ ├── key: (1)
+ ├── fd: ()-->(2)
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000]
@@ -401,7 +404,8 @@ except
  ├── left columns: a.x:1(int!null) a.x:1(int!null) y:2(int)
  ├── right columns: b.x:6(int) z:7(int) z:7(int)
  ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0]
- ├── key: (1,2)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000, distinct(1,2)=5000, null(1,2)=0]
@@ -441,6 +445,8 @@ except-all
  ├── left columns: a.x:1(int!null) a.x:1(int!null) y:2(int)
  ├── right columns: b.x:6(int) z:7(int) z:7(int)
  ├── stats: [rows=5000]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  ├── project
  │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000]
@@ -878,9 +884,10 @@ except
  ├── columns: a:1(int) b:2(bool!null)
  ├── left columns: column1:1(int) column2:2(bool!null)
  ├── right columns: column1:3(int) column2:4(bool)
- ├── cardinality: [0 - 2]
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1,2)=1, null(1,2)=0, distinct(2,5)=1, null(2,5)=0]
- ├── key: (1,2)
+ ├── key: ()
+ ├── fd: ()-->(1,2)
  ├── select
  │    ├── columns: column1:1(int) column2:2(bool!null)
  │    ├── cardinality: [0 - 2]
@@ -922,7 +929,8 @@ except
  ├── right columns: column1:3(int) column2:4(int)
  ├── cardinality: [0 - 3]
  ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0.666666667]
- ├── key: (1,2)
+ ├── key: (2)
+ ├── fd: ()-->(1)
  ├── select
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── cardinality: [0 - 3]
@@ -956,29 +964,24 @@ except
 opt disable=SimplifyIntersectRight
 VALUES (1), (2) INTERSECT VALUES (NULL) ORDER BY 1
 ----
-sort
+intersect
  ├── columns: column1:1(int)
+ ├── left columns: column1:1(int)
+ ├── right columns: column1:2(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- ├── key: (1)
- ├── ordering: +1
- └── intersect
-      ├── columns: column1:1(int)
-      ├── left columns: column1:1(int)
-      ├── right columns: column1:2(int)
-      ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-      ├── key: (1)
-      ├── values
-      │    ├── columns: column1:1(int!null)
-      │    ├── cardinality: [2 - 2]
-      │    ├── stats: [rows=2, distinct(1)=2, null(1)=0]
-      │    ├── (1,) [type=tuple{int}]
-      │    └── (2,) [type=tuple{int}]
-      └── values
-           ├── columns: column1:2(int)
-           ├── cardinality: [1 - 1]
-           ├── stats: [rows=1, distinct(2)=1, null(2)=1]
-           ├── key: ()
-           ├── fd: ()-->(2)
-           └── (NULL,) [type=tuple{int}]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(1)=2, null(1)=0]
+ │    ├── (1,) [type=tuple{int}]
+ │    └── (2,) [type=tuple{int}]
+ └── values
+      ├── columns: column1:2(int)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      └── (NULL,) [type=tuple{int}]

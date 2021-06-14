@@ -1224,6 +1224,16 @@ func TestFuncDeps_MakeFullOuter(t *testing.T) {
 	verifyFD(t, outer, "")
 }
 
+func TestFuncDeps_RemapFrom(t *testing.T) {
+	var res props.FuncDepSet
+	abcde := makeAbcdeFD(t)
+	mnpq := makeMnpqFD(t)
+	res.RemapFrom(abcde, func(in opt.ColumnID) opt.ColumnID { return in + 100 })
+	verifyFD(t, &res, "ey(101); (101)-->(102-105), (102,103)~~>(101,104,105)")
+	res.RemapFrom(mnpq, func(in opt.ColumnID) opt.ColumnID { return in + 100 })
+	verifyFD(t, &res, "key(110,111); (110,111)-->(112,113)")
+}
+
 // Construct base table FD from figure 3.3, page 114:
 //   CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)
 //   CREATE UNIQUE INDEX ON abcde (b, c)

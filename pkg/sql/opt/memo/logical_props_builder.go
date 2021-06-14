@@ -685,6 +685,7 @@ func (b *logicalPropsBuilder) buildLocalityOptimizedSearchProps(
 func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relational) {
 	BuildSharedProps(setNode, &rel.Shared)
 
+	op := setNode.Op()
 	leftProps := setNode.Child(0).(RelExpr).Relational()
 	rightProps := setNode.Child(1).(RelExpr).Relational()
 	setPrivate := setNode.Private().(*SetPrivate)
@@ -720,12 +721,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 
 	// Functional Dependencies
 	// -----------------------
-	switch setNode.Op() {
-	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
-		// These operators eliminate duplicates, so a strict key exists.
-		rel.FuncDeps.AddStrictKey(rel.OutputCols, rel.OutputCols)
-	}
-	switch setNode.Op() {
+	switch op {
 	case opt.UnionOp, opt.UnionAllOp, opt.LocalityOptimizedSearchOp:
 		// If columns at ordinals (i, j) are equivalent in both the left input
 		// and right input, then the output columns at ordinals at (i, j) are
@@ -738,27 +734,48 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 				}
 			}
 		}
+
 	case opt.IntersectOp, opt.IntersectAllOp, opt.ExceptOp, opt.ExceptAllOp:
-		// Intersect, IntersectAll, Except and ExceptAll only output rows from
-		// the left input, so if columns at ordinals (i, j) are equivalent in
-		// the left input, then they are equivalent in the output.
-		// TODO(mgartner): The entire FD set on the left side can be used, but
-		// columns may need to be mapped. Intersections can combine FD
-		// information from both the left and the right.
-		for i := range setPrivate.OutCols {
-			for j := i + 1; j < len(setPrivate.OutCols); j++ {
-				if leftProps.FuncDeps.AreColsEquiv(setPrivate.LeftCols[i], setPrivate.LeftCols[j]) {
-					rel.FuncDeps.AddEquivalency(setPrivate.OutCols[i], setPrivate.OutCols[j])
+		// With these operators, the output is a subset of the left input, so all
+		// the left FDs still hold (similar to a Select).
+		rel.FuncDeps.RemapFrom(&leftProps.FuncDeps, func(in opt.ColumnID) opt.ColumnID {
+			for i, leftCol := range setPrivate.LeftCols {
+				if in == leftCol {
+					return setPrivate.OutCols[i]
 				}
 			}
+			panic(errors.AssertionFailedf("invalid column %d in left FD", in))
+		})
+
+		if op == opt.IntersectOp || op == opt.IntersectAllOp {
+			// With Intersect operators, the output is also a subset of the right input,
+			// so all the right FDs apply as well.
+			var remapped props.FuncDepSet
+			remapped.RemapFrom(&rightProps.FuncDeps, func(in opt.ColumnID) opt.ColumnID {
+				for i, rightCol := range setPrivate.RightCols {
+					if in == rightCol {
+						return setPrivate.OutCols[i]
+					}
+				}
+				panic(errors.AssertionFailedf("invalid column %d in right FD", in))
+			})
+			rel.FuncDeps.AddFrom(&remapped)
 		}
+	}
+
+	// Add a strict key for variants that eliminate duplicates.
+	switch op {
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
+		rel.FuncDeps.AddStrictKey(rel.OutputCols, rel.OutputCols)
 	}
 
 	// Cardinality
 	// -----------
 	// Calculate cardinality of the set operator.
-	rel.Cardinality = b.makeSetCardinality(
-		setNode.Op(), leftProps.Cardinality, rightProps.Cardinality)
+	rel.Cardinality = b.makeSetCardinality(op, leftProps.Cardinality, rightProps.Cardinality)
+	if rel.FuncDeps.HasMax1Row() {
+		rel.Cardinality = rel.Cardinality.Limit(1)
+	}
 
 	// Statistics
 	// ----------
