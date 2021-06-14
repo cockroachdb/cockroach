@@ -136,6 +136,21 @@ func (b *Event) Timestamp() hlc.Timestamp {
 	}
 }
 
+// MVCCTimestamp returns the Timestamp of the KV, ignoring the
+// backfillTimestamp if present. This helps distinguish backfills from
+// other events.
+func (b *Event) MVCCTimestamp() hlc.Timestamp {
+	switch b.Type() {
+	case ResolvedEvent:
+		return b.resolved.Timestamp
+	case KVEvent:
+		return b.kv.Value.Timestamp
+	default:
+		log.Fatalf(context.TODO(), "unknown event type")
+		return hlc.Timestamp{} // unreachable
+	}
+}
+
 // chanBuffer mediates between the changed data KVFeed and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
 type chanBuffer struct {
