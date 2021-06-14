@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 )
 
 var jepsenNemeses = []struct {
@@ -155,7 +157,7 @@ func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	run := func(c Cluster, ctx context.Context, node nodeListOption, args ...string) {
+	run := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
 		if !c.isLocal() {
 			c.Run(ctx, node, args...)
 			return
@@ -163,7 +165,7 @@ func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
 		t.l.Printf("> %s\n", strings.Join(args, " "))
 	}
-	runE := func(c Cluster, ctx context.Context, node nodeListOption, args ...string) error {
+	runE := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}

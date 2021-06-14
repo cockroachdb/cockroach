@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,7 +59,7 @@ func runConnectionLatencyTest(ctx context.Context, t *test, c Cluster, numNodes 
 	err = c.RunE(ctx, c.Node(1), "./workload init connectionlatency --user testuser --secure")
 	require.NoError(t, err)
 
-	runWorkload := func(loadNode nodeListOption, locality string) {
+	runWorkload := func(loadNode option.NodeListOption, locality string) {
 		workloadCmd := fmt.Sprintf(
 			`./workload run connectionlatency %s --user testuser --secure --duration 30s --histograms=%s/stats.json --locality %s`,
 			urlString,

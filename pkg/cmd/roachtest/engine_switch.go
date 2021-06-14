@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -113,7 +114,7 @@ func registerEngineSwitch(r *testRegistry) {
 				}
 
 				i := rng.Intn(len(roachNodes))
-				var args option
+				var args option.Option
 				usingPebble[i] = !usingPebble[i]
 				if usingPebble[i] {
 					args = pebbleArgs

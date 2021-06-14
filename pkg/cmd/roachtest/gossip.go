@@ -142,7 +142,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		waitForGossip(0)
 		nodes := c.All()
 		for j := 0; j < 10; j++ {
-			deadNode := nodes.randNode()[0]
+			deadNode := nodes.RandNode()[0]
 			c.Stop(ctx, c.Node(deadNode))
 			waitForGossip(deadNode)
 			c.Start(ctx, t, c.Node(deadNode), args)
@@ -304,7 +304,7 @@ func runGossipPeerings(ctx context.Context, t *test, c Cluster) {
 		t.l.Printf("%d: OK\n", i)
 
 		// Restart a random node.
-		node := c.All().randNode()
+		node := c.All().RandNode()
 		t.l.Printf("%d: restarting node %d\n", i, node[0])
 		c.Stop(ctx, node)
 		c.Start(ctx, t, node)

@@ -13,6 +13,8 @@ package main
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 )
 
 func registerInterleaved(r *testRegistry) {
@@ -64,12 +66,12 @@ func registerInterleaved(r *testRegistry) {
 		t.Status("initializing workload")
 
 		// Always init on an east node.
-		c.Run(ctx, cockroachEast.randNode(), cmdInit)
+		c.Run(ctx, cockroachEast.RandNode(), cmdInit)
 
 		duration := " --duration " + ifLocal("10s", "10m")
 		histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 
-		createCmd := func(locality string, cockroachNodes nodeListOption) string {
+		createCmd := func(locality string, cockroachNodes option.NodeListOption) string {
 			return fmt.Sprintf(
 				"./workload run interleavedpartitioned %s --locality %s "+
 					"--insert-percent %d --insert-local-percent %d "+
@@ -104,7 +106,7 @@ func registerInterleaved(r *testRegistry) {
 		t.Status("running workload")
 		m := newMonitor(ctx, c, cockroachNodes)
 
-		runLocality := func(node nodeListOption, cmd string) {
+		runLocality := func(node option.NodeListOption, cmd string) {
 			m.Go(func(ctx context.Context) error {
 				return c.RunE(ctx, node, cmd)
 			})
