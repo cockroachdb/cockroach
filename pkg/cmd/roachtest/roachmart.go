@@ -13,6 +13,8 @@ package main
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 func registerRoachmart(r *testRegistry) {
@@ -66,7 +68,7 @@ func registerRoachmart(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("roachmart/partition=%v", v),
 			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
+			Cluster: r.makeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

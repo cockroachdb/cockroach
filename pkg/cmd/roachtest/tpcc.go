@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -190,7 +191,9 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
 
-func maxSupportedTPCCWarehouses(buildVersion version.Version, cloud string, nodes clusterSpec) int {
+func maxSupportedTPCCWarehouses(
+	buildVersion version.Version, cloud string, nodes spec.ClusterSpec,
+) int {
 	var v *version.Version
 	var warehouses int
 	hardware := fmt.Sprintf(`%s-%s`, cloud, &nodes)
@@ -210,7 +213,7 @@ func maxSupportedTPCCWarehouses(buildVersion version.Version, cloud string, node
 }
 
 func registerTPCC(r *testRegistry) {
-	headroomSpec := r.makeClusterSpec(4, cpu(16))
+	headroomSpec := r.makeClusterSpec(4, spec.CPU(16))
 	r.Add(testSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
@@ -231,7 +234,7 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	mixedHeadroomSpec := r.makeClusterSpec(5, cpu(16))
+	mixedHeadroomSpec := r.makeClusterSpec(5, spec.CPU(16))
 
 	r.Add(testSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional
@@ -323,7 +326,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc-nowait/nodes=3/w=1",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    r.makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -338,7 +341,7 @@ func registerTPCC(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Tags:       []string{`weekly`},
-		Cluster:    r.makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Timeout:    time.Duration(6*24)*time.Hour + time.Duration(10)*time.Minute,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			warehouses := 1000
@@ -364,7 +367,7 @@ func registerTPCC(r *testRegistry) {
 			Owner:      OwnerMultiRegion,
 			MinVersion: "v21.1.0",
 			// 3 nodes per region + 1 node for workload.
-			Cluster: r.makeClusterSpec(10, geo(), zones(strings.Join(zs, ","))),
+			Cluster: r.makeClusterSpec(10, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				duration := 90 * time.Minute
 				partitionArgs := fmt.Sprintf(
@@ -429,7 +432,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
 		Owner:      OwnerSQLQueries,
 		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Timeout:    6 * time.Hour,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			skip.WithIssue(t, 53886)
@@ -616,16 +619,16 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "chaos")
 	}
 
-	opts := []createOption{cpu(b.CPUs)}
+	opts := []spec.Option{spec.CPU(b.CPUs)}
 	switch b.Distribution {
 	case singleZone:
 		// No specifier.
 	case multiZone:
 		nameParts = append(nameParts, "multi-az")
-		opts = append(opts, geo(), zones(strings.Join(b.Distribution.zones(), ",")))
+		opts = append(opts, spec.Geo(), spec.Zones(strings.Join(b.Distribution.zones(), ",")))
 	case multiRegion:
 		nameParts = append(nameParts, "multi-region")
-		opts = append(opts, geo(), zones(strings.Join(b.Distribution.zones(), ",")))
+		opts = append(opts, spec.Geo(), spec.Zones(strings.Join(b.Distribution.zones(), ",")))
 	default:
 		panic("unexpected")
 	}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -91,7 +92,7 @@ type Cluster interface {
 
 	// Metadata about the provisioned nodes.
 
-	Spec() clusterSpec
+	Spec() spec.ClusterSpec
 	Name() string
 	isLocal() bool
 

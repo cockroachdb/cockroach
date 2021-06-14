@@ -29,7 +29,7 @@ import (
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &cluster{spec: makeClusterSpec(spec.GCE, "", 10)}
+	c := &cluster{spec: spec.MakeClusterSpec(spec.GCE, "", 10)}
 	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
@@ -358,7 +358,7 @@ func TestLoadGroups(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
 			func(t *testing.T) {
-				c := &cluster{t: testWrapper{t}, l: logger, spec: makeClusterSpec(spec.GCE, "", tc.numRoachNodes+tc.numLoadNodes)}
+				c := &cluster{t: testWrapper{t}, l: logger, spec: spec.MakeClusterSpec(spec.GCE, "", tc.numRoachNodes+tc.numLoadNodes)}
 				lg := makeLoadGroups(c, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
 				require.EqualValues(t, lg, tc.loadGroups)
 			})

@@ -15,6 +15,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 func registerSyncTest(r *testRegistry) {
@@ -33,7 +35,7 @@ fi
 		Owner:      OwnerStorage,
 		MinVersion: "v19.1.0",
 		// This test sets up a custom file system; we don't want the cluster reused.
-		Cluster: r.makeClusterSpec(1, reuseNone()),
+		Cluster: r.makeClusterSpec(1, spec.ReuseNone()),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")

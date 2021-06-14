@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -95,20 +96,14 @@ func (r *testRegistry) Add(spec testSpec) {
 	r.m[spec.Name] = &spec
 }
 
-type preferSSDOption struct{}
-
-func (*preferSSDOption) apply(spec *clusterSpec) {
-	spec.PreferLocalSSD = true
-}
-
-func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
+func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
 	if r.preferSSD {
-		opts = append(opts, &preferSSDOption{})
+		opts = append(opts, spec.PreferSSD())
 	}
 	if r.zones != "" {
-		opts = append(opts, zones(r.zones))
+		opts = append(opts, spec.Zones(r.zones))
 	}
-	return makeClusterSpec(r.cloud, r.instanceType, nodeCount, opts...)
+	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, opts...)
 }
 
 // prepareSpec validates a spec and does minor massaging of its fields.

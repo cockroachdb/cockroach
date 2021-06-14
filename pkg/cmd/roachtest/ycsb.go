@@ -13,6 +13,8 @@ package main
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 func registerYCSB(r *testRegistry) {
@@ -74,7 +76,7 @@ func registerYCSB(r *testRegistry) {
 			r.Add(testSpec{
 				Name:    name,
 				Owner:   OwnerKV,
-				Cluster: r.makeClusterSpec(4, cpu(cpus)),
+				Cluster: r.makeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},

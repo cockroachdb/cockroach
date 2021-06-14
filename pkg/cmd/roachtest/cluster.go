@@ -691,7 +691,7 @@ func withWorkerAction() option.Option {
 type cluster struct {
 	name string
 	tag  string
-	spec clusterSpec
+	spec spec.ClusterSpec
 	t    testI
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
@@ -733,7 +733,7 @@ func (c *cluster) EncryptDefault(b bool) {
 }
 
 // Spec returns the spec underlying the cluster.
-func (c *cluster) Spec() clusterSpec {
+func (c *cluster) Spec() spec.ClusterSpec {
 	return c.spec
 }
 
@@ -796,7 +796,7 @@ func (c *cluster) closeLogger() {
 }
 
 type clusterConfig struct {
-	spec clusterSpec
+	spec spec.ClusterSpec
 	// artifactsDir is the path where log file will be stored.
 	artifactsDir string
 	localCluster bool
@@ -884,7 +884,7 @@ func (f *clusterFactory) newCluster(
 		return c, nil
 	}
 
-	exp := cfg.spec.expiration()
+	exp := cfg.spec.Expiration()
 	if cfg.localCluster {
 		// Local clusters never expire.
 		exp = timeutil.Now().Add(100000 * time.Hour)
@@ -902,7 +902,7 @@ func (f *clusterFactory) newCluster(
 	}
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
-	sargs = append(sargs, cfg.spec.args(createArgs...)...)
+	sargs = append(sargs, cfg.spec.Args(createArgs...)...)
 	if !cfg.useIOBarrier && localSSDArg {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
@@ -967,11 +967,11 @@ func attachToExistingCluster(
 	ctx context.Context,
 	name string,
 	l *logger.Logger,
-	spec clusterSpec,
+	spec spec.ClusterSpec,
 	opt attachOpt,
 	r *clusterRegistry,
 ) (*cluster, error) {
-	exp := spec.expiration()
+	exp := spec.Expiration()
 	if name == "local" {
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
@@ -1067,7 +1067,7 @@ func (c *cluster) Save(ctx context.Context, msg string, l *logger.Logger) {
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
-func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger.Logger) error {
+func (c *cluster) validate(ctx context.Context, nodes spec.ClusterSpec, l *logger.Logger) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}

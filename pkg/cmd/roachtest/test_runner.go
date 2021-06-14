@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -425,7 +426,7 @@ func (r *testRunner) runWorker(
 		}
 
 		if c != nil {
-			if _, ok := c.spec.ReusePolicy.(reusePolicyNone); ok {
+			if _, ok := c.spec.ReusePolicy.(spec.ReusePolicyNone); ok {
 				wStatus.SetStatus("destroying cluster")
 				// We use a context that can't be canceled for the Destroy().
 				c.Destroy(context.Background(), closeLogger, l)

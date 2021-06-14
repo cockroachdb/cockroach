@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -42,7 +43,7 @@ func registerFollowerReads(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
 			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(6, cpu(2), geo(), zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
+			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Wipe(ctx)
@@ -64,7 +65,7 @@ func registerFollowerReads(r *testRegistry) {
 		Owner: OwnerKV,
 		Cluster: r.makeClusterSpec(
 			3, /* nodeCount */
-			cpu(2),
+			spec.CPU(2),
 		),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, r.buildVersion)

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -91,7 +92,7 @@ func registerAllocator(r *testRegistry) {
 		Name:       `replicate/wide`,
 		Owner:      OwnerKV,
 		Timeout:    10 * time.Minute,
-		Cluster:    r.makeClusterSpec(9, cpu(1)),
+		Cluster:    r.makeClusterSpec(9, spec.CPU(1)),
 		MinVersion: "v19.2.0",
 		Run:        runWideReplication,
 	})
