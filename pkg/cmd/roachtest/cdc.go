@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -607,7 +608,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/tpcc-1000",
 		Owner:           OwnerCDC,
-		Cluster:         r.makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -622,7 +623,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/tpcc-1000/sink=null",
 		Owner:           OwnerCDC,
-		Cluster:         r.makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
@@ -639,7 +640,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/initial-scan",
 		Owner:           OwnerCDC,
-		Cluster:         r.makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -655,7 +656,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/sink-chaos",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -671,7 +672,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/crdb-chaos",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -692,7 +693,7 @@ func registerCDC(r *testRegistry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Cluster:         r.makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -708,7 +709,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
 		Owner:           `cdc`,
-		Cluster:         r.makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
@@ -61,7 +62,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 	if b.NumShards > 0 {
 		nameParts = append(nameParts, fmt.Sprintf("shards=%d", b.NumShards))
 	}
-	opts := []createOption{cpu(b.CPUs)}
+	opts := []spec.Option{spec.CPU(b.CPUs)}
 	switch b.KeyDistribution {
 	case sequential:
 		nameParts = append(nameParts, "sequential")

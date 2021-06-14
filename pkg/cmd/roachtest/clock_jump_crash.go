@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	_ "github.com/lib/pq"
 )
 
@@ -128,16 +129,16 @@ func registerClockJumpTests(r *testRegistry) {
 
 	for i := range testCases {
 		tc := testCases[i]
-		spec := testSpec{
+		s := testSpec{
 			Name:  "clock/jump/" + tc.name,
 			Owner: OwnerKV,
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
-			Cluster: r.makeClusterSpec(1, reuseTagged("offset-injector")),
+			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
 		}
-		r.Add(spec)
+		r.Add(s)
 	}
 }

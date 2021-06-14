@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -30,7 +31,7 @@ func registerClearRange(r *testRegistry) {
 			// to <3:30h but it varies.
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
-			Cluster:    r.makeClusterSpec(10, cpu(16)),
+			Cluster:    r.makeClusterSpec(10, spec.CPU(16)),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},

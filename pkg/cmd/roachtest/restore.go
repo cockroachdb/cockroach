@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -368,14 +369,14 @@ func registerRestore(r *testRegistry) {
 		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
 	} {
 		item := item
-		clusterOpts := make([]createOption, 0)
+		clusterOpts := make([]spec.Option, 0)
 		testName := fmt.Sprintf("restore%s/nodes=%d", item.dataSet.name(), item.nodes)
 		if item.cpus != 0 {
-			clusterOpts = append(clusterOpts, cpu(item.cpus))
+			clusterOpts = append(clusterOpts, spec.CPU(item.cpus))
 			testName += fmt.Sprintf("/cpus=%d", item.cpus)
 		}
 		if item.largeVolumes {
-			clusterOpts = append(clusterOpts, volumeSize(largeVolumeSize))
+			clusterOpts = append(clusterOpts, spec.VolumeSize(largeVolumeSize))
 			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
 		}
 

@@ -184,7 +184,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Name:    `timeout`,
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
-		Cluster: makeClusterSpec(spec.GCE, "", 0),
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			<-ctx.Done()
 		},
@@ -219,7 +219,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:    "a",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
-				Cluster: makeClusterSpec(spec.GCE, "", 0),
+				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
 			"",
 			[]string{"a"},
@@ -230,7 +230,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Run:        dummyRun,
-				Cluster:    makeClusterSpec(spec.GCE, "", 0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
 			"",
 			[]string{"a"},
@@ -241,7 +241,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "foo",
 				Run:        dummyRun,
-				Cluster:    makeClusterSpec(spec.GCE, "", 0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
 			"a: unable to parse min-version: invalid version string 'foo'",
 			nil,
@@ -288,7 +288,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Name:       "a",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
-				Cluster:    makeClusterSpec(spec.GCE, "", 0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runA = true
 				},
@@ -297,7 +297,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Name:       "b",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
-				Cluster:    makeClusterSpec(spec.GCE, "", 0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runB = true
 				},
@@ -346,7 +346,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	r.Add(testSpec{
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
-		Cluster: makeClusterSpec(spec.GCE, "", 0),
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -288,14 +289,14 @@ func findIndexProblem(
 }
 
 func registerSchemaChangeIndexTPCC1000(r *testRegistry) {
-	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5, cpu(16)), 1000, time.Hour*2))
+	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*2))
 }
 
 func registerSchemaChangeIndexTPCC100(r *testRegistry) {
 	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5), 100, time.Minute*15))
 }
 
-func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration) testSpec {
+func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Duration) testSpec {
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
 		Owner:   OwnerSQLSchema,
@@ -409,10 +410,12 @@ func makeSchemaChangeBulkIngestTest(
 }
 
 func registerSchemaChangeDuringTPCC1000(r *testRegistry) {
-	r.Add(makeSchemaChangeDuringTPCC(r.makeClusterSpec(5, cpu(16)), 1000, time.Hour*3))
+	r.Add(makeSchemaChangeDuringTPCC(r.makeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*3))
 }
 
-func makeSchemaChangeDuringTPCC(spec clusterSpec, warehouses int, length time.Duration) testSpec {
+func makeSchemaChangeDuringTPCC(
+	spec spec.ClusterSpec, warehouses int, length time.Duration,
+) testSpec {
 	return testSpec{
 		Name:    "schemachange/during/tpcc",
 		Owner:   OwnerSQLSchema,

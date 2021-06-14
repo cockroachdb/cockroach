@@ -31,7 +31,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZonesStr)),
+		Cluster: r.makeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		MinVersion: `v19.1.0`,
 		Run: func(ctx context.Context, t *test, c Cluster) {

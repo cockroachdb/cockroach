@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 type sysbenchWorkload int
@@ -140,7 +142,7 @@ func registerSysbench(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(n+1, cpu(cpus)),
+			Cluster: r.makeClusterSpec(n+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},

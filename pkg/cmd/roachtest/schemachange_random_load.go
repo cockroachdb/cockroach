@@ -37,8 +37,8 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		Owner: OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(
 			3,
-			geo(),
-			zones(geoZonesStr),
+			spec.Geo(),
+			spec.Zones(geoZonesStr),
 		),
 		MinVersion: "v20.1.0",
 		// This is set while development is still happening on the workload and we

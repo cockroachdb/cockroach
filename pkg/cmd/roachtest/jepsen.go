@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 var jepsenNemeses = []struct {
@@ -340,7 +341,7 @@ func registerJepsen(r *testRegistry) {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
-			spec := testSpec{
+			s := testSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
 				MinVersion: "v20.1.0",
@@ -352,12 +353,12 @@ func registerJepsen(r *testRegistry) {
 				// clusters because they have a lengthy setup step, but avoid doing it
 				// if they detect that the machines have already been properly
 				// initialized.
-				Cluster: r.makeClusterSpec(6, reuseTagged("jepsen")),
+				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}
-			r.Add(spec)
+			r.Add(s)
 		}
 	}
 }

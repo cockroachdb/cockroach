@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -226,7 +227,7 @@ func registerKV(r *testRegistry) {
 			Name:       strings.Join(nameParts, "/"),
 			Owner:      OwnerKV,
 			MinVersion: minVersion,
-			Cluster:    r.makeClusterSpec(opts.nodes+1, cpu(opts.cpus)),
+			Cluster:    r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runKV(ctx, t, c, opts)
 			},
@@ -673,7 +674,7 @@ func registerKVScalability(r *testRegistry) {
 			r.Add(testSpec{
 				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Owner:   OwnerKV,
-				Cluster: r.makeClusterSpec(7, cpu(8)),
+				Cluster: r.makeClusterSpec(7, spec.CPU(8)),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runScalability(ctx, t, c, p)
 				},
@@ -808,7 +809,7 @@ func registerKVRangeLookups(r *testRegistry) {
 			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
 			Owner:      OwnerKV,
 			MinVersion: "v19.2.0",
-			Cluster:    r.makeClusterSpec(nodes+1, cpu(cpus)),
+			Cluster:    r.makeClusterSpec(nodes+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},
