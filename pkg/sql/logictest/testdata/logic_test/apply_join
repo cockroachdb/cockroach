@@ -401,3 +401,55 @@ WHERE t1.b IN (
     (VALUES (t1.a)) AS v (a)
       JOIN t65040 AS t2 ON v.a = t2.a
 )
+
+# Regression tests for not handling the subqueries in the "inner" plans
+# correctly (#39433).
+query I
+SELECT
+  (
+    SELECT
+      tab_4.col_4
+    FROM
+      (VALUES (1)) AS tab_1 (col_1)
+      JOIN (
+          VALUES
+            (
+              (
+                SELECT
+                  1
+                FROM
+                  (SELECT 1)
+                WHERE
+                  EXISTS(SELECT 1)
+              )
+            )
+        )
+          AS tab_6 (col_6) ON (tab_1.col_1) = (tab_6.col_6)
+  )
+FROM
+  (VALUES (NULL)) AS tab_4 (col_4),
+  (VALUES (NULL), (NULL)) AS tab_5 (col_5);
+----
+NULL
+NULL
+
+statement ok
+CREATE TABLE t39433 AS SELECT true AS _bool;
+
+query I
+SELECT
+  (
+    SELECT
+      NULL
+    FROM
+      t39433
+      LEFT JOIN t39433 AS tab_57077
+        RIGHT JOIN t39433 AS tab_57078 FULL JOIN t39433 AS tab_57079 ON true ON tab_57069._bool
+        CROSS JOIN t39433 AS tab_57080
+        INNER JOIN t39433 AS tab_57081 ON true ON
+          EXISTS(SELECT NULL FROM t39433 AS tab_57082 LEFT JOIN t39433 ON EXISTS(SELECT NULL FROM t39433))
+  )
+FROM
+  t39433 AS tab_57069;
+----
+NULL
