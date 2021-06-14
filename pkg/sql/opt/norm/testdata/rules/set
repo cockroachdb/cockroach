@@ -23,10 +23,10 @@ CREATE TABLE t2 (
 ----
 
 # --------------------------------------------------
-# EliminateUnionAllLeft
+# EliminateSetLeft
 # --------------------------------------------------
 
-norm expect=EliminateUnionAllLeft
+norm expect=EliminateSetLeft
 SELECT k FROM
   (SELECT k FROM b)
   UNION ALL
@@ -41,11 +41,21 @@ project
  └── projections
       └── b.k:1 [as=k:15, outer=(1)]
 
+norm expect=EliminateSetLeft
+SELECT k FROM
+  (SELECT k FROM b)
+  EXCEPT ALL
+  (SELECT k FROM b WHERE k IN ())
+----
+scan b
+ ├── columns: k:1!null
+ └── key: (1)
+
 # --------------------------------------------------
-# EliminateUnionAllRight
+# EliminateSetRight
 # --------------------------------------------------
 
-norm expect=EliminateUnionAllRight
+norm expect=EliminateSetRight
 SELECT k FROM
   (SELECT k FROM b WHERE Null)
   UNION ALL
@@ -60,6 +70,19 @@ project
  └── projections
       └── b.k:8 [as=k:15, outer=(8)]
 
+# No-op case because EXCEPT ALL outputs left rows.
+norm expect-not=EliminateSetLeft
+SELECT k FROM
+  (SELECT k FROM b WHERE k IN ())
+  EXCEPT ALL
+  (SELECT k FROM b)
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
 norm
 SELECT k FROM
   (SELECT k FROM b WHERE False)
@@ -73,10 +96,10 @@ values
  └── fd: ()-->(15)
 
 # --------------------------------------------------
-# EliminateUnionLeft
+# EliminateDistinctSetLeft
 # --------------------------------------------------
 
-norm expect=EliminateUnionLeft
+norm expect=EliminateDistinctSetLeft
 SELECT k FROM
   (SELECT k FROM b)
   UNION
@@ -91,11 +114,24 @@ project
  └── projections
       └── b.k:1 [as=k:15, outer=(1)]
 
+norm expect=EliminateDistinctSetLeft
+SELECT i FROM
+  (SELECT i FROM b)
+  EXCEPT
+  (SELECT i FROM b WHERE k IN ())
+----
+distinct-on
+ ├── columns: i:2
+ ├── grouping columns: i:2
+ ├── key: (2)
+ └── scan b
+      └── columns: i:2
+
 # --------------------------------------------------
-# EliminateUnionRight
+# EliminateDistinctSetRight
 # --------------------------------------------------
 
-norm expect=EliminateUnionRight
+norm expect=EliminateDistinctSetRight
 SELECT k FROM
   (SELECT k FROM b WHERE Null)
   UNION
@@ -110,6 +146,19 @@ project
  └── projections
       └── b.k:8 [as=k:15, outer=(8)]
 
+# No-op case because EXCEPT outputs left rows.
+norm expect-not=EliminateDistinctSetLeft
+SELECT i FROM
+  (SELECT i FROM b WHERE k IN ())
+  EXCEPT
+  (SELECT i FROM b)
+----
+values
+ ├── columns: i:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(2)
+
 norm
 SELECT k FROM
   (SELECT k FROM b WHERE False)
@@ -121,6 +170,114 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(15)
+
+# -------------------------------------------------
+# SimplifyExcept
+# -------------------------------------------------
+
+norm expect=SimplifyExcept
+SELECT k FROM
+  (SELECT k FROM b)
+  EXCEPT
+  (SELECT i FROM b)
+----
+except-all
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── scan b
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── scan b
+      └── columns: i:9
+
+# No-op case because the left side does not have a key.
+norm expect-not=SimplifyExcept
+SELECT i FROM
+  (SELECT i FROM b)
+  EXCEPT
+  (SELECT k FROM b)
+----
+except
+ ├── columns: i:2
+ ├── left columns: i:2
+ ├── right columns: k:8
+ ├── key: (2)
+ ├── scan b
+ │    └── columns: i:2
+ └── scan b
+      ├── columns: k:8!null
+      └── key: (8)
+
+# -------------------------------------------------
+# SimplifyIntersect
+# -------------------------------------------------
+
+norm expect=SimplifyIntersectLeft expect-not=SimplifyIntersectRight
+SELECT k FROM
+  (SELECT k FROM b)
+  Intersect
+  (SELECT i FROM b)
+----
+intersect-all
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── scan b
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── scan b
+      └── columns: i:9
+
+norm expect=SimplifyIntersectRight expect-not=SimplifyIntersectLeft
+SELECT i FROM
+  (SELECT i FROM b)
+  Intersect
+  (SELECT k FROM b)
+----
+intersect-all
+ ├── columns: i:2
+ ├── left columns: i:2
+ ├── right columns: k:8
+ ├── scan b
+ │    └── columns: i:2
+ └── scan b
+      ├── columns: k:8!null
+      └── key: (8)
+
+norm
+SELECT k FROM
+  (SELECT k FROM b)
+  Intersect
+  (SELECT k FROM b)
+----
+intersect-all
+ ├── columns: k:1!null
+ ├── left columns: k:1!null
+ ├── right columns: k:8
+ ├── scan b
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── scan b
+      ├── columns: k:8!null
+      └── key: (8)
+
+# No-op case because neither side has a key.
+norm expect-not=(SimplifyIntersectLeft, SimplifyIntersectRight)
+SELECT i FROM
+  (SELECT i FROM b)
+  Intersect
+  (SELECT i FROM b)
+----
+intersect
+ ├── columns: i:2
+ ├── left columns: i:2
+ ├── right columns: i:9
+ ├── key: (2)
+ ├── scan b
+ │    └── columns: i:2
+ └── scan b
+      └── columns: i:9
 
 # -------------------------------------------------
 # ConvertUnionToDistinctUnionAll
