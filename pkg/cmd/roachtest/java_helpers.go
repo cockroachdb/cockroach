@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 )
 
 var issueRegexp = regexp.MustCompile(`See: https://[^\s]+issues?/(\d+)`)
@@ -175,7 +177,7 @@ func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
 	t *test,
 	c Cluster,
-	node nodeListOption,
+	node option.NodeListOption,
 	ormName string,
 	testOutput []byte,
 	blocklistName string,

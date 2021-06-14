@@ -135,6 +135,7 @@ go_library(
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/internal/issues",
         "//pkg/cmd/roachtest/logger",
+        "//pkg/cmd/roachtest/option",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
         "//pkg/internal/team",
@@ -215,6 +216,7 @@ go_test(
     tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cmd/roachtest/logger",
+        "//pkg/cmd/roachtest/option",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/syncutil",

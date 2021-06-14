@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -500,7 +501,7 @@ func verifySQLLatency(
 	ctx context.Context,
 	c Cluster,
 	t *test,
-	adminNode nodeListOption,
+	adminNode option.NodeListOption,
 	start, end time.Time,
 	targetLatency time.Duration,
 ) {
@@ -553,7 +554,7 @@ func verifyHighFollowerReadRatios(
 	ctx context.Context,
 	c Cluster,
 	t *test,
-	node nodeListOption,
+	node option.NodeListOption,
 	start, end time.Time,
 	toleratedNodes int,
 ) {
@@ -774,12 +775,12 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
-	var remainingNodes nodeListOption
+	var remainingNodes option.NodeListOption
 	for i := 0; i < c.Spec().NodeCount; i++ {
 		if i+1 == randNode {
 			continue
 		}
-		remainingNodes = remainingNodes.merge(c.Node(i + 1))
+		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
 	t.l.Printf("upgrading nodes %s to current version", remainingNodes)
 	upgradeNodes(ctx, remainingNodes, curVersion, t, c)

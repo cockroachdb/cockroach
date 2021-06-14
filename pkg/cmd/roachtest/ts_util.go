@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
@@ -93,7 +94,7 @@ func verifyTxnPerSecond(
 	ctx context.Context,
 	c Cluster,
 	t *test,
-	adminNode nodeListOption,
+	adminNode option.NodeListOption,
 	start, end time.Time,
 	txnTarget, maxPercentTimeUnderTarget float64,
 ) {
@@ -144,7 +145,7 @@ func verifyLookupsPerSec(
 	ctx context.Context,
 	c Cluster,
 	t *test,
-	adminNode nodeListOption,
+	adminNode option.NodeListOption,
 	start, end time.Time,
 	rangeLookupsTarget float64,
 ) {

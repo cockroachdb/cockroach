@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -39,12 +40,12 @@ import (
 type HealthChecker struct {
 	t      *test
 	c      Cluster
-	nodes  nodeListOption
+	nodes  option.NodeListOption
 	doneCh chan struct{}
 }
 
 // NewHealthChecker returns a populated HealthChecker.
-func NewHealthChecker(t *test, c Cluster, nodes nodeListOption) *HealthChecker {
+func NewHealthChecker(t *test, c Cluster, nodes option.NodeListOption) *HealthChecker {
 	return &HealthChecker{
 		t:      t,
 		c:      c,

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -920,7 +921,7 @@ func newDecommTestHelper(t *test, c Cluster) *decommTestHelper {
 // decommission decommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *decommTestHelper) decommission(
-	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
 ) (string, error) {
 	args := []string{"node", "decommission"}
 	args = append(args, verbs...)
@@ -938,7 +939,7 @@ func (h *decommTestHelper) decommission(
 // recommission recommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *decommTestHelper) recommission(
-	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
 ) (string, error) {
 	args := []string{"node", "recommission"}
 	args = append(args, verbs...)

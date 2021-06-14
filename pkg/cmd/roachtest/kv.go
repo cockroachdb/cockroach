@@ -752,7 +752,7 @@ func registerKVRangeLookups(r *testRegistry) {
 					default:
 					}
 
-					conn := conns[c.Range(1, nodes).randNode()[0]-1]
+					conn := conns[c.Range(1, nodes).RandNode()[0]-1]
 					switch workloadType {
 					case splitWorkload:
 						_, err := conn.ExecContext(ctx, `

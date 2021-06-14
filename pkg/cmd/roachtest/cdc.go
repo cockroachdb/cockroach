@@ -33,6 +33,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -217,7 +218,7 @@ func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 		}
 		ch := Chaos{
 			Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
-			Target:  crdbNodes.randNode,
+			Target:  crdbNodes.RandNode,
 			Stopper: time.After(chaosDuration),
 		}
 		m.Go(ch.Runner(c, m))
@@ -228,7 +229,7 @@ func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 	workloadEnd := timeutil.Now()
 	if args.targetTxnPerSecond > 0.0 {
 		verifyTxnPerSecond(
-			ctx, c, t, crdbNodes.randNode(), workloadStart, workloadEnd, args.targetTxnPerSecond, 0.05,
+			ctx, c, t, crdbNodes.RandNode(), workloadStart, workloadEnd, args.targetTxnPerSecond, 0.05,
 		)
 	}
 }
@@ -1085,7 +1086,7 @@ confluent.support.customer.id=anonymous
 type kafkaManager struct {
 	t     *test
 	c     Cluster
-	nodes nodeListOption
+	nodes option.NodeListOption
 }
 
 func (k kafkaManager) basePath() string {
@@ -1380,8 +1381,8 @@ func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsume
 }
 
 type tpccWorkload struct {
-	workloadNodes      nodeListOption
-	sqlNodes           nodeListOption
+	workloadNodes      option.NodeListOption
+	sqlNodes           option.NodeListOption
 	tpccWarehouseCount int
 	tolerateErrors     bool
 }
@@ -1392,7 +1393,7 @@ func (tw *tpccWorkload) install(ctx context.Context, c Cluster) {
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
 		`./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl%s}`,
 		tw.tpccWarehouseCount,
-		tw.sqlNodes.randNode(),
+		tw.sqlNodes.RandNode(),
 	))
 }
 
@@ -1408,14 +1409,14 @@ func (tw *tpccWorkload) run(ctx context.Context, c Cluster, workloadDuration str
 }
 
 type ledgerWorkload struct {
-	workloadNodes nodeListOption
-	sqlNodes      nodeListOption
+	workloadNodes option.NodeListOption
+	sqlNodes      option.NodeListOption
 }
 
 func (lw *ledgerWorkload) install(ctx context.Context, c Cluster) {
-	c.Run(ctx, lw.workloadNodes.randNode(), fmt.Sprintf(
+	c.Run(ctx, lw.workloadNodes.RandNode(), fmt.Sprintf(
 		`./workload init ledger {pgurl%s}`,
-		lw.sqlNodes.randNode(),
+		lw.sqlNodes.RandNode(),
 	))
 }
 

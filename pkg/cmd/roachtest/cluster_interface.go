@@ -15,6 +15,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -25,45 +26,45 @@ import (
 type Cluster interface {
 	// Selecting nodes.
 
-	All() nodeListOption
-	Range(begin, end int) nodeListOption
-	Nodes(ns ...int) nodeListOption
-	Node(i int) nodeListOption
+	All() option.NodeListOption
+	Range(begin, end int) option.NodeListOption
+	Nodes(ns ...int) option.NodeListOption
+	Node(i int) option.NodeListOption
 
 	// Uploading and downloading from/to nodes.
 
-	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option) error
-	Put(ctx context.Context, src, dest string, opts ...option)
-	PutE(ctx context.Context, l *logger.Logger, src, dest string, opts ...option) error
+	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
+	Put(ctx context.Context, src, dest string, opts ...option.Option)
+	PutE(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
 	PutLibraries(ctx context.Context, libraryDir string) error
 	Stage(
-		ctx context.Context, l *logger.Logger, application, versionOrSHA, dir string, opts ...option,
+		ctx context.Context, l *logger.Logger, application, versionOrSHA, dir string, opts ...option.Option,
 	) error
 	PutString(
-		ctx context.Context, content, dest string, mode os.FileMode, opts ...option,
+		ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 	) error
 
 	// Starting and stopping CockroachDB.
 
-	StartE(ctx context.Context, opts ...option) error
-	Start(ctx context.Context, t *test, opts ...option)
-	StopE(ctx context.Context, opts ...option) error
-	Stop(ctx context.Context, opts ...option)
+	StartE(ctx context.Context, opts ...option.Option) error
+	Start(ctx context.Context, t *test, opts ...option.Option)
+	StopE(ctx context.Context, opts ...option.Option) error
+	Stop(ctx context.Context, opts ...option.Option)
 	StopCockroachGracefullyOnNode(ctx context.Context, node int) error
 
 	// Hostnames and IP addresses of the nodes.
 
-	InternalAddr(ctx context.Context, node nodeListOption) ([]string, error)
-	InternalIP(ctx context.Context, node nodeListOption) ([]string, error)
-	ExternalAddr(ctx context.Context, node nodeListOption) ([]string, error)
-	ExternalIP(ctx context.Context, node nodeListOption) ([]string, error)
+	InternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
+	InternalIP(ctx context.Context, node option.NodeListOption) ([]string, error)
+	ExternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
+	ExternalIP(ctx context.Context, node option.NodeListOption) ([]string, error)
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, node nodeListOption) ([]string, error)
-	ExternalPGUrl(ctx context.Context, node nodeListOption) ([]string, error)
+	InternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
+	ExternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error)
 	ExternalPGUrlSecure(
-		ctx context.Context, node nodeListOption, user string, certsDir string, port int,
+		ctx context.Context, node option.NodeListOption, user string, certsDir string, port int,
 	) ([]string, error)
 
 	// SQL clients to nodes.
@@ -76,16 +77,16 @@ type Cluster interface {
 
 	// URLs for the Admin UI.
 
-	InternalAdminUIAddr(ctx context.Context, node nodeListOption) ([]string, error)
-	ExternalAdminUIAddr(ctx context.Context, node nodeListOption) ([]string, error)
+	InternalAdminUIAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
+	ExternalAdminUIAddr(ctx context.Context, node option.NodeListOption) ([]string, error)
 
 	// Running commands on nodes.
 
-	Run(ctx context.Context, node nodeListOption, args ...string)
-	RunE(ctx context.Context, node nodeListOption, args ...string) error
-	RunL(ctx context.Context, l *logger.Logger, node nodeListOption, args ...string) error
+	Run(ctx context.Context, node option.NodeListOption, args ...string)
+	RunE(ctx context.Context, node option.NodeListOption, args ...string) error
+	RunL(ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string) error
 	RunWithBuffer(
-		ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
+		ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 	) ([]byte, error)
 
 	// Metadata about the provisioned nodes.
@@ -96,8 +97,8 @@ type Cluster interface {
 
 	// Deleting CockroachDB data and logs on nodes.
 
-	WipeE(ctx context.Context, l *logger.Logger, opts ...option) error
-	Wipe(ctx context.Context, opts ...option)
+	WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error
+	Wipe(ctx context.Context, opts ...option.Option)
 
 	// Toggling encryption-at-rest settings for starting CockroachDB.
 
@@ -107,18 +108,18 @@ type Cluster interface {
 	// Internal niche tools.
 
 	Reset(ctx context.Context) error
-	Reformat(ctx context.Context, node nodeListOption, args ...string)
+	Reformat(ctx context.Context, node option.NodeListOption, args ...string)
 	Install(
-		ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
+		ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 	) error
 
 	// Methods whose inclusion on this interface is purely historical.
 	// These should be removed over time.
 
-	makeNodes(opts ...option) string
+	makeNodes(opts ...option.Option) string
 	CheckReplicaDivergenceOnDB(context.Context, *test, *gosql.DB) error
 	FetchDiskUsage(ctx context.Context, t *test) error
 	GitClone(
-		ctx context.Context, l *logger.Logger, src, dest, branch string, node nodeListOption,
+		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error
 }

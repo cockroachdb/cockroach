@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -80,7 +81,7 @@ func tpccImportCmdWithCockroachBinary(
 
 func setupTPCC(
 	ctx context.Context, t *test, c Cluster, opts tpccOptions,
-) (crdbNodes, workloadNode nodeListOption) {
+) (crdbNodes, workloadNode option.NodeListOption) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 	crdbNodes = c.Range(1, c.Spec().NodeCount-1)
@@ -385,7 +386,7 @@ func registerTPCC(r *testRegistry) {
 								Period:   300 * time.Second,
 								DownTime: 300 * time.Second,
 							},
-							Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
+							Target:       func() option.NodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
 							Stopper:      time.After(duration),
 							DrainAndQuit: false,
 						}
@@ -415,7 +416,7 @@ func registerTPCC(r *testRegistry) {
 							Period:   45 * time.Second,
 							DownTime: 10 * time.Second,
 						},
-						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
+						Target:       func() option.NodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
 						Stopper:      time.After(duration),
 						DrainAndQuit: false,
 					}
@@ -597,8 +598,8 @@ func (s tpccBenchSpec) partitions() int {
 }
 
 // startOpts returns any extra start options that the spec requires.
-func (s tpccBenchSpec) startOpts() []option {
-	opts := []option{startArgsDontEncrypt}
+func (s tpccBenchSpec) startOpts() []option.Option {
+	opts := []option.Option{startArgsDontEncrypt}
 	if s.LoadConfig == singlePartitionedLoadgen {
 		opts = append(opts, racks(s.partitions()))
 	}
@@ -666,7 +667,11 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 // function is idempotent and first checks whether a compatible dataset exists,
 // performing an expensive dataset restore only if it doesn't.
 func loadTPCCBench(
-	ctx context.Context, t *test, c Cluster, b tpccBenchSpec, roachNodes, loadNode nodeListOption,
+	ctx context.Context,
+	t *test,
+	c Cluster,
+	b tpccBenchSpec,
+	roachNodes, loadNode option.NodeListOption,
 ) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -909,7 +914,7 @@ func runTPCCBench(ctx context.Context, t *test, c Cluster, b tpccBenchSpec) {
 			// Kill one node at a time.
 			ch := Chaos{
 				Timer:   Periodic{Period: 90 * time.Second, DownTime: 5 * time.Second},
-				Target:  roachNodes.randNode,
+				Target:  roachNodes.RandNode,
 				Stopper: loadDone,
 			}
 			m.Go(ch.Runner(c, m))

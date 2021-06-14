@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -27,7 +28,7 @@ import (
 type quitTest struct {
 	t    *test
 	c    Cluster
-	args option
+	args option.Option
 }
 
 // runQuitTransfersLeases performs rolling restarts on a

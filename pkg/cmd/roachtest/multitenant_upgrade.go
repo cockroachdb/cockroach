@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -407,7 +408,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Ve
 func startTenantServer(
 	tenantCtx context.Context,
 	c Cluster,
-	node nodeListOption,
+	node option.NodeListOption,
 	binary string,
 	kvAddrs []string,
 	tenantID int,

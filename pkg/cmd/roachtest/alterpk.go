@@ -15,12 +15,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func registerAlterPK(r *testRegistry) {
 
-	setupTest := func(ctx context.Context, t *test, c Cluster) (nodeListOption, nodeListOption) {
+	setupTest := func(ctx context.Context, t *test, c Cluster) (option.NodeListOption, option.NodeListOption) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		t.Status("copying binaries")

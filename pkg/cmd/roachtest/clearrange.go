@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -53,7 +54,7 @@ func runClearRange(ctx context.Context, t *test, c Cluster, aggressiveChecks boo
 	c.Stop(ctx)
 	t.Status()
 
-	var opts []option
+	var opts []option.Option
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,7 +41,7 @@ type backgroundStepper struct {
 	// When not nil, called with the error within `.stop()`. The interceptor
 	// gets a chance to ignore the error or produce a different one (via t.Fatal).
 	onStop func(context.Context, *test, *versionUpgradeTest, error)
-	nodes  nodeListOption // nodes to monitor, defaults to c.All()
+	nodes  option.NodeListOption // nodes to monitor, defaults to c.All()
 
 	// Internal.
 	m *monitor

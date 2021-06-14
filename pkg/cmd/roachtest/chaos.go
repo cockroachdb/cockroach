@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -40,7 +41,7 @@ type Chaos struct {
 	Timer ChaosTimer
 	// Target is consulted before each chaos event to determine the node(s) which
 	// should be killed.
-	Target func() nodeListOption
+	Target func() option.NodeListOption
 	// Stopper is a channel that the chaos agent listens on. The agent will
 	// terminate cleanly once it receives on the channel.
 	Stopper <-chan time.Time
