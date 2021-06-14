@@ -266,6 +266,17 @@ func runPlanInsidePlan(
 	)
 	defer recv.Release()
 
+	// Right now curPlan.subqueryPlans are the subqueries from the "outer"
+	// plan, but it is possible that subqueries or the main query of the "inner"
+	// plan refer to the results of subqueries from the "inner" plan. We have to
+	// replace the subqueries manually in such scenario and restore the original
+	// state.
+	oldSubqueries := params.p.curPlan.subqueryPlans
+	params.p.curPlan.subqueryPlans = plan.subqueryPlans
+	defer func() {
+		params.p.curPlan.subqueryPlans = oldSubqueries
+	}()
+
 	if len(plan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
