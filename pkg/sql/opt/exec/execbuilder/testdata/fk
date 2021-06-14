@@ -487,6 +487,7 @@ vectorized: true
 │       │
 │       └── • hash join
 │           │ equality: (p) = (p)
+│           │ left cols are key
 │           │ right cols are key
 │           │
 │           ├── • except all
@@ -512,6 +513,7 @@ vectorized: true
         │
         └── • hash join
             │ equality: (p) = (p)
+            │ left cols are key
             │ right cols are key
             │
             ├── • except all
@@ -618,6 +620,7 @@ vectorized: true
         │
         └── • hash join
             │ equality: (c) = (c)
+            │ left cols are key
             │ right cols are key
             │
             ├── • except all
@@ -758,6 +761,7 @@ vectorized: true
         │
         └── • hash join
             │ equality: (c) = (c)
+            │ left cols are key
             │ right cols are key
             │
             ├── • except all
@@ -890,6 +894,7 @@ vectorized: true
         │
         └── • hash join
             │ equality: (x) = (y)
+            │ left cols are key
             │ right cols are key
             │
             ├── • except all
