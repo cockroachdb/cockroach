@@ -11,7 +11,6 @@
 package main
 
 var activeRecordBlocklists = blocklistsForVersion{
-	{"v20.1", "activeRecordBlockList20_1", activeRecordBlockList20_1, "activeRecordIgnoreList20_1", activeRecordIgnoreList20_1},
 	{"v20.2", "activeRecordBlockList20_2", activeRecordBlockList20_2, "activeRecordIgnoreList20_2", activeRecordIgnoreList20_2},
 }
 
@@ -28,26 +27,9 @@ var activeRecordBlocklists = blocklistsForVersion{
 // in the test log.
 var activeRecordBlockList20_2 = blocklist{}
 
-var activeRecordBlockList20_1 = blocklist{
-	"ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_partial_index":          "9683",
-	"ActiveRecord::Migration::CompatibilityTest#test_migration_does_remove_unnamed_index": "9683",
-	"PostgresqlActiveSchemaTest#test_add_index":                                           "9683",
-	"PostgresqlEnumTest#test_assigning_enum_to_nil":                                       "24873",
-	"PostgresqlEnumTest#test_column":                                                      "24873",
-	"PostgresqlEnumTest#test_enum_defaults":                                               "24873",
-	"PostgresqlEnumTest#test_enum_mapping":                                                "24873",
-	"PostgresqlEnumTest#test_enum_type_cast":                                              "24873",
-	"PostgresqlEnumTest#test_invalid_enum_update":                                         "24873",
-	"PostgresqlEnumTest#test_no_oid_warning":                                              "24873",
-	"PostgresqlUUIDTest#test_add_column_with_default_array":                               "55320",
-}
-
 var activeRecordIgnoreList20_2 = blocklist{
 	"ActiveRecord::WhereChainTest#test_rewhere_with_infinite_range": "flaky",
 	"FixturesTest#test_create_fixtures":                             "flaky - FK constraint violated sometimes when loading all fixture data",
 	"IgnoreFixturesTest#test_ignores_books_fixtures":                "flaky - FK constraint violated sometimes when loading all fixture data",
-}
-
-var activeRecordIgnoreList20_1 = blocklist{
-	"FixturesTest#test_create_fixtures": "flaky - FK constraint violated sometimes when loading all fixture data",
+	"IgnoreFixturesTest#test_ignores_parrots_fixtures":              "flaky - FK constraint violated sometimes when loading all fixture data",
 }
