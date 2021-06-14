@@ -1003,12 +1003,15 @@ func (s *statusServer) LogFile(
 	// Read the logs.
 	reader, err := log.GetLogReader(req.File, true /* restricted */)
 	if reader == nil || err != nil {
-		return nil, fmt.Errorf("log file %s could not be opened: %s", req.File, err)
+		return nil, errors.Newf("log file %q could not be opened: %s", req.File, err)
 	}
 	defer reader.Close()
 
 	var resp serverpb.LogEntriesResponse
-	decoder := log.NewEntryDecoder(reader, inputEditMode)
+	decoder, err := log.NewEntryDecoder(reader, inputEditMode)
+	if err != nil {
+		return nil, err
+	}
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
