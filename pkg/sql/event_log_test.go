@@ -85,7 +85,7 @@ func TestStructuredEventLogging(t *testing.T) {
 		if err := json.Unmarshal(jsonPayload, &ev); err != nil {
 			t.Errorf("unmarshalling %q: %v", e.Message, err)
 		}
-		if expected := string(redact.Sprint(setStmt)); ev.Statement != expected {
+		if expected := redact.Sprint(setStmt); ev.Statement != expected {
 			t.Errorf("wrong statement: expected %q, got %q", expected, ev.Statement)
 		}
 		if expected := []string{string(redact.Sprint("8"))}; !reflect.DeepEqual(expected, ev.PlaceholderValues) {
