@@ -65,7 +65,6 @@ import {
   TimeWindow,
   TimeScale,
 } from "src/redux/timewindow";
-
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -246,8 +245,12 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
       );
     });
 
+    // add pading to have last chart tooltip visible
+    const paddingBottom =
+      nodeIDs.length > 8 ? 90 + Math.ceil(nodeIDs.length / 3) * 10 : 50;
+
     return (
-      <div>
+      <div style={{ paddingBottom }}>
         <Helmet title={title} />
         <section className="section">
           <h1 className="base-heading">{title}</h1>
