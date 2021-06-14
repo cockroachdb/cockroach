@@ -26,7 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func runClusterInit(ctx context.Context, t *test, c clusterI) {
+func runClusterInit(ctx context.Context, t *test, c Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	addrs, err := c.InternalAddr(ctx, c.All())

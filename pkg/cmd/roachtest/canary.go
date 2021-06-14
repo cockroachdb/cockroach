@@ -84,7 +84,7 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 }
 
 func fetchCockroachVersion(
-	ctx context.Context, c clusterI, nodeIndex int, dbConnectionParams *SecureDBConnectionParams,
+	ctx context.Context, c Cluster, nodeIndex int, dbConnectionParams *SecureDBConnectionParams,
 ) (string, error) {
 	var db *gosql.DB
 	var err error
@@ -138,7 +138,7 @@ var canaryRetryOptions = retry.Options{
 
 // repeatRunE is the same function as c.RunE but with an automatic retry loop.
 func repeatRunE(
-	ctx context.Context, t *test, c clusterI, node nodeListOption, operation string, args ...string,
+	ctx context.Context, t *test, c Cluster, node nodeListOption, operation string, args ...string,
 ) error {
 	var lastError error
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
@@ -163,7 +163,7 @@ func repeatRunE(
 // repeatRunWithBuffer is the same function as c.RunWithBuffer but with an
 // automatic retry loop.
 func repeatRunWithBuffer(
-	ctx context.Context, c clusterI, t *test, node nodeListOption, operation string, args ...string,
+	ctx context.Context, c Cluster, t *test, node nodeListOption, operation string, args ...string,
 ) ([]byte, error) {
 	var (
 		lastResult []byte
@@ -191,7 +191,7 @@ func repeatRunWithBuffer(
 // repeatGitCloneE is the same function as c.GitCloneE but with an automatic
 // retry loop.
 func repeatGitCloneE(
-	ctx context.Context, t *test, c clusterI, src, dest, branch string, node nodeListOption,
+	ctx context.Context, t *test, c Cluster, src, dest, branch string, node nodeListOption,
 ) error {
 	var lastError error
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {

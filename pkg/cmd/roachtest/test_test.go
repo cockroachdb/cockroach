@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -64,12 +65,12 @@ func TestMatchOrSkip(t *testing.T) {
 	}
 }
 
-func nilLogger() *logger {
-	lcfg := loggerConfig{
-		stdout: ioutil.Discard,
-		stderr: ioutil.Discard,
+func nilLogger() *logger.Logger {
+	lcfg := logger.Config{
+		Stdout: ioutil.Discard,
+		Stderr: ioutil.Discard,
 	}
-	l, err := lcfg.newLogger("" /* path */)
+	l, err := lcfg.NewLogger("" /* path */)
 	if err != nil {
 		panic(err)
 	}
@@ -85,13 +86,13 @@ func TestRunnerRun(t *testing.T) {
 	r.Add(testSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
-		Run:     func(ctx context.Context, t *test, c clusterI) {},
+		Run:     func(ctx context.Context, t *test, c Cluster) {},
 		Cluster: makeClusterSpec(0),
 	})
 	r.Add(testSpec{
 		Name:  "fail",
 		Owner: OwnerUnitTest,
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			t.Fatal("failed")
 		},
 		Cluster: makeClusterSpec(0),
@@ -116,7 +117,7 @@ func TestRunnerRun(t *testing.T) {
 
 			lopt := loggingOpt{
 				l:            nilLogger(),
-				tee:          noTee,
+				tee:          logger.NoTee,
 				stdout:       ioutil.Discard,
 				stderr:       ioutil.Discard,
 				artifactsDir: "",
@@ -163,7 +164,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	var buf syncedBuffer
 	lopt := loggingOpt{
 		l:            nilLogger(),
-		tee:          noTee,
+		tee:          logger.NoTee,
 		stdout:       &buf,
 		stderr:       &buf,
 		artifactsDir: "",
@@ -179,7 +180,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
 		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			<-ctx.Done()
 		},
 	}
@@ -197,7 +198,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {
-	dummyRun := func(context.Context, *test, clusterI) {}
+	dummyRun := func(context.Context, *test, Cluster) {}
 
 	var listTests = func(t *testSpec) []string {
 		return []string{t.Name}
@@ -286,7 +287,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
 				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c clusterI) {
+				Run: func(ctx context.Context, t *test, c Cluster) {
 					runA = true
 				},
 			})
@@ -295,7 +296,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Cluster:    makeClusterSpec(0),
-				Run: func(ctx context.Context, t *test, c clusterI) {
+				Run: func(ctx context.Context, t *test, c Cluster) {
 					runB = true
 				},
 			})
@@ -307,7 +308,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			var buf syncedBuffer
 			lopt := loggingOpt{
 				l:            nilLogger(),
-				tee:          noTee,
+				tee:          logger.NoTee,
 				stdout:       &buf,
 				stderr:       &buf,
 				artifactsDir: "",
@@ -345,7 +346,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
 		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)
 			}
@@ -354,7 +355,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	tests := testsToRun(ctx, r, newFilter(nil))
 	lopt := loggingOpt{
 		l:            nilLogger(),
-		tee:          noTee,
+		tee:          logger.NoTee,
 		stdout:       ioutil.Discard,
 		stderr:       ioutil.Discard,
 		artifactsDir: "",

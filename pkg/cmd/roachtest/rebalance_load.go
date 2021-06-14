@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
@@ -42,7 +43,7 @@ func registerRebalanceLoad(r *testRegistry) {
 	rebalanceLoadRun := func(
 		ctx context.Context,
 		t *test,
-		c clusterI,
+		c Cluster,
 		rebalanceMode string,
 		maxDuration time.Duration,
 		concurrency int,
@@ -130,7 +131,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(4), // the last node is just used to generate load
 		MinVersion: "v2.1.0",
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			if local {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
@@ -143,7 +144,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(7), // the last node is just used to generate load
 		MinVersion: "v2.1.0",
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			if local {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
@@ -153,7 +154,7 @@ func registerRebalanceLoad(r *testRegistry) {
 	})
 }
 
-func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error) {
+func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool, error) {
 	rows, err := db.Query(
 		`select lease_holder, count(*) ` +
 			`from [show ranges from table kv.kv] ` +

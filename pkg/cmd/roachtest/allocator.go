@@ -17,12 +17,13 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 func registerAllocator(r *testRegistry) {
-	runAllocator := func(ctx context.Context, t *test, c clusterI, start int, maxStdDev float64) {
+	runAllocator := func(ctx context.Context, t *test, c Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, cockroach, "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
@@ -57,7 +58,7 @@ func registerAllocator(r *testRegistry) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer l.close()
+				defer l.Close()
 				_ = execCmd(ctx, t.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
 			}()
 		}
@@ -74,7 +75,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/up/1to3`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
@@ -82,7 +83,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
@@ -98,7 +99,7 @@ func registerAllocator(r *testRegistry) {
 
 // printRebalanceStats prints the time it took for rebalancing to finish and the
 // final standard deviation of replica counts across stores.
-func printRebalanceStats(l *logger, db *gosql.DB) error {
+func printRebalanceStats(l *logger.Logger, db *gosql.DB) error {
 	// TODO(cuongdo): Output these in a machine-friendly way and graph.
 
 	// Output time it took to rebalance.
@@ -214,7 +215,9 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
-func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev float64) error {
+func waitForRebalance(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, maxStdDev float64,
+) error {
 	// const statsInterval = 20 * time.Second
 	const statsInterval = 2 * time.Second
 	const stableSeconds = 3 * 60
@@ -250,7 +253,7 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 	}
 }
 
-func runWideReplication(ctx context.Context, t *test, c clusterI) {
+func runWideReplication(ctx context.Context, t *test, c Cluster) {
 	nodes := c.Spec().NodeCount
 	if nodes != 9 {
 		t.Fatalf("9-node cluster required")

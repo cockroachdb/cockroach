@@ -22,6 +22,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -37,13 +38,13 @@ import (
 // future.
 type HealthChecker struct {
 	t      *test
-	c      clusterI
+	c      Cluster
 	nodes  nodeListOption
 	doneCh chan struct{}
 }
 
 // NewHealthChecker returns a populated HealthChecker.
-func NewHealthChecker(t *test, c clusterI, nodes nodeListOption) *HealthChecker {
+func NewHealthChecker(t *test, c Cluster, nodes nodeListOption) *HealthChecker {
 	return &HealthChecker{
 		t:      t,
 		c:      c,
@@ -144,12 +145,12 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 // DiskUsageLogger regularly logs the disk spaced used by the nodes in the cluster.
 type DiskUsageLogger struct {
 	t      *test
-	c      clusterI
+	c      Cluster
 	doneCh chan struct{}
 }
 
 // NewDiskUsageLogger populates a DiskUsageLogger.
-func NewDiskUsageLogger(t *test, c clusterI) *DiskUsageLogger {
+func NewDiskUsageLogger(t *test, c Cluster) *DiskUsageLogger {
 	return &DiskUsageLogger{
 		t:      t,
 		c:      c,
@@ -165,11 +166,11 @@ func (dul *DiskUsageLogger) Done() {
 // Runner runs in a loop until Done() is called and prints the cluster-wide per
 // node disk usage in descending order.
 func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
-	logger, err := dul.t.l.ChildLogger("diskusage")
+	l, err := dul.t.l.ChildLogger("diskusage")
 	if err != nil {
 		return err
 	}
-	quietLogger, err := dul.t.l.ChildLogger("diskusage-exec", quietStdout, quietStderr)
+	quietLogger, err := dul.t.l.ChildLogger("diskusage-exec", logger.QuietStdout, logger.QuietStderr)
 	if err != nil {
 		return err
 	}
@@ -196,7 +197,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 			cur, err := getDiskUsageInBytes(ctx, dul.c, quietLogger, i)
 			if err != nil {
 				// This can trigger spuriously as compactions remove files out from under `du`.
-				logger.Printf("%s", errors.Wrapf(err, "node #%d", i))
+				l.Printf("%s", errors.Wrapf(err, "node #%d", i))
 				cur = -1
 			}
 			bytesUsed = append(bytesUsed, usage{
@@ -211,12 +212,12 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 			s = append(s, fmt.Sprintf("n#%d: %s", usage.nodeNum, humanizeutil.IBytes(int64(usage.bytes))))
 		}
 
-		logger.Printf("%s\n", strings.Join(s, ", "))
+		l.Printf("%s\n", strings.Join(s, ", "))
 	}
 }
 func registerRestoreNodeShutdown(r *testRegistry) {
-	makeRestoreStarter := func(ctx context.Context, t *test, c clusterI, gatewayNode int) jobStarter {
-		return func(c clusterI) (string, error) {
+	makeRestoreStarter := func(ctx context.Context, t *test, c Cluster, gatewayNode int) jobStarter {
+		return func(c Cluster) (string, error) {
 			t.l.Printf("connecting to gateway")
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
@@ -284,7 +285,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, cockroach, "./cockroach")
@@ -299,7 +300,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, cockroach, "./cockroach")
@@ -315,7 +316,7 @@ type testDataSet interface {
 	// runRestore does any setup that's required and restores the dataset into
 	// the given cluster. Any setup shouldn't take a long amount of time since
 	// perf artifacts are based on how long this takes.
-	runRestore(ctx context.Context, c clusterI)
+	runRestore(ctx context.Context, c Cluster)
 }
 
 type dataBank2TB struct{}
@@ -324,7 +325,7 @@ func (dataBank2TB) name() string {
 	return "2TB"
 }
 
-func (dataBank2TB) runRestore(ctx context.Context, c clusterI) {
+func (dataBank2TB) runRestore(ctx context.Context, c Cluster) {
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
@@ -338,7 +339,7 @@ func (tpccIncData) name() string {
 	return "TPCCInc"
 }
 
-func (tpccIncData) runRestore(ctx context.Context, c clusterI) {
+func (tpccIncData) runRestore(ctx context.Context, c Cluster) {
 	// This data set restores a 1.80TB (replicated) backup consisting of 50
 	// incremental backup layers taken every 15 minutes. 8000 warehouses
 	// were imported and then a workload of 1000 warehouses was run against
@@ -382,7 +383,7 @@ func registerRestore(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
@@ -448,7 +449,7 @@ func registerRestore(r *testRegistry) {
 // specified in m. This is particularly useful for verifying that a counter
 // metric does not exceed some threshold during a test. For example, the
 // restore and import tests verify that the range merge queue is inactive.
-func verifyMetrics(ctx context.Context, c clusterI, m map[string]float64) error {
+func verifyMetrics(ctx context.Context, c Cluster, m map[string]float64) error {
 	const sample = 10 * time.Second
 	// Query needed information over the timespan of the query.
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))

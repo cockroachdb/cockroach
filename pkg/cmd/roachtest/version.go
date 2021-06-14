@@ -24,7 +24,7 @@ import (
 // TODO(tbg): remove this test. Use the harness in versionupgrade.go
 // to make a much better one, much more easily.
 func registerVersion(r *testRegistry) {
-	runVersion := func(ctx context.Context, t *test, c clusterI, binaryVersion string) {
+	runVersion := func(ctx context.Context, t *test, c Cluster, binaryVersion string) {
 		nodes := c.Spec().NodeCount - 1
 
 		if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Range(1, nodes)); err != nil {
@@ -214,7 +214,7 @@ func registerVersion(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v2.1.0",
 			Cluster:    makeClusterSpec(n + 1),
-			Run: func(ctx context.Context, t *test, c clusterI) {
+			Run: func(ctx context.Context, t *test, c Cluster) {
 				pred, err := PredecessorVersion(r.buildVersion)
 				if err != nil {
 					t.Fatal(err)

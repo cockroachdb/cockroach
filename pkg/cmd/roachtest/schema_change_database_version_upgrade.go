@@ -34,7 +34,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v20.2.0",
 		Cluster:    makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c clusterI) {
+		Run: func(ctx context.Context, t *test, c Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -61,7 +61,7 @@ func uploadAndStart(nodes nodeListOption, v string) versionStep {
 }
 
 func runSchemaChangeDatabaseVersionUpgrade(
-	ctx context.Context, t *test, c clusterI, buildVersion version.Version,
+	ctx context.Context, t *test, c Cluster, buildVersion version.Version,
 ) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.

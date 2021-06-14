@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runEventLog(ctx context.Context, t *test, c clusterI) {
+func runEventLog(ctx context.Context, t *test, c Cluster) {
 	type nodeEventInfo struct {
 		NodeID roachpb.NodeID
 	}
