@@ -362,38 +362,57 @@ type saramaConfig struct {
 		Frequency   jsonDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
 	}
+
+	Version string `json:",omitempty"`
 }
 
 // Configure configures provided kafka configuration struct based
 // on this config.
-func (c *saramaConfig) Apply(kafka *sarama.Config) {
+func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	kafka.Producer.Flush.Bytes = c.Flush.Bytes
 	kafka.Producer.Flush.Messages = c.Flush.Messages
 	kafka.Producer.Flush.Frequency = time.Duration(c.Flush.Frequency)
 	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
+	if c.Version != "" {
+		parsedVersion, err := sarama.ParseKafkaVersion(c.Version)
+		if err != nil {
+			return err
+		}
+		kafka.Version = parsedVersion
+	}
+	return nil
 }
 
-var defaultSaramaConfig = func() *saramaConfig {
+func (c saramaConfig) Validate() error {
+	// If Flush.Bytes > 0 or Flush.Messages > 1 without
+	// Flush.Frequency, sarama may wait forever to flush the
+	// messages to Kafka.  We want to guard against such
+	// configurations to ensure that we don't get into a situation
+	// where our call to Flush() would block forever.
+	if (c.Flush.Bytes > 0 || c.Flush.Messages > 1) && c.Flush.Frequency == 0 {
+		return errors.New("Flush.Frequency must be > 0 when Flush.Bytes > 0 or Flush.Messages > 1")
+	}
+	return nil
+}
+
+func defaultSaramaConfig() *saramaConfig {
 	config := &saramaConfig{}
 
-	// When we emit messages to sarama, they're placed in a queue (as does any
-	// reasonable kafka producer client). When our sink's Flush is called, we
-	// have to wait for all buffered and inflight requests to be sent and then
-	// acknowledged. Quite unfortunately, we have no way to hint to the producer
-	// that it should immediately send out whatever is buffered. This
-	// configuration can have a dramatic impact on how quickly this happens
-	// naturally (and some configurations will block forever!).
+	// When we emit messages to sarama, they're placed in a queue
+	// (as does any reasonable kafka producer client). When our
+	// sink's Flush is called, we have to wait for all buffered
+	// and inflight requests to be sent and then
+	// acknowledged. Quite unfortunately, we have no way to hint
+	// to the producer that it should immediately send out
+	// whatever is buffered. This configuration can have a
+	// dramatic impact on how quickly this happens naturally (and
+	// some configurations will block forever!).
 	//
-	// We can configure the producer to send out its batches based on number of
-	// messages and/or total buffered message size and/or time. If none of them
-	// are set, it uses some defaults, but if any of the three are set, it does
-	// no defaulting. Which means that if `Flush.Messages` is set to 10 and
-	// nothing else is set, then 9/10 times `Flush` will block forever. We can
-	// work around this by also setting `Flush.Frequency` but a cleaner way is
-	// to set `Flush.Messages` to 1. In the steady state, this sends a request
-	// with some messages, buffers any messages that come in while it is in
-	// flight, then sends those out.
-	config.Flush.Messages = 1
+	// The default configuration of all 0 values will send
+	// messages as quickly as possible.
+	config.Flush.Messages = 0
+	config.Flush.Frequency = jsonDuration(0)
+	config.Flush.Bytes = 0
 
 	// This works around what seems to be a bug in sarama where it isn't
 	// computing the right value to compare against `Producer.MaxMessageBytes`
@@ -407,19 +426,14 @@ var defaultSaramaConfig = func() *saramaConfig {
 	// to test this one more before changing it.
 	config.Flush.MaxMessages = 1000
 
-	// config.Producer.Flush.Messages is set to 1 so we don't need this, but
-	// sarama prints scary things to the logs if we don't.
-	config.Flush.Frequency = jsonDuration(time.Hour)
-
 	return config
-}()
+}
 
 func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
+	config = defaultSaramaConfig()
 	if configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]; haveOverride {
 		config = &saramaConfig{}
 		err = json.Unmarshal([]byte(configStr), config)
-	} else {
-		config = defaultSaramaConfig
 	}
 	return
 }
@@ -503,7 +517,14 @@ func makeKafkaSink(
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse sarama config; check changefeed.experimental_kafka_config setting")
 	}
-	saramaCfg.Apply(config)
+
+	if err := saramaCfg.Validate(); err != nil {
+		return nil, errors.Wrap(err, "invalid sarama configuration")
+	}
+
+	if err := saramaCfg.Apply(config); err != nil {
+		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
+	}
 
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
