@@ -44,6 +44,9 @@ func TestEventJSON(t *testing.T) {
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "$ inte‹rnal"}}, `"ApplicationName":"$ inte?rnal"`},
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "myapp"}}, `"ApplicationName":"‹myapp›"`},
 
+		// Check that redactable strings get their redaction markers preserved.
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{Statement: "CREATE DATABASE ‹foo›"}}, `"Statement":"CREATE DATABASE ‹foo›"`},
+
 		// Integer and boolean fields are not redactable in any case.
 		{&UnsafeDeleteDescriptor{ParentID: 123, Force: true}, `"ParentID":123,"Force":true`},
 	}
