@@ -37,9 +37,13 @@ const (
 type encodeRow struct {
 	// datums is the new value of a changed table row.
 	datums rowenc.EncDatumRow
-	// updated is the mvcc timestamp corresponding to the latest update in
-	// `datums`.
+	// updated is the mvcc timestamp corresponding to the latest
+	// update in `datums` or, if the row is part of a backfill,
+	// the time at which the backfill was started.
 	updated hlc.Timestamp
+	// mvccTimestamp is the mvcc timestamp corresponding to the
+	// latest update in `datums`.
+	mvccTimestamp hlc.Timestamp
 	// deleted is true if row is a deletion. In this case, only the primary
 	// key columns are guaranteed to be set in `datums`.
 	deleted bool
@@ -95,7 +99,7 @@ func getEncoder(
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, beforeField, wrapped, keyOnly, keyInValue bool
+	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue bool
 
 	alloc rowenc.DatumAlloc
 	buf   bytes.Buffer
@@ -109,6 +113,7 @@ func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
 		wrapped: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
 	}
 	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
+	_, e.mvccTimestampField = opts[changefeedbase.OptMVCCTimestamps]
 	_, e.beforeField = opts[changefeedbase.OptDiff]
 	if e.beforeField && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
@@ -226,7 +231,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 		jsonEntries = after
 	}
 
-	if e.updatedField {
+	if e.updatedField || e.mvccTimestampField {
 		var meta map[string]interface{}
 		if e.wrapped {
 			meta = jsonEntries
@@ -234,7 +239,12 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 			meta = make(map[string]interface{}, 1)
 			jsonEntries[jsonMetaSentinel] = meta
 		}
-		meta[`updated`] = row.updated.AsOfSystemTime()
+		if e.updatedField {
+			meta[`updated`] = row.updated.AsOfSystemTime()
+		}
+		if e.mvccTimestampField {
+			meta[`mvcc_timestamp`] = row.mvccTimestamp.AsOfSystemTime()
+		}
 	}
 
 	j, err := json.MakeJSON(jsonEntries)

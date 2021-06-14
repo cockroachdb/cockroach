@@ -691,6 +691,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 	var r encodeRow
 	schemaTimestamp := event.KV().Value.Timestamp
 	prevSchemaTimestamp := schemaTimestamp
+	mvccTimestamp := event.MVCCTimestamp()
 
 	if backfillTs := event.BackfillTimestamp(); !backfillTs.IsEmpty() {
 		schemaTimestamp = backfillTs
@@ -734,6 +735,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 	r.datums = append(rowenc.EncDatumRow(nil), r.datums...)
 	r.deleted = rf.RowIsDeleted()
 	r.updated = schemaTimestamp
+	r.mvccTimestamp = mvccTimestamp
 
 	// Assert that we don't get a second row from the row.Fetcher. We
 	// fed it a single KV, so that would be surprising.
