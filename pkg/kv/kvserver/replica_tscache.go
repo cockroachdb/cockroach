@@ -586,10 +586,12 @@ func collectReadSummaryFromTimestampCache(
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 	)
+	userKeys := desc.KeySpan()
 	s.Global.LowWater, _ = tc.GetMax(
-		desc.StartKey.AsRawKey(),
-		desc.EndKey.AsRawKey(),
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
 	)
+
 	return s
 }
 
@@ -606,9 +608,10 @@ func applyReadSummaryToTimestampCache(
 		s.Local.LowWater,
 		uuid.Nil, /* txnID */
 	)
+	userKeys := desc.KeySpan()
 	tc.Add(
-		desc.StartKey.AsRawKey(),
-		desc.EndKey.AsRawKey(),
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
 		s.Global.LowWater,
 		uuid.Nil, /* txnID */
 	)
