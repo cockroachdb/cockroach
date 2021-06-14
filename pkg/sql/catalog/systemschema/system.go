@@ -419,7 +419,7 @@ var (
 	// code assumes that it only has KV entries for column family 4, not the
 	// "sentinel" column family 0 which would be written by SQL.
 	NamespaceTable = makeTable(descpb.TableDescriptor{
-		Name:                    "namespace",
+		Name:                    catconstants.NamespaceTableName,
 		ID:                      keys.NamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,

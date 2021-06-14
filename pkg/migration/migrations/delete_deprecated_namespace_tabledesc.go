@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -35,7 +37,9 @@ func deleteDeprecatedNamespaceTableDescriptorMigration(
 	namespace2NameKey := catalogkeys.MakePublicObjectNameKey(d.Codec, keys.SystemDatabaseID, `namespace2`)
 
 	log.Info(ctx, "removing references to deprecated system.namespace table descriptor")
-	return d.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
 		err := txn.Iterate(
 			ctx,
 			deprecatedTablePrefix,
@@ -53,6 +57,18 @@ func deleteDeprecatedNamespaceTableDescriptorMigration(
 		b.Del(deprecatedTableDescKey)
 		b.Del(namespace2NameKey)
 		b.Put(namespaceNameKey, descpb.ID(keys.NamespaceTableID))
+		nsTable, err := descriptors.GetMutableTableByID(
+			ctx, txn, keys.NamespaceTableID, tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		if nsTable.GetPostDeserializationChanges().UpgradedNamespaceName {
+			const kvTrace = false
+			if err := descriptors.WriteDescToBatch(ctx, kvTrace, nsTable, b); err != nil {
+				return err
+			}
+		}
 		return txn.Run(ctx, b)
 	})
 }
