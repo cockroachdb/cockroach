@@ -1520,12 +1520,11 @@ SELECT k FROM
   (SELECT i FROM a))
 WHERE k < 10 AND k > 1
 ----
-except
+except-all
  ├── columns: k:1!null
  ├── left columns: b.k:1!null
  ├── right columns: a.i:9
  ├── cardinality: [0 - 8]
- ├── key: (1)
  ├── select
  │    ├── columns: b.k:1!null
  │    ├── cardinality: [0 - 8]
@@ -1577,12 +1576,11 @@ SELECT k FROM
   (SELECT i FROM a))
 WHERE k < 10 AND k > 1
 ----
-intersect
+intersect-all
  ├── columns: k:1!null
  ├── left columns: b.k:1!null
  ├── right columns: a.i:9
  ├── cardinality: [0 - 8]
- ├── key: (1)
  ├── select
  │    ├── columns: b.k:1!null
  │    ├── cardinality: [0 - 8]
@@ -1867,13 +1865,12 @@ SELECT * FROM ((values (1,2))
   EXCEPT (values (0,1)))
 WHERE 1 / column1 > 0
 ----
-except
+except-all
  ├── columns: column1:1!null column2:2!null
  ├── left columns: column1:1!null column2:2!null
  ├── right columns: column1:3 column2:4
  ├── cardinality: [0 - 1]
  ├── immutable
- ├── key: (1,2)
  ├── values
  │    ├── columns: column1:1!null column2:2!null
  │    ├── cardinality: [1 - 1]
@@ -1903,13 +1900,11 @@ select
  ├── columns: column1:1!null
  ├── cardinality: [0 - 1]
  ├── immutable
- ├── key: (1)
- ├── except
+ ├── except-all
  │    ├── columns: column1:1!null
  │    ├── left columns: column1:1!null
  │    ├── right columns: column1:2
  │    ├── cardinality: [0 - 1]
- │    ├── key: (1)
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    ├── cardinality: [1 - 1]
@@ -1929,12 +1924,11 @@ select
 norm expect=PushFilterIntoSetOp
 SELECT * FROM ((VALUES (1.0::DECIMAL)) EXCEPT (VALUES (1.00::DECIMAL))) WHERE column1 > 0;
 ----
-except
+except-all
  ├── columns: column1:1!null
  ├── left columns: column1:1!null
  ├── right columns: column1:2
  ├── cardinality: [0 - 1]
- ├── key: (1)
  ├── values
  │    ├── columns: column1:1!null
  │    ├── cardinality: [1 - 1]

@@ -126,7 +126,7 @@ vectorized: true
 
 query T
 EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
-UNION ALL ((SELECT '', '', 'x') EXCEPT (VALUES ('', '', 'x')))
+UNION ALL ((SELECT * FROM (VALUES ('', '', 'x'), ('', '', 'x'))) EXCEPT (VALUES ('', '', 'x')))
 ----
 distribution: full
 vectorized: true
@@ -134,22 +134,23 @@ vectorized: true
 • render
 │ columns: ("?column?", "?column?", "?column?")
 │ estimated row count: 1
-│ render ?column?: "?column?"
-│ render ?column?: "?column?"
-│ render ?column?: "?column?"
+│ render ?column?: column1
+│ render ?column?: column2
+│ render ?column?: column3
 │
 └── • except
-    │ columns: ("?column?", "?column?", "?column?")
+    │ columns: (column1, column2, column3)
     │ estimated row count: 1
     │
-    ├── • project
-    │   │ columns: ("?column?", "?column?", "?column?")
-    │   │
-    │   └── • values
-    │         columns: ("?column?", "?column?")
-    │         size: 2 columns, 1 row
-    │         row 0, expr 0: ''
-    │         row 0, expr 1: 'x'
+    ├── • values
+    │     columns: (column1, column2, column3)
+    │     size: 3 columns, 2 rows
+    │     row 0, expr 0: ''
+    │     row 0, expr 1: ''
+    │     row 0, expr 2: 'x'
+    │     row 1, expr 0: ''
+    │     row 1, expr 1: ''
+    │     row 1, expr 2: 'x'
     │
     └── • values
           columns: (column1, column2, column3)

@@ -487,10 +487,9 @@ vectorized: true
 │       │
 │       └── • hash join
 │           │ equality: (p) = (p)
-│           │ left cols are key
 │           │ right cols are key
 │           │
-│           ├── • except
+│           ├── • except all
 │           │   │
 │           │   ├── • scan buffer
 │           │   │     label: buffer 1
@@ -513,10 +512,9 @@ vectorized: true
         │
         └── • hash join
             │ equality: (p) = (p)
-            │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -564,7 +562,7 @@ vectorized: true
 │           │ table: child@child_p_idx
 │           │ equality: (p) = (p)
 │           │
-│           └── • except
+│           └── • except all
 │               │
 │               ├── • scan buffer
 │               │     label: buffer 1
@@ -580,7 +578,7 @@ vectorized: true
             │ table: child_nullable@child_nullable_p_idx
             │ equality: (p) = (p)
             │
-            └── • except
+            └── • except all
                 │
                 ├── • scan buffer
                 │     label: buffer 1
@@ -620,10 +618,9 @@ vectorized: true
         │
         └── • hash join
             │ equality: (c) = (c)
-            │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -761,10 +758,9 @@ vectorized: true
         │
         └── • hash join
             │ equality: (c) = (c)
-            │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -894,10 +890,9 @@ vectorized: true
         │
         └── • hash join
             │ equality: (x) = (y)
-            │ left cols are key
             │ right cols are key
             │
-            ├── • except
+            ├── • except all
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -1543,7 +1538,7 @@ vectorized: true
             │ table: partial_child@partial_idx (partial index)
             │ equality: (id) = (parent_id)
             │
-            └── • except
+            └── • except all
                 │
                 ├── • scan buffer
                 │     label: buffer 1
