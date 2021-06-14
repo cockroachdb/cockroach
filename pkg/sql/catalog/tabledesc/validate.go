@@ -883,22 +883,21 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		return ErrMissingPrimaryKey
 	}
 
-	var virtualCols catalog.TableColSet
-	for i := range desc.Columns {
-		if desc.Columns[i].Virtual {
-			virtualCols.Add(desc.Columns[i].ID)
-		}
+	columnsByID := make(map[descpb.ColumnID]catalog.Column)
+	for _, col := range desc.DeletableColumns() {
+		columnsByID[col.GetID()] = col
 	}
 
 	// Verify that the primary index columns are not virtual.
-	for i, col := range desc.PrimaryIndex.KeyColumnIDs {
-		if virtualCols.Contains(col) {
-			return fmt.Errorf("primary index column %q cannot be virtual", desc.PrimaryIndex.KeyColumnNames[i])
+	for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
+		if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
+			return fmt.Errorf("primary index column %q cannot be virtual", col.GetName())
 		}
 	}
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
+	indexCoverage := catalog.TableColSet{}
 	for _, idx := range desc.NonDropIndexes() {
 		if err := catalog.ValidateName(idx.GetName(), "index"); err != nil {
 			return err
@@ -960,6 +959,7 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
 					idx.GetName(), name, colID, idx.IndexDesc().KeyColumnIDs[i])
 			}
+			indexCoverage.Add(colID)
 			if validateIndexDup.Contains(colID) {
 				return fmt.Errorf("index %q contains duplicate column %q", idx.GetName(), name)
 			}
@@ -989,13 +989,15 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 		}
 		// Ensure that indexes do not STORE virtual columns.
-		for _, col := range idx.IndexDesc().KeySuffixColumnIDs {
-			if virtualCols.Contains(col) {
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			indexCoverage.Add(colID)
+			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
 				return fmt.Errorf("index %q cannot store virtual column %d", idx.GetName(), col)
 			}
 		}
-		for i, col := range idx.IndexDesc().StoreColumnIDs {
-			if virtualCols.Contains(col) {
+		for i, colID := range idx.IndexDesc().StoreColumnIDs {
+			indexCoverage.Add(colID)
+			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
 				return fmt.Errorf("index %q cannot store virtual column %q",
 					idx.GetName(), idx.IndexDesc().StoreColumnNames[i])
 			}
@@ -1044,36 +1046,16 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 					idx.GetName(), colID, foundIn)
 			}
 		}
-		// Check presence of all deletable column IDs in primary index.
-		if idx.Primary() {
-			primaryIDs := idx.CollectKeyColumnIDs()
-			primaryIDs.UnionWith(idx.CollectPrimaryStoredColumnIDs())
-			expectedIDs := catalog.TableColSet{}
-			var names []string
-			for _, col := range desc.DeletableColumns() {
-				if col.IsVirtual() {
-					continue
-				}
-				expectedIDs.Add(col.GetID())
-				if !primaryIDs.Contains(col.GetID()) {
-					names = append(names, col.GetName())
-				}
-			}
-			if names != nil {
-				return errors.AssertionFailedf("primary index %q is missing deletable non-virtual non-pk columns: %v",
-					idx.GetName(), names)
-			}
-			for i := 0; i < idx.NumPrimaryStoredColumns(); i++ {
-				id := idx.GetStoredColumnID(i)
-				name := idx.GetStoredColumnName(i)
-				if !expectedIDs.Contains(id) {
-					names = append(names, name)
-				}
-			}
-			if names != nil {
-				return errors.AssertionFailedf("primary index %q has invalid stored column references: %v",
-					idx.GetName(), names)
-			}
+	}
+
+	// Check that each of the table's deletable non-virtual columns can be found
+	// in at least one of the table's non-drop indexes.
+	for colID, col := range columnsByID {
+		if col.IsVirtual() {
+			continue
+		}
+		if !indexCoverage.Contains(colID) {
+			return errors.AssertionFailedf("deletable non-virtual column %q is not present in any index", col.GetName())
 		}
 	}
 	return nil
