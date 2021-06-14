@@ -1008,7 +1008,14 @@ func (s *statusServer) LogFile(
 	defer reader.Close()
 
 	var resp serverpb.LogEntriesResponse
-	decoder := log.NewEntryDecoder(reader, inputEditMode)
+	data, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	decoder, err := log.NewEntryDecoder(data, inputEditMode)
+	if err != nil {
+		return nil, err
+	}
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
