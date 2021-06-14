@@ -80,7 +80,7 @@ func nilLogger() *logger.Logger {
 
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
-	r, err := makeTestRegistry(spec.GCE)
+	r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Name:    `timeout`,
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
-		Cluster: makeClusterSpec(spec.GCE, 0),
+		Cluster: makeClusterSpec(spec.GCE, "", 0),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			<-ctx.Done()
 		},
@@ -215,7 +215,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:    "a",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
-				Cluster: makeClusterSpec(spec.GCE, 0),
+				Cluster: makeClusterSpec(spec.GCE, "", 0),
 			},
 			"",
 			[]string{"a"},
@@ -226,7 +226,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Run:        dummyRun,
-				Cluster:    makeClusterSpec(spec.GCE, 0),
+				Cluster:    makeClusterSpec(spec.GCE, "", 0),
 			},
 			"",
 			[]string{"a"},
@@ -237,7 +237,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "foo",
 				Run:        dummyRun,
-				Cluster:    makeClusterSpec(spec.GCE, 0),
+				Cluster:    makeClusterSpec(spec.GCE, "", 0),
 			},
 			"a: unable to parse min-version: invalid version string 'foo'",
 			nil,
@@ -245,7 +245,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r, err := makeTestRegistry(spec.GCE)
+			r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -279,7 +279,7 @@ func TestRegistryMinVersion(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.buildVersion, func(t *testing.T) {
 			var runA, runB bool
-			r, err := makeTestRegistry(spec.GCE)
+			r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -287,7 +287,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Name:       "a",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
-				Cluster:    makeClusterSpec(spec.GCE, 0),
+				Cluster:    makeClusterSpec(spec.GCE, "", 0),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runA = true
 				},
@@ -296,7 +296,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Name:       "b",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
-				Cluster:    makeClusterSpec(spec.GCE, 0),
+				Cluster:    makeClusterSpec(spec.GCE, "", 0),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runB = true
 				},
@@ -341,12 +341,12 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	t.Helper()
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, version.Version{})
-	r, err := makeTestRegistry(spec.GCE)
+	r, err := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
 	require.NoError(t, err)
 	r.Add(testSpec{
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
-		Cluster: makeClusterSpec(spec.GCE, 0),
+		Cluster: makeClusterSpec(spec.GCE, "", 0),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)

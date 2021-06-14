@@ -23,20 +23,24 @@ import (
 // clusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type clusterSpec struct {
-	Cloud     string
-	NodeCount int
+	Cloud        string
+	InstanceType string // auto-chosen if left empty
+	NodeCount    int
 	// CPUs is the number of CPUs per node.
-	CPUs        int
-	SSDs        int
-	VolumeSize  int
-	Zones       string
-	Geo         bool
-	Lifetime    time.Duration
-	ReusePolicy clusterReusePolicy
+	CPUs           int
+	SSDs           int
+	VolumeSize     int
+	PreferLocalSSD bool
+	Zones          string
+	Geo            bool
+	Lifetime       time.Duration
+	ReusePolicy    clusterReusePolicy
 }
 
-func makeClusterSpec(cloud string, nodeCount int, opts ...createOption) clusterSpec {
-	spec := clusterSpec{Cloud: cloud, NodeCount: nodeCount}
+func makeClusterSpec(
+	cloud string, instanceType string, nodeCount int, opts ...createOption,
+) clusterSpec {
+	spec := clusterSpec{Cloud: cloud, InstanceType: instanceType, NodeCount: nodeCount}
 	defaultOpts := []createOption{cpu(4), nodeLifetimeOption(12 * time.Hour), reuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o.apply(&spec)
@@ -76,7 +80,7 @@ func (s *clusterSpec) args(extra ...string) []string {
 
 	if s.Cloud != spec.Local && s.CPUs != 0 {
 		// Use the machine type specified as a CLI flag.
-		machineType := instanceType
+		machineType := s.InstanceType
 		if len(machineType) == 0 {
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
@@ -89,15 +93,42 @@ func (s *clusterSpec) args(extra ...string) []string {
 				machineType = azureMachineType(s.CPUs)
 			}
 		}
+
+		var isAWSSSD bool // true if we're on AWS and local SSD is requested
 		if s.Cloud == spec.AWS {
-			if isSSD(machineType) {
+			typeAndSize := strings.Split(machineType, ".")
+			if len(typeAndSize) == 2 {
+				awsType := typeAndSize[0]
+				// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
+				isAWSSSD = strings.HasPrefix(awsType, "i3") || strings.HasSuffix(awsType, "d")
+			}
+		}
+
+		if s.Cloud == spec.AWS {
+			if s.PreferLocalSSD && isAWSSSD {
 				args = append(args, "--local-ssd=true")
 			} else {
 				args = append(args, "--local-ssd=false")
 			}
 		}
-		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
-		args = append(args, machineTypeArg)
+
+		var arg string
+		switch s.Cloud {
+		case spec.AWS:
+			if isAWSSSD {
+				arg = "--aws-machine-type-ssd"
+			} else {
+				arg = "--aws-machine-type"
+			}
+		case spec.GCE:
+			arg = "--gce-machine-type"
+		case spec.Azure:
+			arg = "--azure-machine-type"
+		default:
+			panic(fmt.Sprintf("unsupported cloud: %s\n", s.Cloud))
+		}
+
+		args = append(args, arg+"="+machineType)
 	}
 
 	if s.Cloud != spec.Local && s.VolumeSize != 0 {
