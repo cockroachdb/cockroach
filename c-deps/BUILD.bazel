@@ -2,50 +2,60 @@
 load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
 load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 
-# TODO(irfansharif): All the cmake cache entries below were cargo-culted from
-# the Makefile. We may need to programatically set them depending on the
-# machine bazel is being run on. For now the only tested variant are Macbooks.
-
 # Define the build target for libjemalloc.
 configure_make(
     name = "libjemalloc",
     autoconf = True,
-    configure_env_vars = {
-        "AR": "",
-    },
     configure_in_place = True,
     configure_options = [
         "--enable-prof",
-    ],
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
+        "//conditions:default": [],
+    }),
     lib_source = "@jemalloc//:all",
     make_commands = [
         "make build_lib_static",
         "mkdir -p libjemalloc/lib",
-        "cp lib/libjemalloc.a libjemalloc/lib",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": ["cp lib/jemalloc.lib libjemalloc/lib"],
+        "//conditions:default": ["cp lib/libjemalloc.a libjemalloc/lib"],
+    }) + [
         "cp -r include libjemalloc",
     ],
-    out_static_libs = ["libjemalloc.a"],
+    out_static_libs = select({
+        "@io_bazel_rules_go//go/platform:windows": ["jemalloc.lib"],
+        "//conditions:default": ["libjemalloc.a"],
+    }),
     visibility = ["//visibility:public"],
 )
 
 # Define the build target for libproj.
 cmake(
     name = "libproj",
-    cache_entries = {
-        "CMAKE_BUILD_TYPE": "Release",
-        "BUILD_LIBPROJ_SHARED": "OFF",
-    },
+    cache_entries = select({
+        # TODO(ricky): The repetition here is dumb, but I don't know a cleaner
+        # way to do it?
+        # https://github.com/bazelbuild/bazel/issues/12457 would help.
+        "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "//conditions:default": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+        },
+    }),
     # As of this writing (2021-05-05), foreign_cc
     # only knows about windows, darwin and linux.
-    cmake_options = select({
-        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
-        "//conditions:default": ["-GUnix Makefiles"],
-    }),
+    cmake_options = ["-GUnix Makefiles"],
     lib_source = "@proj//:all",
     out_static_libs = ["libproj.a"],
     visibility = ["//visibility:public"],
 )
 
+# TODO(ricky): Still broken on Windows.
 # Define the targets for libgeos.
 cmake(
     name = "libgeos",
@@ -104,16 +114,20 @@ cmake(
 # in a certain path, so we fix it all up accordingly within make_commands.
 cmake(
     name = "libroach",
-    cache_entries = {
-        "CMAKE_TARGET_MESSAGES": "OFF",
-        "CMAKE_BUILD_TYPE": "Release",
-    },
+    cache_entries = select({
+        "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "//conditions:default": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+        },
+    }),
     # As of this writing (2021-05-05), foreign_cc
     # only knows about windows, darwin and linux.
-    cmake_options = select({
-        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
-        "//conditions:default": ["-GUnix Makefiles"],
-    }),
+    cmake_options = ["-GUnix Makefiles"],
     lib_source = "@libroach//:all",
     make_commands = [
         "make roach",

@@ -1,7 +1,22 @@
-# TODO(irfansharif): We should fold this into `dev` instead (#56965).
-
 build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off
 test --symlink_prefix=_bazel/ --define gotags=bazel,crdb_test
 query --ui_event_filters=-DEBUG
 
 try-import %workspace%/.bazelrc.user
+
+# CI should always run with `--config=ci`.
+build:ci --stamp --workspace_status_command=$(pwd)/build-rev.sh
+build:ci --host_crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
+# Set `-test.v` in Go tests.
+# Ref: https://github.com/bazelbuild/rules_go/pull/2456
+test:ci --test_env=GO_TEST_WRAP_TESTV=1
+# Dump all output for failed tests to the build log.
+test:ci --test_output=errors
+
+# cross-compilation configurations. Add e.g. --config=crosslinux to turn these on
+# TODO(ricky): Having to specify both the `platform` and the `crosstool_top` is
+# weird, but I think `rules_foreign_cc` doesn't play too nicely with `--platforms`?
+build:crosslinux --platforms=//build/toolchains:cross_linux
+build:crosslinux --crosstool_top=@toolchain_cross_x86_64-unknown-linux-gnu//:suite
+build:crosswindows --platforms=//build/toolchains:cross_windows
+build:crosswindows --crosstool_top=@toolchain_cross_x86_64-w64-mingw32//:suite
