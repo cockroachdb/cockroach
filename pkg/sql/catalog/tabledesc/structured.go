@@ -1086,6 +1086,7 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		// Only override the index name if it hasn't been set by the user.
 		idx.Name = PrimaryKeyIndexName
 	}
+	idx.EncodingType = descpb.PrimaryIndexEncoding
 	// Populate store columns.
 	names := make(map[string]struct{})
 	for _, name := range idx.KeyColumnNames {
