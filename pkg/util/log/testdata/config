@@ -4,8 +4,7 @@ yaml
 sinks:
   file-groups:
     default:
-      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
-        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
+      channels: all
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -36,8 +35,7 @@ sinks:
 sinks:
   file-groups:
     default:
-      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
-        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
+      channels: all
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
