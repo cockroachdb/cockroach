@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -149,18 +150,27 @@ func indentText(input string, tab string) string {
 
 // marshalDeps marshals dependencies in scplan.Plan to a string.
 func marshalDeps(t *testing.T, plan *scplan.Plan) string {
-	var stages strings.Builder
+	var sortedDeps []string
 	err := plan.Graph.ForEachNode(func(n *scpb.Node) error {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			toAttr := de.To().Element().GetAttributes()
 			fromAttr := de.From().Element().GetAttributes()
-			fmt.Fprintf(&stages, "- from: [%s, %s]\n", fromAttr, de.From().State)
-			fmt.Fprintf(&stages, "  to:   [%s, %s]\n", toAttr, de.To().State)
+			var deps strings.Builder
+			fmt.Fprintf(&deps, "- from: [%s, %s]\n", fromAttr, de.From().State)
+			fmt.Fprintf(&deps, "  to:   [%s, %s]\n", toAttr, de.To().State)
+			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})
 	})
 	if err != nil {
 		panic(errors.Wrap(err, "failed marshaling dependencies."))
+	}
+	// Lexicographically sort the dependencies,
+	// since the order is not fully deterministic.
+	sort.Strings(sortedDeps)
+	var stages strings.Builder
+	for _, dep := range sortedDeps {
+		fmt.Fprintf(&stages, "%s", dep)
 	}
 	return stages.String()
 }

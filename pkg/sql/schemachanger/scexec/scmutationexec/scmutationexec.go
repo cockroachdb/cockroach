@@ -168,7 +168,7 @@ func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) er
 		return err
 	}
 	if !refDescs.Contains(op.TypeID) {
-		errors.AssertionFailedf("Back reference for type %d is missing inside descriptor %d.",
+		return errors.AssertionFailedf("Back reference for type %d is missing inside descriptor %d.",
 			op.TypeID, op.DescID)
 	}
 	return nil

@@ -15,6 +15,10 @@ create-sequence
 CREATE SEQUENCE defaultdb.SQ2;
 ----
 
+create-type
+CREATE TYPE defaultdb.typ AS ENUM('a')
+----
+
 create-table
 CREATE TABLE defaultdb.shipments (
     tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -22,6 +26,7 @@ CREATE TABLE defaultdb.shipments (
     status STRING,
     customer_id INT,
     randcol INT DEFAULT nextval('defaultdb.sq2'),
+    val defaultdb.TYP AS ('a'::defaultdb.typ) STORED,
     CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES customers(id),
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES orders(customer)
   );
@@ -38,24 +43,24 @@ CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
 build
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-- DROP View:{DescID: 57}
+- DROP View:{DescID: 59}
   state: PUBLIC
   details:
     dependedOnBy: []
     dependsOn:
-    - 55
-    tableId: 57
-- DROP OutboundForeignKey:{DescID: 55, DepID: 52, ElementName: "fk_customers"}
+    - 57
+    tableId: 59
+- DROP OutboundForeignKey:{DescID: 57, DepID: 52, ElementName: "fk_customers"}
   state: PUBLIC
   details:
     name: fk_customers
     originColumns:
     - 4
-    originId: 55
+    originId: 57
     referenceColumns:
     - 1
     referenceId: 52
-- DROP InboundForeignKey:{DescID: 52, DepID: 55, ElementName: "fk_customers"}
+- DROP InboundForeignKey:{DescID: 52, DepID: 57, ElementName: "fk_customers"}
   state: PUBLIC
   details:
     name: fk_customers
@@ -64,18 +69,18 @@ DROP TABLE defaultdb.shipments CASCADE;
     originId: 52
     referenceColumns:
     - 4
-    referenceId: 55
-- DROP OutboundForeignKey:{DescID: 55, DepID: 53, ElementName: "fk_orders"}
+    referenceId: 57
+- DROP OutboundForeignKey:{DescID: 57, DepID: 53, ElementName: "fk_orders"}
   state: PUBLIC
   details:
     name: fk_orders
     originColumns:
     - 4
-    originId: 55
+    originId: 57
     referenceColumns:
     - 2
     referenceId: 53
-- DROP InboundForeignKey:{DescID: 53, DepID: 55, ElementName: "fk_orders"}
+- DROP InboundForeignKey:{DescID: 53, DepID: 57, ElementName: "fk_orders"}
   state: PUBLIC
   details:
     name: fk_orders
@@ -84,30 +89,66 @@ DROP TABLE defaultdb.shipments CASCADE;
     originId: 53
     referenceColumns:
     - 4
-    referenceId: 55
-- DROP Sequence:{DescID: 56}
+    referenceId: 57
+- DROP DefaultExpression:{DescID: 57, ColumnID: 1}
   state: PUBLIC
   details:
-    sequenceId: 56
-- DROP SequenceOwnedBy:{DescID: 56, DepID: 55}
+    columnId: 1
+    defaultExpr: gen_random_uuid()
+    tableId: 57
+- DROP Sequence:{DescID: 58}
   state: PUBLIC
   details:
-    ownerTableId: 55
-    sequenceId: 56
-- DROP DefaultExpression:{DescID: 55, ColumnID: 5}
+    sequenceId: 58
+- DROP SequenceOwnedBy:{DescID: 58, DepID: 57}
+  state: PUBLIC
+  details:
+    ownerTableId: 57
+    sequenceId: 58
+- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 57
+- DROP DefaultExpression:{DescID: 57, ColumnID: 3}
+  state: PUBLIC
+  details:
+    columnId: 3
+    tableId: 57
+- DROP DefaultExpression:{DescID: 57, ColumnID: 4}
+  state: PUBLIC
+  details:
+    columnId: 4
+    tableId: 57
+- DROP DefaultExpression:{DescID: 57, ColumnID: 5}
   state: PUBLIC
   details:
     columnId: 5
     defaultExpr: nextval(54:::REGCLASS)
-    tableId: 55
+    tableId: 57
     usesSequenceIDs:
     - 54
-- DROP RelationDependedOnBy:{DescID: 54, DepID: 55}
+- DROP RelationDependedOnBy:{DescID: 54, DepID: 57}
   state: PUBLIC
   details:
-    dependedOn: 55
+    dependedOn: 57
     tableId: 54
-- DROP Table:{DescID: 55}
+- DROP DefaultExpression:{DescID: 57, ColumnID: 6}
   state: PUBLIC
   details:
-    tableId: 55
+    columnId: 6
+    tableId: 57
+- DROP TypeReference:{DescID: 55, DepID: 57}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+    typeId: 55
+- DROP TypeReference:{DescID: 56, DepID: 57}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+    typeId: 56
+- DROP Table:{DescID: 57}
+  state: PUBLIC
+  details:
+    tableId: 57

@@ -13,7 +13,7 @@ package scbuild
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -41,9 +41,9 @@ func (b *buildContext) dropDatabase(ctx context.Context, n *tree.DropDatabase) {
 		panic(err)
 	}
 
-	dropIDs := make([]descpb.ID, 0, len(schemas))
+	dropIDs := catalog.DescriptorIDSet{}
 	for schemaID := range schemas {
-		dropIDs = append(dropIDs, schemaID)
+		dropIDs.Add(schemaID)
 		schemaDesc, err := b.Descs.GetMutableSchemaByID(ctx, b.EvalCtx.Txn, schemaID, tree.SchemaLookupFlags{Required: true})
 		if err != nil {
 			panic(err)
@@ -63,11 +63,13 @@ func (b *buildContext) dropDatabase(ctx context.Context, n *tree.DropDatabase) {
 		}
 		// If no schema exists to depend on, then depend on dropped IDs
 		if !nodeAdded {
-			dropIDs = append(dropIDs, schemaDroppedIDs...)
+			for _, id := range schemaDroppedIDs {
+				dropIDs.Add(id)
+			}
 		}
 	}
 	b.addNode(scpb.Target_DROP,
 		&scpb.Database{
 			DatabaseID:       dbDesc.ID,
-			DependentObjects: dropIDs})
+			DependentObjects: dropIDs.Ordered()})
 }

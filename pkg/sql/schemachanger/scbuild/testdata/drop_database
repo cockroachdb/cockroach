@@ -61,6 +61,16 @@ DROP DATABASE db1 CASCADE
   state: PUBLIC
   details:
     sequenceId: 54
+- DROP DefaultExpression:{DescID: 57, ColumnID: 1}
+  state: PUBLIC
+  details:
+    columnId: 1
+    tableId: 57
+- DROP DefaultExpression:{DescID: 57, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 57
 - DROP RelationDependedOnBy:{DescID: 54, DepID: 57}
   state: PUBLIC
   details:
@@ -132,6 +142,16 @@ DROP DATABASE db1 CASCADE
   details:
     descriptorId: 64
     typeId: 63
+- DROP DefaultExpression:{DescID: 56, ColumnID: 1}
+  state: PUBLIC
+  details:
+    columnId: 1
+    tableId: 56
+- DROP DefaultExpression:{DescID: 56, ColumnID: 2}
+  state: PUBLIC
+  details:
+    columnId: 2
+    tableId: 56
 - DROP RelationDependedOnBy:{DescID: 55, DepID: 56}
   state: PUBLIC
   details:
@@ -169,6 +189,6 @@ DROP DATABASE db1 CASCADE
     databaseId: 52
     dependentObjects:
     - 29
+    - 53
     - 54
     - 57
-    - 53

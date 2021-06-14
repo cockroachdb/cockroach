@@ -15,6 +15,10 @@ create-sequence
 CREATE SEQUENCE defaultdb.SQ2;
 ----
 
+create-type
+CREATE TYPE defaultdb.typ AS ENUM('a')
+----
+
 create-table
 CREATE TABLE defaultdb.shipments (
     tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -22,6 +26,7 @@ CREATE TABLE defaultdb.shipments (
     status STRING,
     customer_id INT,
     randcol INT DEFAULT nextval('defaultdb.sq2'),
+    val defaultdb.TYP AS ('a'::defaultdb.typ) STORED,
     CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES customers(id),
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES orders(customer)
   );
@@ -42,61 +47,106 @@ Stage 0
   *scop.DropForeignKeyRef
     Name: fk_customers
     Outbound: true
-    TableID: 55
+    TableID: 57
   *scop.DropForeignKeyRef
     Name: fk_customers
     TableID: 52
   *scop.DropForeignKeyRef
     Name: fk_orders
     Outbound: true
-    TableID: 55
+    TableID: 57
   *scop.DropForeignKeyRef
     Name: fk_orders
     TableID: 53
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 1
+    TableID: 57
+  *scop.UpdateRelationDeps
+    TableID: 57
   *scop.RemoveSequenceOwnedBy
-    TableID: 56
+    TableID: 58
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 2
+    TableID: 57
+  *scop.UpdateRelationDeps
+    TableID: 57
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 3
+    TableID: 57
+  *scop.UpdateRelationDeps
+    TableID: 57
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 4
+    TableID: 57
+  *scop.UpdateRelationDeps
+    TableID: 57
   *scop.RemoveColumnDefaultExpression
     ColumnID: 5
-    TableID: 55
+    TableID: 57
   *scop.UpdateRelationDeps
-    TableID: 55
+    TableID: 57
   *scop.RemoveRelationDependedOnBy
-    DependedOnBy: 55
+    DependedOnBy: 57
     TableID: 54
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 6
+    TableID: 57
+  *scop.UpdateRelationDeps
+    TableID: 57
+  *scop.RemoveTypeBackRef
+    DescID: 57
+    TypeID: 55
+  *scop.RemoveTypeBackRef
+    DescID: 57
+    TypeID: 56
+  *scop.MarkDescriptorAsDropped
+    TableID: 59
+  *scop.MarkDescriptorAsDropped
+    TableID: 58
   *scop.MarkDescriptorAsDropped
     TableID: 57
-  *scop.MarkDescriptorAsDropped
-    TableID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
 Stage 1
   *scop.CreateGcJobForDescriptor
+    DescID: 59
+  *scop.CreateGcJobForDescriptor
+    DescID: 58
+  *scop.CreateGcJobForDescriptor
     DescID: 57
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
+  *scop.DrainDescriptorName
+    TableID: 59
+  *scop.DrainDescriptorName
+    TableID: 58
   *scop.DrainDescriptorName
     TableID: 57
-  *scop.DrainDescriptorName
-    TableID: 56
-  *scop.DrainDescriptorName
-    TableID: 55
 
 deps
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-- from: [SequenceOwnedBy:{DescID: 56, DepID: 55}, ABSENT]
-  to:   [Sequence:{DescID: 56}, DELETE_ONLY]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [DefaultExpression:{DescID: 55, ColumnID: 5}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [RelationDependedOnBy:{DescID: 54, DepID: 55}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [OutboundForeignKey:{DescID: 55, DepID: 52, ElementName: "fk_customers"}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [OutboundForeignKey:{DescID: 55, DepID: 53, ElementName: "fk_orders"}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [View:{DescID: 57}, ABSENT]
-- from: [Table:{DescID: 55}, ABSENT]
-  to:   [SequenceOwnedBy:{DescID: 56, DepID: 55}, ABSENT]
+- from: [SequenceOwnedBy:{DescID: 58, DepID: 57}, ABSENT]
+  to:   [Sequence:{DescID: 58}, DELETE_ONLY]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [DefaultExpression:{DescID: 57, ColumnID: 1}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [DefaultExpression:{DescID: 57, ColumnID: 2}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [DefaultExpression:{DescID: 57, ColumnID: 3}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [DefaultExpression:{DescID: 57, ColumnID: 4}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [DefaultExpression:{DescID: 57, ColumnID: 5}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [DefaultExpression:{DescID: 57, ColumnID: 6}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [OutboundForeignKey:{DescID: 57, DepID: 52, ElementName: "fk_customers"}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [OutboundForeignKey:{DescID: 57, DepID: 53, ElementName: "fk_orders"}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 54, DepID: 57}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [SequenceOwnedBy:{DescID: 58, DepID: 57}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [TypeReference:{DescID: 55, DepID: 57}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [TypeReference:{DescID: 56, DepID: 57}, ABSENT]
+- from: [Table:{DescID: 57}, ABSENT]
+  to:   [View:{DescID: 59}, ABSENT]

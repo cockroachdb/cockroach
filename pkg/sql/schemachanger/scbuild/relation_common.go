@@ -15,8 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/lib/pq/oid"
 )
 
 func (b *buildContext) removeTypeBackRefDeps(
@@ -49,6 +52,63 @@ func (b *buildContext) removeTypeBackRefDeps(
 		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
 			b.addNode(scpb.Target_DROP,
 				typeRef)
+		}
+	}
+}
+
+// removeColumnTypeBackRefs removes type back references for a given table
+// column from default expressions and comptued expressions.
+func (b *buildContext) removeColumnTypeBackRefs(table catalog.TableDescriptor, id descpb.ColumnID) {
+	visitor := &tree.TypeCollectorVisitor{
+		OIDs: make(map[oid.Oid]struct{}),
+	}
+	visitorDeleted := &tree.TypeCollectorVisitor{
+		OIDs: make(map[oid.Oid]struct{}),
+	}
+	// TODO(fqazi): Deal with the case where a column is added
+	// in the current statement.
+
+	// Get all available type references and create nodes
+	// for dropping these type references.
+	for _, col := range table.AllColumns() {
+		if !col.HasDefault() || col.ColumnDesc().HasNullDefault() {
+			continue
+		}
+		expr, err := parser.ParseExpr(col.GetDefaultExpr())
+		if err != nil {
+			panic(err)
+		}
+		if col.GetID() == id {
+			tree.WalkExpr(visitorDeleted, expr)
+		} else {
+			tree.WalkExpr(visitor, expr)
+		}
+		if col.IsComputed() {
+			expr, err := parser.ParseExpr(col.GetComputeExpr())
+			if err != nil {
+				panic(err)
+			}
+			if col.GetID() == id {
+				tree.WalkExpr(visitorDeleted, expr)
+			} else {
+				tree.WalkExpr(visitor, expr)
+			}
+		}
+	}
+	// Remove OID that only exist in the deleted list.
+	for oid := range visitorDeleted.OIDs {
+		if _, ok := visitor.OIDs[oid]; !ok {
+			typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
+			if err != nil {
+				panic(err)
+			}
+			typeRef := &scpb.TypeReference{
+				TypeID: typeID,
+				DescID: table.GetID(),
+			}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
+				b.addNode(scpb.Target_DROP, typeRef)
+			}
 		}
 	}
 }

@@ -240,7 +240,6 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph, params Params) []Stage {
 		// try to execute non-failing ones first.
 		opsSlice := s.Ops.Slice()
 		if !params.DisableOpRandomization {
-
 			rand.Seed(timeutil.Now().UnixNano())
 			rand.Shuffle(len(opsSlice), func(i, j int) {
 				tmp := opsSlice[i]
