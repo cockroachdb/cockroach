@@ -30,6 +30,7 @@ go_test(
         ":stop",
         "//pkg/roachpb",
         "//pkg/testutils",
+        "//pkg/util/contextutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/quotapool",
