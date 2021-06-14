@@ -122,7 +122,7 @@ PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v 2>&1 | %s/bin/go-junit-rep
 		Name:       "gorm",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run:        runGORM,
 	})

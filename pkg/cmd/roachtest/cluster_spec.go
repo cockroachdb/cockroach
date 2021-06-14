@@ -16,12 +16,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // clusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type clusterSpec struct {
+	Cloud     string
 	NodeCount int
 	// CPUs is the number of CPUs per node.
 	CPUs        int
@@ -33,8 +35,8 @@ type clusterSpec struct {
 	ReusePolicy clusterReusePolicy
 }
 
-func makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
-	spec := clusterSpec{NodeCount: nodeCount}
+func makeClusterSpec(cloud string, nodeCount int, opts ...createOption) clusterSpec {
+	spec := clusterSpec{Cloud: cloud, NodeCount: nodeCount}
 	defaultOpts := []createOption{cpu(4), nodeLifetimeOption(12 * time.Hour), reuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o.apply(&spec)
@@ -63,31 +65,31 @@ func firstZone(zones string) string {
 func (s *clusterSpec) args() []string {
 	var args []string
 
-	switch cloud {
-	case aws:
+	switch s.Cloud {
+	case spec.AWS:
 		args = append(args, "--clouds=aws")
-	case gce:
+	case spec.GCE:
 		args = append(args, "--clouds=gce")
-	case azure:
+	case spec.Azure:
 		args = append(args, "--clouds=azure")
 	}
 
-	if !local && s.CPUs != 0 {
+	if s.Cloud != spec.Local && s.CPUs != 0 {
 		// Use the machine type specified as a CLI flag.
 		machineType := instanceType
 		if len(machineType) == 0 {
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
-			switch cloud {
-			case aws:
+			switch s.Cloud {
+			case spec.AWS:
 				machineType = awsMachineType(s.CPUs)
-			case gce:
+			case spec.GCE:
 				machineType = gceMachineType(s.CPUs)
-			case azure:
+			case spec.Azure:
 				machineType = azureMachineType(s.CPUs)
 			}
 		}
-		if cloud == aws {
+		if s.Cloud == spec.AWS {
 			if isSSD(machineType) {
 				args = append(args, "--local-ssd=true")
 			} else {
@@ -98,35 +100,35 @@ func (s *clusterSpec) args() []string {
 		args = append(args, machineTypeArg)
 	}
 
-	if !local && s.VolumeSize != 0 {
+	if s.Cloud != spec.Local && s.VolumeSize != 0 {
 		fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
 		// Set network disk options.
 		args = append(args, "--local-ssd=false")
 
 		var arg string
-		switch cloud {
-		case gce:
+		switch s.Cloud {
+		case spec.GCE:
 			arg = fmt.Sprintf("--gce-pd-volume-size=%d", s.VolumeSize)
 		default:
-			fmt.Fprintf(os.Stderr, "specifying volume size is not yet supported on %s", cloud)
+			fmt.Fprintf(os.Stderr, "specifying volume size is not yet supported on %s", s.Cloud)
 			os.Exit(1)
 		}
 		args = append(args, arg)
 	}
 
-	if !local && s.SSDs != 0 {
+	if s.Cloud != spec.Local && s.SSDs != 0 {
 		var arg string
-		switch cloud {
-		case gce:
+		switch s.Cloud {
+		case spec.GCE:
 			arg = fmt.Sprintf("--gce-local-ssd-count=%d", s.SSDs)
 		default:
-			fmt.Fprintf(os.Stderr, "specifying ssd count is not yet supported on %s", cloud)
+			fmt.Fprintf(os.Stderr, "specifying ssd count is not yet supported on %s", s.Cloud)
 			os.Exit(1)
 		}
 		args = append(args, arg)
 	}
 
-	if !local {
+	if s.Cloud != spec.Local {
 		zones := s.Zones
 		if zones == "" {
 			zones = zonesF
@@ -136,15 +138,15 @@ func (s *clusterSpec) args() []string {
 				zones = firstZone(zones)
 			}
 			var arg string
-			switch cloud {
-			case aws:
+			switch s.Cloud {
+			case spec.AWS:
 				arg = "--aws-zones=" + zones
-			case gce:
+			case spec.GCE:
 				arg = "--gce-zones=" + zones
-			case azure:
+			case spec.Azure:
 				arg = "--azure-locations=" + zones
 			default:
-				fmt.Fprintf(os.Stderr, "specifying zones is not yet supported on %s", cloud)
+				fmt.Fprintf(os.Stderr, "specifying zones is not yet supported on %s", s.Cloud)
 				os.Exit(1)
 			}
 			args = append(args, arg)

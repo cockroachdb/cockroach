@@ -23,6 +23,7 @@ go_library(
         "cluster.go",
         "cluster_init.go",
         "cluster_interface.go",
+        "cluster_spec.go",
         "connection_latency.go",
         "copy.go",
         "decommission.go",
@@ -136,6 +137,7 @@ go_library(
         "//pkg/cmd/internal/issues",
         "//pkg/cmd/roachtest/logger",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/spec",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
         "//pkg/internal/team",
@@ -217,6 +219,7 @@ go_test(
     deps = [
         "//pkg/cmd/roachtest/logger",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/spec",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/syncutil",

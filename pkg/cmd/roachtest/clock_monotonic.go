@@ -133,7 +133,7 @@ func registerClockMonotonicTests(r *testRegistry) {
 			Owner: OwnerKV,
 			// These tests muck with NTP, therefor we don't want the cluster reused by
 			// others.
-			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
+			Cluster: r.makeClusterSpec(1, reuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},

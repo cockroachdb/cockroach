@@ -93,7 +93,7 @@ func registerConnectionLatencyTest(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Name:       fmt.Sprintf("connection_latency/nodes=%d", numNodes),
 		Owner:      OwnerSQLExperience,
-		Cluster:    makeClusterSpec(numNodes + 1), // Add one for load node.
+		Cluster:    r.makeClusterSpec(numNodes + 1), // Add one for load node.
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1)
 		},
@@ -108,7 +108,7 @@ func registerConnectionLatencyTest(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Name:       fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
 		Owner:      OwnerSQLExperience,
-		Cluster:    makeClusterSpec(numMultiRegionNodes+loadNodes, geo(), zones(geoZonesStr)),
+		Cluster:    r.makeClusterSpec(numMultiRegionNodes+loadNodes, geo(), zones(geoZonesStr)),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones)
 		},

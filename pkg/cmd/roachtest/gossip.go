@@ -152,7 +152,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 	r.Add(testSpec{
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(9),
+		Cluster: r.makeClusterSpec(9),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runGossipChaos(ctx, t, c)
 		},

@@ -40,21 +40,9 @@ import (
 func registerFollowerReads(r *testRegistry) {
 	register := func(survival survivalGoal, locality localitySetting) {
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
-			Owner: OwnerKV,
-			Cluster: makeClusterSpec(
-				6, /* nodeCount */
-				cpu(2),
-				geo(),
-				// This zone option looks strange, but it makes more sense once you
-				// understand what the test is doing. The test creates a multi-region
-				// database with either ZONE or REGION survivability and with a PRIMARY
-				// REGION of us-east1. This means that for ZONE survivability, the test
-				// wants 3 nodes in us-east1, 1 in us-west1, and 1 in europe-west2. For
-				// REGION surviability, the test wants 2 nodes in us-east1, 2 (or 1) in
-				// us-west1, and 1 (or 2) in europe-west2.
-				zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
-			),
+			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
+			Owner:   OwnerKV,
+			Cluster: r.makeClusterSpec(6, cpu(2), geo(), zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Wipe(ctx)
@@ -74,7 +62,7 @@ func registerFollowerReads(r *testRegistry) {
 	r.Add(testSpec{
 		Name:  "follower-reads/mixed-version/single-region",
 		Owner: OwnerKV,
-		Cluster: makeClusterSpec(
+		Cluster: r.makeClusterSpec(
 			3, /* nodeCount */
 			cpu(2),
 		),

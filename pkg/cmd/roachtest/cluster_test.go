@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -28,7 +29,7 @@ import (
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &cluster{spec: makeClusterSpec(10)}
+	c := &cluster{spec: makeClusterSpec(spec.GCE, 10)}
 	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
@@ -357,7 +358,7 @@ func TestLoadGroups(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
 			func(t *testing.T) {
-				c := &cluster{t: testWrapper{t}, l: logger, spec: makeClusterSpec(tc.numRoachNodes + tc.numLoadNodes)}
+				c := &cluster{t: testWrapper{t}, l: logger, spec: makeClusterSpec(spec.GCE, tc.numRoachNodes+tc.numLoadNodes)}
 				lg := makeLoadGroups(c, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
 				require.EqualValues(t, lg, tc.loadGroups)
 			})

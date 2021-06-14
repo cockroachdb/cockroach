@@ -22,7 +22,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "schemachange/invertedindex",
 		Owner:   OwnerSQLSchema,
-		Cluster: makeClusterSpec(5),
+		Cluster: r.makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},

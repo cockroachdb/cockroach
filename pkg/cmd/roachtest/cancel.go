@@ -130,7 +130,7 @@ func registerCancel(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%s,nodes=%d", queries, numNodes),
 		Owner:   OwnerSQLQueries,
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, true /* useDistsql */)
 		},
@@ -139,7 +139,7 @@ func registerCancel(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("cancel/tpch/local/queries=%s,nodes=%d", queries, numNodes),
 		Owner:   OwnerSQLQueries,
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, false /* useDistsql */)
 		},

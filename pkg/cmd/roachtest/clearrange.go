@@ -30,7 +30,7 @@ func registerClearRange(r *testRegistry) {
 			// to <3:30h but it varies.
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
-			Cluster:    makeClusterSpec(10, cpu(16)),
+			Cluster:    r.makeClusterSpec(10, cpu(16)),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},

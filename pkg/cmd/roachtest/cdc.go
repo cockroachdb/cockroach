@@ -607,7 +607,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/tpcc-1000",
 		Owner:           OwnerCDC,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -622,7 +622,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/tpcc-1000/sink=null",
 		Owner:           OwnerCDC,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, cpu(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
@@ -639,7 +639,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/initial-scan",
 		Owner:           OwnerCDC,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -655,7 +655,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/sink-chaos",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -671,7 +671,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/crdb-chaos",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -692,7 +692,7 @@ func registerCDC(r *testRegistry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -708,7 +708,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, cpu(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -729,7 +729,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(1),
+		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
@@ -738,7 +738,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/bank",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4),
+		Cluster:         r.makeClusterSpec(4),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCBank(ctx, t, c)
@@ -747,7 +747,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/schemareg",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(1),
+		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)

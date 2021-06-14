@@ -143,7 +143,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(n + 1),
+		Cluster:    r.makeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runEngineSwitch(ctx, t, c)
 		},
@@ -153,7 +153,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(n + 1),
+		Cluster:    r.makeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runEngineSwitch(ctx, t, c, "--encrypt=true")
 		},

@@ -133,7 +133,7 @@ func registerSecondaryIndexesMultiVersionCluster(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "schemachange/secondary-index-multi-version",
 		Owner:      OwnerSQLSchema,
-		Cluster:    makeClusterSpec(3),
+		Cluster:    r.makeClusterSpec(3),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
