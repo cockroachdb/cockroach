@@ -34,7 +34,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 		Name:       "schemachange/database-version-upgrade",
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v20.2.0",
-		Cluster:    makeClusterSpec(3),
+		Cluster:    r.makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, r.buildVersion)
 		},

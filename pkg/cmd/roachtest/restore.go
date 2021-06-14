@@ -284,7 +284,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "restore/nodeShutdown/worker",
 		Owner:      OwnerBulkIO,
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			gatewayNode := 2
@@ -299,7 +299,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "restore/nodeShutdown/coordinator",
 		Owner:      OwnerBulkIO,
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			gatewayNode := 2
@@ -382,7 +382,7 @@ func registerRestore(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    testName,
 			Owner:   OwnerBulkIO,
-			Cluster: makeClusterSpec(item.nodes, clusterOpts...),
+			Cluster: r.makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				// Randomize starting with encryption-at-rest enabled.

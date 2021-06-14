@@ -111,7 +111,7 @@ func registerTPCE(r *testRegistry) {
 			Owner:   OwnerKV,
 			Tags:    opts.tags,
 			Timeout: opts.timeout,
-			Cluster: makeClusterSpec(opts.nodes+1, cpu(opts.cpus), ssd(opts.ssds)),
+			Cluster: r.makeClusterSpec(opts.nodes+1, cpu(opts.cpus), ssd(opts.ssds)),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runTPCE(ctx, t, c, opts)
 			},

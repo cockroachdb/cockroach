@@ -48,15 +48,17 @@ func ownerToAlias(o Owner) team.Alias {
 const defaultTag = "default"
 
 type testRegistry struct {
-	m map[string]*testSpec
+	m     map[string]*testSpec
+	cloud string
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
 }
 
 // makeTestRegistry constructs a testRegistry and configures it with opts.
-func makeTestRegistry() (testRegistry, error) {
+func makeTestRegistry(cloud string) (testRegistry, error) {
 	r := testRegistry{
-		m: make(map[string]*testSpec),
+		cloud: cloud,
+		m:     make(map[string]*testSpec),
 	}
 	v := buildTag
 	if v == "" {
@@ -83,6 +85,10 @@ func (r *testRegistry) Add(spec testSpec) {
 		os.Exit(1)
 	}
 	r.m[spec.Name] = &spec
+}
+
+func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
+	return makeClusterSpec(r.cloud, nodeCount, opts...)
 }
 
 // prepareSpec validates a spec and does minor massaging of its fields.

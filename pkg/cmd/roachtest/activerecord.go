@@ -239,7 +239,7 @@ func registerActiveRecord(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "activerecord",
 		Owner:      OwnerSQLExperience,
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run:        runActiveRecord,
 	})

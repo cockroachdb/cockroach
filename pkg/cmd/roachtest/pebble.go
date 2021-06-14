@@ -105,7 +105,7 @@ func registerPebble(r *testRegistry) {
 			Owner:      OwnerStorage,
 			Timeout:    2 * time.Hour,
 			MinVersion: "v20.1.0",
-			Cluster:    makeClusterSpec(5, cpu(16)),
+			Cluster:    r.makeClusterSpec(5, cpu(16)),
 			Tags:       []string{"pebble"},
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				run(ctx, t, c, size)

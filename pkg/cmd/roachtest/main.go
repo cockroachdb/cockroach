@@ -119,7 +119,7 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r, err := makeTestRegistry()
+			r, err := makeTestRegistry(cloud)
 			if err != nil {
 				return err
 			}
@@ -281,7 +281,7 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
-	r, err := makeTestRegistry()
+	r, err := makeTestRegistry(cloud)
 	if err != nil {
 		return err
 	}

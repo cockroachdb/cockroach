@@ -200,7 +200,7 @@ func registerRubyPG(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Name:       "ruby-pg",
 		Owner:      OwnerSQLExperience,
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runRubyPGTest(ctx, t, c)

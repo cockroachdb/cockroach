@@ -37,6 +37,7 @@ import (
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -48,17 +49,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	aws   = "aws"
-	gce   = "gce"
-	azure = "azure"
-)
-
 var (
-	local            bool
+	// TODO(tbg): this is redundant with --cloud==local. Make the --local flag an
+	// alias for `--cloud=local` and remove this variable.
+	local bool
+
 	cockroach        string
 	libraryFilePaths []string
-	cloud                         = gce
+	cloud                         = spec.GCE
 	encrypt          encryptValue = "false"
 	instanceType     string
 	localSSDArg      bool
@@ -196,6 +194,9 @@ func initBinariesAndLibraries() {
 	// to true in order to get the "local" test configurations.
 	if clusterName == "local" {
 		local = true
+	}
+	if local {
+		cloud = spec.Local
 	}
 
 	cockroachDefault := "cockroach"
@@ -707,14 +708,14 @@ func azureMachineType(cpus int) string {
 
 func machineTypeFlag(machineType string) string {
 	switch cloud {
-	case aws:
+	case spec.AWS:
 		if isSSD(machineType) {
 			return "--aws-machine-type-ssd"
 		}
 		return "--aws-machine-type"
-	case gce:
+	case spec.GCE:
 		return "--gce-machine-type"
-	case azure:
+	case spec.Azure:
 		return "--azure-machine-type"
 	default:
 		panic(fmt.Sprintf("unsupported cloud: %s\n", cloud))
@@ -722,7 +723,7 @@ func machineTypeFlag(machineType string) string {
 }
 
 func isSSD(machineType string) bool {
-	if cloud != aws {
+	if cloud != spec.AWS {
 		panic("can only differentiate SSDs based on machine type on AWS")
 	}
 	if !localSSDArg {

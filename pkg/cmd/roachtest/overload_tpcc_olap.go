@@ -121,7 +121,7 @@ func registerTPCCOverloadSpec(r *testRegistry, s tpccOLAPSpec) {
 	r.Add(testSpec{
 		Name:       name,
 		Owner:      OwnerKV,
-		Cluster:    makeClusterSpec(s.Nodes+1, cpu(s.CPUs)),
+		Cluster:    r.makeClusterSpec(s.Nodes+1, cpu(s.CPUs)),
 		Run:        s.run,
 		MinVersion: "v19.2.0",
 		Timeout:    20 * time.Minute,

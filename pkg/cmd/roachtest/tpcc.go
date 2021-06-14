@@ -210,7 +210,7 @@ func maxSupportedTPCCWarehouses(buildVersion version.Version, cloud string, node
 }
 
 func registerTPCC(r *testRegistry) {
-	headroomSpec := makeClusterSpec(4, cpu(16))
+	headroomSpec := r.makeClusterSpec(4, cpu(16))
 	r.Add(testSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
@@ -231,7 +231,7 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	mixedHeadroomSpec := makeClusterSpec(5, cpu(16))
+	mixedHeadroomSpec := r.makeClusterSpec(5, cpu(16))
 
 	r.Add(testSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional
@@ -323,7 +323,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc-nowait/nodes=3/w=1",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -338,7 +338,7 @@ func registerTPCC(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Tags:       []string{`weekly`},
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, cpu(16)),
 		Timeout:    time.Duration(6*24)*time.Hour + time.Duration(10)*time.Minute,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			warehouses := 1000
@@ -364,7 +364,7 @@ func registerTPCC(r *testRegistry) {
 			Owner:      OwnerMultiRegion,
 			MinVersion: "v21.1.0",
 			// 3 nodes per region + 1 node for workload.
-			Cluster: makeClusterSpec(10, geo(), zones(strings.Join(zs, ","))),
+			Cluster: r.makeClusterSpec(10, geo(), zones(strings.Join(zs, ","))),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				duration := 90 * time.Minute
 				partitionArgs := fmt.Sprintf(
@@ -401,7 +401,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -429,7 +429,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
 		Owner:      OwnerSQLQueries,
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, cpu(16)),
 		Timeout:    6 * time.Hour,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			skip.WithIssue(t, 53886)
@@ -644,7 +644,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
-	nodes := makeClusterSpec(numNodes, opts...)
+	nodes := r.makeClusterSpec(numNodes, opts...)
 
 	minVersion := b.MinVersion
 	if minVersion == "" {
