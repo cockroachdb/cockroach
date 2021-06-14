@@ -56,6 +56,8 @@ intersect-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2169.13
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
@@ -76,6 +78,8 @@ intersect-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2169.13
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
@@ -96,6 +100,8 @@ except-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2169.13
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
@@ -116,6 +122,8 @@ except-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2169.13
+ ├── key: (1)
+ ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]

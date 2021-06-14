@@ -681,11 +681,11 @@ func (c *CustomFuncs) MutationTable(private *memo.MutationPrivate) opt.TableID {
 // NeededColMapLeft returns the subset of a SetPrivate's LeftCols that corresponds to the
 // needed subset of OutCols. This is useful for pruning columns in set operations.
 func (c *CustomFuncs) NeededColMapLeft(needed opt.ColSet, set *memo.SetPrivate) opt.ColSet {
-	return opt.TranslateColSet(needed, set.OutCols, set.LeftCols)
+	return opt.TranslateColSetStrict(needed, set.OutCols, set.LeftCols)
 }
 
 // NeededColMapRight returns the subset of a SetPrivate's RightCols that corresponds to the
 // needed subset of OutCols. This is useful for pruning columns in set operations.
 func (c *CustomFuncs) NeededColMapRight(needed opt.ColSet, set *memo.SetPrivate) opt.ColSet {
-	return opt.TranslateColSet(needed, set.OutCols, set.RightCols)
+	return opt.TranslateColSetStrict(needed, set.OutCols, set.RightCols)
 }

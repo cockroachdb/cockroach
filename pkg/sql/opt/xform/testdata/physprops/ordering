@@ -1558,6 +1558,7 @@ intersect-all
  ├── columns: a:1!null b:2!null c:3!null
  ├── left columns: a:1!null b:2!null c:3!null
  ├── right columns: y:7 x:6 z:8
+ ├── key: (2,3)
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2) [actual: +1]
  ├── select
@@ -1666,7 +1667,8 @@ intersect-all
  ├── left columns: column1:1!null
  ├── right columns: column1:2
  ├── cardinality: [0 - 1]
- ├── ordering: +1
+ ├── key: ()
+ ├── fd: ()-->(1)
  ├── values
  │    ├── columns: column1:1!null
  │    ├── cardinality: [1 - 1]

@@ -124,19 +124,18 @@ func (s ColSet) ToList() ColList {
 //   TranslateColSet(ColSet{5, 6}, Right, Out)  -> ColSet{8, 9}
 //   TranslateColSet(ColSet{9}, Out, Right)     -> ColSet{6}
 //
-// Note that for the output of TranslateColSet to be correct, colSetIn must be
-// a subset of the columns in `from`. TranslateColSet does not check that this
-// is the case, because that would require building a ColSet from `from`, and
-// checking that colSetIn.SubsetOf(fromColSet) is true -- a lot of computation
-// for a validation check. It is not correct or sufficient to check that
-// colSetIn.Len() == colSetOut.Len(), because it is possible that colSetIn and
-// colSetOut could have different lengths and still be valid. Consider the
-// following case:
+// Any columns in the input set that do not appear in the from list are ignored.
+//
+// Even when all the columns in the input set appear in the from list, it is
+// possible for the input and output sets to have different cardinality.
+// Consider the following case:
 //
 //   SELECT x, x, y FROM xyz UNION SELECT a, b, c FROM abc
 //
-// TranslateColSet(ColSet{x, y}, Left, Right) correctly returns
-// ColSet{a, b, c}, even though ColSet{x, y}.Len() != ColSet{a, b, c}.Len().
+// TranslateColSet(ColSet{x, y}, {x, x, y}, {a, b, c}) returns ColSet{a, b, c}.
+//
+// Conversely, TranslateColSet(ColSet{a, b, c}, {a, b, c}, {x, x, y}) returns
+// ColSet{x, y}.
 func TranslateColSet(colSetIn ColSet, from ColList, to ColList) ColSet {
 	var colSetOut ColSet
 	for i := range from {
@@ -146,4 +145,13 @@ func TranslateColSet(colSetIn ColSet, from ColList, to ColList) ColSet {
 	}
 
 	return colSetOut
+}
+
+// TranslateColSetStrict is a version of TranslateColSet which requires that all
+// columns in the input set appear in the from list.
+func TranslateColSetStrict(colSetIn ColSet, from ColList, to ColList) ColSet {
+	if util.CrdbTestBuild && !colSetIn.SubsetOf(from.ToSet()) {
+		panic(errors.AssertionFailedf("input set contains unknown columns"))
+	}
+	return TranslateColSet(colSetIn, from, to)
 }

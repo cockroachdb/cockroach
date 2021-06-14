@@ -904,12 +904,12 @@ func (oc OrderingChoice) Format(buf *bytes.Buffer) {
 // in to.
 func (oc *OrderingChoice) RemapColumns(from, to opt.ColList) OrderingChoice {
 	var other OrderingChoice
-	other.Optional = opt.TranslateColSet(oc.Optional, from, to)
+	other.Optional = opt.TranslateColSetStrict(oc.Optional, from, to)
 	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
 	for i := range oc.Columns {
 		col := &oc.Columns[i]
 		other.Columns[i] = OrderingColumnChoice{
-			Group:      opt.TranslateColSet(col.Group, from, to),
+			Group:      opt.TranslateColSetStrict(col.Group, from, to),
 			Descending: col.Descending,
 		}
 	}
