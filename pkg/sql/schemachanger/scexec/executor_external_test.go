@@ -243,6 +243,8 @@ func TestSchemaChanger(t *testing.T) {
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 						Unique:              true,
 						Type:                descpb.IndexDescriptor_FORWARD,
+						Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+						EncodingType:        descpb.PrimaryIndexEncoding,
 					},
 					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
 					StoreColumnIDs:      []descpb.ColumnID{2},

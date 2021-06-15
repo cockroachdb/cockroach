@@ -622,7 +622,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 			KeyColumnNames:      []string{col.Name},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 		}
-		if err := desc.AddIndex(idx, true); err != nil {
+		if err := desc.AddPrimaryIndex(idx); err != nil {
 			return err
 		}
 	}
@@ -653,14 +653,21 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	// Populate IDs.
 	primaryColIDs := desc.GetPrimaryIndex().CollectKeyColumnIDs()
 	for _, idx := range desc.AllIndexes() {
-		maybeUpgradeIndexFormatVersion(idx.IndexDesc())
-		if idx.GetID() != 0 {
-			// This index has already been populated. Nothing to do.
+		if !idx.Primary() {
+			maybeUpgradeSecondaryIndexFormatVersion(idx.IndexDesc())
+		}
+		if idx.GetID() == 0 {
+			idx.IndexDesc().ID = desc.NextIndexID
+			desc.NextIndexID++
+		} else if !idx.Primary() {
+			// Nothing to do for this secondary index.
+			continue
+		} else if !idx.CollectPrimaryStoredColumnIDs().Contains(0) {
+			// Nothing to do for this primary index.
 			continue
 		}
-		idx.IndexDesc().ID = desc.NextIndexID
-		desc.NextIndexID++
 
+		// Populate KeyColumnIDs to match KeyColumnNames.
 		for j, colName := range idx.IndexDesc().KeyColumnNames {
 			if len(idx.IndexDesc().KeyColumnIDs) <= j {
 				idx.IndexDesc().KeyColumnIDs = append(idx.IndexDesc().KeyColumnIDs, 0)
@@ -670,50 +677,69 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			}
 		}
 
-		if !idx.Primary() && idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
-			indexHasOldStoredColumns := idx.HasOldStoredColumns()
-			// Need to clear KeySuffixColumnIDs and StoreColumnIDs
-			idx.IndexDesc().KeySuffixColumnIDs = nil
-			idx.IndexDesc().StoreColumnIDs = nil
-			colIDs := idx.CollectKeyColumnIDs()
-			var extraColumnIDs []descpb.ColumnID
-			for _, primaryColID := range desc.PrimaryIndex.KeyColumnIDs {
-				if !colIDs.Contains(primaryColID) {
-					extraColumnIDs = append(extraColumnIDs, primaryColID)
-					colIDs.Add(primaryColID)
-				}
-			}
-			idx.IndexDesc().KeySuffixColumnIDs = extraColumnIDs
+		// Rebuild KeySuffixColumnIDs, StoreColumnIDs and CompositeColumnIDs.
+		indexHasOldStoredColumns := idx.HasOldStoredColumns()
+		idx.IndexDesc().KeySuffixColumnIDs = nil
+		idx.IndexDesc().StoreColumnIDs = nil
+		idx.IndexDesc().CompositeColumnIDs = nil
 
-			for _, colName := range idx.IndexDesc().StoreColumnNames {
-				col, err := desc.FindColumnWithName(tree.Name(colName))
-				if err != nil {
-					return err
-				}
-				if primaryColIDs.Contains(col.GetID()) {
-					// If the primary index contains a stored column, we don't need to
-					// store it - it's already part of the index.
-					err = pgerror.Newf(pgcode.DuplicateColumn,
-						"index %q already contains column %q", idx.GetName(), col.GetName())
-					err = errors.WithDetailf(err,
-						"column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
-					return err
-				}
-				if colIDs.Contains(col.GetID()) {
-					return pgerror.Newf(
-						pgcode.DuplicateColumn,
-						"index %q already contains column %q", idx.GetName(), col.GetName())
-				}
-				if indexHasOldStoredColumns {
-					idx.IndexDesc().KeySuffixColumnIDs = append(idx.IndexDesc().KeySuffixColumnIDs, col.GetID())
-				} else {
-					idx.IndexDesc().StoreColumnIDs = append(idx.IndexDesc().StoreColumnIDs, col.GetID())
-				}
-				colIDs.Add(col.GetID())
+		// KeySuffixColumnIDs is only populated for indexes using the secondary
+		// index encoding. It is the set difference of the primary key minus the
+		// index's key.
+		colIDs := idx.CollectKeyColumnIDs()
+		var extraColumnIDs []descpb.ColumnID
+		for _, primaryColID := range desc.PrimaryIndex.KeyColumnIDs {
+			if !colIDs.Contains(primaryColID) {
+				extraColumnIDs = append(extraColumnIDs, primaryColID)
+				colIDs.Add(primaryColID)
 			}
 		}
+		if idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+			idx.IndexDesc().KeySuffixColumnIDs = extraColumnIDs
+		} else {
+			colIDs = idx.CollectKeyColumnIDs()
+		}
 
-		idx.IndexDesc().CompositeColumnIDs = nil
+		// StoreColumnIDs are derived from StoreColumnNames just like KeyColumnIDs
+		// derives from KeyColumnNames.
+		// For primary indexes this set of columns is typically defined as the set
+		// difference of non-virtual columns minus the primary key.
+		// In the case of secondary indexes, these columns are defined explicitly at
+		// index creation via the STORING clause. We do some validation checks here
+		// presumably to guard against user input errors.
+		//
+		// TODO(postamar): AllocateIDs should not do user input validation.
+		// The only errors it should return should be assertion failures.
+		for _, colName := range idx.IndexDesc().StoreColumnNames {
+			col, err := desc.FindColumnWithName(tree.Name(colName))
+			if err != nil {
+				return err
+			}
+			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+				// If the primary index contains a stored column, we don't need to
+				// store it - it's already part of the index.
+				err = pgerror.Newf(pgcode.DuplicateColumn,
+					"index %q already contains column %q", idx.GetName(), col.GetName())
+				err = errors.WithDetailf(err,
+					"column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
+				return err
+			}
+			if colIDs.Contains(col.GetID()) {
+				return pgerror.Newf(
+					pgcode.DuplicateColumn,
+					"index %q already contains column %q", idx.GetName(), col.GetName())
+			}
+			if indexHasOldStoredColumns {
+				idx.IndexDesc().KeySuffixColumnIDs = append(idx.IndexDesc().KeySuffixColumnIDs, col.GetID())
+			} else {
+				idx.IndexDesc().StoreColumnIDs = append(idx.IndexDesc().StoreColumnIDs, col.GetID())
+			}
+			colIDs.Add(col.GetID())
+		}
+
+		// CompositeColumnIDs is defined as the subset of columns in the index key
+		// or in the primary key whose type has a composite encoding, like DECIMAL
+		// for instance.
 		for _, colID := range idx.IndexDesc().KeyColumnIDs {
 			if compositeColIDs.Contains(colID) {
 				idx.IndexDesc().CompositeColumnIDs = append(idx.IndexDesc().CompositeColumnIDs, colID)
@@ -1051,35 +1077,59 @@ func (desc *Mutable) AddFamily(fam descpb.ColumnFamilyDescriptor) {
 	desc.Families = append(desc.Families, fam)
 }
 
-// AddIndex adds an index to the table.
-func (desc *Mutable) AddIndex(idx descpb.IndexDescriptor, primary bool) error {
+// AddPrimaryIndex adds a primary index to a mutable table descriptor, assuming
+// that none has yet been set, and performs some sanity checks.
+func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
+	if idx.Type == descpb.IndexDescriptor_INVERTED {
+		return fmt.Errorf("primary index cannot be inverted")
+	}
+	if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
+		return err
+	}
+	if desc.PrimaryIndex.Name != "" {
+		return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
+	}
+	if idx.Name == "" {
+		// Only override the index name if it hasn't been set by the user.
+		idx.Name = PrimaryKeyIndexName
+	}
+	idx.EncodingType = descpb.PrimaryIndexEncoding
+	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
+		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+		// Populate store columns.
+		names := make(map[string]struct{})
+		for _, name := range idx.KeyColumnNames {
+			names[name] = struct{}{}
+		}
+		cols := desc.DeletableColumns()
+		idx.StoreColumnNames = make([]string, 0, len(cols))
+		for _, col := range cols {
+			if _, found := names[col.GetName()]; found || col.IsVirtual() {
+				continue
+			}
+			names[col.GetName()] = struct{}{}
+			idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
+		}
+		if len(idx.StoreColumnNames) == 0 {
+			idx.StoreColumnNames = nil
+		}
+	}
+	desc.SetPrimaryIndex(idx)
+	return nil
+}
+
+// AddSecondaryIndex adds a secondary index to a mutable table descriptor.
+func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
 	if idx.Type == descpb.IndexDescriptor_FORWARD {
 		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
-
-		if primary {
-			// PrimaryIndex is unset.
-			if desc.PrimaryIndex.Name == "" {
-				if idx.Name == "" {
-					// Only override the index name if it hasn't been set by the user.
-					idx.Name = PrimaryKeyIndexName
-				}
-				desc.SetPrimaryIndex(idx)
-			} else {
-				return fmt.Errorf("multiple primary keys for table %q are not allowed", desc.Name)
-			}
-		} else {
-			desc.AddPublicNonPrimaryIndex(idx)
-		}
-
 	} else {
 		if err := checkColumnsValidForInvertedIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
 		}
-		desc.AddPublicNonPrimaryIndex(idx)
 	}
-
+	desc.AddPublicNonPrimaryIndex(idx)
 	return nil
 }
 
@@ -1118,8 +1168,22 @@ func (desc *Mutable) AddColumnToFamilyMaybeCreate(
 	return nil
 }
 
-// RemoveColumnFromFamily removes a colID from the family it's assigned to.
-func (desc *Mutable) RemoveColumnFromFamily(colID descpb.ColumnID) {
+// RemoveColumnFromFamilyAndPrimaryIndex removes a colID from the family it's
+// assigned to, and from the stored column references in the primary index.
+func (desc *Mutable) RemoveColumnFromFamilyAndPrimaryIndex(colID descpb.ColumnID) {
+	desc.removeColumnFromFamily(colID)
+	idx := desc.GetPrimaryIndex().IndexDescDeepCopy()
+	for i, id := range idx.StoreColumnIDs {
+		if id == colID {
+			idx.StoreColumnIDs = append(idx.StoreColumnIDs[:i], idx.StoreColumnIDs[i+1:]...)
+			idx.StoreColumnNames = append(idx.StoreColumnNames[:i], idx.StoreColumnNames[i+1:]...)
+			desc.SetPrimaryIndex(idx)
+			return
+		}
+	}
+}
+
+func (desc *Mutable) removeColumnFromFamily(colID descpb.ColumnID) {
 	for i := range desc.Families {
 		for j, c := range desc.Families[i].ColumnIDs {
 			if c == colID {
@@ -1507,7 +1571,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			desc.AddColumn(t.Column)
 
 		case *descpb.DescriptorMutation_Index:
-			if err := desc.AddIndex(*t.Index, false); err != nil {
+			if err := desc.AddSecondaryIndex(*t.Index); err != nil {
 				return err
 			}
 
@@ -1603,8 +1667,6 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			// encoded and decoded when it is accessed after it is no longer the primary key
 			// but before it is dropped entirely during the index drop process.
 			primaryIndexCopy := desc.GetPrimaryIndex().IndexDescDeepCopy()
-			primaryIndexCopy.EncodingType = descpb.PrimaryIndexEncoding
-			PopulateAllStoreColumns(&primaryIndexCopy, desc)
 			// Move the old primary index from the table descriptor into the mutations queue
 			// to schedule it for deletion.
 			if err := desc.AddIndexMutation(&primaryIndexCopy, descpb.DescriptorMutation_DROP); err != nil {
@@ -1625,9 +1687,9 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				} else {
 					primaryIndex.Name = args.NewPrimaryIndexName
 				}
-				// The primary index "implicitly" stores all columns in the table.
-				// Explicitly including them in the stored columns list is incorrect.
-				primaryIndex.StoreColumnNames, primaryIndex.StoreColumnIDs = nil, nil
+				if primaryIndex.Version == descpb.StrictIndexColumnIDGuaranteesVersion {
+					primaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+				}
 				desc.SetPrimaryIndex(primaryIndex)
 			}
 
@@ -1683,7 +1745,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 		// set of column/index descriptors at mutation creation time.
 		// Constraints to be dropped are dropped before column/index backfills.
 		case *descpb.DescriptorMutation_Column:
-			desc.RemoveColumnFromFamily(t.Column.ID)
+			desc.RemoveColumnFromFamilyAndPrimaryIndex(t.Column.ID)
 		}
 	}
 	return nil

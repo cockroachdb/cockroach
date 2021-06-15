@@ -521,6 +521,14 @@ created_idx           c             false
 created_idx           pk            true
 primary               partition_by  true
 primary               pk            false
+primary               pk2           false
+primary               a             false
+primary               b             false
+primary               c             false
+primary               d             false
+primary               j             false
+primary               u             false
+primary               e             false
 t_a_idx               partition_by  true
 t_a_idx               a             false
 t_a_idx               pk            true
