@@ -155,6 +155,7 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 // for the specified index descriptor. Returns false iff this was a no-op.
 func UpdateIndexPartitioning(
 	idx *descpb.IndexDescriptor,
+	isIndexPrimary bool,
 	newImplicitCols []catalog.Column,
 	newPartitioning descpb.PartitioningDescriptor,
 ) bool {
@@ -182,6 +183,10 @@ func UpdateIndexPartitioning(
 	idx.KeyColumnIDs = append(newColumnIDs, idx.KeyColumnIDs[oldNumImplicitCols:]...)
 	idx.KeyColumnNames = append(newColumnNames, idx.KeyColumnNames[oldNumImplicitCols:]...)
 	idx.KeyColumnDirections = append(newColumnDirections, idx.KeyColumnDirections[oldNumImplicitCols:]...)
+	idx.Partitioning = newPartitioning
+	if !isIndexPrimary {
+		return true
+	}
 
 	newStoreColumnIDs := make([]descpb.ColumnID, 0, len(idx.StoreColumnIDs))
 	newStoreColumnNames := make([]string, 0, len(idx.StoreColumnNames))
@@ -206,8 +211,6 @@ func UpdateIndexPartitioning(
 		idx.StoreColumnIDs = nil
 		idx.StoreColumnNames = nil
 	}
-
-	idx.Partitioning = newPartitioning
 	return true
 }
 

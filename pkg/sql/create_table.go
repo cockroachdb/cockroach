@@ -1788,7 +1788,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				tabledesc.UpdateIndexPartitioning(implicitColumnDefIdx.idx, newImplicitCols, newPartitioning)
+				tabledesc.UpdateIndexPartitioning(implicitColumnDefIdx.idx, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
 			}
 
 			if err := desc.AddSecondaryIndex(*implicitColumnDefIdx.idx); err != nil {
@@ -1934,7 +1934,7 @@ func NewTableDesc(
 					if err != nil {
 						return nil, err
 					}
-					tabledesc.UpdateIndexPartitioning(&idx, newImplicitCols, newPartitioning)
+					tabledesc.UpdateIndexPartitioning(&idx, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
 				}
 			}
 			if d.Predicate != nil {
@@ -2034,7 +2034,7 @@ func NewTableDesc(
 					if err != nil {
 						return nil, err
 					}
-					tabledesc.UpdateIndexPartitioning(&idx, newImplicitCols, newPartitioning)
+					tabledesc.UpdateIndexPartitioning(&idx, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
 				}
 			}
 			if d.Predicate != nil {
@@ -2159,7 +2159,7 @@ func NewTableDesc(
 			if err != nil {
 				return nil, err
 			}
-			isIndexAltered := tabledesc.UpdateIndexPartitioning(&newPrimaryIndex, newImplicitCols, newPartitioning)
+			isIndexAltered := tabledesc.UpdateIndexPartitioning(&newPrimaryIndex, true /* isIndexPrimary */, newImplicitCols, newPartitioning)
 			if isIndexAltered {
 				// During CreatePartitioning, implicitly partitioned columns may be
 				// created. AllocateIDs which allocates column IDs to each index

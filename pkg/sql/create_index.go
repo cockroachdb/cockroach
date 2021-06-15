@@ -706,7 +706,7 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 			if err != nil {
 				return indexDesc, err
 			}
-			tabledesc.UpdateIndexPartitioning(&indexDesc, newImplicitCols, newPartitioning)
+			tabledesc.UpdateIndexPartitioning(&indexDesc, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
 		}
 	}
 	return indexDesc, nil

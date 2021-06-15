@@ -107,7 +107,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot ALTER INDEX and change the partitioning to contain implicit columns",
 				)
 			}
-			isIndexAltered := tabledesc.UpdateIndexPartitioning(&alteredIndexDesc, newImplicitCols, newPartitioning)
+			isIndexAltered := tabledesc.UpdateIndexPartitioning(&alteredIndexDesc, n.index.Primary(), newImplicitCols, newPartitioning)
 			if isIndexAltered {
 				oldPartitioning := n.index.GetPartitioning().DeepCopy()
 				if n.index.Primary() {
