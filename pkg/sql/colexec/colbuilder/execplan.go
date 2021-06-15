@@ -1843,8 +1843,9 @@ func planSelectionOperators(
 			switch cmpOp {
 			case tree.Like, tree.NotLike:
 				negate := cmpOp == tree.NotLike
+				rightString := tree.UnescapePattern(string(tree.MustBeDString(constArg)), `\`)
 				op, err = colexecsel.GetLikeOperator(
-					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate,
+					evalCtx, leftOp, leftIdx, rightString, negate,
 				)
 			case tree.In, tree.NotIn:
 				negate := cmpOp == tree.NotIn
@@ -2284,9 +2285,9 @@ func planProjectionExpr(
 			switch projOp {
 			case tree.Like, tree.NotLike:
 				negate := projOp == tree.NotLike
+				rightString := tree.UnescapePattern(string(tree.MustBeDString(rConstArg)), `\`)
 				op, err = colexecproj.GetLikeProjectionOperator(
-					allocator, evalCtx, input, leftIdx, resultIdx,
-					string(tree.MustBeDString(rConstArg)), negate,
+					allocator, evalCtx, input, leftIdx, resultIdx, rightString, negate,
 				)
 			case tree.In, tree.NotIn:
 				negate := projOp == tree.NotIn

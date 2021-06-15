@@ -4814,6 +4814,12 @@ func unescapePattern(
 	return string(ret[0:retWidth]), nil
 }
 
+// UnescapePattern is useful for converting a LIKE predicate to a filter
+func UnescapePattern(pattern, escapeToken string) string {
+	s, _ := unescapePattern(pattern, `\`, false)
+	return s
+}
+
 // replaceUnescaped replaces all instances of oldStr that are not escaped (read:
 // preceded) with the specified unescape token with newStr.
 // For example, with an escape token of `\\`
