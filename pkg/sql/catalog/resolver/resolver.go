@@ -41,18 +41,12 @@ type SchemaResolver interface {
 	ObjectNameExistingResolver
 	ObjectNameTargetResolver
 	tree.QualifiedNameResolver
+	tree.TypeReferenceResolver
 
 	// Accessor is a crufty name and interface that wraps the *descs.Collection.
 	Accessor() catalog.Accessor
-
-	Txn() *kv.Txn
-	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
-	ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id descpb.ID) (catalog.TableDescriptor, error)
-
-	tree.TypeReferenceResolver
 }
 
 // ObjectNameExistingResolver is the helper interface to resolve table
