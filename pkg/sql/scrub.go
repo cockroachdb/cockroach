@@ -180,7 +180,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		objDesc, err := p.Accessor().GetObjectDesc(
+		_, objDesc, err := p.Accessor().GetObjectDesc(
 			ctx, p.txn, tableName.Catalog(), tableName.Schema(), tableName.Table(),
 			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
 		)

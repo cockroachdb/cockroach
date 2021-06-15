@@ -69,8 +69,27 @@ type VirtualObject interface {
 // ResolvedObjectPrefix represents the resolved components of an object name
 // prefix. It contains the parent database and schema.
 type ResolvedObjectPrefix struct {
+	// ExplicitDatabase and ExplicitSchema configure what is returned
+	// in the NamePrefix call.
+	ExplicitDatabase, ExplicitSchema bool
+
 	// Database is the parent database descriptor.
 	Database DatabaseDescriptor
 	// Schema is the parent schema.
 	Schema SchemaDescriptor
+}
+
+// NamePrefix returns the tree.ObjectNamePrefix with the appropriate names
+// and indications about which of those names were provided explicitly.
+func (p ResolvedObjectPrefix) NamePrefix() tree.ObjectNamePrefix {
+	var n tree.ObjectNamePrefix
+	n.ExplicitCatalog = p.ExplicitDatabase
+	n.ExplicitSchema = p.ExplicitSchema
+	if p.Database != nil {
+		n.CatalogName = tree.Name(p.Database.GetName())
+	}
+	if p.Schema != nil {
+		n.SchemaName = tree.Name(p.Schema.GetName())
+	}
+	return n
 }

@@ -98,7 +98,7 @@ func (b *buildContext) dropSchema(ctx context.Context, n *tree.DropSchema) {
 			panic(err)
 		}
 
-		sc, err := b.Descs.GetSchemaByName(ctx, b.EvalCtx.Txn, db.ID, scName, tree.SchemaLookupFlags{
+		sc, err := b.Descs.GetSchemaByName(ctx, b.EvalCtx.Txn, db, scName, tree.SchemaLookupFlags{
 			Required: true,
 		})
 		if err != nil {

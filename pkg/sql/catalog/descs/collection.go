@@ -257,29 +257,6 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 	return tc.kv.validateUncommittedDescriptors(ctx, txn)
 }
 
-// getSyntheticOrUncommittedDescriptor attempts to look up a descriptor in the
-// set of synthetic descriptors, followed by the set of uncommitted descriptors.
-func (tc *Collection) getSyntheticOrUncommittedDescriptor(
-	dbID descpb.ID, schemaID descpb.ID, name string, mutable bool,
-) (found bool, refuseFurtherLookup bool, desc catalog.Descriptor, err error) {
-	if found, sd := tc.synthetic.getByName(dbID, schemaID, name); found {
-		if mutable {
-			return false, false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
-		}
-		return true, false, sd, nil
-	}
-
-	var ud *uncommittedDescriptor
-	refuseFurtherLookup, ud = tc.kv.getUncommittedByName(dbID, schemaID, name)
-	if ud == nil {
-		return false, refuseFurtherLookup, nil, nil
-	}
-	if mutable {
-		return true, false, ud.mutable, nil
-	}
-	return true, false, ud.immutable, nil
-}
-
 func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 	return errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
 }
@@ -334,7 +311,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 		IncludeDropped: flags.IncludeDropped,
 		IncludeOffline: flags.IncludeOffline,
 	}
-	schema, err := tc.getSchemaByName(ctx, txn, dbDesc.GetID(), scName, schemaFlags)
+	schema, err := tc.getSchemaByName(ctx, txn, dbDesc, scName, schemaFlags)
 	if err != nil {
 		return nil, nil, err
 	}

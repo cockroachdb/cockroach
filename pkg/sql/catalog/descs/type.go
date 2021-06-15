@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,27 +50,13 @@ func (tc *Collection) GetImmutableTypeByName(
 func (tc *Collection) getTypeByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (found bool, _ catalog.TypeDescriptor, err error) {
-	found, desc, err := tc.getObjectByName(
+	flags.DesiredObjectKind = tree.TypeObject
+	_, desc, err := tc.getObjectByName(
 		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
-	if err != nil {
-		return false, nil, err
-	} else if !found {
-		if flags.Required {
-			return false, nil, sqlerrors.NewUndefinedTypeError(name)
-		}
-		return false, nil, nil
-	}
-	typ, ok := desc.(catalog.TypeDescriptor)
-	if !ok {
-		if flags.Required {
-			return false, nil, sqlerrors.NewUndefinedTypeError(name)
-		}
-		return false, nil, nil
-	}
-	if dropped, err := filterDescriptorState(typ, flags.Required, flags.CommonLookupFlags); err != nil || dropped {
+	if err != nil || desc == nil {
 		return false, nil, err
 	}
-	return true, typ, nil
+	return true, desc.(catalog.TypeDescriptor), nil
 }
 
 // GetMutableTypeVersionByID is the equivalent of GetMutableTableDescriptorByID

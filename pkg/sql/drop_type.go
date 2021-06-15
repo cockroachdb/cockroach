@@ -54,7 +54,7 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 	}
 	for _, name := range n.Names {
 		// Resolve the desired type descriptor.
-		typeDesc, err := p.ResolveMutableTypeDescriptor(ctx, name, !n.IfExists)
+		_, typeDesc, err := p.ResolveMutableTypeDescriptor(ctx, name, !n.IfExists)
 		if err != nil {
 			return nil, err
 		}

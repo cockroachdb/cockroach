@@ -90,53 +90,54 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool
 // and expects to see its own writes.
 func (n *createTableNode) ReadingOwnWrites() {}
 
-// getSchemaIDForCreate returns the ID of the schema to create an object within.
+// getNonTemporarySchemaForCreate returns the schema in which to create an object.
 // Note that it does not handle the temporary schema -- if the requested schema
 // is temporary, the caller needs to use (*planner).getOrCreateTemporarySchema.
-func (p *planner) getSchemaIDForCreate(
-	ctx context.Context, codec keys.SQLCodec, dbID descpb.ID, scName string,
-) (descpb.ID, error) {
+func (p *planner) getNonTemporarySchemaForCreate(
+	ctx context.Context, db catalog.DatabaseDescriptor, scName string,
+) (catalog.SchemaDescriptor, error) {
 	res, err := p.Descriptors().GetMutableSchemaByName(
-		ctx, p.txn, dbID, scName, tree.SchemaLookupFlags{
+		ctx, p.txn, db, scName, tree.SchemaLookupFlags{
 			Required:       true,
 			RequireMutable: true,
 		})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	switch res.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaUserDefined:
-		return res.GetID(), nil
+		return res, nil
 	case catalog.SchemaVirtual:
-		return 0, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
-		return 0, errors.AssertionFailedf("invalid schema kind for getSchemaIDForCreate: %d", res.SchemaKind())
+		return nil, errors.AssertionFailedf(
+			"invalid schema kind for getNonTemporarySchemaForCreate: %d", res.SchemaKind())
 	}
 }
 
-// getTableCreateParams returns the table key needed for the new table,
+// getSchemaForCreateTable returns the table key needed for the new table,
 // as well as the schema id. It returns valid data in the case that
 // the desired object exists.
-func getTableCreateParams(
+func getSchemaForCreateTable(
 	params runParams,
-	dbID descpb.ID,
+	db catalog.DatabaseDescriptor,
 	persistence tree.Persistence,
 	tableName *tree.TableName,
 	kind tree.RequiredTableKind,
 	ifNotExists bool,
-) (schemaID descpb.ID, err error) {
+) (schema catalog.SchemaDescriptor, err error) {
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
 	if tableName.Schema() == tree.PublicSchema {
 		if _, ok := types.PublicSchemaAliases[tableName.Object()]; ok {
-			return descpb.InvalidID, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
+			return nil, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
 		}
 	}
 
 	if persistence.IsTemporary() {
 		if !params.SessionData().TempTablesEnabled {
-			return descpb.InvalidID, errors.WithTelemetry(
+			return nil, errors.WithTelemetry(
 				pgerror.WithCandidateCode(
 					errors.WithHint(
 						errors.WithIssueLink(
@@ -153,18 +154,18 @@ func getTableCreateParams(
 
 		// If the table is temporary, get the temporary schema ID.
 		var err error
-		schemaID, err = params.p.getOrCreateTemporarySchema(params.ctx, dbID)
+		schema, err = params.p.getOrCreateTemporarySchema(params.ctx, db)
 		if err != nil {
-			return descpb.InvalidID, err
+			return nil, err
 		}
 	} else {
 		// Otherwise, find the ID of the schema to create the table within.
 		var err error
-		schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, dbID, tableName.Schema())
+		schema, err = params.p.getNonTemporarySchemaForCreate(params.ctx, db, tableName.Schema())
 		if err != nil {
-			return descpb.InvalidID, err
+			return nil, err
 		}
-		if schemaID != keys.PublicSchemaID {
+		if schema.SchemaKind() == catalog.SchemaUserDefined {
 			sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 		}
 	}
@@ -179,20 +180,20 @@ func getTableCreateParams(
 
 	// Check permissions on the schema.
 	if err := params.p.canCreateOnSchema(
-		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
-		return descpb.InvalidID, err
+		params.ctx, schema.GetID(), db.GetID(), params.p.User(), skipCheckPublicSchema); err != nil {
+		return nil, err
 	}
 
 	desc, err := catalogkv.GetDescriptorCollidingWithObject(
 		params.ctx,
 		params.p.txn,
 		params.ExecCfg().Codec,
-		dbID,
-		schemaID,
+		db.GetID(),
+		schema.GetID(),
 		tableName.Table(),
 	)
 	if err != nil {
-		return descpb.InvalidID, err
+		return nil, err
 	}
 	if desc != nil {
 		// Ensure that the descriptor that does exist has the appropriate type.
@@ -214,7 +215,7 @@ func getTableCreateParams(
 			// Only complain about mismatched types for
 			// if not exists clauses.
 			if mismatchedType && ifNotExists {
-				return descpb.InvalidID, pgerror.Newf(pgcode.WrongObjectType,
+				return nil, pgerror.Newf(pgcode.WrongObjectType,
 					"%q is not a %s",
 					tableName.Table(),
 					kind)
@@ -223,23 +224,23 @@ func getTableCreateParams(
 
 		// Check if the object already exists in a dropped state
 		if desc.Dropped() {
-			return descpb.InvalidID, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"%s %q is being dropped, try again later",
 				kind,
 				tableName.Table())
 		}
 
 		// Still return data in this case.
-		return schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.FQString())
+		return schema, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.FQString())
 	}
 
-	return schemaID, nil
+	return schema, nil
 }
 
 func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
-	schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Table,
+	schema, err := getSchemaForCreateTable(params, n.dbDesc, n.n.Persistence, &n.n.Table,
 		tree.ResolveRequireTableDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
@@ -251,7 +252,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		return err
 	}
-
 	if n.n.Interleave != nil {
 		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
 		if err := interleavedTableDeprecationAction(params); err != nil {
@@ -322,7 +322,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			asCols = asCols[:len(asCols)-1]
 		}
 		desc, err = newTableDescIfAs(
-			params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext(),
+			params, n.n, n.dbDesc, schema, id, creationTime, asCols, privs, params.p.EvalContext(),
 		)
 		if err != nil {
 			return err
@@ -335,7 +335,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[descpb.ID]*tabledesc.Mutable)
-		desc, err = newTableDesc(params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, privs, affected)
+		desc, err = newTableDesc(params, n.n, n.dbDesc, schema, id, creationTime, privs, affected)
 		if err != nil {
 			return err
 		}
@@ -363,7 +363,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
 		params.ctx,
-		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schemaID, n.n.Table.Table()),
+		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.n.Table.Table()),
 		id,
 		desc,
 		params.EvalContext().Settings,
@@ -819,7 +819,7 @@ func ResolveFK(
 		originCols[i] = col
 	}
 
-	target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, tree.ResolveRequireTableDesc)
+	_, target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -1122,7 +1122,7 @@ func addInterleave(
 		return interleaveOnRegionalByRowError()
 	}
 
-	parentTable, err := resolver.ResolveExistingTableObject(
+	_, parentTable, err := resolver.ResolveExistingTableObject(
 		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
 	)
 	if err != nil {
@@ -1345,7 +1345,9 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 func newTableDescIfAs(
 	params runParams,
 	p *tree.CreateTable,
-	parentID, parentSchemaID, id descpb.ID,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	id descpb.ID,
 	creationTime hlc.Timestamp,
 	resultColumns []colinfo.ResultColumn,
 	privileges *descpb.PrivilegeDescriptor,
@@ -1386,7 +1388,7 @@ func newTableDescIfAs(
 	desc, err = newTableDesc(
 		params,
 		p,
-		parentID, parentSchemaID, id,
+		db, sc, id,
 		creationTime,
 		privileges,
 		nil, /* affected */
@@ -1444,7 +1446,9 @@ func NewTableDesc(
 	vt resolver.SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
-	parentID, parentSchemaID, id descpb.ID,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	id descpb.ID,
 	regionConfig *multiregion.RegionConfig,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
@@ -1464,8 +1468,12 @@ func NewTableDesc(
 		o(&opts)
 	}
 
+	var dbID descpb.ID
+	if db != nil {
+		dbID = db.GetID()
+	}
 	desc := tabledesc.InitTableDescriptor(
-		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, persistence,
+		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
 
 	if err := paramparse.ApplyStorageParameters(
@@ -2219,8 +2227,12 @@ func NewTableDesc(
 	// table.
 	fkResolver := &fkSelfResolver{
 		SchemaResolver: vt,
-		newTableDesc:   &desc,
-		newTableName:   &n.Table,
+		prefix: catalog.ResolvedObjectPrefix{
+			Database: db,
+			Schema:   sc,
+		},
+		newTableDesc: &desc,
+		newTableName: &n.Table,
 	}
 
 	ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, n.Table, &desc, semaCtx)
@@ -2356,7 +2368,9 @@ func NewTableDesc(
 func newTableDesc(
 	params runParams,
 	n *tree.CreateTable,
-	parentID, parentSchemaID, id descpb.ID,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	id descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
@@ -2383,22 +2397,16 @@ func newTableDesc(
 		n.Defs = newDefs
 	}
 
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidCached: true,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
+	tn := tree.MakeTableNameFromPrefix(catalog.ResolvedObjectPrefix{
+		Database: db,
+		Schema:   sc,
+	}.NamePrefix(), tree.Name(n.Table.Table()))
 	for i, def := range n.Defs {
 		d, ok := def.(*tree.ColumnTableDef)
 		if !ok {
 			continue
 		}
-		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &n.Table)
+		newDef, prefix, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &tn)
 		if err != nil {
 			return nil, err
 		}
@@ -2406,8 +2414,8 @@ func newTableDesc(
 		if seqName != nil {
 			if err := doCreateSequence(
 				params,
-				seqDbDesc,
-				parentSchemaID,
+				prefix.Database,
+				prefix.Schema,
 				seqName,
 				n.Persistence,
 				seqOpts,
@@ -2423,8 +2431,8 @@ func newTableDesc(
 	}
 
 	var regionConfig *multiregion.RegionConfig
-	if dbDesc.IsMultiRegion() {
-		conf, err := SynthesizeRegionConfig(params.ctx, params.p.txn, parentID, params.p.Descriptors())
+	if db.IsMultiRegion() {
+		conf, err := SynthesizeRegionConfig(params.ctx, params.p.txn, db.GetID(), params.p.Descriptors())
 		if err != nil {
 			return nil, err
 		}
@@ -2435,15 +2443,15 @@ func newTableDesc(
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
 	// See the comment at the start of NewTableDesc() and ResolveFK().
-	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: parentID}, func() {
+	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: db.GetID()}, func() {
 		ret, err = NewTableDesc(
 			params.ctx,
 			params.p.txn,
 			params.p,
 			params.p.ExecCfg().Settings,
 			n,
-			parentID,
-			parentSchemaID,
+			db,
+			sc,
 			id,
 			regionConfig,
 			creationTime,
@@ -2480,7 +2488,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			newDefs = make(tree.TableDefs, 0, len(n.Defs))
 			newDefs = append(newDefs, n.Defs[:i]...)
 		}
-		td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, tree.ResolveRequireTableDesc)
+		_, td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}

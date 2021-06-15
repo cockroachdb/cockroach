@@ -12,11 +12,18 @@ package descs
 
 import (
 	"context"
+	"regexp"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -140,6 +147,145 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		return nil, err
 	}
 	return desc, nil
+}
+
+func isDatabasePrefix(parentID, parentSchemaID descpb.ID) bool {
+	return parentID == descpb.InvalidID && parentSchemaID == descpb.InvalidID
+}
+func isSchemaPrefix(parentID, parentSchemaID descpb.ID) bool {
+	return parentID != descpb.InvalidID && parentSchemaID == descpb.InvalidID
+}
+
+func (tc *Collection) getByName(
+	ctx context.Context,
+	txn *kv.Txn,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	name string,
+	avoidCached, mutable bool,
+) (found bool, desc catalog.Descriptor, err error) {
+	var parentID, parentSchemaID descpb.ID
+	switch {
+	case db == nil && sc == nil:
+		if db := maybeGetSystemDatabase(name, mutable); db != nil {
+			return true, db, nil
+		}
+	case sc == nil:
+		parentID = db.GetID()
+		if name == tree.PublicSchema {
+			return true, schemadesc.GetPublicSchema(), nil
+		}
+		if sc := tc.virtual.getSchemaByName(name); sc != nil {
+			return true, sc, nil
+		}
+		if isTemporarySchema(name) {
+			if refuseFurtherLookup, sc, err := tc.temporary.getSchemaByName(
+				ctx, txn, db.GetID(), name,
+			); refuseFurtherLookup || sc != nil || err != nil {
+				return sc != nil, sc, err
+			}
+		}
+		if id := db.GetSchemaID(name); id != descpb.InvalidID {
+			// TODO(ajwerner): Fill in flags here or, more likely, get rid of
+			// it on this path.
+			sc, err := tc.getSchemaByID(ctx, txn, id, tree.SchemaLookupFlags{
+				RequireMutable: mutable,
+				AvoidCached:    avoidCached,
+			})
+			if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+				errors.Is(err, catalog.ErrDescriptorDropped) {
+				err = nil
+			}
+			return sc != nil, sc, err
+		}
+		return false, nil, nil
+	default: // object
+		parentID, parentSchemaID = db.GetID(), sc.GetID()
+		// Note that we do not attempt to resolve virtual objects here.
+		// We resolve virtual objects by name at a higher level.
+		avoidCached = avoidCached || !canUseLeasingForObject(parentID, name)
+	}
+
+	if found, sd := tc.synthetic.getByName(parentID, parentSchemaID, name); found {
+		if mutable {
+			return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
+		}
+		return true, sd, nil
+	}
+
+	{
+		refuseFurtherLookup, ud := tc.kv.getUncommittedByName(parentID, parentSchemaID, name)
+		if ud != nil {
+			log.VEventf(ctx, 2, "found uncommitted descriptor %d", ud.GetID())
+			if mutable {
+				return true, ud.mutable, nil
+			}
+			return true, ud.immutable, nil
+		}
+		if refuseFurtherLookup {
+			return false, nil, nil
+		}
+	}
+
+	if avoidCached || mutable || lease.TestingTableLeasesAreDisabled() {
+		return tc.kv.getByName(
+			ctx, txn, parentID, parentSchemaID, name, mutable,
+		)
+	}
+
+	desc, shouldReadFromStore, err := tc.leased.getByName(
+		ctx, txn, parentID, parentSchemaID, name)
+	if err != nil {
+		return false, nil, err
+	}
+	if shouldReadFromStore {
+		return tc.kv.getByName(
+			ctx, txn, parentID, parentSchemaID, name, mutable,
+		)
+	}
+	return desc != nil, desc, nil
+}
+
+func isTemporarySchema(name string) bool {
+	return strings.HasPrefix(name, catconstants.PgTempSchemaName)
+}
+
+// TODO(vivek): Ideally we'd avoid caching for only the
+// system.descriptor and system.lease tables, because they are
+// used for acquiring leases, creating a chicken&egg problem.
+// But doing so turned problematic and the tests pass only by also
+// disabling caching of system.eventlog, system.rangelog, and
+// system.users. For now we're sticking to disabling caching of
+// all system descriptors except role_members, role_options, and users
+// (i.e., the ones used during authn/authz flows).
+// TODO (lucy): Reevaluate the above. We have many more system tables now and
+// should be able to lease most of them.
+var allowedCachedSystemTableNameRE = regexp.MustCompile(strings.Join([]string{
+	systemschema.RoleMembersTable.GetName(),
+	systemschema.RoleOptionsTable.GetName(),
+	systemschema.UsersTable.GetName(),
+	systemschema.JobsTable.GetName(),
+	systemschema.EventLogTable.GetName(),
+}, "|"))
+
+func canUseLeasingForObject(parentID descpb.ID, name string) bool {
+	return parentID != keys.SystemDatabaseID ||
+		allowedCachedSystemTableNameRE.MatchString(name)
+}
+
+func maybeGetSystemDatabase(name string, mutable bool) catalog.Descriptor {
+	if name != systemschema.SystemDatabaseName {
+		return nil
+	}
+	// The system database descriptor should never actually be mutated, which is
+	// why we return the same hard-coded descriptor every time. It's assumed
+	// that callers of this method will check the privileges on the descriptor
+	// (like any other database) and return an error.
+	if mutable {
+		proto := systemschema.MakeSystemDatabaseDesc().DatabaseDesc()
+		return dbdesc.NewBuilder(proto).BuildExistingMutableDatabase()
+	}
+	return systemschema.MakeSystemDatabaseDesc()
 }
 
 // filterDescriptorState wraps the more general catalog function to swallow

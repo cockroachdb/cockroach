@@ -2708,7 +2708,7 @@ func (og *operationGenerator) randType(
 		return typName, typ, nil
 	}
 	typ := randgen.RandSortingType(og.params.rng)
-	typeName := tree.MakeUnqualifiedTypeName(tree.Name(typ.SQLString()))
+	typeName := tree.MakeUnqualifiedTypeName(typ.SQLString())
 	return &typeName, typ, nil
 }
 

@@ -126,7 +126,7 @@ func resolveNewTypeName(
 		return nil, nil, errors.New("cannot create a type in the system database")
 	}
 
-	typename := tree.NewUnqualifiedTypeName(tree.Name(name.Object()))
+	typename := tree.NewUnqualifiedTypeName(name.Object())
 	typename.ObjectNamePrefix = prefix
 	return typename, db, nil
 }
@@ -135,29 +135,29 @@ func resolveNewTypeName(
 // TypeName and returns the ID of the parent schema.
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db catalog.DatabaseDescriptor,
-) (schemaID descpb.ID, err error) {
+) (schema catalog.SchemaDescriptor, err error) {
 	// Check we are not creating a type which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
 	if name.Schema() == tree.PublicSchema {
 		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
-			return descpb.InvalidID, sqlerrors.NewTypeAlreadyExistsError(name.String())
+			return nil, sqlerrors.NewTypeAlreadyExistsError(name.String())
 		}
 	}
 	// Get the ID of the schema the type is being created in.
 	dbID := db.GetID()
-	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, dbID, name.Schema())
+	schema, err = params.p.getNonTemporarySchemaForCreate(params.ctx, db, name.Schema())
 	if err != nil {
-		return descpb.InvalidID, err
+		return nil, err
 	}
 
 	// Check permissions on the schema.
 	if err := params.p.canCreateOnSchema(
-		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
-		return descpb.InvalidID, err
+		params.ctx, schema.GetID(), dbID, params.p.User(), skipCheckPublicSchema); err != nil {
+		return nil, err
 	}
 
-	if schemaID != keys.PublicSchemaID {
+	if schema.SchemaKind() == catalog.SchemaUserDefined {
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 	}
 
@@ -166,14 +166,14 @@ func getCreateTypeParams(
 		params.p.txn,
 		params.ExecCfg().Codec,
 		db.GetID(),
-		schemaID,
+		schema.GetID(),
 		name,
 	)
 	if err != nil {
-		return descpb.InvalidID, err
+		return nil, err
 	}
 
-	return schemaID, nil
+	return schema, nil
 }
 
 // Postgres starts off trying to create the type as _<typename>. It then
@@ -313,7 +313,7 @@ func (p *planner) createEnumWithID(
 	}
 
 	// Generate a key in the namespace table and a new id for this type.
-	schemaID, err := getCreateTypeParams(params, typeName, dbDesc)
+	schema, err := getCreateTypeParams(params, typeName, dbDesc)
 	if err != nil {
 		return err
 	}
@@ -333,13 +333,8 @@ func (p *planner) createEnumWithID(
 	// However having USAGE on a parent schema of the type
 	// gives USAGE privilege to the type.
 	privs := descpb.NewDefaultPrivilegeDescriptor(params.p.User())
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
-		params.ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
-	if err != nil {
-		return err
-	}
 
-	inheritUsagePrivilegeFromSchema(resolvedSchema, privs)
+	inheritUsagePrivilegeFromSchema(schema, privs)
 	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	enumKind := descpb.TypeDescriptor_ENUM
@@ -364,7 +359,7 @@ func (p *planner) createEnumWithID(
 		Name:           typeName.Type(),
 		ID:             id,
 		ParentID:       dbDesc.GetID(),
-		ParentSchemaID: schemaID,
+		ParentSchemaID: schema.GetID(),
 		Kind:           enumKind,
 		EnumMembers:    members,
 		Version:        1,
@@ -373,7 +368,7 @@ func (p *planner) createEnumWithID(
 	}).BuildCreatedMutableType()
 
 	// Create the implicit array type for this type before finishing the type.
-	arrayTypeID, err := p.createArrayType(params, typeName, typeDesc, dbDesc, schemaID)
+	arrayTypeID, err := p.createArrayType(params, typeName, typeDesc, dbDesc, schema.GetID())
 	if err != nil {
 		return err
 	}
@@ -384,7 +379,7 @@ func (p *planner) createEnumWithID(
 	// Now create the type after the implicit array type as been created.
 	if err := p.createDescriptorWithID(
 		params.ctx,
-		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schemaID, typeName.Type()),
+		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schema.GetID(), typeName.Type()),
 		id,
 		typeDesc,
 		params.EvalContext().Settings,

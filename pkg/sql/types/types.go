@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -2405,10 +2406,11 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 		}
 	}
 	err := errors.Newf(
-		"could not find %v in enum %q representation %s",
+		"could not find %v in enum %q representation %s %s",
 		phys,
 		t.TypeMeta.Name.FQName(),
 		t.TypeMeta.EnumData.debugString(),
+		debug.Stack(),
 	)
 	return 0, err
 }

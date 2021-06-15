@@ -368,7 +368,7 @@ func createPostgresTables(
 			schemaID = desc.ID
 		}
 		removeDefaultRegclass(create)
-		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), p.SemaCtx(), p.ExecCfg().Settings,
+		desc, err := MakeTestingSimpleTableDescriptor(evalCtx.Ctx(), p.SemaCtx(), p.ExecCfg().Settings,
 			create, parentID, schemaID, getNextPlaceholderDescID(), fks, walltime)
 		if err != nil {
 			return nil, err

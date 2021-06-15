@@ -107,7 +107,7 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
 			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
 	}
-	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
+	name := tree.MakeUnqualifiedTypeName(desc.GetName())
 	return name, typeDesc, nil
 }
 

@@ -20,9 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 type temporaryDescriptors struct {
@@ -46,9 +44,10 @@ func makeTemporaryDescriptors(
 //
 // TODO(ajwerner): Understand and rationalize the namespace lookup given the
 // schema lookup by ID path only returns descriptors owned by this session.
+// TODO(ajwerner):
 func (td *temporaryDescriptors) getSchemaByName(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
+) (refuseFurtherLookup bool, _ catalog.SchemaDescriptor, _ error) {
 	// If a temp schema is requested, check if it's for the current session, or
 	// else fall back to reading from the store.
 	if td.sessionData != nil {
@@ -56,7 +55,7 @@ func (td *temporaryDescriptors) getSchemaByName(
 			schemaName == td.sessionData.SearchPath.GetTemporarySchemaName() {
 			schemaID, found := td.sessionData.GetTemporarySchemaIDForDb(uint32(dbID))
 			if found {
-				return schemadesc.NewTemporarySchema(
+				return true, schemadesc.NewTemporarySchema(
 					td.sessionData.SearchPath.GetTemporarySchemaName(),
 					descpb.ID(schemaID),
 					dbID,
@@ -65,16 +64,10 @@ func (td *temporaryDescriptors) getSchemaByName(
 		}
 	}
 	exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, td.codec, dbID, schemaName)
-	if !exists && err == nil {
-		err = sqlerrors.NewUndefinedSchemaError(schemaName)
+	if !exists || err != nil {
+		return true, nil, err
 	}
-	if err != nil || !exists {
-		if err == nil && flags.Required {
-			err = sqlerrors.NewUndefinedSchemaError(schemaName)
-		}
-		return nil, err
-	}
-	return schemadesc.NewTemporarySchema(
+	return true, schemadesc.NewTemporarySchema(
 		schemaName,
 		schemaID,
 		dbID,

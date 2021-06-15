@@ -216,7 +216,6 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	tdb.Exec(t, "CREATE TYPE db.sc.typ AS ENUM ('foo')")
 	lm := s0.LeaseManager().(*lease.Manager)
 	ie := s0.InternalExecutor().(sqlutil.InternalExecutor)
-	var dbID descpb.ID
 	t.Run("database descriptors", func(t *testing.T) {
 		require.NoError(t, descs.Txn(ctx, s0.ClusterSettings(), lm, ie, s0.DB(), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -227,7 +226,6 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
-			dbID = db.GetID()
 
 			resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
@@ -298,11 +296,14 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			schema, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			require.NoError(t, err)
+
+			schema, err := descriptors.GetMutableSchemaByName(ctx, txn, db, "sc", flags)
 			require.NoError(t, err)
 			require.NotNil(t, schema)
 
-			resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
+			resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, db, "sc", flags)
 			require.NoError(t, err)
 			require.NotNil(t, schema)
 
@@ -346,7 +347,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags := tree.ObjectLookupFlags{}
 			flags.RequireMutable = true
 			flags.Required = true
-			tn := tree.MakeNewQualifiedTypeName("db", "sc", "typ")
+			tn := tree.MakeQualifiedTypeName("db", "sc", "typ")
 			_, typ, err := descriptors.GetMutableTypeByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
 
@@ -494,7 +495,7 @@ CREATE TABLE test.schema.t(x INT);
 				if err != nil {
 					return err
 				}
-				schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc.GetID(), "schema", tree.SchemaLookupFlags{Required: true})
+				schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc, "schema", tree.SchemaLookupFlags{Required: true})
 				if err != nil {
 					return err
 				}
