@@ -241,6 +241,17 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			"a: unable to parse min-version: invalid version string 'foo'",
 			nil,
 		},
+		{
+			testSpec{
+				Name:       "illegal *[]",
+				Owner:      OwnerUnitTest,
+				MinVersion: "foo",
+				Run:        dummyRun,
+				Cluster:    makeClusterSpec(0),
+			},
+			`illegal \*\[\]: Name must match this regexp: `,
+			nil,
+		},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {

@@ -85,8 +85,14 @@ func (r *testRegistry) Add(spec testSpec) {
 	r.m[spec.Name] = &spec
 }
 
+const testNameRE = "^[a-zA-Z0-9-_=/,]+$"
+
 // prepareSpec validates a spec and does minor massaging of its fields.
 func (r *testRegistry) prepareSpec(spec *testSpec) error {
+	if matched, err := regexp.MatchString(testNameRE, spec.Name); err != nil || !matched {
+		return fmt.Errorf("%s: Name must match this regexp: %s", spec.Name, testNameRE)
+	}
+
 	if spec.Run == nil {
 		return fmt.Errorf("%s: must specify Run", spec.Name)
 	}
