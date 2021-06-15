@@ -495,7 +495,7 @@ func (p *planner) GetOrInitSequenceCache() sessiondata.SequenceCache {
 }
 
 func (p *planner) LeaseMgr() *lease.Manager {
-	return p.Descriptors().LeaseManager()
+	return p.execCfg.LeaseManager
 }
 
 func (p *planner) Txn() *kv.Txn {

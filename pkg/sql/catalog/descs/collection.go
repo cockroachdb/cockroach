@@ -49,7 +49,6 @@ func MakeCollection(
 		codec = leaseMgr.Codec()
 	}
 	return Collection{
-		leaseMgr:       leaseMgr,
 		settings:       settings,
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
@@ -77,8 +76,6 @@ func NewCollection(
 // end of each transaction on the session, or on hitting conditions such
 // as errors, or retries that result in transaction timestamp changes.
 type Collection struct {
-	// leaseMgr manages acquiring and releasing per-descriptor leases.
-	leaseMgr *lease.Manager
 
 	// settings dictate whether we validate descriptors on write.
 	settings *cluster.Settings
@@ -382,7 +379,7 @@ func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 }
 
 func (tc *Collection) codec() keys.SQLCodec {
-	return tc.leaseMgr.Codec()
+	return tc.kv.codec
 }
 
 // AddDeletedDescriptor is temporarily tracking descriptors that have been,
@@ -394,9 +391,4 @@ func (tc *Collection) codec() keys.SQLCodec {
 // IMPORT or RESTORE.
 func (tc *Collection) AddDeletedDescriptor(desc catalog.Descriptor) {
 	tc.deletedDescs = append(tc.deletedDescs, desc)
-}
-
-// LeaseManager returns the lease.Manager.
-func (tc *Collection) LeaseManager() *lease.Manager {
-	return tc.leaseMgr
 }
