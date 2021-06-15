@@ -241,12 +241,12 @@ func TestSchemaChanger(t *testing.T) {
 						KeyColumnIDs:        []descpb.ColumnID{1},
 						KeyColumnNames:      []string{"i"},
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						StoreColumnIDs:      []descpb.ColumnID{2},
+						StoreColumnNames:    []string{"j"},
 						Unique:              true,
 						Type:                descpb.IndexDescriptor_FORWARD,
 					},
 					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
-					StoreColumnIDs:      []descpb.ColumnID{2},
-					StoreColumnNames:    []string{"j"},
 				}),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
 					TableID:    fooTable.GetID(),
@@ -272,8 +272,6 @@ func TestSchemaChanger(t *testing.T) {
 						Type:                descpb.IndexDescriptor_FORWARD,
 					},
 					OtherPrimaryIndexID: 2,
-					StoreColumnIDs:      []descpb.ColumnID{},
-					StoreColumnNames:    []string{},
 				}),
 			}
 
