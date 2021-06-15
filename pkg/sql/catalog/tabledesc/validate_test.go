@@ -125,6 +125,7 @@ var validationMap = []struct {
 			"LocalityConfig":                {status: iSolemnlySwearThisFieldIsValidated},
 			"PartitionAllBy":                {status: iSolemnlySwearThisFieldIsValidated},
 			"NewSchemaChangeJobID":          {status: iSolemnlySwearThisFieldIsValidated},
+			"IsRepaired":                    {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -239,6 +240,7 @@ var validationMap = []struct {
 			"Privileges":               {status: iSolemnlySwearThisFieldIsValidated},
 			"OfflineReason":            {status: thisFieldReferencesNoObjects},
 			"RegionConfig":             {status: iSolemnlySwearThisFieldIsValidated},
+			"IsRepaired":               {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -254,6 +256,7 @@ var validationMap = []struct {
 			"State":            {status: thisFieldReferencesNoObjects},
 			"OfflineReason":    {status: thisFieldReferencesNoObjects},
 			"RegionConfig":     {status: iSolemnlySwearThisFieldIsValidated},
+			"IsRepaired":       {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -268,6 +271,7 @@ var validationMap = []struct {
 			"DrainingNames":    {status: thisFieldReferencesNoObjects},
 			"ParentID":         {status: iSolemnlySwearThisFieldIsValidated},
 			"Privileges":       {status: iSolemnlySwearThisFieldIsValidated},
+			"IsRepaired":       {status: thisFieldReferencesNoObjects},
 		},
 	},
 }

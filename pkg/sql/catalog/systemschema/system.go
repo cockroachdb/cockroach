@@ -406,7 +406,7 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
 	ctx := context.Background()
 	b := tabledesc.NewBuilder(&desc)
-	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
+	_, err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
 	if err != nil {
 		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", desc.Name, err)
 	}
@@ -1773,6 +1773,6 @@ func newCommentPrivilegeDescriptor(
 				Privileges: priv.ToBitField(),
 			},
 		},
-		Version: descpb.OwnerVersion,
+		Version: descpb.Version21_2,
 	}
 }

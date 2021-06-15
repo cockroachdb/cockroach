@@ -79,12 +79,6 @@ type PostDeserializationTableDescriptorChanges struct {
 	// one index descriptor was upgraded
 	UpgradedIndexFormatVersion bool
 
-	// FixedPrivileges indicates that the privileges were fixed.
-	//
-	// TODO(ajwerner): Determine whether this still needs to exist of can be
-	// removed.
-	FixedPrivileges bool
-
 	// UpgradedForeignKeyRepresentation indicates that the foreign key
 	// representation was upgraded.
 	UpgradedForeignKeyRepresentation bool
@@ -95,6 +89,15 @@ type PostDeserializationTableDescriptorChanges struct {
 	// TODO(ajwerner): Remove this and the associated migration in 22.1 as
 	// this will never be true due to the corresponding long-running migration.
 	UpgradedNamespaceName bool
+
+	// UpgradedPrivileges indicates that the PrivilegeDescriptor version was upgraded.
+	UpgradedPrivileges bool
+}
+
+// Changed returns if any changes were made to the descriptor.
+func (p *PostDeserializationTableDescriptorChanges) Changed() bool {
+	return p.UpgradedPrivileges || p.UpgradedForeignKeyRepresentation ||
+		p.UpgradedFormatVersion || p.UpgradedIndexFormatVersion || p.UpgradedNamespaceName
 }
 
 // DescriptorType returns the type of this descriptor.

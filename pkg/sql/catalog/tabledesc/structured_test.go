@@ -299,7 +299,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	}
 	for i, test := range tests {
 		b := NewBuilder(&test.desc)
-		err := b.RunPostDeserializationChanges(context.Background(), nil)
+		_, err := b.RunPostDeserializationChanges(context.Background(), nil)
 		desc := b.BuildImmutableTable()
 		require.NoError(t, err)
 		changes, err := GetPostDeserializationChanges(desc)
@@ -414,7 +414,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 	}
 	for i, test := range tests {
 		b := NewBuilder(&test.desc)
-		err := b.RunPostDeserializationChanges(context.Background(), nil)
+		_, err := b.RunPostDeserializationChanges(context.Background(), nil)
 		desc := b.BuildImmutableTable()
 		require.NoError(t, err)
 		changes, err := GetPostDeserializationChanges(desc)

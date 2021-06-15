@@ -952,7 +952,7 @@ func maybeUpgradeDescriptors(
 		} else {
 			b = catalogkv.NewBuilder(desc.DescriptorProto())
 		}
-		err := b.RunPostDeserializationChanges(ctx, descGetter)
+		_, err := b.RunPostDeserializationChanges(ctx, descGetter)
 		if err != nil {
 			return err
 		}
