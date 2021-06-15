@@ -155,7 +155,7 @@ func descriptorFromKeyValue(
 	if err != nil || b == nil {
 		return nil, err
 	}
-	err = b.RunPostDeserializationChanges(ctx, dg)
+	_, err = b.RunPostDeserializationChanges(ctx, dg)
 	if err != nil {
 		return nil, err
 	}

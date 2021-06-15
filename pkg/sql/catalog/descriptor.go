@@ -77,7 +77,8 @@ type DescriptorBuilder interface {
 	// arguments other than ctx are optional. As of writing this, the only other
 	// argument is a DescGetter and a nil value will cause table foreign-key
 	// representation upgrades to be skipped.
-	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) error
+	// RunPostDeserializationChanges returns if the descriptor changed.
+	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) (bool, error)
 
 	// BuildImmutable returns an immutable Descriptor.
 	BuildImmutable() Descriptor
