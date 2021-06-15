@@ -595,7 +595,7 @@ vectorized: true
 ·
 • intersect
 │ columns: (b, c, d, e)
-│ ordering: +b,+c,+d,+e
+│ ordering: +b,+d,+c,+e
 │ estimated row count: 1 (missing stats)
 │
 ├── • filter
@@ -624,7 +624,7 @@ vectorized: true
           table: abcde@abcde_b_c_d_e_idx
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF-L2kAUxd_7KS73KcEpbv7olgFhdmuWBlyzTUL_UERi5tYG0iSdjLBF_O4lSdtVu6Z12b4Ic2Z-95x7kGyx_pYjR-_D3ezKn4Mx9aM4ejtj8M4Lr4PIMyHyZt7rGFYMUgaSAcFNGNyCcUJPVqkk8OexF0bNfd8zE96_8UIPjBQmYJlwNZ-CIWECZEIQTr0Qrj_CChkWpaR58pVq5J_QwgXDSpUp1XWpGmnbPvDlPfILhllRbXQjLximpSLkW9SZzgk5xskqp5ASSWp4gQwl6STL27FtItH-LlfLdCmXtMzkPTKMqqSoObxEhsFGcxA2Ew4TLhMjXOwYlhv94FjrZE3IrR3791Q3Wa5JkRpah5E6nYMh7KYgzrk_j1_97Ek4MAHhmicj2OdE2C_G_p_FOE8qxnnOYtxzIkyzWmdFqofuYQRhsV_rNusrSYokh0Z2TjqPnuQ8egbn8UnnB8NNUXbDDvwWDfm3J4_EvyW1poh0UA3HhwvE3yvie5-Iq9kMGeb0WRvCGjBhD5hwBky4A3OisvWXP-Xff7i9Kk5tfnlO5yHVVVnUdNzAo5MvmrVJrqmrsS43KqU7VaatTXcMWq4VJNW6u7W6g190V03AfdjqhUf9sN0LO_2w0wu7_bDbC48PYOsYHp0B28fwuBe-PIq92L34EQAA___K-yzi
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF-L2kAUxd_7KS73KcEpbv7olgFhdmuWBlyzTUL_UERi5tYG0iSdjLBF_O4lSdtVu6Z12b4Ic2Z-95x7kGyx_pYjR-_D3ezKn4Mx9aM4ejtj8M4Lr4PIMyHyZt7rGFYMUgaSAcFNGNyCcUJPVqkk8OexF0bNfd8zE96_8UIPjBQmYJlwNZ-CIWECZEIQTr0Qrj_CChkWpaR58pVq5J_QwgXDSpUp1XWpGmnbPvDlPfILhllRbXQjLximpSLkW9SZzgk5xskqp5ASSWp4gQwl6STL27FtItH-LlfLdCmXtMzkPTKMqqSoObxEhsFGcxA2Ew4TLhMjXOwYlhv94FjrZE3IrR3791Q3Wa5JkRpah5E6nYMh7KYgzrk_j1_97Ek4MAHhmicj2OdE2C_G_p_FOE8qxnnOYtxzIkyzWmdFqofuYQRhsV_rNusrSYokh0Z2TjqPnuQ8egbn8UnnB8NNUXbDDvwWDfm3J4_EvyW1poh0UA3HhwvE3yvie5-Iq9kMGeb0WRvCGjDhDJiwB0y4A3OisvWXP-Xff7i9Kk5tfnlO5yHVVVnUdNzAo5MvmrVJrqmrsS43KqU7VaatTXcMWq4VJNW6u7W6g190V03AfdjqhUf9sN0LO_2w0wu7_bDbC48PYOsYHp0B28fwuBe-PIq92L34EQAA___LAyzi
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT b, c, d, e FROM (SELECT b, c, d, e FROM abcde EXCEPT SELECT b, c, d, e FROM abcde) WHERE c = 1 AND d = e ORDER BY b, c, d, e
@@ -634,7 +634,7 @@ vectorized: true
 ·
 • except
 │ columns: (b, c, d, e)
-│ ordering: +b,+c,+d,+e
+│ ordering: +b,+d,+c,+e
 │ estimated row count: 1 (missing stats)
 │
 ├── • filter
@@ -663,7 +663,7 @@ vectorized: true
           table: abcde@abcde_b_c_d_e_idx
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9q20wQxe-_pxjmSsL74eiPnbJg2CRWqMGxUkm0KcUYWTt1BaqkrtaQEvzuRVLT2G6k1iG9MezZ_c05czB6wOpbhhy9u9v5xWwBxnQWRuG7OYP3XnDph54JoTf3riJYM0gYSAYE14F_A0aHHq8TSeDdXXm3URfbvDHhw1sv8MBIYAKWCReLKRgSJkAm-MHUC-Dy4x6JDPNC0iL-ShXyT2jhkmGpioSqqlC19NA8mMl75GcM07zc6lpeMkwKRcgfUKc6I-QYxeuMAoolqeEZMpSk4zRrxjbRRPO7Wq-SlVzRKpX3yDAs47zi8D8y9Leag7CZcJhwmRjhcsew2Oonx0rHG0Ju7djfp7pOM02K1NA6jNTqHAxh101xzmeL6M3PwoQDExCu2RnBPiXCfjH2vyzGeVExzmsW454SYZpWOs0TPXQPIwiLPa5br68kKZIcatnpdB69yHn0Cs7jTucnw21etMMO_JY1-acnz8S_IbWhkLRfDseHC0TfS-KPH4qL-RwZZvRZG8IaMGEPmHAGTLgDc6LSzZff5V__tr0eutY-P6XwgKqyyCs6Xv_ZyWf1ziQ31HZYFVuV0K0qksamPfoN1wiSKt3eWu1hlrdXdcB92OqF3X7Y7oWdftjphUf9sNsLjw9g6xgenQDbx_C4Fz4_ir3c_fcjAAD__7UbLSI=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9q20wQxe-_pxjmSsL74eiPnbJg2CRWqMGxUkm0KcUYWTt1BaqkrtaQEvzuRVLT2G6k1iG9MezZ_c05czB6wOpbhhy9u9v5xWwBxnQWRuG7OYP3XnDph54JoTf3riJYM0gYSAYE14F_A0aHHq8TSeDdXXm3URfbvDHhw1sv8MBIYAKWCReLKRgSJkAm-MHUC-Dy4x6JDPNC0iL-ShXyT2jhkmGpioSqqlC19NA8mMl75GcM07zc6lpeMkwKRcgfUKc6I-QYxeuMAoolqeEZMpSk4zRrxjbRRPO7Wq-SlVzRKpX3yDAs47zi8D8y9Leag7CZcJhwmRjhcsew2Oonx0rHG0Ju7djfp7pOM02K1NA6jNTqHAxh101xzmeL6M3PwoQDExCu2RnBPiXCfjH2vyzGeVExzmsW454SYZpWOs0TPXQPIwiLPa5br68kKZIcatnpdB69yHn0Cs7jTucnw21etMMO_JY1-acnz8S_IbWhkLRfDseHC0TfS-KPH4qL-RwZZvRZG8IaMOEMmLAHTLgDc6LSzZff5V__tr0eutY-P6XwgKqyyCs6Xv_ZyWf1ziQ31HZYFVuV0K0qksamPfoN1wiSKt3eWu1hlrdXdcB92OqF3X7Y7oWdftjphUf9sNsLjw9g6xgenQDbx_C4Fz4_ir3c_fcjAAD__7UjLSI=
 
 query T
 EXPLAIN (DISTSQL,VERBOSE) SELECT * FROM (SELECT * FROM abcde EXCEPT ALL SELECT * FROM abcde) WHERE c = 1 AND d = e ORDER BY a
@@ -712,7 +712,7 @@ vectorized: true
 ·
 • intersect all
 │ columns: (a, b, c, d, e)
-│ ordering: +b,+c,+d,+a,+e
+│ ordering: +b,+d,+a,+c,+e
 │ estimated row count: 1 (missing stats)
 │
 ├── • filter
@@ -741,7 +741,7 @@ vectorized: true
           table: abcde@abcde_b_c_d_e_idx
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9uLm1AQxt_7VwzzpM2UjZdAORA42calQjZuVXqhhGA801Swao8GtoT870Ut7BqStCn7EpjLN993fsE91j9zFOh9fljM_CUYcz-Kow8Lgo9eeBtEngmRt_DexfAa7sLgHoxhmWxSxeAvYy-M2vZssYATGyZ8eu-FHhgpTMEyYbacg6FgCmxCEM69EG6_wIYgJVAETJAgYVEqXiY_uEbxFS1cEVa6TLmuS9229t2Crx5RjAmzoto1bXtFmJaaUeyxyZqcUWCcbHIOOVGsb8ZIqLhJsrw726WT3e96s07Xas3rTD0iYVQlRS3gDa4OhOWueTpfN8mWUVgH-vcId1nesGZ9Yw39-74AQzotGSGEv4zf_gEkXZiCnJhnI9jXRHhOwX4xCs5_UXBekoJ7NsKT864otWLNamC8apV_WznxjnvWW464Caobd_iS-FfFYvg9IGHO3xpD2iOSzoikOyJpjUhORuZUZ9vvp0dIGOwaAdIiaZN0SLokJ2chTK75H0Kuq7Ko-RjGycvjlgCrLfdE63KnU37QZdrZ9GXQ6bqG4rrpp1Zf-EU_agM-F1sXxe5AbB-L7Yti57Kzc4WzdSx2L4onR86rw6vfAQAA___SNa8C
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9uLm1AQxt_7VwzzpM2UjZdAORA42calQjZuVXqhhGA801Swao8GtoT870Ut7BqStCn7EpjLN993fsE91j9zFOh9fljM_CUYcz-Kow8Lgo9eeBtEngmRt_DexfAa7sLgHoxhmWxSxeAvYy-M2vZssYATGyZ8eu-FHhgpTMEyYbacg6FgCmxCEM69EG6_wIYgJVAETJAgYVEqXiY_uEbxFS1cEVa6TLmuS9229t2Crx5RjAmzoto1bXtFmJaaUeyxyZqcUWCcbHIOOVGsb8ZIqLhJsrw726WT3e96s07Xas3rTD0iYVQlRS3gDa4OhOWueTpfN8mWUVgH-vcId1nesGZ9Yw39-74AQzotGSGEv4zf_gEkXZiCnJhnI9jXRHhOwX4xCs5_UXBekoJ7NsKT864otWLNamC8apV_WznxjnvWW464Caobd_iS-FfFYvg9IGHO3xpD2iOS7oikNSLpjEhORuZUZ9vvp0dIGOwaAdIiaZN0SLokJ2chTK75H0Kuq7Ko-RjGycvjlgCrLfdE63KnU37QZdrZ9GXQ6bqG4rrpp1Zf-EU_agM-F1sXxe5AbB-L7Yti57Kzc4WzdSx2L4onR86rw6vfAQAA___SLa8C
 
 # Regression test for #64181. Ensure that a projection on top of an ordered
 # UNION ALL correctly projects away ordering columns.

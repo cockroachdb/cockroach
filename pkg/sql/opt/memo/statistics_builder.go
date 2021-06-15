@@ -1851,8 +1851,8 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 	s := &relProps.Stats
 	setPrivate := setNode.Private().(*SetPrivate)
 
-	leftCols := opt.TranslateColSet(outputCols, setPrivate.OutCols, setPrivate.LeftCols)
-	rightCols := opt.TranslateColSet(outputCols, setPrivate.OutCols, setPrivate.RightCols)
+	leftCols := opt.TranslateColSetStrict(outputCols, setPrivate.OutCols, setPrivate.LeftCols)
+	rightCols := opt.TranslateColSetStrict(outputCols, setPrivate.OutCols, setPrivate.RightCols)
 	leftColStat := sb.colStatFromChild(leftCols, setNode, 0 /* childIdx */)
 	rightColStat := sb.colStatFromChild(rightCols, setNode, 1 /* childIdx */)
 
@@ -2356,7 +2356,7 @@ func (sb *statisticsBuilder) colStatWithScan(
 
 	// Calculate the corresponding col stat in the bound expression and convert
 	// the result.
-	inColSet := opt.TranslateColSet(colSet, withScan.OutCols, withScan.InCols)
+	inColSet := opt.TranslateColSetStrict(colSet, withScan.OutCols, withScan.InCols)
 	inColStat := sb.colStat(inColSet, boundExpr)
 
 	colStat, _ := s.ColStats.Add(colSet)

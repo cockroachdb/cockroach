@@ -1224,6 +1224,28 @@ func TestFuncDeps_MakeFullOuter(t *testing.T) {
 	verifyFD(t, outer, "")
 }
 
+func TestFuncDeps_RemapFrom(t *testing.T) {
+	var res props.FuncDepSet
+	abcde := makeAbcdeFD(t)
+	mnpq := makeMnpqFD(t)
+
+	from := opt.ColList{1, 2, 3, 4, 5, 10, 11, 12, 13}
+	to := make(opt.ColList, len(from))
+	for i := range from {
+		to[i] = from[i] * 10
+	}
+	res.RemapFrom(abcde, from, to)
+	verifyFD(t, &res, "key(10); (10)-->(20,30,40,50), (20,30)~~>(10,40,50)")
+	res.RemapFrom(mnpq, from, to)
+	verifyFD(t, &res, "key(100,110); (100,110)-->(120,130)")
+
+	// Test where not all columns in the FD are present in the mapping.
+	from = opt.ColList{1, 3, 4, 5}
+	to = opt.ColList{10, 30, 40, 50}
+	res.RemapFrom(abcde, from, to)
+	verifyFD(t, &res, "key(10); (10)-->(30,40,50)")
+}
+
 // Construct base table FD from figure 3.3, page 114:
 //   CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)
 //   CREATE UNIQUE INDEX ON abcde (b, c)

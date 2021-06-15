@@ -439,7 +439,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 		s.sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
-		return nil, errors.Errorf("failed to fetch statement stats: %s", err)
+		return nil, errors.Wrap(err, "failed to fetch statement stats")
 	}
 
 	return stmtStats, nil
@@ -459,7 +459,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 		s.sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{}, txnStatsVisitor)
 
 	if err != nil {
-		return nil, errors.Errorf("failed to fetch statement stats: %s", err)
+		return nil, errors.Wrap(err, "failed to fetch statement stats")
 	}
 
 	return txnStats, nil
@@ -509,7 +509,7 @@ func (s *Server) getScrubbedStmtStats(
 		statsProvider.IterateStatementStats(ctx, &sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
-		return nil, errors.Errorf("failed to fetch scrubbed statement stats: %s", err)
+		return nil, errors.Wrap(err, "failed to fetch scrubbed statement stats")
 	}
 
 	return scrubbedStats, nil
