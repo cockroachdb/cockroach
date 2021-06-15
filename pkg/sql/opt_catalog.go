@@ -1124,6 +1124,9 @@ type optIndex struct {
 	desc *descpb.IndexDescriptor
 	zone *zonepb.ZoneConfig
 
+	// columnOrds maps the index columns to table column ordinals.
+	columnOrds []int
+
 	// storedCols is the set of non-PK columns if this is the primary index,
 	// otherwise it is desc.StoreColumnIDs.
 	storedCols []descpb.ColumnID
@@ -1244,6 +1247,26 @@ func (oi *optIndex) init(
 		oi.numLaxKeyCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs)
 		oi.numKeyCols = oi.numLaxKeyCols
 	}
+
+	// Populate columnOrds.
+	inverted := oi.IsInverted()
+	numKeyCols := len(desc.ColumnIDs)
+	numKeySuffixCols := len(desc.ExtraColumnIDs)
+	oi.columnOrds = make([]int, oi.numCols)
+	for i := 0; i < oi.numCols; i++ {
+		var ord int
+		switch {
+		case inverted && i == numKeyCols-1:
+			ord = oi.invertedVirtualColOrd
+		case i < numKeyCols:
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		case i < numKeyCols+numKeySuffixCols:
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i-numKeyCols])
+		default:
+			ord, _ = oi.tab.lookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
+		}
+		oi.columnOrds[i] = ord
+	}
 }
 
 // ID is part of the cat.Index interface.
@@ -1291,30 +1314,13 @@ func (oi *optIndex) NonInvertedPrefixColumnCount() int {
 
 // Column is part of the cat.Index interface.
 func (oi *optIndex) Column(i int) cat.IndexColumn {
-	length := len(oi.desc.ColumnIDs)
-	if i < length {
-		ord := 0
-		if oi.IsInverted() && i == length-1 {
-			ord = oi.invertedVirtualColOrd
-		} else {
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
-		}
-		return cat.IndexColumn{
-			Column:     oi.tab.Column(ord),
-			Descending: oi.desc.ColumnDirections[i] == descpb.IndexDescriptor_DESC,
-		}
+	ord := oi.columnOrds[i]
+	// Only key columns have a direction.
+	descending := i < len(oi.desc.ColumnIDs) && oi.desc.ColumnDirections[i] == descpb.IndexDescriptor_DESC
+	return cat.IndexColumn{
+		Column:     oi.tab.Column(ord),
+		Descending: descending,
 	}
-
-	i -= length
-	length = len(oi.desc.ExtraColumnIDs)
-	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
-		return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
-	}
-
-	i -= length
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
-	return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
 }
 
 // VirtualInvertedColumn is part of the cat.Index interface.
