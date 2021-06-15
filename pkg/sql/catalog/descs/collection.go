@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -53,7 +52,7 @@ func MakeCollection(
 		leaseMgr:       leaseMgr,
 		settings:       settings,
 		hydratedTables: hydratedTables,
-		virtualSchemas: virtualSchemas,
+		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
 		synthetic:      makeSyntheticDescriptors(),
 		kv:             makeKVDescriptors(codec),
@@ -85,7 +84,7 @@ type Collection struct {
 	settings *cluster.Settings
 
 	// virtualSchemas optionally holds the virtual schemas.
-	virtualSchemas catalog.VirtualSchemas
+	virtual virtualDescriptors
 
 	// A collection of descriptors valid for the timestamp. They are released once
 	// the transaction using them is complete.
@@ -126,33 +125,6 @@ var _ catalog.Accessor = (*Collection)(nil)
 // only done when a deadline exists.
 func (tc *Collection) MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error) {
 	return tc.leased.maybeUpdateDeadline(ctx, txn)
-}
-
-func (tc *Collection) maybeGetVirtualObjectDesc(
-	schema string, object string, flags tree.ObjectLookupFlags, db string,
-) (isVirtual bool, _ catalog.Descriptor, _ error) {
-	if tc.virtualSchemas == nil {
-		return false, nil, nil
-	}
-	scEntry, ok := tc.virtualSchemas.GetVirtualSchema(schema)
-	if !ok {
-		return false, nil, nil
-	}
-	desc, err := scEntry.GetObjectByName(object, flags)
-	if err != nil {
-		return true, nil, err
-	}
-	if desc == nil {
-		if flags.Required {
-			obj := tree.NewQualifiedObjectName(db, schema, object, flags.DesiredObjectKind)
-			return true, nil, sqlerrors.NewUndefinedObjectError(obj, flags.DesiredObjectKind)
-		}
-		return true, nil, nil
-	}
-	if flags.RequireMutable {
-		return true, nil, catalog.NewMutableAccessToVirtualSchemaError(scEntry, object)
-	}
-	return true, desc.Desc(), nil
 }
 
 // SkipValidationOnWrite avoids validating uncommitted descriptors prior to
@@ -353,7 +325,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, descpb.IDs, error) {
-	if ok, names, ds := tc.maybeGetVirtualObjectNamesAndIDs(
+	if ok, names, ds := tc.virtual.maybeGetObjectNamesAndIDs(
 		scName, dbDesc, flags,
 	); ok {
 		return names, ds, nil
@@ -401,31 +373,6 @@ func (tc *Collection) GetObjectNamesAndIDs(
 	return tableNames, tableIDs, nil
 }
 
-func (tc *Collection) maybeGetVirtualObjectNamesAndIDs(
-	scName string, dbDesc catalog.DatabaseDescriptor, flags tree.DatabaseListFlags,
-) (isVirtual bool, _ tree.TableNames, _ descpb.IDs) {
-	if tc.virtualSchemas == nil {
-		return false, nil, nil
-	}
-	entry, ok := tc.virtualSchemas.GetVirtualSchema(scName)
-	if !ok {
-		return false, nil, nil
-	}
-	names := make(tree.TableNames, 0, entry.NumTables())
-	IDs := make(descpb.IDs, 0, entry.NumTables())
-	schemaDesc := entry.Desc()
-	entry.VisitTables(func(table catalog.VirtualObject) {
-		name := tree.MakeTableNameWithSchema(
-			tree.Name(dbDesc.GetName()), tree.Name(schemaDesc.GetName()), tree.Name(table.Desc().GetName()))
-		name.ExplicitCatalog = flags.ExplicitPrefix
-		name.ExplicitSchema = flags.ExplicitPrefix
-		names = append(names, name)
-		IDs = append(IDs, table.Desc().GetID())
-	})
-	return true, names, IDs
-
-}
-
 // SetSyntheticDescriptors sets the provided descriptors as the synthetic
 // descriptors to override all other matching descriptors during immutable
 // access. An immutable copy is made if the descriptor is mutable. See the
@@ -452,31 +399,4 @@ func (tc *Collection) AddDeletedDescriptor(desc catalog.Descriptor) {
 // LeaseManager returns the lease.Manager.
 func (tc *Collection) LeaseManager() *lease.Manager {
 	return tc.leaseMgr
-}
-
-func (tc *Collection) maybeGetVirtualDescriptorByID(
-	ctx context.Context, id descpb.ID, flags tree.CommonLookupFlags,
-) (catalog.Descriptor, error) {
-	if tc.virtualSchemas == nil {
-		return nil, nil
-	}
-	if vd, found := tc.virtualSchemas.GetVirtualObjectByID(id); found {
-		if flags.RequireMutable {
-			vs, found := tc.virtualSchemas.GetVirtualSchemaByID(vd.Desc().GetParentSchemaID())
-			if !found {
-				return nil, errors.AssertionFailedf(
-					"cannot resolve mutable virtual descriptor %d with unknown parent schema %d",
-					id, vd.Desc().GetParentSchemaID(),
-				)
-			}
-			return nil, catalog.NewMutableAccessToVirtualSchemaError(vs, vd.Desc().GetName())
-		}
-		return vd.Desc(), nil
-	}
-	if vs, found := tc.virtualSchemas.GetVirtualSchemaByID(id); found {
-		if flags.RequireMutable {
-			return nil, catalog.NewMutableAccessToVirtualSchemaError(vs, vs.Desc().GetName())
-		}
-	}
-	return nil, nil
 }
