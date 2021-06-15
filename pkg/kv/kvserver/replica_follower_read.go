@@ -166,15 +166,6 @@ func (r *Replica) maxClosedRLocked(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), appliedLAI)
 	maxClosed.Forward(initialMaxClosed)
 
-	// If the range has not upgraded to the new closed timestamp system,
-	// continue using the lease start time as an input to the range's closed
-	// timestamp. Otherwise, ignore it. We expect to delete this code soon, but
-	// we keep it around for now to avoid a regression in follower read
-	// availability in mixed v20.2/v21.1 clusters.
-	if raftClosed.IsEmpty() {
-		maxClosed.Forward(lease.Start.ToTimestamp())
-	}
-
 	// Look at the "new" closed timestamp propagation mechanism.
 	maxClosed.Forward(raftClosed)
 	maxClosed.Forward(sideTransportClosed)
