@@ -594,7 +594,7 @@ func RunCommitTrigger(
 	// timestamp was bumped after it acquired latches.
 	if txn.WriteTimestamp.Synthetic && rec.Clock().Now().Less(txn.WriteTimestamp) {
 		return result.Result{}, errors.AssertionFailedf("txn %s with %s commit trigger needs "+
-			"commit wait. Was its timestamp bumped after acquiring latches?", txn, errors.Safe(ct.Kind()))
+			"commit wait. Was its timestamp bumped after acquiring latches?", txn, ct.Kind())
 	}
 
 	// Stage the commit trigger's side-effects so that they will go into effect on

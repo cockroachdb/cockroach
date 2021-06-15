@@ -478,7 +478,7 @@ func (r *Replica) applyTimestampCache(
 // system.
 //
 func (r *Replica) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
+	ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 ) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.

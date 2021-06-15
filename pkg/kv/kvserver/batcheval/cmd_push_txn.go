@@ -139,7 +139,7 @@ func PushTxn(
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
-		log.VEventf(ctx, 2, "pushee txn record not found")
+		log.VEventf(ctx, 2, "pushee txn record not found (pushee: %s)", args.PusheeTxn.Short())
 		// There are three cases in which there is no transaction record:
 		//
 		// * the pushee is still active but its transaction record has not
@@ -161,7 +161,7 @@ func PushTxn(
 		// written. If a transaction record for the transaction could be written in
 		// the future then we must be in the first case. If one could not be written
 		// then we know we're in either the second or the third case.
-		reply.PusheeTxn = SynthesizeTxnFromMeta(cArgs.EvalCtx, args.PusheeTxn)
+		reply.PusheeTxn = SynthesizeTxnFromMeta(ctx, cArgs.EvalCtx, args.PusheeTxn)
 		if reply.PusheeTxn.Status == roachpb.ABORTED {
 			// If the transaction is uncommittable, we don't even need to
 			// persist an ABORTED transaction record, we can just consider it

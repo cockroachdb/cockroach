@@ -18,6 +18,7 @@
 package serverutils
 
 import (
+	"context"
 	gosql "database/sql"
 	"testing"
 
@@ -155,11 +156,17 @@ type TestClusterInterface interface {
 	// advancing the manual clock. The target is then instructed to acquire the
 	// ownerless lease. Most tests should use the cooperative version of this
 	// method, TransferRangeLease.
+	//
+	// Returns the new lease.
+	//
+	// If the lease starts out on dest, this is a no-op and the current lease is
+	// returned.
 	MoveRangeLeaseNonCooperatively(
+		ctx context.Context,
 		rangeDesc roachpb.RangeDescriptor,
 		dest roachpb.ReplicationTarget,
 		manual *hlc.HybridManualClock,
-	) error
+	) (*roachpb.Lease, error)
 
 	// LookupRange returns the descriptor of the range containing key.
 	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
