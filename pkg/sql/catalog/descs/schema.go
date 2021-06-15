@@ -38,15 +38,6 @@ func (tc *Collection) GetMutableSchemaByName(
 	return tc.getSchemaByName(ctx, txn, dbID, schemaName, flags)
 }
 
-// GetImmutableSchemaByName resolves the schema and, if applicable, returns an
-// immutable descriptor usable by the transaction. RequireMutable is ignored.
-func (tc *Collection) GetImmutableSchemaByName(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
-	flags.RequireMutable = false
-	return tc.getSchemaByName(ctx, txn, dbID, schemaName, flags)
-}
-
 // GetSchemaByName returns true and a ResolvedSchema object if the target schema
 // exists under the target database.
 func (tc *Collection) GetSchemaByName(

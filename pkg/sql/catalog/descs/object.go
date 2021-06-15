@@ -87,7 +87,7 @@ func (tc *Collection) getObjectByName(
 
 	// Resolve the schema.
 	dbID := db.GetID()
-	scDesc, err := tc.GetImmutableSchemaByName(ctx, txn, db.GetID(), schemaName,
+	scDesc, err := tc.getSchemaByName(ctx, txn, db.GetID(), schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    avoidCachedForParent,

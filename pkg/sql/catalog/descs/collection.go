@@ -334,7 +334,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 		IncludeDropped: flags.IncludeDropped,
 		IncludeOffline: flags.IncludeOffline,
 	}
-	schema, err := tc.GetImmutableSchemaByName(ctx, txn, dbDesc.GetID(), scName, schemaFlags)
+	schema, err := tc.getSchemaByName(ctx, txn, dbDesc.GetID(), scName, schemaFlags)
 	if err != nil {
 		return nil, nil, err
 	}
