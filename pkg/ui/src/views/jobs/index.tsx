@@ -62,7 +62,7 @@ export const showSetting = new LocalSetting<AdminUIState, string>(
 // Moment cannot render durations (moment/moment#1048). Hack it ourselves.
 export const formatDuration = (d: moment.Duration) =>
   [Math.floor(d.asHours()).toFixed(0), d.minutes(), d.seconds()]
-    .map(c => ("0" + c).slice(-2))
+    .map((c) => (c < 10 ? ("0" + c).slice(-2) : c))
     .join(":");
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
