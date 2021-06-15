@@ -1107,7 +1107,7 @@ t  CREATE TABLE public.t (
    z INT8 NULL,
    w INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
-   UNIQUE INDEX t_x_key (x ASC),
+   UNIQUE INDEX t_x_key (x ASC) STORING (y, z, w),
    INDEX i1 (z ASC) PARTITION BY LIST (z) (
      PARTITION p1 VALUES IN ((1), (2)),
      PARTITION p2 VALUES IN ((3), (4))
