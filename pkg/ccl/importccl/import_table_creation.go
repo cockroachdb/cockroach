@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -334,11 +333,6 @@ type fkResolver struct {
 
 var _ resolver.SchemaResolver = &fkResolver{}
 
-// Txn implements the resolver.SchemaResolver interface.
-func (r *fkResolver) Txn() *kv.Txn {
-	return nil
-}
-
 // Accessor implements the resolver.SchemaResolver interface.
 func (r *fkResolver) Accessor() catalog.Accessor {
 	return nil
@@ -357,13 +351,6 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 // CommonLookupFlags implements the resolver.SchemaResolver interface.
 func (r *fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{}
-}
-
-// ObjectLookupFlags implements the resolver.SchemaResolver interface.
-func (r *fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags {
-	return tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: requireMutable},
-	}
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
@@ -401,13 +388,6 @@ func (r fkResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	return false, scMeta, errSchemaResolver
-}
-
-// LookupTableByID implements the resolver.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(
-	ctx context.Context, id descpb.ID,
-) (catalog.TableDescriptor, error) {
-	return nil, errSchemaResolver
 }
 
 // ResolveTypeByOID implements the resolver.SchemaResolver interface.
