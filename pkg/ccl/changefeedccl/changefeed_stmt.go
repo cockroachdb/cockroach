@@ -208,7 +208,7 @@ func changefeedPlanHook(
 					return err
 				}
 				_, qualified := opts[changefeedbase.OptFullTableName]
-				name, err := getChangefeedTargetName(ctx, table, *p.ExecCfg(), p.Txn(), qualified)
+				name, err := getChangefeedTargetName(ctx, table, *p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
 				if err != nil {
 					return err
 				}
