@@ -88,11 +88,6 @@ func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) err
 	)
 	s := r.Replace(inputFileContents)
 
-	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
-	s = replaceManipulationFuncsAmbiguous(".Global.Left", s)
-	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
-	s = replaceManipulationFuncsAmbiguous(".Global.Right", s)
-
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Right.Assign", 6))
 

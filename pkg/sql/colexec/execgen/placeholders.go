@@ -27,8 +27,7 @@ var (
 
 // COPYVAL is a template function that can be used to set a scalar to the value
 // of another scalar in such a way that the destination won't be modified if the
-// source is. You must use this on the result of UNSAFEGET if you wish to store
-// that result past the lifetime of the batch you UNSAFEGET'd from.
+// source is.
 func COPYVAL(dest, src interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
