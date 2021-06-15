@@ -78,6 +78,7 @@ go_library(
         "pgx.go",
         "pgx_blocklist.go",
         "pop.go",
+        "prometheus.go",
         "psycopg.go",
         "psycopg_blocklist.go",
         "python_helpers.go",

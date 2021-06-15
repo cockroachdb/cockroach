@@ -140,7 +140,21 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		}
 		rampDuration = 30 * time.Second
 	}
+
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
+
+	// TODO(otan): make this work locally as well.
+	if !c.isLocal() {
+		t.Status("initializing prometheus")
+		p := initPrometheus(ctx, t, c, workloadNode, workloadNode)
+		defer func() {
+			t.Status("make prometheus snapshot")
+			p.snapshot(ctx, "workload-prometheus-snapshot.tar.gz")
+			t.Status("cleaning up prometheus")
+			p.cleanup(ctx)
+		}()
+	}
+
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
