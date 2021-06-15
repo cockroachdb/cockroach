@@ -109,9 +109,9 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 
 		if s.Cloud == AWS {
 			if s.PreferLocalSSD && isAWSSSD {
-				args = append(args, "--local-SSD=true")
+				args = append(args, "--local-ssd=true")
 			} else {
-				args = append(args, "--local-SSD=false")
+				args = append(args, "--local-ssd=false")
 			}
 		}
 
@@ -119,7 +119,7 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 		switch s.Cloud {
 		case AWS:
 			if isAWSSSD {
-				arg = "--aws-machine-type-SSD"
+				arg = "--aws-machine-type-ssd"
 			} else {
 				arg = "--aws-machine-type"
 			}
@@ -135,9 +135,9 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 	}
 
 	if s.Cloud != Local && s.VolumeSize != 0 {
-		fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-SSD flag")
+		fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
 		// Set network disk options.
-		args = append(args, "--local-SSD=false")
+		args = append(args, "--local-ssd=false")
 
 		var arg string
 		switch s.Cloud {
@@ -171,9 +171,9 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 			var arg string
 			switch s.Cloud {
 			case AWS:
-				arg = "--aws-Zones=" + zones
+				arg = "--aws-zones=" + zones
 			case GCE:
-				arg = "--gce-Zones=" + zones
+				arg = "--gce-zones=" + zones
 			case Azure:
 				arg = "--azure-locations=" + zones
 			default:
@@ -185,7 +185,7 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 	}
 
 	if s.Geo {
-		args = append(args, "--Geo")
+		args = append(args, "--geo")
 	}
 	if s.Lifetime != 0 {
 		args = append(args, "--lifetime="+s.Lifetime.String())
