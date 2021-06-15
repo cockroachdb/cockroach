@@ -340,7 +340,7 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`table is encoded using using version 0, but this client only supports version 4`,
+		{`table is encoded using using version 0, but this client only supports version 3`,
 			descpb.TableDescriptor{
 				ID:       2,
 				ParentID: 1,

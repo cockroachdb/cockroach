@@ -33,7 +33,7 @@ Stage 0
       StoreColumnNames:
       - j
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
 Stage 1
   *scop.MakeAddedColumnDeleteAndWriteOnly
@@ -67,7 +67,7 @@ Stage 4
       - i
       Name: new_primary_key
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
@@ -81,7 +81,7 @@ Stage 4
       - i
       Name: primary
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
 Stage 5
   *scop.MakeDroppedIndexDeleteOnly
@@ -124,7 +124,7 @@ Stage 0
       StoreColumnNames:
       - j
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
 Stage 1
   *scop.MakeAddedColumnDeleteAndWriteOnly
@@ -158,7 +158,7 @@ Stage 4
       - i
       Name: new_primary_key
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
@@ -172,7 +172,7 @@ Stage 4
       - i
       Name: primary
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
 Stage 5
   *scop.MakeDroppedIndexDeleteOnly
@@ -218,7 +218,7 @@ Stage 0
       - j
       - k
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeAddedColumnDeleteOnly
     Column:
@@ -267,7 +267,7 @@ Stage 4
       - i
       Name: new_primary_key
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
@@ -281,7 +281,7 @@ Stage 4
       - i
       Name: primary
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeColumnPublic
     ColumnID: 3
@@ -327,7 +327,7 @@ Stage 0
       StoreColumnNames:
       - a
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
 Stage 1
   *scop.MakeAddedColumnDeleteAndWriteOnly
@@ -361,7 +361,7 @@ Stage 4
       - i
       Name: new_primary_key
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
@@ -375,7 +375,7 @@ Stage 4
       - i
       Name: primary
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
 Stage 5
   *scop.MakeDroppedIndexDeleteOnly
@@ -423,7 +423,7 @@ Stage 0
       StoreColumnNames:
       - a
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeAddedColumnDeleteOnly
     Column:
@@ -454,6 +454,7 @@ Stage 0
       - j
       - b
       Unique: true
+      Version: 4
     TableID: 53
 Stage 1
   *scop.MakeAddedColumnDeleteAndWriteOnly
@@ -500,7 +501,7 @@ Stage 4
       - i
       Name: new_primary_key
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
@@ -514,7 +515,7 @@ Stage 4
       - i
       Name: primary
       Unique: true
-      Version: 3
+      Version: 4
     TableID: 52
   *scop.MakeColumnPublic
     ColumnID: 3
@@ -535,6 +536,7 @@ Stage 4
       StoreColumnNames:
       - j
       Unique: true
+      Version: 4
     TableID: 53
   *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
     Index:
@@ -552,6 +554,7 @@ Stage 4
       StoreColumnNames:
       - j
       Unique: true
+      Version: 4
     TableID: 53
 Stage 5
   *scop.MakeDroppedIndexDeleteOnly

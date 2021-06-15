@@ -64,6 +64,7 @@ func TestAllocateIDs(t *testing.T) {
 		PrimaryIndex: func() descpb.IndexDescriptor {
 			idx := makeIndexDescriptor("c", []string{"a", "b"})
 			idx.StoreColumnNames = []string{"c"}
+			idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 			return idx
 		}(),
 		Indexes: []descpb.IndexDescriptor{
@@ -107,7 +108,7 @@ func TestAllocateIDs(t *testing.T) {
 				descpb.IndexDescriptor_ASC},
 			StoreColumnIDs:   descpb.ColumnIDs{3},
 			StoreColumnNames: []string{"c"},
-			Version:          descpb.StrictIndexColumnIDGuaranteesVersion},
+			Version:          descpb.PrimaryIndexWithStoredColumnsVersion},
 		Indexes: []descpb.IndexDescriptor{
 			{ID: 2, Name: "d", KeyColumnIDs: []descpb.ColumnID{2, 1}, KeyColumnNames: []string{"b", "a"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC,

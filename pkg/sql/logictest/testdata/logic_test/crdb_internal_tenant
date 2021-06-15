@@ -124,8 +124,8 @@ SELECT
   parent_schema_id
 FROM crdb_internal.tables WHERE NAME = 'descriptor'
 ----
-table_id  parent_id  name        database_name  version  format_version                          state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
-3         1          descriptor  system         1        PrimaryIndexStoredColumnsFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
+table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
+3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
 
 # Verify that table names are not double escaped.
 
