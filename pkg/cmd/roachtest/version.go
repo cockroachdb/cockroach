@@ -213,7 +213,7 @@ func registerVersion(r *testRegistry) {
 			Name:       fmt.Sprintf("version/mixed/nodes=%d", n),
 			Owner:      OwnerKV,
 			MinVersion: "v2.1.0",
-			Cluster:    makeClusterSpec(n + 1),
+			Cluster:    r.makeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				pred, err := PredecessorVersion(r.buildVersion)
 				if err != nil {

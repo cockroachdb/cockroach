@@ -239,7 +239,7 @@ func registerNetwork(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("network/sanity/nodes=%d", numNodes),
 		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
 		},
@@ -247,7 +247,7 @@ func registerNetwork(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
 		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: r.makeClusterSpec(numNodes),
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/49901#issuecomment-640666646",
 		SkipDetails: `The ordering of steps in the test is:
 

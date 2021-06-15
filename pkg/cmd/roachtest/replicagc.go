@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -25,7 +26,7 @@ func registerReplicaGC(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
 			Owner:   OwnerKV,
-			Cluster: makeClusterSpec(6),
+			Cluster: r.makeClusterSpec(6),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
@@ -197,7 +198,7 @@ func (h *replicagcTestHelper) numReplicas(ctx context.Context, db *gosql.DB, tar
 // decommission decommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *replicagcTestHelper) decommission(
-	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
 ) error {
 	args := []string{"node", "decommission"}
 	args = append(args, verbs...)
@@ -212,7 +213,7 @@ func (h *replicagcTestHelper) decommission(
 // recommission recommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *replicagcTestHelper) recommission(
-	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
 ) error {
 	args := []string{"node", "recommission"}
 	args = append(args, verbs...)

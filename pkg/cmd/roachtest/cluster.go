@@ -12,7 +12,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"encoding/json"
@@ -37,6 +36,8 @@ import (
 
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -48,17 +49,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	aws   = "aws"
-	gce   = "gce"
-	azure = "azure"
-)
-
 var (
-	local            bool
+	// TODO(tbg): this is redundant with --cloud==local. Make the --local flag an
+	// alias for `--cloud=local` and remove this variable.
+	local bool
+
 	cockroach        string
 	libraryFilePaths []string
-	cloud                         = gce
+	cloud                         = spec.GCE
 	encrypt          encryptValue = "false"
 	instanceType     string
 	localSSDArg      bool
@@ -196,6 +194,9 @@ func initBinariesAndLibraries() {
 	// to true in order to get the "local" test configurations.
 	if clusterName == "local" {
 		local = true
+	}
+	if local {
+		cloud = spec.Local
 	}
 
 	cockroachDefault := "cockroach"
@@ -650,98 +651,6 @@ func MachineTypeToCPUs(s string) int {
 	return -1
 }
 
-func awsMachineType(cpus int) string {
-	switch {
-	case cpus <= 2:
-		return "c5d.large"
-	case cpus <= 4:
-		return "c5d.xlarge"
-	case cpus <= 8:
-		return "c5d.2xlarge"
-	case cpus <= 16:
-		return "c5d.4xlarge"
-	case cpus <= 36:
-		return "c5d.9xlarge"
-	case cpus <= 72:
-		return "c5d.18xlarge"
-	case cpus <= 96:
-		// There is no c5d.24xlarge.
-		return "m5d.24xlarge"
-	default:
-		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
-	}
-}
-
-// Default GCE machine type when none is specified.
-func gceMachineType(cpus int) string {
-	// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
-	// machines have a decent amount of RAM. We could use customer machine
-	// configurations, but the rules for the amount of RAM per CPU need to be
-	// determined (you can't request any arbitrary amount of RAM).
-	if cpus < 16 {
-		return fmt.Sprintf("n1-standard-%d", cpus)
-	}
-	return fmt.Sprintf("n1-highcpu-%d", cpus)
-}
-
-func azureMachineType(cpus int) string {
-	switch {
-	case cpus <= 2:
-		return "Standard_D2_v3"
-	case cpus <= 4:
-		return "Standard_D4_v3"
-	case cpus <= 8:
-		return "Standard_D8_v3"
-	case cpus <= 16:
-		return "Standard_D16_v3"
-	case cpus <= 36:
-		return "Standard_D32_v3"
-	case cpus <= 48:
-		return "Standard_D48_v3"
-	case cpus <= 64:
-		return "Standard_D64_v3"
-	default:
-		panic(fmt.Sprintf("no azure machine type with %d cpus", cpus))
-	}
-}
-
-func machineTypeFlag(machineType string) string {
-	switch cloud {
-	case aws:
-		if isSSD(machineType) {
-			return "--aws-machine-type-ssd"
-		}
-		return "--aws-machine-type"
-	case gce:
-		return "--gce-machine-type"
-	case azure:
-		return "--azure-machine-type"
-	default:
-		panic(fmt.Sprintf("unsupported cloud: %s\n", cloud))
-	}
-}
-
-func isSSD(machineType string) bool {
-	if cloud != aws {
-		panic("can only differentiate SSDs based on machine type on AWS")
-	}
-	if !localSSDArg {
-		// Overridden by the user using a cmd arg.
-		return false
-	}
-
-	typeAndSize := strings.Split(machineType, ".")
-	if len(typeAndSize) == 2 {
-		awsType := typeAndSize[0]
-		// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
-		return strings.HasPrefix(awsType, "i3") || strings.HasSuffix(awsType, "d")
-	}
-
-	fmt.Fprint(os.Stderr, "aws machine type does not match expected format 'type.size' (e.g. c5d.4xlarge)", machineType)
-	os.Exit(1)
-	return false
-}
-
 type testI interface {
 	Name() string
 	Fatal(args ...interface{})
@@ -754,379 +663,24 @@ type testI interface {
 	Status(args ...interface{})
 }
 
-// TODO(tschottdorf): Consider using a more idiomatic approach in which options
-// act upon a config struct:
-// https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis
-type option interface {
-	option()
-}
-
 type nodeSelector interface {
-	option
-	merge(nodeListOption) nodeListOption
-}
-
-type nodeListOption []int
-
-func (n nodeListOption) option() {}
-
-func (n nodeListOption) merge(o nodeListOption) nodeListOption {
-	t := make(nodeListOption, 0, len(n)+len(o))
-	t = append(t, n...)
-	t = append(t, o...)
-	sort.Ints([]int(t))
-	r := t[:1]
-	for i := 1; i < len(t); i++ {
-		if r[len(r)-1] != t[i] {
-			r = append(r, t[i])
-		}
-	}
-	return r
-}
-
-func (n nodeListOption) randNode() nodeListOption {
-	return nodeListOption{n[rand.Intn(len(n))]}
-}
-
-// nodeIDsString returns a space separated list of all node IDs comprising this
-// list.
-func (n nodeListOption) nodeIDsString() string {
-	result := ""
-	for _, i := range n {
-		result += fmt.Sprintf("%s ", strconv.Itoa(i))
-	}
-	return result
-}
-
-func (n nodeListOption) String() string {
-	if len(n) == 0 {
-		return ""
-	}
-
-	var buf bytes.Buffer
-	buf.WriteByte(':')
-
-	appendRange := func(start, end int) {
-		if buf.Len() > 1 {
-			buf.WriteByte(',')
-		}
-		if start == end {
-			fmt.Fprintf(&buf, "%d", start)
-		} else {
-			fmt.Fprintf(&buf, "%d-%d", start, end)
-		}
-	}
-
-	start, end := -1, -1
-	for _, i := range n {
-		if start != -1 && end == i-1 {
-			end = i
-			continue
-		}
-		if start != -1 {
-			appendRange(start, end)
-		}
-		start, end = i, i
-	}
-	if start != -1 {
-		appendRange(start, end)
-	}
-	return buf.String()
+	option.Option
+	Merge(option.NodeListOption) option.NodeListOption
 }
 
 // workerAction informs a cluster operation that the callee is a "worker" rather
 // than the test's main goroutine.
 type workerAction struct{}
 
-var _ option = workerAction{}
+var _ option.Option = workerAction{}
 
-func (o workerAction) option() {}
+func (o workerAction) Option() {}
 
 // withWorkerAction creates the workerAction option, informing a cluster
 // operation that the callee is a "worker" rather than the test's main
 // goroutine.
-func withWorkerAction() option {
+func withWorkerAction() option.Option {
 	return workerAction{}
-}
-
-// clusterSpec represents a test's description of what its cluster needs to
-// look like. It becomes part of a clusterConfig when the cluster is created.
-type clusterSpec struct {
-	NodeCount int
-	// CPUs is the number of CPUs per node.
-	CPUs        int
-	SSDs        int
-	VolumeSize  int
-	Zones       string
-	Geo         bool
-	Lifetime    time.Duration
-	ReusePolicy clusterReusePolicy
-}
-
-func makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
-	spec := clusterSpec{NodeCount: nodeCount}
-	defaultOpts := []createOption{cpu(4), nodeLifetimeOption(12 * time.Hour), reuseAny()}
-	for _, o := range append(defaultOpts, opts...) {
-		o.apply(&spec)
-	}
-	return spec
-}
-
-func clustersCompatible(s1, s2 clusterSpec) bool {
-	s1.Lifetime = 0
-	s2.Lifetime = 0
-	return s1 == s2
-}
-
-func (s clusterSpec) String() string {
-	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
-	if s.Geo {
-		str += "-geo"
-	}
-	return str
-}
-
-func firstZone(zones string) string {
-	return strings.SplitN(zones, ",", 2)[0]
-}
-
-func (s *clusterSpec) args() []string {
-	var args []string
-
-	switch cloud {
-	case aws:
-		args = append(args, "--clouds=aws")
-	case gce:
-		args = append(args, "--clouds=gce")
-	case azure:
-		args = append(args, "--clouds=azure")
-	}
-
-	if !local && s.CPUs != 0 {
-		// Use the machine type specified as a CLI flag.
-		machineType := instanceType
-		if len(machineType) == 0 {
-			// If no machine type was specified, choose one
-			// based on the cloud and CPU count.
-			switch cloud {
-			case aws:
-				machineType = awsMachineType(s.CPUs)
-			case gce:
-				machineType = gceMachineType(s.CPUs)
-			case azure:
-				machineType = azureMachineType(s.CPUs)
-			}
-		}
-		if cloud == aws {
-			if isSSD(machineType) {
-				args = append(args, "--local-ssd=true")
-			} else {
-				args = append(args, "--local-ssd=false")
-			}
-		}
-		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
-		args = append(args, machineTypeArg)
-	}
-
-	if !local && s.VolumeSize != 0 {
-		fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
-		// Set network disk options.
-		args = append(args, "--local-ssd=false")
-
-		var arg string
-		switch cloud {
-		case gce:
-			arg = fmt.Sprintf("--gce-pd-volume-size=%d", s.VolumeSize)
-		default:
-			fmt.Fprintf(os.Stderr, "specifying volume size is not yet supported on %s", cloud)
-			os.Exit(1)
-		}
-		args = append(args, arg)
-	}
-
-	if !local && s.SSDs != 0 {
-		var arg string
-		switch cloud {
-		case gce:
-			arg = fmt.Sprintf("--gce-local-ssd-count=%d", s.SSDs)
-		default:
-			fmt.Fprintf(os.Stderr, "specifying ssd count is not yet supported on %s", cloud)
-			os.Exit(1)
-		}
-		args = append(args, arg)
-	}
-
-	if !local {
-		zones := s.Zones
-		if zones == "" {
-			zones = zonesF
-		}
-		if zones != "" {
-			if !s.Geo {
-				zones = firstZone(zones)
-			}
-			var arg string
-			switch cloud {
-			case aws:
-				arg = "--aws-zones=" + zones
-			case gce:
-				arg = "--gce-zones=" + zones
-			case azure:
-				arg = "--azure-locations=" + zones
-			default:
-				fmt.Fprintf(os.Stderr, "specifying zones is not yet supported on %s", cloud)
-				os.Exit(1)
-			}
-			args = append(args, arg)
-		}
-	}
-
-	if s.Geo {
-		args = append(args, "--geo")
-	}
-	if s.Lifetime != 0 {
-		args = append(args, "--lifetime="+s.Lifetime.String())
-	}
-	if len(createArgs) > 0 {
-		args = append(args, createArgs...)
-	}
-	return args
-}
-
-func (s *clusterSpec) expiration() time.Time {
-	l := s.Lifetime
-	if l == 0 {
-		l = 12 * time.Hour
-	}
-	return timeutil.Now().Add(l)
-}
-
-type createOption interface {
-	apply(spec *clusterSpec)
-}
-
-type nodeCPUOption int
-
-func (o nodeCPUOption) apply(spec *clusterSpec) {
-	spec.CPUs = int(o)
-}
-
-// cpu is a node option which requests nodes with the specified number of CPUs.
-func cpu(n int) nodeCPUOption {
-	return nodeCPUOption(n)
-}
-
-type volumeSizeOption int
-
-func (o volumeSizeOption) apply(spec *clusterSpec) {
-	spec.VolumeSize = int(o)
-}
-
-// volumeSize is the size in GB of the disk volume.
-func volumeSize(n int) volumeSizeOption {
-	return volumeSizeOption(n)
-}
-
-type nodeSSDOption int
-
-func (o nodeSSDOption) apply(spec *clusterSpec) {
-	spec.SSDs = int(o)
-}
-
-// ssd is a node option which requests nodes with the specified number of SSDs.
-func ssd(n int) nodeSSDOption {
-	return nodeSSDOption(n)
-}
-
-type nodeGeoOption struct{}
-
-func (o nodeGeoOption) apply(spec *clusterSpec) {
-	spec.Geo = true
-}
-
-// geo is a node option which requests geo-distributed nodes.
-func geo() nodeGeoOption {
-	return nodeGeoOption{}
-}
-
-type nodeZonesOption string
-
-func (o nodeZonesOption) apply(spec *clusterSpec) {
-	spec.Zones = string(o)
-}
-
-// zones is a node option which requests geo-distributed nodes. Note that this
-// overrides the --zones flag and is useful for tests that require running on
-// specific zones.
-func zones(s string) nodeZonesOption {
-	return nodeZonesOption(s)
-}
-
-type nodeLifetimeOption time.Duration
-
-func (o nodeLifetimeOption) apply(spec *clusterSpec) {
-	spec.Lifetime = time.Duration(o)
-}
-
-// clusterReusePolicy indicates what clusters a particular test can run on and
-// who (if anybody) can reuse the cluster after the test has finished running
-// (either passing or failing). See the individual policies for details.
-//
-// Only tests whose cluster spec matches can ever run on the same
-// cluster, regardless of this policy.
-//
-// Clean clusters (freshly-created clusters or cluster on which a test with the
-// Any policy ran) are accepted by all policies.
-//
-// Note that not all combinations of "what cluster can I accept" and "how am I
-// soiling this cluster" can be expressed. For example, there's no way to
-// express that I'll accept a cluster that was tagged a certain way but after me
-// nobody else can reuse the cluster at all.
-type clusterReusePolicy interface {
-	clusterReusePolicy()
-}
-
-// reusePolicyAny means that only clean clusters are accepted and the cluster
-// can be used by any other test (i.e. the cluster remains "clean").
-type reusePolicyAny struct{}
-
-// reusePolicyNone means that only clean clusters are accepted and the cluster
-// cannot be reused afterwards.
-type reusePolicyNone struct{}
-
-// reusePolicyTagged means that clusters left over by similarly-tagged tests are
-// accepted in addition to clean cluster and, regardless of how the cluster
-// started up, it will be tagged with the given tag at the end (so only
-// similarly-tagged tests can use it afterwards).
-//
-// The idea is that a tag identifies a particular way in which a test is soiled,
-// since it's common for groups of tests to mess clusters up in similar ways and
-// to also be able to reset the cluster when the test starts. It's like a virus
-// - if you carry it, you infect a clean host and can otherwise intermingle with
-// other hosts that are already infected. Note that using this policy assumes
-// that the way in which every test soils the cluster is idempotent.
-type reusePolicyTagged struct{ tag string }
-
-func (reusePolicyAny) clusterReusePolicy()    {}
-func (reusePolicyNone) clusterReusePolicy()   {}
-func (reusePolicyTagged) clusterReusePolicy() {}
-
-type clusterReusePolicyOption struct {
-	p clusterReusePolicy
-}
-
-func reuseAny() clusterReusePolicyOption {
-	return clusterReusePolicyOption{p: reusePolicyAny{}}
-}
-func reuseNone() clusterReusePolicyOption {
-	return clusterReusePolicyOption{p: reusePolicyNone{}}
-}
-func reuseTagged(tag string) clusterReusePolicyOption {
-	return clusterReusePolicyOption{p: reusePolicyTagged{tag: tag}}
-}
-
-func (p clusterReusePolicyOption) apply(spec *clusterSpec) {
-	spec.ReusePolicy = p.p
 }
 
 // cluster provides an interface for interacting with a set of machines,
@@ -1137,7 +691,7 @@ func (p clusterReusePolicyOption) apply(spec *clusterSpec) {
 type cluster struct {
 	name string
 	tag  string
-	spec clusterSpec
+	spec spec.ClusterSpec
 	t    testI
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
@@ -1179,7 +733,7 @@ func (c *cluster) EncryptDefault(b bool) {
 }
 
 // Spec returns the spec underlying the cluster.
-func (c *cluster) Spec() clusterSpec {
+func (c *cluster) Spec() spec.ClusterSpec {
 	return c.spec
 }
 
@@ -1242,7 +796,7 @@ func (c *cluster) closeLogger() {
 }
 
 type clusterConfig struct {
-	spec clusterSpec
+	spec spec.ClusterSpec
 	// artifactsDir is the path where log file will be stored.
 	artifactsDir string
 	localCluster bool
@@ -1330,7 +884,7 @@ func (f *clusterFactory) newCluster(
 		return c, nil
 	}
 
-	exp := cfg.spec.expiration()
+	exp := cfg.spec.Expiration()
 	if cfg.localCluster {
 		// Local clusters never expire.
 		exp = timeutil.Now().Add(100000 * time.Hour)
@@ -1348,7 +902,13 @@ func (f *clusterFactory) newCluster(
 	}
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
-	sargs = append(sargs, cfg.spec.args()...)
+	{
+		args, err := cfg.spec.Args(createArgs...)
+		if err != nil {
+			return nil, err
+		}
+		sargs = append(sargs, args...)
+	}
 	if !cfg.useIOBarrier && localSSDArg {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
@@ -1413,11 +973,11 @@ func attachToExistingCluster(
 	ctx context.Context,
 	name string,
 	l *logger.Logger,
-	spec clusterSpec,
+	spec spec.ClusterSpec,
 	opt attachOpt,
 	r *clusterRegistry,
 ) (*cluster, error) {
-	exp := spec.expiration()
+	exp := spec.Expiration()
 	if name == "local" {
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
@@ -1513,7 +1073,7 @@ func (c *cluster) Save(ctx context.Context, msg string, l *logger.Logger) {
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
-func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger.Logger) error {
+func (c *cluster) validate(ctx context.Context, nodes spec.ClusterSpec, l *logger.Logger) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
@@ -1557,16 +1117,16 @@ func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger.Log
 }
 
 // All returns a node list containing all of the nodes in the cluster.
-func (c *cluster) All() nodeListOption {
+func (c *cluster) All() option.NodeListOption {
 	return c.Range(1, c.spec.NodeCount)
 }
 
 // All returns a node list containing the nodes [begin,end].
-func (c *cluster) Range(begin, end int) nodeListOption {
+func (c *cluster) Range(begin, end int) option.NodeListOption {
 	if begin < 1 || end > c.spec.NodeCount {
 		c.t.Fatalf("invalid node range: %d-%d (1-%d)", begin, end, c.spec.NodeCount)
 	}
-	r := make(nodeListOption, 0, 1+end-begin)
+	r := make(option.NodeListOption, 0, 1+end-begin)
 	for i := begin; i <= end; i++ {
 		r = append(r, i)
 	}
@@ -1574,8 +1134,8 @@ func (c *cluster) Range(begin, end int) nodeListOption {
 }
 
 // All returns a node list containing only the node i.
-func (c *cluster) Nodes(ns ...int) nodeListOption {
-	r := make(nodeListOption, 0, len(ns))
+func (c *cluster) Nodes(ns ...int) option.NodeListOption {
+	r := make(option.NodeListOption, 0, len(ns))
 	for _, n := range ns {
 		if n < 1 || n > c.spec.NodeCount {
 			c.t.Fatalf("invalid node range: %d (1-%d)", n, c.spec.NodeCount)
@@ -1587,7 +1147,7 @@ func (c *cluster) Nodes(ns ...int) nodeListOption {
 }
 
 // All returns a node list containing only the node with id i. IDs are 1-based.
-func (c *cluster) Node(i int) nodeListOption {
+func (c *cluster) Node(i int) option.NodeListOption {
 	return c.Range(i, i)
 }
 
@@ -2054,7 +1614,7 @@ func loggedCommand(ctx context.Context, l *logger.Logger, arg0 string, args ...s
 
 // Put a local file to all of the machines in a cluster.
 // Put is DEPRECATED. Use PutE instead.
-func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
+func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option.Option) {
 	if err := c.PutE(ctx, c.l, src, dest, opts...); err != nil {
 		c.t.Fatal(err)
 	}
@@ -2062,7 +1622,7 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 
 // PutE puts a local file to all of the machines in a cluster.
 func (c *cluster) PutE(
-	ctx context.Context, l *logger.Logger, src, dest string, opts ...option,
+	ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
@@ -2107,7 +1667,10 @@ func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
 
 // Stage stages a binary to the cluster.
 func (c *cluster) Stage(
-	ctx context.Context, l *logger.Logger, application, versionOrSHA, dir string, opts ...option,
+	ctx context.Context,
+	l *logger.Logger,
+	application, versionOrSHA, dir string,
+	opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Stage")
@@ -2129,7 +1692,7 @@ func (c *cluster) Stage(
 
 // Get gets files from remote hosts.
 func (c *cluster) Get(
-	ctx context.Context, l *logger.Logger, src, dest string, opts ...option,
+	ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Get error")
@@ -2144,7 +1707,7 @@ func (c *cluster) Get(
 
 // Put a string into the specified file on the remote(s).
 func (c *cluster) PutString(
-	ctx context.Context, content, dest string, mode os.FileMode, opts ...option,
+	ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.PutString error")
@@ -2178,7 +1741,7 @@ func (c *cluster) PutString(
 // version of the given branch. The src, dest, and branch arguments must not
 // contain shell special characters.
 func (c *cluster) GitClone(
-	ctx context.Context, l *logger.Logger, src, dest, branch string, node nodeListOption,
+	ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 ) error {
 	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
 if ! test -d %s; then
@@ -2195,7 +1758,7 @@ fi
 }
 
 // startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
-func startArgs(extraArgs ...string) option {
+func startArgs(extraArgs ...string) option.Option {
 	return roachprodArgOption(extraArgs)
 }
 
@@ -2206,20 +1769,20 @@ var startArgsDontEncrypt = startArgs("--encrypt=false")
 
 // racks is an option which specifies the number of racks to partition the nodes
 // into.
-func racks(n int) option {
+func racks(n int) option.Option {
 	return startArgs(fmt.Sprintf("--racks=%d", n))
 }
 
 // stopArgs specifies extra arguments that are passed to `roachprod` during `c.Stop`.
-func stopArgs(extraArgs ...string) option {
+func stopArgs(extraArgs ...string) option.Option {
 	return roachprodArgOption(extraArgs)
 }
 
 type roachprodArgOption []string
 
-func (o roachprodArgOption) option() {}
+func (o roachprodArgOption) Option() {}
 
-func roachprodArgs(opts []option) []string {
+func roachprodArgs(opts []option.Option) []string {
 	var args []string
 	for _, opt := range opts {
 		a, ok := opt.(roachprodArgOption)
@@ -2231,12 +1794,12 @@ func roachprodArgs(opts []option) []string {
 	return args
 }
 
-func (c *cluster) setStatusForClusterOpt(operation string, opts ...option) {
-	var nodes nodeListOption
+func (c *cluster) setStatusForClusterOpt(operation string, opts ...option.Option) {
+	var nodes option.NodeListOption
 	worker := false
 	for _, o := range opts {
 		if s, ok := o.(nodeSelector); ok {
-			nodes = s.merge(nodes)
+			nodes = s.Merge(nodes)
 		}
 		if _, ok := o.(workerAction); ok {
 			worker = true
@@ -2254,7 +1817,7 @@ func (c *cluster) setStatusForClusterOpt(operation string, opts ...option) {
 	}
 }
 
-func (c *cluster) clearStatusForClusterOpt(opts ...option) {
+func (c *cluster) clearStatusForClusterOpt(opts ...option.Option) {
 	worker := false
 	for _, o := range opts {
 		if _, ok := o.(workerAction); ok {
@@ -2271,7 +1834,7 @@ func (c *cluster) clearStatusForClusterOpt(opts ...option) {
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
-func (c *cluster) StartE(ctx context.Context, opts ...option) error {
+func (c *cluster) StartE(ctx context.Context, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StartE")
 	}
@@ -2303,7 +1866,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 }
 
 // Start is like StartE() except it takes a test and, on error, calls t.Fatal().
-func (c *cluster) Start(ctx context.Context, t *test, opts ...option) {
+func (c *cluster) Start(ctx context.Context, t *test, opts ...option.Option) {
 	FatalIfErr(t, c.StartE(ctx, opts...))
 }
 
@@ -2318,7 +1881,7 @@ func argExists(args []string, target string) bool {
 
 // StopE cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
-func (c *cluster) StopE(ctx context.Context, opts ...option) error {
+func (c *cluster) StopE(ctx context.Context, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StopE")
 	}
@@ -2335,7 +1898,7 @@ func (c *cluster) StopE(ctx context.Context, opts ...option) error {
 
 // Stop is like StopE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *cluster) Stop(ctx context.Context, opts ...option) {
+func (c *cluster) Stop(ctx context.Context, opts ...option.Option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -2364,7 +1927,7 @@ func (c *cluster) Reset(ctx context.Context) error {
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *cluster) WipeE(ctx context.Context, l *logger.Logger, opts ...option) error {
+func (c *cluster) WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -2379,7 +1942,7 @@ func (c *cluster) WipeE(ctx context.Context, l *logger.Logger, opts ...option) e
 
 // Wipe is like WipeE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *cluster) Wipe(ctx context.Context, opts ...option) {
+func (c *cluster) Wipe(ctx context.Context, opts ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -2389,7 +1952,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 }
 
 // Run a command on the specified node.
-func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
+func (c *cluster) Run(ctx context.Context, node option.NodeListOption, args ...string) {
 	err := c.RunE(ctx, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
@@ -2397,7 +1960,7 @@ func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) 
 }
 
 // Reformat the disk on the specified node.
-func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...string) {
+func (c *cluster) Reformat(ctx context.Context, node option.NodeListOption, args ...string) {
 	err := execCmd(ctx, c.l,
 		append([]string{roachprod, "reformat", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
@@ -2410,7 +1973,7 @@ var _ = (&cluster{}).Reformat
 
 // Install a package in a node
 func (c *cluster) Install(
-	ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 ) error {
 	return execCmd(ctx, l,
 		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
@@ -2419,7 +1982,7 @@ func (c *cluster) Install(
 var reOnlyAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
 // cmdLogFileName comes up with a log file to use for the given argument string.
-func cmdLogFileName(t time.Time, nodes nodeListOption, args ...string) string {
+func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) string {
 	// Make sure we treat {"./cockroach start"} like {"./cockroach", "start"}.
 	args = strings.Split(strings.Join(args, " "), " ")
 	prefix := []string{reOnlyAlphanumeric.ReplaceAllString(args[0], "")}
@@ -2447,7 +2010,7 @@ func cmdLogFileName(t time.Time, nodes nodeListOption, args ...string) string {
 // will be redirected to a file which is logged via the cluster-wide logger in
 // case of an error. Logs will sort chronologically. Failing invocations will
 // have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
+func (c *cluster) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
 	logFile := cmdLogFileName(timeutil.Now(), node, args...)
 
 	// NB: we set no prefix because it's only going to a file anyway.
@@ -2474,7 +2037,7 @@ func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string)
 
 // RunL runs a command on the specified node, returning an error.
 func (c *cluster) RunL(
-	ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 ) error {
 	if err := errors.Wrap(ctx.Err(), "cluster.RunL"); err != nil {
 		return err
@@ -2486,7 +2049,7 @@ func (c *cluster) RunL(
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
 // and stdout or an error.
 func (c *cluster) RunWithBuffer(
-	ctx context.Context, l *logger.Logger, node nodeListOption, args ...string,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 ) ([]byte, error) {
 	if err := errors.Wrap(ctx.Err(), "cluster.RunWithBuffer"); err != nil {
 		return nil, err
@@ -2501,7 +2064,7 @@ func (c *cluster) RunWithBuffer(
 // internal IPs and communication from a test driver to nodes in a cluster
 // should use external IPs.
 func (c *cluster) pgURLErr(
-	ctx context.Context, node nodeListOption, external bool,
+	ctx context.Context, node option.NodeListOption, external bool,
 ) ([]string, error) {
 	args := []string{roachprod, "pgurl"}
 	if external {
@@ -2532,7 +2095,7 @@ func (c *cluster) pgURLErr(
 }
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
-func (c *cluster) InternalPGUrl(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) InternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error) {
 	return c.pgURLErr(ctx, node, false /* external */)
 }
 
@@ -2540,14 +2103,14 @@ func (c *cluster) InternalPGUrl(ctx context.Context, node nodeListOption) ([]str
 var _ = (&cluster{}).InternalPGUrl
 
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
-func (c *cluster) ExternalPGUrl(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) ExternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error) {
 	return c.pgURLErr(ctx, node, true /* external */)
 }
 
 // ExternalPGUrlSecure returns the external Postgres endpoint for the specified
 // nodes.
 func (c *cluster) ExternalPGUrlSecure(
-	ctx context.Context, node nodeListOption, user string, certsDir string, port int,
+	ctx context.Context, node option.NodeListOption, user string, certsDir string, port int,
 ) ([]string, error) {
 	urlTemplate := "postgres://%s@%s:%d?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
 	ips, err := c.ExternalIP(ctx, node)
@@ -2604,7 +2167,9 @@ func addrToHostPort(addr string) (string, int, error) {
 
 // InternalAdminUIAddr returns the internal Admin UI address in the form host:port
 // for the specified node.
-func (c *cluster) InternalAdminUIAddr(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) InternalAdminUIAddr(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	var addrs []string
 	urls, err := c.InternalAddr(ctx, node)
 	if err != nil {
@@ -2622,7 +2187,9 @@ func (c *cluster) InternalAdminUIAddr(ctx context.Context, node nodeListOption) 
 
 // ExternalAdminUIAddr returns the internal Admin UI address in the form host:port
 // for the specified node.
-func (c *cluster) ExternalAdminUIAddr(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) ExternalAdminUIAddr(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	var addrs []string
 	externalAddrs, err := c.ExternalAddr(ctx, node)
 	if err != nil {
@@ -2640,7 +2207,7 @@ func (c *cluster) ExternalAdminUIAddr(ctx context.Context, node nodeListOption) 
 
 // InternalAddr returns the internal address in the form host:port for the
 // specified nodes.
-func (c *cluster) InternalAddr(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) InternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error) {
 	var addrs []string
 	urls, err := c.pgURLErr(ctx, node, false /* external */)
 	if err != nil {
@@ -2657,7 +2224,7 @@ func (c *cluster) InternalAddr(ctx context.Context, node nodeListOption) ([]stri
 }
 
 // InternalIP returns the internal IP addresses for the specified nodes.
-func (c *cluster) InternalIP(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) InternalIP(ctx context.Context, node option.NodeListOption) ([]string, error) {
 	var ips []string
 	addrs, err := c.InternalAddr(ctx, node)
 	if err != nil {
@@ -2675,7 +2242,7 @@ func (c *cluster) InternalIP(ctx context.Context, node nodeListOption) ([]string
 
 // ExternalAddr returns the external address in the form host:port for the
 // specified node.
-func (c *cluster) ExternalAddr(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) ExternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error) {
 	var addrs []string
 	urls, err := c.pgURLErr(ctx, node, true /* external */)
 	if err != nil {
@@ -2692,7 +2259,7 @@ func (c *cluster) ExternalAddr(ctx context.Context, node nodeListOption) ([]stri
 }
 
 // ExternalIP returns the external IP addresses for the specified node.
-func (c *cluster) ExternalIP(ctx context.Context, node nodeListOption) ([]string, error) {
+func (c *cluster) ExternalIP(ctx context.Context, node option.NodeListOption) ([]string, error) {
 	var ips []string
 	addrs, err := c.ExternalAddr(ctx, node)
 	if err != nil {
@@ -2752,11 +2319,11 @@ func (c *cluster) ConnSecure(
 	return db, nil
 }
 
-func (c *cluster) makeNodes(opts ...option) string {
-	var r nodeListOption
+func (c *cluster) makeNodes(opts ...option.Option) string {
+	var r option.NodeListOption
 	for _, o := range opts {
 		if s, ok := o.(nodeSelector); ok {
-			r = s.merge(r)
+			r = s.Merge(r)
 		}
 	}
 	return c.name + r.String()
@@ -2844,7 +2411,7 @@ type monitor struct {
 	expDeaths int32 // atomically
 }
 
-func newMonitor(ctx context.Context, ci Cluster, opts ...option) *monitor {
+func newMonitor(ctx context.Context, ci Cluster, opts ...option.Option) *monitor {
 	c := ci.(*cluster) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `makeNodes`
 	m := &monitor{
 		t:     c.t,
@@ -3084,24 +2651,24 @@ func waitForUpdatedReplicationReport(ctx context.Context, t *test, db *gosql.DB)
 }
 
 type loadGroup struct {
-	roachNodes nodeListOption
-	loadNodes  nodeListOption
+	roachNodes option.NodeListOption
+	loadNodes  option.NodeListOption
 }
 
 type loadGroupList []loadGroup
 
-func (lg loadGroupList) roachNodes() nodeListOption {
-	var roachNodes nodeListOption
+func (lg loadGroupList) roachNodes() option.NodeListOption {
+	var roachNodes option.NodeListOption
 	for _, g := range lg {
-		roachNodes = roachNodes.merge(g.roachNodes)
+		roachNodes = roachNodes.Merge(g.roachNodes)
 	}
 	return roachNodes
 }
 
-func (lg loadGroupList) loadNodes() nodeListOption {
-	var loadNodes nodeListOption
+func (lg loadGroupList) loadNodes() option.NodeListOption {
+	var loadNodes option.NodeListOption
 	for _, g := range lg {
-		loadNodes = loadNodes.merge(g.loadNodes)
+		loadNodes = loadNodes.Merge(g.loadNodes)
 	}
 	return loadNodes
 }

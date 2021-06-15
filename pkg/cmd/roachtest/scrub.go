@@ -21,16 +21,20 @@ import (
 
 func registerScrubIndexOnlyTPCC(r *testRegistry) {
 	// numScrubRuns is set assuming a single SCRUB run (index only) takes ~1 min
-	r.Add(makeScrubTPCCTest(5, 100, 30*time.Minute, "index-only", 20))
+	r.Add(makeScrubTPCCTest(r, 5, 100, 30*time.Minute, "index-only", 20))
 }
 
 func registerScrubAllChecksTPCC(r *testRegistry) {
 	// numScrubRuns is set assuming a single SCRUB run (all checks) takes ~2 min
-	r.Add(makeScrubTPCCTest(5, 100, 30*time.Minute, "all-checks", 10))
+	r.Add(makeScrubTPCCTest(r, 5, 100, 30*time.Minute, "all-checks", 10))
 }
 
 func makeScrubTPCCTest(
-	numNodes, warehouses int, length time.Duration, optionName string, numScrubRuns int,
+	r *testRegistry,
+	numNodes, warehouses int,
+	length time.Duration,
+	optionName string,
+	numScrubRuns int,
 ) testSpec {
 	var stmtOptions string
 	// SCRUB checks are run at -1m to avoid contention with TPCC traffic.
@@ -49,7 +53,7 @@ func makeScrubTPCCTest(
 	return testSpec{
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
 		Owner:   OwnerSQLQueries,
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,

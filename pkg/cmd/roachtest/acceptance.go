@@ -90,7 +90,7 @@ func registerAcceptance(r *testRegistry) {
 
 			spec := specTemplate
 			spec.Owner = owner
-			spec.Cluster = makeClusterSpec(numNodes)
+			spec.Cluster = r.makeClusterSpec(numNodes)
 			spec.Skip = tc.skip
 			spec.Name = specTemplate.Name + "/" + tc.name
 			spec.MinVersion = tc.minVersion

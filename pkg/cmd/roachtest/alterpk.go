@@ -15,12 +15,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func registerAlterPK(r *testRegistry) {
 
-	setupTest := func(ctx context.Context, t *test, c Cluster) (nodeListOption, nodeListOption) {
+	setupTest := func(ctx context.Context, t *test, c Cluster) (option.NodeListOption, option.NodeListOption) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		t.Status("copying binaries")
@@ -170,7 +172,7 @@ func registerAlterPK(r *testRegistry) {
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		Run:        runAlterPKBank,
 	})
 	r.Add(testSpec{
@@ -179,7 +181,7 @@ func registerAlterPK(r *testRegistry) {
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4, cpu(32)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(32)),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
@@ -190,7 +192,7 @@ func registerAlterPK(r *testRegistry) {
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runAlterPKTPCC(ctx, t, c, 500 /* warehouses */, false /* expensiveChecks */)
 		},

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -57,7 +58,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "import/nodeShutdown/worker",
 		Owner:      OwnerBulkIO,
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
@@ -72,7 +73,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "import/nodeShutdown/coordinator",
 		Owner:      OwnerBulkIO,
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
@@ -134,7 +135,7 @@ func registerImportTPCC(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    testName,
 			Owner:   OwnerBulkIO,
-			Cluster: makeClusterSpec(numNodes),
+			Cluster: r.makeClusterSpec(numNodes),
 			Timeout: timeout,
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
@@ -147,7 +148,7 @@ func registerImportTPCC(r *testRegistry) {
 		Skip:    "#37349 - OOMing",
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 		Owner:   OwnerBulkIO,
-		Cluster: makeClusterSpec(8, cpu(16), geo(), zones(geoZones)),
+		Cluster: r.makeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
@@ -176,7 +177,7 @@ func registerImportTPCH(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
 			Owner:   OwnerBulkIO,
-			Cluster: makeClusterSpec(item.nodes),
+			Cluster: r.makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
@@ -308,7 +309,7 @@ func registerImportMixedVersion(r *testRegistry) {
 		Owner: OwnerBulkIO,
 		// Mixed-version support was added in 21.1.
 		MinVersion: "v21.1.0",
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
@@ -352,7 +353,7 @@ func registerImportDecommissioned(r *testRegistry) {
 		Name:       "import/decommissioned",
 		Owner:      OwnerBulkIO,
 		MinVersion: "v21.1.0",
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		Run:        runImportDecommissioned,
 	})
 }

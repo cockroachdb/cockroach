@@ -17,20 +17,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 	const nodes = 6
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if cloud == aws {
+	if cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
 		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZonesStr)),
+		Cluster: r.makeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		MinVersion: `v19.1.0`,
 		Run: func(ctx context.Context, t *test, c Cluster) {

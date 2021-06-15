@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(\.(?P<point>\d+))?$`)
@@ -214,7 +216,7 @@ func registerDjango(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "django",
 		Owner:      OwnerSQLExperience,
-		Cluster:    makeClusterSpec(1, cpu(16)),
+		Cluster:    r.makeClusterSpec(1, spec.CPU(16)),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runDjango(ctx, t, c)

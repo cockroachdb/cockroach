@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -32,6 +33,13 @@ import (
 const OwnerUnitTest Owner = `unowned`
 
 const defaultParallelism = 10
+
+func mkReg(t *testing.T) testRegistry {
+	t.Helper()
+	r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+	require.NoError(t, err)
+	return r
+}
 
 func TestMatchOrSkip(t *testing.T) {
 	testCases := []struct {
@@ -79,15 +87,12 @@ func nilLogger() *logger.Logger {
 
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
-	r, err := makeTestRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := mkReg(t)
 	r.Add(testSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
 		Run:     func(ctx context.Context, t *test, c Cluster) {},
-		Cluster: makeClusterSpec(0),
+		Cluster: r.makeClusterSpec(0),
 	})
 	r.Add(testSpec{
 		Name:  "fail",
@@ -95,7 +100,7 @@ func TestRunnerRun(t *testing.T) {
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			t.Fatal("failed")
 		},
-		Cluster: makeClusterSpec(0),
+		Cluster: r.makeClusterSpec(0),
 	})
 
 	testCases := []struct {
@@ -179,7 +184,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Name:    `timeout`,
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
-		Cluster: makeClusterSpec(0),
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			<-ctx.Done()
 		},
@@ -214,7 +219,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:    "a",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
-				Cluster: makeClusterSpec(0),
+				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
 			"",
 			[]string{"a"},
@@ -225,7 +230,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Run:        dummyRun,
-				Cluster:    makeClusterSpec(0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
 			"",
 			[]string{"a"},
@@ -236,7 +241,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "foo",
 				Run:        dummyRun,
-				Cluster:    makeClusterSpec(0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 			},
 			"a: unable to parse min-version: invalid version string 'foo'",
 			nil,
@@ -244,7 +249,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r, err := makeTestRegistry()
+			r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -278,15 +283,12 @@ func TestRegistryMinVersion(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.buildVersion, func(t *testing.T) {
 			var runA, runB bool
-			r, err := makeTestRegistry()
-			if err != nil {
-				t.Fatal(err)
-			}
+			r := mkReg(t)
 			r.Add(testSpec{
 				Name:       "a",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
-				Cluster:    makeClusterSpec(0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runA = true
 				},
@@ -295,7 +297,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Name:       "b",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
-				Cluster:    makeClusterSpec(0),
+				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runB = true
 				},
@@ -321,7 +323,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			}
 			cr := newClusterRegistry()
 			runner := newTestRunner(cr, r.buildVersion)
-			err = runner.Run(ctx, tests, 1, /* count */
+			err := runner.Run(ctx, tests, 1, /* count */
 				defaultParallelism, copt, testOpts{}, lopt)
 			if !testutils.IsError(err, c.expErr) {
 				t.Fatalf("expected err: %q, got: %v", c.expErr, err)
@@ -340,12 +342,11 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	t.Helper()
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, version.Version{})
-	r, err := makeTestRegistry()
-	require.NoError(t, err)
+	r := mkReg(t)
 	r.Add(testSpec{
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
-		Cluster: makeClusterSpec(0),
+		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)

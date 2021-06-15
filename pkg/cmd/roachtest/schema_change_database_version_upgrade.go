@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -33,7 +34,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 		Name:       "schemachange/database-version-upgrade",
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v20.2.0",
-		Cluster:    makeClusterSpec(3),
+		Cluster:    r.makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, r.buildVersion)
 		},
@@ -51,7 +52,7 @@ func createDBStep(node int, name string) versionStep {
 	}
 }
 
-func uploadAndStart(nodes nodeListOption, v string) versionStep {
+func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, v)

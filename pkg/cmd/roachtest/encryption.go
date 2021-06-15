@@ -82,7 +82,7 @@ func registerEncryption(r *testRegistry) {
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
 			Owner:      OwnerStorage,
 			MinVersion: "v2.1.0",
-			Cluster:    makeClusterSpec(n),
+			Cluster:    r.makeClusterSpec(n),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runEncryption(ctx, t, c)
 			},

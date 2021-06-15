@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -27,12 +29,12 @@ import (
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &cluster{spec: makeClusterSpec(10)}
-	opts := func(opts ...option) []option {
+	c := &cluster{spec: spec.MakeClusterSpec(spec.GCE, "", 10)}
+	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
 	testCases := []struct {
-		opts     []option
+		opts     []option.Option
 		expected string
 	}{
 		{opts(), ""},
@@ -318,16 +320,16 @@ func TestLoadGroups(t *testing.T) {
 			3, 9, 3,
 			loadGroupList{
 				{
-					nodeListOption{1, 2, 3},
-					nodeListOption{4},
+					option.NodeListOption{1, 2, 3},
+					option.NodeListOption{4},
 				},
 				{
-					nodeListOption{5, 6, 7},
-					nodeListOption{8},
+					option.NodeListOption{5, 6, 7},
+					option.NodeListOption{8},
 				},
 				{
-					nodeListOption{9, 10, 11},
-					nodeListOption{12},
+					option.NodeListOption{9, 10, 11},
+					option.NodeListOption{12},
 				},
 			},
 		},
@@ -335,8 +337,8 @@ func TestLoadGroups(t *testing.T) {
 			3, 9, 1,
 			loadGroupList{
 				{
-					nodeListOption{1, 2, 3, 4, 5, 6, 7, 8, 9},
-					nodeListOption{10},
+					option.NodeListOption{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					option.NodeListOption{10},
 				},
 			},
 		},
@@ -344,19 +346,19 @@ func TestLoadGroups(t *testing.T) {
 			4, 8, 2,
 			loadGroupList{
 				{
-					nodeListOption{1, 2, 3, 4},
-					nodeListOption{9},
+					option.NodeListOption{1, 2, 3, 4},
+					option.NodeListOption{9},
 				},
 				{
-					nodeListOption{5, 6, 7, 8},
-					nodeListOption{10},
+					option.NodeListOption{5, 6, 7, 8},
+					option.NodeListOption{10},
 				},
 			},
 		},
 	} {
 		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
 			func(t *testing.T) {
-				c := &cluster{t: testWrapper{t}, l: logger, spec: makeClusterSpec(tc.numRoachNodes + tc.numLoadNodes)}
+				c := &cluster{t: testWrapper{t}, l: logger, spec: spec.MakeClusterSpec(spec.GCE, "", tc.numRoachNodes+tc.numLoadNodes)}
 				lg := makeLoadGroups(c, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
 				require.EqualValues(t, lg, tc.loadGroups)
 			})
@@ -380,7 +382,7 @@ func TestCmdLogFileName(t *testing.T) {
 	ts := time.Date(2000, 1, 1, 15, 4, 12, 0, time.Local)
 
 	const exp = `run_150412.000_n1,3-4,9_cockroach_bla`
-	nodes := nodeListOption{1, 3, 4, 9}
+	nodes := option.NodeListOption{1, 3, 4, 9}
 	assert.Equal(t,
 		exp,
 		cmdLogFileName(ts, nodes, "./cockroach", "bla", "--foo", "bar"),

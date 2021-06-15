@@ -33,6 +33,8 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -217,7 +219,7 @@ func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 		}
 		ch := Chaos{
 			Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
-			Target:  crdbNodes.randNode,
+			Target:  crdbNodes.RandNode,
 			Stopper: time.After(chaosDuration),
 		}
 		m.Go(ch.Runner(c, m))
@@ -228,7 +230,7 @@ func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 	workloadEnd := timeutil.Now()
 	if args.targetTxnPerSecond > 0.0 {
 		verifyTxnPerSecond(
-			ctx, c, t, crdbNodes.randNode(), workloadStart, workloadEnd, args.targetTxnPerSecond, 0.05,
+			ctx, c, t, crdbNodes.RandNode(), workloadStart, workloadEnd, args.targetTxnPerSecond, 0.05,
 		)
 	}
 }
@@ -606,7 +608,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/tpcc-1000",
 		Owner:           OwnerCDC,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -621,7 +623,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/tpcc-1000/sink=null",
 		Owner:           OwnerCDC,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
@@ -638,7 +640,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/initial-scan",
 		Owner:           OwnerCDC,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -654,7 +656,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/sink-chaos",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -670,7 +672,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/crdb-chaos",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -691,7 +693,7 @@ func registerCDC(r *testRegistry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -707,7 +709,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4, cpu(16)),
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -728,7 +730,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(1),
+		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
@@ -737,7 +739,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/bank",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(4),
+		Cluster:         r.makeClusterSpec(4),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCBank(ctx, t, c)
@@ -746,7 +748,7 @@ func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
 		Name:            "cdc/schemareg",
 		Owner:           `cdc`,
-		Cluster:         makeClusterSpec(1),
+		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
@@ -1085,7 +1087,7 @@ confluent.support.customer.id=anonymous
 type kafkaManager struct {
 	t     *test
 	c     Cluster
-	nodes nodeListOption
+	nodes option.NodeListOption
 }
 
 func (k kafkaManager) basePath() string {
@@ -1380,8 +1382,8 @@ func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsume
 }
 
 type tpccWorkload struct {
-	workloadNodes      nodeListOption
-	sqlNodes           nodeListOption
+	workloadNodes      option.NodeListOption
+	sqlNodes           option.NodeListOption
 	tpccWarehouseCount int
 	tolerateErrors     bool
 }
@@ -1392,7 +1394,7 @@ func (tw *tpccWorkload) install(ctx context.Context, c Cluster) {
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
 		`./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl%s}`,
 		tw.tpccWarehouseCount,
-		tw.sqlNodes.randNode(),
+		tw.sqlNodes.RandNode(),
 	))
 }
 
@@ -1408,14 +1410,14 @@ func (tw *tpccWorkload) run(ctx context.Context, c Cluster, workloadDuration str
 }
 
 type ledgerWorkload struct {
-	workloadNodes nodeListOption
-	sqlNodes      nodeListOption
+	workloadNodes option.NodeListOption
+	sqlNodes      option.NodeListOption
 }
 
 func (lw *ledgerWorkload) install(ctx context.Context, c Cluster) {
-	c.Run(ctx, lw.workloadNodes.randNode(), fmt.Sprintf(
+	c.Run(ctx, lw.workloadNodes.RandNode(), fmt.Sprintf(
 		`./workload init ledger {pgurl%s}`,
-		lw.sqlNodes.randNode(),
+		lw.sqlNodes.RandNode(),
 	))
 }
 

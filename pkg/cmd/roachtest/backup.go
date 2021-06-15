@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,7 +84,7 @@ func importBankData(ctx context.Context, rows int, t *test, c Cluster) string {
 func registerBackupNodeShutdown(r *testRegistry) {
 	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
 	// the backup.
-	backupNodeRestartSpec := makeClusterSpec(4)
+	backupNodeRestartSpec := r.makeClusterSpec(4)
 	loadBackupData := func(ctx context.Context, t *test, c Cluster) string {
 		// This aught to be enough since this isn't a performance test.
 		rows := rows15GiB
@@ -177,7 +178,7 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 
 func registerBackup(r *testRegistry) {
 
-	backup2TBSpec := makeClusterSpec(10)
+	backup2TBSpec := r.makeClusterSpec(10)
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
 		Owner:      OwnerBulkIO,
@@ -213,14 +214,14 @@ func registerBackup(r *testRegistry) {
 		},
 	})
 
-	KMSSpec := makeClusterSpec(3)
+	KMSSpec := r.makeClusterSpec(3)
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
 		Owner:      OwnerBulkIO,
 		Cluster:    KMSSpec,
 		MinVersion: "v20.2.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
-			if cloud == gce {
+			if cloud == spec.GCE {
 				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
 			}
 
@@ -336,7 +337,7 @@ func registerBackup(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    `backupTPCC`,
 		Owner:   OwnerBulkIO,
-		Cluster: makeClusterSpec(3),
+		Cluster: r.makeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			// Randomize starting with encryption-at-rest enabled.
