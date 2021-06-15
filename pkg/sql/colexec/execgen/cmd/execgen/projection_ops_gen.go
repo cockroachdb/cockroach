@@ -23,13 +23,6 @@ const projConstOpsTmpl = "pkg/sql/colexec/colexecproj/proj_const_ops_tmpl.go"
 // Note that not all template variables can be present in the template, and it
 // is ok - such replacements will be noops.
 func replaceProjTmplVariables(tmpl string) string {
-	tmpl = strings.ReplaceAll(tmpl, "_L_UNSAFEGET", "execgen.UNSAFEGET")
-	tmpl = replaceManipulationFuncsAmbiguous(".Left", tmpl)
-	tmpl = strings.ReplaceAll(tmpl, "_R_UNSAFEGET", "execgen.UNSAFEGET")
-	tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
-	tmpl = strings.ReplaceAll(tmpl, "_RETURN_UNSAFEGET", "execgen.RETURNUNSAFEGET")
-	tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
-
 	r := strings.NewReplacer(
 		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
 		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
