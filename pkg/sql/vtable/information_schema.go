@@ -1032,3 +1032,304 @@ CREATE TABLE information_schema.role_usage_grants (
 	is_grantable STRING,
 	object_catalog STRING
 )`
+
+//InformationSchemaTablespaces is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaTablespaces = `
+CREATE TABLE information_schema.tablespaces (
+	extent_size INT,
+	logfile_group_name STRING,
+	nodegroup_id INT,
+	tablespace_type STRING,
+	autoextend_size INT,
+	engine STRING,
+	maximum_size INT,
+	tablespace_comment STRING,
+	tablespace_name STRING
+)`
+
+//InformationSchemaStSpatialReferenceSystems is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaStSpatialReferenceSystems = `
+CREATE TABLE information_schema.st_spatial_reference_systems (
+	srs_id INT,
+	srs_name STRING,
+	definition STRING,
+	description STRING,
+	organization STRING,
+	organization_coordsys_id INT
+)`
+
+//InformationSchemaProcesslist is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaProcesslist = `
+CREATE TABLE information_schema.processlist (
+	host STRING,
+	id INT,
+	info STRING,
+	state STRING,
+	time INT,
+	"user" STRING,
+	command STRING,
+	db STRING
+)`
+
+//InformationSchemaTablesExtensions is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaTablesExtensions = `
+CREATE TABLE information_schema.tables_extensions (
+	engine_attribute STRING,
+	secondary_engine_attribute STRING,
+	table_catalog STRING,
+	table_name STRING,
+	table_schema STRING
+)`
+
+//InformationSchemaProfiling is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaProfiling = `
+CREATE TABLE information_schema.profiling (
+	cpu_system DECIMAL,
+	messages_sent INT,
+	swaps INT,
+	block_ops_in INT,
+	block_ops_out INT,
+	context_voluntary INT,
+	cpu_user DECIMAL,
+	query_id INT,
+	source_function STRING,
+	context_involuntary INT,
+	duration DECIMAL,
+	page_faults_major INT,
+	page_faults_minor INT,
+	seq INT,
+	source_file STRING,
+	state STRING,
+	messages_received INT,
+	source_line INT
+)`
+
+//InformationSchemaColumnStatistics is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaColumnStatistics = `
+CREATE TABLE information_schema.column_statistics (
+	column_name STRING,
+	histogram STRING,
+	schema_name STRING,
+	table_name STRING
+)`
+
+//InformationSchemaResourceGroups is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaResourceGroups = `
+CREATE TABLE information_schema.resource_groups (
+	resource_group_enabled INT2,
+	resource_group_name STRING,
+	resource_group_type STRING,
+	thread_priority INT,
+	vcpu_ids BYTES
+)`
+
+//InformationSchemaPartitions is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaPartitions = `
+CREATE TABLE information_schema.partitions (
+	data_free INT,
+	partition_name STRING,
+	subpartition_expression STRING,
+	table_name STRING,
+	table_rows INT,
+	avg_row_length INT,
+	check_time TIMESTAMPTZ,
+	create_time TIMESTAMPTZ,
+	index_length INT,
+	nodegroup STRING,
+	partition_comment STRING,
+	partition_description STRING,
+	table_schema STRING,
+	checksum INT,
+	partition_expression STRING,
+	partition_method STRING,
+	subpartition_name STRING,
+	tablespace_name STRING,
+	update_time TIMESTAMPTZ,
+	data_length INT,
+	max_data_length INT,
+	partition_ordinal_position INT,
+	subpartition_method STRING,
+	subpartition_ordinal_position INT,
+	table_catalog STRING
+)`
+
+//InformationSchemaTablespacesExtensions is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaTablespacesExtensions = `
+CREATE TABLE information_schema.tablespaces_extensions (
+	engine_attribute STRING,
+	tablespace_name STRING
+)`
+
+//InformationSchemaSchemataExtensions is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaSchemataExtensions = `
+CREATE TABLE information_schema.schemata_extensions (
+	catalog_name STRING,
+	options STRING,
+	schema_name STRING
+)`
+
+//InformationSchemaStUnitsOfMeasure is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaStUnitsOfMeasure = `
+CREATE TABLE information_schema.st_units_of_measure (
+	conversion_factor FLOAT,
+	description STRING,
+	unit_name STRING,
+	unit_type STRING
+)`
+
+//InformationSchemaFiles is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaFiles = `
+CREATE TABLE information_schema.files (
+	last_update_time BYTES,
+	table_rows BYTES,
+	autoextend_size INT,
+	check_time BYTES,
+	checksum BYTES,
+	extra STRING,
+	file_id INT,
+	table_name BYTES,
+	avg_row_length BYTES,
+	extent_size INT,
+	file_name STRING,
+	free_extents INT,
+	max_data_length BYTES,
+	table_schema BYTES,
+	update_time BYTES,
+	data_length BYTES,
+	tablespace_name STRING,
+	version INT,
+	create_time BYTES,
+	initial_size INT,
+	logfile_group_name STRING,
+	maximum_size INT,
+	status STRING,
+	update_count BYTES,
+	creation_time BYTES,
+	engine STRING,
+	fulltext_keys BYTES,
+	row_format STRING,
+	total_extents INT,
+	data_free INT,
+	index_length BYTES,
+	last_access_time BYTES,
+	table_catalog STRING,
+	transaction_counter BYTES,
+	file_type STRING,
+	logfile_group_number INT,
+	recover_time BYTES,
+	deleted_rows BYTES
+)`
+
+//InformationSchemaEngines is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaEngines = `
+CREATE TABLE information_schema.engines (
+	support STRING,
+	transactions STRING,
+	xa STRING,
+	comment STRING,
+	engine STRING,
+	savepoints STRING
+)`
+
+//InformationSchemaColumnsExtensions is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaColumnsExtensions = `
+CREATE TABLE information_schema.columns_extensions (
+	engine_attribute STRING,
+	secondary_engine_attribute STRING,
+	table_catalog STRING,
+	table_name STRING,
+	table_schema STRING,
+	column_name STRING
+)`
+
+//InformationSchemaStGeometryColumns is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaStGeometryColumns = `
+CREATE TABLE information_schema.st_geometry_columns (
+	srs_id INT,
+	srs_name STRING,
+	table_catalog STRING,
+	table_name STRING,
+	table_schema STRING,
+	column_name STRING,
+	geometry_type_name STRING
+)`
+
+//InformationSchemaPlugins is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaPlugins = `
+CREATE TABLE information_schema.plugins (
+	plugin_version STRING,
+	load_option STRING,
+	plugin_description STRING,
+	plugin_library_version STRING,
+	plugin_status STRING,
+	plugin_type STRING,
+	plugin_type_version STRING,
+	plugin_author STRING,
+	plugin_library STRING,
+	plugin_license STRING,
+	plugin_name STRING
+)`
+
+//InformationSchemaEvents is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaEvents = `
+CREATE TABLE information_schema.events (
+	definer STRING,
+	event_definition STRING,
+	event_name STRING,
+	interval_value STRING,
+	last_altered TIMESTAMPTZ,
+	on_completion STRING,
+	originator INT,
+	collation_connection STRING,
+	database_collation STRING,
+	event_body STRING,
+	event_schema STRING,
+	execute_at TIMESTAMPTZ,
+	interval_field STRING,
+	starts TIMESTAMPTZ,
+	time_zone STRING,
+	character_set_client STRING,
+	ends TIMESTAMPTZ,
+	event_catalog STRING,
+	event_comment STRING,
+	event_type STRING,
+	last_executed TIMESTAMPTZ,
+	sql_mode STRING[],
+	status STRING,
+	created TIMESTAMPTZ
+)`
+
+//InformationSchemaUserAttributes is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaUserAttributes = `
+CREATE TABLE information_schema.user_attributes (
+	attribute STRING,
+	host STRING,
+	"user" STRING
+)`
+
+//InformationSchemaKeywords is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaKeywords = `
+CREATE TABLE information_schema.keywords (
+	word STRING,
+	reserved INT
+)`
+
+//InformationSchemaOptimizerTrace is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaOptimizerTrace = `
+CREATE TABLE information_schema.optimizer_trace (
+	insufficient_privileges INT2,
+	missing_bytes_beyond_max_mem_size INT,
+	query STRING,
+	trace STRING
+)`
+
+//InformationSchemaTableConstraintsExtensions is an empty table in the pg_catalog that is not implemented yet
+const InformationSchemaTableConstraintsExtensions = `
+CREATE TABLE information_schema.table_constraints_extensions (
+	constraint_catalog STRING,
+	constraint_name STRING,
+	constraint_schema STRING,
+	engine_attribute STRING,
+	secondary_engine_attribute STRING,
+	table_name STRING
+)`

@@ -2,8 +2,8 @@
   "pgVersion": "8.0.25",
   "diffSummary": {
     "TotalTables": 48,
-    "TotalColumns": 280,
-    "MissingTables": 21,
+    "TotalColumns": 476,
+    "MissingTables": 0,
     "MissingColumns": 80,
     "DatatypeMismatches": 0
   },
@@ -35,7 +35,6 @@
       "is_default": null,
       "sortlen": null
     },
-    "column_statistics": {},
     "columns": {
       "column_key": null,
       "column_type": null,
@@ -43,30 +42,19 @@
       "privileges": null,
       "srs_id": null
     },
-    "columns_extensions": {},
     "enabled_roles": {
       "is_default": null,
       "is_mandatory": null,
       "role_host": null
     },
-    "engines": {},
-    "events": {},
-    "files": {},
     "key_column_usage": {
       "referenced_column_name": null,
       "referenced_table_name": null,
       "referenced_table_schema": null
     },
-    "keywords": {},
-    "optimizer_trace": {},
     "parameters": {
       "routine_type": null
     },
-    "partitions": {},
-    "plugins": {},
-    "processlist": {},
-    "profiling": {},
-    "resource_groups": {},
     "role_column_grants": {
       "grantee_host": null,
       "grantor_host": null
@@ -91,10 +79,6 @@
       "default_collation_name": null,
       "default_encryption": null
     },
-    "schemata_extensions": {},
-    "st_geometry_columns": {},
-    "st_spatial_reference_systems": {},
-    "st_units_of_measure": {},
     "statistics": {
       "collation": null,
       "comment": null,
@@ -109,7 +93,6 @@
     "table_constraints": {
       "enforced": null
     },
-    "table_constraints_extensions": {},
     "tables": {
       "auto_increment": null,
       "avg_row_length": null,
@@ -128,9 +111,6 @@
       "table_rows": null,
       "update_time": null
     },
-    "tables_extensions": {},
-    "tablespaces": {},
-    "tablespaces_extensions": {},
     "triggers": {
       "character_set_client": null,
       "collation_connection": null,
@@ -138,7 +118,6 @@
       "definer": null,
       "sql_mode": null
     },
-    "user_attributes": {},
     "views": {
       "character_set_client": null,
       "collation_connection": null,
