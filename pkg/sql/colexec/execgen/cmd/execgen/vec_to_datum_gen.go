@@ -109,21 +109,11 @@ const vecToDatumTmpl = "pkg/sql/colconv/vec_to_datum_tmpl.go"
 
 func genVecToDatum(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-		"_HAS_NULLS", "$.HasNulls",
-		"_HAS_SEL", "$.HasSel",
-		"_DESELECT", "$.Deselect",
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_VEC_METHOD", "{{.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
-
-	setDestIdx := makeFunctionRegex("_SET_DEST_IDX", 5)
-	s = setDestIdx.ReplaceAllString(s, `{{template "setDestIdx" buildDict "HasSel" $4 "Deselect" $5}}`)
-	setSrcIdx := makeFunctionRegex("_SET_SRC_IDX", 4)
-	s = setSrcIdx.ReplaceAllString(s, `{{template "setSrcIdx" buildDict "HasSel" $4}}`)
-	vecToDatum := makeFunctionRegex("_VEC_TO_DATUM", 8)
-	s = vecToDatum.ReplaceAllString(s, `{{template "vecToDatum" buildDict "Global" . "HasNulls" $6 "HasSel" $7 "Deselect" $8}}`)
 
 	assignConvertedRe := makeFunctionRegex("_ASSIGN_CONVERTED", 3)
 	s = assignConvertedRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignConverted", 3))
