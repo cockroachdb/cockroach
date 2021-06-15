@@ -15,6 +15,8 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
@@ -89,6 +91,116 @@ select age, message from [ show trace for session ];
 			}
 		}
 
+		return nil
+	})
+
+	m.Wait()
+}
+
+// runNetworkAuthentication creates a network black hole to the leaseholder
+// of system.users, and then measures how long it takes to be able to create
+// new connections to the cluster afterwards.
+func runNetworkAuthentication(ctx context.Context, t *test, c Cluster) {
+	c.Put(ctx, cockroach, "./cockroach", c.All())
+
+	c.Start(ctx, t, c.Node(1), startArgs("--secure", "--args=--locality=node=1"))
+	c.Start(ctx, t, c.Nodes(2, 3), startArgs("--secure", "--args=--locality=node=other"))
+
+	certsDir := "/home/ubuntu/certs"
+	localCertsDir, err := filepathAbs("./certs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(localCertsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.Get(ctx, t.l, certsDir, localCertsDir, c.Node(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Certs can have at max 0600 privilege.
+	if err := filepath.Walk(localCertsDir, func(path string, info os.FileInfo, err error) error {
+		// Don't change permissions for the certs directory.
+		if path == localCertsDir {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, os.FileMode(0600))
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := c.ConnSecure(ctx, 1, "root", localCertsDir, 26257)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	waitForFullReplication(t, db)
+
+	if err := c.RunE(ctx, c.Node(1),
+		`./cockroach sql --certs-dir /home/ubuntu/certs -e "CREATE USER testuser WITH PASSWORD 'password'"`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`ALTER RANGE liveness CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER RANGE system CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
+		t.Fatal(err)
+	}
+
+	var leaseholder int
+	if err := db.QueryRow(`
+SELECT lease_holder FROM crdb_internal.ranges
+WHERE start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivenessMax'`,
+	).Scan(&leaseholder); err != nil {
+		t.Fatal(err)
+	}
+	if leaseholder != 1 {
+		t.Fatal("liveness leaseholder should be node 1")
+	}
+	if err := db.QueryRow(
+		"SELECT lease_holder FROM [SHOW RANGES FROM TABLE system.public.users]",
+	).Scan(&leaseholder); err != nil {
+		t.Fatal(err)
+	}
+	if leaseholder != 1 {
+		t.Fatal("system.users leaseholder should be node 1")
+	}
+
+	if err := c.RunE(ctx, c.Node(leaseholder), `
+sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables-save`); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newMonitor(ctx, c, c.All())
+	m.Go(func(ctx context.Context) error {
+		errorCount := 0
+		for attempt := 0; attempt < 10; attempt++ {
+			t.l.Printf("connection attempt %d\n", attempt)
+			for i := 1; i <= c.Spec().NodeCount; i++ {
+				if i == leaseholder {
+					continue
+				}
+
+				url := "postgres://testuser:password@localhost:26257/defaultdb?sslmode=require"
+				b, err := c.RunWithBuffer(ctx, t.l, c.Node(i), "time", "-p", "./cockroach", "sql",
+					"--url", url, "-e", "'SELECT 1'")
+				t.l.Printf("%s\n", b)
+				if err != nil {
+					errorCount++
+				}
+			}
+		}
+
+		if errorCount >= 1 /*c.Spec().NodeCount*/ {
+			t.Fatalf("failed authentication %d times; expected fewer than %d", errorCount, 1 /*c.Spec().NodeCount*/)
+		}
 		return nil
 	})
 
@@ -242,6 +354,14 @@ func registerNetwork(r *testRegistry) {
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
+		},
+	})
+	r.Add(testSpec{
+		Name:    fmt.Sprintf("network/authentication/nodes=3"),
+		Owner:   OwnerKV,
+		Cluster: makeClusterSpec(3),
+		Run: func(ctx context.Context, t *test, c Cluster) {
+			runNetworkAuthentication(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{

@@ -749,6 +749,7 @@ func (ds *DistSender) Send(
 
 		var rpl *roachpb.BatchResponse
 		var pErr *roachpb.Error
+		// todo here
 		if withParallelCommit {
 			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, 0 /* batchIdx */)
 		} else {

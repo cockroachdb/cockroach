@@ -165,6 +165,7 @@ func (n *Dialer) dial(
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			fmt.Printf("canceled during the dial\n")
 			return nil, ctxErr
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
