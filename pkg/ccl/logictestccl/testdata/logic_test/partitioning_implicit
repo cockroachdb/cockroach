@@ -588,7 +588,7 @@ CREATE TABLE public.t (
   u STRING NULL,
   e INT8 NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
-  UNIQUE INDEX t_pk_key (pk ASC),
+  UNIQUE INDEX t_pk_key (pk ASC) STORING (pk2, a, b, c, d, j, u, e),
   UNIQUE INDEX t_u_key (u ASC),
   INDEX t_a_idx (a ASC),
   UNIQUE INDEX t_b_key (b ASC),

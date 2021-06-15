@@ -11,6 +11,7 @@
 package systemschema
 
 import (
+	"context"
 	"math"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -376,7 +378,6 @@ func pk(name string) descpb.IndexDescriptor {
 		KeyColumnNames:      []string{name},
 		KeyColumnDirections: singleASC,
 		KeyColumnIDs:        singleID1,
-		Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 	}
 }
 
@@ -403,7 +404,13 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 }
 
 func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
-	return tabledesc.NewBuilder(&desc).BuildImmutableTable()
+	ctx := context.Background()
+	b := tabledesc.NewBuilder(&desc)
+	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
+	if err != nil {
+		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", desc.Name, err)
+	}
+	return b.BuildImmutableTable()
 }
 
 // These system config descpb.TableDescriptor literals should match the descriptor
@@ -443,7 +450,6 @@ var (
 			KeyColumnNames:      []string{"parentID", "parentSchemaID", "name"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -538,7 +544,6 @@ var (
 			KeyColumnNames:      []string{"id"},
 			KeyColumnDirections: singleASC,
 			KeyColumnIDs:        []descpb.ColumnID{keys.ZonesTablePrimaryIndexID},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextFamilyID: 3,
 		NextIndexID:  2,
@@ -679,7 +684,6 @@ var (
 			KeyColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextFamilyID: 1,
 		NextIndexID:  2,
@@ -724,7 +728,6 @@ var (
 			KeyColumnNames:      []string{"timestamp", "uniqueID"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 6},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextFamilyID: 6,
 		NextIndexID:  2,
@@ -768,7 +771,6 @@ var (
 			KeyColumnNames:      []string{"timestamp", "uniqueID"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 7},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextFamilyID: 7,
 		NextIndexID:  2,
@@ -995,7 +997,6 @@ var (
 			KeyColumnNames:      []string{"tableID", "statisticID"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1036,7 +1037,6 @@ var (
 			KeyColumnNames:      []string{"localityKey", "localityValue"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1081,7 +1081,6 @@ var (
 			KeyColumnNames:      []string{"role", "member"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		Indexes: []descpb.IndexDescriptor{
 			{
@@ -1138,7 +1137,6 @@ var (
 			KeyColumnNames:      []string{"type", "object_id", "sub_id"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: newCommentPrivilegeDescriptor(
@@ -1176,7 +1174,6 @@ var (
 				descpb.IndexDescriptor_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{1},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1231,7 +1228,6 @@ var (
 				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1281,7 +1277,6 @@ var (
 				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{1, 2, 3},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1334,7 +1329,6 @@ var (
 			KeyColumnNames:      []string{"zone_id", "subzone_id"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1380,7 +1374,6 @@ var (
 		PrimaryIndex: descpb.IndexDescriptor{
 			Name:           "primary",
 			ID:             1,
-			Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
 			Unique:         true,
 			KeyColumnNames: []string{"singleton"},
 			KeyColumnIDs:   []descpb.ColumnID{1},
@@ -1422,7 +1415,6 @@ var (
 		PrimaryIndex: descpb.IndexDescriptor{
 			Name:           "primary",
 			ID:             1,
-			Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
 			Unique:         true,
 			KeyColumnNames: []string{"id"},
 			KeyColumnIDs:   []descpb.ColumnID{1},
@@ -1466,7 +1458,6 @@ var (
 			KeyColumnNames:      []string{"username", "option"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1710,7 +1701,6 @@ var (
 				descpb.IndexDescriptor_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -1753,7 +1743,6 @@ var (
 				descpb.IndexDescriptor_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{1},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(

@@ -483,6 +483,12 @@ func maybeCreateAndAddShardCol(
 		} else {
 			desc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_ADD)
 		}
+		if !shardColDesc.Virtual {
+			primaryIndex := desc.GetPrimaryIndex().IndexDescDeepCopy()
+			primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, shardColDesc.ID)
+			primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, shardColDesc.Name)
+			desc.SetPrimaryIndex(primaryIndex)
+		}
 		created = true
 	}
 	shardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
@@ -700,7 +706,7 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 			if err != nil {
 				return indexDesc, err
 			}
-			tabledesc.UpdateIndexPartitioning(&indexDesc, newImplicitCols, newPartitioning)
+			tabledesc.UpdateIndexPartitioning(&indexDesc, false /* isIndexPrimary */, newImplicitCols, newPartitioning)
 		}
 	}
 	return indexDesc, nil

@@ -215,7 +215,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 			if err != nil {
 				return err
 			}
-			tabledesc.UpdateIndexPartitioning(index.IndexDesc(), newImplicitCols, newPartitioning)
+			tabledesc.UpdateIndexPartitioning(index.IndexDesc(), index.Primary(), newImplicitCols, newPartitioning)
 		}
 
 		// Remove zone configurations that applied to partitions that were removed

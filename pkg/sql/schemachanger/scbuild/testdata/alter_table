@@ -22,6 +22,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -36,7 +37,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 1
     storeColumnIds:
     - 2
@@ -47,6 +48,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -61,7 +63,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 2
     tableId: 52
 
@@ -86,6 +88,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -100,7 +103,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 1
     storeColumnIds:
     - 2
@@ -111,6 +114,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -125,7 +129,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 2
     tableId: 52
 
@@ -151,6 +155,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -165,7 +170,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 1
     storeColumnIds:
     - 2
@@ -178,6 +183,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -192,7 +198,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 2
     tableId: 52
 - ADD Column:{DescID: 52, ColumnID: 3, ElementName: "k"}
@@ -231,6 +237,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -245,7 +252,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 1
     storeColumnIds:
     - 2
@@ -256,6 +263,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -270,7 +278,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 2
     tableId: 52
 
@@ -299,6 +307,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -313,7 +322,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 1
     storeColumnIds:
     - 2
@@ -324,6 +333,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -338,7 +348,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       partitioning: {}
       sharded: {}
       unique: true
-      version: 3
+      version: 4
     otherPrimaryIndexId: 2
     tableId: 52
 - ADD Column:{DescID: 53, ColumnID: 3, ElementName: "b"}
@@ -358,6 +368,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: ABSENT
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 2
@@ -371,7 +382,12 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       name: new_primary_key
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 1
+      storeColumnNames:
+      - j
       unique: true
+      version: 4
     otherPrimaryIndexId: 1
     storeColumnIds:
     - 1
@@ -384,6 +400,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
   state: PUBLIC
   details:
     index:
+      encodingType: 1
       foreignKey: {}
       geoConfig: {}
       id: 1
@@ -397,7 +414,12 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       name: primary
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 1
+      storeColumnNames:
+      - j
       unique: true
+      version: 4
     otherPrimaryIndexId: 2
     storeColumnIds:
     - 1
