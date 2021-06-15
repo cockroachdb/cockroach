@@ -519,10 +519,10 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// We maintain forward compatibility, so if you see this error message with a
 	// version older that what this client supports, then there's a
 	// maybeFillInDescriptor missing from some codepath.
-	if desc.GetFormatVersion() != descpb.PrimaryIndexStoredColumnsFormatVersion {
+	if desc.GetFormatVersion() < descpb.InterleavedFormatVersion {
 		vea.Report(errors.AssertionFailedf(
 			"table is encoded using using version %d, but this client only supports version %d",
-			desc.GetFormatVersion(), descpb.PrimaryIndexStoredColumnsFormatVersion))
+			desc.GetFormatVersion(), descpb.InterleavedFormatVersion))
 		return
 	}
 

@@ -217,7 +217,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -233,7 +233,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				StoreColumnNames:    []string{"a"},
 				StoreColumnIDs:      []descpb.ColumnID{1},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
 			[]descpb.IndexDescriptor{
 				{
@@ -258,7 +258,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -272,7 +272,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
 			[]descpb.IndexDescriptor{
 				{
@@ -297,7 +297,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
 			[]descpb.IndexDescriptor{},
 		},

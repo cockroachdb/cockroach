@@ -668,7 +668,9 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	// Populate IDs.
 	primaryColIDs := desc.GetPrimaryIndex().CollectKeyColumnIDs()
 	for _, idx := range desc.AllIndexes() {
-		maybeUpgradeIndexFormatVersion(idx.IndexDesc())
+		if !idx.Primary() {
+			maybeUpgradeSecondaryIndexFormatVersion(idx.IndexDesc())
+		}
 		if idx.GetID() == 0 {
 			idx.IndexDesc().ID = desc.NextIndexID
 			desc.NextIndexID++
@@ -1089,22 +1091,25 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		idx.Name = PrimaryKeyIndexName
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
-	// Populate store columns.
-	names := make(map[string]struct{})
-	for _, name := range idx.KeyColumnNames {
-		names[name] = struct{}{}
-	}
-	cols := desc.DeletableColumns()
-	idx.StoreColumnNames = make([]string, 0, len(cols))
-	for _, col := range cols {
-		if _, found := names[col.GetName()]; found || col.IsVirtual() {
-			continue
+	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
+		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+		// Populate store columns.
+		names := make(map[string]struct{})
+		for _, name := range idx.KeyColumnNames {
+			names[name] = struct{}{}
 		}
-		names[col.GetName()] = struct{}{}
-		idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
-	}
-	if len(idx.StoreColumnNames) == 0 {
-		idx.StoreColumnNames = nil
+		cols := desc.DeletableColumns()
+		idx.StoreColumnNames = make([]string, 0, len(cols))
+		for _, col := range cols {
+			if _, found := names[col.GetName()]; found || col.IsVirtual() {
+				continue
+			}
+			names[col.GetName()] = struct{}{}
+			idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
+		}
+		if len(idx.StoreColumnNames) == 0 {
+			idx.StoreColumnNames = nil
+		}
 	}
 	desc.SetPrimaryIndex(idx)
 	return nil
