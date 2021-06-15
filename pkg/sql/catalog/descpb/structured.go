@@ -371,3 +371,18 @@ func (ni NameInfo) GetParentSchemaID() ID {
 func (ni NameInfo) GetName() string {
 	return ni.Name
 }
+
+// Dropped returns true if the database is being dropped.
+func (s *SchemaDescriptor) Dropped() bool {
+	return s.GetState() == DescriptorState_DROP
+}
+
+// Dropped returns true if the schema is being dropped.
+func (d *DatabaseDescriptor) Dropped() bool {
+	return d.GetState() == DescriptorState_DROP
+}
+
+// Dropped returns true if the type is being dropped.
+func (d *TypeDescriptor) Dropped() bool {
+	return d.GetState() == DescriptorState_DROP
+}

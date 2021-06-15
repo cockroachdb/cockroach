@@ -34,6 +34,11 @@ const (
 	// OwnerVersion corresponds to descriptors created 20.2 and onward.
 	// These descriptors should always have owner set.
 	OwnerVersion
+
+	// Version21_2 corresponds to descriptors created in 21.2 and onwards.
+	// These descriptors should have all the correct privileges and the owner field
+	// explicitly set. These descriptors should be strictly validated.
+	Version21_2
 )
 
 func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
@@ -256,6 +261,7 @@ func MaybeFixUsagePrivForTablesAndDBs(ptr **PrivilegeDescriptor) bool {
 			modified = true
 		}
 	}
+
 	return modified
 }
 
@@ -527,6 +533,11 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 // SetOwner sets the owner of the privilege descriptor to the provided string.
 func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUsername) {
 	p.OwnerProto = owner.EncodeProto()
+}
+
+// SetVersion sets the version of the privilege descriptor.
+func (p *PrivilegeDescriptor) SetVersion(version PrivilegeDescVersion) {
+	p.Version = version
 }
 
 // maybeGetSystemString is a helper function that returns "system" with a space
