@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -40,6 +41,8 @@ const (
 	sigFigs    = 1
 	minLatency = 100 * time.Microsecond
 )
+
+var invalidPrometheusMetricRe = regexp.MustCompile(`[^a-zA-Z0-9:_]`)
 
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
 // but intended to be thread-local.
@@ -161,6 +164,9 @@ func makePrometheusLatencyHistogramBuckets() []float64 {
 }
 
 func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
+	// Metric names must be sanitized or NewHistogram will panic.
+	name = invalidPrometheusMetricRe.ReplaceAllString(name, "_")
+
 	w.prometheusMu.RLock()
 	ph, ok := w.prometheusMu.prometheusHistograms[name]
 	w.prometheusMu.RUnlock()
