@@ -209,7 +209,7 @@ func showBackupPlanHook(
 		// FKs for which we can't resolve the cross-table references. We can't
 		// display them anyway, because we don't have the referenced table names,
 		// etc.
-		if err := maybeUpgradeTableDescsInBackupManifests(ctx, manifests, true); err != nil {
+		if err := maybeUpgradeDescriptorsInBackupManifests(ctx, manifests, true /* */); err != nil {
 			return err
 		}
 
