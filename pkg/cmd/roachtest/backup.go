@@ -144,10 +144,6 @@ func registerBackupNodeShutdown(r *testRegistry) {
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
 func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time.Duration) func() {
-	// TODO(tbg,aditya): this is temporarily skipped, figure out a fix. See:
-	// https://cockroachlabs.slack.com/archives/CJ0H8Q97C/p1623776034188400
-	return func() {}
-
 	// Register a named histogram to track the total time the bulk job took.
 	// Roachperf uses this information to display information about this
 	// roachtest.
