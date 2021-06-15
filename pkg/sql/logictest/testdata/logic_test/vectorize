@@ -979,6 +979,12 @@ SELECT CASE a WHEN 0 THEN a ELSE 1:::INT8 END FROM t43550
 1
 
 # Regression test for #43855.
+
+# TODO(yuzefovich): use experimental_always once the casts between datum-backed
+# types are supported again.
+statement ok
+SET vectorize=on
+
 statement ok
 CREATE TABLE t43855(o OID, r REGPROCEDURE);
 
@@ -989,6 +995,9 @@ SELECT CASE WHEN o = 0 THEN 0:::OID ELSE r END FROM t43855
 query i
 SELECT CASE o WHEN 0 THEN 0:::OID ELSE r END FROM t43855
 ----
+
+statement ok
+SET vectorize=experimental_always
 
 # Regression test for an aggregate that has output type different from its
 # input type (INT4 is input whereas output is INT).
