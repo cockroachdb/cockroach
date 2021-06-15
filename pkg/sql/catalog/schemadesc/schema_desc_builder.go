@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -51,8 +52,8 @@ func (sdb *schemaDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
-	privDesc := sdb.original.GetPrivileges()
-	descpb.MaybeFixSchemaPrivileges(&privDesc)
+	descpb.MaybeFixPrivileges(sdb.original.GetID(), sdb.original.GetParentID(),
+		&sdb.original.Privileges, privilege.Schema)
 	return nil
 }
 

@@ -79,12 +79,6 @@ type PostDeserializationTableDescriptorChanges struct {
 	// one index descriptor was upgraded
 	UpgradedIndexFormatVersion bool
 
-	// FixedPrivileges indicates that the privileges were fixed.
-	//
-	// TODO(ajwerner): Determine whether this still needs to exist of can be
-	// removed.
-	FixedPrivileges bool
-
 	// UpgradedForeignKeyRepresentation indicates that the foreign key
 	// representation was upgraded.
 	UpgradedForeignKeyRepresentation bool
