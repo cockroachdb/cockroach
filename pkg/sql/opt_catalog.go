@@ -203,13 +203,13 @@ func (oc *optCatalog) ResolveDataSource(
 
 	oc.tn = *name
 	lflags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
-	desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, lflags)
+	prefix, desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
 
 	// Ensure that the current user can access the target schema.
-	if err := oc.planner.canResolveDescUnderSchema(ctx, desc.GetParentSchemaID(), desc); err != nil {
+	if err := oc.planner.canResolveDescUnderSchema(ctx, prefix.Schema, desc); err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
 

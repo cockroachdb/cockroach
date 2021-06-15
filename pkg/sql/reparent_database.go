@@ -164,7 +164,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	// to the new parent DB and schema.
 	for _, objName := range objNames {
 		// First try looking up objName as a table.
-		found, desc, err := p.LookupObject(
+		found, _, desc, err := p.LookupObject(
 			ctx,
 			tree.ObjectLookupFlags{
 				// Note we set required to be false here in order to not error out
@@ -232,7 +232,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			}
 		} else {
 			// If we couldn't resolve objName as a table, try a type.
-			found, desc, err := p.LookupObject(
+			found, _, desc, err := p.LookupObject(
 				ctx,
 				tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{

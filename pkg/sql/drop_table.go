@@ -175,7 +175,7 @@ func (*dropTableNode) Close(context.Context)        {}
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType tree.RequiredTableKind,
 ) (*tabledesc.Mutable, error) {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
 	}

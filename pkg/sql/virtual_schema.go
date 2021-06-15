@@ -67,7 +67,7 @@ type virtualSchema struct {
 type virtualSchemaDef interface {
 	getSchema() string
 	initVirtualTableDesc(
-		ctx context.Context, st *cluster.Settings, parentSchemaID, id descpb.ID,
+		ctx context.Context, st *cluster.Settings, sc catalog.SchemaDescriptor, id descpb.ID,
 	) (descpb.TableDescriptor, error)
 	getComment() string
 	isUnimplemented() bool
@@ -134,7 +134,7 @@ func (t virtualSchemaTable) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (t virtualSchemaTable) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings, parentSchemaID, id descpb.ID,
+	ctx context.Context, st *cluster.Settings, sc catalog.SchemaDescriptor, id descpb.ID,
 ) (descpb.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
@@ -172,8 +172,8 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil, /* vs */
 		st,
 		create,
-		descpb.InvalidID, /* parentID */
-		parentSchemaID,
+		nil,
+		sc,
 		id,
 		nil,       /* regionConfig */
 		startTime, /* creationTime */
@@ -232,7 +232,7 @@ func (v virtualSchemaView) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings, parentSchemaID descpb.ID, id descpb.ID,
+	ctx context.Context, st *cluster.Settings, sc catalog.SchemaDescriptor, id descpb.ID,
 ) (descpb.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(v.schema)
 	if err != nil {
@@ -251,7 +251,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
 		0, /* parentID */
-		parentSchemaID,
+		sc.GetID(),
 		id,
 		columns,
 		startTime, /* creationTime */
@@ -683,7 +683,7 @@ func NewVirtualSchemaHolder(
 		orderedDefNames := make([]string, 0, len(schema.tableDefs))
 
 		for id, def := range schema.tableDefs {
-			tableDesc, err := def.initVirtualTableDesc(ctx, st, schemaID, id)
+			tableDesc, err := def.initVirtualTableDesc(ctx, st, scDesc, id)
 
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,

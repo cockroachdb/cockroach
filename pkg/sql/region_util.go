@@ -962,6 +962,9 @@ var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *
 // configured state of a multi-region database by coalescing state from both
 // the database descriptor and multi-region type descriptor. By default, it
 // avoids the cache and is intended for use by DDL statements.
+//
+// TODO(ajwerner): Refactor this to take the database descriptor rather than
+// the database ID.
 func SynthesizeRegionConfig(
 	ctx context.Context,
 	txn *kv.Txn,

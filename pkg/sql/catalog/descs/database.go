@@ -14,16 +14,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,48 +60,9 @@ func (tc *Collection) GetDatabaseDesc(
 func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
-	if name == systemschema.SystemDatabaseName {
-		// The system database descriptor should never actually be mutated, which is
-		// why we return the same hard-coded descriptor every time. It's assumed
-		// that callers of this method will check the privileges on the descriptor
-		// (like any other database) and return an error.
-		if flags.RequireMutable {
-			proto := systemschema.MakeSystemDatabaseDesc().DatabaseDesc()
-			return dbdesc.NewBuilder(proto).BuildExistingMutableDatabase(), nil
-		}
-		return systemschema.MakeSystemDatabaseDesc(), nil
-	}
-
-	getDatabaseByName := func() (found bool, _ catalog.Descriptor, err error) {
-		if found, refuseFurtherLookup, desc, err := tc.getSyntheticOrUncommittedDescriptor(
-			keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable,
-		); err != nil || refuseFurtherLookup {
-			return false, nil, err
-		} else if found {
-			log.VEventf(ctx, 2, "found uncommitted descriptor %d", desc.GetID())
-			return true, desc, nil
-		}
-
-		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
-			return tc.kv.getByName(
-				ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable,
-			)
-		}
-
-		desc, shouldReadFromStore, err := tc.leased.getByName(
-			ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
-		if err != nil {
-			return false, nil, err
-		}
-		if shouldReadFromStore {
-			return tc.kv.getByName(
-				ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable,
-			)
-		}
-		return true, desc, nil
-	}
-
-	found, desc, err := getDatabaseByName()
+	found, desc, err := tc.getByName(
+		ctx, txn, nil, nil, name, flags.AvoidCached, flags.RequireMutable,
+	)
 	if err != nil {
 		return nil, err
 	} else if !found {

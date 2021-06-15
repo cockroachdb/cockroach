@@ -739,7 +739,7 @@ func allocateDescriptorRewrites(
 
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
-					typeName := tree.NewUnqualifiedTypeName(tree.Name(arrTyp.GetName()))
+					typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
 					err := catalogkv.CheckObjectCollision(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), typeName)
 					if err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)

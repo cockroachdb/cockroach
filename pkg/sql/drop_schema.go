@@ -70,7 +70,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		}
 
 		sc, err := p.Descriptors().GetSchemaByName(
-			ctx, p.txn, db.ID, scName, tree.SchemaLookupFlags{
+			ctx, p.txn, db, scName, tree.SchemaLookupFlags{
 				Required:       false,
 				RequireMutable: true,
 			},

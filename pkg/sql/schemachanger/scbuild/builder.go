@@ -222,7 +222,7 @@ func (b *buildContext) getTableDescriptor(
 	// This will return an error for dropped and offline tables, but it's possible
 	// that later iterations of the builder will want to handle those cases
 	// in a different way.
-	return resolver.ResolveExistingTableObject(ctx, b.Res, tn,
+	_, table, err := resolver.ResolveExistingTableObject(ctx, b.Res, tn,
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
 				Required:    true,
@@ -230,6 +230,7 @@ func (b *buildContext) getTableDescriptor(
 			},
 		},
 	)
+	return table, err
 }
 
 // HasConcurrentSchemaChanges returns whether the table descriptor is undergoing

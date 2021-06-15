@@ -94,27 +94,26 @@ var (
 const TemporarySchemaNameForRestorePrefix string = "pg_temp_0_"
 
 func (p *planner) getOrCreateTemporarySchema(
-	ctx context.Context, dbID descpb.ID,
-) (descpb.ID, error) {
+	ctx context.Context, db catalog.DatabaseDescriptor,
+) (catalog.SchemaDescriptor, error) {
 	tempSchemaName := p.TemporarySchemaName()
-	sKey := catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, tempSchemaName)
-	schemaID, err := catalogkv.GetDescriptorID(ctx, p.txn, p.ExecCfg().Codec, sKey)
-	if err != nil {
-		return descpb.InvalidID, err
-	} else if schemaID == descpb.InvalidID {
-		// The temporary schema has not been created yet.
-		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-		if err != nil {
-			return descpb.InvalidID, err
-		}
-		if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), id); err != nil {
-			return descpb.InvalidID, err
-		}
-		p.sessionDataMutator.SetTemporarySchemaName(sKey.GetName())
-		p.sessionDataMutator.SetTemporarySchemaIDForDatabase(uint32(dbID), uint32(id))
-		return id, nil
+	sc, err := p.Descriptors().GetMutableSchemaByName(ctx, p.txn, db, tempSchemaName, p.CommonLookupFlags(false))
+	if sc != nil || err != nil {
+		return sc, err
 	}
-	return schemaID, nil
+	sKey := catalogkeys.NewNameKeyComponents(db.GetID(), keys.RootNamespaceID, tempSchemaName)
+
+	// The temporary schema has not been created yet.
+	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), id); err != nil {
+		return nil, err
+	}
+	p.sessionDataMutator.SetTemporarySchemaName(sKey.GetName())
+	p.sessionDataMutator.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
+	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlags(true))
 }
 
 // CreateSchemaNamespaceEntry creates an entry for the schema in the

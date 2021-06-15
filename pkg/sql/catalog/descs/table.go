@@ -41,11 +41,7 @@ func (tc *Collection) GetImmutableTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (found bool, _ catalog.TableDescriptor, _ error) {
 	flags.RequireMutable = false
-	found, desc, err := tc.getTableByName(ctx, txn, name, flags)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc, nil
+	return tc.getTableByName(ctx, txn, name, flags)
 }
 
 // getTableByName returns a table descriptor with properties according to the
@@ -53,46 +49,13 @@ func (tc *Collection) GetImmutableTableByName(
 func (tc *Collection) getTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (found bool, _ catalog.TableDescriptor, err error) {
-	found, desc, err := tc.getObjectByName(
+	flags.DesiredObjectKind = tree.TableObject
+	_, desc, err := tc.getObjectByName(
 		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
-	if err != nil {
-		return false, nil, err
-	} else if !found {
-		if flags.Required {
-			return false, nil, sqlerrors.NewUndefinedRelationError(name)
-		}
-		return false, nil, nil
-	}
-	table, ok := desc.(catalog.TableDescriptor)
-	if !ok {
-		if flags.Required {
-			return false, nil, sqlerrors.NewUndefinedRelationError(name)
-		}
-		return false, nil, nil
-	}
-	if table.Adding() && table.IsUncommittedVersion() &&
-		(flags.RequireMutable || flags.CommonLookupFlags.AvoidCached) {
-		// Special case: We always return tables in the adding state if they were
-		// created in the same transaction and a descriptor (effectively) read in
-		// the same transaction is requested. What this basically amounts to is
-		// resolving adding descriptors only for DDLs (etc.).
-		// TODO (lucy): I'm not sure where this logic should live. We could add an
-		// IncludeAdding flag and pull the special case handling up into the
-		// callers. Figure that out after we clean up the name resolution layers
-		// and it becomes more Clear what the callers should be.
-		return true, table, nil
-	}
-	if dropped, err := filterDescriptorState(
-		table, flags.Required, flags.CommonLookupFlags,
-	); err != nil || dropped {
+	if err != nil || desc == nil {
 		return false, nil, err
 	}
-	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
-	if err != nil {
-		return false, nil, err
-	}
-
-	return true, hydrated, nil
+	return true, desc.(catalog.TableDescriptor), nil
 }
 
 // GetUncommittedTableByID returns an uncommitted table by its ID.

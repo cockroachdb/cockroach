@@ -55,6 +55,9 @@ var _ catalog.SchemaDescriptor = virtual{}
 func (p virtual) GetID() descpb.ID       { return p.id }
 func (p virtual) GetName() string        { return p.name }
 func (p virtual) GetParentID() descpb.ID { return descpb.InvalidID }
+func (p virtual) GetPrivileges() *descpb.PrivilegeDescriptor {
+	return descpb.NewPublicSelectPrivilegeDescriptor()
+}
 
 type virtualBase struct{}
 

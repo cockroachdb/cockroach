@@ -404,7 +404,8 @@ func importPlanHook(
 		}
 
 		table := importStmt.Table
-		var parentID, parentSchemaID descpb.ID
+		var db catalog.DatabaseDescriptor
+		var sc catalog.SchemaDescriptor
 		if table != nil {
 			// TODO: As part of work for #34240, we should be operating on
 			//  UnresolvedObjectNames here, rather than TableNames.
@@ -416,35 +417,33 @@ func importPlanHook(
 				return pgerror.Wrap(err, pgcode.UndefinedTable,
 					"resolving target import name")
 			}
-			table.ObjectNamePrefix = prefix
 			if !found {
 				// Check if database exists right now. It might not after the import is done,
 				// but it's better to fail fast than wait until restore.
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"database does not exist: %q", table)
 			}
-			dbDesc := resPrefix.Database
-			schema := resPrefix.Schema
+			table.ObjectNamePrefix = prefix
+			db = resPrefix.Database
+			sc = resPrefix.Schema
 			// If this is a non-INTO import that will thus be making a new table, we
 			// need the CREATE priv in the target DB.
 			if !importStmt.Into {
-				if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
+				if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
 					return err
 				}
 			}
-			parentID = dbDesc.GetID()
-			switch schema.SchemaKind() {
+
+			switch sc.SchemaKind() {
 			case catalog.SchemaVirtual:
 				return pgerror.Newf(pgcode.InvalidSchemaName,
 					"cannot import into schema %q", table.SchemaName)
-			case catalog.SchemaUserDefined, catalog.SchemaPublic, catalog.SchemaTemporary:
-				parentSchemaID = schema.GetID()
 			}
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
 			txn := p.ExtendedEvalContext().Txn
-			dbDesc, err := p.Accessor().GetDatabaseDesc(ctx, txn, p.SessionData().Database, tree.DatabaseLookupFlags{
+			db, err = p.Accessor().GetDatabaseDesc(ctx, txn, p.SessionData().Database, tree.DatabaseLookupFlags{
 				AvoidCached: true,
 				Required:    true,
 			})
@@ -455,12 +454,11 @@ func importPlanHook(
 			// If this is a non-INTO import that will thus be making a new table, we
 			// need the CREATE priv in the target DB.
 			if !importStmt.Into {
-				if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
+				if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
 					return err
 				}
 			}
-			parentID = dbDesc.GetID()
-			parentSchemaID = keys.PublicSchemaID
+			sc = schemadesc.GetPublicSchema()
 		}
 
 		format := roachpb.IOFileFormat{}
@@ -751,7 +749,7 @@ func importPlanHook(
 					"%s file format is currently unsupported by IMPORT INTO",
 					importStmt.FileFormat)
 			}
-			found, err := p.ResolveMutableTableDescriptor(ctx, table, true, tree.ResolveRequireTableDesc)
+			_, found, err := p.ResolveMutableTableDescriptor(ctx, table, true, tree.ResolveRequireTableDesc)
 			if err != nil {
 				return err
 			}
@@ -859,7 +857,7 @@ func importPlanHook(
 					)
 				}
 				tbl, err := MakeSimpleTableDescriptor(
-					ctx, p.SemaCtx(), p.ExecCfg().Settings, create, parentID, parentSchemaID, defaultCSVTableID, NoFKs, walltime)
+					ctx, p.SemaCtx(), p.ExecCfg().Settings, create, db, sc, defaultCSVTableID, NoFKs, walltime)
 				if err != nil {
 					return err
 				}
@@ -892,7 +890,7 @@ func importPlanHook(
 
 			// Due to how we generate and rewrite descriptor ID's for import, we run
 			// into problems when using user defined schemas.
-			if parentSchemaID != keys.PublicSchemaID {
+			if sc.GetID() != keys.PublicSchemaID {
 				err := errors.New("cannot use IMPORT with a user defined schema")
 				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
 				return hint
@@ -930,7 +928,7 @@ func importPlanHook(
 		importDetails := jobspb.ImportDetails{
 			URIs:              files,
 			Format:            format,
-			ParentID:          parentID,
+			ParentID:          db.GetID(),
 			Tables:            tableDetails,
 			SSTSize:           sstSize,
 			Oversample:        oversample,

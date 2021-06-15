@@ -145,6 +145,8 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 			return err
 		}
 		lookupFlags.Required = false
+		// TODO(ajwerner): Make this do something better than one-at-a-time lookups
+		// followed by catalogkv reads on each dependency.
 		for i := range tbNames {
 			found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
 				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
