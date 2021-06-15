@@ -1123,33 +1123,6 @@ func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
 	return nil
 }
 
-// AddIndex adds an index to the table.
-func (desc *Mutable) AddIndex(idx descpb.IndexDescriptor, primary bool) error {
-	if idx.Type == descpb.IndexDescriptor_FORWARD {
-		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
-			return err
-		}
-
-		if primary {
-			// PrimaryIndex is unset.
-			if desc.PrimaryIndex.Name == "" {
-
-			} else {
-			}
-		} else {
-			desc.AddPublicNonPrimaryIndex(idx)
-		}
-
-	} else {
-		if err := checkColumnsValidForInvertedIndex(desc, idx.KeyColumnNames); err != nil {
-			return err
-		}
-		desc.AddPublicNonPrimaryIndex(idx)
-	}
-
-	return nil
-}
-
 // AddColumnToFamilyMaybeCreate adds the specified column to the specified
 // family. If it doesn't exist and create is true, creates it. If it does exist
 // adds it unless "strict" create (`true` for create but `false` for
