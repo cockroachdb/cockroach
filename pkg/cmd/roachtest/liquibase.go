@@ -104,7 +104,7 @@ func registerLiquibase(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "liquibase",
 		Owner:      OwnerSQLExperience,
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `tool`},
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runLiquibase(ctx, t, c)

@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -114,7 +115,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c Cluster, buildVersion ver
 	}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
-	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], 10 /* maxOps */, 2 /* concurrency */)
+	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], 10 /* maxOps */, 2 /* concurrency */)
 	// TODO(irfansharif): All schema change instances were commented out while
 	// of #58489 is being addressed.
 	_ = schemaChangeStep
@@ -252,7 +253,7 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 // path of the uploaded binaries on the nodes, suitable to be used with
 // `roachdprod start --binary=<path>`.
 func uploadVersion(
-	ctx context.Context, t *test, c Cluster, nodes nodeListOption, newVersion string,
+	ctx context.Context, t *test, c Cluster, nodes option.NodeListOption, newVersion string,
 ) (binaryName string) {
 	binaryName = "./cockroach"
 	if newVersion == "" {
@@ -294,8 +295,8 @@ func binaryPathFromVersion(v string) string {
 }
 
 func (u *versionUpgradeTest) uploadVersion(
-	ctx context.Context, t *test, nodes nodeListOption, newVersion string,
-) option {
+	ctx context.Context, t *test, nodes option.NodeListOption, newVersion string,
+) option.Option {
 	return startArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
 }
 
@@ -343,7 +344,7 @@ func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int)
 // versionStep is an isolated version migration on a running cluster.
 type versionStep func(ctx context.Context, t *test, u *versionUpgradeTest)
 
-func uploadAndStartFromCheckpointFixture(nodes nodeListOption, v string) versionStep {
+func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
 		vv := version.MustParse("v" + v)
@@ -371,7 +372,7 @@ func uploadAndStartFromCheckpointFixture(nodes nodeListOption, v string) version
 // binaryUpgradeStep rolling-restarts the given nodes into the new binary
 // version. Note that this does *not* wait for the cluster version to upgrade.
 // Use a waitForUpgradeStep() for that.
-func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
+func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		upgradeNodes(ctx, nodes, newVersion, t, u.c)
 		// TODO(nvanbenschoten): add upgrade qualification step. What should we
@@ -381,7 +382,7 @@ func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 }
 
 func upgradeNodes(
-	ctx context.Context, nodes nodeListOption, newVersion string, t *test, c Cluster,
+	ctx context.Context, nodes option.NodeListOption, newVersion string, t *test, c Cluster,
 ) {
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
@@ -447,7 +448,7 @@ func allowAutoUpgradeStep(node int) versionStep {
 // heuristically) to the real-world situation in which some nodes have already
 // learned of a cluster version bump (from Gossip) where others haven't. This
 // situation tends to exhibit unexpected behavior.
-func waitForUpgradeStep(nodes nodeListOption) versionStep {
+func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		newVersion := u.binaryVersion(ctx, t, nodes[0]).String()
 		t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
@@ -487,12 +488,12 @@ func setClusterSettingVersionStep(ctx context.Context, t *test, u *versionUpgrad
 
 type versionFeatureTest struct {
 	name string
-	fn   func(context.Context, *test, *versionUpgradeTest, nodeListOption) (skipped bool)
+	fn   func(context.Context, *test, *versionUpgradeTest, option.NodeListOption) (skipped bool)
 }
 
 type versionFeatureStep []versionFeatureTest
 
-func (vs versionFeatureStep) step(nodes nodeListOption) versionStep {
+func (vs versionFeatureStep) step(nodes option.NodeListOption) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		for _, feature := range vs {
 			t.l.Printf("checking %s", feature.name)
@@ -513,8 +514,8 @@ func stmtFeatureTest(
 ) versionFeatureTest {
 	return versionFeatureTest{
 		name: name,
-		fn: func(ctx context.Context, t *test, u *versionUpgradeTest, nodes nodeListOption) (skipped bool) {
-			i := nodes.randNode()[0]
+		fn: func(ctx context.Context, t *test, u *versionUpgradeTest, nodes option.NodeListOption) (skipped bool) {
+			i := nodes.RandNode()[0]
 			if u.clusterVersion(ctx, t, i).Less(minVersion) {
 				return true // skipped
 			}
@@ -633,7 +634,9 @@ done
 // crashes during the import). If oldV is nil, this runs the import using the specified
 // version (for example "19.2.1", as provided by PredecessorVersion()) using the location
 // used by c.Stage(). An empty oldV uses the main cockroach binary.
-func importTPCCStep(oldV string, headroomWarehouses int, crdbNodes nodeListOption) versionStep {
+func importTPCCStep(
+	oldV string, headroomWarehouses int, crdbNodes option.NodeListOption,
+) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// We need to use the predecessor binary to load into the
 		// predecessor cluster to avoid random breakage. For example, you
@@ -657,7 +660,7 @@ func importTPCCStep(oldV string, headroomWarehouses int, crdbNodes nodeListOptio
 	}
 }
 
-func importLargeBankStep(oldV string, rows int, crdbNodes nodeListOption) versionStep {
+func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// Use the predecessor binary to load into the predecessor
 		// cluster to avoid random breakage due to flag changes, etc.

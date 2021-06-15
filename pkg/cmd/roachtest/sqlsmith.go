@@ -243,7 +243,7 @@ func registerSQLSmith(r *testRegistry) {
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:      OwnerSQLQueries,
-			Cluster:    makeClusterSpec(4),
+			Cluster:    r.makeClusterSpec(4),
 			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
 			Run: func(ctx context.Context, t *test, c Cluster) {

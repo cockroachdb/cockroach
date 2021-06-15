@@ -26,7 +26,7 @@ func registerQueue(r *testRegistry) {
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/17229",
 		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
 		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runQueue(ctx, t, c)
 		},

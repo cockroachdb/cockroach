@@ -16,13 +16,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
 func runResetQuorum(ctx context.Context, t *test, c Cluster) {
 	skip.WithIssue(t, 58165)
-	args := func(attr string) option {
+	args := func(attr string) option.Option {
 		return startArgs(
 			"-a=--attrs="+attr,
 			"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", // speed up replication

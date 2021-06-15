@@ -181,7 +181,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 	r.Add(testSpec{
 		Name:       "node-postgres",
 		Owner:      OwnerSQLExperience,
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.1.0",
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t *test, c Cluster) {

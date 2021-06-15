@@ -135,6 +135,8 @@ go_library(
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/internal/issues",
         "//pkg/cmd/roachtest/logger",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/spec",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
         "//pkg/internal/team",
@@ -208,6 +210,7 @@ go_test(
     srcs = [
         "blocklist_test.go",
         "cluster_test.go",
+        "test_registry_test.go",
         "test_test.go",
         "tpcc_test.go",
     ],
@@ -215,6 +218,8 @@ go_test(
     tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cmd/roachtest/logger",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/spec",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/syncutil",

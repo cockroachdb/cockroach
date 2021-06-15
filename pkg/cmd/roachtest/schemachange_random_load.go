@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 type randomLoadBenchSpec struct {
@@ -26,17 +28,17 @@ type randomLoadBenchSpec struct {
 
 func registerSchemaChangeRandomLoad(r *testRegistry) {
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if cloud == aws {
+	if cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(testSpec{
 		Name:  "schemachange/random-load",
 		Owner: OwnerSQLSchema,
-		Cluster: makeClusterSpec(
+		Cluster: r.makeClusterSpec(
 			3,
-			geo(),
-			zones(geoZonesStr),
+			spec.Geo(),
+			spec.Zones(geoZonesStr),
 		),
 		MinVersion: "v20.1.0",
 		// This is set while development is still happening on the workload and we
@@ -80,7 +82,7 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 	r.Add(testSpec{
 		Name:       name,
 		Owner:      OwnerSQLSchema,
-		Cluster:    makeClusterSpec(b.Nodes),
+		Cluster:    r.makeClusterSpec(b.Nodes),
 		MinVersion: "v20.1.0",
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.

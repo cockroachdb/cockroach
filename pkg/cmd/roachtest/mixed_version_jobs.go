@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,7 +41,7 @@ type backgroundStepper struct {
 	// When not nil, called with the error within `.stop()`. The interceptor
 	// gets a chance to ignore the error or produce a different one (via t.Fatal).
 	onStop func(context.Context, *test, *versionUpgradeTest, error)
-	nodes  nodeListOption // nodes to monitor, defaults to c.All()
+	nodes  option.NodeListOption // nodes to monitor, defaults to c.All()
 
 	// Internal.
 	m *monitor
@@ -332,7 +333,7 @@ func registerJobsMixedVersions(r *testRegistry) {
 		// vice versa in order to detect regressions in the work done for 20.1.
 		MinVersion: "v20.1.0",
 		Skip:       "https://github.com/cockroachdb/cockroach/issues/57230",
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {

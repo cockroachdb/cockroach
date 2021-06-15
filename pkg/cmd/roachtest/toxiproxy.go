@@ -21,6 +21,7 @@ import (
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,7 +85,9 @@ type ToxiCluster struct {
 // wraps the original cluster, whose returned addresses will all go through
 // toxiproxy. The upstream (i.e. non-intercepted) addresses are accessible via
 // getters prefixed with "External".
-func Toxify(ctx context.Context, t *test, c Cluster, node nodeListOption) (*ToxiCluster, error) {
+func Toxify(
+	ctx context.Context, t *test, c Cluster, node option.NodeListOption,
+) (*ToxiCluster, error) {
 	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
 	if local && runtime.GOOS == "darwin" {
 		toxiURL = "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-darwin-amd64"
@@ -159,14 +162,16 @@ func (tc *ToxiCluster) Proxy(i int) *toxiproxy.Proxy {
 
 // ExternalAddr gives the external host:port of the node(s), bypassing the
 // toxiproxy interception.
-func (tc *ToxiCluster) ExternalAddr(ctx context.Context, node nodeListOption) ([]string, error) {
+func (tc *ToxiCluster) ExternalAddr(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	return tc.Cluster.ExternalAddr(ctx, node)
 }
 
 // PoisonedExternalAddr gives the external host:port of the toxiproxy process
 // for the given nodes (i.e. the connection will be affected by toxics).
 func (tc *ToxiCluster) PoisonedExternalAddr(
-	ctx context.Context, node nodeListOption,
+	ctx context.Context, node option.NodeListOption,
 ) ([]string, error) {
 	var out []string
 
@@ -185,7 +190,9 @@ func (tc *ToxiCluster) PoisonedExternalAddr(
 }
 
 // PoisonedPGAddr gives a connection to the given node that passes through toxiproxy.
-func (tc *ToxiCluster) PoisonedPGAddr(ctx context.Context, node nodeListOption) ([]string, error) {
+func (tc *ToxiCluster) PoisonedPGAddr(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	var out []string
 
 	urls, err := tc.ExternalPGUrl(ctx, node)

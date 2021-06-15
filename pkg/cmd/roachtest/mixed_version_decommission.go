@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -121,7 +122,7 @@ func recommissionAllStep(from int, binaryVersion string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "recommission",
-			"--insecure", c.All().nodeIDsString())
+			"--insecure", c.All().NodeIDsString())
 	}
 }
 
@@ -248,7 +249,7 @@ func checkAllMembership(from int, membership string) versionStep {
 
 // uploadVersionStep uploads the specified cockroach binary version on the specified
 // nodes.
-func uploadVersionStep(nodes nodeListOption, version string) versionStep {
+func uploadVersionStep(nodes option.NodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// Put the binary.
 		uploadVersion(ctx, t, u.c, nodes, version)
@@ -257,7 +258,7 @@ func uploadVersionStep(nodes nodeListOption, version string) versionStep {
 
 // startVersion starts the specified cockroach binary version on the specified
 // nodes.
-func startVersion(nodes nodeListOption, version string) versionStep {
+func startVersion(nodes option.NodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		args := startArgs("--binary=" + cockroachBinaryPath(version))
 		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt)

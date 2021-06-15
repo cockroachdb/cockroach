@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -48,15 +49,25 @@ func ownerToAlias(o Owner) team.Alias {
 const defaultTag = "default"
 
 type testRegistry struct {
-	m map[string]*testSpec
+	m            map[string]*testSpec
+	cloud        string
+	instanceType string // optional
+	zones        string
+	preferSSD    bool
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
 }
 
 // makeTestRegistry constructs a testRegistry and configures it with opts.
-func makeTestRegistry() (testRegistry, error) {
+func makeTestRegistry(
+	cloud string, instanceType string, zones string, preferSSD bool,
+) (testRegistry, error) {
 	r := testRegistry{
-		m: make(map[string]*testSpec),
+		cloud:        cloud,
+		instanceType: instanceType,
+		zones:        zones,
+		preferSSD:    preferSSD,
+		m:            make(map[string]*testSpec),
 	}
 	v := buildTag
 	if v == "" {
@@ -83,6 +94,20 @@ func (r *testRegistry) Add(spec testSpec) {
 		os.Exit(1)
 	}
 	r.m[spec.Name] = &spec
+}
+
+func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
+	// NB: we need to make sure that `opts` is appended at the end, so that it
+	// overrides the SSD and zones settings from the registry.
+	var finalOpts []spec.Option
+	if r.preferSSD {
+		finalOpts = append(finalOpts, spec.PreferSSD())
+	}
+	if r.zones != "" {
+		finalOpts = append(finalOpts, spec.Zones(r.zones))
+	}
+	finalOpts = append(finalOpts, opts...)
+	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, finalOpts...)
 }
 
 // prepareSpec validates a spec and does minor massaging of its fields.

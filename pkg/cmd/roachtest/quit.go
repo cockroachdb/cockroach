@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -27,7 +28,7 @@ import (
 type quitTest struct {
 	t    *test
 	c    Cluster
-	args option
+	args option.Option
 }
 
 // runQuitTransfersLeases performs rolling restarts on a
@@ -338,7 +339,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("transfer-leases/%s", name),
 			Owner:      OwnerKV,
-			Cluster:    makeClusterSpec(3),
+			Cluster:    r.makeClusterSpec(3),
 			MinVersion: minver,
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
@@ -418,7 +419,7 @@ func registerQuitAllNodes(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "quit-all-nodes",
 		Owner:      OwnerServer,
-		Cluster:    makeClusterSpec(5),
+		Cluster:    r.makeClusterSpec(5),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			q := quitTest{t: t, c: c}

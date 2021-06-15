@@ -95,7 +95,7 @@ func registerHotSpotSplits(r *testRegistry) {
 		// No problem in 20.1 thanks to:
 		// https://github.com/cockroachdb/cockroach/pull/45323.
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(numNodes),
+		Cluster:    r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			if local {
 				concurrency = 32

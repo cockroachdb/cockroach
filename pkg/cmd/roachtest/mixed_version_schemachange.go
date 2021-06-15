@@ -25,7 +25,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 		// addition prevented making any new schema changes on a mixed cluster in
 		// order to prevent bugs during upgrades.
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			maxOps := 100
 			concurrency := 5
@@ -84,7 +84,7 @@ func runSchemaChangeMixedVersions(
 	// An empty string will lead to the cockroach binary specified by flag
 	// `cockroach` to be used.
 	const mainVersion = ""
-	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().randNode()[0], maxOps, concurrency)
+	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], maxOps, concurrency)
 	if buildVersion.Major() < 20 {
 		// Schema change workload is meant to run only on versions 19.2 or higher.
 		// If the main version is below 20.1 then then predecessor version will be

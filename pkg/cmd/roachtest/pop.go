@@ -97,7 +97,7 @@ func registerPop(r *testRegistry) {
 		Name:       "pop",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run:        runPop,
 	})

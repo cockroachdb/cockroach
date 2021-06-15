@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -80,7 +82,7 @@ func tpccImportCmdWithCockroachBinary(
 
 func setupTPCC(
 	ctx context.Context, t *test, c Cluster, opts tpccOptions,
-) (crdbNodes, workloadNode nodeListOption) {
+) (crdbNodes, workloadNode option.NodeListOption) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 	crdbNodes = c.Range(1, c.Spec().NodeCount-1)
@@ -189,7 +191,9 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
 
-func maxSupportedTPCCWarehouses(buildVersion version.Version, cloud string, nodes clusterSpec) int {
+func maxSupportedTPCCWarehouses(
+	buildVersion version.Version, cloud string, nodes spec.ClusterSpec,
+) int {
 	var v *version.Version
 	var warehouses int
 	hardware := fmt.Sprintf(`%s-%s`, cloud, &nodes)
@@ -209,7 +213,7 @@ func maxSupportedTPCCWarehouses(buildVersion version.Version, cloud string, node
 }
 
 func registerTPCC(r *testRegistry) {
-	headroomSpec := makeClusterSpec(4, cpu(16))
+	headroomSpec := r.makeClusterSpec(4, spec.CPU(16))
 	r.Add(testSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
@@ -230,7 +234,7 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	mixedHeadroomSpec := makeClusterSpec(5, cpu(16))
+	mixedHeadroomSpec := r.makeClusterSpec(5, spec.CPU(16))
 
 	r.Add(testSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional
@@ -322,7 +326,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc-nowait/nodes=3/w=1",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -337,7 +341,7 @@ func registerTPCC(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Tags:       []string{`weekly`},
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Timeout:    time.Duration(6*24)*time.Hour + time.Duration(10)*time.Minute,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			warehouses := 1000
@@ -363,7 +367,7 @@ func registerTPCC(r *testRegistry) {
 			Owner:      OwnerMultiRegion,
 			MinVersion: "v21.1.0",
 			// 3 nodes per region + 1 node for workload.
-			Cluster: makeClusterSpec(10, geo(), zones(strings.Join(zs, ","))),
+			Cluster: r.makeClusterSpec(10, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				duration := 90 * time.Minute
 				partitionArgs := fmt.Sprintf(
@@ -385,7 +389,7 @@ func registerTPCC(r *testRegistry) {
 								Period:   300 * time.Second,
 								DownTime: 300 * time.Second,
 							},
-							Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
+							Target:       func() option.NodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
 							Stopper:      time.After(duration),
 							DrainAndQuit: false,
 						}
@@ -400,7 +404,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4),
+		Cluster:    r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -415,7 +419,7 @@ func registerTPCC(r *testRegistry) {
 							Period:   45 * time.Second,
 							DownTime: 10 * time.Second,
 						},
-						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
+						Target:       func() option.NodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
 						Stopper:      time.After(duration),
 						DrainAndQuit: false,
 					}
@@ -428,7 +432,7 @@ func registerTPCC(r *testRegistry) {
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
 		Owner:      OwnerSQLQueries,
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Timeout:    6 * time.Hour,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			skip.WithIssue(t, 53886)
@@ -597,8 +601,8 @@ func (s tpccBenchSpec) partitions() int {
 }
 
 // startOpts returns any extra start options that the spec requires.
-func (s tpccBenchSpec) startOpts() []option {
-	opts := []option{startArgsDontEncrypt}
+func (s tpccBenchSpec) startOpts() []option.Option {
+	opts := []option.Option{startArgsDontEncrypt}
 	if s.LoadConfig == singlePartitionedLoadgen {
 		opts = append(opts, racks(s.partitions()))
 	}
@@ -615,16 +619,16 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "chaos")
 	}
 
-	opts := []createOption{cpu(b.CPUs)}
+	opts := []spec.Option{spec.CPU(b.CPUs)}
 	switch b.Distribution {
 	case singleZone:
 		// No specifier.
 	case multiZone:
 		nameParts = append(nameParts, "multi-az")
-		opts = append(opts, geo(), zones(strings.Join(b.Distribution.zones(), ",")))
+		opts = append(opts, spec.Geo(), spec.Zones(strings.Join(b.Distribution.zones(), ",")))
 	case multiRegion:
 		nameParts = append(nameParts, "multi-region")
-		opts = append(opts, geo(), zones(strings.Join(b.Distribution.zones(), ",")))
+		opts = append(opts, spec.Geo(), spec.Zones(strings.Join(b.Distribution.zones(), ",")))
 	default:
 		panic("unexpected")
 	}
@@ -643,7 +647,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
-	nodes := makeClusterSpec(numNodes, opts...)
+	nodes := r.makeClusterSpec(numNodes, opts...)
 
 	minVersion := b.MinVersion
 	if minVersion == "" {
@@ -666,7 +670,11 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 // function is idempotent and first checks whether a compatible dataset exists,
 // performing an expensive dataset restore only if it doesn't.
 func loadTPCCBench(
-	ctx context.Context, t *test, c Cluster, b tpccBenchSpec, roachNodes, loadNode nodeListOption,
+	ctx context.Context,
+	t *test,
+	c Cluster,
+	b tpccBenchSpec,
+	roachNodes, loadNode option.NodeListOption,
 ) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -909,7 +917,7 @@ func runTPCCBench(ctx context.Context, t *test, c Cluster, b tpccBenchSpec) {
 			// Kill one node at a time.
 			ch := Chaos{
 				Timer:   Periodic{Period: 90 * time.Second, DownTime: 5 * time.Second},
-				Target:  roachNodes.randNode,
+				Target:  roachNodes.RandNode,
 				Stopper: loadDone,
 			}
 			m.Go(ch.Runner(c, m))

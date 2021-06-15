@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -56,7 +57,7 @@ type testSpec struct {
 	// given.
 	Tags []string
 	// Cluster provides the specification for the cluster to use for the test.
-	Cluster clusterSpec
+	Cluster spec.ClusterSpec
 
 	// UseIOBarrier controls the local-ssd-no-ext4-barrier flag passed to
 	// roachprod when creating a cluster. If set, the flag is not passed, and so

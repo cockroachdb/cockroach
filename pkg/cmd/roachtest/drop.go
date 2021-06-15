@@ -158,7 +158,7 @@ func registerDrop(r *testRegistry) {
 		Name:       fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
 		Owner:      OwnerKV,
 		MinVersion: `v2.1.0`,
-		Cluster:    makeClusterSpec(numNodes),
+		Cluster:    r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.

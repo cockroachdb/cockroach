@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -39,21 +41,9 @@ import (
 func registerFollowerReads(r *testRegistry) {
 	register := func(survival survivalGoal, locality localitySetting) {
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
-			Owner: OwnerKV,
-			Cluster: makeClusterSpec(
-				6, /* nodeCount */
-				cpu(2),
-				geo(),
-				// This zone option looks strange, but it makes more sense once you
-				// understand what the test is doing. The test creates a multi-region
-				// database with either ZONE or REGION survivability and with a PRIMARY
-				// REGION of us-east1. This means that for ZONE survivability, the test
-				// wants 3 nodes in us-east1, 1 in us-west1, and 1 in europe-west2. For
-				// REGION surviability, the test wants 2 nodes in us-east1, 2 (or 1) in
-				// us-west1, and 1 (or 2) in europe-west2.
-				zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
-			),
+			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
+			Owner:   OwnerKV,
+			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Wipe(ctx)
@@ -73,9 +63,9 @@ func registerFollowerReads(r *testRegistry) {
 	r.Add(testSpec{
 		Name:  "follower-reads/mixed-version/single-region",
 		Owner: OwnerKV,
-		Cluster: makeClusterSpec(
+		Cluster: r.makeClusterSpec(
 			3, /* nodeCount */
-			cpu(2),
+			spec.CPU(2),
 		),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, r.buildVersion)
@@ -500,7 +490,7 @@ func verifySQLLatency(
 	ctx context.Context,
 	c Cluster,
 	t *test,
-	adminNode nodeListOption,
+	adminNode option.NodeListOption,
 	start, end time.Time,
 	targetLatency time.Duration,
 ) {
@@ -553,7 +543,7 @@ func verifyHighFollowerReadRatios(
 	ctx context.Context,
 	c Cluster,
 	t *test,
-	node nodeListOption,
+	node option.NodeListOption,
 	start, end time.Time,
 	toleratedNodes int,
 ) {
@@ -774,12 +764,12 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
-	var remainingNodes nodeListOption
+	var remainingNodes option.NodeListOption
 	for i := 0; i < c.Spec().NodeCount; i++ {
 		if i+1 == randNode {
 			continue
 		}
-		remainingNodes = remainingNodes.merge(c.Node(i + 1))
+		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
 	t.l.Printf("upgrading nodes %s to current version", remainingNodes)
 	upgradeNodes(ctx, remainingNodes, curVersion, t, c)

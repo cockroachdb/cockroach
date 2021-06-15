@@ -86,7 +86,7 @@ func registerRestart(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "restart/down-for-2m",
 		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(3),
+		Cluster: r.makeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
 		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {

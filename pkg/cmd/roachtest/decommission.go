@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,7 +38,7 @@ func registerDecommission(r *testRegistry) {
 			Name:       fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
-			Cluster:    makeClusterSpec(4),
+			Cluster:    r.makeClusterSpec(4),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				if local {
 					duration = 5 * time.Minute
@@ -54,7 +55,7 @@ func registerDecommission(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Timeout:    10 * time.Minute,
-			Cluster:    makeClusterSpec(numNodes),
+			Cluster:    r.makeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
@@ -66,7 +67,7 @@ func registerDecommission(r *testRegistry) {
 			Name:       "decommission/mixed-versions",
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
-			Cluster:    makeClusterSpec(numNodes),
+			Cluster:    r.makeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
 			},
@@ -920,7 +921,7 @@ func newDecommTestHelper(t *test, c Cluster) *decommTestHelper {
 // decommission decommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *decommTestHelper) decommission(
-	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
 ) (string, error) {
 	args := []string{"node", "decommission"}
 	args = append(args, verbs...)
@@ -938,7 +939,7 @@ func (h *decommTestHelper) decommission(
 // recommission recommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *decommTestHelper) recommission(
-	ctx context.Context, targetNodes nodeListOption, runNode int, verbs ...string,
+	ctx context.Context, targetNodes option.NodeListOption, runNode int, verbs ...string,
 ) (string, error) {
 	args := []string{"node", "recommission"}
 	args = append(args, verbs...)

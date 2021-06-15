@@ -32,7 +32,7 @@ func registerTLP(r *testRegistry) {
 		Timeout:    time.Minute * 5,
 		MinVersion: "v20.2.0",
 		Tags:       nil,
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		Run:        runTLP,
 	})
 }

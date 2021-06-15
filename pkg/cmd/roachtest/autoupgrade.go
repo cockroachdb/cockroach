@@ -245,7 +245,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		Name:       `autoupgrade`,
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(5),
+		Cluster:    r.makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			pred, err := PredecessorVersion(r.buildVersion)
 			if err != nil {

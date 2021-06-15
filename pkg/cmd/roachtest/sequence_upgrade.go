@@ -20,7 +20,7 @@ func registerSequenceUpgrade(r *testRegistry) {
 		Name:       "version/sequence-upgrade",
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v21.1.0",
-		Cluster:    makeClusterSpec(1),
+		Cluster:    r.makeClusterSpec(1),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runSequenceUpgradeMigration(ctx, t, c)
 		},

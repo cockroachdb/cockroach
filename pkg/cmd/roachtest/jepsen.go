@@ -20,6 +20,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
 var jepsenNemeses = []struct {
@@ -155,7 +158,7 @@ func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	run := func(c Cluster, ctx context.Context, node nodeListOption, args ...string) {
+	run := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
 		if !c.isLocal() {
 			c.Run(ctx, node, args...)
 			return
@@ -163,7 +166,7 @@ func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
 		t.l.Printf("> %s\n", strings.Join(args, " "))
 	}
-	runE := func(c Cluster, ctx context.Context, node nodeListOption, args ...string) error {
+	runE := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}
@@ -338,7 +341,7 @@ func registerJepsen(r *testRegistry) {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
-			spec := testSpec{
+			s := testSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
 				MinVersion: "v20.1.0",
@@ -350,12 +353,12 @@ func registerJepsen(r *testRegistry) {
 				// clusters because they have a lengthy setup step, but avoid doing it
 				// if they detect that the machines have already been properly
 				// initialized.
-				Cluster: makeClusterSpec(6, reuseTagged("jepsen")),
+				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
 				Run: func(ctx context.Context, t *test, c Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}
-			r.Add(spec)
+			r.Add(s)
 		}
 	}
 }

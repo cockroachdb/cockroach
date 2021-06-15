@@ -173,7 +173,7 @@ func registerCopy(r *testRegistry) {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
 			Owner:   OwnerKV,
-			Cluster: makeClusterSpec(tc.nodes),
+			Cluster: r.makeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},

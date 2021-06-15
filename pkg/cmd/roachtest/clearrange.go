@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -29,7 +31,7 @@ func registerClearRange(r *testRegistry) {
 			// to <3:30h but it varies.
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
-			Cluster:    makeClusterSpec(10, cpu(16)),
+			Cluster:    r.makeClusterSpec(10, spec.CPU(16)),
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
@@ -53,7 +55,7 @@ func runClearRange(ctx context.Context, t *test, c Cluster, aggressiveChecks boo
 	c.Stop(ctx)
 	t.Status()
 
-	var opts []option
+	var opts []option.Option
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.
