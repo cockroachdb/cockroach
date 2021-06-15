@@ -268,7 +268,7 @@ func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKi
 		name := MakeTableNameWithSchema(Name(catalog), Name(schema), Name(object))
 		return &name
 	case TypeObject:
-		name := MakeNewQualifiedTypeName(catalog, schema, object)
+		name := MakeQualifiedTypeName(catalog, schema, object)
 		return &name
 	}
 	return nil

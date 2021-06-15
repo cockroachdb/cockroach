@@ -59,7 +59,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		toRequire = tree.ResolveRequireSequenceDesc
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		}
 
 		targetSchemaDesc, err = p.Descriptors().GetMutableSchemaByName(
-			ctx, p.txn, targetDbDesc.GetID(), oldTn.Schema(), tree.SchemaLookupFlags{
+			ctx, p.txn, targetDbDesc, oldTn.Schema(), tree.SchemaLookupFlags{
 				Required:       true,
 				RequireMutable: true,
 			})

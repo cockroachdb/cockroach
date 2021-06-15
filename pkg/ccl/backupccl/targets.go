@@ -543,7 +543,7 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "creating a new resolver for all descriptors")
 	}
 
-	found, desc, err := resolver.LookupObject(ctx, tree.ObjectLookupFlags{}, descName[0], descName[1], descName[2])
+	found, _, desc, err := resolver.LookupObject(ctx, tree.ObjectLookupFlags{}, descName[0], descName[1], descName[2])
 	if err != nil {
 		return BackupTableEntry{}, errors.Wrapf(err, "looking up table %s", fullyQualifiedTableName)
 	}

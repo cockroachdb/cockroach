@@ -58,7 +58,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if err != nil {
 		return nil, err
 	}
-	schema, err := p.Descriptors().GetSchemaByName(ctx, p.txn, db.ID,
+	schema, err := p.Descriptors().GetSchemaByName(ctx, p.txn, db,
 		string(n.Schema.SchemaName), tree.SchemaLookupFlags{
 			Required:       true,
 			RequireMutable: true,

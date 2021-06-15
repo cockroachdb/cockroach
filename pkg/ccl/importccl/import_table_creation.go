@@ -20,8 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -88,10 +90,41 @@ var NoFKs = fkHandler{resolver: fkResolver{
 	tableNameToDesc: make(map[string]*tabledesc.Mutable),
 }}
 
-// MakeSimpleTableDescriptor creates a Mutable from a CreateTable parse
-// node without the full machinery. Many parts of the syntax are unsupported
-// (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
-// but this is enough for our csv IMPORT and for some unit tests.
+// MakeTestingSimpleTableDescriptor is like MakeSimpleTableDescriptor but it
+// uses parentID and parentSchemaID instead of descriptors.
+func MakeTestingSimpleTableDescriptor(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	st *cluster.Settings,
+	create *tree.CreateTable,
+	parentID, parentSchemaID, tableID descpb.ID,
+	fks fkHandler,
+	walltime int64,
+) (*tabledesc.Mutable, error) {
+	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
+	var sc catalog.SchemaDescriptor
+	if parentSchemaID == keys.PublicSchemaID {
+		sc = schemadesc.GetPublicSchema()
+	} else {
+		sc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+			Name:     "foo",
+			ID:       parentSchemaID,
+			Version:  1,
+			ParentID: parentID,
+			Privileges: descpb.NewPrivilegeDescriptor(
+				security.PublicRoleName(),
+				privilege.SchemaPrivileges,
+				security.RootUserName(),
+			),
+		}).BuildCreatedMutableSchema()
+	}
+	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
+}
+
+// MakeSimpleTableDescriptor creates a tabledesc.Mutable from a CreateTable
+// parse node without the full machinery. Many parts of the syntax are
+// unsupported (see the implementation and TestMakeSimpleTableDescriptorErrors
+// for details), but this is enough for our csv IMPORT and for some unit tests.
 //
 // Any occurrence of SERIAL in the column definitions is handled using
 // the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
@@ -101,7 +134,9 @@ func MakeSimpleTableDescriptor(
 	semaCtx *tree.SemaContext,
 	st *cluster.Settings,
 	create *tree.CreateTable,
-	parentID, parentSchemaID, tableID descpb.ID,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	tableID descpb.ID,
 	fks fkHandler,
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
@@ -166,8 +201,8 @@ func MakeSimpleTableDescriptor(
 		&fks.resolver,
 		st,
 		create,
-		parentID,
-		parentSchemaID,
+		db,
+		sc,
 		tableID,
 		nil, /* regionConfig */
 		hlc.Timestamp{WallTime: walltime},
@@ -355,13 +390,13 @@ func (r *fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkResolver) LookupObject(
-	_ context.Context, _ tree.ObjectLookupFlags, catalogName, scName, obName string,
-) (found bool, objMeta catalog.Descriptor, err error) {
+	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
 	// PGDUMP supports non-public schemas so respect the schema name.
 	var lookupName string
 	if r.format.Format == roachpb.IOFileFormat_PgDump {
-		if scName == "" || catalogName == "" {
-			return false, nil, errors.Errorf("expected catalog and schema name to be set when resolving"+
+		if scName == "" || dbName == "" {
+			return false, prefix, nil, errors.Errorf("expected catalog and schema name to be set when resolving"+
 				" table %q in PGDUMP", obName)
 		}
 		lookupName = fmt.Sprintf("%s.%s", scName, obName)
@@ -372,14 +407,14 @@ func (r *fkResolver) LookupObject(
 	}
 	tbl, ok := r.tableNameToDesc[lookupName]
 	if ok {
-		return true, tbl, nil
+		return true, prefix, tbl, nil
 	}
 	names := make([]string, 0, len(r.tableNameToDesc))
 	for k := range r.tableNameToDesc {
 		names = append(names, k)
 	}
 	suggestions := strings.Join(names, ",")
-	return false, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)",
+	return false, prefix, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)",
 		lookupName, suggestions)
 }
 
