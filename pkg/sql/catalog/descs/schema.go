@@ -65,10 +65,8 @@ func (tc *Collection) getSchemaByName(
 		return schemadesc.GetPublicSchema(), nil
 	}
 
-	if tc.virtualSchemas != nil {
-		if sc, ok := tc.virtualSchemas.GetVirtualSchema(schemaName); ok {
-			return sc.Desc(), nil
-		}
+	if sc := tc.virtual.getSchemaByName(schemaName); sc != nil {
+		return sc, nil
 	}
 	if strings.HasPrefix(schemaName, catconstants.PgTempSchemaName) {
 		return tc.temporary.getSchemaByName(ctx, txn, dbID, schemaName, flags)
@@ -197,10 +195,10 @@ func (tc *Collection) getSchemaByID(
 
 	// We have already considered if the schemaID is PublicSchemaID,
 	// if the id appears in staticSchemaIDMap, it must map to a virtual schema.
-	if tc.virtualSchemas != nil {
-		if sc, ok := tc.virtualSchemas.GetVirtualSchemaByID(schemaID); ok {
-			return sc.Desc(), nil
-		}
+	if sc, err := tc.virtual.getSchemaByID(
+		ctx, schemaID, flags.RequireMutable,
+	); sc != nil || err != nil {
+		return sc, err
 	}
 
 	// If this collection is attached to a session and the session has created

@@ -35,7 +35,7 @@ import (
 func (tc *Collection) GetObjectDesc(
 	ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
 ) (desc catalog.Descriptor, err error) {
-	if isVirtual, desc, err := tc.maybeGetVirtualObjectDesc(
+	if isVirtual, desc, err := tc.virtual.getObjectByName(
 		schema, object, flags, db,
 	); isVirtual || err != nil {
 		return desc, err
@@ -78,10 +78,16 @@ func (tc *Collection) getObjectByName(
 	if err != nil || db == nil {
 		return false, nil, err
 	}
-	dbID := db.GetID()
+
+	if isVirtual, desc, err := tc.virtual.getObjectByName(
+		schemaName, objectName, flags, db.GetName(),
+	); isVirtual || err != nil {
+		return isVirtual, desc, err
+	}
 
 	// Resolve the schema.
-	scDesc, err := tc.GetImmutableSchemaByName(ctx, txn, dbID, schemaName,
+	dbID := db.GetID()
+	scDesc, err := tc.GetImmutableSchemaByName(ctx, txn, db.GetID(), schemaName,
 		tree.SchemaLookupFlags{
 			Required:       flags.Required,
 			AvoidCached:    avoidCachedForParent,
@@ -92,12 +98,6 @@ func (tc *Collection) getObjectByName(
 		return false, nil, err
 	}
 	schemaID := scDesc.GetID()
-
-	if isVirtual, desc, err := tc.maybeGetVirtualObjectDesc(
-		scDesc.GetName(), objectName, flags, db.GetName(),
-	); isVirtual || err != nil {
-		return isVirtual, desc, err
-	}
 
 	if found, refuseFurtherLookup, desc, err := tc.getSyntheticOrUncommittedDescriptor(
 		dbID, schemaID, objectName, flags.RequireMutable,
