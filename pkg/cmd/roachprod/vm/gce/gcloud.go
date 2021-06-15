@@ -273,7 +273,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210325",
+	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210603",
 		"Image to use to create the vm, "+
 			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
 
