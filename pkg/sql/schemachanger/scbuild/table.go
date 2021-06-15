@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
@@ -370,8 +369,8 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
 			b.outputNodes[i].Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
-			t.StoreColumnIDs = append(t.StoreColumnIDs, colID)
-			t.StoreColumnNames = append(t.StoreColumnNames, colName)
+			t.Index.StoreColumnIDs = append(t.Index.StoreColumnIDs, colID)
+			t.Index.StoreColumnNames = append(t.Index.StoreColumnNames, colName)
 			return t.Index.ID
 		}
 	}
@@ -390,28 +389,16 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	)
 	newIdx.ID = idxID
 
-	var storeColIDs []descpb.ColumnID
-	var storeColNames []string
-	for _, col := range table.PublicColumns() {
-		containsCol := false
-		for _, id := range newIdx.KeyColumnIDs {
-			if id == col.GetID() {
-				containsCol = true
-				break
-			}
-		}
-		if !containsCol {
-			storeColIDs = append(storeColIDs, col.GetID())
-			storeColNames = append(storeColNames, col.GetName())
-		}
+	if !table.GetPrimaryIndex().CollectKeyColumnIDs().Contains(colID) &&
+		!table.GetPrimaryIndex().CollectPrimaryStoredColumnIDs().Contains(colID) {
+		newIdx.StoreColumnIDs = append(newIdx.StoreColumnIDs, colID)
+		newIdx.StoreColumnNames = append(newIdx.StoreColumnNames, colName)
 	}
 
 	b.addNode(scpb.Target_ADD, &scpb.PrimaryIndex{
 		TableID:             table.GetID(),
 		Index:               newIdx,
 		OtherPrimaryIndexID: table.GetPrimaryIndexID(),
-		StoreColumnIDs:      append(storeColIDs, colID),
-		StoreColumnNames:    append(storeColNames, colName),
 	})
 
 	// Drop the existing primary index.
@@ -419,8 +406,6 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 		TableID:             table.GetID(),
 		Index:               table.GetPrimaryIndex().IndexDescDeepCopy(),
 		OtherPrimaryIndexID: newIdx.ID,
-		StoreColumnIDs:      storeColIDs,
-		StoreColumnNames:    storeColNames,
 	})
 
 	return idxID
@@ -436,10 +421,10 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 		if t, ok := n.Element().(*scpb.PrimaryIndex); ok &&
 			n.Target.Direction == scpb.Target_ADD &&
 			t.TableID == table.GetID() {
-			for j := range t.StoreColumnIDs {
-				if t.StoreColumnIDs[j] == colID {
-					t.StoreColumnIDs = append(t.StoreColumnIDs[:j], t.StoreColumnIDs[j+1:]...)
-					t.StoreColumnNames = append(t.StoreColumnNames[:j], t.StoreColumnNames[j+1:]...)
+			for j := range t.Index.StoreColumnIDs {
+				if t.Index.StoreColumnIDs[j] == colID {
+					t.Index.StoreColumnIDs = append(t.Index.StoreColumnIDs[:j], t.Index.StoreColumnIDs[j+1:]...)
+					t.Index.StoreColumnNames = append(t.Index.StoreColumnNames[:j], t.Index.StoreColumnNames[j+1:]...)
 					return t.Index.ID
 				}
 
@@ -451,7 +436,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// Create a new primary index, identical to the existing one except for its
 	// ID and name.
 	idxID = b.nextIndexID(table)
-	newIdx := protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)
+	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
 	newIdx.Name = tabledesc.GenerateUniqueName(
 		"new_primary_key",
 		func(name string) bool {
@@ -461,44 +446,32 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 		},
 	)
 	newIdx.ID = idxID
-
-	var addStoreColIDs []descpb.ColumnID
-	var addStoreColNames []string
-	var dropStoreColIDs []descpb.ColumnID
-	var dropStoreColNames []string
-	for _, col := range table.PublicColumns() {
-		containsCol := false
-		for _, id := range newIdx.KeyColumnIDs {
-			if id == col.GetID() {
-				containsCol = true
-				break
-			}
+	for j, id := range newIdx.KeyColumnIDs {
+		if id == colID {
+			newIdx.KeyColumnIDs = append(newIdx.KeyColumnIDs[:j], newIdx.KeyColumnIDs[j+1:]...)
+			newIdx.KeyColumnNames = append(newIdx.KeyColumnNames[:j], newIdx.KeyColumnNames[j+1:]...)
+			break
 		}
-		if !containsCol {
-			if colID != col.GetID() {
-				addStoreColIDs = append(addStoreColIDs, col.GetID())
-				addStoreColNames = append(addStoreColNames, col.GetName())
-			}
-			dropStoreColIDs = append(dropStoreColIDs, col.GetID())
-			dropStoreColNames = append(dropStoreColNames, col.GetName())
+	}
+	for j, id := range newIdx.StoreColumnIDs {
+		if id == colID {
+			newIdx.StoreColumnIDs = append(newIdx.StoreColumnIDs[:j], newIdx.StoreColumnIDs[j+1:]...)
+			newIdx.StoreColumnNames = append(newIdx.StoreColumnNames[:j], newIdx.StoreColumnNames[j+1:]...)
+			break
 		}
 	}
 
 	b.addNode(scpb.Target_ADD, &scpb.PrimaryIndex{
 		TableID:             table.GetID(),
-		Index:               *newIdx,
+		Index:               newIdx,
 		OtherPrimaryIndexID: table.GetPrimaryIndexID(),
-		StoreColumnIDs:      addStoreColIDs,
-		StoreColumnNames:    addStoreColNames,
 	})
 
 	// Drop the existing primary index.
 	b.addNode(scpb.Target_DROP, &scpb.PrimaryIndex{
 		TableID:             table.GetID(),
-		Index:               *(protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)),
+		Index:               table.GetPrimaryIndex().IndexDescDeepCopy(),
 		OtherPrimaryIndexID: idxID,
-		StoreColumnIDs:      dropStoreColIDs,
-		StoreColumnNames:    dropStoreColNames,
 	})
 	return idxID
 }

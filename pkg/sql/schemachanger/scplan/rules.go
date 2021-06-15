@@ -11,7 +11,6 @@
 package scplan
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -24,7 +23,7 @@ func columnInSecondaryIndex(this *scpb.Column, that *scpb.SecondaryIndex) bool {
 func columnInPrimaryIndex(this *scpb.Column, that *scpb.PrimaryIndex) bool {
 	return this.TableID == that.TableID &&
 		indexContainsColumn(&that.Index, this.Column.ID) ||
-		columnsContainsID(that.StoreColumnIDs, this.Column.ID)
+		columnsContainsID(that.Index.StoreColumnIDs, this.Column.ID)
 }
 
 func primaryIndexContainsColumn(this *scpb.PrimaryIndex, that *scpb.Column) bool {
@@ -632,13 +631,9 @@ var rules = map[scpb.Element]targetRules{
 				{
 					nextState: scpb.State_DELETE_ONLY,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						idx := this.Index
-						idx.StoreColumnNames = this.StoreColumnNames
-						idx.StoreColumnIDs = this.StoreColumnIDs
-						idx.EncodingType = descpb.PrimaryIndexEncoding
 						return &scop.MakeAddedIndexDeleteOnly{
 							TableID: this.TableID,
-							Index:   idx,
+							Index:   this.Index,
 						}
 					},
 				},
@@ -724,13 +719,9 @@ var rules = map[scpb.Element]targetRules{
 					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
 						// Most of this logic is taken from MakeMutationComplete().
-						idx := this.Index
-						idx.StoreColumnIDs = this.StoreColumnIDs
-						idx.StoreColumnNames = this.StoreColumnNames
-						idx.EncodingType = descpb.PrimaryIndexEncoding
 						return &scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
 							TableID: this.TableID,
-							Index:   idx,
+							Index:   this.Index,
 						}
 					},
 				},
