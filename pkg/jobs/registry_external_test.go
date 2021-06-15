@@ -349,6 +349,8 @@ func TestExpiringSessionsAndClaimJobsDoesNotTouchTerminalJobs(t *testing.T) {
    VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 `
+	// Disallow clean up of claimed jobs
+	jobs.CancellationsUpdateLimitSetting.Override(ctx, &s.ClusterSettings().SV, 0)
 	terminalStatuses := []jobs.Status{jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed}
 	terminalIDs := make([]jobspb.JobID, len(terminalStatuses))
 	terminalClaims := make([][]byte, len(terminalStatuses))
@@ -370,6 +372,21 @@ RETURNING id;
 		}
 		return nil
 	}
+
+	getClaimCount := func(id jobspb.JobID) int {
+		const getClaimQuery = `SELECT count(claim_session_id) FROM system.jobs WHERE id = $1`
+		count := 0
+		tdb.QueryRow(t, getClaimQuery, id).Scan(&count)
+		return count
+	}
+	// Validate the claims were not cleaned up.
+	claimCount := getClaimCount(nonTerminalID)
+	if claimCount == 0 {
+		require.FailNowf(t, "unexpected claim sessions",
+			"claim session ID's were removed some how %d", claimCount)
+	}
+	// Allow clean up of claimed jobs
+	jobs.CancellationsUpdateLimitSetting.Override(ctx, &s.ClusterSettings().SV, 1000)
 	testutils.SucceedsSoon(t, func() error {
 		return checkClaimEqual(nonTerminalID, nil)
 	})
