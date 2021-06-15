@@ -24,7 +24,10 @@ import (
 
 // InjectDescriptors attempts to inject the provided descriptors into the
 // database.
-func InjectDescriptors(ctx context.Context, db *gosql.DB, input []*descpb.Descriptor) error {
+// If force is true, we can inject descriptors that are invalid.
+func InjectDescriptors(
+	ctx context.Context, db *gosql.DB, input []*descpb.Descriptor, force bool,
+) error {
 	cloneInput := func() []*descpb.Descriptor {
 		cloned := make([]*descpb.Descriptor, 0, len(input))
 		for _, d := range input {
@@ -49,8 +52,8 @@ func InjectDescriptors(ctx context.Context, db *gosql.DB, input []*descpb.Descri
 			return err
 		}
 		_, err = tx.Exec(
-			"SELECT crdb_internal.unsafe_upsert_descriptor($1, $2, true)",
-			id, encoded,
+			"SELECT crdb_internal.unsafe_upsert_descriptor($1, $2, $3)",
+			id, encoded, force,
 		)
 		return err
 	}

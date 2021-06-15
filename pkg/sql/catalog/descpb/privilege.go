@@ -34,6 +34,11 @@ const (
 	// OwnerVersion corresponds to descriptors created 20.2 and onward.
 	// These descriptors should always have owner set.
 	OwnerVersion
+
+	// Version21_2 corresponds to descriptors created in 21.2 and onwards.
+	// These descriptors should have all the correct privileges and the owner field
+	// explicitly set. These descriptors should be strictly validated.
+	Version21_2
 )
 
 func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
@@ -118,7 +123,7 @@ func NewCustomSuperuserPrivilegeDescriptor(
 				Privileges: priv.ToBitField(),
 			},
 		},
-		Version: OwnerVersion,
+		Version: Version21_2,
 	}
 }
 
@@ -144,7 +149,7 @@ func NewPrivilegeDescriptor(
 				Privileges: priv.ToBitField(),
 			},
 		},
-		Version: OwnerVersion,
+		Version: Version21_2,
 	}
 }
 
@@ -256,56 +261,41 @@ func MaybeFixUsagePrivForTablesAndDBs(ptr **PrivilegeDescriptor) bool {
 			modified = true
 		}
 	}
+
 	return modified
-}
-
-// MaybeFixSchemaPrivileges removes all invalid bits set on a schema's
-// PrivilegeDescriptor.
-// This is necessary due to ALTER DATABASE ... CONVERT TO SCHEMA originally
-// copying all database privileges to the schema. Not all database privileges
-// are valid for schemas thus after running ALTER DATABASE ... CONVERT TO SCHEMA,
-// the schema may become unusable.
-func MaybeFixSchemaPrivileges(ptr **PrivilegeDescriptor) {
-	if *ptr == nil {
-		*ptr = &PrivilegeDescriptor{}
-	}
-	p := *ptr
-
-	validPrivs := privilege.GetValidPrivilegesForObject(privilege.Schema).ToBitField()
-
-	for i := range p.Users {
-		p.Users[i].Privileges &= validPrivs
-	}
 }
 
 // MaybeFixPrivileges fixes the privilege descriptor if needed, including:
 // * adding default privileges for the "admin" role
 // * fixing default privileges for the "root" user
 // * fixing maximum privileges for users.
-// Returns true if the privilege descriptor was modified.
-//
-// TODO(ajwerner): Figure out whether this is still needed. It seems like
-// perhaps it was intended only for the 2.0 release but then somehow we got
-// bad descriptors with bad initial permissions into later versions or we didn't
-// properly bake this migration in.
-func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
+// * populating the owner field if previously empty.
+// * updating version field to Version21_2.
+// MaybeFixPrivileges can be removed after v21.2.
+func MaybeFixPrivileges(
+	id ID, parentID ID, ptr **PrivilegeDescriptor, objectType privilege.ObjectType,
+) bool {
 	if *ptr == nil {
 		*ptr = &PrivilegeDescriptor{}
 	}
 	p := *ptr
-	allowedPrivilegesBits := privilege.ALL.Mask()
+	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
 	if IsReservedID(id) {
 		// System databases and tables have custom maximum allowed privileges.
 		allowedPrivilegesBits = SystemAllowedPrivileges[id].ToBitField()
 	}
 
-	var modified bool
+	changed := false
 
 	fixSuperUser := func(user security.SQLUsername) {
 		privs := p.findOrCreateUser(user)
 		if privs.Privileges != allowedPrivilegesBits {
-			privs.Privileges = allowedPrivilegesBits
-			modified = true
+			if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
+				privs.Privileges = privilege.ALL.Mask()
+			} else {
+				privs.Privileges = allowedPrivilegesBits
+			}
+			changed = true
 		}
 	}
 
@@ -313,9 +303,8 @@ func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
 	fixSuperUser(security.RootUserName())
 	fixSuperUser(security.AdminRoleName())
 
-	if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
-		// ALL privileges allowed, we can skip regular users.
-		return modified
+	if objectType == privilege.Table || objectType == privilege.Database {
+		changed = MaybeFixUsagePrivForTablesAndDBs(&p) || changed
 	}
 
 	for i := range p.Users {
@@ -326,14 +315,26 @@ func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
 			continue
 		}
 
-		if (u.Privileges &^ allowedPrivilegesBits) != 0 {
-			// User has disallowed privileges: bitwise AND with allowed privileges.
-			u.Privileges &= allowedPrivilegesBits
-			modified = true
+		if u.Privileges&allowedPrivilegesBits != u.Privileges {
+			changed = true
 		}
+		u.Privileges &= allowedPrivilegesBits
 	}
 
-	return modified
+	if p.Owner().Undefined() {
+		if id == keys.SystemDatabaseID || parentID == keys.SystemDatabaseID {
+			p.SetOwner(security.NodeUserName())
+		} else {
+			p.SetOwner(security.RootUserName())
+		}
+		changed = true
+	}
+
+	if p.Version < Version21_2 {
+		p.SetVersion(Version21_2)
+		changed = true
+	}
+	return changed
 }
 
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
@@ -386,6 +387,24 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 	}
 
 	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
+
+	// Validate can be called during the fix_privileges_migration introduced in
+	// 21.2. It is possible for have invalid privileges prior to 21.2 in certain
+	// cases due to bugs. We can strictly check privileges in 21.2 and onwards.
+	if p.Version < Version21_2 {
+		if objectType == privilege.Schema {
+			// Prior to 21_2, it was possible for a schema to have some database
+			// privileges on it. This was temporarily fixed by an upgrade on read
+			// but in 21.2 onwards, it should be permanently fixed with a migration.
+			allowedPrivilegesBits |= privilege.GetValidPrivilegesForObject(privilege.Database).ToBitField()
+		}
+		if objectType == privilege.Table || objectType == privilege.Database {
+			// Prior to 21_2, it was possible for a table or database to have USAGE
+			// privilege on it due to a bug when upgrading from 20.1 to 20.2.
+			// In 21.2 onwards, it should be permanently fixed with a migration.
+			allowedPrivilegesBits |= privilege.USAGE.Mask()
+		}
+	}
 
 	// For all non-super users, privileges must not exceed the allowed privileges.
 	// Also the privileges must be valid on the object type.
@@ -527,6 +546,11 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 // SetOwner sets the owner of the privilege descriptor to the provided string.
 func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUsername) {
 	p.OwnerProto = owner.EncodeProto()
+}
+
+// SetVersion sets the version of the privilege descriptor.
+func (p *PrivilegeDescriptor) SetVersion(version PrivilegeDescVersion) {
+	p.Version = version
 }
 
 // maybeGetSystemString is a helper function that returns "system" with a space
