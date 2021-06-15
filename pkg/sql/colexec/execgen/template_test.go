@@ -11,31 +11,71 @@
 package execgen
 
 import (
+	"go/token"
 	"testing"
 
 	"github.com/dave/dst"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestGenerateAllTemplateArgs(t *testing.T) {
-	params := make([]templateParamInfo, 3)
-	for i := range params {
-		params[i] = templateParamInfo{
-			field: &dst.Field{Type: dst.NewIdent("bool")},
-		}
+func TestTryEvalBools(t *testing.T) {
+	tcs := []struct {
+		expr     dst.Expr
+		expected bool
+		failed   bool
+	}{
+		{
+			expr:     &dst.Ident{Name: "true"},
+			expected: true,
+		},
+		{
+			expr:     &dst.Ident{Name: "false"},
+			expected: false,
+		},
+		{
+			expr:     &dst.UnaryExpr{Op: token.NOT, X: &dst.Ident{Name: "true"}},
+			expected: false,
+		},
+		{
+			expr:     &dst.UnaryExpr{Op: token.NOT, X: &dst.Ident{Name: "false"}},
+			expected: true,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LAND, X: &dst.Ident{Name: "false"}, Y: &dst.Ident{Name: "false"}},
+			expected: false,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LAND, X: &dst.Ident{Name: "true"}, Y: &dst.Ident{Name: "false"}},
+			expected: false,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LAND, X: &dst.Ident{Name: "false"}, Y: &dst.Ident{Name: "true"}},
+			expected: false,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LAND, X: &dst.Ident{Name: "true"}, Y: &dst.Ident{Name: "true"}},
+			expected: true,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LOR, X: &dst.Ident{Name: "false"}, Y: &dst.Ident{Name: "false"}},
+			expected: false,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LOR, X: &dst.Ident{Name: "true"}, Y: &dst.Ident{Name: "false"}},
+			expected: true,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LOR, X: &dst.Ident{Name: "false"}, Y: &dst.Ident{Name: "true"}},
+			expected: true,
+		},
+		{
+			expr:     &dst.BinaryExpr{Op: token.LOR, X: &dst.Ident{Name: "true"}, Y: &dst.Ident{Name: "true"}},
+			expected: true,
+		},
 	}
-
-	res := generateAllTemplateArgs(params)
-
-	argsMap := map[string]struct{}{}
-	for _, args := range res {
-		argsStr := prettyPrintExprs(args...)
-		if _, ok := argsMap[argsStr]; ok {
-			t.Fatalf("duplicate template args %s", argsStr)
-		}
-		argsMap[argsStr] = struct{}{}
-	}
-
-	if len(res) != 8 {
-		t.Fatalf("wrong number of template arg set, expected 8, found %d", len(res))
+	for _, tc := range tcs {
+		actual, ok := tryEvalBool(tc.expr)
+		assert.NotEqual(t, ok, tc.failed, "unexpected value for ok")
+		assert.Equal(t, actual, tc.expected, "wrong result for expr", prettyPrintExprs(tc.expr))
 	}
 }
