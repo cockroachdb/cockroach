@@ -87,7 +87,9 @@ func TestForeignKeyMigration(t *testing.T) {
 
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
-	require.NoError(t, sqlutils.InjectDescriptors(ctx, db, descriptorsToInject))
+	require.NoError(t, sqlutils.InjectDescriptors(
+		ctx, db, descriptorsToInject, true, /* force */
+	))
 	tdb := sqlutils.MakeSQLRunner(db)
 	numUnupgradedDescriptors := func() (numUnupgraded int) {
 		tdb.QueryRow(t, `

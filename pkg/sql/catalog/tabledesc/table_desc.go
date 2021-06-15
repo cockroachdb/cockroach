@@ -53,6 +53,16 @@ func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDes
 	return desc.postDeserializationChanges
 }
 
+// GetChanged returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *wrapper) GetChanged() bool {
+	return desc.postDeserializationChanges.UpgradedForeignKeyRepresentation ||
+		desc.postDeserializationChanges.UpgradedFormatVersion ||
+		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
+		desc.postDeserializationChanges.UpgradedNamespaceName ||
+		desc.postDeserializationChanges.UpgradedPrivileges
+}
+
 // ActiveChecks returns a list of all check constraints that should be enforced
 // on writes (including constraints being added/validated). The columns
 // referenced by the returned checks are writable, but not necessarily public.

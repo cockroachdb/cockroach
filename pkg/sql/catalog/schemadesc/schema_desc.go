@@ -73,6 +73,10 @@ type Mutable struct {
 	immutable
 
 	ClusterVersion *immutable
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 var _ redact.SafeMessager = (*immutable)(nil)
@@ -281,6 +285,12 @@ func (desc *Mutable) SetName(name string) {
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
+}
+
+// GetChanged returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *Mutable) GetChanged() bool {
+	return desc.changed
 }
 
 // IsSchemaNameValid returns whether the input name is valid for a user defined

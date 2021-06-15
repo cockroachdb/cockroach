@@ -31,6 +31,7 @@ go_test(
         "//pkg/security",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/privilege",
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

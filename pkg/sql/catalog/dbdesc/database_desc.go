@@ -45,6 +45,10 @@ type immutable struct {
 type Mutable struct {
 	immutable
 	ClusterVersion *immutable
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 // SafeMessage makes immutable a SafeMessager.
@@ -388,4 +392,10 @@ func (desc *Mutable) SetInitialMultiRegionConfig(config *multiregion.RegionConfi
 		RegionEnumID:  config.RegionEnumID(),
 	}
 	return nil
+}
+
+// GetChanged returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *Mutable) GetChanged() bool {
+	return desc.changed
 }

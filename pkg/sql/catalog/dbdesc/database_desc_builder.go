@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -32,6 +33,8 @@ type DatabaseDescriptorBuilder interface {
 type databaseDescriptorBuilder struct {
 	original      *descpb.DatabaseDescriptor
 	maybeModified *descpb.DatabaseDescriptor
+
+	changed bool
 }
 
 var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
@@ -54,12 +57,9 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
-	descpb.MaybeFixPrivileges(ddb.maybeModified.ID, &ddb.maybeModified.Privileges)
-	descpb.MaybeFixUsagePrivForTablesAndDBs(&ddb.maybeModified.Privileges)
+	ddb.changed = descpb.MaybeFixPrivileges(ddb.maybeModified.ID, ddb.maybeModified.ID,
+		&ddb.maybeModified.Privileges, privilege.Database)
 	return nil
 }
 
@@ -91,6 +91,7 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
 	return &Mutable{
 		immutable:      immutable{DatabaseDescriptor: *ddb.maybeModified},
 		ClusterVersion: &immutable{DatabaseDescriptor: *ddb.original},
+		changed:        ddb.changed,
 	}
 }
 
@@ -106,7 +107,10 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
 	if desc == nil {
 		desc = ddb.original
 	}
-	return &Mutable{immutable: immutable{DatabaseDescriptor: *desc}}
+	return &Mutable{
+		immutable: immutable{DatabaseDescriptor: *desc},
+		changed:   ddb.changed,
+	}
 }
 
 // NewInitialOption is an optional argument for NewInitial.

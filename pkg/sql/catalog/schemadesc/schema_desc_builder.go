@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -28,7 +29,9 @@ type SchemaDescriptorBuilder interface {
 }
 
 type schemaDescriptorBuilder struct {
-	original *descpb.SchemaDescriptor
+	original      *descpb.SchemaDescriptor
+	maybeModified *descpb.SchemaDescriptor
+	changed       bool
 }
 
 var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
@@ -51,8 +54,9 @@ func (sdb *schemaDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
 ) error {
-	privDesc := sdb.original.GetPrivileges()
-	descpb.MaybeFixSchemaPrivileges(&privDesc)
+	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	sdb.changed = descpb.MaybeFixPrivileges(sdb.maybeModified.GetID(), sdb.maybeModified.GetParentID(),
+		&sdb.maybeModified.Privileges, privilege.Schema)
 	return nil
 }
 
@@ -63,7 +67,11 @@ func (sdb *schemaDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 
 // BuildImmutableSchema returns an immutable schema descriptor.
 func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescriptor {
-	return &immutable{SchemaDescriptor: *sdb.original}
+	desc := sdb.maybeModified
+	if desc == nil {
+		desc = sdb.original
+	}
+	return &immutable{SchemaDescriptor: *desc}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -74,10 +82,13 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutable() catalog.MutableDescri
 // BuildExistingMutableSchema returns a mutable descriptor for a schema
 // which already exists.
 func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
-	desc := protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	if sdb.maybeModified == nil {
+		sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	}
 	return &Mutable{
-		immutable:      immutable{SchemaDescriptor: *desc},
+		immutable:      immutable{SchemaDescriptor: *sdb.maybeModified},
 		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
+		changed:        sdb.changed,
 	}
 }
 
@@ -89,5 +100,8 @@ func (sdb *schemaDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescrip
 // BuildCreatedMutableSchema returns a mutable descriptor for a schema
 // which is in the process of being created.
 func (sdb *schemaDescriptorBuilder) BuildCreatedMutableSchema() *Mutable {
-	return &Mutable{immutable: immutable{SchemaDescriptor: *sdb.original}}
+	return &Mutable{
+		immutable: immutable{SchemaDescriptor: *sdb.original},
+		changed:   sdb.changed,
+	}
 }
