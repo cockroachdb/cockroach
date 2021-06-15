@@ -402,6 +402,7 @@ func checkReplicaCount(
 func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes a long time or times out under race")
 
 	ctx := context.Background()
 
@@ -511,8 +512,8 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 // non-voting replicas on dead nodes are replaced or removed.
 func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 65932, "flaky test")
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes a long time or times out under race")
 
 	ctx := context.Background()
 
@@ -656,8 +657,8 @@ func getNonVoterNodeIDs(rangeDesc roachpb.RangeDescriptor) (result []roachpb.Nod
 // from voter to non-voter.
 func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 65932, "flaky test")
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes a long time or times out under race")
 
 	ctx := context.Background()
 	serverArgs := make(map[int]base.TestServerArgs)
