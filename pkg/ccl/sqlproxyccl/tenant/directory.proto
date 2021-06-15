@@ -12,8 +12,8 @@ option go_package="tenant";
 
 import "gogoproto/gogo.proto";
 
-// WatchEndpointsRequest is empty as we want to get all notifications.
-message WatchEndpointsRequest {}
+// WatchPodsRequest is empty as we want to get all notifications.
+message WatchPodsRequest {}
 
 // EventType shows the event type of the notifications that the server streams
 // to its clients.
@@ -25,51 +25,51 @@ enum EventType {
   DELETED = 2;
 }
 
-// WatchEndpointsResponse represents the notifications that the server sends to
+// WatchPodsResponse represents the notifications that the server sends to
 // its clients when clients want to monitor the directory server activity.
-message WatchEndpointsResponse {
+message WatchPodsResponse {
   // EventType is the type of the notifications - added, modified, deleted.
   EventType typ = 1;
-  // IP is the endpoint that this notification applies to.
-  string ip = 2 [(gogoproto.customname) = "IP"];
-  // TenantID is the tenant that owns the endpoint.
+  // Addr is the address of the pod that this notification applies to.
+  string addr = 2;
+  // TenantID is the tenant that owns the pod.
   uint64 tenant_id = 3[(gogoproto.customname) = "TenantID"];
 }
 
-// ListEndpointsRequest is used to query the server for the list of current
-// endpoints of a given tenant.
-message ListEndpointsRequest {
+// ListPodsRequest is used to query the server for the list of current
+// pods of a given tenant.
+message ListPodsRequest {
   // TenantID identifies the tenant for which the client is requesting a list of
-  // the endpoints.
+  // the pods.
   uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
 }
 
-// EnsureEndpointRequest is used to ensure that a tenant's backend is active. If
+// EnsurePodRequest is used to ensure that a tenant's backend is active. If
 // there is an active backend then the server doesn't have to do anything. If
 // there isn't an active backend, then the server has to bring a new one up.
-message EnsureEndpointRequest {
+message EnsurePodRequest {
   // TenantID is the id of the tenant for which an active backend is requested.
   uint64 tenant_id = 1[(gogoproto.customname) = "TenantID"];
 }
 
-// EnsureEndpointResponse is empty and indicates that the server processed the
+// EnsurePodResponse is empty and indicates that the server processed the
 // request.
-message EnsureEndpointResponse {
+message EnsurePodResponse {
 }
 
-// Endpoint contains the information about a tenant endpoint. Most often it is a
+// Pod contains the information about a tenant pod. Most often it is a
 // combination of an ip address and port, e.g. 132.130.1.11:34576.
-message Endpoint {
-  // IP is the ip and port combo identifying the tenant endpoint.
-  string IP = 1[(gogoproto.customname) = "IP"];
+message Pod {
+  // Addr is the ip and port combo identifying the tenant pod.
+  string Addr = 1;
 }
 
-// ListEndpointsResponse is sent back as a result of requesting the list of
-// endpoints for a given tenant.
-message ListEndpointsResponse {
-  // Endpoints is the list of endpoints currently active for the requested
+// ListPodsResponse is sent back as a result of requesting the list of
+// pods for a given tenant.
+message ListPodsResponse {
+  // Pods is the list of pods currently active for the requested
   // tenant.
-  repeated Endpoint endpoints = 1;
+  repeated Pod pods = 1;
 }
 
 // GetTenantRequest is used by a client to request from the sever metadata
@@ -86,20 +86,20 @@ message GetTenantResponse {
 }
 
 // Directory specifies a service that keeps track and manages tenant backends,
-// related metadata and their endpoints.
+// related metadata and their pods.
 service Directory {
-  // ListEndpoints is used to query the server for the list of current endpoints
+  // ListPods is used to query the server for the list of current pods
   // of a given tenant.
-  rpc ListEndpoints(ListEndpointsRequest) returns (ListEndpointsResponse);
-  // WatchEndpoints is used to get a stream, that is used to receive notifications
+  rpc ListPods(ListPodsRequest) returns (ListPodsResponse);
+  // WatchPods is used to get a stream, that is used to receive notifications
   // about changes in tenant backend's state - added, modified and deleted.
-  rpc WatchEndpoints(WatchEndpointsRequest) returns (stream WatchEndpointsResponse);
-  // EnsureEndpoint is used to ensure that a tenant's backend is active. If
+  rpc WatchPods(WatchPodsRequest) returns (stream WatchPodsResponse);
+  // EnsurePod is used to ensure that a tenant's backend is active. If
   // there is an active backend then the server doesn't have to do anything. If
   // there isn't an active backend, then the server has to bring a new one up.
-  // If the requested tenant does not exist, EnsureEndpoint returns a GRPC
+  // If the requested tenant does not exist, EnsurePod returns a GRPC
   // NotFound error.
-  rpc EnsureEndpoint(EnsureEndpointRequest) returns (EnsureEndpointResponse);
+  rpc EnsurePod(EnsurePodRequest) returns (EnsurePodResponse);
   // GetTenant is used to fetch the metadata of a specific tenant. If the tenant
   // does not exist, GetTenant returns a GRPC NotFound error.
   rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
