@@ -22,19 +22,6 @@ import "util/hlc/timestamp.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "clusterversion/cluster_version.proto";
 
-message Lease {
-  option (gogoproto.equal) = true;
-
-  // The ID of the node that holds the lease.
-  uint32 node_id = 1 [
-    (gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-  ];
-  // The epoch of the lease holder's node liveness entry.
-  int64 epoch = 2;
-}
-
-
 enum EncryptionMode {
   Passphrase = 0;
   KMS = 1;
@@ -676,7 +663,7 @@ message Payload {
   // reverted. The error is recorded so it can be handled while reverting, if
   // needed.
   errorspb.EncodedError final_resume_error = 19;
-  Lease lease = 9;
+  reserved 9;
   // Noncancelable is used to denote when a job cannot be canceled. This field
   // will not be respected in mixed version clusters where some nodes have
   // a version < 20.1, so it can only be used in cases where all nodes having

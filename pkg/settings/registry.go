@@ -92,6 +92,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.vectorize_row_count_threshold": {},
 	"cloudstorage.gs.default.key":                {},
 	"storage.sst_export.max_intents_per_error":   {},
+	"jobs.registry.leniency":                     {},
 }
 
 // register adds a setting to the registry.
