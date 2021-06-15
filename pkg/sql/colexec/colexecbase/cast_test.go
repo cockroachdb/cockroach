@@ -114,8 +114,10 @@ func TestRandomizedCast(t *testing.T) {
 		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Int4, toPhysType: datumAsInt4, retryGeneration: true},
 		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
 		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Float, toPhysType: datumAsFloat, retryGeneration: true},
+		{fromTyp: types.Decimal, fromPhysType: datumAsDecimal, toTyp: types.Decimal, toPhysType: datumAsDecimal},
 		// int -> t tests
 		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Bool, toPhysType: datumAsBool},
+		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Int, toPhysType: datumAsInt},
 		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Int4, toPhysType: datumAsInt4, retryGeneration: true},
 		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
 		{fromTyp: types.Int, fromPhysType: datumAsInt, toTyp: types.Float, toPhysType: datumAsFloat},
@@ -123,6 +125,7 @@ func TestRandomizedCast(t *testing.T) {
 		// int4 -> t tests
 		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Bool, toPhysType: datumAsBool},
 		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Int, toPhysType: datumAsInt},
+		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Int4, toPhysType: datumAsInt4},
 		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
 		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Float, toPhysType: datumAsFloat},
 		{fromTyp: types.Int4, fromPhysType: datumAsInt4, toTyp: types.Decimal, toPhysType: datumAsDecimal},
@@ -130,6 +133,7 @@ func TestRandomizedCast(t *testing.T) {
 		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Bool, toPhysType: datumAsBool},
 		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Int, toPhysType: datumAsInt},
 		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Int4, toPhysType: datumAsInt},
+		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Int2, toPhysType: datumAsInt2},
 		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Float, toPhysType: datumAsFloat},
 		{fromTyp: types.Int2, fromPhysType: datumAsInt2, toTyp: types.Decimal, toPhysType: datumAsDecimal},
 		// float -> t tests
@@ -139,6 +143,7 @@ func TestRandomizedCast(t *testing.T) {
 		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Int, toPhysType: datumAsInt, retryGeneration: true},
 		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Int4, toPhysType: datumAsInt4, retryGeneration: true},
 		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Int2, toPhysType: datumAsInt2, retryGeneration: true},
+		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Float, toPhysType: datumAsFloat},
 		{fromTyp: types.Float, fromPhysType: datumAsFloat, toTyp: types.Decimal, toPhysType: datumAsDecimal},
 		// datum-backed type -> t tests
 		{fromTyp: collatedStringType, fromPhysType: makeDatumVecAdapter(collatedStringVec), toTyp: types.Bool, toPhysType: datumAsBool, getValidSet: getCollatedStringsThatCanBeCastAsBools},

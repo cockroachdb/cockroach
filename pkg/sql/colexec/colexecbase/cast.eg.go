@@ -49,6 +49,15 @@ func GetCastOperator(
 			outputIdx:                resultIdx,
 		}, nil
 	}
+	if toType.Identical(fromType) {
+		// We have an identity cast, so we use a custom identity cast operator.
+		return &castIdentityOp{
+			OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+			allocator:                allocator,
+			colIdx:                   colIdx,
+			outputIdx:                resultIdx,
+		}, nil
+	}
 	leftType, rightType := fromType, toType
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 	case types.BoolFamily:
@@ -56,18 +65,6 @@ func GetCastOperator(
 		case -1:
 		default:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-			case types.BoolFamily:
-				switch rightType.Width() {
-				case -1:
-				default:
-					return &castBoolBoolOp{
-						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-						allocator:                allocator,
-						colIdx:                   colIdx,
-						outputIdx:                resultIdx,
-						toType:                   toType,
-					}, nil
-				}
 			case types.FloatFamily:
 				switch rightType.Width() {
 				case -1:
@@ -187,14 +184,6 @@ func GetCastOperator(
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 			case types.IntFamily:
 				switch rightType.Width() {
-				case 16:
-					return &castInt16Int16Op{
-						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-						allocator:                allocator,
-						colIdx:                   colIdx,
-						outputIdx:                resultIdx,
-						toType:                   toType,
-					}, nil
 				case 32:
 					return &castInt16Int32Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
@@ -256,14 +245,6 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case 16:
 					return &castInt32Int16Op{
-						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-						allocator:                allocator,
-						colIdx:                   colIdx,
-						outputIdx:                resultIdx,
-						toType:                   toType,
-					}, nil
-				case 32:
-					return &castInt32Int32Op{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
 						colIdx:                   colIdx,
@@ -338,15 +319,6 @@ func GetCastOperator(
 						outputIdx:                resultIdx,
 						toType:                   toType,
 					}, nil
-				case -1:
-				default:
-					return &castInt64Int64Op{
-						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-						allocator:                allocator,
-						colIdx:                   colIdx,
-						outputIdx:                resultIdx,
-						toType:                   toType,
-					}, nil
 				}
 			case types.BoolFamily:
 				switch rightType.Width() {
@@ -391,18 +363,6 @@ func GetCastOperator(
 		case -1:
 		default:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-			case types.FloatFamily:
-				switch rightType.Width() {
-				case -1:
-				default:
-					return &castFloat64Float64Op{
-						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-						allocator:                allocator,
-						colIdx:                   colIdx,
-						outputIdx:                resultIdx,
-						toType:                   toType,
-					}, nil
-				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
@@ -496,6 +456,9 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
 		return true
 	}
+	if toType.Identical(fromType) {
+		return true
+	}
 	leftType, rightType := fromType, toType
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 	case types.BoolFamily:
@@ -503,12 +466,6 @@ func IsCastSupported(fromType, toType *types.T) bool {
 		case -1:
 		default:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-			case types.BoolFamily:
-				switch rightType.Width() {
-				case -1:
-				default:
-					return true
-				}
 			case types.FloatFamily:
 				switch rightType.Width() {
 				case -1:
@@ -568,8 +525,6 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 			case types.IntFamily:
 				switch rightType.Width() {
-				case 16:
-					return true
 				case 32:
 					return true
 				case -1:
@@ -601,8 +556,6 @@ func IsCastSupported(fromType, toType *types.T) bool {
 				switch rightType.Width() {
 				case 16:
 					return true
-				case 32:
-					return true
 				case -1:
 				default:
 					return true
@@ -635,9 +588,6 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					return true
 				case 32:
 					return true
-				case -1:
-				default:
-					return true
 				}
 			case types.BoolFamily:
 				switch rightType.Width() {
@@ -664,12 +614,6 @@ func IsCastSupported(fromType, toType *types.T) bool {
 		case -1:
 		default:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-			case types.FloatFamily:
-				switch rightType.Width() {
-				case -1:
-				default:
-					return true
-				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
@@ -763,110 +707,56 @@ func (c *castOpNullAny) Next() coldata.Batch {
 	return batch
 }
 
-// TODO(yuzefovich): refactor castOp so that it is type-specific (meaning not
-// canonical type family specific, but actual type specific). This will
-// probably require changing the way we handle cast overloads as well.
-
-type castBoolBoolOp struct {
+// castIdentityOp is a special cast operator for the case when "from" and "to"
+// types are identical. The job of this operator is to simply copy the input
+// column into the output column, without performing the deselection step. Not
+// performing the deselection is justified by the following:
+// 1. to be in line with other cast operators
+// 2. AND/OR projection operators cannot handle when a different batch is
+//    returned than the one they fed into the projection chain (which might
+//    contain casts)
+// 3. performing the deselection would require copying over all vectors, not
+//    just the output one.
+// This operator should be planned rarely enough (if ever) to not be very
+// important.
+type castIdentityOp struct {
 	colexecop.OneInputInitCloserHelper
 
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
-	toType    *types.T
 }
 
-var _ colexecop.ResettableOperator = &castBoolBoolOp{}
-var _ colexecop.ClosableOperator = &castBoolBoolOp{}
+var _ colexecop.ClosableOperator = &castIdentityOp{}
 
-func (c *castBoolBoolOp) Reset(ctx context.Context) {
-	if r, ok := c.Input.(colexecop.Resetter); ok {
-		r.Reset(ctx)
-	}
-}
-
-func (c *castBoolBoolOp) Next() coldata.Batch {
+func (c *castIdentityOp) Next() coldata.Batch {
 	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Bool()
-			outputCol := outputVec.Bool()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			} else {
-				// We need to make sure that there are no left over null values
-				// in the output vector.
-				outputNulls.UnsetNulls()
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r bool
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			}
-		},
-	)
+	projVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		maxIdx := n
+		if sel := batch.Selection(); sel != nil {
+			// We don't want to perform the deselection during copying, so we
+			// will copy everything up to (and including) the last selected
+			// element, without the selection vector.
+			maxIdx = sel[n-1]
+		}
+		projVec.Copy(coldata.CopySliceArgs{
+			SliceArgs: coldata.SliceArgs{
+				Src:       batch.ColVec(c.colIdx),
+				SrcEndIdx: maxIdx,
+			},
+		})
+	})
 	return batch
 }
+
+// TODO(yuzefovich): refactor castOp so that it is type-specific (meaning not
+// canonical type family specific, but actual type specific). This will
+// probably require changing the way we handle cast overloads as well.
 
 type castBoolFloat64Op struct {
 	colexecop.OneInputInitCloserHelper
@@ -2226,107 +2116,6 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 	return batch
 }
 
-type castInt16Int16Op struct {
-	colexecop.OneInputInitCloserHelper
-
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
-	toType    *types.T
-}
-
-var _ colexecop.ResettableOperator = &castInt16Int16Op{}
-var _ colexecop.ClosableOperator = &castInt16Int16Op{}
-
-func (c *castInt16Int16Op) Reset(ctx context.Context) {
-	if r, ok := c.Input.(colexecop.Resetter); ok {
-		r.Reset(ctx)
-	}
-}
-
-func (c *castInt16Int16Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int16()
-			outputCol := outputVec.Int16()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int16
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			} else {
-				// We need to make sure that there are no left over null values
-				// in the output vector.
-				outputNulls.UnsetNulls()
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int16
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int16
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
 type castInt16Int32Op struct {
 	colexecop.OneInputInitCloserHelper
 
@@ -2987,107 +2776,6 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						}
 						r = int16(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castInt32Int32Op struct {
-	colexecop.OneInputInitCloserHelper
-
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
-	toType    *types.T
-}
-
-var _ colexecop.ResettableOperator = &castInt32Int32Op{}
-var _ colexecop.ClosableOperator = &castInt32Int32Op{}
-
-func (c *castInt32Int32Op) Reset(ctx context.Context) {
-	if r, ok := c.Input.(colexecop.Resetter); ok {
-		r.Reset(ctx)
-	}
-}
-
-func (c *castInt32Int32Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int32()
-			outputCol := outputVec.Int32()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			} else {
-				// We need to make sure that there are no left over null values
-				// in the output vector.
-				outputNulls.UnsetNulls()
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int32
-						r = v
 						//gcassert:bce
 						outputCol.Set(tupleIdx, r)
 					}
@@ -3792,107 +3480,6 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 	return batch
 }
 
-type castInt64Int64Op struct {
-	colexecop.OneInputInitCloserHelper
-
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
-	toType    *types.T
-}
-
-var _ colexecop.ResettableOperator = &castInt64Int64Op{}
-var _ colexecop.ClosableOperator = &castInt64Int64Op{}
-
-func (c *castInt64Int64Op) Reset(ctx context.Context) {
-	if r, ok := c.Input.(colexecop.Resetter); ok {
-		r.Reset(ctx)
-	}
-}
-
-func (c *castInt64Int64Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Int64()
-			outputCol := outputVec.Int64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			} else {
-				// We need to make sure that there are no left over null values
-				// in the output vector.
-				outputNulls.UnsetNulls()
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r int64
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
 type castInt64BoolOp struct {
 	colexecop.OneInputInitCloserHelper
 
@@ -4226,107 +3813,6 @@ func (c *castInt64Float64Op) Next() coldata.Batch {
 
 						r = float64(v)
 
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castFloat64Float64Op struct {
-	colexecop.OneInputInitCloserHelper
-
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
-	toType    *types.T
-}
-
-var _ colexecop.ResettableOperator = &castFloat64Float64Op{}
-var _ colexecop.ClosableOperator = &castFloat64Float64Op{}
-
-func (c *castFloat64Float64Op) Reset(ctx context.Context) {
-	if r, ok := c.Input.(colexecop.Resetter); ok {
-		r.Reset(ctx)
-	}
-}
-
-func (c *castFloat64Float64Op) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Float64()
-			outputCol := outputVec.Float64()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				inputNulls := inputVec.Nulls()
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						v := inputCol.Get(tupleIdx)
-						var r float64
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						if inputNulls.NullAt(tupleIdx) {
-							continue
-						}
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-						r = v
-						//gcassert:bce
-						outputCol.Set(tupleIdx, r)
-					}
-				}
-			} else {
-				// We need to make sure that there are no left over null values
-				// in the output vector.
-				outputNulls.UnsetNulls()
-				if sel != nil {
-					sel = sel[:n]
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = sel[i]
-						v := inputCol.Get(tupleIdx)
-						var r float64
-						r = v
-						outputCol.Set(tupleIdx, r)
-					}
-				} else {
-					// Remove bounds checks for inputCol[i] and outputCol[i].
-					_ = inputCol.Get(n - 1)
-					_ = outputCol.Get(n - 1)
-					var tupleIdx int
-					for i := 0; i < n; i++ {
-						tupleIdx = i
-						//gcassert:bce
-						v := inputCol.Get(tupleIdx)
-						var r float64
-						r = v
 						//gcassert:bce
 						outputCol.Set(tupleIdx, r)
 					}

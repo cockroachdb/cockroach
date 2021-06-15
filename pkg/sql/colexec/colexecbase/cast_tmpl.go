@@ -85,6 +85,15 @@ func GetCastOperator(
 			outputIdx:                resultIdx,
 		}, nil
 	}
+	if toType.Identical(fromType) {
+		// We have an identity cast, so we use a custom identity cast operator.
+		return &castIdentityOp{
+			OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+			allocator:                allocator,
+			colIdx:                   colIdx,
+			outputIdx:                resultIdx,
+		}, nil
+	}
 	leftType, rightType := fromType, toType
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 	// {{range .LeftFamilies}}
@@ -118,6 +127,9 @@ func GetCastOperator(
 
 func IsCastSupported(fromType, toType *types.T) bool {
 	if fromType.Family() == types.UnknownFamily {
+		return true
+	}
+	if toType.Identical(fromType) {
 		return true
 	}
 	leftType, rightType := fromType, toType
@@ -188,6 +200,53 @@ func (c *castOpNullAny) Next() coldata.Batch {
 			}
 		}
 	}
+	return batch
+}
+
+// castIdentityOp is a special cast operator for the case when "from" and "to"
+// types are identical. The job of this operator is to simply copy the input
+// column into the output column, without performing the deselection step. Not
+// performing the deselection is justified by the following:
+// 1. to be in line with other cast operators
+// 2. AND/OR projection operators cannot handle when a different batch is
+//    returned than the one they fed into the projection chain (which might
+//    contain casts)
+// 3. performing the deselection would require copying over all vectors, not
+//    just the output one.
+// This operator should be planned rarely enough (if ever) to not be very
+// important.
+type castIdentityOp struct {
+	colexecop.OneInputInitCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ colexecop.ClosableOperator = &castIdentityOp{}
+
+func (c *castIdentityOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	projVec := batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		maxIdx := n
+		if sel := batch.Selection(); sel != nil {
+			// We don't want to perform the deselection during copying, so we
+			// will copy everything up to (and including) the last selected
+			// element, without the selection vector.
+			maxIdx = sel[n-1]
+		}
+		projVec.Copy(coldata.CopySliceArgs{
+			SliceArgs: coldata.SliceArgs{
+				Src:       batch.ColVec(c.colIdx),
+				SrcEndIdx: maxIdx,
+			},
+		})
+	})
 	return batch
 }
 
