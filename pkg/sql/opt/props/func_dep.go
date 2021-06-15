@@ -551,6 +551,24 @@ func (f *FuncDepSet) CopyFrom(fdset *FuncDepSet) {
 	f.hasKey = fdset.hasKey
 }
 
+// RemapFrom copies the given FD into this FD, remapping column IDs according to
+// the from/to lists. Specifically, column from[i] is replaced with column
+// to[i] (see TranslateColSet).
+// Any columns not in the from list are removed from the FDs.
+func (f *FuncDepSet) RemapFrom(fdset *FuncDepSet, fromCols, toCols opt.ColList) {
+	f.CopyFrom(fdset)
+	colSet := f.ColSet()
+	fromSet := fromCols.ToSet()
+	if !colSet.SubsetOf(fromSet) {
+		f.ProjectCols(colSet.Intersection(fromSet))
+	}
+	for i := range f.deps {
+		f.deps[i].from = opt.TranslateColSetStrict(f.deps[i].from, fromCols, toCols)
+		f.deps[i].to = opt.TranslateColSetStrict(f.deps[i].to, fromCols, toCols)
+	}
+	f.key = opt.TranslateColSetStrict(f.key, fromCols, toCols)
+}
+
 // ColsAreStrictKey returns true if the given columns contain a strict key for the
 // relation. This means that any two rows in the relation will never have the
 // same values for this set of columns. If the columns are nullable, then at

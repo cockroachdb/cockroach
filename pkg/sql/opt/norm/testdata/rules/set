@@ -185,6 +185,7 @@ except-all
  ├── columns: k:1
  ├── left columns: k:1
  ├── right columns: i:9
+ ├── key: (1)
  ├── scan b
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -223,6 +224,7 @@ intersect-all
  ├── columns: k:1
  ├── left columns: k:1
  ├── right columns: i:9
+ ├── key: (1)
  ├── scan b
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -255,6 +257,7 @@ intersect-all
  ├── columns: k:1!null
  ├── left columns: k:1!null
  ├── right columns: k:8
+ ├── key: (1)
  ├── scan b
  │    ├── columns: k:1!null
  │    └── key: (1)
