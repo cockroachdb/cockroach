@@ -27,13 +27,13 @@ func a() {
 
 const _ = "template_b"
 
-func b_false() int {
-	x = 4
+func b_true() int {
+	x = 3
 	return x
 }
 
-func b_true() int {
-	x = 3
+func b_false() int {
+	x = 4
 	return x
 }
 ----
@@ -79,9 +79,9 @@ func a() {
 const _ = "template_b"
 
 // execgen:inline
-func b_false_false(a int) int {
+func b_true_true(a int) int {
 	var x int
-	x = 4
+	x = 3
 	return x
 }
 
@@ -101,9 +101,9 @@ func b_false_true(a int) int {
 }
 
 // execgen:inline
-func b_true_true(a int) int {
+func b_false_false(a int) int {
 	var x int
-	x = 3
+	x = 4
 	return x
 }
 ----
@@ -156,10 +156,7 @@ func main() {
 const _ = "template_a"
 
 // execgen:inline
-func a_false(x int) {
-	b_false_true(x)
-	b_false_false(x)
-}
+const _ = "template_b"
 
 // execgen:inline
 func a_true(x int) {
@@ -168,11 +165,14 @@ func a_true(x int) {
 }
 
 // execgen:inline
-const _ = "template_b"
+func a_false(x int) {
+	b_false_true(x)
+	b_false_false(x)
+}
 
 // execgen:inline
-func b_false_false(x int) int {
-	fmt.Println("not y not z")
+func b_true_true(x int) int {
+	fmt.Println("y and z")
 }
 
 // execgen:inline
@@ -186,8 +186,8 @@ func b_false_true(x int) int {
 }
 
 // execgen:inline
-func b_true_true(x int) int {
-	fmt.Println("y and z")
+func b_false_false(x int) int {
+	fmt.Println("not y not z")
 }
 ----
 ----
@@ -238,8 +238,23 @@ func main() {
 const _ = "template_b"
 
 // execgen:inline
-func b_false_false(x int) int {
-	fmt.Println("not y not z")
+const _ = "template_a"
+
+// execgen:inline
+func a_true(x int) {
+	b_true_true(x)
+	b_true_false(x)
+}
+
+// execgen:inline
+func a_false(x int) {
+	b_false_true(x)
+	b_false_false(x)
+}
+
+// execgen:inline
+func b_true_true(x int) int {
+	fmt.Println("y and z")
 }
 
 // execgen:inline
@@ -253,23 +268,134 @@ func b_false_true(x int) int {
 }
 
 // execgen:inline
-func b_true_true(x int) int {
-	fmt.Println("y and z")
+func b_false_false(x int) int {
+	fmt.Println("not y not z")
+}
+----
+----
+
+# Test non-bool templates and execgen:switch
+template
+package main
+
+func main() {
+  a(1, blah.Foo)
+  a(1, *blah.Bar)
+  a(1, *blah.Bar)
+}
+
+// execgen:inline
+// execgen:template<y>
+func a(x int, y blah.Derp) {
+  // execgen:switch
+  switch y {
+  case blah.Foo:
+    fmt.Println("foo")
+    b(x, true, y)
+  case *blah.Bar:
+    fmt.Println("bar")
+    b(x, false, y)
+  }
+}
+
+// execgen:template<b, y>
+func b(x int, b bool, y blah.Derp) {
+  if !b {
+    switch y {
+      case blah.Foo:
+        fmt.Println("foo false")
+      case *blah.Bar:
+        fmt.Println("bar false")
+    }
+  } else {
+    switch y {
+      case blah.Foo:
+        fmt.Println("foo true")
+      case *blah.Bar:
+        fmt.Println("bar true")
+    }
+  }
+}
+----
+----
+package main
+
+func main() {
+	a_blahDOTFoo(1)
+	a_STARblahDOTBar(1)
+	a_STARblahDOTBar(1)
 }
 
 // execgen:inline
 const _ = "template_a"
 
+const _ = "template_b"
+
 // execgen:inline
-func a_false(x int) {
-	b_false_true(x)
-	b_false_false(x)
+func a_blahDOTFoo(x int) {
+	fmt.Println("foo")
+	b_true_blahDOTFoo(x)
 }
 
 // execgen:inline
-func a_true(x int) {
-	b_true_true(x)
-	b_true_false(x)
+func a_STARblahDOTBar(x int) {
+	fmt.Println("bar")
+	b_false_STARblahDOTBar(x)
+}
+
+func b_true_blahDOTFoo(x int) {
+	fmt.Println("foo true")
+}
+
+func b_false_STARblahDOTBar(x int) {
+	fmt.Println("bar false")
+}
+----
+----
+
+# Test an example type template
+template
+package main
+// execgen:template<family, width>
+func frobnicateColumn(col coldata.Vec, family types.Family, width int32) {
+   switch family {
+   case types.Int:
+     switch width {
+       case 32:
+         fmt.Println("i'm an int32!", col.Int32()[0])
+     }
+   case types.Interval, types.Interval2:
+     fmt.Println("I'm an interval!", col.Interval()[0])
+   }
+}
+
+func otherFunc(col coldata.Vec) {
+  frobnicateColumn(col, types.Int, 32)
+  frobnicateColumn(col, types.Interval, 0)
+  frobnicateColumn(col, types.Interval2, 0)
+}
+----
+----
+package main
+
+const _ = "template_frobnicateColumn"
+
+func otherFunc(col coldata.Vec) {
+	frobnicateColumn_typesDOTInt_32(col)
+	frobnicateColumn_typesDOTInterval_0(col)
+	frobnicateColumn_typesDOTInterval2_0(col)
+}
+
+func frobnicateColumn_typesDOTInt_32(col coldata.Vec) {
+	fmt.Println("i'm an int32!", col.Int32()[0])
+}
+
+func frobnicateColumn_typesDOTInterval_0(col coldata.Vec) {
+	fmt.Println("I'm an interval!", col.Interval()[0])
+}
+
+func frobnicateColumn_typesDOTInterval2_0(col coldata.Vec) {
+	fmt.Println("I'm an interval!", col.Interval()[0])
 }
 ----
 ----
