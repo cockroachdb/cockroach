@@ -20,14 +20,12 @@ const castTmpl = "pkg/sql/colexec/colexecbase/cast_tmpl.go"
 
 func genCastOperators(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
-		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
-		"_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}",
-		"_RIGHT_TYPE_WIDTH", typeWidthReplacement,
-		"_R_GO_TYPE", "{{.Right.GoType}}",
-		"_L_TYP", "{{.Left.VecMethod}}",
-		"_R_TYP", "{{.Right.VecMethod}}",
-		"_NAME", "{{.Left.VecMethod}}{{.Right.VecMethod}}",
+		"_TYPE_FAMILY", "{{.TypeFamily}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_TO_GO_TYPE", "{{.GoType}}",
+		"_FROM_TYPE", "{{$fromInfo.VecMethod}}",
+		"_TO_TYPE", "{{.VecMethod}}",
+		"_NAME", "{{$fromInfo.TypeName}}{{.TypeName}}",
 	)
 	s := r.Replace(inputFileContents)
 
@@ -35,14 +33,14 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	s = setValues.ReplaceAllString(s, `{{template "castTuples" buildDict "Global" . "HasNulls" $1 "HasSel" $2}}`)
 
 	castRe := makeFunctionRegex("_CAST", 4)
-	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 4))
+	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Cast", 4))
 
 	tmpl, err := template.New("cast").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	return tmpl.Execute(wr, twoArgsResolvedOverloadsInfo.CastOverloads)
+	return tmpl.Execute(wr, getCastFromTmplInfos())
 }
 
 func init() {

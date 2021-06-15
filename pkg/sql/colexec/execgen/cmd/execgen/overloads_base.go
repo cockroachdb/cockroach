@@ -116,7 +116,6 @@ const (
 	binaryOverload overloadKind = iota
 	comparisonOverload
 	hashOverload
-	castOverload
 )
 
 func (b *overloadBase) String() string {
@@ -272,7 +271,6 @@ type lastArgWidthOverload struct {
 
 	AssignFunc  assignFunc
 	CompareFunc compareFunc
-	CastFunc    castFunc
 }
 
 // newLastArgWidthOverload creates a new lastArgWidthOverload. Note that it
@@ -399,20 +397,6 @@ func (o *lastArgWidthOverload) Compare(
 	return fmt.Sprintf(
 		"if %s < %s { %s = -1 } else if %s > %s { %s = 1 } else { %s = 0 }",
 		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
-}
-
-func (o *lastArgWidthOverload) Cast(to, from, fromCol, toType string) string {
-	if o.CastFunc != nil {
-		if ret := o.CastFunc(to, from, fromCol, toType); ret != "" {
-			return ret
-		}
-	}
-	// There is no default cast operation.
-	colexecerror.InternalError(errors.AssertionFailedf(
-		"unexpectedly don't have CastFunc set for %s -> %s cast", from, to,
-	))
-	// This code is unreachable, but the compiler cannot infer that.
-	return ""
 }
 
 func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec string) string {
@@ -607,7 +591,6 @@ var (
 	lawo = &lastArgWidthOverload{}
 	_    = lawo.Assign
 	_    = lawo.Compare
-	_    = lawo.Cast
 	_    = lawo.UnaryAssign
 
 	awob = &argWidthOverloadBase{}
@@ -626,7 +609,6 @@ func init() {
 	populateBinOpOverloads()
 	populateCmpOpOverloads()
 	populateHashOverloads()
-	populateCastOverloads()
 }
 
 // typeCustomizer is a marker interface for something that implements one or
