@@ -23,10 +23,10 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type    is_nullable  column_default  generation_expression  indices    is_hidden
-s            STRING       true         NULL            ·                      {}         false
-sl           STRING(6)    true         NULL            ·                      {}         false
-t            TIME         true         NULL            ·                      {}         false
-ts           TIMESTAMPTZ  true         NULL            ·                      {}         false
+s            STRING       true         NULL            ·                      {primary}  false
+sl           STRING(6)    true         NULL            ·                      {primary}  false
+t            TIME         true         NULL            ·                      {primary}  false
+ts           TIMESTAMPTZ  true         NULL            ·                      {primary}  false
 rowid        INT8         false        unique_rowid()  ·                      {primary}  true
 
 query TTTT
@@ -107,7 +107,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         NULL            ·                      {}         false
+a            INT8       true         NULL            ·                      {primary}  false
 rowid        INT8       false        unique_rowid()  ·                      {primary}  true
 
 statement ok
@@ -117,7 +117,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         NULL            ·                      {}         false
+a            INT8       true         NULL            ·                      {primary}  false
 rowid        INT8       false        unique_rowid()  ·                      {primary}  true
 
 statement ok
@@ -194,7 +194,7 @@ ALTER TABLE t2 ALTER COLUMN id TYPE STRING
 query TTBTTTB
 SHOW COLUMNS FROM t2
 ----
-id     STRING  true   NULL            ·  {}         false
+id     STRING  true   NULL            ·  {primary}  false
 rowid  INT8    false  unique_rowid()  ·  {primary}  true
 
 statement ok
@@ -217,9 +217,9 @@ ALTER TABLE t3 ALTER COLUMN id2 TYPE string
 query TTBTTTB
 SHOW COLUMNS FROM t3
 ----
-id     INT8    true   NULL            ·  {}         false
-id2    STRING  true   NULL            ·  {}         false
-id3    INT8    true   NULL            ·  {}         false
+id     INT8    true   NULL            ·  {primary}  false
+id2    STRING  true   NULL            ·  {primary}  false
+id3    INT8    true   NULL            ·  {primary}  false
 rowid  INT8    false  unique_rowid()  ·  {primary}  true
 
 statement ok

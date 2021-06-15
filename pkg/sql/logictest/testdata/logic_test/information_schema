@@ -3032,6 +3032,9 @@ other_db       public        teststatics  NO          public        idx_cd      
 other_db       public        teststatics  NO          public        idx_cd      2             d            NULL       NULL         ASC        NO       NO
 other_db       public        teststatics  NO          public        idx_cd      3             id           NULL       NULL         ASC        NO       YES
 other_db       public        teststatics  NO          public        primary     1             id           NULL       NULL         ASC        NO       NO
+other_db       public        teststatics  NO          public        primary     2             c            NULL       NULL         N/A        YES      NO
+other_db       public        teststatics  NO          public        primary     3             d            NULL       NULL         N/A        YES      NO
+other_db       public        teststatics  NO          public        primary     4             e            NULL       NULL         N/A        YES      NO
 
 # Verify information_schema.views
 statement ok

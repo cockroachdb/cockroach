@@ -1259,6 +1259,9 @@ query TTT
 select index_name,column_name,direction from [show indexes from t1] where index_name like 'primary%';
 ----
 primary  rowid  ASC
+primary  id     N/A
+primary  id2    N/A
+primary  name   N/A
 
 statement ok
 alter table t1 alter primary key using columns(id, id2);
@@ -1267,8 +1270,10 @@ alter table t1 alter primary key using columns(id, id2);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id  ASC
-primary  id2  ASC
+primary  id     ASC
+primary  id2    ASC
+primary  name   N/A
+primary  rowid  N/A
 
 
 statement ok
@@ -1278,8 +1283,10 @@ alter table t1 alter primary key using columns(id, id2);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id  ASC
-primary  id2  ASC
+primary  id     ASC
+primary  id2    ASC
+primary  name   N/A
+primary  rowid  N/A
 
 # Validate drop and recreate
 statement ok
@@ -1289,8 +1296,10 @@ alter table t1 drop constraint "primary", alter primary key using columns(id, id
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id  ASC
-primary  id2  ASC
+primary  id     ASC
+primary  id2    ASC
+primary  name   N/A
+primary  rowid  N/A
 
 statement ok
 alter table t1 alter primary key using columns(id);
@@ -1299,9 +1308,12 @@ alter table t1 alter primary key using columns(id);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary  id  ASC
-t1_id_id2_key  id  ASC
-t1_id_id2_key  id2  ASC
+primary        id     ASC
+primary        id2    N/A
+primary        name   N/A
+primary        rowid  N/A
+t1_id_id2_key  id     ASC
+t1_id_id2_key  id2    ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1310,10 +1322,13 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary        id   DESC
-t1_id_id2_key  id   ASC
-t1_id_id2_key  id2  ASC
-t1_id_key      id   ASC
+primary        id     DESC
+primary        id2    N/A
+primary        name   N/A
+primary        rowid  N/A
+t1_id_id2_key  id     ASC
+t1_id_id2_key  id2    ASC
+t1_id_key      id     ASC
 
 
 statement ok
@@ -1322,10 +1337,13 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary        id   DESC
-t1_id_id2_key  id   ASC
-t1_id_id2_key  id2  ASC
-t1_id_key      id   ASC
+primary        id     DESC
+primary        id2    N/A
+primary        name   N/A
+primary        rowid  N/A
+t1_id_id2_key  id     ASC
+t1_id_id2_key  id2    ASC
+t1_id_key      id     ASC
 
 statement ok
 alter table t1 alter primary key using columns(id desc);
@@ -1333,10 +1351,13 @@ alter table t1 alter primary key using columns(id desc);
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
 ----
-primary        id   DESC
-t1_id_id2_key  id   ASC
-t1_id_id2_key  id2  ASC
-t1_id_key      id   ASC
+primary        id     DESC
+primary        id2    N/A
+primary        name   N/A
+primary        rowid  N/A
+t1_id_id2_key  id     ASC
+t1_id_id2_key  id2    ASC
+t1_id_key      id     ASC
 
 statement ok
 alter table t1 alter primary key using columns(id) USING HASH WITH BUCKET_COUNT = 10
@@ -1346,6 +1367,9 @@ select index_name,column_name,direction from [show indexes from t1];
 ----
 primary        crdb_internal_id_shard_10  ASC
 primary        id                         ASC
+primary        id2                        N/A
+primary        name                       N/A
+primary        rowid                      N/A
 t1_id_key1     id                         DESC
 t1_id_key1     crdb_internal_id_shard_10  ASC
 t1_id_id2_key  id                         ASC
@@ -1364,6 +1388,8 @@ query TTT
 select index_name,column_name,direction from [show indexes from child3];
 ----
 primary  x  ASC
+primary  y  N/A
+primary  z  N/A
 
 statement ok
 INSERT INTO parent3 VALUES (1, 2), (4, 5);
@@ -1405,6 +1431,7 @@ select index_name,column_name,direction from [show indexes from child3];
 ----
 primary           x  ASC
 primary           y  ASC
+primary           z  N/A
 child3_x_key      x  ASC
 child3_x_key      y  ASC
 child3_x_y_z_key  x  ASC
@@ -1421,6 +1448,7 @@ select index_name,column_name,direction from [show indexes from child3];
 ----
 primary           x  ASC
 primary           y  ASC
+primary           z  N/A
 child3_x_key      x  ASC
 child3_x_key      y  ASC
 child3_x_y_z_key  x  ASC
@@ -1485,7 +1513,8 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i);
 query TTT
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
-primary  i  ASC
+primary  i                        ASC
+primary  crdb_internal_i_shard_2  N/A
 
 # Test that we do not create new indexes for the old primary key when going
 # from interleaved to non-interleaved and back.

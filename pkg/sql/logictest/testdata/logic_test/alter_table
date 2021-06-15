@@ -22,8 +22,8 @@ SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices            is_hidden
 a            INT8       false        NULL            ·                      {primary,t_f_idx}  false
-f            INT8       true         NULL            ·                      {t_f_idx}          false
-b            INT8       true         NULL            ·                      {}                 false
+f            INT8       true         NULL            ·                      {primary,t_f_idx}  false
+b            INT8       true         NULL            ·                      {primary}          false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -50,6 +50,8 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 t           foo         false       1             b            ASC        false    false
 t           foo         false       2             a            ASC        false    true
 t           primary     false       1             a            ASC        false    false
+t           primary     false       2             f            N/A        true     false
+t           primary     false       3             b            N/A        true     false
 t           t_f_idx     true        1             f            ASC        false    false
 t           t_f_idx     true        2             a            ASC        false    true
 
@@ -207,6 +209,9 @@ SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 t           primary     false       1             a            ASC        false    false
+t           primary     false       2             f            N/A        true     false
+t           primary     false       3             b            N/A        true     false
+t           primary     false       4             c            N/A        true     false
 t           t_f_idx     true        1             f            ASC        false    false
 t           t_f_idx     true        2             a            ASC        false    true
 
@@ -362,6 +367,8 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 o           oi          true        1             i            ASC        false    false
 o           oi          true        2             rowid        ASC        false    true
 o           primary     false       1             rowid        ASC        false    false
+o           primary     false       2             gf           N/A        true     false
+o           primary     false       3             i            N/A        true     false
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
@@ -456,10 +463,10 @@ SHOW COLUMNS FROM tt
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
 a            INT8       false        NULL            ·                      {primary,tt_s_key,tt_t_key}  false
-q            DECIMAL    false        NULL            ·                      {}                           false
-r            DECIMAL    true         NULL            ·                      {}                           false
-s            DECIMAL    false        NULL            ·                      {tt_s_key}                   false
-t            DECIMAL    true         4.0:::DECIMAL   ·                      {tt_t_key}                   false
+q            DECIMAL    false        NULL            ·                      {primary}                    false
+r            DECIMAL    true         NULL            ·                      {primary}                    false
+s            DECIMAL    false        NULL            ·                      {primary,tt_s_key}           false
+t            DECIMAL    true         4.0:::DECIMAL   ·                      {primary,tt_t_key}           false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -660,7 +667,7 @@ SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
 a            INT8       false        NULL            ·                      {primary}  false
-b            INT8       true         NULL            ·                      {}         false
+b            INT8       true         NULL            ·                      {primary}  false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -678,8 +685,8 @@ SHOW COLUMNS FROM privs
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices        is_hidden
 a            INT8       false        NULL            ·                      {foo,primary}  false
-b            INT8       true         NULL            ·                      {foo}          false
-c            INT8       true         NULL            ·                      {}             false
+b            INT8       true         NULL            ·                      {foo,primary}  false
+c            INT8       true         NULL            ·                      {primary}      false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
@@ -1402,6 +1409,8 @@ query TT
 SELECT index_name, column_name FROM [SHOW INDEXES FROM regression_54196]
 ORDER BY index_name, column_name ASC
 ----
+primary                         col2
+primary                         col3
 primary                         rowid
 regression_54196_col2_col3_idx  col2
 regression_54196_col2_col3_idx  col3
