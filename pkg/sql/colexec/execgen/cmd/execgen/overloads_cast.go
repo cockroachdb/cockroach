@@ -35,11 +35,25 @@ func registerCastOutputTypes() {
 		for _, leftWidth := range supportedWidthsByCanonicalTypeFamily[leftFamily] {
 			for _, rightFamily := range castableCanonicalTypeFamilies[leftFamily] {
 				for _, rightWidth := range supportedWidthsByCanonicalTypeFamily[rightFamily] {
+					if shouldSkipCast(leftFamily, leftWidth, rightFamily, rightWidth) {
+						continue
+					}
 					castOutputTypes[typePair{leftFamily, leftWidth, rightFamily, rightWidth}] = types.Bool
 				}
 			}
 		}
 	}
+}
+
+func shouldSkipCast(
+	leftFamily types.Family, leftWidth int32, rightFamily types.Family, rightWidth int32,
+) bool {
+	skipIdentityCast := leftFamily == rightFamily && leftWidth == rightWidth
+	switch leftFamily {
+	case types.DecimalFamily, typeconv.DatumVecCanonicalTypeFamily:
+		skipIdentityCast = false
+	}
+	return skipIdentityCast
 }
 
 func populateCastOverloads() {
@@ -272,21 +286,6 @@ func registerCastTypeCustomizer(pair typePair, customizer typeCustomizer) {
 }
 
 func registerCastTypeCustomizers() {
-	// Identity casts.
-	//
-	// Note that we're using the same "vanilla" type customizers since identity
-	// casts are the default behavior of the CastFunc (except for decimals and
-	// datum-backed types which are handled separately).
-	registerCastTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.BoolFamily, anyWidth}, boolCustomizer{})
-	// TODO(yuzefovich): add casts between types that have types.BytesFamily as
-	// their canonical type family.
-	registerCastTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}, floatCustomizer{})
-	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
-		registerCastTypeCustomizer(typePair{types.IntFamily, intWidth, types.IntFamily, intWidth}, intCustomizer{width: intWidth})
-	}
-	// TODO(yuzefovich): add casts for Timestamps, Intervals, and datum-backed
-	// types.
-
 	// Casts from boolean.
 	registerCastTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.FloatFamily, anyWidth}, boolCastCustomizer{})
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -300,7 +299,8 @@ func registerCastTypeCustomizers() {
 	}
 	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.FloatFamily, anyWidth}, decimalCastCustomizer{toFamily: types.FloatFamily})
 	// Note that we have the decimal "identity" cast here in order to handle
-	// possible rounding of the precision.
+	// possible rounding of the precision. If both types are actually identical,
+	// we will fallback to castIdentityOp.
 	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}, decimalCastCustomizer{toFamily: types.DecimalFamily})
 
 	// Casts from ints.
@@ -326,6 +326,9 @@ func registerCastTypeCustomizers() {
 
 	// Casts from datum-backed types.
 	registerCastTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BoolFamily, anyWidth}, datumCastCustomizer{toFamily: types.BoolFamily})
+	// Note that we have a special cast operator for datum-backed types because
+	// we can have actual different types to cast between. If both types are
+	// actually identical, we will fallback to castIdentityOp.
 	registerCastTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCastCustomizer{toFamily: typeconv.DatumVecCanonicalTypeFamily})
 }
 
