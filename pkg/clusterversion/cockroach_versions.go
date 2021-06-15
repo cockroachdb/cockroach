@@ -300,6 +300,8 @@ const (
 	ExpressionBasedIndexes
 	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
 	DeleteDeprecatedNamespaceTableDescriptorMigration
+	// FixedPrivilegeDescriptors is for the migration to fix all privilege descriptors.
+	FixedPrivilegeDescriptors
 
 	// Step (1): Add new versions here.
 )
@@ -500,6 +502,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 12},
+	},
+	{
+		Key:     FixedPrivilegeDescriptors,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 14},
 	},
 
 	// Step (2): Add new versions here.

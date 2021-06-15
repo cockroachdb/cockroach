@@ -127,6 +127,19 @@ func (tc *Collection) getDatabaseByName(
 	return db, nil
 }
 
+// GetMutableDatabaseByID returns a mutable database descriptor with
+// properties according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetMutableDatabaseByID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
+) (*dbdesc.Mutable, error) {
+	flags.RequireMutable = true
+	_, desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags)
+	if err != nil {
+		return nil, err
+	}
+	return desc.(*dbdesc.Mutable), nil
+}
+
 // GetImmutableDatabaseByID returns an immutable database descriptor with
 // properties according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableDatabaseByID(
