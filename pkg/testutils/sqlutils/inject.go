@@ -49,7 +49,7 @@ func InjectDescriptors(ctx context.Context, db *gosql.DB, input []*descpb.Descri
 			return err
 		}
 		_, err = tx.Exec(
-			"SELECT crdb_internal.unsafe_upsert_descriptor($1, $2)",
+			"SELECT crdb_internal.unsafe_upsert_descriptor($1, $2, true)",
 			id, encoded,
 		)
 		return err

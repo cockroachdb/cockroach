@@ -101,20 +101,20 @@ query TTBTTTB
 SHOW COLUMNS FROM system.descriptor
 ----
 id          INT8   false  NULL  ·  {primary}  false
-descriptor  BYTES  true   NULL  ·  {}         false
+descriptor  BYTES  true   NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
 username        STRING  false  NULL   ·  {primary}  false
-hashedPassword  BYTES   true   NULL   ·  {}         false
-isRole          BOOL    false  false  ·  {}         false
+hashedPassword  BYTES   true   NULL   ·  {primary}  false
+isRole          BOOL    false  false  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
 ----
 id      INT8   false  NULL  ·  {primary}  false
-config  BYTES  true   NULL  ·  {}         false
+config  BYTES  true   NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.lease
@@ -128,57 +128,57 @@ query TTBTTTB
 SHOW COLUMNS FROM system.eventlog
 ----
 timestamp    TIMESTAMP  false  NULL       ·  {primary}  false
-eventType    STRING     false  NULL       ·  {}         false
-targetID     INT8       false  NULL       ·  {}         false
-reportingID  INT8       false  NULL       ·  {}         false
-info         STRING     true   NULL       ·  {}         false
+eventType    STRING     false  NULL       ·  {primary}  false
+targetID     INT8       false  NULL       ·  {primary}  false
+reportingID  INT8       false  NULL       ·  {primary}  false
+info         STRING     true   NULL       ·  {primary}  false
 uniqueID     BYTES      false  uuid_v4()  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.rangelog
 ----
 timestamp     TIMESTAMP  false  NULL            ·  {primary}  false
-rangeID       INT8       false  NULL            ·  {}         false
-storeID       INT8       false  NULL            ·  {}         false
-eventType     STRING     false  NULL            ·  {}         false
-otherRangeID  INT8       true   NULL            ·  {}         false
-info          STRING     true   NULL            ·  {}         false
+rangeID       INT8       false  NULL            ·  {primary}  false
+storeID       INT8       false  NULL            ·  {primary}  false
+eventType     STRING     false  NULL            ·  {primary}  false
+otherRangeID  INT8       true   NULL            ·  {primary}  false
+info          STRING     true   NULL            ·  {primary}  false
 uniqueID      INT8       false  unique_rowid()  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.ui
 ----
 key          STRING     false  NULL  ·  {primary}  false
-value        BYTES      true   NULL  ·  {}         false
-lastUpdated  TIMESTAMP  false  NULL  ·  {}         false
+value        BYTES      true   NULL  ·  {primary}  false
+lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
 id                 INT8       false  unique_rowid()     ·  {jobs_created_by_type_created_by_id_idx,jobs_status_created_idx,primary}  false
-status             STRING     false  NULL               ·  {jobs_created_by_type_created_by_id_idx,jobs_status_created_idx}          false
-created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}                                                 false
-payload            BYTES      false  NULL               ·  {}                                                                        false
-progress           BYTES      true   NULL               ·  {}                                                                        false
-created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
-created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
-claim_session_id   BYTES      true   NULL               ·  {}                                                                        false
-claim_instance_id  INT8       true   NULL               ·  {}                                                                        false
+status             STRING     false  NULL               ·  {jobs_created_by_type_created_by_id_idx,jobs_status_created_idx,primary}  false
+created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx,primary}                                         false
+payload            BYTES      false  NULL               ·  {primary}                                                                 false
+progress           BYTES      true   NULL               ·  {primary}                                                                 false
+created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                          false
+created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                          false
+claim_session_id   BYTES      true   NULL               ·  {primary}                                                                 false
+claim_instance_id  INT8       true   NULL               ·  {primary}                                                                 false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings
 ----
 name         STRING     false  NULL               ·  {primary}  false
-value        STRING     false  NULL               ·  {}         false
-lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {}         false
-valueType    STRING     true   NULL               ·  {}         false
+value        STRING     false  NULL               ·  {primary}  false
+lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {primary}  false
+valueType    STRING     true   NULL               ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.role_members
 ----
 role     STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
 member   STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
-isAdmin  BOOL    false  NULL  ·  {}                                                       false
+isAdmin  BOOL    false  NULL  ·  {primary}                                                false
 
 
 # Verify default privileges on system tables.

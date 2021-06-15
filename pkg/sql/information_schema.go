@@ -1152,7 +1152,7 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 						sequence++
 						delete(implicitCols, col)
 					}
-					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+					for i := 0; i < index.NumPrimaryStoredColumns()+index.NumSecondaryStoredColumns(); i++ {
 						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
 						if err := appendRow(index, col, sequence,

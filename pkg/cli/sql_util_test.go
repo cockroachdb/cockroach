@@ -155,7 +155,7 @@ SET
 		{`parentID`, `INT8`, `false`, `NULL`, ``, `{primary}`, `false`},
 		{`parentSchemaID`, `INT8`, `false`, `NULL`, ``, `{primary}`, `false`},
 		{`name`, `STRING`, `false`, `NULL`, ``, `{primary}`, `false`},
-		{`id`, `INT8`, `true`, `NULL`, ``, `{}`, `false`},
+		{`id`, `INT8`, `true`, `NULL`, ``, `{primary}`, `false`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -172,7 +172,7 @@ SET
   parentID       | INT8      |    false    | NULL           |                       | {primary} |   false
   parentSchemaID | INT8      |    false    | NULL           |                       | {primary} |   false
   name           | STRING    |    false    | NULL           |                       | {primary} |   false
-  id             | INT8      |    true     | NULL           |                       | {}        |   false
+  id             | INT8      |    true     | NULL           |                       | {primary} |   false
 (4 rows)
 `
 

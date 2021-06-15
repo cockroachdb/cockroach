@@ -188,6 +188,10 @@ ORDER BY index_name, seq_in_index
 ----
 primary                      crdb_region  true
 primary                      pk           false
+primary                      pk2          false
+primary                      a            false
+primary                      b            false
+primary                      j            false
 regional_by_row_table_a_idx  crdb_region  true
 regional_by_row_table_a_idx  a            false
 regional_by_row_table_a_idx  pk           true

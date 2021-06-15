@@ -193,7 +193,16 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 			panic("we don't know how to deal with virtual composite indexes yet")
 		}
 		idx := index.IndexDescDeepCopy()
-		tabledesc.PopulateAllStoreColumns(&idx, mutDesc)
+		idx.StoreColumnNames, idx.StoreColumnIDs = nil, nil
+		publicColumns := mutDesc.PublicColumns()
+		presentInIndex := catalog.MakeTableColSet(idx.KeyColumnIDs...)
+		for _, col := range publicColumns {
+			if col.IsVirtual() || presentInIndex.Contains(col.GetID()) {
+				continue
+			}
+			idx.StoreColumnIDs = append(idx.StoreColumnIDs, col.GetID())
+			idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
+		}
 		mutDesc.SetPublicNonPrimaryIndex(index.Ordinal(), idx)
 	}
 	return mutDesc.TableDescriptor, nil

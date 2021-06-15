@@ -60,7 +60,9 @@ rowid_2
 query TT
 SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
 ----
-primary rowid_2
+primary  rowid_2
+primary  rowid
+primary  rowid_1
 
 query TT
 SHOW CREATE t

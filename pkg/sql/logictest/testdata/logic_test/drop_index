@@ -61,6 +61,8 @@ users       bar         false       2             name         ASC        false 
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 statement error index "zap" does not exist
 DROP INDEX users@zap
@@ -77,6 +79,8 @@ users       bar         false       2             name         ASC        false 
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 # Also test that dropping with a non-existing index still drops 'foo'.
 
@@ -90,6 +94,8 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 user testuser
 
@@ -117,6 +123,8 @@ SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 user root
 
@@ -147,6 +155,8 @@ users       bar         true        2             id           ASC        false 
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 statement ok
 CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
@@ -164,6 +174,8 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
@@ -196,6 +208,8 @@ SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 query TTTTIT
 SHOW TABLES
@@ -217,6 +231,8 @@ SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 # Test that it still succeeds when an index does not exist.
 

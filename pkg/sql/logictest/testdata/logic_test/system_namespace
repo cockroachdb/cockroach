@@ -53,4 +53,4 @@ SHOW COLUMNS FROM system.namespace
 parentID        INT8    false  NULL  ·  {primary}  false
 parentSchemaID  INT8    false  NULL  ·  {primary}  false
 name            STRING  false  NULL  ·  {primary}  false
-id              INT8    true   NULL  ·  {}         false
+id              INT8    true   NULL  ·  {primary}  false
