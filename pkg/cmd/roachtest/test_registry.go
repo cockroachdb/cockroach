@@ -97,12 +97,16 @@ func (r *testRegistry) Add(spec testSpec) {
 }
 
 func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
+	// NB: we need to make sure that `opts` is appended at the end, so that it
+	// overrides the SSD and zones settings from the registry.
+	var finalOpts []spec.Option
 	if r.preferSSD {
-		opts = append(opts, spec.PreferSSD())
+		finalOpts = append(finalOpts, spec.PreferSSD())
 	}
 	if r.zones != "" {
-		opts = append(opts, spec.Zones(r.zones))
+		finalOpts = append(finalOpts, spec.Zones(r.zones))
 	}
+	finalOpts = append(finalOpts, opts...)
 	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, opts...)
 }
 
