@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +56,15 @@ var (
 		"the amount of time to retain records for completed jobs before",
 		time.Hour*24*14,
 	).WithPublic()
+
+	// CancellationsUpdateLimitSetting the number of jobs can be updated when canceling jobs
+	//concurrently from dead sessions
+	CancellationsUpdateLimitSetting = settings.RegisterIntSetting(
+		"jobs.cancel_update_limit",
+		"the number of jobs can be updated when canceling jobs concurrently from dead sessions",
+		1000,
+		settings.NonNegativeInt,
+	)
 )
 
 // adoptedJobs represents a the epoch and cancelation of a job id being run
@@ -672,9 +682,12 @@ func (r *Registry) Start(
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()}, `
 UPDATE system.jobs
    SET claim_session_id = NULL
+WHERE claim_session_id in (
+SELECT claim_session_id
  WHERE claim_session_id <> $1
    AND status IN `+claimableStatusTupleString+`
-   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
+   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id) FETCH 
+	 FIRST `+strconv.Itoa(int(CancellationsUpdateLimitSetting.Get(&r.settings.SV)))+` ROWS ONLY)`,
 				s.ID().UnsafeBytes(),
 			)
 			return err
