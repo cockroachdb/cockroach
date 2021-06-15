@@ -47,8 +47,9 @@ type comment struct {
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 
+	txn := p.ExtendedEvalContext().Txn
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
-		ctx, "show-tables-with-comment", p.Txn(), query)
+		ctx, "show-tables-with-comment", txn, query)
 	if err != nil {
 		log.VEventf(ctx, 1, "%q", err)
 	} else {

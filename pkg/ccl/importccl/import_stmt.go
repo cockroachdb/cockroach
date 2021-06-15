@@ -443,7 +443,8 @@ func importPlanHook(
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
-			dbDesc, err := p.Accessor().GetDatabaseDesc(ctx, p.Txn(), p.SessionData().Database, tree.DatabaseLookupFlags{
+			txn := p.ExtendedEvalContext().Txn
+			dbDesc, err := p.Accessor().GetDatabaseDesc(ctx, txn, p.SessionData().Database, tree.DatabaseLookupFlags{
 				AvoidCached: true,
 				Required:    true,
 			})
