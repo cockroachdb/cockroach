@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -44,23 +43,17 @@ var _ coldataext.Datum
 
 // {{/*
 
-type _R_GO_TYPE interface{}
+type _TO_GO_TYPE interface{}
 
 var _ apd.Decimal
 var _ = math.MaxInt8
 var _ tree.Datum
 
-// _LEFT_CANONICAL_TYPE_FAMILY is the template variable.
-const _LEFT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
+// _TYPE_FAMILY is the template variable.
+const _TYPE_FAMILY = types.UnknownFamily
 
-// _LEFT_TYPE_WIDTH is the template variable.
-const _LEFT_TYPE_WIDTH = 0
-
-// _RIGHT_CANONICAL_TYPE_FAMILY is the template variable.
-const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
-
-// _RIGHT_TYPE_WIDTH is the template variable.
-const _RIGHT_TYPE_WIDTH = 0
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 func _CAST(to, from, fromCol, toType interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
@@ -94,19 +87,21 @@ func GetCastOperator(
 			outputIdx:                resultIdx,
 		}, nil
 	}
+	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
 	leftType, rightType := fromType, toType
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-	// {{range .LeftFamilies}}
-	case _LEFT_CANONICAL_TYPE_FAMILY:
+	switch leftType.Family() {
+	// {{range .}}
+	case _TYPE_FAMILY:
 		switch leftType.Width() {
-		// {{range .LeftWidths}}
-		case _LEFT_TYPE_WIDTH:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-			// {{range .RightFamilies}}
-			case _RIGHT_CANONICAL_TYPE_FAMILY:
+		// {{range .Widths}}
+		case _TYPE_WIDTH:
+			switch rightType.Family() {
+			// {{$fromInfo := .}}
+			// {{range .To}}
+			case _TYPE_FAMILY:
 				switch rightType.Width() {
-				// {{range .RightWidths}}
-				case _RIGHT_TYPE_WIDTH:
+				// {{range .Widths}}
+				case _TYPE_WIDTH:
 					return &cast_NAMEOp{
 						OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
 						allocator:                allocator,
@@ -132,19 +127,20 @@ func IsCastSupported(fromType, toType *types.T) bool {
 	if toType.Identical(fromType) {
 		return true
 	}
+	// TODO(yuzefovich): remove this rebinding in the follow-up commit.
 	leftType, rightType := fromType, toType
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-	// {{range .LeftFamilies}}
-	case _LEFT_CANONICAL_TYPE_FAMILY:
+	switch leftType.Family() {
+	// {{range .}}
+	case _TYPE_FAMILY:
 		switch leftType.Width() {
-		// {{range .LeftWidths}}
-		case _LEFT_TYPE_WIDTH:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-			// {{range .RightFamilies}}
-			case _RIGHT_CANONICAL_TYPE_FAMILY:
+		// {{range .Widths}}
+		case _TYPE_WIDTH:
+			switch rightType.Family() {
+			// {{range .To}}
+			case _TYPE_FAMILY:
 				switch rightType.Width() {
-				// {{range .RightWidths}}
-				case _RIGHT_TYPE_WIDTH:
+				// {{range .Widths}}
+				case _TYPE_WIDTH:
 					return true
 					// {{end}}
 				}
@@ -248,16 +244,13 @@ func (c *castIdentityOp) Next() coldata.Batch {
 	return batch
 }
 
-// TODO(yuzefovich): refactor castOp so that it is type-specific (meaning not
-// canonical type family specific, but actual type specific). This will
-// probably require changing the way we handle cast overloads as well.
-
-// {{range .LeftFamilies}}
-// {{$leftFamily := .LeftCanonicalFamilyStr}}
-// {{range .LeftWidths}}
-// {{range .RightFamilies}}
-// {{$rightFamily := .RightCanonicalFamilyStr}}
-// {{range .RightWidths}}
+// {{range .}}
+// {{$fromFamily := .TypeFamily}}
+// {{range .Widths}}
+// {{$fromInfo := .}}
+// {{range .To}}
+// {{$toFamily := .TypeFamily}}
+// {{range .Widths}}
 
 type cast_NAMEOp struct {
 	colexecop.OneInputInitCloserHelper
@@ -266,7 +259,7 @@ type cast_NAMEOp struct {
 	colIdx    int
 	outputIdx int
 	toType    *types.T
-	// {{if and (eq $leftFamily "types.DecimalFamily") (eq $rightFamily "types.IntFamily")}}
+	// {{if and (eq $fromFamily "types.DecimalFamily") (eq $toFamily "types.IntFamily")}}
 	// {{/*
 	// overloadHelper is used only when we perform the cast from decimals to
 	// ints. In all other cases we don't want to wastefully allocate the helper.
@@ -290,7 +283,7 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	// {{if and (eq $leftFamily "types.DecimalFamily") (eq $rightFamily "types.IntFamily")}}
+	// {{if and (eq $fromFamily "types.DecimalFamily") (eq $toFamily "types.IntFamily")}}
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
 	_overloadHelper := c.overloadHelper
@@ -300,8 +293,8 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	outputVec := batch.ColVec(c.outputIdx)
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec._L_TYP()
-			outputCol := outputVec._R_TYP()
+			inputCol := inputVec._FROM_TYPE()
+			outputCol := outputVec._TO_TYPE()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				inputNulls := inputVec.Nulls()
@@ -362,13 +355,13 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 		//gcassert:bce
 		// {{end}}
 		v := inputCol.Get(tupleIdx)
-		var r _R_GO_TYPE
+		var r _TO_GO_TYPE
 		_CAST(r, v, inputCol, c.toType)
-		// {{if and (.Right.Sliceable) (not $hasSel)}}
+		// {{if and (.Sliceable) (not $hasSel)}}
 		//gcassert:bce
 		// {{end}}
 		outputCol.Set(tupleIdx, r)
-		// {{if eq .Right.VecMethod "Datum"}}
+		// {{if eq .VecMethod "Datum"}}
 		// Casting to datum-backed vector might produce a null value on
 		// non-null tuple, so we need to check that case after the cast was
 		// performed.
