@@ -613,6 +613,7 @@ func validateKMSURIsAgainstFullBackup(
 type annotatedBackupStatement struct {
 	*tree.Backup
 	*jobs.CreatedByInfo
+	minReadDelaySeconds int64
 }
 
 // backupEncryptionParams is a structured representation of the encryption
@@ -1198,13 +1199,14 @@ func backupPlanHook(
 		}
 
 		backupDetails := jobspb.BackupDetails{
-			StartTime:         startTime,
-			EndTime:           endTime,
-			URI:               defaultURI,
-			URIsByLocalityKV:  urisByLocalityKV,
-			EncryptionOptions: encryptionOptions,
-			EncryptionInfo:    encryptionInfo,
-			CollectionURI:     collectionURI,
+			StartTime:           startTime,
+			EndTime:             endTime,
+			URI:                 defaultURI,
+			URIsByLocalityKV:    urisByLocalityKV,
+			EncryptionOptions:   encryptionOptions,
+			EncryptionInfo:      encryptionInfo,
+			CollectionURI:       collectionURI,
+			MinReadDelaySeconds: backupStmt.minReadDelaySeconds,
 		}
 		if len(spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()

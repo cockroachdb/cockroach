@@ -246,6 +246,7 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 				Name: jobs.CreatedByScheduledJobs,
 				ID:   sj.ScheduleID(),
 			},
+			minReadDelaySeconds: args.MinReadDelay,
 		}, nil
 	}
 

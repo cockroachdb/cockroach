@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ const (
 	optOnPreviousRunning       = "on_previous_running"
 	optIgnoreExistingBackups   = "ignore_existing_backups"
 	optUpdatesLastBackupMetric = "updates_cluster_last_backup_time_metric"
+	optMinReadDelay            = "min_read_delay"
 )
 
 var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
@@ -47,6 +49,7 @@ var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
 	optOnPreviousRunning:       sql.KVStringOptRequireValue,
 	optIgnoreExistingBackups:   sql.KVStringOptRequireNoValue,
 	optUpdatesLastBackupMetric: sql.KVStringOptRequireNoValue,
+	optMinReadDelay:            sql.KVStringOptRequireValue,
 }
 
 // scheduledBackupEval is a representation of tree.ScheduledBackup, prepared
@@ -315,6 +318,15 @@ func doCreateBackupSchedules(
 		}
 	}
 
+	var minReadDelay int64
+	if s, ok := scheduleOptions[optMinReadDelay]; ok {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		minReadDelay = int64(i)
+	}
+
 	evalCtx := &p.ExtendedEvalContext().EvalContext
 	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
 	if err != nil {
@@ -335,7 +347,7 @@ func doCreateBackupSchedules(
 		backupNode.AppendToLatest = true
 		inc, err := makeBackupSchedule(
 			env, p.User(), scheduleLabel,
-			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
+			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, minReadDelay, backupNode)
 
 		if err != nil {
 			return err
@@ -358,7 +370,7 @@ func doCreateBackupSchedules(
 	backupNode.AppendToLatest = false
 	full, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel,
-		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
+		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, minReadDelay, backupNode)
 	if err != nil {
 		return err
 	}
@@ -433,6 +445,7 @@ func makeBackupSchedule(
 	details jobspb.ScheduleDetails,
 	unpauseOnSuccess int64,
 	updateLastMetricOnSuccess bool,
+	minReadDelay int64,
 	backupNode *tree.Backup,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
@@ -443,6 +456,7 @@ func makeBackupSchedule(
 	args := &ScheduledBackupExecutionArgs{
 		UnpauseOnSuccess:        unpauseOnSuccess,
 		UpdatesLastBackupMetric: updateLastMetricOnSuccess,
+		MinReadDelay:            minReadDelay,
 	}
 	if backupNode.AppendToLatest {
 		args.BackupType = ScheduledBackupExecutionArgs_INCREMENTAL

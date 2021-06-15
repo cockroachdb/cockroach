@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -188,6 +189,10 @@ func backup(
 		if t, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
 			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
 		}
+	}
+
+	if err := maybeWaitForReadDelay(ctx, job); err != nil {
+		return RowCount{}, err
 	}
 
 	evalCtx := execCtx.ExtendedEvalContext()
@@ -355,6 +360,48 @@ func backup(
 	}
 
 	return backupManifest.EntryCounts, nil
+}
+
+func maybeWaitForReadDelay(ctx context.Context, job *jobs.Job) error {
+	details := job.Details().(jobspb.BackupDetails)
+	// At this point we're ready to start backing up, but before we actually pick
+	// the physcial nodes and tell them to start sending out exportrequests, check
+	// if the job had a minimum read delay and wait if needed.
+	if backdate := details.MinReadDelaySeconds; backdate > 0 {
+		minStartTime := details.EndTime.GoTime().Add(time.Duration(backdate) * time.Second)
+		status := false
+		if wait := timeutil.Until(minStartTime); wait > 0 {
+			if wait > time.Second*30 {
+				status = true
+				if err := job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+					return jobs.RunningStatus("Waiting to avoid read contention"), nil
+				}); err != nil {
+					return err
+				}
+			}
+		}
+		if wait := timeutil.Until(minStartTime); wait > 0 {
+			ctx, sp := tracing.ChildSpan(ctx, "backup min read delay")
+			defer sp.Finish()
+
+			t := timeutil.NewTimer()
+			t.Reset(wait)
+			select {
+			case <-t.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			t.Stop()
+		}
+		if status {
+			if err := job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+				return jobs.RunningStatus(""), nil
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (b *backupResumer) releaseProtectedTimestamp(
