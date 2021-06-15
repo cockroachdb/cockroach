@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -830,10 +831,8 @@ func TestJobLifecycle(t *testing.T) {
 
 	createJob := func(record jobs.Record) (*jobs.Job, expectation) {
 		beforeTime := timeutil.Now()
-		job := registry.NewJob(record, registry.MakeJobID())
-		if err := job.Created(ctx); err != nil {
-			t.Fatal(err)
-		}
+		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */)
+		require.NoError(t, err)
 		payload := job.Payload()
 		return job, expectation{
 			DB:     sqlDB,
@@ -961,11 +960,8 @@ func TestJobLifecycle(t *testing.T) {
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
-		buzzJob := registry.NewJob(buzzRecord, registry.MakeJobID())
-
-		if err := buzzJob.Created(ctx); err != nil {
-			t.Fatal(err)
-		}
+		buzzJob, err := registry.CreateAdoptableJobWithTxn(ctx, buzzRecord, registry.MakeJobID(), nil /* txn */)
+		require.NoError(t, err)
 		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
@@ -1193,18 +1189,23 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatalf("expected 'unknown details type int', but got: %v", r)
 			}
 		}()
-
-		job := registry.NewJob(jobs.Record{
+		// Ignore the returned error because this code is expecting the call to
+		// panic.
+		_, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 			Details: 42,
-		}, registry.MakeJobID())
-		_ = job.Created(ctx)
+		}, registry.MakeJobID(), nil /* txn */)
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
-		job := registry.NewJob(jobs.Record{
-			Details:  jobspb.RestoreDetails{},
-			Progress: jobspb.RestoreProgress{},
-		}, registry.MakeJobID())
+		// Attempt to create the job but abort the transaction.
+		var job *jobs.Job
+		require.Regexp(t, "boom", s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			job, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
+				Details:  jobspb.RestoreDetails{},
+				Progress: jobspb.RestoreProgress{},
+			}, registry.MakeJobID(), txn)
+			return errors.New("boom")
+		}))
 		if err := job.Started(ctx); !testutils.IsError(err, "not found in system.jobs table") {
 			t.Fatalf("unexpected error %v", err)
 		}
@@ -1388,12 +1389,13 @@ func TestJobLifecycle(t *testing.T) {
 		createdByType := "internal_test"
 
 		jobID := registry.MakeJobID()
-		job := registry.NewJob(jobs.Record{
+		record := jobs.Record{
 			Details:   jobspb.RestoreDetails{},
 			Progress:  jobspb.RestoreProgress{},
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
-		}, jobID)
-		require.NoError(t, job.Created(ctx))
+		}
+		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
+		require.NoError(t, err)
 
 		loadedJob, err := registry.LoadJob(ctx, jobID)
 		require.NoError(t, err)
@@ -1413,7 +1415,11 @@ func TestShowJobs(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	session, err := s.SQLLivenessProvider().(sqlliveness.Provider).Session(ctx)
+	require.NoError(t, err)
 
 	// row represents a row returned from crdb_internal.jobs, but
 	// *not* a row in system.jobs.
@@ -1434,6 +1440,7 @@ func TestShowJobs(t *testing.T) {
 		details           jobspb.Details
 	}
 
+	const instanceID = 7
 	for _, in := range []row{
 		{
 			id:          42,
@@ -1450,7 +1457,7 @@ func TestShowJobs(t *testing.T) {
 			finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
 			modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
 			fractionCompleted: 0.42,
-			coordinatorID:     7,
+			coordinatorID:     instanceID,
 			details:           jobspb.SchemaChangeDetails{},
 		},
 		{
@@ -1471,7 +1478,7 @@ func TestShowJobs(t *testing.T) {
 				WallTime: 1533143242000000,
 				Logical:  4,
 			},
-			coordinatorID: 7,
+			coordinatorID: instanceID,
 			details:       jobspb.ChangefeedDetails{},
 		},
 	} {
@@ -1483,11 +1490,8 @@ func TestShowJobs(t *testing.T) {
 				StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
 				FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
 				UsernameProto:  in.username.EncodeProto(),
-				Lease: &jobspb.Lease{
-					NodeID: 7,
-				},
-				Error:   in.err,
-				Details: jobspb.WrapPayloadDetails(in.details),
+				Error:          in.err,
+				Details:        jobspb.WrapPayloadDetails(in.details),
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -1510,8 +1514,8 @@ func TestShowJobs(t *testing.T) {
 				t.Fatal(err)
 			}
 			sqlDB.Exec(t,
-				`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
-				in.id, in.status, in.created, inPayload, inProgress,
+				`INSERT INTO system.jobs (id, status, created, payload, progress, claim_session_id, claim_instance_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				in.id, in.status, in.created, inPayload, inProgress, session.ID().UnsafeBytes(), instanceID,
 			)
 
 			var out row

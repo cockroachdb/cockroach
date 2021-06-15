@@ -32,7 +32,6 @@ type TestingKnobs struct {
 	SQLMigrationManager  ModuleTestingKnobs
 	DistSQL              ModuleTestingKnobs
 	SQLEvalContext       ModuleTestingKnobs
-	RegistryLiveness     ModuleTestingKnobs
 	NodeLiveness         ModuleTestingKnobs
 	Server               ModuleTestingKnobs
 	TenantTestingKnobs   ModuleTestingKnobs

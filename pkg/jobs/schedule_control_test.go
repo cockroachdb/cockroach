@@ -150,7 +150,10 @@ func TestJobsControlForSchedules(t *testing.T) {
 
 	// Create few jobs not started by any schedule.
 	for i := 0; i < numJobs; i++ {
-		require.NoError(t, registry.NewJob(record, registry.MakeJobID()).Created(context.Background()))
+		_, err := registry.CreateAdoptableJobWithTxn(
+			context.Background(), record, registry.MakeJobID(), nil, /* txn */
+		)
+		require.NoError(t, err)
 	}
 
 	var scheduleID int64 = 123
@@ -180,8 +183,10 @@ func TestJobsControlForSchedules(t *testing.T) {
 					ID:   scheduleID,
 				}
 				jobID := registry.MakeJobID()
-				newJob := registry.NewJob(record, jobID)
-				require.NoError(t, newJob.Created(context.Background()))
+				_, err := registry.CreateAdoptableJobWithTxn(
+					context.Background(), record, jobID, nil, /* txn */
+				)
+				require.NoError(t, err)
 
 				if tc.command == "resume" {
 					// Job has to be in paused state in order for it to be resumable;
@@ -271,8 +276,8 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				ID:   scheduleID,
 			}
 			jobID := registry.MakeJobID()
-			newJob := registry.NewJob(record, jobID)
-			require.NoError(t, newJob.Created(context.Background()))
+			_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
+			require.NoError(t, err)
 			th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
 		}
 
