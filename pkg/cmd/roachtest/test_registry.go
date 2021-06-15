@@ -107,7 +107,7 @@ func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...spec.Option) spec.
 		finalOpts = append(finalOpts, spec.Zones(r.zones))
 	}
 	finalOpts = append(finalOpts, opts...)
-	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, opts...)
+	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, finalOpts...)
 }
 
 // prepareSpec validates a spec and does minor massaging of its fields.

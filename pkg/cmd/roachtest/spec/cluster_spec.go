@@ -12,12 +12,12 @@ package spec
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // ClusterSpec represents a test's description of what its cluster needs to
@@ -70,7 +70,7 @@ func firstZone(zones string) string {
 
 // Args are the arguments to pass to `roachprod create` in order
 // to create the cluster described in the spec.
-func (s *ClusterSpec) Args(extra ...string) []string {
+func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 	var args []string
 
 	switch s.Cloud {
@@ -83,8 +83,9 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 	}
 
 	var localSSD bool
-	if s.Cloud != Local && s.CPUs != 0 {
-		// Use the machine type specified as a CLI flag.
+	if s.CPUs != 0 {
+		// Default to the user-supplied machine type, if any.
+		// Otherwise, pick based on requested CPU count.
 		machineType := s.InstanceType
 		if len(machineType) == 0 {
 			// If no machine type was specified, choose one
@@ -96,6 +97,10 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 				machineType = GCEMachineType(s.CPUs)
 			case Azure:
 				machineType = AzureMachineType(s.CPUs)
+			case Local:
+			// Don't need to set machineType.
+			default:
+				return nil, errors.Errorf("unsupported cloud %v", s.Cloud)
 			}
 		}
 
@@ -115,72 +120,61 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 		// caused problems in the past (at time of writing, the default is 'true').
 		args = append(args, "--local-ssd="+strconv.FormatBool(localSSD))
 
-		var arg string
 		switch s.Cloud {
 		case AWS:
 			if localSSD {
-				arg = "--aws-machine-type-ssd"
+				args = append(args, "--aws-machine-type-ssd="+machineType)
 			} else {
-				arg = "--aws-machine-type"
+				args = append(args, "--aws-machine-type="+machineType)
 			}
 		case GCE:
-			arg = "--gce-machine-type"
+			args = append(args, "--gce-machine-type="+machineType)
 		case Azure:
-			arg = "--azure-machine-type"
+			args = append(args, "--azure-machine-type="+machineType)
+		case Local:
+			// No flag needed.
 		default:
-			panic(fmt.Sprintf("unsupported cloud: %s\n", s.Cloud))
+			return nil, errors.Errorf("unsupported cloud: %s\n", s.Cloud)
 		}
-
-		args = append(args, arg+"="+machineType)
 	}
 
-	if s.Cloud != Local && s.VolumeSize != 0 {
-		if s.PreferLocalSSD {
-			fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
-		}
-
-		var arg string
+	if s.VolumeSize != 0 {
 		switch s.Cloud {
 		case GCE:
-			arg = fmt.Sprintf("--gce-pd-volume-size=%d", s.VolumeSize)
+			args = append(args, fmt.Sprintf("--gce-pd-volume-size=%d", s.VolumeSize))
+		case Local:
+			// Ignore the volume size.
 		default:
-			fmt.Fprintf(os.Stderr, "specifying volume size is not yet supported on %s", s.Cloud)
-			os.Exit(1)
+			return nil, errors.Errorf("specifying volume size is not yet supported on %s", s.Cloud)
 		}
-		args = append(args, arg)
 	}
 
-	if s.Cloud != Local && localSSD && s.SSDs != 0 {
-		var arg string
+	// Note that localSSD implies that Cloud != Local.
+	if localSSD && s.SSDs != 0 {
 		switch s.Cloud {
 		case GCE:
-			arg = fmt.Sprintf("--gce-local-SSD-count=%d", s.SSDs)
+			args = append(args, fmt.Sprintf("--gce-local-SSD-count=%d", s.SSDs))
 		default:
-			fmt.Fprintf(os.Stderr, "specifying SSD count is not yet supported on %s", s.Cloud)
-			os.Exit(1)
+			return nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
 		}
-		args = append(args, arg)
 	}
 
-	if s.Cloud != Local {
-		zones := s.Zones
-		if zones != "" {
-			if !s.Geo {
-				zones = firstZone(zones)
-			}
-			var arg string
-			switch s.Cloud {
-			case AWS:
-				arg = "--aws-zones=" + zones
-			case GCE:
-				arg = "--gce-zones=" + zones
-			case Azure:
-				arg = "--azure-locations=" + zones
-			default:
-				fmt.Fprintf(os.Stderr, "specifying Zones is not yet supported on %s", s.Cloud)
-				os.Exit(1)
-			}
-			args = append(args, arg)
+	zones := s.Zones
+	if zones != "" {
+		if !s.Geo {
+			zones = firstZone(zones)
+		}
+		switch s.Cloud {
+		case AWS:
+			args = append(args, "--aws-zones="+zones)
+		case GCE:
+			args = append(args, "--gce-zones="+zones)
+		case Azure:
+			args = append(args, "--azure-locations="+zones)
+		case Local:
+			// Do nothing.
+		default:
+			return nil, errors.Errorf("specifying Zones is not yet supported on %s", s.Cloud)
 		}
 	}
 
@@ -193,7 +187,7 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 	if len(extra) > 0 {
 		args = append(args, extra...)
 	}
-	return args
+	return args, nil
 }
 
 // Expiration is the lifetime of the cluster. It may be destroyed after
