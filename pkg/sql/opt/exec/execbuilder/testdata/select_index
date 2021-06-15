@@ -774,6 +774,7 @@ abz  abz_c_b_key  false  2  b  ASC   false  false
 abz  abz_c_b_key  false  3  a  ASC   false  true
 abz  primary      false  1  a  DESC  false  false
 abz  primary      false  2  b  ASC   false  false
+abz  primary      false  3  c  N/A   true   false
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1

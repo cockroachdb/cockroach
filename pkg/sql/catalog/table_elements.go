@@ -154,12 +154,14 @@ type Index interface {
 
 	CollectKeyColumnIDs() TableColSet
 	CollectKeySuffixColumnIDs() TableColSet
+	CollectPrimaryStoredColumnIDs() TableColSet
 	CollectSecondaryStoredColumnIDs() TableColSet
 	CollectCompositeColumnIDs() TableColSet
 
 	InvertedColumnID() descpb.ColumnID
 	InvertedColumnName() string
 
+	NumPrimaryStoredColumns() int
 	NumSecondaryStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
 	GetStoredColumnName(storedColumnOrdinal int) string

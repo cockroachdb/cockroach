@@ -327,20 +327,20 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 			}},
 		{`empty column name`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 0},
 				},
 				NextColumnID: 2,
 			}},
-		{`table "foo" is encoded using using version 0, but this client only supports version 2 and 3`,
+		{`table is encoded using using version 0, but this client only supports version 3`,
 			descpb.TableDescriptor{
 				ID:       2,
 				ParentID: 1,
@@ -355,7 +355,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "virt", Virtual: true},
@@ -367,7 +367,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 0, Name: "bar"},
 				},
@@ -378,7 +378,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -393,7 +393,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "bar"},
@@ -405,7 +405,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            catconstants.CrdbInternalBackwardDependenciesTableID,
 				ParentID:      0,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "bar"},
@@ -417,7 +417,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 1, Name: "blah"},
@@ -429,7 +429,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -440,7 +440,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -454,7 +454,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -470,7 +470,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -486,7 +486,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -502,7 +502,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -517,7 +517,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -532,7 +532,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -547,7 +547,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -562,7 +562,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -578,7 +578,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "virt", ComputeExpr: &computedExpr, Virtual: true},
@@ -595,7 +595,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -613,7 +613,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -631,7 +631,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -654,7 +654,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -671,7 +671,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "blah"},
@@ -692,7 +692,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -718,7 +718,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -744,7 +744,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -764,7 +764,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -784,7 +784,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -803,7 +803,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "c1"},
 					{ID: 2, Name: "c2"},
@@ -834,7 +834,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -857,7 +857,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "crdb_internal_bar_shard_5"},
@@ -898,7 +898,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -923,7 +923,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -948,7 +948,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -973,7 +973,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 				},
@@ -997,7 +997,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
 					{ID: 2, Name: "v", ComputeExpr: &computedExpr, Virtual: true},
@@ -1023,7 +1023,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "c1"},
 					{ID: 2, Name: "c2"},
@@ -1054,7 +1054,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
-				FormatVersion: descpb.FamilyFormatVersion,
+				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "c1"},
 					{ID: 2, Name: "c2"},
