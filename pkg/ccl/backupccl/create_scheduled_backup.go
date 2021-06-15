@@ -234,6 +234,7 @@ func doCreateBackupSchedules(
 			CaptureRevisionHistory:       eval.BackupOptions.CaptureRevisionHistory,
 			Detached:                     true,
 			IncludeDeprecatedInterleaves: eval.BackupOptions.IncludeDeprecatedInterleaves,
+			MinReadDelaySeconds:          eval.BackupOptions.MinReadDelaySeconds,
 		},
 		Nested:         true,
 		AppendToLatest: false,

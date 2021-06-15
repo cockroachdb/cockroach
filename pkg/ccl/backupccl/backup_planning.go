@@ -473,6 +473,7 @@ func resolveOptionsForBackupJobDescription(
 	newOpts := tree.BackupOptions{
 		CaptureRevisionHistory: opts.CaptureRevisionHistory,
 		Detached:               opts.Detached,
+		MinReadDelaySeconds:    opts.MinReadDelaySeconds,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1198,13 +1199,14 @@ func backupPlanHook(
 		}
 
 		backupDetails := jobspb.BackupDetails{
-			StartTime:         startTime,
-			EndTime:           endTime,
-			URI:               defaultURI,
-			URIsByLocalityKV:  urisByLocalityKV,
-			EncryptionOptions: encryptionOptions,
-			EncryptionInfo:    encryptionInfo,
-			CollectionURI:     collectionURI,
+			StartTime:           startTime,
+			EndTime:             endTime,
+			URI:                 defaultURI,
+			URIsByLocalityKV:    urisByLocalityKV,
+			EncryptionOptions:   encryptionOptions,
+			EncryptionInfo:      encryptionInfo,
+			CollectionURI:       collectionURI,
+			MinReadDelaySeconds: backupStmt.Options.MinReadDelaySeconds,
 		}
 		if len(spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()
