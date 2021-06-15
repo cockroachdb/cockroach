@@ -13,6 +13,7 @@ package spec
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,6 +82,7 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 		args = append(args, "--clouds=azure")
 	}
 
+	var localSSD bool
 	if s.Cloud != Local && s.CPUs != 0 {
 		// Use the machine type specified as a CLI flag.
 		machineType := s.InstanceType
@@ -97,28 +99,26 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 			}
 		}
 
-		var isAWSSSD bool // true if we're on AWS and local SSD is requested
+		// Local SSD can only be requested
+		// - if configured to prefer doing so,
+		// - if not running locally,
+		// - if no particular volume size is requested, and,
+		// - on AWS, if the machine type supports it.
+		localSSD = s.PreferLocalSSD && s.Cloud != Local && s.VolumeSize == 0
 		if s.Cloud == AWS {
 			typeAndSize := strings.Split(machineType, ".")
-			if len(typeAndSize) == 2 {
-				awsType := typeAndSize[0]
+			localSSD = localSSD && len(typeAndSize) == 2 &&
 				// All SSD machine types that we use end in 'd or begins with i3 (e.g. i3, i3en).
-				isAWSSSD = strings.HasPrefix(awsType, "i3") || strings.HasSuffix(awsType, "d")
-			}
+				(strings.HasPrefix(typeAndSize[0], "i3") || strings.HasSuffix(typeAndSize[0], "d"))
 		}
-
-		if s.Cloud == AWS {
-			if s.PreferLocalSSD && isAWSSSD {
-				args = append(args, "--local-ssd=true")
-			} else {
-				args = append(args, "--local-ssd=false")
-			}
-		}
+		// NB: emit the arg either way; changes to roachprod's default for the flag have
+		// caused problems in the past (at time of writing, the default is 'true').
+		args = append(args, "--local-ssd="+strconv.FormatBool(localSSD))
 
 		var arg string
 		switch s.Cloud {
 		case AWS:
-			if isAWSSSD {
+			if localSSD {
 				arg = "--aws-machine-type-ssd"
 			} else {
 				arg = "--aws-machine-type"
@@ -135,9 +135,9 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 	}
 
 	if s.Cloud != Local && s.VolumeSize != 0 {
-		fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
-		// Set network disk options.
-		args = append(args, "--local-ssd=false")
+		if s.PreferLocalSSD {
+			fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
+		}
 
 		var arg string
 		switch s.Cloud {
@@ -150,7 +150,7 @@ func (s *ClusterSpec) Args(extra ...string) []string {
 		args = append(args, arg)
 	}
 
-	if s.Cloud != Local && s.SSDs != 0 {
+	if s.Cloud != Local && localSSD && s.SSDs != 0 {
 		var arg string
 		switch s.Cloud {
 		case GCE:
