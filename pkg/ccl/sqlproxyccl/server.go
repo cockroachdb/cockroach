@@ -27,7 +27,7 @@ import (
 
 // proxyConnHandler defines the signature of the function that handles each
 // individual new incoming connection.
-type proxyConnHandler func(ctx context.Context, proxyConn *conn) error
+type proxyConnHandler func(ctx context.Context, conn *proxyConn) error
 
 // Server is a TCP server that proxies SQL connections to a configurable
 // backend. It may also run an HTTP server to expose a health check and
@@ -162,7 +162,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		if err != nil {
 			return err
 		}
-		conn := &conn{
+		conn := &proxyConn{
 			Conn: origConn,
 		}
 
@@ -182,8 +182,8 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 }
 
-// conn is a SQL connection into the proxy.
-type conn struct {
+// proxyConn is a SQL connection into the proxy.
+type proxyConn struct {
 	net.Conn
 
 	mu struct {
@@ -194,7 +194,7 @@ type conn struct {
 }
 
 // Done returns a channel that's closed when the connection is closed.
-func (c *conn) done() <-chan struct{} {
+func (c *proxyConn) done() <-chan struct{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.closedCh == nil {
@@ -209,7 +209,7 @@ func (c *conn) done() <-chan struct{} {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 // The connection's Done channel will be closed. This overrides net.Conn.Close.
-func (c *conn) Close() error {
+func (c *proxyConn) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.closed {
