@@ -412,3 +412,106 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 	close(continueNotification)
 	require.NoError(t, g.Wait())
 }
+
+func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	ctx := context.Background()
+
+	var doOnce sync.Once
+	// Closed when we enter the RunBeforeBackfill knob.
+	beforeBackfillNotification := make(chan struct{})
+	// Closed when we're ready to continue with the schema change.
+	continueNotification := make(chan struct{})
+
+	var kvDB *kv.DB
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				// Assert that old schema change jobs never run in this test.
+				t.Errorf("unexpected old schema change job %d", jobID)
+				return nil
+			},
+		},
+		SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
+			BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+				// Verify that we never get a mutation ID not associated with the schema
+				// change that is running.
+				if m.Phase != scplan.PostCommitPhase {
+					return nil
+				}
+				table := catalogkv.TestingGetTableDescriptorFromSchema(
+					kvDB, keys.SystemSQLCodec, "db", "public", "t")
+				for _, m := range table.AllMutations() {
+					assert.LessOrEqual(t, int(m.MutationID()), 2)
+				}
+
+				if ops.Type() != scop.BackfillType {
+					return nil
+				}
+				for _, op := range ops.Slice() {
+					if _, ok := op.(scop.BackfillIndex); ok {
+						doOnce.Do(func() {
+							close(beforeBackfillNotification)
+							<-continueNotification
+						})
+					}
+				}
+				return nil
+			},
+		},
+	}
+
+	var s serverutils.TestServerInterface
+	var sqlDB *gosql.DB
+	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+
+	g := ctxgroup.WithContext(ctx)
+
+	g.GoCtx(func(ctx context.Context) error {
+		conn, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = conn.ExecContext(ctx, `SET experimental_use_new_schema_changer = 'on'`)
+		assert.NoError(t, err)
+		_, err = conn.ExecContext(ctx, `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 100`)
+		assert.NoError(t, err)
+		return nil
+	})
+
+	<-beforeBackfillNotification
+
+	// At this point the backfill operation is paused as it's about to begin.
+	// The new column `b` is not yet public, so a concurrent insert should:
+	// - in the current primary index, only insert a value for `a`,
+	// - in the new secondary index, which will be the future primary index,
+	//   insert a value both for `a` and the default value for `b`, because that
+	//   new index is delete-and-write-only as it is being backfilled.
+	tdb.Exec(t, `
+		SET tracing = on,kv;
+		INSERT INTO db.t (a) VALUES (10);
+		SET tracing = off;`)
+
+	// Trigger the resumption and conclusion of the backfill,
+	// and hence of the ADD COLUMN transaction.
+	close(continueNotification)
+	require.NoError(t, g.Wait())
+
+	// Check that the expectations set out above are verified.
+	results := tdb.QueryStr(t, `
+		SELECT message
+		FROM [SHOW KV TRACE FOR SESSION]
+		WHERE message LIKE 'CPut %' OR message LIKE 'InitPut %'`)
+	require.GreaterOrEqual(t, len(results), 2)
+	require.Equal(t, fmt.Sprintf("CPut /Table/%d/1/10/0 -> /TUPLE/", desc.GetID()), results[0][0])
+	require.Equal(t, fmt.Sprintf("InitPut /Table/%d/2/10/0 -> /TUPLE/2:2:Int/100", desc.GetID()), results[1][0])
+}
