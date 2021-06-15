@@ -407,8 +407,12 @@ func (o *lastArgWidthOverload) Cast(to, from, fromCol, toType string) string {
 			return ret
 		}
 	}
-	// Default cast function is "identity" cast.
-	return fmt.Sprintf("%s = %s", to, from)
+	// There is no default cast operation.
+	colexecerror.InternalError(errors.AssertionFailedf(
+		"unexpectedly don't have CastFunc set for %s -> %s cast", from, to,
+	))
+	// This code is unreachable, but the compiler cannot infer that.
+	return ""
 }
 
 func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec string) string {
