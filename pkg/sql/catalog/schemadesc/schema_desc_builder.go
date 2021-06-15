@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -28,7 +29,8 @@ type SchemaDescriptorBuilder interface {
 }
 
 type schemaDescriptorBuilder struct {
-	original *descpb.SchemaDescriptor
+	original      *descpb.SchemaDescriptor
+	maybeModified *descpb.SchemaDescriptor
 }
 
 var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
@@ -50,10 +52,11 @@ func (sdb *schemaDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // interface.
 func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
-) error {
-	privDesc := sdb.original.GetPrivileges()
-	descpb.MaybeFixSchemaPrivileges(&privDesc)
-	return nil
+) (bool, error) {
+	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	changed := descpb.MaybeFixPrivileges(sdb.maybeModified.GetID(), sdb.maybeModified.GetParentID(),
+		&sdb.maybeModified.Privileges, privilege.Schema)
+	return changed, nil
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
@@ -63,7 +66,11 @@ func (sdb *schemaDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 
 // BuildImmutableSchema returns an immutable schema descriptor.
 func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescriptor {
-	return &immutable{SchemaDescriptor: *sdb.original}
+	desc := sdb.maybeModified
+	if desc == nil {
+		desc = sdb.original
+	}
+	return &immutable{SchemaDescriptor: *desc}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -74,9 +81,11 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutable() catalog.MutableDescri
 // BuildExistingMutableSchema returns a mutable descriptor for a schema
 // which already exists.
 func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
-	desc := protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	if sdb.maybeModified == nil {
+		sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	}
 	return &Mutable{
-		immutable:      immutable{SchemaDescriptor: *desc},
+		immutable:      immutable{SchemaDescriptor: *sdb.maybeModified},
 		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
 	}
 }

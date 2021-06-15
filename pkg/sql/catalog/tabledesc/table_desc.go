@@ -461,3 +461,8 @@ func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
 func (desc *wrapper) AllMutations() []catalog.Mutation {
 	return desc.getExistingOrNewMutationCache().all
 }
+
+// SetIsRepaired sets the IsRepaired bit to true.
+func (desc *Mutable) SetIsRepaired() {
+	desc.IsRepaired = true
+}

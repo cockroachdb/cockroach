@@ -70,7 +70,7 @@ func TestProtectedTimestampMetaMigration(t *testing.T) {
 			`{"ownerProto": "node", "users": [`+
 				`{"privileges": %d, "userProto": "admin"}, `+
 				`{"privileges": %d, "userProto": "root"}`+
-				`], "version": 1}`,
+				`], "version": 2}`,
 			expectedPrivileges,
 			expectedPrivileges,
 		)

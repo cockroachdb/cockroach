@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -98,10 +99,11 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // interface.
 func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
 	ctx context.Context, dg catalog.DescGetter,
-) (err error) {
+) (bool, error) {
+	var err error
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
-	return err
+	return tdb.changes.Changed(), err
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
@@ -197,14 +199,7 @@ func maybeFillInDescriptor(
 		}
 	}
 
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
-	changes.FixedPrivileges = descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
-
-	fixedUsagePrivilege := descpb.MaybeFixUsagePrivForTablesAndDBs(&desc.Privileges)
-
-	changes.FixedPrivileges = changes.FixedPrivileges || fixedUsagePrivilege
+	changes.UpgradedPrivileges = descpb.MaybeFixPrivileges(desc.ID, desc.GetParentID(), &desc.Privileges, privilege.Table)
 
 	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
 

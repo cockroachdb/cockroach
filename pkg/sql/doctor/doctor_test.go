@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -66,16 +67,28 @@ var validTableDesc = &descpb.Descriptor{
 func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
 	table, database, typ, schema := descpb.FromDescriptor(desc)
 	if table != nil {
-		descpb.MaybeFixPrivileges(table.GetID(), &table.Privileges)
+		descpb.MaybeFixPrivileges(
+			table.GetID(), table.GetParentID(),
+			&table.Privileges, privilege.Table,
+		)
 		if table.FormatVersion == 0 {
 			table.FormatVersion = descpb.InterleavedFormatVersion
 		}
 	} else if database != nil {
-		descpb.MaybeFixPrivileges(database.GetID(), &database.Privileges)
+		descpb.MaybeFixPrivileges(
+			database.GetID(), database.GetID(),
+			&database.Privileges, privilege.Database,
+		)
 	} else if typ != nil {
-		descpb.MaybeFixPrivileges(typ.GetID(), &typ.Privileges)
+		descpb.MaybeFixPrivileges(
+			typ.GetID(), typ.GetParentID(),
+			&typ.Privileges, privilege.Type,
+		)
 	} else if schema != nil {
-		descpb.MaybeFixPrivileges(schema.GetID(), &schema.Privileges)
+		descpb.MaybeFixPrivileges(
+			schema.GetID(), schema.GetParentID(),
+			&schema.Privileges, privilege.Schema,
+		)
 	}
 	res, err := protoutil.Marshal(desc)
 	require.NoError(t, err)
@@ -220,26 +233,26 @@ func TestExamineDescriptors(t *testing.T) {
 		{ // 9
 			descTable: doctor.DescriptorTable{
 				{
-					ID: 1,
+					ID: 51,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Type{
-						Type: &descpb.TypeDescriptor{Name: "type", ID: 1},
+						Type: &descpb.TypeDescriptor{Name: "type", ID: 51},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{Name: "type"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "type"}, ID: 51},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parentID 0
-  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parent schema ID 0
+  ParentID   0, ParentSchemaID  0: type "type" (51): invalid parentID 0
+  ParentID   0, ParentSchemaID  0: type "type" (51): invalid parent schema ID 0
 `,
 		},
 		{ // 10
 			descTable: doctor.DescriptorTable{
 				{
-					ID: 1,
+					ID: 51,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Type{
-						Type: &descpb.TypeDescriptor{Name: "type", ID: 1, ParentID: 3, ParentSchemaID: 2},
+						Type: &descpb.TypeDescriptor{Name: "type", ID: 51, ParentID: 3, ParentSchemaID: 2},
 					}}),
 				},
 				{
@@ -250,12 +263,12 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 3, ParentSchemaID: 2, Name: "type"}, ID: 1},
+				{NameInfo: descpb.NameInfo{ParentID: 3, ParentSchemaID: 2, Name: "type"}, ID: 51},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 3},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID   3, ParentSchemaID  2: type "type" (1): referenced schema ID 2: descriptor not found
-  ParentID   3, ParentSchemaID  2: type "type" (1): arrayTypeID 0 does not exist for "ENUM": referenced type ID 0: descriptor not found
+  ParentID   3, ParentSchemaID  2: type "type" (51): referenced schema ID 2: descriptor not found
+  ParentID   3, ParentSchemaID  2: type "type" (51): arrayTypeID 0 does not exist for "ENUM": referenced type ID 0: descriptor not found
 `,
 		},
 		{ // 11
@@ -269,18 +282,6 @@ func TestExamineDescriptors(t *testing.T) {
 				{
 					ID: 52,
 					DescBytes: func() []byte {
-						// Skip `toBytes` to produce a descriptor with unset privileges field.
-						// The purpose of this is to produce a nil dereference during validation
-						// in order to test that doctor recovers from this.
-						//
-						// Note that it might be the case that validation aught to check that
-						// this field is not nil in the first place, in which case this test case
-						// will need to craft a corrupt descriptor serialization in a more
-						// creative way. Ideally validation code should never cause runtime errors
-						// but there's no way to guarantee that short of formally verifying it. We
-						// therefore have to consider the possibility of runtime errors (sadly) and
-						// doctor should absolutely make every possible effort to continue executing
-						// in the face of these, considering its main use case!
 						desc := &descpb.Descriptor{Union: &descpb.Descriptor_Type{
 							Type: &descpb.TypeDescriptor{Name: "type", ID: 52, ParentID: 51, ParentSchemaID: keys.PublicSchemaID},
 						}}
@@ -295,7 +296,7 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{ParentID: 51, ParentSchemaID: keys.PublicSchemaID, Name: "type"}, ID: 52},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID  51, ParentSchemaID 29: type "type" (52): validation: runtime error: invalid memory address or nil pointer dereference
+  ParentID  51, ParentSchemaID 29: type "type" (52): arrayTypeID 0 does not exist for "ENUM": referenced type ID 0: descriptor not found
 `,
 		},
 		{ // 12

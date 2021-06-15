@@ -1190,6 +1190,9 @@ message TableDescriptor {
   // This means that all indexes implicitly inherit all partitioning
   // from the PARTITION ALL BY clause.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
+
+  // IsRepaired is set if the descriptor has been upgrade through fix_descriptor_migration.
+  optional bool is_repaired = 47 [(gogoproto.nullable)=false];
 }
 
 // SurvivalGoal is the survival goal for a database.
@@ -1254,6 +1257,9 @@ message DatabaseDescriptor {
   }
   // RegionConfig is only set if multi-region controls are set on the database.
   optional RegionConfig region_config = 10;
+
+  // IsRepaired is set if the descriptor has been upgrade through fix_descriptor_migration.
+  optional bool is_repaired = 11 [(gogoproto.nullable)=false];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
@@ -1369,6 +1375,9 @@ message TypeDescriptor {
   }
 
   optional RegionConfig region_config = 16;
+
+  // IsRepaired is set if the descriptor has been upgrade through fix_descriptor_migration.
+  optional bool is_repaired = 17 [(gogoproto.nullable)=false];
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured
@@ -1401,6 +1410,9 @@ message SchemaDescriptor {
 
   // privileges contains the privileges for the schema.
   optional PrivilegeDescriptor privileges = 4;
+
+  // IsRepaired is set if the descriptor has been upgrade through fix_descriptor_migration.
+  optional bool is_repaired = 10 [(gogoproto.nullable)=false];
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

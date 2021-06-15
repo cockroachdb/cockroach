@@ -90,7 +90,7 @@ func newDescGetter(
 		}
 		b := catalogkv.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
 		if b != nil {
-			if err := b.RunPostDeserializationChanges(ctx, ddg); err != nil {
+			if _, err := b.RunPostDeserializationChanges(ctx, ddg); err != nil {
 				descReport(stdout, ddg.Descriptors[descpb.ID(r.ID)], "failed to upgrade descriptor: %v", err)
 			} else {
 				ddg.Descriptors[descpb.ID(r.ID)] = b.BuildImmutable()

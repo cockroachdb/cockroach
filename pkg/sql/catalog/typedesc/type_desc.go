@@ -973,3 +973,8 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	}
 	return ret, nil
 }
+
+// SetIsRepaired sets the IsRepaired bit to true.
+func (desc *Mutable) SetIsRepaired() {
+	desc.IsRepaired = true
+}

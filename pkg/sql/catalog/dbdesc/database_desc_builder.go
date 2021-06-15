@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -53,14 +54,11 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // interface.
 func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
-) error {
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
+) (bool, error) {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
-	descpb.MaybeFixPrivileges(ddb.maybeModified.ID, &ddb.maybeModified.Privileges)
-	descpb.MaybeFixUsagePrivForTablesAndDBs(&ddb.maybeModified.Privileges)
-	return nil
+	changed := descpb.MaybeFixPrivileges(ddb.maybeModified.ID, ddb.maybeModified.ID,
+		&ddb.maybeModified.Privileges, privilege.Database)
+	return changed, nil
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.

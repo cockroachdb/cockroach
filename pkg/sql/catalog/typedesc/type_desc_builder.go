@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -28,7 +29,8 @@ type TypeDescriptorBuilder interface {
 }
 
 type typeDescriptorBuilder struct {
-	original *descpb.TypeDescriptor
+	original      *descpb.TypeDescriptor
+	maybeModified *descpb.TypeDescriptor
 }
 
 var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
@@ -50,8 +52,12 @@ func (tdb *typeDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // interface.
 func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
 	_ context.Context, _ catalog.DescGetter,
-) error {
-	return nil
+) (bool, error) {
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
+	changed := descpb.MaybeFixPrivileges(tdb.maybeModified.ID, tdb.maybeModified.ID,
+		&tdb.maybeModified.Privileges, privilege.Type)
+
+	return changed, nil
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
@@ -61,7 +67,11 @@ func (tdb *typeDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 
 // BuildImmutableType returns an immutable type descriptor.
 func (tdb *typeDescriptorBuilder) BuildImmutableType() catalog.TypeDescriptor {
-	imm := makeImmutable(tdb.original)
+	desc := tdb.maybeModified
+	if desc == nil {
+		desc = tdb.original
+	}
+	imm := makeImmutable(desc)
 	return &imm
 }
 
@@ -73,8 +83,14 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutable() catalog.MutableDescript
 // BuildExistingMutableType returns a mutable descriptor for a type
 // which already exists.
 func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
-	clusterVersion := makeImmutable(protoutil.Clone(tdb.original).(*descpb.TypeDescriptor))
-	return &Mutable{immutable: makeImmutable(tdb.original), ClusterVersion: &clusterVersion}
+	if tdb.maybeModified == nil {
+		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
+	}
+	clusterVersion := makeImmutable(tdb.original)
+	return &Mutable{
+		immutable:      makeImmutable(tdb.maybeModified),
+		ClusterVersion: &clusterVersion,
+	}
 }
 
 // BuildCreatedMutable implements the catalog.DescriptorBuilder interface.

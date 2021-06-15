@@ -294,3 +294,8 @@ func IsSchemaNameValid(name string) error {
 	}
 	return nil
 }
+
+// SetIsRepaired sets the IsRepaired bit to true.
+func (desc *Mutable) SetIsRepaired() {
+	desc.IsRepaired = true
+}

@@ -44,6 +44,8 @@ type MutableDescriptor interface {
 	SetDropped()
 	// SetOffline sets the descriptor's state to offline, with the provided reason.
 	SetOffline(reason string)
+	// SetIsRepaired sets the IsRepaired bit to true.
+	SetIsRepaired()
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.

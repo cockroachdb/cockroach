@@ -96,3 +96,7 @@ func (p synthetic) SchemaDesc() *descpb.SchemaDescriptor {
 		"synthetic %s cannot be encoded", p.kindName())
 	return nil // unreachable
 }
+
+func (p synthetic) GetIsRepaired() bool {
+	return false
+}

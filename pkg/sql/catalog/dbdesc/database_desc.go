@@ -386,3 +386,8 @@ func (desc *Mutable) SetInitialMultiRegionConfig(config *multiregion.RegionConfi
 	}
 	return nil
 }
+
+// SetIsRepaired sets the IsRepaired bit to true.
+func (desc *Mutable) SetIsRepaired() {
+	desc.IsRepaired = true
+}
