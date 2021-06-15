@@ -289,6 +289,9 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 		firstRun := true
 		ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
+		watchEndpointsErr := log.Every(10 * time.Second)
+		recvErr := log.Every(10 * time.Second)
+
 		for {
 			if client == nil {
 				client, err = d.client.WatchEndpoints(ctx, &req)
@@ -300,9 +303,13 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 					if grpcutil.IsContextCanceled(err) {
 						break
 					}
-					log.Errorf(ctx, "err creating new watch endpoint client: %s", err)
+					if watchEndpointsErr.ShouldLog() {
+						log.Errorf(ctx, "err creating new watch endpoint client: %s", err)
+					}
 					sleepContext(ctx, time.Second)
 					continue
+				} else {
+					log.Info(ctx, "established watch on endpoints")
 				}
 			}
 
@@ -312,11 +319,14 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 				if grpcutil.IsContextCanceled(err) {
 					break
 				}
-				if err != io.EOF {
+				if recvErr.ShouldLog() {
 					log.Errorf(ctx, "err receiving stream events: %s", err)
+				}
+				// If stream ends, immediately try to establish a new one. Otherwise,
+				// wait for a second to avoid slamming server.
+				if err != io.EOF {
 					time.Sleep(time.Second)
 				}
-				// Loop around and try a new call to get a client stream.
 				client = nil
 				continue
 			}
@@ -334,7 +344,7 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 					break
 				}
 				// This should only happen in case of a deleted tenant or a transient
-				// error during fetch of tenant metadata.
+				// error during fetch of tenant metadata (i.e. very rarely).
 				log.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", resp.TenantID, err)
 				continue
 			}
