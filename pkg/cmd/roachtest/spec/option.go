@@ -68,7 +68,7 @@ func (o nodeZonesOption) apply(spec *ClusterSpec) {
 }
 
 // Zones is a node option which requests Geo-distributed nodes. Note that this
-// overrides the --Zones flag and is useful for tests that require running on
+// overrides the --zones flag and is useful for tests that require running on
 // specific Zones.
 func Zones(s string) Option {
 	return nodeZonesOption(s)
