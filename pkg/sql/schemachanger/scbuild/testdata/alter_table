@@ -36,13 +36,13 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       name: new_primary_key
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - j
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-    storeColumnIds:
-    - 2
-    storeColumnNames:
-    - j
     tableId: 52
 - DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
   state: PUBLIC
@@ -102,13 +102,13 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       name: new_primary_key
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - j
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-    storeColumnIds:
-    - 2
-    storeColumnNames:
-    - j
     tableId: 52
 - DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
   state: PUBLIC
@@ -169,15 +169,15 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       name: new_primary_key
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 2
+      - 3
+      storeColumnNames:
+      - j
+      - k
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-    storeColumnIds:
-    - 2
-    - 3
-    storeColumnNames:
-    - j
-    - k
     tableId: 52
 - DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
   state: PUBLIC
@@ -251,13 +251,13 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       name: new_primary_key
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - a
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-    storeColumnIds:
-    - 2
-    storeColumnNames:
-    - a
     tableId: 52
 - DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
   state: PUBLIC
@@ -321,13 +321,13 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       name: new_primary_key
       partitioning: {}
       sharded: {}
+      storeColumnIds:
+      - 2
+      storeColumnNames:
+      - a
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-    storeColumnIds:
-    - 2
-    storeColumnNames:
-    - a
     tableId: 52
 - DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
   state: PUBLIC
@@ -384,17 +384,13 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       sharded: {}
       storeColumnIds:
       - 1
+      - 3
       storeColumnNames:
       - j
+      - b
       unique: true
       version: 4
     otherPrimaryIndexId: 1
-    storeColumnIds:
-    - 1
-    - 3
-    storeColumnNames:
-    - j
-    - b
     tableId: 53
 - DROP PrimaryIndex:{DescID: 53, ElementName: "primary", IndexID: 1}
   state: PUBLIC
@@ -421,8 +417,4 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       unique: true
       version: 4
     otherPrimaryIndexId: 2
-    storeColumnIds:
-    - 1
-    storeColumnNames:
-    - j
     tableId: 53
