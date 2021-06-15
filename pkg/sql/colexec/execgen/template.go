@@ -72,37 +72,47 @@ func replaceTemplateVars(
 // statements that use the template variables and output only the branches that
 // match.
 //
-// Currently, this only works on booleans :)
-//
 // For example, given the function:
 // // execgen:inline
 // // execgen:template<t>
-// func b(t bool) int {
+// func b(t bool, i int) int {
 //   if t {
 //     x = 3
 //   } else {
 //     x = 4
 //   }
+//   switch i {
+//     case 5: fmt.Println("5")
+//     case 6: fmt.Println("6")
+//   }
 //   return x
 // }
 //
 // and a caller
-//   b(true)
+//   b(true, 5)
 // this function will generate
 //   if true {
 //     x = 3
 //   } else {
 //     x = 4
 //   }
+//   switch 5 {
+//     case 5: fmt.Println("5")
+//     case 6: fmt.Println("6")
+//   }
 //   return x
 //
-// but because true is a constant, it will be reduced to
+// in its first pass. However, because the if's condition (true, in this case)
+// is a logical expression containing boolean literals, and the switch statement
+// is a switch on a template variable alone, a second pass "folds"
+// the conditionals and replaces them like so:
 //
-// x = 3
-// return x
+//   x = 3
+//   fmt.Println(5)
+//   return x
 //
 // Note that this method lexically replaces all formal parameters, so together
-// with createTemplateFuncVariants, it enables templates to call other templates
+// with createTemplateFuncVariant, it enables templates to call other templates
 // with template variables.
 func monomorphizeTemplate(n dst.Node, info *funcInfo, args []dst.Expr) dst.Node {
 	// Create map from formal param name to arg.
@@ -110,85 +120,170 @@ func monomorphizeTemplate(n dst.Node, info *funcInfo, args []dst.Expr) dst.Node 
 	for i, p := range info.templateParams {
 		paramMap[p.field.Names[0].Name] = args[i]
 	}
+	templateSwitches := make(map[*dst.SwitchStmt]struct{})
 	n = dstutil.Apply(n, func(cursor *dstutil.Cursor) bool {
 		// Replace all usages of the formal parameter with the template arg.
 		c := cursor.Node()
 		switch t := c.(type) {
 		case *dst.Ident:
 			if arg := paramMap[t.Name]; arg != nil {
+				p := cursor.Parent()
+				if s, ok := p.(*dst.SwitchStmt); ok {
+					if s.Tag.(*dst.Ident) == t {
+						// Write down the switch statements we see that are of the form:
+						// switch <templateParam> {
+						// ...
+						// }
+						// We'll replace these later.
+						templateSwitches[s] = struct{}{}
+					}
+				}
 				cursor.Replace(dst.Clone(arg))
 			}
 		}
 		return true
 	}, nil)
 
-	return foldConditionals(n, info, args)
+	return foldConditionals(n, info, templateSwitches)
 }
 
 // foldConditionals edits conditional statements to try to remove branches that
-// are statically falsifiable.
-func foldConditionals(n dst.Node, info *funcInfo, args []dst.Expr) dst.Node {
+// are statically falsifiable. It works with two cases:
+//
+// if <bool> { } else { } and if !<bool> { } else { }
+//
+// execgen:switch
+// switch <ident> {
+//   case <otherIdent>:
+//   case <ident>:
+//   ...
+// }
+func foldConditionals(
+	n dst.Node, info *funcInfo, templateSwitches map[*dst.SwitchStmt]struct{},
+) dst.Node {
 	return dstutil.Apply(n, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
 		switch n := n.(type) {
+		case *dst.SwitchStmt:
+			if _, ok := templateSwitches[n]; !ok {
+				// Not a template switch.
+				return true
+			}
+			t := prettyPrintExprs(n.Tag)
+			for _, item := range n.Body.List {
+				c := item.(*dst.CaseClause)
+				for _, e := range c.List {
+					if prettyPrintExprs(e) == t {
+						body := &dst.BlockStmt{List: c.Body}
+						newBody := foldConditionals(body, info, templateSwitches).(*dst.BlockStmt)
+						for _, stmt := range newBody.List {
+							cursor.InsertBefore(stmt)
+						}
+						cursor.Delete()
+						return true
+					}
+				}
+			}
 		case *dst.IfStmt:
-			switch c := n.Cond.(type) {
-			case *dst.Ident:
-				if c.Name == "true" {
-					newBody := foldConditionals(n.Body, info, args).(*dst.BlockStmt)
-					for _, stmt := range newBody.List {
+			ret, ok := tryEvalBool(n.Cond)
+			if !ok {
+				return true
+			}
+			// Since we're replacing the node, make sure we preserve any comments.
+			if len(n.Decs.NodeDecs.Start) > 0 {
+				cursor.InsertBefore(&dst.AssignStmt{
+					Tok: token.ASSIGN,
+					Lhs: []dst.Expr{dst.NewIdent("_")},
+					Rhs: []dst.Expr{
+						&dst.BasicLit{
+							Kind:  token.STRING,
+							Value: "true",
+						},
+					},
+					Decs: dst.AssignStmtDecorations{
+						NodeDecs: n.Decs.NodeDecs,
+					},
+				})
+			}
+			if ret {
+				// Replace with the if side.
+				newBody := foldConditionals(n.Body, info, templateSwitches).(*dst.BlockStmt)
+				for _, stmt := range newBody.List {
+					cursor.InsertBefore(stmt)
+				}
+				cursor.Delete()
+				return true
+			}
+			// Replace with the else side, if it exists.
+			if n.Else != nil {
+				newElse := foldConditionals(n.Else, info, templateSwitches)
+				switch e := newElse.(type) {
+				case *dst.BlockStmt:
+					for _, stmt := range e.List {
 						cursor.InsertBefore(stmt)
 					}
 					cursor.Delete()
-					return true
+				default:
+					cursor.Replace(newElse)
 				}
-				if c.Name == "false" {
-					if n.Else != nil {
-						newElse := foldConditionals(n.Else, info, args)
-						switch e := newElse.(type) {
-						case *dst.BlockStmt:
-							for _, stmt := range e.List {
-								cursor.InsertBefore(stmt)
-							}
-							cursor.Delete()
-						default:
-							cursor.Replace(newElse)
-						}
-					} else {
-						cursor.Delete()
-					}
-				}
+			} else {
+				cursor.Delete()
 			}
 		}
 		return true
 	}, nil)
 }
 
-// createTemplateFuncVariants, given an AST, finds all functions annotated with
-// execgen:template<foo,bar>, and produces all of the necessary variants for
-// every combination of possible values for the type of each template argument.
-//
-// For example, given a template function:
-//
-// // execgen:template<b>
-// func foo (a int, b bool) {
-//   if b {
-//     return a
-//   } else {
-//     return a + 1
-//   }
-// }
-//
-// This function will add 2 new func decls to the AST:
-//
-// func foo_true(a int) {
-//   return a
-// }
-//
-// func foo_false(a int) {
-//   return a + 1
-// }
-func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
+// tryEvalBool attempts to statically evaluate the input expr as a logical
+// combination of boolean literals (like false || true). It returns the result
+// of the evaluation and whether or not the expression was actually evaluable
+// as such.
+func tryEvalBool(n dst.Expr) (ret bool, ok bool) {
+	switch n := n.(type) {
+	case *dst.UnaryExpr:
+		// !<expr>
+		if n.Op == token.NOT {
+			ret, ok = tryEvalBool(n.X)
+			ret = !ret
+			return ret, ok
+		}
+		return false, false
+	case *dst.BinaryExpr:
+		// expr && expr or expr || expr
+		if n.Op != token.LAND && n.Op != token.LOR {
+			return false, false
+		}
+		l, ok := tryEvalBool(n.X)
+		if !ok {
+			return false, false
+		}
+		r, ok := tryEvalBool(n.Y)
+		if !ok {
+			return false, false
+		}
+		switch n.Op {
+		case token.LAND:
+			return l && r, true
+		case token.LOR:
+			return l || r, true
+		default:
+			panic("unreachable")
+		}
+	case *dst.Ident:
+		switch n.Name {
+		case "true":
+			return true, true
+		case "false":
+			return false, true
+		}
+		return false, false
+	}
+	return false, false
+}
+
+// findTemplateFuncs, given an AST, finds all functions annotated with
+// execgen:template<foo,bar>, and returns a funcInfo for each of them.
+func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
 	ret := make(map[string]*funcInfo)
 
 	dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
@@ -227,9 +322,6 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 					// one name, and we've already banned the case where they have more
 					// than one. (e.g. func a (a int, b int, c, d int))
 					if f.Names[0].Name == v {
-						if ident, ok := f.Type.(*dst.Ident); !ok || ident.Name != "bool" {
-							panic("can't currently handle non-boolean template variables :)")
-						}
 						info.templateParams = append(info.templateParams, templateParamInfo{
 							fieldOrdinal: i,
 							field:        dst.Clone(f).(*dst.Field),
@@ -242,8 +334,6 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 					panic(fmt.Errorf("template var %s not found", v))
 				}
 			}
-			info.decl = n
-
 			// Delete template params from runtime definition.
 			newParamList := make([]*dst.Field, 0, len(n.Type.Params.List)-len(info.templateParams))
 			for i, field := range n.Type.Params.List {
@@ -258,13 +348,7 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 					newParamList = append(newParamList, field)
 				}
 			}
-			n.Type.Params.List = newParamList
-
-			// Now, make variants for every possible combination of allowed values of
-			// the template variables.
-			argsPossibilities := generateAllTemplateArgs(info.templateParams)
-
-			funcDecs := info.decl.Decs
+			funcDecs := n.Decs
 			// Replace the template function with a const marker, just so we can keep
 			// the comments above the template function available.
 			cursor.InsertBefore(&dst.GenDecl{
@@ -284,39 +368,18 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 					NodeDecs: funcDecs.NodeDecs,
 				},
 			})
-
-			// Extract the remaining execgen directives.
-			directives := make([]string, 0)
-			for _, s := range funcDecs.Start {
-				if strings.HasPrefix(s, "// execgen") {
-					directives = append(directives, s)
-				}
-			}
-
-			for _, args := range argsPossibilities {
-				newBody := monomorphizeTemplate(dst.Clone(n.Body).(*dst.BlockStmt), info, args).(*dst.BlockStmt)
-				newName := getTemplateVariantName(info, args)
-				cursor.InsertAfter(&dst.FuncDecl{
-					Name: newName,
-					Type: dst.Clone(info.decl.Type).(*dst.FuncType),
-					Body: newBody,
-					Decs: dst.FuncDeclDecorations{
-						NodeDecs: dst.NodeDecs{
-							Before: dst.EmptyLine,
-							Start:  directives,
-						},
-					},
-				})
-			}
+			n.Type.Params.List = newParamList
+			info.decl = n
 			ret[info.decl.Name.Name] = info
 			cursor.Delete()
-			return false
 		}
-
 		return true
 	}, nil)
+
 	return ret
 }
+
+var nameMangler = strings.NewReplacer(".", "DOT", "*", "STAR")
 
 func getTemplateVariantName(info *funcInfo, args []dst.Expr) *dst.Ident {
 	var newName strings.Builder
@@ -325,63 +388,173 @@ func getTemplateVariantName(info *funcInfo, args []dst.Expr) *dst.Ident {
 		newName.WriteByte('_')
 		newName.WriteString(prettyPrintExprs(args[j]))
 	}
-	return dst.NewIdent(newName.String())
+	s := newName.String()
+	s = nameMangler.Replace(s)
+	return dst.NewIdent(s)
 }
 
-// generateAllTemplateArgs returns every possible combination of values for the
-// list of parameter types passed in.
-func generateAllTemplateArgs(paramInfos []templateParamInfo) [][]dst.Expr {
-	if len(paramInfos) == 0 {
-		return [][]dst.Expr{nil}
-	}
-	if ident, ok := paramInfos[0].field.Type.(*dst.Ident); !ok || ident.Name != "bool" {
-		panic("can't deal with non-boolean template arguments right now")
-	}
-
-	inner := generateAllTemplateArgs(paramInfos[:len(paramInfos)-1])
-
-	result := make([][]dst.Expr, 0)
-	for _, b := range []bool{true, false} {
-		for _, s := range inner {
-			// s here should be the list of possible arguments of the first n-1 types.
-			s = append(s[:], dst.NewIdent(fmt.Sprintf("%t", b)))
-			result = append(result, s)
-		}
-	}
-
-	return result
-}
-
-// replaceTemplateCallSites finds all CallExprs in the input AST that are calling
+// replaceAndExpandTemplates finds all CallExprs in the input AST that are calling
 // the functions that had been annotated with // execgen:template that are
-// passed in via the templateFuncInfos map.
-func replaceTemplateCallSites(f *dst.File, templateFuncInfos map[string]*funcInfo) dst.Node {
-	return dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
+// passed in via the templateFuncInfos map. It recursively replaces the
+// CallExprs with their expanded, mangled template function names, and creates
+// the requisite monomorphized FuncDecls on demand.
+//
+// For example, given a template function:
+//
+// // execgen:template<b>
+// func foo (a int, b bool) {
+//   if b {
+//     return a
+//   } else {
+//     return a + 1
+//   }
+// }
+//
+// And callsites:
+//
+// foo(a, true)
+// foo(a, false)
+//
+// This function will add 2 new func decls to the AST:
+//
+// func foo_true(a int) {
+//   return a
+// }
+//
+// func foo_false(a int) {
+//   return a + 1
+// }
+func replaceAndExpandTemplates(f *dst.File, templateFuncInfos map[string]*funcInfo) dst.Node {
+	// First, create the DAG of template functions. This DAG points from template
+	// function to any other template functions that are called from within its
+	// body that propagate template arguments.
+	// First, find all "roots": template CallExprs that only have concrete
+	// arguments.
+	var q []*dst.CallExpr
+	dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
 		switch n := n.(type) {
+		case *dst.FuncDecl:
+			q = append(q, findConcreteTemplateCallSites(n, templateFuncInfos)...)
+		}
+		return true
+	}, nil)
+
+	// For every remaining concrete call site, replace it with its mangled template
+	// function call, and generate the requisite monomorphized template function
+	// if we haven't already.
+	//
+	// Then, process the new monomorphized template function and add any newly
+	// created concrete template call sites to the queue. Do this until we have no
+	// more concrete template call sites.
+	seenCallsites := make(map[string]struct{})
+	for len(q) > 0 {
+		q = q[:0]
+		dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
+			n := cursor.Node()
+			switch n := n.(type) {
+			case *dst.CallExpr:
+				ident, ok := n.Fun.(*dst.Ident)
+				if !ok {
+					return true
+				}
+				info, ok := templateFuncInfos[ident.Name]
+				if !ok {
+					// Nothing to do, it's not a templated function.
+					return true
+				}
+				templateArgs, newCall := replaceTemplateVars(info, n)
+				name := getTemplateVariantName(info, templateArgs)
+				newCall.Fun = name
+				cursor.Replace(newCall)
+				// Have we already replaced this template function with these args?
+				funcInstance := name.Name + prettyPrintExprs(templateArgs...)
+				if _, ok := seenCallsites[funcInstance]; !ok {
+					seenCallsites[funcInstance] = struct{}{}
+					newFuncVariant := createTemplateFuncVariant(f, info, templateArgs)
+					q = append(q, findConcreteTemplateCallSites(newFuncVariant, templateFuncInfos)...)
+				}
+			}
+			return true
+		}, nil)
+	}
+	return nil
+}
+
+// findConcreteTemplateCallSites finds all CallExprs within the input funcDecl
+// that do not contain template arguments and thus can be immediately replaced.
+func findConcreteTemplateCallSites(
+	funcDecl *dst.FuncDecl, templateFuncInfos map[string]*funcInfo,
+) []*dst.CallExpr {
+	info, calledFromTemplate := templateFuncInfos[funcDecl.Name.Name]
+	var ret []*dst.CallExpr
+	dstutil.Apply(funcDecl, func(cursor *dstutil.Cursor) bool {
+		n := cursor.Node()
+		switch callExpr := n.(type) {
 		case *dst.CallExpr:
-			ident, ok := n.Fun.(*dst.Ident)
+			ident, ok := callExpr.Fun.(*dst.Ident)
 			if !ok {
 				return true
 			}
-			info, ok := templateFuncInfos[ident.Name]
+			_, ok = templateFuncInfos[ident.Name]
 			if !ok {
 				// Nothing to do, it's not a templated function.
 				return true
 			}
-			templateArgs, newCall := replaceTemplateVars(info, n)
-			newCall.Fun = getTemplateVariantName(info, templateArgs)
-			cursor.Replace(newCall)
-			return false
+			if !calledFromTemplate {
+				// All arguments are concrete since the callsite isn't within another
+				// templated function decl.
+				ret = append(ret, callExpr)
+				return true
+			}
+			for i := range callExpr.Args {
+				switch a := callExpr.Args[i].(type) {
+				case *dst.Ident:
+					for _, param := range info.templateParams {
+						if param.field.Names[0].Name == a.Name {
+							// Found a propagated template parameter, so we don't return
+							// this CallExpr (it's not concrete).
+							// NOTE: This is broken in the presence of shadowing.
+							// Let's assume nobody shadows template vars for now.
+							return true
+						}
+					}
+				}
+			}
+			ret = append(ret, callExpr)
 		}
 		return true
 	}, nil)
+	return ret
 }
 
 // expandTemplates is the main entry point to the templater. Given a dst.File,
 // it modifies the dst.File to include all expanded template functions, and
 // edits call sites to call the newly expanded functions.
 func expandTemplates(f *dst.File) {
-	funcInfos := createTemplateFuncVariants(f)
-	replaceTemplateCallSites(f, funcInfos)
+	funcInfos := findTemplateFuncs(f)
+	replaceAndExpandTemplates(f, funcInfos)
+}
+
+// createTemplateFuncVariant creates a variant of the input funcInfo given the
+// template arguments passed in args, and adds the variant to the end of the
+// input file.
+func createTemplateFuncVariant(f *dst.File, info *funcInfo, args []dst.Expr) *dst.FuncDecl {
+	n := info.decl
+	directives := n.Decs.NodeDecs.Start
+	newBody := monomorphizeTemplate(dst.Clone(n.Body).(*dst.BlockStmt), info, args).(*dst.BlockStmt)
+	newName := getTemplateVariantName(info, args)
+	ret := &dst.FuncDecl{
+		Name: newName,
+		Type: dst.Clone(info.decl.Type).(*dst.FuncType),
+		Body: newBody,
+		Decs: dst.FuncDeclDecorations{
+			NodeDecs: dst.NodeDecs{
+				Before: dst.EmptyLine,
+				Start:  directives,
+			},
+		},
+	}
+	f.Decls = append(f.Decls, ret)
+	return ret
 }
