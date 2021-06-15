@@ -43,7 +43,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
-	tableDesc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
+	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
+	_, descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -228,7 +228,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
+	_, descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -279,7 +279,7 @@ func (p *planner) SetSequenceValue(
 	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
+	_, descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
 	if err != nil {
 		return err
 	}
@@ -591,7 +591,7 @@ func resolveColumnItemToDescriptors(
 		return nil, nil, errors.WithHint(err, "Specify OWNED BY table.column or OWNED BY NONE.")
 	}
 	tableName := columnItem.TableName.ToTableName()
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -719,13 +719,13 @@ func GetSequenceDescFromIdentifier(
 	var err error
 	p, ok := sc.(*planner)
 	if ok {
-		seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
+		_, seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		// This is only executed via IMPORT which uses its own resolver.
-		seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
+		_, seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}

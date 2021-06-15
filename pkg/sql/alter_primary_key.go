@@ -581,7 +581,7 @@ func (p *planner) shouldCreateIndexes(
 	// specifically the parent table, and the index
 	// involved.
 	if alterPKNode.Interleave != nil {
-		parentTable, err := resolver.ResolveExistingTableObject(
+		_, parentTable, err := resolver.ResolveExistingTableObject(
 			ctx, p, &alterPKNode.Interleave.Parent, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
 		)
 		if err != nil {
