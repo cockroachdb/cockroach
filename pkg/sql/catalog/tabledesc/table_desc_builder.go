@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -197,14 +198,7 @@ func maybeFillInDescriptor(
 		}
 	}
 
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
-	changes.FixedPrivileges = descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
-
-	fixedUsagePrivilege := descpb.MaybeFixUsagePrivForTablesAndDBs(&desc.Privileges)
-
-	changes.FixedPrivileges = changes.FixedPrivileges || fixedUsagePrivilege
+	descpb.MaybeFixPrivileges(desc.ID, desc.GetParentID(), &desc.Privileges, privilege.Table)
 
 	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
 

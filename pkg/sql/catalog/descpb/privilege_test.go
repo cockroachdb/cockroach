@@ -564,10 +564,7 @@ func TestFixPrivileges(t *testing.T) {
 			desc.Grant(u, p)
 		}
 
-		if a, e := MaybeFixPrivileges(testCase.id, &desc), testCase.modified; a != e {
-			t.Errorf("#%d: expected modified=%t, got modified=%t", num, e, a)
-			continue
-		}
+		MaybeFixPrivileges(testCase.id, testCase.id, &desc, privilege.Any)
 
 		if a, e := len(desc.Users), len(testCase.output); a != e {
 			t.Errorf("#%d: expected %d users (%v), got %d (%v)", num, e, testCase.output, a, desc.Users)
@@ -970,7 +967,8 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 		for u, p := range tc.input {
 			desc.Grant(u, p)
 		}
-		MaybeFixSchemaPrivileges(&desc)
+		testID := ID(keys.MaxReservedDescID + 1)
+		MaybeFixPrivileges(testID, testID, &desc, privilege.Schema)
 
 		for u, p := range tc.output {
 			outputUser, ok := desc.findUser(u)
