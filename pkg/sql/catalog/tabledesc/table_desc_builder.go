@@ -464,7 +464,6 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 }
 
 func upgradeToPrimaryIndexStoredColumnsFormatVersion(desc *descpb.TableDescriptor) {
-	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
 	nonVirtualCols := make([]*descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 	maybeAddCol := func(col *descpb.ColumnDescriptor) {
 		if col == nil || col.Virtual {
@@ -479,39 +478,26 @@ func upgradeToPrimaryIndexStoredColumnsFormatVersion(desc *descpb.TableDescripto
 		maybeAddCol(m.GetColumn())
 	}
 
-	maybePopulateStoreSlices := func(idx *descpb.IndexDescriptor) {
-		if idx == nil {
-			return
-		}
-		if idx.EncodingType != descpb.PrimaryIndexEncoding {
-			return
-		}
-		if idx.StoreColumnNames != nil {
-			return
-		}
-		keyColIDs := catalog.TableColSet{}
-		for _, colID := range idx.KeyColumnIDs {
-			keyColIDs.Add(colID)
-		}
-		for _, col := range nonVirtualCols {
-			if keyColIDs.Contains(col.ID) {
-				continue
-			}
-			if idx.StoreColumnIDs == nil {
-				idx.StoreColumnIDs = make([]descpb.ColumnID, 0, len(nonVirtualCols))
-				idx.StoreColumnNames = make([]string, 0, len(nonVirtualCols))
-			}
-			idx.StoreColumnIDs = append(idx.StoreColumnIDs, col.ID)
-			idx.StoreColumnNames = append(idx.StoreColumnNames, col.Name)
-		}
+	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
+	newStoreColumnIDs := make([]descpb.ColumnID, 0, len(nonVirtualCols))
+	newStoreColumnNames := make([]string, 0, len(nonVirtualCols))
+	keyColIDs := catalog.TableColSet{}
+	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
+		keyColIDs.Add(colID)
 	}
-	maybePopulateStoreSlices(&desc.PrimaryIndex)
-	for i := range desc.Indexes {
-		maybePopulateStoreSlices(&desc.Indexes[i])
+	for _, col := range nonVirtualCols {
+		if keyColIDs.Contains(col.ID) {
+			continue
+		}
+		newStoreColumnIDs = append(newStoreColumnIDs, col.ID)
+		newStoreColumnNames = append(newStoreColumnNames, col.Name)
 	}
-	for _, m := range desc.Mutations {
-		maybePopulateStoreSlices(m.GetIndex())
+	if len(newStoreColumnIDs) == 0 {
+		newStoreColumnIDs = nil
+		newStoreColumnNames = nil
 	}
+	desc.PrimaryIndex.StoreColumnIDs = newStoreColumnIDs
+	desc.PrimaryIndex.StoreColumnNames = newStoreColumnNames
 }
 
 // maybeUpgradeIndexFormatVersion tries to promote an index to version
