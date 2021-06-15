@@ -72,11 +72,6 @@ var _ = rowsToVecWidthTmplInfo{}.Convert
 var _ = rowsToVecWidthTmplInfo{}.Set
 var _ = rowsToVecWidthTmplInfo{}.Sliceable
 
-type familyWidthPair struct {
-	family types.Family
-	width  int32
-}
-
 var rowsToVecPreludeTmpls = map[familyWidthPair]string{
 	{types.StringFamily, anyWidth}: `// Handle other STRING-related OID types, like oid.T_name.
 												 wrapper, ok := %[1]s.(*tree.DOidWrapper)
