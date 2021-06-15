@@ -1343,6 +1343,17 @@ CREATE TABLE information_schema.column_privileges (
    privilege_type STRING NOT NULL,
    is_grantable STRING NULL
 )  {}  {}
+CREATE TABLE information_schema.column_statistics (
+   column_name STRING NULL,
+   histogram STRING NULL,
+   schema_name STRING NULL,
+   table_name STRING NULL
+)  CREATE TABLE information_schema.column_statistics (
+   column_name STRING NULL,
+   histogram STRING NULL,
+   schema_name STRING NULL,
+   table_name STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.column_udt_usage (
    udt_catalog STRING NOT NULL,
    udt_schema STRING NOT NULL,
@@ -1456,6 +1467,21 @@ CREATE TABLE information_schema.columns (
    is_updatable STRING NULL,
    is_hidden STRING NOT NULL,
    crdb_sql_type STRING NOT NULL
+)  {}  {}
+CREATE TABLE information_schema.columns_extensions (
+   engine_attribute STRING NULL,
+   secondary_engine_attribute STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   column_name STRING NULL
+)  CREATE TABLE information_schema.columns_extensions (
+   engine_attribute STRING NULL,
+   secondary_engine_attribute STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   column_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.constraint_column_usage (
    table_catalog STRING NOT NULL,
@@ -1659,6 +1685,151 @@ CREATE TABLE information_schema.enabled_roles (
 )  CREATE TABLE information_schema.enabled_roles (
    role_name STRING NOT NULL
 )  {}  {}
+CREATE TABLE information_schema.engines (
+   support STRING NULL,
+   transactions STRING NULL,
+   xa STRING NULL,
+   comment STRING NULL,
+   engine STRING NULL,
+   savepoints STRING NULL
+)  CREATE TABLE information_schema.engines (
+   support STRING NULL,
+   transactions STRING NULL,
+   xa STRING NULL,
+   comment STRING NULL,
+   engine STRING NULL,
+   savepoints STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.events (
+   definer STRING NULL,
+   event_definition STRING NULL,
+   event_name STRING NULL,
+   interval_value STRING NULL,
+   last_altered TIMESTAMPTZ NULL,
+   on_completion STRING NULL,
+   originator INT8 NULL,
+   collation_connection STRING NULL,
+   database_collation STRING NULL,
+   event_body STRING NULL,
+   event_schema STRING NULL,
+   execute_at TIMESTAMPTZ NULL,
+   interval_field STRING NULL,
+   starts TIMESTAMPTZ NULL,
+   time_zone STRING NULL,
+   character_set_client STRING NULL,
+   ends TIMESTAMPTZ NULL,
+   event_catalog STRING NULL,
+   event_comment STRING NULL,
+   event_type STRING NULL,
+   last_executed TIMESTAMPTZ NULL,
+   sql_mode STRING[] NULL,
+   status STRING NULL,
+   created TIMESTAMPTZ NULL
+)  CREATE TABLE information_schema.events (
+   definer STRING NULL,
+   event_definition STRING NULL,
+   event_name STRING NULL,
+   interval_value STRING NULL,
+   last_altered TIMESTAMPTZ NULL,
+   on_completion STRING NULL,
+   originator INT8 NULL,
+   collation_connection STRING NULL,
+   database_collation STRING NULL,
+   event_body STRING NULL,
+   event_schema STRING NULL,
+   execute_at TIMESTAMPTZ NULL,
+   interval_field STRING NULL,
+   starts TIMESTAMPTZ NULL,
+   time_zone STRING NULL,
+   character_set_client STRING NULL,
+   ends TIMESTAMPTZ NULL,
+   event_catalog STRING NULL,
+   event_comment STRING NULL,
+   event_type STRING NULL,
+   last_executed TIMESTAMPTZ NULL,
+   sql_mode STRING[] NULL,
+   status STRING NULL,
+   created TIMESTAMPTZ NULL
+)  {}  {}
+CREATE TABLE information_schema.files (
+   last_update_time BYTES NULL,
+   table_rows BYTES NULL,
+   autoextend_size INT8 NULL,
+   check_time BYTES NULL,
+   checksum BYTES NULL,
+   extra STRING NULL,
+   file_id INT8 NULL,
+   table_name BYTES NULL,
+   avg_row_length BYTES NULL,
+   extent_size INT8 NULL,
+   file_name STRING NULL,
+   free_extents INT8 NULL,
+   max_data_length BYTES NULL,
+   table_schema BYTES NULL,
+   update_time BYTES NULL,
+   data_length BYTES NULL,
+   tablespace_name STRING NULL,
+   version INT8 NULL,
+   create_time BYTES NULL,
+   initial_size INT8 NULL,
+   logfile_group_name STRING NULL,
+   maximum_size INT8 NULL,
+   status STRING NULL,
+   update_count BYTES NULL,
+   creation_time BYTES NULL,
+   engine STRING NULL,
+   fulltext_keys BYTES NULL,
+   row_format STRING NULL,
+   total_extents INT8 NULL,
+   data_free INT8 NULL,
+   index_length BYTES NULL,
+   last_access_time BYTES NULL,
+   table_catalog STRING NULL,
+   transaction_counter BYTES NULL,
+   file_type STRING NULL,
+   logfile_group_number INT8 NULL,
+   recover_time BYTES NULL,
+   deleted_rows BYTES NULL
+)  CREATE TABLE information_schema.files (
+   last_update_time BYTES NULL,
+   table_rows BYTES NULL,
+   autoextend_size INT8 NULL,
+   check_time BYTES NULL,
+   checksum BYTES NULL,
+   extra STRING NULL,
+   file_id INT8 NULL,
+   table_name BYTES NULL,
+   avg_row_length BYTES NULL,
+   extent_size INT8 NULL,
+   file_name STRING NULL,
+   free_extents INT8 NULL,
+   max_data_length BYTES NULL,
+   table_schema BYTES NULL,
+   update_time BYTES NULL,
+   data_length BYTES NULL,
+   tablespace_name STRING NULL,
+   version INT8 NULL,
+   create_time BYTES NULL,
+   initial_size INT8 NULL,
+   logfile_group_name STRING NULL,
+   maximum_size INT8 NULL,
+   status STRING NULL,
+   update_count BYTES NULL,
+   creation_time BYTES NULL,
+   engine STRING NULL,
+   fulltext_keys BYTES NULL,
+   row_format STRING NULL,
+   total_extents INT8 NULL,
+   data_free INT8 NULL,
+   index_length BYTES NULL,
+   last_access_time BYTES NULL,
+   table_catalog STRING NULL,
+   transaction_counter BYTES NULL,
+   file_type STRING NULL,
+   logfile_group_number INT8 NULL,
+   recover_time BYTES NULL,
+   deleted_rows BYTES NULL
+)  {}  {}
 CREATE TABLE information_schema.foreign_data_wrapper_options (
    option_name STRING NULL,
    option_value STRING NULL,
@@ -1763,6 +1934,24 @@ CREATE TABLE information_schema.key_column_usage (
    ordinal_position INT8 NOT NULL,
    position_in_unique_constraint INT8 NULL
 )  {}  {}
+CREATE TABLE information_schema.keywords (
+   word STRING NULL,
+   reserved INT8 NULL
+)  CREATE TABLE information_schema.keywords (
+   word STRING NULL,
+   reserved INT8 NULL
+)  {}  {}
+CREATE TABLE information_schema.optimizer_trace (
+   insufficient_privileges INT2 NULL,
+   missing_bytes_beyond_max_mem_size INT8 NULL,
+   query STRING NULL,
+   trace STRING NULL
+)  CREATE TABLE information_schema.optimizer_trace (
+   insufficient_privileges INT2 NULL,
+   missing_bytes_beyond_max_mem_size INT8 NULL,
+   query STRING NULL,
+   trace STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.parameters (
    specific_catalog STRING NULL,
    specific_schema STRING NULL,
@@ -1830,6 +2019,142 @@ CREATE TABLE information_schema.parameters (
    dtd_identifier STRING NULL,
    parameter_default STRING NULL
 )  {}  {}
+CREATE TABLE information_schema.partitions (
+   data_free INT8 NULL,
+   partition_name STRING NULL,
+   subpartition_expression STRING NULL,
+   table_name STRING NULL,
+   table_rows INT8 NULL,
+   avg_row_length INT8 NULL,
+   check_time TIMESTAMPTZ NULL,
+   create_time TIMESTAMPTZ NULL,
+   index_length INT8 NULL,
+   nodegroup STRING NULL,
+   partition_comment STRING NULL,
+   partition_description STRING NULL,
+   table_schema STRING NULL,
+   checksum INT8 NULL,
+   partition_expression STRING NULL,
+   partition_method STRING NULL,
+   subpartition_name STRING NULL,
+   tablespace_name STRING NULL,
+   update_time TIMESTAMPTZ NULL,
+   data_length INT8 NULL,
+   max_data_length INT8 NULL,
+   partition_ordinal_position INT8 NULL,
+   subpartition_method STRING NULL,
+   subpartition_ordinal_position INT8 NULL,
+   table_catalog STRING NULL
+)  CREATE TABLE information_schema.partitions (
+   data_free INT8 NULL,
+   partition_name STRING NULL,
+   subpartition_expression STRING NULL,
+   table_name STRING NULL,
+   table_rows INT8 NULL,
+   avg_row_length INT8 NULL,
+   check_time TIMESTAMPTZ NULL,
+   create_time TIMESTAMPTZ NULL,
+   index_length INT8 NULL,
+   nodegroup STRING NULL,
+   partition_comment STRING NULL,
+   partition_description STRING NULL,
+   table_schema STRING NULL,
+   checksum INT8 NULL,
+   partition_expression STRING NULL,
+   partition_method STRING NULL,
+   subpartition_name STRING NULL,
+   tablespace_name STRING NULL,
+   update_time TIMESTAMPTZ NULL,
+   data_length INT8 NULL,
+   max_data_length INT8 NULL,
+   partition_ordinal_position INT8 NULL,
+   subpartition_method STRING NULL,
+   subpartition_ordinal_position INT8 NULL,
+   table_catalog STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.plugins (
+   plugin_version STRING NULL,
+   load_option STRING NULL,
+   plugin_description STRING NULL,
+   plugin_library_version STRING NULL,
+   plugin_status STRING NULL,
+   plugin_type STRING NULL,
+   plugin_type_version STRING NULL,
+   plugin_author STRING NULL,
+   plugin_library STRING NULL,
+   plugin_license STRING NULL,
+   plugin_name STRING NULL
+)  CREATE TABLE information_schema.plugins (
+   plugin_version STRING NULL,
+   load_option STRING NULL,
+   plugin_description STRING NULL,
+   plugin_library_version STRING NULL,
+   plugin_status STRING NULL,
+   plugin_type STRING NULL,
+   plugin_type_version STRING NULL,
+   plugin_author STRING NULL,
+   plugin_library STRING NULL,
+   plugin_license STRING NULL,
+   plugin_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.processlist (
+   host STRING NULL,
+   id INT8 NULL,
+   info STRING NULL,
+   state STRING NULL,
+   "time" INT8 NULL,
+   "user" STRING NULL,
+   command STRING NULL,
+   db STRING NULL
+)  CREATE TABLE information_schema.processlist (
+   host STRING NULL,
+   id INT8 NULL,
+   info STRING NULL,
+   state STRING NULL,
+   "time" INT8 NULL,
+   "user" STRING NULL,
+   command STRING NULL,
+   db STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.profiling (
+   cpu_system DECIMAL NULL,
+   messages_sent INT8 NULL,
+   swaps INT8 NULL,
+   block_ops_in INT8 NULL,
+   block_ops_out INT8 NULL,
+   context_voluntary INT8 NULL,
+   cpu_user DECIMAL NULL,
+   query_id INT8 NULL,
+   source_function STRING NULL,
+   context_involuntary INT8 NULL,
+   duration DECIMAL NULL,
+   page_faults_major INT8 NULL,
+   page_faults_minor INT8 NULL,
+   seq INT8 NULL,
+   source_file STRING NULL,
+   state STRING NULL,
+   messages_received INT8 NULL,
+   source_line INT8 NULL
+)  CREATE TABLE information_schema.profiling (
+   cpu_system DECIMAL NULL,
+   messages_sent INT8 NULL,
+   swaps INT8 NULL,
+   block_ops_in INT8 NULL,
+   block_ops_out INT8 NULL,
+   context_voluntary INT8 NULL,
+   cpu_user DECIMAL NULL,
+   query_id INT8 NULL,
+   source_function STRING NULL,
+   context_involuntary INT8 NULL,
+   duration DECIMAL NULL,
+   page_faults_major INT8 NULL,
+   page_faults_minor INT8 NULL,
+   seq INT8 NULL,
+   source_file STRING NULL,
+   state STRING NULL,
+   messages_received INT8 NULL,
+   source_line INT8 NULL
+)  {}  {}
 CREATE TABLE information_schema.referential_constraints (
    constraint_catalog STRING NOT NULL,
    constraint_schema STRING NOT NULL,
@@ -1854,6 +2179,19 @@ CREATE TABLE information_schema.referential_constraints (
    delete_rule STRING NOT NULL,
    table_name STRING NOT NULL,
    referenced_table_name STRING NOT NULL
+)  {}  {}
+CREATE TABLE information_schema.resource_groups (
+   resource_group_enabled INT2 NULL,
+   resource_group_name STRING NULL,
+   resource_group_type STRING NULL,
+   thread_priority INT8 NULL,
+   vcpu_ids BYTES NULL
+)  CREATE TABLE information_schema.resource_groups (
+   resource_group_enabled INT2 NULL,
+   resource_group_name STRING NULL,
+   resource_group_type STRING NULL,
+   thread_priority INT8 NULL,
+   vcpu_ids BYTES NULL
 )  {}  {}
 CREATE TABLE information_schema.role_column_grants (
    table_schema STRING NULL,
@@ -2166,6 +2504,15 @@ CREATE TABLE information_schema.schemata (
    sql_path STRING NULL,
    crdb_is_user_defined STRING NULL
 )  {}  {}
+CREATE TABLE information_schema.schemata_extensions (
+   catalog_name STRING NULL,
+   options STRING NULL,
+   schema_name STRING NULL
+)  CREATE TABLE information_schema.schemata_extensions (
+   catalog_name STRING NULL,
+   options STRING NULL,
+   schema_name STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.sequences (
    sequence_catalog STRING NOT NULL,
    sequence_schema STRING NOT NULL,
@@ -2254,6 +2601,49 @@ CREATE TABLE information_schema.sql_sizing (
    sizing_name STRING NULL,
    supported_value INT8 NULL
 )  {}  {}
+CREATE TABLE information_schema.st_geometry_columns (
+   srs_id INT8 NULL,
+   srs_name STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   column_name STRING NULL,
+   geometry_type_name STRING NULL
+)  CREATE TABLE information_schema.st_geometry_columns (
+   srs_id INT8 NULL,
+   srs_name STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL,
+   column_name STRING NULL,
+   geometry_type_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.st_spatial_reference_systems (
+   srs_id INT8 NULL,
+   srs_name STRING NULL,
+   definition STRING NULL,
+   description STRING NULL,
+   organization STRING NULL,
+   organization_coordsys_id INT8 NULL
+)  CREATE TABLE information_schema.st_spatial_reference_systems (
+   srs_id INT8 NULL,
+   srs_name STRING NULL,
+   definition STRING NULL,
+   description STRING NULL,
+   organization STRING NULL,
+   organization_coordsys_id INT8 NULL
+)  {}  {}
+CREATE TABLE information_schema.st_units_of_measure (
+   conversion_factor FLOAT8 NULL,
+   description STRING NULL,
+   unit_name STRING NULL,
+   unit_type STRING NULL
+)  CREATE TABLE information_schema.st_units_of_measure (
+   conversion_factor FLOAT8 NULL,
+   description STRING NULL,
+   unit_name STRING NULL,
+   unit_type STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.statistics (
    table_catalog STRING NOT NULL,
    table_schema STRING NOT NULL,
@@ -2304,6 +2694,21 @@ CREATE TABLE information_schema.table_constraints (
    is_deferrable STRING NOT NULL,
    initially_deferred STRING NOT NULL
 )  {}  {}
+CREATE TABLE information_schema.table_constraints_extensions (
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   engine_attribute STRING NULL,
+   secondary_engine_attribute STRING NULL,
+   table_name STRING NULL
+)  CREATE TABLE information_schema.table_constraints_extensions (
+   constraint_catalog STRING NULL,
+   constraint_name STRING NULL,
+   constraint_schema STRING NULL,
+   engine_attribute STRING NULL,
+   secondary_engine_attribute STRING NULL,
+   table_name STRING NULL
+)  {}  {}
 CREATE TABLE information_schema.table_privileges (
    grantor STRING NULL,
    grantee STRING NOT NULL,
@@ -2337,6 +2742,47 @@ CREATE TABLE information_schema.tables (
    table_type STRING NOT NULL,
    is_insertable_into STRING NOT NULL,
    version INT8 NULL
+)  {}  {}
+CREATE TABLE information_schema.tables_extensions (
+   engine_attribute STRING NULL,
+   secondary_engine_attribute STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  CREATE TABLE information_schema.tables_extensions (
+   engine_attribute STRING NULL,
+   secondary_engine_attribute STRING NULL,
+   table_catalog STRING NULL,
+   table_name STRING NULL,
+   table_schema STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.tablespaces (
+   extent_size INT8 NULL,
+   logfile_group_name STRING NULL,
+   nodegroup_id INT8 NULL,
+   tablespace_type STRING NULL,
+   autoextend_size INT8 NULL,
+   engine STRING NULL,
+   maximum_size INT8 NULL,
+   tablespace_comment STRING NULL,
+   tablespace_name STRING NULL
+)  CREATE TABLE information_schema.tablespaces (
+   extent_size INT8 NULL,
+   logfile_group_name STRING NULL,
+   nodegroup_id INT8 NULL,
+   tablespace_type STRING NULL,
+   autoextend_size INT8 NULL,
+   engine STRING NULL,
+   maximum_size INT8 NULL,
+   tablespace_comment STRING NULL,
+   tablespace_name STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.tablespaces_extensions (
+   engine_attribute STRING NULL,
+   tablespace_name STRING NULL
+)  CREATE TABLE information_schema.tablespaces_extensions (
+   engine_attribute STRING NULL,
+   tablespace_name STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.transforms (
    specific_catalog STRING NULL,
@@ -2459,6 +2905,15 @@ CREATE TABLE information_schema.usage_privileges (
    privilege_type STRING NULL,
    grantee STRING NULL,
    grantor STRING NULL
+)  {}  {}
+CREATE TABLE information_schema.user_attributes (
+   attribute STRING NULL,
+   host STRING NULL,
+   "user" STRING NULL
+)  CREATE TABLE information_schema.user_attributes (
+   attribute STRING NULL,
+   host STRING NULL,
+   "user" STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.user_defined_types (
    character_maximum_length INT8 NULL,
