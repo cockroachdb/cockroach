@@ -11,9 +11,6 @@
 package idxconstraint
 
 import (
-	"regexp"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -22,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"regexp"
+	"strings"
 )
 
 // Convenience aliases to avoid the constraint prefix everywhere.
@@ -280,20 +279,21 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
-			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
+			str ,_ := tree.UnescapePattern(string(s), `\`,false)
+			if i := strings.IndexAny(str, "_%"); i >= 0 {
 				if i == 0 {
 					// Mask starts with _ or %.
 					c.unconstrained(offset, out)
 					return false
 				}
-				c.makeStringPrefixSpan(offset, string(s[:i]), out)
+				c.makeStringPrefixSpan(offset, string(str[:i]), out)
 				// A mask like ABC% is equivalent to restricting the prefix to ABC.
 				// A mask like ABC%Z requires restricting the prefix, but is a stronger
 				// condition.
 				return (i == len(s)-1) && s[i] == '%'
 			}
 			// No wildcard characters, this is an equality.
-			c.eqSpan(offset, &s, out)
+			c.eqSpan(offset, tree.NewDString(str), out)
 			return true
 		}
 

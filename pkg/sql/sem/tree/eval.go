@@ -4814,6 +4814,8 @@ func unescapePattern(
 	return string(ret[0:retWidth]), nil
 }
 
+var UnescapePattern = unescapePattern
+
 // replaceUnescaped replaces all instances of oldStr that are not escaped (read:
 // preceded) with the specified unescape token with newStr.
 // For example, with an escape token of `\\`
