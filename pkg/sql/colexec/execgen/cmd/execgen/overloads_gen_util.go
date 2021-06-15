@@ -60,6 +60,11 @@ func populateTwoArgsOverloads(
 			rightFamilyStr := toString(rightFamily)
 			for _, leftWidth := range leftWidths {
 				for _, rightWidth := range rightWidths {
+					if base.kind == castOverload && shouldSkipCast(leftFamily, leftWidth, rightFamily, rightWidth) {
+						// Cast overloads are special because we have a separate
+						// identity operator for identity casts.
+						continue
+					}
 					customizer, ok := customizers[typePair{leftFamily, leftWidth, rightFamily, rightWidth}]
 					if !ok {
 						colexecerror.InternalError(errors.AssertionFailedf(
