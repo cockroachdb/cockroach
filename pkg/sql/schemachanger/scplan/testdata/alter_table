@@ -66,6 +66,10 @@ Stage 4
       KeyColumnNames:
       - i
       Name: new_primary_key
+      StoreColumnIDs:
+      - 2
+      StoreColumnNames:
+      - j
       Unique: true
       Version: 4
     TableID: 52
@@ -157,6 +161,10 @@ Stage 4
       KeyColumnNames:
       - i
       Name: new_primary_key
+      StoreColumnIDs:
+      - 2
+      StoreColumnNames:
+      - j
       Unique: true
       Version: 4
     TableID: 52
@@ -266,6 +274,12 @@ Stage 4
       KeyColumnNames:
       - i
       Name: new_primary_key
+      StoreColumnIDs:
+      - 2
+      - 3
+      StoreColumnNames:
+      - j
+      - k
       Unique: true
       Version: 4
     TableID: 52
@@ -360,6 +374,10 @@ Stage 4
       KeyColumnNames:
       - i
       Name: new_primary_key
+      StoreColumnIDs:
+      - 2
+      StoreColumnNames:
+      - a
       Unique: true
       Version: 4
     TableID: 52
@@ -500,6 +518,10 @@ Stage 4
       KeyColumnNames:
       - i
       Name: new_primary_key
+      StoreColumnIDs:
+      - 2
+      StoreColumnNames:
+      - a
       Unique: true
       Version: 4
     TableID: 52
@@ -533,8 +555,10 @@ Stage 4
       Name: new_primary_key
       StoreColumnIDs:
       - 1
+      - 3
       StoreColumnNames:
       - j
+      - b
       Unique: true
       Version: 4
     TableID: 53

@@ -71,8 +71,6 @@ message PrimaryIndex {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
   uint32 other_primary_index_id = 3 [(gogoproto.customname) = "OtherPrimaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
-  repeated uint32 store_column_ids = 4 [(gogoproto.customname) = "StoreColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
-  repeated string store_column_names = 5 [(gogoproto.customname) = "StoreColumnNames"];
 }
 
 message SecondaryIndex {
