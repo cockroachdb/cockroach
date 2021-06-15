@@ -74,6 +74,10 @@ func (d *Datum) CompareDatum(dVec, other interface{}) int {
 	return d.Datum.Compare(dVec.(*datumVec).evalCtx, maybeUnwrapDatum(other))
 }
 
+// TODO(yuzefovich): remove this once casts from datum-backed types are added
+// back.
+var _ = (*Datum).Cast
+
 // Cast returns the result of casting d to the type toType. dVec is the
 // datumVec that stores d and is used to supply the eval context.
 func (d *Datum) Cast(dVec interface{}, toType *types.T) (tree.Datum, error) {

@@ -457,7 +457,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				// implementation of math.(Max|Min)(16|32) numbers that store
 				// the boundaries of the allowed range.
 				// NOTE: when updating the code below, make sure to update
-				// execgen/overloads_cast.go as well.
+				// execgen/cast_gen_util.go as well.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
 					if typ.Width() == 16 {
