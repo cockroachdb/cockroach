@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -598,51 +598,124 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 	})
 }
 
+type txnConflictExecutor struct {
+	beforeUpdate, proceed chan struct{}
+}
+
+func (e *txnConflictExecutor) ExecuteJob(
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	txn *kv.Txn,
+) error {
+	// Read number of rows -- this count will be used when updating
+	// a single row in the table.
+	row, err := cfg.InternalExecutor.QueryRow(
+		ctx, "txn-executor", txn, "SELECT count(*) FROM defaultdb.foo")
+	if err != nil {
+		return err
+	}
+	cnt := int(tree.MustBeDInt(row[0]))
+	if e.beforeUpdate != nil {
+		// Wait to be signaled.
+		e.beforeUpdate <- struct{}{}
+		<-e.proceed
+		e.beforeUpdate = nil
+		e.proceed = nil
+	}
+
+	// Try updating.
+	_, err = cfg.InternalExecutor.Exec(
+		ctx, "txn-executor", txn, "UPDATE defaultdb.foo SET b=b+$1 WHERE a=1", cnt)
+	return err
+}
+
+func (e *txnConflictExecutor) NotifyJobTermination(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	jobStatus Status,
+	details jobspb.Details,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) error {
+	return nil
+}
+
+func (e *txnConflictExecutor) Metrics() metric.Struct {
+	return nil
+}
+
+var _ ScheduledJobExecutor = (*txnConflictExecutor)(nil)
+
 func TestTransientTxnErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes >1min under race")
 
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 	ctx := context.Background()
 
-	h.sqlDB.Exec(t, "CREATE TABLE defaultdb.foo(a int primary key, b timestamp not null)")
+	h.sqlDB.Exec(t, `
+CREATE TABLE defaultdb.foo(a int primary key, b int);
+INSERT INTO defaultdb.foo VALUES(1, 1)
+`)
 
-	// Setup 10 schedules updating defaultdb.foo timestamp.
-	for i := 0; i < 10; i++ {
-		schedule := NewScheduledJob(h.env)
-		schedule.SetScheduleLabel(fmt.Sprintf("test schedule: %d", i))
-		schedule.SetOwner(security.TestUserName())
-		require.NoError(t, schedule.SetSchedule("*/1 * * * *"))
-		any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{
-			Statement: fmt.Sprintf("UPSERT INTO defaultdb.foo (a, b) VALUES (%d, now())", i),
-		})
-		require.NoError(t, err)
-		schedule.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
-		require.NoError(t, schedule.Create(
-			ctx, h.cfg.InternalExecutor, nil))
+	const execName = "test-executor"
+	ex := &txnConflictExecutor{
+		beforeUpdate: make(chan struct{}),
+		proceed:      make(chan struct{}),
 	}
+	defer registerScopedScheduledJobExecutor(execName, ex)()
 
-	// Setup numConcurrent workers, each executing maxExec executeSchedule calls.
-	const maxExec = 100
-	const numConcurrent = 3
+	// Setup schedule with our test executor.
+	schedule := NewScheduledJob(h.env)
+	schedule.SetScheduleLabel("test schedule")
+	schedule.SetOwner(security.TestUserName())
+	nextRun := h.env.Now().Add(time.Hour)
+	schedule.SetNextRun(nextRun)
+	schedule.SetExecutionDetails(execName, jobspb.ExecutionArguments{})
+	require.NoError(t, schedule.Create(
+		ctx, h.cfg.InternalExecutor, nil))
+
+	// Execute schedule on another thread.
+	g := ctxgroup.WithContext(context.Background())
+	g.Go(func() error {
+		return h.cfg.DB.Txn(context.Background(),
+			func(ctx context.Context, txn *kv.Txn) error {
+				err := h.execSchedules(ctx, allSchedules, txn)
+				return err
+			},
+		)
+	})
+
 	require.NoError(t,
-		ctxgroup.GroupWorkers(context.Background(), numConcurrent, func(ctx context.Context, _ int) error {
-			ticker := time.NewTicker(time.Millisecond)
-			numExecs := 0
-			for range ticker.C {
-				h.env.AdvanceTime(time.Minute)
-				// Transaction retry errors should never bubble up.
-				require.NoError(t,
-					h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-						return h.execSchedules(ctx, allSchedules, txn)
-					}))
-				numExecs++
-				if numExecs == maxExec {
-					return nil
-				}
+		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			// Let schedule start running, and wait for it to be ready to update.
+			h.env.SetTime(nextRun.Add(time.Second))
+			<-ex.beforeUpdate
+
+			// Before we let schedule proceed, update the number of rows in the table.
+			// This should cause transaction in schedule to restart, but we don't
+			// expect to see any errors in the schedule status.
+			if _, err := h.cfg.InternalExecutor.Exec(ctx, "update-a", txn,
+				`UPDATE defaultdb.foo SET b=3 WHERE a=1`); err != nil {
+				return err
 			}
+			if _, err := h.cfg.InternalExecutor.Exec(ctx, "add-row", txn,
+				`INSERT INTO defaultdb.foo VALUES (123, 123)`); err != nil {
+				return err
+			}
+			ex.proceed <- struct{}{}
 			return nil
 		}))
+
+	err := g.Wait()
+	require.True(t, errors.HasType(err, &savePointError{}))
+
+	// Reload schedule -- verify it doesn't have any errors in its status.
+	updated := h.loadSchedule(t, schedule.ScheduleID())
+	require.Equal(t, "", updated.ScheduleStatus())
 }
