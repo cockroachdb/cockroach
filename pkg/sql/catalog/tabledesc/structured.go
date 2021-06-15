@@ -1072,6 +1072,8 @@ func (desc *Mutable) AddFamily(fam descpb.ColumnFamilyDescriptor) {
 	desc.Families = append(desc.Families, fam)
 }
 
+// AddPrimaryIndex adds a primary index to a mutable table descriptor, assuming
+// that none has yet been set, and performs some sanity checks.
 func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 	if idx.Type == descpb.IndexDescriptor_INVERTED {
 		return fmt.Errorf("primary index cannot be inverted")
@@ -1108,8 +1110,8 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 	return nil
 }
 
+// AddSecondaryIndex adds a secondary index to a mutable table descriptor.
 func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
-
 	if idx.Type == descpb.IndexDescriptor_FORWARD {
 		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
 			return err
