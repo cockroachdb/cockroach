@@ -75,8 +75,8 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
 	getDescriptorByID := func() (catalog.Descriptor, error) {
-		if vd, err := tc.maybeGetVirtualDescriptorByID(
-			ctx, id, flags,
+		if vd, err := tc.virtual.getByID(
+			ctx, id, flags.RequireMutable,
 		); vd != nil || err != nil {
 			return vd, err
 		}
