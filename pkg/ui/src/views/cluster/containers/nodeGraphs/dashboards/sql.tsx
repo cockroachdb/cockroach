@@ -154,6 +154,40 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Connection Latency: 99th percentile"
+      tooltip={`Over the last minute, this node established and authenticated 99% of connections within this time.`}
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.sql.conn.latency-p99"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Connection Latency: 90th percentile"
+      tooltip={`Over the last minute, this node established and authenticated 90% of connections within this time.`}
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.sql.conn.latency-p90"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Service Latency: SQL Statements, 99th percentile"
       tooltip={
         <div>
