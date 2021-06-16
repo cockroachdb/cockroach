@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // createStatsPostEvents controls the cluster setting for logging
@@ -582,7 +583,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			sqlEventCommonExecPayload{
 				user:         evalCtx.SessionData.User(),
 				appName:      evalCtx.SessionData.ApplicationName,
-				stmt:         details.Statement,
+				stmt:         redact.Sprint(details.Statement),
 				stmtTag:      "CREATE STATISTICS",
 				placeholders: nil, /* no placeholders known at this point */
 			},
