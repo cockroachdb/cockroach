@@ -1073,16 +1073,16 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: successful bu unexpected error provided", job.ID())
 		}
-		if err := job.succeeded(ctx, nil /* txn */, nil /* fn */); err != nil {
-			// If it didn't succeed, we consider the job as failed and need to go
-			// through reverting state first.
-			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
-			// execute them in resume so that the client can handle these errors
-			// better.
-			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", job.ID()))
+		err := job.succeeded(ctx, nil /* txn */, nil /* fn */)
+		switch {
+		case err == nil:
+			telemetry.Inc(TelemetryMetrics[jobType].Successful)
+		default:
+			// If we can't transactionally mark the job as reverting then it will be
+			// restarted during the next adopt loop and it will be retried.
+			err = errors.Wrapf(err, "job %d: could not mark as succeeded", job.ID())
 		}
-		telemetry.Inc(TelemetryMetrics[jobType].Successful)
-		return nil
+		return err
 	case StatusReverting:
 		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
