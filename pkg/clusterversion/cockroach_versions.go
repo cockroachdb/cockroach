@@ -167,12 +167,6 @@ const (
 	GeospatialType
 	// Enums enables the use of ENUM types.
 	Enums
-	// RangefeedLeases is the enablement of leases uses rangefeeds. All nodes
-	// with this versions will have rangefeeds enabled on all system ranges.
-	// Once this version is finalized, gossip is not needed in the schema lease
-	// subsystem. Nodes which start with this version finalized will not pass
-	// gossip to the SQL layer.
-	RangefeedLeases
 	// AlterColumnTypeGeneral enables the use of alter column type for
 	// conversions that require the column data to be rewritten.
 	AlterColumnTypeGeneral
@@ -354,10 +348,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     Enums,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 3},
-	},
-	{
-		Key:     RangefeedLeases,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 4},
 	},
 	{
 		Key:     AlterColumnTypeGeneral,
