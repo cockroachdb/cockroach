@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -299,11 +298,6 @@ func (p *planner) createEnumWithID(
 	typeName *tree.TypeName,
 	enumType enumType,
 ) error {
-	// Make sure that all nodes in the cluster are able to recognize ENUM types.
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.Enums) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"not all nodes are the correct version for ENUM type creation")
-	}
 
 	sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumCreate)
 
