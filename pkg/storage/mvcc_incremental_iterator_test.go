@@ -911,7 +911,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// regular MVCCPut operation to generate these keys, which we'll later be
 	// copying into manually created sstables.
 	ctx := context.Background()
-	db1, err := Open(ctx, InMemory(), SettingsForTesting())
+	db1, err := Open(ctx, InMemory(), ForTesting)
 	require.NoError(t, err)
 	defer db1.Close()
 
@@ -947,7 +947,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	//
 	//   SSTable 2:
 	//     b@2
-	db2, err := Open(ctx, InMemory(), SettingsForTesting())
+	db2, err := Open(ctx, InMemory(), ForTesting)
 	require.NoError(t, err)
 	defer db2.Close()
 

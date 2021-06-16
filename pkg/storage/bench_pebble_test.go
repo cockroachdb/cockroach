@@ -31,9 +31,7 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 	peb, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		CacheSize(testCacheSize),
-		Settings(makeSettingsForSeparatedIntents(
-			false /* oldClusterVersion */, true /* enabled */)))
+		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
@@ -42,14 +40,17 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 
 func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
 	return setupMVCCInMemPebbleWithSettings(b, makeSettingsForSeparatedIntents(
-		false /* oldClusterVersion */, true /* enabled */))
+		false /* oldClusterVersion */), false /* disabledSeparatedIntents */)
 }
 
-func setupMVCCInMemPebbleWithSettings(b testing.TB, settings *cluster.Settings) Engine {
+func setupMVCCInMemPebbleWithSettings(
+	b testing.TB, settings *cluster.Settings, disableSeparatedIntents bool,
+) Engine {
 	peb, err := Open(
 		context.Background(),
 		InMemory(),
 		Settings(settings),
+		SetSeparatedIntents(false, disableSeparatedIntents),
 		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
