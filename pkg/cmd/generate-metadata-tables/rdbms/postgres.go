@@ -15,6 +15,7 @@ package rdbms
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -43,6 +44,22 @@ var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
 	oid.T_pg_lsn:       oid.T_text,
 }
 
+var emptyStruct = struct{}{}
+
+var postgresExclusions = []*excludePattern{
+	{
+		pattern: regexp.MustCompile(`^pg_stat.+$`),
+		except: map[string]struct{}{
+			"pg_stat_database":           emptyStruct,
+			"pg_stat_database_conflicts": emptyStruct,
+		},
+	},
+	{
+		pattern: regexp.MustCompile(`^_pg_.+$`),
+		except:  make(map[string]struct{}),
+	},
+}
+
 type pgMetadataConnection struct {
 	*pgx.Conn
 	catalog string
@@ -61,7 +78,7 @@ func postgresConnect(address, user, catalog string) (DBMetadataConnection, error
 	return pgMetadataConnection{conn, catalog}, nil
 }
 
-func (conn pgMetadataConnection) DescribeSchema() (ColumnMetadataList, error) {
+func (conn pgMetadataConnection) DescribeSchema() (*ColumnMetadataList, error) {
 	var metadata []*columnMetadata
 	rows, err := conn.Query(sql.GetPGMetadataSQL, conn.catalog)
 	if err != nil {
@@ -84,7 +101,7 @@ func (conn pgMetadataConnection) DescribeSchema() (ColumnMetadataList, error) {
 		row.dataTypeOid = mappedTypeOid
 		metadata = append(metadata, row)
 	}
-	return metadata, nil
+	return &ColumnMetadataList{data: metadata, exclusions: postgresExclusions}, nil
 }
 
 func (conn pgMetadataConnection) DatabaseVersion() (pgVersion string, err error) {

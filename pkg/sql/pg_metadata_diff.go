@@ -45,8 +45,6 @@ const GetPGMetadataSQL = `
 	WHERE n.nspname = $1
 	AND a.attnum > 0
   AND c.relkind != 'i'
-  AND c.relname NOT LIKE 'pg_stat%'
-	AND c.relname NOT LIKE '_pg_%'
 	ORDER BY 1, 2;
 `
 
@@ -245,7 +243,10 @@ func (p PGMetadataTables) getUnimplementedColumns(target PGMetadataTables) PGMet
 				// dataType mismatch (Not a new column).
 				continue
 			}
-			sourceType := target[tableName][columnName]
+			sourceType, ok := target[tableName][columnName]
+			if !ok {
+				continue
+			}
 			typeOid := oid.Oid(sourceType.Oid)
 			if _, ok := types.OidToType[typeOid]; !ok || typeOid == oid.T_anyarray {
 				// can't implement this column due to missing type.
