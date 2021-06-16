@@ -267,6 +267,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 			}
 
 			// Remap error for external consumption.
+			log.Errorf(ctx, "could not retrieve outgoing address: %v", err.Error())
 			err = newErrorf(
 				codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
 			break
@@ -417,7 +418,7 @@ func (handler *proxyHandler) outgoingAddress(
 	addr := strings.ReplaceAll(
 		handler.RoutingRule, "{{clusterName}}", fmt.Sprintf("%s-%d", name, tenID.ToUint64()),
 	)
-	_, err := backendLookupAddr(addr)
+	_, err := backendLookupAddr(ctx, addr)
 	if err != nil {
 		return "", status.Error(codes.NotFound, err.Error())
 	}
