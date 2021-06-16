@@ -168,11 +168,6 @@ const (
 	// AlterColumnTypeGeneral enables the use of alter column type for
 	// conversions that require the column data to be rewritten.
 	AlterColumnTypeGeneral
-	// AlterSystemJobsTable is a version which modified system.jobs table.
-	AlterSystemJobsAddCreatedByColumns
-	// AddScheduledJobsTable is a version which adds system.scheduled_jobs
-	// table.
-	AddScheduledJobsTable
 	// UserDefinedSchemas enables the creation of user defined schemas.
 	UserDefinedSchemas
 	// NoOriginFKIndexes allows for foreign keys to no longer need indexes on
@@ -186,16 +181,10 @@ const (
 	// AbortSpanBytes adds a field to MVCCStats
 	// (MVCCStats.AbortSpanBytes) that tracks the size of a range's abort span.
 	AbortSpanBytes
-	// AlterSystemJobsTableAddLeaseColumn is a version which modified
-	// system.jobs table.
-	AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	// MaterializedViews enables the use of materialized views.
 	MaterializedViews
 	// Box2DType enables the use of the box2d type.
 	Box2DType
-	// UpdateScheduledJobsSchema drops schedule_changes and adds
-	// schedule_status.
-	UpdateScheduledJobsSchema
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -348,14 +337,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 5},
 	},
 	{
-		Key:     AlterSystemJobsAddCreatedByColumns,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 6},
-	},
-	{
-		Key:     AddScheduledJobsTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 7},
-	},
-	{
 		Key:     UserDefinedSchemas,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 8},
 	},
@@ -376,20 +357,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 14},
 	},
 	{
-		Key:     AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 15},
-	},
-	{
 		Key:     MaterializedViews,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 16},
 	},
 	{
 		Key:     Box2DType,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 17},
-	},
-	{
-		Key:     UpdateScheduledJobsSchema,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 19},
 	},
 	{
 		Key:     CreateLoginPrivilege,
