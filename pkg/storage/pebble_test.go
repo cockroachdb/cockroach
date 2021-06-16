@@ -434,6 +434,7 @@ func TestPebbleDiskSlowEmit(t *testing.T) {
 		vfs.NewMem(),
 		"",
 		settings,
+		nil, /* knobs */
 	)
 	defer p.Close()
 

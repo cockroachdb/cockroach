@@ -117,9 +117,17 @@ func TestMVCCHistories(t *testing.T) {
 				"randomly setting oldClusterVersion: %t, enableSeparated: %t",
 				oldClusterVersion, enabledSeparated)
 		}
-		settings := makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
+		settings := makeSettingsForSeparatedIntents(oldClusterVersion)
 		// We start from a clean slate in every test file.
-		engine := createTestPebbleEngineWithSettings(settings)
+		knobs := &TestingKnobs{DisableSeparatedIntents: !enabledSeparated}
+		engine := newPebbleInMem(
+			context.Background(),
+			roachpb.Attributes{},
+			1<<20,   /* cacheSize */
+			512<<20, /* storeSize */
+			settings,
+			knobs, /* knobs */
+		)
 		defer engine.Close()
 
 		reportDataEntries := func(buf *bytes.Buffer) error {
