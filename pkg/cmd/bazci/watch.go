@@ -197,6 +197,9 @@ func (w watcher) stageBinaryArtifacts() error {
 		head := strings.ReplaceAll(strings.TrimPrefix(bin, "//"), ":", "/")
 		components := strings.Split(bin, ":")
 		relBinPath := path.Join(head+"_", components[len(components)-1])
+		if usingCrossWindowsConfig() {
+			relBinPath = relBinPath + ".exe"
+		}
 		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0777, finalizePhase,
 			copyContentTo)
 		if err != nil {
