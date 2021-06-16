@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo/colinfotestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -47,7 +46,7 @@ func (s *scope) ResolveQualifiedStarTestResults(
 	nl := make(tree.NameList, 0, len(s.cols))
 	for i := range s.cols {
 		col := s.cols[i]
-		if col.table == *srcName && col.visibility == cat.Visible {
+		if col.table == *srcName && col.visibility == visible {
 			nl = append(nl, col.name.ReferenceName())
 		}
 	}

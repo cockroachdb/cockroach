@@ -95,7 +95,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/colinfo/colinfotestutils",
-        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",

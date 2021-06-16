@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -307,11 +306,6 @@ type usingJoinBuilder struct {
 	// same column may be used multiple times with different aliases.
 	hideCols map[*scopeColumn]struct{}
 
-	// showCols contains the join columns which are not hidden in the result
-	// expression. Note that we cannot simply store the column ids since the
-	// same column may be used multiple times with different aliases.
-	showCols map[*scopeColumn]struct{}
-
 	// ifNullCols contains the ids of each synthesized column which performs the
 	// IFNULL check for a pair of join columns.
 	ifNullCols opt.ColSet
@@ -333,7 +327,6 @@ func (jb *usingJoinBuilder) init(
 		rightScope: rightScope,
 		outScope:   outScope,
 		hideCols:   make(map[*scopeColumn]struct{}),
-		showCols:   make(map[*scopeColumn]struct{}),
 	}
 }
 
@@ -375,7 +368,7 @@ func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
 	var seenCols opt.ColSet
 	for i := range jb.leftScope.cols {
 		leftCol := &jb.leftScope.cols[i]
-		if leftCol.visibility != cat.Visible {
+		if leftCol.visibility != visible {
 			continue
 		}
 		if seenCols.Contains(leftCol.id) {
@@ -404,8 +397,8 @@ func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
 // the Join operator. If at least one "if null" column exists, the join must be
 // wrapped in a Project operator that performs the required IFNULL checks.
 func (jb *usingJoinBuilder) finishBuild() {
-	jb.addRemainingCols(jb.leftScope.cols)
-	jb.addRemainingCols(jb.rightScope.cols)
+	jb.addCols(jb.leftScope.cols)
+	jb.addCols(jb.rightScope.cols)
 
 	jb.outScope.expr = jb.b.constructJoin(
 		jb.joinType,
@@ -431,22 +424,14 @@ func (jb *usingJoinBuilder) finishBuild() {
 	}
 }
 
-// addRemainingCols iterates through each of the columns in cols and performs
-// one of the following actions:
-// (1) If the column is part of the hideCols set, then it is a join column that
-//     needs to be added to output scope, with the hidden attribute set to true.
-// (2) If the column is part of the showCols set, then it is a join column that
-//     has already been added to the output scope by addEqualityCondition, so
-//     skip it now.
-// (3) All other columns are added to the scope without modification.
-func (jb *usingJoinBuilder) addRemainingCols(cols []scopeColumn) {
+// addCols appends all columns from the given scope. Any columns that are in the
+// hideCols set are marked as accessibleByQualifiedStar.
+func (jb *usingJoinBuilder) addCols(cols []scopeColumn) {
 	for i := range cols {
 		col := &cols[i]
+		jb.outScope.cols = append(jb.outScope.cols, *col)
 		if _, ok := jb.hideCols[col]; ok {
-			jb.outScope.cols = append(jb.outScope.cols, *col)
-			jb.outScope.cols[len(jb.outScope.cols)-1].visibility = cat.Hidden
-		} else if _, ok := jb.showCols[col]; !ok {
-			jb.outScope.cols = append(jb.outScope.cols, *col)
+			jb.outScope.cols[len(jb.outScope.cols)-1].visibility = accessibleByQualifiedStar
 		}
 	}
 }
@@ -461,7 +446,7 @@ func (jb *usingJoinBuilder) findUsingColumn(
 	var foundCol *scopeColumn
 	for i := range cols {
 		col := &cols[i]
-		if col.visibility == cat.Visible && col.name.MatchesReferenceName(name) {
+		if col.visibility == visible && col.name.MatchesReferenceName(name) {
 			if foundCol != nil {
 				jb.raiseDuplicateColError(name, context)
 			}
@@ -487,6 +472,10 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		}
 	}
 
+	// We will create a new "merged" column and hide the original columns.
+	jb.hideCols[leftCol] = struct{}{}
+	jb.hideCols[rightCol] = struct{}{}
+
 	// Construct the predicate.
 	leftVar := jb.b.factory.ConstructVariable(leftCol.id)
 	rightVar := jb.b.factory.ConstructVariable(rightCol.id)
@@ -497,16 +486,16 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	if jb.joinType == descpb.InnerJoin || jb.joinType == descpb.LeftOuterJoin {
 		// The merged column is the same as the corresponding column from the
 		// left side.
-		jb.outScope.cols = append(jb.outScope.cols, *leftCol)
-		jb.showCols[leftCol] = struct{}{}
-		jb.hideCols[rightCol] = struct{}{}
+		col := *leftCol
+		col.table = tree.TableName{}
+		jb.outScope.cols = append(jb.outScope.cols, col)
 	} else if jb.joinType == descpb.RightOuterJoin &&
 		!colinfo.HasCompositeKeyEncoding(leftCol.typ) {
 		// The merged column is the same as the corresponding column from the
 		// right side.
-		jb.outScope.cols = append(jb.outScope.cols, *rightCol)
-		jb.showCols[rightCol] = struct{}{}
-		jb.hideCols[leftCol] = struct{}{}
+		col := *rightCol
+		col.table = tree.TableName{}
+		jb.outScope.cols = append(jb.outScope.cols, col)
 	} else {
 		// Construct a new merged column to represent IFNULL(left, right).
 		var typ *types.T
@@ -519,8 +508,6 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		merged := jb.b.factory.ConstructCoalesce(memo.ScalarListExpr{leftVar, rightVar})
 		col := jb.b.synthesizeColumn(jb.outScope, leftCol.name, typ, texpr, merged)
 		jb.ifNullCols.Add(col.id)
-		jb.hideCols[leftCol] = struct{}{}
-		jb.hideCols[rightCol] = struct{}{}
 	}
 }
 
