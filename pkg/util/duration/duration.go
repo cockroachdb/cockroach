@@ -617,14 +617,37 @@ func (d Duration) MulFloat(x float64) Duration {
 
 // DivFloat returns a Duration representing a time length of d/x.
 func (d Duration) DivFloat(x float64) Duration {
-	monthInt, monthFrac := math.Modf(float64(d.Months) / x)
-	dayInt, dayFrac := math.Modf((float64(d.Days) / x) + (monthFrac * DaysPerMonth))
+	// In order to keep it compatible with PostgreSQL, we use the same logic.
+	// Refer to https://github.com/postgres/postgres/blob/e56bce5d43789cce95d099554ae9593ada92b3b7/src/backend/utils/adt/timestamp.c#L3266-L3304.
+	month := int32(float64(d.Months) / x)
+	day := int32(float64(d.Days) / x)
+
+	remainderDays := (float64(d.Months)/x - float64(month)) * DaysPerMonth
+	remainderDays = secRoundToEven(remainderDays)
+	secRemainder := (float64(d.Days)/x - float64(day) +
+		remainderDays - float64(int64(remainderDays))) * SecsPerDay
+	secRemainder = secRoundToEven(secRemainder)
+	if math.Abs(secRemainder) >= SecsPerDay {
+		day += int32(secRemainder / SecsPerDay)
+		secRemainder -= float64(int32(secRemainder/SecsPerDay) * SecsPerDay)
+	}
+	day += int32(remainderDays)
+	microSecs := float64(time.Duration(d.nanos).Microseconds())/x + secRemainder*MicrosPerMilli*MillisPerSec
+	retNanos := time.Duration(int64(math.RoundToEven(microSecs))) * time.Microsecond
 
 	return MakeDuration(
-		int64((float64(d.nanos)/x)+(dayFrac*float64(nanosInDay))),
-		int64(dayInt),
-		int64(monthInt),
+		retNanos.Nanoseconds(),
+		int64(day),
+		int64(month),
 	)
+}
+
+// secRoundToEven rounds the given float to the nearest second,
+// assuming the input float is a microsecond representation of
+// time
+// This maps to the TSROUND macro in Postgres.
+func secRoundToEven(f float64) float64 {
+	return math.RoundToEven(f*MicrosPerMilli*MillisPerSec) / (MicrosPerMilli * MillisPerSec)
 }
 
 // normalized returns a new Duration transformed using the equivalence rules.
