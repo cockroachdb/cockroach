@@ -216,6 +216,9 @@ func (u *sqlSymUnion) strs() []string {
 func (u *sqlSymUnion) user() security.SQLUsername {
     return u.val.(security.SQLUsername)
 }
+func (u *sqlSymUnion) userPtr() *security.SQLUsername {
+    return u.val.(*security.SQLUsername)
+}
 func (u *sqlSymUnion) users() []security.SQLUsername {
     return u.val.([]security.SQLUsername)
 }
@@ -655,6 +658,18 @@ func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
     return u.val.(tree.ObjectNamePrefixList)
 }
+func (u *sqlSymUnion) abbreviatedGrant() tree.AbbreviatedGrant {
+  return u.val.(tree.AbbreviatedGrant)
+}
+func (u *sqlSymUnion) abbreviatedRevoke() tree.AbbreviatedRevoke {
+  return u.val.(tree.AbbreviatedRevoke)
+}
+func (u *sqlSymUnion) objectNamePrefixPtr() *tree.ObjectNamePrefix {
+  return u.val.(*tree.ObjectNamePrefix)
+}
+func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPrivilegesTargetObject {
+  return u.val.(tree.AlterDefaultPrivilegesTargetObject)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -704,7 +719,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -751,7 +766,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> REGCLASS REGION REGIONAL REGIONS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
-%token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
+%token <str> ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
@@ -864,6 +879,9 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> alter_sequence_options_stmt
 %type <tree.Statement> alter_sequence_set_schema_stmt
 %type <tree.Statement> alter_sequence_owner_stmt
+
+// ALTER DEFAULT PRIVILEGES
+%type <tree.Statement> alter_default_privileges_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -1302,6 +1320,14 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.ScheduleState> schedule_state
 %type <tree.ScheduledJobExecutorType> opt_schedule_executor_type
 
+%type <tree.AbbreviatedGrant> abbreviated_grant_stmt
+%type <tree.AbbreviatedRevoke> abbreviated_revoke_stmt
+%type <bool> opt_with_grant_option
+%type <*security.SQLUsername> opt_for_role
+%type <*tree.ObjectNamePrefix>  opt_in_schema
+%type <tree.AlterDefaultPrivilegesTargetObject> alter_default_privileges_target_object
+
+
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
 %nonassoc  SET                 // see table_expr_opt_alias_idx
@@ -1413,15 +1439,16 @@ alter_stmt:
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
-  alter_table_stmt     // EXTEND WITH HELP: ALTER TABLE
-| alter_index_stmt     // EXTEND WITH HELP: ALTER INDEX
-| alter_view_stmt      // EXTEND WITH HELP: ALTER VIEW
-| alter_sequence_stmt  // EXTEND WITH HELP: ALTER SEQUENCE
-| alter_database_stmt  // EXTEND WITH HELP: ALTER DATABASE
-| alter_range_stmt     // EXTEND WITH HELP: ALTER RANGE
-| alter_partition_stmt // EXTEND WITH HELP: ALTER PARTITION
-| alter_schema_stmt    // EXTEND WITH HELP: ALTER SCHEMA
-| alter_type_stmt      // EXTEND WITH HELP: ALTER TYPE
+  alter_table_stmt              // EXTEND WITH HELP: ALTER TABLE
+| alter_index_stmt              // EXTEND WITH HELP: ALTER INDEX
+| alter_view_stmt               // EXTEND WITH HELP: ALTER VIEW
+| alter_sequence_stmt           // EXTEND WITH HELP: ALTER SEQUENCE
+| alter_database_stmt           // EXTEND WITH HELP: ALTER DATABASE
+| alter_range_stmt              // EXTEND WITH HELP: ALTER RANGE
+| alter_partition_stmt          // EXTEND WITH HELP: ALTER PARTITION
+| alter_schema_stmt             // EXTEND WITH HELP: ALTER SCHEMA
+| alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
+| alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -2888,11 +2915,6 @@ alter_unsupported_stmt:
   {
     return unimplemented(sqllex, "alter aggregate")
   }
-| ALTER DEFAULT error
-  {
-    return unimplemented(sqllex, "alter default privileges")
-  }
-
 
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
@@ -7826,6 +7848,115 @@ alter_rename_index_stmt:
     $$.val = &tree.RenameIndex{Index: $5.newTableIndexName(), NewName: tree.UnrestrictedName($8), IfExists: true}
   }
 
+alter_default_privileges_stmt:
+ ALTER DEFAULT PRIVILEGES opt_for_role opt_in_schema abbreviated_grant_stmt
+ {
+   $$.val = &tree.AlterDefaultPrivileges{
+     Role: $4.userPtr(),
+     Schema: $5.objectNamePrefixPtr(),
+     Grant: $6.abbreviatedGrant(),
+     IsGrant: true,
+   }
+ }
+| ALTER DEFAULT PRIVILEGES opt_for_role opt_in_schema abbreviated_revoke_stmt
+ {
+   $$.val = &tree.AlterDefaultPrivileges{
+     Role: $4.userPtr(),
+     Schema: $5.objectNamePrefixPtr(),
+     Revoke: $6.abbreviatedRevoke(),
+     IsGrant: false,
+   }
+ }
+
+abbreviated_grant_stmt:
+  GRANT privileges ON alter_default_privileges_target_object TO name_list opt_with_grant_option
+  {
+    $$.val = tree.AbbreviatedGrant{
+      Privileges: $2.privilegeList(),
+      Target: $4.alterDefaultPrivilegesTargetObject(),
+      Grantees: $6.nameList(),
+      WithGrantOption: $7.bool(),
+    }
+  }
+
+opt_with_grant_option:
+ WITH GRANT OPTION
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+abbreviated_revoke_stmt:
+  REVOKE privileges ON alter_default_privileges_target_object FROM name_list opt_drop_behavior
+  {
+    $$.val = tree.AbbreviatedRevoke{
+      Privileges: $2.privilegeList(),
+      Target: $4.alterDefaultPrivilegesTargetObject(),
+      Grantees: $6.nameList(),
+      Drop: $7.dropBehavior(),
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON alter_default_privileges_target_object FROM name_list opt_drop_behavior
+  {
+    $$.val = tree.AbbreviatedRevoke{
+      Privileges: $5.privilegeList(),
+      Target: $7.alterDefaultPrivilegesTargetObject(),
+      Grantees: $9.nameList(),
+      Drop: $10.dropBehavior(),
+      GrantOptionFor: true,
+    }
+  }
+
+alter_default_privileges_target_object:
+  TABLES
+  {
+    $$.val = tree.Tables
+  }
+| SEQUENCES
+  {
+    $$.val = tree.Sequences
+  }
+| TYPES
+  {
+    $$.val = tree.Types
+  }
+| SCHEMAS
+  {
+    $$.val = tree.Schemas
+  }
+| FUNCTIONS error
+  {
+    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON FUNCTIONS ...")
+  }
+| ROUTINES error
+  {
+    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON FUNCTIONS ...")
+  }
+
+opt_for_role:
+ FOR role_or_group_or_user role_spec
+ {
+   tmp := $3.user()
+   $$.val = &tmp
+ }
+| /* EMPTY */ {
+   $$.val = (*security.SQLUsername)(nil)
+}
+
+opt_in_schema:
+ IN SCHEMA qualifiable_schema_name
+ {
+   tmp := $3.objectNamePrefix()
+   $$.val = &tmp
+ }
+| /* EMPTY */
+ {
+   $$.val = (*tree.ObjectNamePrefix)(nil)
+ }
+
 opt_column:
   COLUMN {}
 | /* EMPTY */ {}
@@ -12634,6 +12765,7 @@ unreserved_keyword:
 | FORCE
 | FORCE_INDEX
 | FUNCTION
+| FUNCTIONS
 | GENERATED
 | GEOMETRYM
 | GEOMETRYZ
@@ -12795,6 +12927,7 @@ unreserved_keyword:
 | ROLES
 | ROLLBACK
 | ROLLUP
+| ROUTINES
 | ROWS
 | RULE
 | RUNNING
