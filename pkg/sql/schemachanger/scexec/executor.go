@@ -123,8 +123,8 @@ func (ex *Executor) executeBackfillOps(ctx context.Context, execute []scop.Op) e
 	for _, op := range execute {
 		var err error
 		switch op := op.(type) {
-		case scop.BackfillIndex:
-			err = ex.executeIndexBackfillOp(ctx, op)
+		case *scop.BackfillIndex:
+			err = ex.executeIndexBackfillOp(ctx, *op)
 		default:
 			panic("unimplemented")
 		}

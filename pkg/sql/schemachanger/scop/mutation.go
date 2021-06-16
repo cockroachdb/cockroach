@@ -19,13 +19,13 @@ type mutationOp struct{ baseOp }
 // Make sure baseOp is used for linter.
 var _ = mutationOp{baseOp: baseOp{}}
 
-func (mutationOp) Type() Type        { return MutationType }
-func (*mutationOp) Revertible() bool { return true }
+func (mutationOp) Type() Type { return MutationType }
 
 // MakeAddedIndexDeleteOnly adds a non-existent primary index to the
 // table.
 type MakeAddedIndexDeleteOnly struct {
 	mutationOp
+	nonRevertibleOp
 	TableID descpb.ID
 
 	// Index represents the index as it should appear in the mutation.
@@ -36,6 +36,7 @@ type MakeAddedIndexDeleteOnly struct {
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
 type MakeAddedIndexDeleteAndWriteOnly struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -44,6 +45,7 @@ type MakeAddedIndexDeleteAndWriteOnly struct {
 // public.
 type MakeAddedPrimaryIndexPublic struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 	Index   descpb.IndexDescriptor
 }
@@ -52,6 +54,7 @@ type MakeAddedPrimaryIndexPublic struct {
 // public to DELETE_AND_WRITE_ONLY.
 type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 
 	// Index is the descriptor as it should be added as part of the mutation. The
@@ -64,40 +67,35 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 // CreateGcJobForDescriptor creates a GC job for a given descriptor.
 type CreateGcJobForDescriptor struct {
 	mutationOp
+	nonRevertibleOp
 	DescID descpb.ID
 }
 
 // MarkDescriptorAsDropped marks a descriptor as dropped.
 type MarkDescriptorAsDropped struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
-}
-
-// Revertible implements if this operation can be reverted.
-func (*MarkDescriptorAsDropped) Revertible() bool {
-	return false
 }
 
 // DrainDescriptorName marks a descriptor as dropped.
 type DrainDescriptorName struct {
 	mutationOp
+	nonRevertibleOp
 	TableID descpb.ID
-}
-
-// Revertible implements if this operation can be reverted.
-func (*DrainDescriptorName) Revertible() bool {
-	return false
 }
 
 // UpdateRelationDeps updates dependencies for a relation.
 type UpdateRelationDeps struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 }
 
 // RemoveColumnDefaultExpression removes the default expression on a given table column.
 type RemoveColumnDefaultExpression struct {
 	mutationOp
+	revertibleOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -105,6 +103,7 @@ type RemoveColumnDefaultExpression struct {
 // AddTypeBackRef adds a type back references from a relation.
 type AddTypeBackRef struct {
 	mutationOp
+	revertibleOp
 	DescID descpb.ID
 	TypeID descpb.ID
 }
@@ -112,6 +111,7 @@ type AddTypeBackRef struct {
 // RemoveRelationDependedOnBy removes a depended on by reference from a given relation.
 type RemoveRelationDependedOnBy struct {
 	mutationOp
+	revertibleOp
 	TableID      descpb.ID
 	DependedOnBy descpb.ID
 }
@@ -119,6 +119,7 @@ type RemoveRelationDependedOnBy struct {
 // RemoveTypeBackRef removes type back references from a relation.
 type RemoveTypeBackRef struct {
 	mutationOp
+	revertibleOp
 	DescID descpb.ID
 	TypeID descpb.ID
 }
@@ -127,6 +128,7 @@ type RemoveTypeBackRef struct {
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
 type MakeAddedColumnDeleteAndWriteOnly struct {
 	mutationOp
+	revertibleOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -135,6 +137,7 @@ type MakeAddedColumnDeleteAndWriteOnly struct {
 // from public to DELETE_AND_WRITE_ONLY.
 type MakeDroppedNonPrimaryIndexDeleteAndWriteOnly struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -143,6 +146,7 @@ type MakeDroppedNonPrimaryIndexDeleteAndWriteOnly struct {
 // DELETE_AND_WRITE_ONLY to DELETE_ONLY.
 type MakeDroppedIndexDeleteOnly struct {
 	mutationOp
+	nonRevertibleOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -151,6 +155,7 @@ type MakeDroppedIndexDeleteOnly struct {
 // table.
 type MakeIndexAbsent struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -158,6 +163,7 @@ type MakeIndexAbsent struct {
 // MakeAddedColumnDeleteOnly adds a new column in the DELETE_ONLY state.
 type MakeAddedColumnDeleteOnly struct {
 	mutationOp
+	nonRevertibleOp
 	TableID    descpb.ID
 	FamilyID   descpb.FamilyID
 	FamilyName string
@@ -167,6 +173,7 @@ type MakeAddedColumnDeleteOnly struct {
 // MakeColumnPublic moves a new column from its mutation to public.
 type MakeColumnPublic struct {
 	mutationOp
+	revertibleOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -175,6 +182,7 @@ type MakeColumnPublic struct {
 // DELETE_AND_WRITE_ONLY.
 type MakeDroppedColumnDeleteAndWriteOnly struct {
 	mutationOp
+	revertibleOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -183,6 +191,7 @@ type MakeDroppedColumnDeleteAndWriteOnly struct {
 // DELETE_AND_WRITE_ONLY to DELETE_ONLY.
 type MakeDroppedColumnDeleteOnly struct {
 	mutationOp
+	nonRevertibleOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -191,6 +200,7 @@ type MakeDroppedColumnDeleteOnly struct {
 // table.
 type MakeColumnAbsent struct {
 	mutationOp
+	revertibleOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -198,6 +208,7 @@ type MakeColumnAbsent struct {
 // AddCheckConstraint adds a check constraint in the unvalidated state.
 type AddCheckConstraint struct {
 	mutationOp
+	revertibleOp
 	TableID     descpb.ID
 	Name        string
 	Expr        string
@@ -212,6 +223,7 @@ type AddCheckConstraint struct {
 // side-effect of adding a column. My hunch is the latter.
 type AddColumnFamily struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 	Family  descpb.ColumnFamilyDescriptor
 }
@@ -220,6 +232,7 @@ type AddColumnFamily struct {
 // support for outbound/inbound keys.
 type DropForeignKeyRef struct {
 	mutationOp
+	revertibleOp
 	TableID  descpb.ID
 	Name     string
 	Outbound bool
@@ -229,5 +242,6 @@ type DropForeignKeyRef struct {
 // reference.
 type RemoveSequenceOwnedBy struct {
 	mutationOp
+	revertibleOp
 	TableID descpb.ID
 }

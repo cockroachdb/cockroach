@@ -40,6 +40,10 @@ type Graph struct {
 	// reached before or concurrently with this targetState.
 	nodeDepEdges map[*scpb.Node][]*DepEdge
 
+	// opToNode maps from an operation back to the
+	// opEdge that generated it as an index.
+	opToNode map[scop.Op]*scpb.Node
+
 	edges []Edge
 }
 
@@ -50,6 +54,7 @@ func New(initialNodes []*scpb.Node) (*Graph, error) {
 		targetIdxMap: map[*scpb.Target]int{},
 		nodeOpEdges:  map[*scpb.Node]*OpEdge{},
 		nodeDepEdges: map[*scpb.Node][]*DepEdge{},
+		opToNode:     map[scop.Op]*scpb.Node{},
 	}
 	for _, n := range initialNodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -110,6 +115,13 @@ func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
 	return oe, ok
 }
 
+// GetDepEdgesFrom returns the unique outgoing op edge from the specified node,
+// if one exists.
+func (g *Graph) GetDepEdgesFrom(n *scpb.Node) ([]*DepEdge, bool) {
+	de, ok := g.nodeDepEdges[n]
+	return de, ok
+}
+
 // AddOpEdges adds an op edges connecting the nodes for two states of a target.
 func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.State, ops ...scop.Op) {
 	oe := &OpEdge{
@@ -123,6 +135,15 @@ func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.State, ops ...scop.Op) 
 	}
 	g.edges = append(g.edges, oe)
 	g.nodeOpEdges[oe.from] = oe
+	// Store mapping from op to Edge
+	for _, op := range ops {
+		g.opToNode[op] = oe.From()
+	}
+}
+
+// GetNodeFromOp Gets an Edge from a given op.
+func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
+	return g.opToNode[op]
 }
 
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets

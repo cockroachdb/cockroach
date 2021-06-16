@@ -89,5 +89,8 @@ var _ Ops = (backfillOps)(nil)
 var _ Ops = (validationOps)(nil)
 
 type baseOp struct{}
+type revertibleOp struct{}
+type nonRevertibleOp struct{}
 
-func (baseOp) Revertible() bool { return true }
+func (revertibleOp) Revertible() bool    { return true }
+func (nonRevertibleOp) Revertible() bool { return false }

@@ -515,7 +515,7 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.Sequence)(nil): {
 		deps: targetDepRules{
-			scpb.State_DELETE_ONLY: {
+			scpb.State_PUBLIC: {
 				{
 					dirPredicate: sameDirection,
 					thatState:    scpb.State_ABSENT,
@@ -533,32 +533,18 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_ONLY,
+					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.Sequence) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
 								TableID: this.SequenceID,
 							},
-						}
-						return ops
-					},
-				},
-			},
-			scpb.State_DELETE_ONLY: {
-				{
-					predicate: func(this *scpb.Sequence, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
-							!flags.CreatedDescriptorIDs.Contains(this.SequenceID)
-					},
-				},
-				{
-					nextState: scpb.State_ABSENT,
-					op: func(this *scpb.Sequence) []scop.Op {
-						ops := []scop.Op{
+							&scop.DrainDescriptorName{
+								TableID: this.SequenceID,
+							},
 							&scop.CreateGcJobForDescriptor{
 								DescID: this.SequenceID,
 							},
-							&scop.DrainDescriptorName{TableID: this.SequenceID},
 						}
 						return ops
 					},
@@ -569,10 +555,10 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.View)(nil): {
 		deps: targetDepRules{
-			scpb.State_DELETE_ONLY: {
+			scpb.State_ABSENT: {
 				{
 					dirPredicate: sameDirection,
-					thatState:    scpb.State_DELETE_ONLY,
+					thatState:    scpb.State_ABSENT,
 					predicate:    thatViewDependsOnThisView,
 				},
 				{
@@ -592,32 +578,16 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_ONLY,
+					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.View) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
 								TableID: this.TableID,
 							},
-						}
-						return ops
-					},
-				},
-			},
-			scpb.State_DELETE_ONLY: {
-				{
-					predicate: func(this *scpb.View, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
-							!flags.CreatedDescriptorIDs.Contains(this.TableID)
-					},
-				},
-				{
-					nextState: scpb.State_ABSENT,
-					op: func(this *scpb.View) []scop.Op {
-						ops := []scop.Op{
+							&scop.DrainDescriptorName{TableID: this.TableID},
 							&scop.CreateGcJobForDescriptor{
 								DescID: this.TableID,
 							},
-							&scop.DrainDescriptorName{TableID: this.TableID},
 						}
 						return ops
 					},
@@ -676,7 +646,7 @@ var rules = map[scpb.Element]targetRules{
 	},
 	(*scpb.Table)(nil): {
 		deps: targetDepRules{
-			scpb.State_ABSENT: {
+			scpb.State_PUBLIC: {
 				{
 					dirPredicate: sameDirection,
 					thatState:    scpb.State_ABSENT,
@@ -729,28 +699,12 @@ var rules = map[scpb.Element]targetRules{
 					},
 				},
 				{
-					nextState: scpb.State_DELETE_ONLY,
+					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.Table) []scop.Op {
 						ops := []scop.Op{
 							&scop.MarkDescriptorAsDropped{
 								TableID: this.TableID,
 							},
-						}
-						return ops
-					},
-				},
-			},
-			scpb.State_DELETE_ONLY: {
-				{
-					predicate: func(this *scpb.Table, flags Params) bool {
-						return flags.ExecutionPhase == StatementPhase &&
-							!flags.CreatedDescriptorIDs.Contains(this.TableID)
-					},
-				},
-				{
-					nextState: scpb.State_ABSENT,
-					op: func(this *scpb.Table) []scop.Op {
-						ops := []scop.Op{
 							&scop.DrainDescriptorName{TableID: this.TableID},
 							&scop.CreateGcJobForDescriptor{
 								DescID: this.TableID,
@@ -761,7 +715,6 @@ var rules = map[scpb.Element]targetRules{
 				},
 			},
 		},
-
 		forward: nil,
 	},
 	(*scpb.Column)(nil): {
@@ -952,7 +905,7 @@ var rules = map[scpb.Element]targetRules{
 					},
 					nextState: scpb.State_BACKFILLED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.BackfillIndex{
+						return &scop.BackfillIndex{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}
@@ -961,7 +914,7 @@ var rules = map[scpb.Element]targetRules{
 				{
 					nextState: scpb.State_VALIDATED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.BackfillIndex{
+						return &scop.BackfillIndex{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}
@@ -972,7 +925,7 @@ var rules = map[scpb.Element]targetRules{
 				{
 					nextState: scpb.State_VALIDATED,
 					op: func(this *scpb.PrimaryIndex) scop.Op {
-						return scop.ValidateUniqueIndex{
+						return &scop.ValidateUniqueIndex{
 							TableID:        this.TableID,
 							PrimaryIndexID: this.OtherPrimaryIndexID,
 							IndexID:        this.Index.ID,
