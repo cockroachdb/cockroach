@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -35,6 +36,7 @@ type StoreTestingKnobs struct {
 	TxnWaitKnobs            txnwait.TestingKnobs
 	ConsistencyTestingKnobs ConsistencyTestingKnobs
 	TenantRateKnobs         tenantrate.TestingKnobs
+	StorageKnobs            storage.TestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
