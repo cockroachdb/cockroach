@@ -431,6 +431,7 @@ func TestPebbleDiskSlowEmit(t *testing.T) {
 		1<<20,   /* cacheSize */
 		512<<20, /* storeSize */
 		settings,
+		nil, /* knobs */
 	)
 	defer p.Close()
 

@@ -91,6 +91,7 @@ func createTestPebbleEngineWithSettings(settings *cluster.Settings) Engine {
 		1<<20,   /* cacheSize */
 		512<<20, /* storeSize */
 		settings,
+		nil, /* knobs */
 	)
 }
 

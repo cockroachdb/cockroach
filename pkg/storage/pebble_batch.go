@@ -67,7 +67,11 @@ var pebbleBatchPool = sync.Pool{
 
 // Instantiates a new pebbleBatch.
 func newPebbleBatch(
-	db *pebble.DB, batch *pebble.Batch, writeOnly bool, settings *cluster.Settings,
+	db *pebble.DB,
+	batch *pebble.Batch,
+	writeOnly bool,
+	settings *cluster.Settings,
+	disableSeparatedIntents bool,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
@@ -96,8 +100,9 @@ func newPebbleBatch(
 		},
 		writeOnly: writeOnly,
 	}
-	pb.wrappedIntentWriter =
-		wrapIntentWriter(context.Background(), pb, settings, false /* isLongLived */)
+	pb.wrappedIntentWriter = wrapIntentWriter(
+		context.Background(), pb, settings, false, /* isLongLived */
+		disableSeparatedIntents)
 	return pb
 }
 
