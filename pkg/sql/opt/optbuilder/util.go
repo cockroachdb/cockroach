@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -699,4 +700,58 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 		}
 	}
 	return ordinals
+}
+
+func addRegionalByRowUpdate(tab cat.Table, upd *tree.Update) {
+	if rbrColName, err := tab.GetRegionalByRowTableRegionColumnName(); err == nil {
+		// Only rehome if the user is using the default column configuration.
+		if rbrColName == tree.RegionalByRowRegionDefaultColName {
+			rbrColInUpdate := false
+			for _, updExp := range upd.Exprs {
+				for _, colName := range updExp.Names {
+					if colName == rbrColName {
+						rbrColInUpdate = true
+						break
+					}
+				}
+			}
+			// If the column is being updated, do not default it out
+			if rbrColInUpdate {
+				return
+			}
+
+			// Find type for region enum for use in the defaulting expression.
+			var rbrType *types.T = nil
+			for i := 0; i < tab.ColumnCount(); i++ {
+				curColumn := tab.Column(i)
+				if curColumn.ColName() == rbrColName {
+					rbrType = curColumn.DatumType()
+					break
+				}
+			}
+
+			if rbrType == nil {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"regional by row table present, but region column could not be found"))
+			}
+
+			// Append a defaulting expression to the update.
+			upd.Exprs = append(upd.Exprs, &tree.UpdateExpr{
+				Tuple: false,
+				Names: []tree.Name{rbrColName},
+				Expr: &tree.CastExpr{
+					Expr: &tree.FuncExpr{
+						Func: tree.WrapFunction(builtins.DefaultToDatabasePrimaryRegionBuiltinName),
+						Exprs: []tree.Expr{
+							&tree.FuncExpr{
+								Func: tree.WrapFunction(builtins.GatewayRegionBuiltinName),
+							},
+						},
+					},
+					Type:       rbrType,
+					SyntaxMode: tree.CastShort,
+				},
+			})
+		}
+	}
 }

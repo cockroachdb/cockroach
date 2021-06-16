@@ -241,6 +241,13 @@ var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var rehomeOnUpdateClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.rehome_on_update.enabled",
+	`default value for rehome_on_update;`+
+		` allows for automatically rehoming rows in regional by row tables to their gateway region`,
+	false,
+)
+
 var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.override_multi_region_zone_config.enabled",
 	"default value for override_multi_region_zone_config; "+
@@ -2411,6 +2418,10 @@ func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
 
 func (m *sessionDataMutator) SetDropEnumValueEnabled(val bool) {
 	m.data.DropEnumValueEnabled = val
+}
+
+func (m *sessionDataMutator) SetRehomeOnUpdateEnabled(val bool) {
+	m.data.RehomeOnUpdate = val
 }
 
 func (m *sessionDataMutator) SetOverrideMultiRegionZoneConfigEnabled(val bool) {

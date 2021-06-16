@@ -208,6 +208,8 @@ type LocalOnlySessionData struct {
 	ImplicitColumnPartitioningEnabled bool
 	// DropEnumValueEnabled indicates whether enum values can be dropped.
 	DropEnumValueEnabled bool
+	// RehomeOnUpdate indicates whether rows in regional by row tables should be rehomed on update.
+	RehomeOnUpdate bool
 	// OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
 	// modified for multi-region databases and tables/indexes/partitions.
 	OverrideMultiRegionZoneConfigEnabled bool

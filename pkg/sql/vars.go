@@ -1184,6 +1184,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_rehome_on_update`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_rehome_on_update`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_rehome_on_update", s)
+			if err != nil {
+				return err
+			}
+			m.SetRehomeOnUpdateEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.RehomeOnUpdate)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(rehomeOnUpdateClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`override_multi_region_zone_config`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`override_multi_region_zone_config`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

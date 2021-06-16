@@ -653,6 +653,11 @@ func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
 }
 
+// GetRegionalByRowTableRegionColumnName is part of the cat.Table interface.
+func (tt *Table) GetRegionalByRowTableRegionColumnName() (tree.Name, error) {
+	return "", errors.New("testing table cannot be regional by row")
+}
+
 // IsMaterializedView is part of the cat.Table interface.
 func (tt *Table) IsMaterializedView() bool {
 	return false

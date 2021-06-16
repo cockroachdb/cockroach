@@ -1010,6 +1010,11 @@ func (ot *optTable) IsVirtualTable() bool {
 	return false
 }
 
+// GetRegionalByRowTableRegionColumnName is part of the cat.Table interface.
+func (ot *optTable) GetRegionalByRowTableRegionColumnName() (tree.Name, error) {
+	return ot.desc.GetRegionalByRowTableRegionColumnName()
+}
+
 // IsMaterializedView implements the cat.Table interface.
 func (ot *optTable) IsMaterializedView() bool {
 	return ot.desc.MaterializedView()
@@ -1890,6 +1895,11 @@ func (ot *optVirtualTable) Equals(other cat.Object) bool {
 // Name is part of the cat.Table interface.
 func (ot *optVirtualTable) Name() tree.Name {
 	return ot.name.ObjectName
+}
+
+// GetRegionalByRowTableRegionColumnName is part of the cat.Table interface.
+func (tt *optVirtualTable) GetRegionalByRowTableRegionColumnName() (tree.Name, error) {
+	return "", errors.New("virtual table cannot be regional by row")
 }
 
 // IsVirtualTable is part of the cat.Table interface.
