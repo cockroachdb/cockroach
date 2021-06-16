@@ -12,7 +12,8 @@ package migrations_test
 
 import (
 	"context"
-	"strconv"
+	"fmt"
+	"path"
 	"testing"
 	"time"
 
@@ -41,26 +42,28 @@ func TestSeparatedIntentsMigration(t *testing.T) {
 		clusterversion.ByKey(clusterversion.SeparatedIntentsMigration-1),
 		false, /* initializeVersion */
 	)
-	storage.SeparatedIntentsEnabled.Override(ctx, &settings.SV, false)
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 	const numServers int = 5
 	stickyServerArgs := make(map[int]base.TestServerArgs)
+	storeKnobs := &kvserver.StoreTestingKnobs{
+		StorageKnobs: storage.TestingKnobs{DisableSeparatedIntents: true},
+	}
+	tempDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
 			Settings: settings,
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory: false,
+					Path:     path.Join(tempDir, fmt.Sprintf("engine-%d", i)),
 				},
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: 1,
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.SeparatedIntentsMigration - 1),
-					StickyEngineRegistry:           stickyEngineRegistry,
 				},
+				Store: storeKnobs,
 			},
 		}
 	}
@@ -139,7 +142,8 @@ func TestSeparatedIntentsMigration(t *testing.T) {
 	}
 	require.Greater(t, interleavedIntentCount, 0)
 
-	storage.SeparatedIntentsEnabled.Override(ctx, &settings.SV, true)
+	// Start writing separated intents.
+	storeKnobs.StorageKnobs.DisableSeparatedIntents = false
 	require.NoError(t, tc.Restart())
 	time.Sleep(10 * time.Second)
 	require.NoError(t, tc.WaitForFullReplication())

@@ -117,9 +117,8 @@ func TestMVCCHistories(t *testing.T) {
 				"randomly setting oldClusterVersion: %t, enableSeparated: %t",
 				oldClusterVersion, enabledSeparated)
 		}
-		settings := makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), Settings(settings))
+		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), SetSeparatedIntents(oldClusterVersion, !enabledSeparated))
 		if err != nil {
 			t.Fatal(err)
 		}
