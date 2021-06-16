@@ -2178,6 +2178,20 @@ The requested number of points must be not larger than 65336.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_hasarc": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				// We don't support CIRCULARSTRINGs, so always return false.
+				return tree.DBoolFalse, nil
+			},
+			types.Bool,
+			infoBuilder{
+				info: "Returns whether there is a CIRCULARSTRING in the geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_npoints": makeBuiltin(
 		defProps(),
 		geometryOverload1(

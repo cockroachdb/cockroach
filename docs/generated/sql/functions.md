@@ -1837,6 +1837,8 @@ The requested number of points must be not larger than 65336.</p>
 </span></td></tr>
 <tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation.</p>
 </span></td></tr>
+<tr><td><a name="st_hasarc"></a><code>st_hasarc(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether there is a CIRCULARSTRING in the geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_hausdorffdistance"></a><code>st_hausdorffdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Hausdorff distance between the given geometries.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
