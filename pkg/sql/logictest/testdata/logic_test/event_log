@@ -1045,7 +1045,7 @@ WHERE "eventType" = 'drop_index'
 ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
-1  {"EventType": "drop_index", "IndexName": "t_i_idx", "MutationID": 1, "Statement": "DROP INDEX defaultdb.public.t@t_i_idx CASCADE", "TableName": "defaultdb.public.t", "Tag": "DROP INDEX", "User": "root", "cascade_dropped_views": ["defaultdb.public.v", "defaultdb.public.w"]}
+1  {"CascadeDroppedViews": ["defaultdb.public.v", "defaultdb.public.w"], "EventType": "drop_index", "IndexName": "t_i_idx", "MutationID": 1, "Statement": "DROP INDEX defaultdb.public.t@t_i_idx CASCADE", "TableName": "defaultdb.public.t", "Tag": "DROP INDEX", "User": "root"}
 
 statement ok
 CREATE TABLE x (a INT PRIMARY KEY, b INT)

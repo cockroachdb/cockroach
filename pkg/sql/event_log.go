@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // The logging functions in this file are the different stages of a
@@ -174,9 +174,15 @@ type eventLogOptions struct {
 func (p *planner) logEventsWithOptions(
 	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
+	// TODO(thomas): place the redaction markers during the formatting
+	// and get rid of the call to redact.Sprint here.
+	// https://github.com/cockroachdb/cockroach/issues/65401
+	rawStmtString := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
+	redactableStmt := redact.Sprint(rawStmtString)
+
 	commonPayload := sqlEventCommonExecPayload{
 		user:         p.User(),
-		stmt:         tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations),
+		stmt:         redactableStmt,
 		stmtTag:      p.stmt.AST.StatementTag(),
 		placeholders: p.extendedEvalCtx.EvalContext.Placeholders.Values,
 		appName:      p.SessionData().ApplicationName,
@@ -232,7 +238,7 @@ func logEventInternalForSchemaChanges(
 // necessary to populate an eventpb.CommonSQLExecDetails.
 type sqlEventCommonExecPayload struct {
 	user         security.SQLUsername
-	stmt         string
+	stmt         redact.RedactableString
 	stmtTag      string
 	placeholders tree.QueryArguments
 	appName      string
@@ -472,10 +478,12 @@ VALUES($1, $2, $3, $4, $5)`
 	args := make([]interface{}, 0, len(entries)*colsPerEvent)
 	constructArgs := func(reportingID int32, entry eventLogEntry) error {
 		event := entry.event
-		infoBytes, err := json.Marshal(event)
-		if err != nil {
-			return err
-		}
+		infoBytes := redact.RedactableBytes("{")
+		_, infoBytes = event.AppendJSONFields(false /* printComma */, infoBytes)
+		infoBytes = append(infoBytes, '}')
+		// In the system.eventlog table, we do not use redaction markers.
+		// (compatibility with previous versions of CockroachDB.)
+		infoBytes = infoBytes.StripMarkers()
 		eventType := eventpb.GetEventTypeName(event)
 		args = append(
 			args,
