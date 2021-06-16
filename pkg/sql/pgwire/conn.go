@@ -61,6 +61,10 @@ type conn struct {
 	sessionArgs sql.SessionArgs
 	metrics     *ServerMetrics
 
+	// startTime is the time when the connection attempt was first received
+	// by the server.
+	startTime time.Time
+
 	// rd is a buffered reader consuming conn. All reads from conn go through
 	// this.
 	rd bufio.Reader
@@ -142,13 +146,14 @@ func (s *Server) serveConn(
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
 	reserved mon.BoundAccount,
+	connStart time.Time,
 	authOpt authOptions,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, &s.metrics, &s.execCfg.Settings.SV)
+	c := newConn(netConn, sArgs, &s.metrics, connStart, &s.execCfg.Settings.SV)
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
 
 	// Do the reading of commands from the network.
@@ -163,12 +168,17 @@ func (s *Server) serveConn(
 var alwaysLogAuthActivity = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_AUTHN_EVENTS", false)
 
 func newConn(
-	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, sv *settings.Values,
+	netConn net.Conn,
+	sArgs sql.SessionArgs,
+	metrics *ServerMetrics,
+	connStart time.Time,
+	sv *settings.Values,
 ) *conn {
 	c := &conn{
 		conn:        netConn,
 		sessionArgs: sArgs,
 		metrics:     metrics,
+		startTime:   connStart,
 		rd:          *bufio.NewReader(netConn),
 		sv:          sv,
 		readBuf:     pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
@@ -393,6 +403,11 @@ func (c *conn) serveImpl(
 					return true, nil //nolint:returnerrcheck
 				}
 				authDone = true
+
+				// We count the connection establish latency until we are ready to
+				// serve a SQL query. It includes the time it takes to authenticate.
+				duration := timeutil.Now().Sub(c.startTime).Nanoseconds()
+				c.metrics.ConnLatency.RecordValue(duration)
 			}
 
 			switch typ {
