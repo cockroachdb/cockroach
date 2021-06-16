@@ -462,6 +462,7 @@ export const getNodeStatus = () => {
       "sql.misc.started.count": 0,
       "sql.misc.started.count.internal": 2,
       "sql.new_conns": 0,
+      "sql.conn.latency": 0,
       "sql.optimizer.fallback.count": 0,
       "sql.optimizer.fallback.count.internal": 0,
       "sql.optimizer.plan_cache.hits": 0,
