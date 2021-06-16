@@ -98,7 +98,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -151,7 +151,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx] = val
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -338,7 +338,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx].Set(&val)
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -391,7 +391,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx].Set(&val)
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -457,7 +457,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -510,7 +510,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx] = val
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -573,7 +573,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -626,7 +626,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx] = val
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -690,7 +690,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -743,7 +743,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx] = val
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -810,7 +810,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -863,7 +863,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx] = val
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -930,7 +930,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -983,7 +983,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx] = val
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -1050,7 +1050,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -1103,7 +1103,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											outCol[outStartIdx] = val
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -1463,7 +1463,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(
@@ -1521,7 +1521,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx].Set(&v)
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(
@@ -1549,7 +1549,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(
@@ -1574,7 +1574,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(
@@ -1600,7 +1600,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(
@@ -1629,7 +1629,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(
@@ -1658,7 +1658,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(
@@ -1687,7 +1687,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(

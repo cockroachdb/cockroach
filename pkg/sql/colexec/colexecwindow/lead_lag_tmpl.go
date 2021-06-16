@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -266,10 +265,8 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			// {{if .IsBytesLike}}
 			leadLagCol.CopySlice(defaultCol, i, i, i+1)
 			// {{else}}
-			// {{with .Global}}
 			val := defaultCol.Get(i)
-			execgen.SET(leadLagCol, i, val)
-			// {{end}}
+			leadLagCol.Set(i, val)
 			// {{end}}
 			continue
 		}
@@ -279,10 +276,8 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			leadLagNulls.SetNull(i)
 			continue
 		}
-		// {{with .Global}}
 		col := vec.TemplateType()
-		// {{end}}
-		// {{if $.IsBytesLike}}
+		// {{if .IsBytesLike}}
 		// We have to use CopySlice here because the column already has a length of
 		// n elements, and Set cannot set values before the last one.
 		leadLagCol.CopySlice(col, i, idx, idx+1)
@@ -291,9 +286,7 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
-		// {{with .Global}}
-		execgen.SET(leadLagCol, i, val)
-		// {{end}}
+		leadLagCol.Set(i, val)
 		// {{end}}
 	}
 	// {{end}}

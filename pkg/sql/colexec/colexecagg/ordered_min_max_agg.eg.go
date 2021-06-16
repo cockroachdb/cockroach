@@ -155,7 +155,7 @@ func (a *minBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -205,7 +205,7 @@ func (a *minBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -257,7 +257,7 @@ func (a *minBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -306,7 +306,7 @@ func (a *minBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -366,7 +366,7 @@ func (a *minBoolOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -699,7 +699,7 @@ func (a *minDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -741,7 +741,7 @@ func (a *minDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -785,7 +785,7 @@ func (a *minDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -826,7 +826,7 @@ func (a *minDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -878,7 +878,7 @@ func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -953,7 +953,7 @@ func (a *minInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1006,7 +1006,7 @@ func (a *minInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1061,7 +1061,7 @@ func (a *minInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1113,7 +1113,7 @@ func (a *minInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1176,7 +1176,7 @@ func (a *minInt16OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1251,7 +1251,7 @@ func (a *minInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1304,7 +1304,7 @@ func (a *minInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1359,7 +1359,7 @@ func (a *minInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1411,7 +1411,7 @@ func (a *minInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1474,7 +1474,7 @@ func (a *minInt32OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1549,7 +1549,7 @@ func (a *minInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1602,7 +1602,7 @@ func (a *minInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1657,7 +1657,7 @@ func (a *minInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1709,7 +1709,7 @@ func (a *minInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1772,7 +1772,7 @@ func (a *minInt64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1847,7 +1847,7 @@ func (a *minFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1908,7 +1908,7 @@ func (a *minFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1971,7 +1971,7 @@ func (a *minFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2031,7 +2031,7 @@ func (a *minFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2102,7 +2102,7 @@ func (a *minFloat64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2177,7 +2177,7 @@ func (a *minTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2226,7 +2226,7 @@ func (a *minTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2277,7 +2277,7 @@ func (a *minTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2325,7 +2325,7 @@ func (a *minTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2384,7 +2384,7 @@ func (a *minTimestampOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2459,7 +2459,7 @@ func (a *minIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2501,7 +2501,7 @@ func (a *minIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2545,7 +2545,7 @@ func (a *minIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2586,7 +2586,7 @@ func (a *minIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2638,7 +2638,7 @@ func (a *minIntervalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3439,7 +3439,7 @@ func (a *maxBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3489,7 +3489,7 @@ func (a *maxBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3541,7 +3541,7 @@ func (a *maxBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3590,7 +3590,7 @@ func (a *maxBoolOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3650,7 +3650,7 @@ func (a *maxBoolOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3983,7 +3983,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4025,7 +4025,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4069,7 +4069,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4110,7 +4110,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4162,7 +4162,7 @@ func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -4237,7 +4237,7 @@ func (a *maxInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4290,7 +4290,7 @@ func (a *maxInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4345,7 +4345,7 @@ func (a *maxInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4397,7 +4397,7 @@ func (a *maxInt16OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4460,7 +4460,7 @@ func (a *maxInt16OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -4535,7 +4535,7 @@ func (a *maxInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4588,7 +4588,7 @@ func (a *maxInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4643,7 +4643,7 @@ func (a *maxInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4695,7 +4695,7 @@ func (a *maxInt32OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4758,7 +4758,7 @@ func (a *maxInt32OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -4833,7 +4833,7 @@ func (a *maxInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4886,7 +4886,7 @@ func (a *maxInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4941,7 +4941,7 @@ func (a *maxInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4993,7 +4993,7 @@ func (a *maxInt64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5056,7 +5056,7 @@ func (a *maxInt64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -5131,7 +5131,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5192,7 +5192,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5255,7 +5255,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5315,7 +5315,7 @@ func (a *maxFloat64OrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5386,7 +5386,7 @@ func (a *maxFloat64OrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -5461,7 +5461,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5510,7 +5510,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5561,7 +5561,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5609,7 +5609,7 @@ func (a *maxTimestampOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5668,7 +5668,7 @@ func (a *maxTimestampOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -5743,7 +5743,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5785,7 +5785,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5829,7 +5829,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5870,7 +5870,7 @@ func (a *maxIntervalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5922,7 +5922,7 @@ func (a *maxIntervalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

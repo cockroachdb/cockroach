@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -727,7 +726,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 						} else {
 							val = srcCol.Get(srcStartIdx)
 							for i := 0; i < toAppend; i++ {
-								execgen.SET(outCol, outStartIdx, val)
+								outCol.Set(outStartIdx, val)
 								outStartIdx++
 							}
 						}
@@ -869,7 +868,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 								outNulls.SetNull(outStartIdx)
 							} else {
 								v := srcCol.Get(srcIdx)
-								execgen.SET(outCol, outStartIdx, v)
+								outCol.Set(outStartIdx, v)
 							}
 						} else {
 							out.Copy(

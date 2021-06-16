@@ -29,7 +29,7 @@ func genVec(inputFileContents string, wr io.Writer) error {
 	s := r.Replace(inputFileContents)
 
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 6)
-	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "Global" . "SelOnDest" $6}}`)
+	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" buildDict "Sliceable" .Sliceable "SelOnDest" $6}}`)
 
 	s = replaceManipulationFuncs(s)
 

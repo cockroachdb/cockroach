@@ -160,7 +160,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 							srcCol := vec.Bool()
 							outCol := o.outBoolCols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx] = v
+							outCol.Set(outputIdx, v)
 						}
 					case types.BytesFamily:
 						switch o.typs[i].Width() {
@@ -178,7 +178,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 							srcCol := vec.Decimal()
 							outCol := o.outDecimalCols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx].Set(&v)
+							outCol.Set(outputIdx, v)
 						}
 					case types.IntFamily:
 						switch o.typs[i].Width() {
@@ -186,18 +186,18 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 							srcCol := vec.Int16()
 							outCol := o.outInt16Cols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx] = v
+							outCol.Set(outputIdx, v)
 						case 32:
 							srcCol := vec.Int32()
 							outCol := o.outInt32Cols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx] = v
+							outCol.Set(outputIdx, v)
 						case -1:
 						default:
 							srcCol := vec.Int64()
 							outCol := o.outInt64Cols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx] = v
+							outCol.Set(outputIdx, v)
 						}
 					case types.FloatFamily:
 						switch o.typs[i].Width() {
@@ -206,7 +206,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 							srcCol := vec.Float64()
 							outCol := o.outFloat64Cols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx] = v
+							outCol.Set(outputIdx, v)
 						}
 					case types.TimestampTZFamily:
 						switch o.typs[i].Width() {
@@ -215,7 +215,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 							srcCol := vec.Timestamp()
 							outCol := o.outTimestampCols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx] = v
+							outCol.Set(outputIdx, v)
 						}
 					case types.IntervalFamily:
 						switch o.typs[i].Width() {
@@ -224,7 +224,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 							srcCol := vec.Interval()
 							outCol := o.outIntervalCols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx] = v
+							outCol.Set(outputIdx, v)
 						}
 					case types.JsonFamily:
 						switch o.typs[i].Width() {

@@ -31,7 +31,7 @@ func replaceLeadLagTmplVariables(tmpl string) string {
 	s := r.Replace(tmpl)
 
 	processBatch := makeFunctionRegex("_PROCESS_BATCH", 2)
-	s = processBatch.ReplaceAllString(s, `{{template "processBatchTmpl" buildDict "Global" . "IsBytesLike" .IsBytesLike "OffsetHasNulls" $1 "DefaultHasNulls" $2}}`)
+	s = processBatch.ReplaceAllString(s, `{{template "processBatchTmpl" buildDict "VecMethod" .VecMethod "IsBytesLike" .IsBytesLike "OffsetHasNulls" $1 "DefaultHasNulls" $2}}`)
 
 	return replaceManipulationFuncs(s)
 }
