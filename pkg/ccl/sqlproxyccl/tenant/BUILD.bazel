@@ -50,7 +50,7 @@ gomock(
     out = "mocks_generated.go",
     interfaces = [
         "DirectoryClient",
-        "Directory_WatchEndpointsClient",
+        "Directory_WatchPodsClient",
     ],
     library = ":tenant_go_proto",
     package = "tenant",

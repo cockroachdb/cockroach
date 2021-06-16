@@ -103,8 +103,8 @@ func New(stopper *stop.Stopper) (*TestDirectoryServer, error) {
 	return dir, nil
 }
 
-// Get a tenant's list of endpoints and the process information for each
-// endpoint.
+// Get a tenant's list of pods and the process information for each
+// pod.
 func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Process) {
 	result = make(map[net.Addr]*Process)
 	s.proc.RLock()
@@ -128,21 +128,21 @@ func (s *TestDirectoryServer) GetTenant(
 	}, nil
 }
 
-// ListEndpoints returns a list of tenant process endpoints as well as status of
+// ListPods returns a list of tenant process pods as well as status of
 // the processes.
-func (s *TestDirectoryServer) ListEndpoints(
-	ctx context.Context, req *tenant.ListEndpointsRequest,
-) (*tenant.ListEndpointsResponse, error) {
+func (s *TestDirectoryServer) ListPods(
+	ctx context.Context, req *tenant.ListPodsRequest,
+) (*tenant.ListPodsResponse, error) {
 	ctx = logtags.AddTag(ctx, "tenant", req.TenantID)
 	s.proc.RLock()
 	defer s.proc.RUnlock()
 	return s.listLocked(ctx, req)
 }
 
-// WatchEndpoints returns a new stream, that can be used to monitor server
+// WatchPods returns a new stream, that can be used to monitor server
 // activity.
-func (s *TestDirectoryServer) WatchEndpoints(
-	_ *tenant.WatchEndpointsRequest, server tenant.Directory_WatchEndpointsServer,
+func (s *TestDirectoryServer) WatchPods(
+	_ *tenant.WatchPodsRequest, server tenant.Directory_WatchPodsServer,
 ) error {
 	select {
 	case <-s.stopper.ShouldQuiesce():
@@ -151,11 +151,11 @@ func (s *TestDirectoryServer) WatchEndpoints(
 	}
 	// Make the channel with a small buffer to allow for a burst of notifications
 	// and a slow receiver.
-	c := make(chan *tenant.WatchEndpointsResponse, 10)
+	c := make(chan *tenant.WatchPodsResponse, 10)
 	s.listen.Lock()
 	elem := s.listen.eventListeners.PushBack(c)
 	s.listen.Unlock()
-	err := s.stopper.RunTask(context.Background(), "watch-endpoints-server",
+	err := s.stopper.RunTask(context.Background(), "watch-pods-server",
 		func(ctx context.Context) {
 		out:
 			for {
@@ -183,28 +183,28 @@ func (s *TestDirectoryServer) WatchEndpoints(
 	return err
 }
 
-func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchEndpointsResponse) {
+func (s *TestDirectoryServer) notifyEventListenersLocked(req *tenant.WatchPodsResponse) {
 	for e := s.listen.eventListeners.Front(); e != nil; {
 		select {
-		case e.Value.(chan *tenant.WatchEndpointsResponse) <- req:
+		case e.Value.(chan *tenant.WatchPodsResponse) <- req:
 			e = e.Next()
 		default:
 			// The receiver is unable to consume fast enough. Close the channel and
 			// remove it from the list.
 			eToClose := e
 			e = e.Next()
-			close(eToClose.Value.(chan *tenant.WatchEndpointsResponse))
+			close(eToClose.Value.(chan *tenant.WatchPodsResponse))
 			s.listen.eventListeners.Remove(eToClose)
 		}
 	}
 }
 
-// EnsureEndpoint will ensure that there is either an already active tenant
+// EnsurePod will ensure that there is either an already active tenant
 // process or it will start a new one. It will return an error if starting a new
 // tenant process is impossible.
-func (s *TestDirectoryServer) EnsureEndpoint(
-	ctx context.Context, req *tenant.EnsureEndpointRequest,
-) (*tenant.EnsureEndpointResponse, error) {
+func (s *TestDirectoryServer) EnsurePod(
+	ctx context.Context, req *tenant.EnsurePodRequest,
+) (*tenant.EnsurePodResponse, error) {
 	select {
 	case <-s.stopper.ShouldQuiesce():
 		return nil, context.Canceled
@@ -216,11 +216,11 @@ func (s *TestDirectoryServer) EnsureEndpoint(
 	s.proc.Lock()
 	defer s.proc.Unlock()
 
-	lst, err := s.listLocked(ctx, &tenant.ListEndpointsRequest{TenantID: req.TenantID})
+	lst, err := s.listLocked(ctx, &tenant.ListPodsRequest{TenantID: req.TenantID})
 	if err != nil {
 		return nil, err
 	}
-	if len(lst.Endpoints) == 0 {
+	if len(lst.Pods) == 0 {
 		process, err := s.TenantStarterFunc(ctx, req.TenantID)
 		if err != nil {
 			return nil, err
@@ -231,7 +231,7 @@ func (s *TestDirectoryServer) EnsureEndpoint(
 		}))
 	}
 
-	return &tenant.EnsureEndpointResponse{}, nil
+	return &tenant.EnsurePodResponse{}, nil
 }
 
 // Serve requests on the given listener.
@@ -240,15 +240,15 @@ func (s *TestDirectoryServer) Serve(listener net.Listener) error {
 }
 
 func (s *TestDirectoryServer) listLocked(
-	_ context.Context, req *tenant.ListEndpointsRequest,
-) (*tenant.ListEndpointsResponse, error) {
+	_ context.Context, req *tenant.ListPodsRequest,
+) (*tenant.ListPodsResponse, error) {
 	processByAddr, ok := s.proc.processByAddrByTenantID[req.TenantID]
 	if !ok {
-		return &tenant.ListEndpointsResponse{}, nil
+		return &tenant.ListPodsResponse{}, nil
 	}
-	resp := tenant.ListEndpointsResponse{}
+	resp := tenant.ListPodsResponse{}
 	for addr := range processByAddr {
-		resp.Endpoints = append(resp.Endpoints, &tenant.Endpoint{IP: addr.String()})
+		resp.Pods = append(resp.Pods, &tenant.Pod{Addr: addr.String()})
 	}
 	return &resp, nil
 }
@@ -263,9 +263,9 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 
 	s.listen.RLock()
 	defer s.listen.RUnlock()
-	s.notifyEventListenersLocked(&tenant.WatchEndpointsResponse{
+	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
 		Typ:      tenant.ADDED,
-		IP:       process.SQL.String(),
+		Addr:     process.SQL.String(),
 		TenantID: tenantID,
 	})
 }
@@ -283,9 +283,9 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 
 		s.listen.RLock()
 		defer s.listen.RUnlock()
-		s.notifyEventListenersLocked(&tenant.WatchEndpointsResponse{
+		s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
 			Typ:      tenant.DELETED,
-			IP:       sql.String(),
+			Addr:     sql.String(),
 			TenantID: tenantID,
 		})
 	}

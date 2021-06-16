@@ -45,26 +45,26 @@ func TestDirectoryErrors(t *testing.T) {
 	tc, dir, _ := newTestDirectory(t)
 	defer tc.Stopper().Stop(ctx)
 
-	_, err := dir.LookupTenantIPs(ctx, roachpb.MakeTenantID(1000))
+	_, err := dir.LookupTenantAddrs(ctx, roachpb.MakeTenantID(1000))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not in directory cache")
-	_, err = dir.LookupTenantIPs(ctx, roachpb.MakeTenantID(1001))
+	_, err = dir.LookupTenantAddrs(ctx, roachpb.MakeTenantID(1001))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1001 not in directory cache")
-	_, err = dir.LookupTenantIPs(ctx, roachpb.MakeTenantID(1002))
+	_, err = dir.LookupTenantAddrs(ctx, roachpb.MakeTenantID(1002))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1002 not in directory cache")
 
 	// Fail to find tenant that does not exist.
-	_, err = dir.EnsureTenantIP(ctx, roachpb.MakeTenantID(1000), "")
+	_, err = dir.EnsureTenantAddr(ctx, roachpb.MakeTenantID(1000), "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not found")
 
 	// Fail to find tenant when cluster name doesn't match.
-	_, err = dir.EnsureTenantIP(ctx, roachpb.MakeTenantID(tenantID), "unknown")
+	_, err = dir.EnsureTenantAddr(ctx, roachpb.MakeTenantID(tenantID), "unknown")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = cluster name unknown doesn't match expected tenant-cluster")
 
 	// No-op when reporting failure for tenant that doesn't exit.
 	require.NoError(t, dir.ReportFailure(ctx, roachpb.MakeTenantID(1000), ""))
 }
 
-func TestEndpointWatcher(t *testing.T) {
+func TestPodWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
@@ -76,10 +76,10 @@ func TestEndpointWatcher(t *testing.T) {
 	tenantID := roachpb.MakeTenantID(20)
 	require.NoError(t, createTenant(tc, tenantID))
 
-	// Call EnsureTenantIP to start a new tenant and create an entry
-	ip, err := dir.EnsureTenantIP(ctx, tenantID, "")
+	// Call EnsureTenantAddr to start a new tenant and create an entry
+	addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
-	require.NotEmpty(t, ip)
+	require.NotEmpty(t, addr)
 
 	// Now shut it down
 	processes := tds.Get(tenantID)
@@ -91,30 +91,30 @@ func TestEndpointWatcher(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		ips, _ := dir.LookupTenantIPs(ctx, tenantID)
-		return len(ips) == 0
+		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+		return len(addrs) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Resume tenant again by a direct call to the directory server
-	_, err = tds.EnsureEndpoint(ctx, &tenant.EnsureEndpointRequest{tenantID.ToUint64()})
+	_, err = tds.EnsurePod(ctx, &tenant.EnsurePodRequest{tenantID.ToUint64()})
 	require.NoError(t, err)
 
-	// Wait for background watcher to populate the initial endpoint.
+	// Wait for background watcher to populate the initial pod.
 	require.Eventually(t, func() bool {
-		ips, _ := dir.LookupTenantIPs(ctx, tenantID)
-		return len(ips) != 0
+		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+		return len(addrs) != 0
 	}, 10*time.Second, 100*time.Millisecond)
 
-	// Verify that EnsureTenantIP returns the endpoint's IP address.
-	ip, err = dir.EnsureTenantIP(ctx, tenantID, "")
+	// Verify that EnsureTenantAddr returns the pod's IP address.
+	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
-	require.NotEmpty(t, ip)
+	require.NotEmpty(t, addr)
 
 	processes = tds.Get(tenantID)
 	require.NotNil(t, processes)
 	require.Len(t, processes, 1)
-	for dirIP := range processes {
-		require.Equal(t, ip, dirIP.String())
+	for dirAddr := range processes {
+		require.Equal(t, addr, dirAddr.String())
 	}
 
 	// Stop the tenant and ensure its IP address is removed from the directory.
@@ -123,14 +123,14 @@ func TestEndpointWatcher(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		ips, _ := dir.LookupTenantIPs(ctx, tenantID)
-		return len(ips) == 0
+		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+		return len(addrs) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
-	// Verify that a new call to EnsureTenantIP will resume again the tenant.
-	ip, err = dir.EnsureTenantIP(ctx, tenantID, "")
+	// Verify that a new call to EnsureTenantAddr will resume again the tenant.
+	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
-	require.NotEmpty(t, ip)
+	require.NotEmpty(t, addr)
 }
 
 func TestCancelLookups(t *testing.T) {
@@ -151,7 +151,7 @@ func TestCancelLookups(t *testing.T) {
 	for i := 0; i < lookupCount; i++ {
 		wait.Add(1)
 		go func(i int) {
-			_, backgroundErrors[i] = dir.EnsureTenantIP(ctx, tenantID, "")
+			_, backgroundErrors[i] = dir.EnsureTenantAddr(ctx, tenantID, "")
 			wait.Done()
 		}(i)
 	}
@@ -183,13 +183,13 @@ func TestResume(t *testing.T) {
 	// No tenant processes running.
 	require.Equal(t, 0, len(tds.Get(tenantID)))
 
-	var ips [lookupCount]string
+	var addrs [lookupCount]string
 	var wait sync.WaitGroup
 	for i := 0; i < lookupCount; i++ {
 		wait.Add(1)
 		go func(i int) {
 			var err error
-			ips[i], err = dir.EnsureTenantIP(ctx, tenantID, "")
+			addrs[i], err = dir.EnsureTenantAddr(ctx, tenantID, "")
 			require.NoError(t, err)
 			wait.Done()
 		}(i)
@@ -205,9 +205,9 @@ func TestResume(t *testing.T) {
 	// Wait until background goroutines complete.
 	wait.Wait()
 
-	for ip := range processes {
+	for addr := range processes {
 		for i := 0; i < lookupCount; i++ {
-			require.Equal(t, ip.String(), ips[i])
+			require.Equal(t, addr.String(), addrs[i])
 		}
 	}
 }
@@ -227,42 +227,42 @@ func TestDeleteTenant(t *testing.T) {
 	require.NoError(t, createTenant(tc, tenantID))
 
 	// Perform lookup to create entry in cache.
-	ip, err := dir.EnsureTenantIP(ctx, tenantID, "")
+	addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
-	require.NotEmpty(t, ip)
+	require.NotEmpty(t, addr)
 
 	// Report failure even though tenant is healthy - refresh should do nothing.
-	require.NoError(t, dir.ReportFailure(ctx, tenantID, ip))
-	ip, err = dir.EnsureTenantIP(ctx, tenantID, "")
+	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
+	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
-	require.NotEmpty(t, ip)
+	require.NotEmpty(t, addr)
 
 	// Stop the tenant
 	for _, process := range tds.Get(tenantID) {
 		process.Stopper.Stop(ctx)
 	}
 
-	// Report failure connecting to the endpoint to force refresh of ips.
-	require.NoError(t, dir.ReportFailure(ctx, tenantID, ip))
+	// Report failure connecting to the pod to force refresh of addrs.
+	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
 
 	// Ensure that tenant has no valid IP addresses.
-	ips, err := dir.LookupTenantIPs(ctx, tenantID)
+	addrs, err := dir.LookupTenantAddrs(ctx, tenantID)
 	require.NoError(t, err)
-	require.Empty(t, ips)
+	require.Empty(t, addrs)
 
 	// Report failure again to ensure that works when there is no ip address.
-	require.NoError(t, dir.ReportFailure(ctx, tenantID, ip))
+	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
 
 	// Now delete the tenant.
 	require.NoError(t, destroyTenant(tc, tenantID))
 
-	// Now EnsureTenantIP should return an error and the directory should no
+	// Now EnsureTenantAddr should return an error and the directory should no
 	// longer cache the tenant.
-	_, err = dir.EnsureTenantIP(ctx, tenantID, "")
+	_, err = dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not found")
-	ips, err = dir.LookupTenantIPs(ctx, tenantID)
+	addrs, err = dir.LookupTenantAddrs(ctx, tenantID)
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not in directory cache")
-	require.Nil(t, ips)
+	require.Nil(t, addrs)
 }
 
 // TestRefreshThrottling checks that throttling works.
@@ -281,23 +281,23 @@ func TestRefreshThrottling(t *testing.T) {
 	require.NoError(t, createTenant(tc, tenantID))
 
 	// Perform lookup to create entry in cache.
-	ip, err := dir.EnsureTenantIP(ctx, tenantID, "")
+	addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
-	require.NotEmpty(t, ip)
+	require.NotEmpty(t, addr)
 
 	// Report a false failure and verify that IP is still present in the cache.
-	require.NoError(t, dir.ReportFailure(ctx, tenantID, ip))
-	ips, err := dir.LookupTenantIPs(ctx, tenantID)
+	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
+	addrs, err := dir.LookupTenantAddrs(ctx, tenantID)
 	require.NoError(t, err)
-	require.Equal(t, []string{ip}, ips)
+	require.Equal(t, []string{addr}, addrs)
 
 	// Now destroy the tenant and call ReportFailure again. This should be a no-op
 	// due to refresh throttling.
 	require.NoError(t, destroyTenant(tc, tenantID))
-	require.NoError(t, dir.ReportFailure(ctx, tenantID, ip))
-	ips, err = dir.LookupTenantIPs(ctx, tenantID)
+	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
+	addrs, err = dir.LookupTenantAddrs(ctx, tenantID)
 	require.NoError(t, err)
-	require.Equal(t, []string{ip}, ips)
+	require.Equal(t, []string{addr}, addrs)
 }
 
 func createTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) error {
