@@ -404,6 +404,7 @@ const (
 	JoinTokensTableID                   = 41
 	StatementStatisticsTableID          = 42
 	TransactionStatisticsTableID        = 43
+	SQLInstancesTableID                 = 44
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

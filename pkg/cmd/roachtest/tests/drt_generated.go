@@ -38,7 +38,9 @@ func (m *MockpromClient) EXPECT() *MockpromClientMockRecorder {
 }
 
 // Query mocks base method.
-func (m *MockpromClient) Query(ctx context.Context, query string, ts time.Time) (model.Value, v1.Warnings, error) {
+func (m *MockpromClient) Query(
+	ctx context.Context, query string, ts time.Time,
+) (model.Value, v1.Warnings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Query", ctx, query, ts)
 	ret0, _ := ret[0].(model.Value)

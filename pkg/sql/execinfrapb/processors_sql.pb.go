@@ -9,14 +9,15 @@ package execinfrapb
 
 import (
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	inverted "github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	types "github.com/cockroachdb/cockroach/pkg/sql/types"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	io "io"
-	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1551,7 +1552,9 @@ func (*InvertedFiltererSpec_PreFiltererSpec) Descriptor() ([]byte, []int) {
 func (m *InvertedFiltererSpec_PreFiltererSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *InvertedFiltererSpec_PreFiltererSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *InvertedFiltererSpec_PreFiltererSpec) XXX_Marshal(
+	b []byte, deterministic bool,
+) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
