@@ -142,6 +142,7 @@ func (s *Server) serveConn(
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
 	reserved mon.BoundAccount,
+	connStart time.Time,
 	authOpt authOptions,
 ) {
 	if log.V(2) {
@@ -152,7 +153,7 @@ func (s *Server) serveConn(
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
 
 	// Do the reading of commands from the network.
-	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
+	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, connStart, authOpt)
 }
 
 // alwaysLogAuthActivity makes it possible to unconditionally enable
@@ -211,11 +212,16 @@ func (c *conn) authLogEnabled() bool {
 // sqlServer is used to create the command processor. As a special facility for
 // tests, sqlServer can be nil, in which case the command processor and the
 // write-side of the connection will not be created.
+//
+// connStart is the time which the connection is activated. It's used for
+// calculating the establish connection latency until we can ready to
+// serve a SQL query.
 func (c *conn) serveImpl(
 	ctx context.Context,
 	draining func() bool,
 	sqlServer *sql.Server,
 	reserved mon.BoundAccount,
+	connStart time.Time,
 	authOpt authOptions,
 ) {
 	defer func() { _ = c.conn.Close() }()
@@ -393,6 +399,11 @@ func (c *conn) serveImpl(
 					return true, nil //nolint:returnerrcheck
 				}
 				authDone = true
+
+				// We count the connection establish latency until we can ready to
+				// serve a SQL query. It includes the time it takes to authenticate.
+				duration := timeutil.Now().Sub(connStart).Nanoseconds()
+				c.metrics.ConnLatency.RecordValue(duration)
 			}
 
 			switch typ {

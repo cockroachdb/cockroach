@@ -1985,6 +1985,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Connection Latency",
+				Metrics: []string{
+					"sql.conn.latency",
+				},
+			},
+			{
 				Title: "Open Transactions",
 				Metrics: []string{
 					"sql.txns.open",

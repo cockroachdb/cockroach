@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx"
@@ -96,6 +97,7 @@ func TestConn(t *testing.T) {
 		return client(ctx, serverAddr, &clientWG)
 	})
 
+	connStart := timeutil.Now()
 	// Wait for the client to connect and perform the handshake.
 	conn, err := waitForClientConn(ln)
 	if err != nil {
@@ -112,6 +114,7 @@ func TestConn(t *testing.T) {
 			// sqlServer - nil means don't create a command processor and a write side of the conn
 			nil,
 			mon.BoundAccount{}, /* reserved */
+			connStart,          /* connection start time */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 		)
 		return nil
@@ -1076,6 +1079,7 @@ func TestMaliciousInputs(t *testing.T) {
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
+			connStart := timeutil.Now()
 			conn := newConn(
 				// ConnResultsBufferBytes - really small so that it overflows
 				// when we produce a few results.
@@ -1089,6 +1093,7 @@ func TestMaliciousInputs(t *testing.T) {
 				func() bool { return false }, /* draining */
 				nil,                          /* sqlServer */
 				mon.BoundAccount{},           /* reserved */
+				connStart,                    /* connection start time */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 			)
 			if err := <-errChan; err != nil {
