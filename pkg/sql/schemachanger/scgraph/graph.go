@@ -40,6 +40,10 @@ type Graph struct {
 	// reached before or concurrently with this targetState.
 	nodeDepEdges map[*scpb.Node][]*DepEdge
 
+	// opToNode maps from an operation back to the
+	// opEdge that generated it as an index.
+	opToNode map[scop.Op]*scpb.Node
+
 	edges []Edge
 }
 
@@ -50,6 +54,7 @@ func New(initialNodes []*scpb.Node) (*Graph, error) {
 		targetIdxMap: map[*scpb.Target]int{},
 		nodeOpEdges:  map[*scpb.Node]*OpEdge{},
 		nodeDepEdges: map[*scpb.Node][]*DepEdge{},
+		opToNode:     map[scop.Op]*scpb.Node{},
 	}
 	for _, n := range initialNodes {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
@@ -110,12 +115,20 @@ func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
 	return oe, ok
 }
 
+// GetDepEdgesFrom returns the unique outgoing op edge from the specified node,
+// if one exists.
+func (g *Graph) GetDepEdgesFrom(n *scpb.Node) ([]*DepEdge, bool) {
+	de, ok := g.nodeDepEdges[n]
+	return de, ok
+}
+
 // AddOpEdges adds an op edges connecting the nodes for two states of a target.
-func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.State, ops ...scop.Op) {
+func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.State, revertible bool, ops ...scop.Op) {
 	oe := &OpEdge{
-		from: g.getOrCreateNode(t, from),
-		to:   g.getOrCreateNode(t, to),
-		op:   ops,
+		from:       g.getOrCreateNode(t, from),
+		to:         g.getOrCreateNode(t, to),
+		op:         ops,
+		revertible: revertible,
 	}
 	if existing, exists := g.nodeOpEdges[oe.from]; exists {
 		panic(errors.Errorf("duplicate outbound op edge %v and %v",
@@ -123,6 +136,15 @@ func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.State, ops ...scop.Op) 
 	}
 	g.edges = append(g.edges, oe)
 	g.nodeOpEdges[oe.from] = oe
+	// Store mapping from op to Edge
+	for _, op := range ops {
+		g.opToNode[op] = oe.From()
+	}
+}
+
+// GetNodeFromOp Gets an Edge from a given op.
+func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
+	return g.opToNode[op]
 }
 
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
@@ -149,8 +171,9 @@ type Edge interface {
 
 // OpEdge represents an edge changing the state of a target with an op.
 type OpEdge struct {
-	from, to *scpb.Node
-	op       []scop.Op
+	from, to   *scpb.Node
+	op         []scop.Op
+	revertible bool
 }
 
 // From implements the Edge interface.
@@ -161,6 +184,9 @@ func (oe *OpEdge) To() *scpb.Node { return oe.to }
 
 // Op returns the scop.Op for execution that is associated with the op edge.
 func (oe *OpEdge) Op() []scop.Op { return oe.op }
+
+// Revertible returns if the dependency edge is revertible
+func (oe *OpEdge) Revertible() bool { return oe.revertible }
 
 // DepEdge represents a dependency between two target states. A dependency
 // implies that the To() state cannot be reached before the From() state. It

@@ -15,7 +15,6 @@ import "github.com/cockroachdb/errors"
 // Op represents an action to be taken on a single descriptor.
 type Op interface {
 	Type() Type
-	Revertible() bool
 }
 
 // Ops represents a slice of operations where all operations have the
@@ -89,5 +88,3 @@ var _ Ops = (backfillOps)(nil)
 var _ Ops = (validationOps)(nil)
 
 type baseOp struct{}
-
-func (baseOp) Revertible() bool { return true }

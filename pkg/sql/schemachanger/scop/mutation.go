@@ -19,8 +19,7 @@ type mutationOp struct{ baseOp }
 // Make sure baseOp is used for linter.
 var _ = mutationOp{baseOp: baseOp{}}
 
-func (mutationOp) Type() Type        { return MutationType }
-func (*mutationOp) Revertible() bool { return true }
+func (mutationOp) Type() Type { return MutationType }
 
 // MakeAddedIndexDeleteOnly adds a non-existent primary index to the
 // table.
@@ -73,20 +72,10 @@ type MarkDescriptorAsDropped struct {
 	TableID descpb.ID
 }
 
-// Revertible implements if this operation can be reverted.
-func (*MarkDescriptorAsDropped) Revertible() bool {
-	return false
-}
-
 // DrainDescriptorName marks a descriptor as dropped.
 type DrainDescriptorName struct {
 	mutationOp
 	TableID descpb.ID
-}
-
-// Revertible implements if this operation can be reverted.
-func (*DrainDescriptorName) Revertible() bool {
-	return false
 }
 
 // UpdateRelationDeps updates dependencies for a relation.
