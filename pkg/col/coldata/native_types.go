@@ -81,6 +81,43 @@ func (c Times) Get(idx int) time.Time { return c[idx] }
 //gcassert:inline
 func (c Durations) Get(idx int) duration.Duration { return c[idx] }
 
+// Set sets the element at index idx of the vector to val.
+//gcassert:inline
+func (c Bools) Set(idx int, val bool) { c[idx] = val }
+
+// Set sets the element at index idx of the vector to val.
+//gcassert:inline
+func (c Int16s) Set(idx int, val int16) { c[idx] = val }
+
+// Set sets the element at index idx of the vector to val.
+//gcassert:inline
+func (c Int32s) Set(idx int, val int32) { c[idx] = val }
+
+// Set sets the element at index idx of the vector to val.
+//gcassert:inline
+func (c Int64s) Set(idx int, val int64) { c[idx] = val }
+
+// Set sets the element at index idx of the vector to val.
+//gcassert:inline
+func (c Float64s) Set(idx int, val float64) { c[idx] = val }
+
+// Set sets the element at index idx of the vector to val.
+//
+// Note that this method is usually inlined, but it isn't in case of the merge
+// joiner generated code (probably because of the size of the functions), so we
+// don't assert the inlining with the GCAssert linter.
+// TODO(yuzefovich): consider whether Get and Set on Decimals should operate on
+// pointers to apd.Decimal.
+func (c Decimals) Set(idx int, val apd.Decimal) { c[idx].Set(&val) }
+
+// Set sets the element at index idx of the vector to val.
+//gcassert:inline
+func (c Times) Set(idx int, val time.Time) { c[idx] = val }
+
+// Set sets the element at index idx of the vector to val.
+//gcassert:inline
+func (c Durations) Set(idx int, val duration.Duration) { c[idx] = val }
+
 // Len returns the length of the vector.
 func (c Bools) Len() int { return len(c) }
 

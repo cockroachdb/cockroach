@@ -489,21 +489,6 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 	return copyVal(b.CanonicalTypeFamily, dest, src)
 }
 
-func set(canonicalTypeFamily types.Family, target, i, new string) string {
-	switch canonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
-	case types.DecimalFamily:
-		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
-	}
-	return fmt.Sprintf("%s[%s] = %s", target, i, new)
-}
-
-// Set is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Set(target, i, new string) string {
-	return set(b.CanonicalTypeFamily, target, i, new)
-}
-
 // slice is a function that should only be used in templates.
 func (b *argWidthOverloadBase) slice(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
@@ -678,7 +663,6 @@ var (
 	awob = &argWidthOverloadBase{}
 	_    = awob.GoTypeSliceName
 	_    = awob.CopyVal
-	_    = awob.Set
 	_    = awob.Sliceable
 	_    = awob.CopySlice
 	_    = awob.AppendSlice

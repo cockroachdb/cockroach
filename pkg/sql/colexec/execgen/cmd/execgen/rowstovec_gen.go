@@ -58,10 +58,6 @@ func (i rowsToVecWidthTmplInfo) Convert(datum string) string {
 	return fmt.Sprintf(i.ConversionTmpl, datum)
 }
 
-func (i rowsToVecWidthTmplInfo) Set(col, idx, castV string) string {
-	return set(i.canonicalTypeFamily, col, idx, castV)
-}
-
 func (i rowsToVecWidthTmplInfo) Sliceable() bool {
 	return sliceable(i.canonicalTypeFamily)
 }
@@ -69,7 +65,6 @@ func (i rowsToVecWidthTmplInfo) Sliceable() bool {
 // Remove unused warnings.
 var _ = rowsToVecWidthTmplInfo{}.Prelude
 var _ = rowsToVecWidthTmplInfo{}.Convert
-var _ = rowsToVecWidthTmplInfo{}.Set
 var _ = rowsToVecWidthTmplInfo{}.Sliceable
 
 type familyWidthPair struct {
@@ -123,8 +118,6 @@ func genRowsToVec(inputFileContents string, wr io.Writer) error {
 	s = preludeRe.ReplaceAllString(s, makeTemplateFunctionCall("Prelude", 1))
 	convertRe := makeFunctionRegex("_CONVERT", 1)
 	s = convertRe.ReplaceAllString(s, makeTemplateFunctionCall("Convert", 1))
-	setRe := makeFunctionRegex("_SET", 3)
-	s = setRe.ReplaceAllString(s, makeTemplateFunctionCall("Set", 3))
 
 	tmpl, err := template.New("rowsToVec").Parse(s)
 	if err != nil {

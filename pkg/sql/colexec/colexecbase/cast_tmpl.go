@@ -66,11 +66,6 @@ func _CAST(to, from, fromCol, toType interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
-// This will be replaced with execgen.SET.
-func _R_SET(to, from interface{}) {
-	colexecerror.InternalError(errors.AssertionFailedf(""))
-}
-
 // */}}
 
 func GetCastOperator(
@@ -315,7 +310,7 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 		// {{if and (.Right.Sliceable) (not $hasSel)}}
 		//gcassert:bce
 		// {{end}}
-		_R_SET(outputCol, tupleIdx, r)
+		outputCol.Set(tupleIdx, r)
 		// {{if eq .Right.VecMethod "Datum"}}
 		// Casting to datum-backed vector might produce a null value on
 		// non-null tuple, so we need to check that case after the cast was

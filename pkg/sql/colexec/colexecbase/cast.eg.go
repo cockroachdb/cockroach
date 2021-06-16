@@ -813,7 +813,7 @@ func (c *castBoolBoolOp) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -830,7 +830,7 @@ func (c *castBoolBoolOp) Next() coldata.Batch {
 						var r bool
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -845,7 +845,7 @@ func (c *castBoolBoolOp) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -859,7 +859,7 @@ func (c *castBoolBoolOp) Next() coldata.Batch {
 						var r bool
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -919,7 +919,7 @@ func (c *castBoolFloat64Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -941,7 +941,7 @@ func (c *castBoolFloat64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -961,7 +961,7 @@ func (c *castBoolFloat64Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -980,7 +980,7 @@ func (c *castBoolFloat64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1040,7 +1040,7 @@ func (c *castBoolInt16Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1062,7 +1062,7 @@ func (c *castBoolInt16Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1082,7 +1082,7 @@ func (c *castBoolInt16Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1101,7 +1101,7 @@ func (c *castBoolInt16Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1161,7 +1161,7 @@ func (c *castBoolInt32Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1183,7 +1183,7 @@ func (c *castBoolInt32Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1203,7 +1203,7 @@ func (c *castBoolInt32Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1222,7 +1222,7 @@ func (c *castBoolInt32Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1282,7 +1282,7 @@ func (c *castBoolInt64Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1304,7 +1304,7 @@ func (c *castBoolInt64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1324,7 +1324,7 @@ func (c *castBoolInt64Op) Next() coldata.Batch {
 							r = 1
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1343,7 +1343,7 @@ func (c *castBoolInt64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1398,7 +1398,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v.Sign() != 0
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1415,7 +1415,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 						var r bool
 						r = v.Sign() != 0
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1430,7 +1430,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r bool
 						r = v.Sign() != 0
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1444,7 +1444,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 						var r bool
 						r = v.Sign() != 0
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1522,7 +1522,7 @@ func (c *castDecimalInt16Op) Next() coldata.Batch {
 
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1558,7 +1558,7 @@ func (c *castDecimalInt16Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1592,7 +1592,7 @@ func (c *castDecimalInt16Op) Next() coldata.Batch {
 
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1625,7 +1625,7 @@ func (c *castDecimalInt16Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1703,7 +1703,7 @@ func (c *castDecimalInt32Op) Next() coldata.Batch {
 
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1739,7 +1739,7 @@ func (c *castDecimalInt32Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1773,7 +1773,7 @@ func (c *castDecimalInt32Op) Next() coldata.Batch {
 
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1806,7 +1806,7 @@ func (c *castDecimalInt32Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -1878,7 +1878,7 @@ func (c *castDecimalInt64Op) Next() coldata.Batch {
 							r = int64(_i)
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1908,7 +1908,7 @@ func (c *castDecimalInt64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -1936,7 +1936,7 @@ func (c *castDecimalInt64Op) Next() coldata.Batch {
 							r = int64(_i)
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1963,7 +1963,7 @@ func (c *castDecimalInt64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2026,7 +2026,7 @@ func (c *castDecimalFloat64Op) Next() coldata.Batch {
 							r = f
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2051,7 +2051,7 @@ func (c *castDecimalFloat64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2074,7 +2074,7 @@ func (c *castDecimalFloat64Op) Next() coldata.Batch {
 							r = f
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2096,7 +2096,7 @@ func (c *castDecimalFloat64Op) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2156,7 +2156,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2178,7 +2178,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2198,7 +2198,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2217,7 +2217,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2272,7 +2272,7 @@ func (c *castInt16Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2289,7 +2289,7 @@ func (c *castInt16Int16Op) Next() coldata.Batch {
 						var r int16
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2304,7 +2304,7 @@ func (c *castInt16Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2318,7 +2318,7 @@ func (c *castInt16Int16Op) Next() coldata.Batch {
 						var r int16
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2373,7 +2373,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 						r = int32(v)
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2390,7 +2390,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						var r int32
 						r = int32(v)
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2405,7 +2405,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 						r = int32(v)
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2419,7 +2419,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						var r int32
 						r = int32(v)
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2474,7 +2474,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = int64(v)
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2491,7 +2491,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						var r int64
 						r = int64(v)
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2506,7 +2506,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = int64(v)
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2520,7 +2520,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						var r int64
 						r = int64(v)
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2577,7 +2577,7 @@ func (c *castInt16BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2596,7 +2596,7 @@ func (c *castInt16BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2613,7 +2613,7 @@ func (c *castInt16BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2629,7 +2629,7 @@ func (c *castInt16BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2690,7 +2690,7 @@ func (c *castInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2713,7 +2713,7 @@ func (c *castInt16DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2734,7 +2734,7 @@ func (c *castInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2754,7 +2754,7 @@ func (c *castInt16DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2811,7 +2811,7 @@ func (c *castInt16Float64Op) Next() coldata.Batch {
 
 						r = float64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2830,7 +2830,7 @@ func (c *castInt16Float64Op) Next() coldata.Batch {
 						r = float64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2847,7 +2847,7 @@ func (c *castInt16Float64Op) Next() coldata.Batch {
 
 						r = float64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2863,7 +2863,7 @@ func (c *castInt16Float64Op) Next() coldata.Batch {
 						r = float64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -2924,7 +2924,7 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2947,7 +2947,7 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						r = int16(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -2968,7 +2968,7 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2988,7 +2988,7 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						r = int16(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3043,7 +3043,7 @@ func (c *castInt32Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3060,7 +3060,7 @@ func (c *castInt32Int32Op) Next() coldata.Batch {
 						var r int32
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3075,7 +3075,7 @@ func (c *castInt32Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3089,7 +3089,7 @@ func (c *castInt32Int32Op) Next() coldata.Batch {
 						var r int32
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3144,7 +3144,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = int64(v)
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3161,7 +3161,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						var r int64
 						r = int64(v)
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3176,7 +3176,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = int64(v)
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3190,7 +3190,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						var r int64
 						r = int64(v)
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3247,7 +3247,7 @@ func (c *castInt32BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3266,7 +3266,7 @@ func (c *castInt32BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3283,7 +3283,7 @@ func (c *castInt32BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3299,7 +3299,7 @@ func (c *castInt32BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3360,7 +3360,7 @@ func (c *castInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3383,7 +3383,7 @@ func (c *castInt32DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3404,7 +3404,7 @@ func (c *castInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3424,7 +3424,7 @@ func (c *castInt32DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3481,7 +3481,7 @@ func (c *castInt32Float64Op) Next() coldata.Batch {
 
 						r = float64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3500,7 +3500,7 @@ func (c *castInt32Float64Op) Next() coldata.Batch {
 						r = float64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3517,7 +3517,7 @@ func (c *castInt32Float64Op) Next() coldata.Batch {
 
 						r = float64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3533,7 +3533,7 @@ func (c *castInt32Float64Op) Next() coldata.Batch {
 						r = float64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3594,7 +3594,7 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3617,7 +3617,7 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						r = int16(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3638,7 +3638,7 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3658,7 +3658,7 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						r = int16(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3719,7 +3719,7 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						}
 						r = int32(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3742,7 +3742,7 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						r = int32(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3763,7 +3763,7 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						}
 						r = int32(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3783,7 +3783,7 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						r = int32(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3838,7 +3838,7 @@ func (c *castInt64Int64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3855,7 +3855,7 @@ func (c *castInt64Int64Op) Next() coldata.Batch {
 						var r int64
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3870,7 +3870,7 @@ func (c *castInt64Int64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int64
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3884,7 +3884,7 @@ func (c *castInt64Int64Op) Next() coldata.Batch {
 						var r int64
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -3941,7 +3941,7 @@ func (c *castInt64BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3960,7 +3960,7 @@ func (c *castInt64BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -3977,7 +3977,7 @@ func (c *castInt64BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -3993,7 +3993,7 @@ func (c *castInt64BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4054,7 +4054,7 @@ func (c *castInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4077,7 +4077,7 @@ func (c *castInt64DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4098,7 +4098,7 @@ func (c *castInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4118,7 +4118,7 @@ func (c *castInt64DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4175,7 +4175,7 @@ func (c *castInt64Float64Op) Next() coldata.Batch {
 
 						r = float64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4194,7 +4194,7 @@ func (c *castInt64Float64Op) Next() coldata.Batch {
 						r = float64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4211,7 +4211,7 @@ func (c *castInt64Float64Op) Next() coldata.Batch {
 
 						r = float64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4227,7 +4227,7 @@ func (c *castInt64Float64Op) Next() coldata.Batch {
 						r = float64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4282,7 +4282,7 @@ func (c *castFloat64Float64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r float64
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4299,7 +4299,7 @@ func (c *castFloat64Float64Op) Next() coldata.Batch {
 						var r float64
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4314,7 +4314,7 @@ func (c *castFloat64Float64Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r float64
 						r = v
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4328,7 +4328,7 @@ func (c *castFloat64Float64Op) Next() coldata.Batch {
 						var r float64
 						r = v
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4385,7 +4385,7 @@ func (c *castFloat64BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4404,7 +4404,7 @@ func (c *castFloat64BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4421,7 +4421,7 @@ func (c *castFloat64BoolOp) Next() coldata.Batch {
 
 						r = v != 0
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4437,7 +4437,7 @@ func (c *castFloat64BoolOp) Next() coldata.Batch {
 						r = v != 0
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4500,7 +4500,7 @@ func (c *castFloat64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4525,7 +4525,7 @@ func (c *castFloat64DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4548,7 +4548,7 @@ func (c *castFloat64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4570,7 +4570,7 @@ func (c *castFloat64DecimalOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx].Set(&r)
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4630,7 +4630,7 @@ func (c *castFloat64Int16Op) Next() coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4652,7 +4652,7 @@ func (c *castFloat64Int16Op) Next() coldata.Batch {
 						r = int16(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4672,7 +4672,7 @@ func (c *castFloat64Int16Op) Next() coldata.Batch {
 						}
 						r = int16(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4691,7 +4691,7 @@ func (c *castFloat64Int16Op) Next() coldata.Batch {
 						r = int16(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4751,7 +4751,7 @@ func (c *castFloat64Int32Op) Next() coldata.Batch {
 						}
 						r = int32(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4773,7 +4773,7 @@ func (c *castFloat64Int32Op) Next() coldata.Batch {
 						r = int32(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4793,7 +4793,7 @@ func (c *castFloat64Int32Op) Next() coldata.Batch {
 						}
 						r = int32(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4812,7 +4812,7 @@ func (c *castFloat64Int32Op) Next() coldata.Batch {
 						r = int32(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4872,7 +4872,7 @@ func (c *castFloat64Int64Op) Next() coldata.Batch {
 						}
 						r = int64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4894,7 +4894,7 @@ func (c *castFloat64Int64Op) Next() coldata.Batch {
 						r = int64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -4914,7 +4914,7 @@ func (c *castFloat64Int64Op) Next() coldata.Batch {
 						}
 						r = int64(v)
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -4933,7 +4933,7 @@ func (c *castFloat64Int64Op) Next() coldata.Batch {
 						r = int64(v)
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}
@@ -4996,7 +4996,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 							r = _castedDatum == tree.DBoolTrue
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -5021,7 +5021,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			} else {
@@ -5044,7 +5044,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 							r = _castedDatum == tree.DBoolTrue
 						}
 
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -5066,7 +5066,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 						}
 
 						//gcassert:bce
-						outputCol[tupleIdx] = r
+						outputCol.Set(tupleIdx, r)
 					}
 				}
 			}

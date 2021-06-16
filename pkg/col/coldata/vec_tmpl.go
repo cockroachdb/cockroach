@@ -99,7 +99,7 @@ func _COPY_WITH_SEL(
 	// {{define "copyWithSel" -}}
 	sel = sel[args.SrcStartIdx:args.SrcEndIdx]
 	n := len(sel)
-	// {{if and (.Global.Sliceable) (not .SelOnDest)}}
+	// {{if and (.Sliceable) (not .SelOnDest)}}
 	toCol = toCol[args.DestIdx:]
 	_ = toCol[n-1]
 	// {{end}}
@@ -115,31 +115,25 @@ func _COPY_WITH_SEL(
 				m.nulls.SetNull(i + args.DestIdx)
 				// {{end}}
 			} else {
-				// {{with .Global}}
 				v := fromCol.Get(selIdx)
-				// {{end}}
 				// {{if .SelOnDest}}
 				m.nulls.UnsetNull(selIdx)
-				// {{with .Global}}
-				execgen.SET(toCol, selIdx, v)
-				// {{end}}
+				toCol.Set(selIdx, v)
 				// {{else}}
-				// {{with .Global}}
 				// {{if .Sliceable}}
 				// {{/*
 				//     For the sliceable types, we sliced toCol to start at
 				//     args.DestIdx, so we use index i directly.
 				// */}}
 				//gcassert:bce
-				execgen.SET(toCol, i, v)
+				toCol.Set(i, v)
 				// {{else}}
 				// {{/*
 				//     For the non-sliceable types, toCol vector is the original
 				//     one (i.e. without an adjustment), so we need to add
 				//     args.DestIdx to set the element at the correct index.
 				// */}}
-				execgen.SET(toCol, i+args.DestIdx, v)
-				// {{end}}
+				toCol.Set(i+args.DestIdx, v)
 				// {{end}}
 				// {{end}}
 			}
@@ -150,30 +144,24 @@ func _COPY_WITH_SEL(
 	for i := 0; i < n; i++ {
 		//gcassert:bce
 		selIdx := sel[i]
-		// {{with .Global}}
 		v := fromCol.Get(selIdx)
-		// {{end}}
 		// {{if .SelOnDest}}
-		// {{with .Global}}
-		execgen.SET(toCol, selIdx, v)
-		// {{end}}
+		toCol.Set(selIdx, v)
 		// {{else}}
-		// {{with .Global}}
 		// {{if .Sliceable}}
 		// {{/*
 		//     For the sliceable types, we sliced toCol to start at
 		//     args.DestIdx, so we use index i directly.
 		// */}}
 		//gcassert:bce
-		execgen.SET(toCol, i, v)
+		toCol.Set(i, v)
 		// {{else}}
 		// {{/*
 		//     For the non-sliceable types, toCol vector is the original one
 		//     (i.e. without an adjustment), so we need to add args.DestIdx to
 		//     set the element at the correct index.
 		// */}}
-		execgen.SET(toCol, i+args.DestIdx, v)
-		// {{end}}
+		toCol.Set(i+args.DestIdx, v)
 		// {{end}}
 		// {{end}}
 	}
@@ -257,7 +245,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 		case _TYPE_WIDTH:
 			target := v.TemplateType()
 			newVal := elem.(_GOTYPE)
-			execgen.SET(target, rowIdx, newVal)
+			target.Set(rowIdx, newVal)
 			// {{end}}
 		}
 		// {{end}}

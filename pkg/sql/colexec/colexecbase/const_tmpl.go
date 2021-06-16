@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -118,7 +117,7 @@ func (c const_TYPEOp) Next() coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					execgen.SET(col, i, c.constVal)
+					col.Set(i, c.constVal)
 				}
 			} else {
 				_ = col.Get(n - 1)
@@ -126,7 +125,7 @@ func (c const_TYPEOp) Next() coldata.Batch {
 					// {{if .Sliceable}}
 					//gcassert:bce
 					// {{end}}
-					execgen.SET(col, i, c.constVal)
+					col.Set(i, c.constVal)
 				}
 			}
 		},
