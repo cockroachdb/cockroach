@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1460,9 +1459,7 @@ func (expr *Tuple) TypeCheck(
 	// Copy the labels if there are any.
 	if len(expr.Labels) > 0 {
 		labels = make([]string, len(expr.Labels))
-		for i := range expr.Labels {
-			labels[i] = lexbase.NormalizeName(expr.Labels[i])
-		}
+		copy(labels, expr.Labels)
 	}
 	expr.typ = types.MakeLabeledTuple(contents, labels)
 	return expr, nil
