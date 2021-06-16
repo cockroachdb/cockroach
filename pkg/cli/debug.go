@@ -738,9 +738,27 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 		fmt.Printf("approximate reported database size before compaction: %s\n", humanizeutil.IBytes(int64(approxBytesBefore)))
 	}
 
-	if err := db.Compact(); err != nil {
-		return errors.Wrap(err, "while compacting")
+	// Begin compacting the store in a separate goroutine.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- errors.Wrap(db.Compact(), "while compacting")
+	}()
+
+	// Print the current LSM every minute.
+	ticker := time.NewTicker(time.Minute)
+	for done := false; !done; {
+		select {
+		case <-ticker.C:
+			fmt.Printf("%s\n", db.GetMetrics())
+		case err := <-errCh:
+			ticker.Stop()
+			if err != nil {
+				return err
+			}
+			done = true
+		}
 	}
+	fmt.Printf("%s\n", db.GetMetrics())
 
 	{
 		approxBytesAfter, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
