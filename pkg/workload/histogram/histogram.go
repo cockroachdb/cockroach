@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -55,7 +56,7 @@ type NamedHistogram struct {
 func newNamedHistogram(reg *Registry, name string) *NamedHistogram {
 	w := &NamedHistogram{
 		name:                name,
-		prometheusHistogram: reg.getPrometheusHistogram(name + "_duration_seconds"),
+		prometheusHistogram: reg.getPrometheusHistogram(name),
 	}
 	w.mu.current = reg.newHistogram()
 	return w
@@ -104,7 +105,12 @@ type Registry struct {
 		syncutil.Mutex
 		registered map[string][]*NamedHistogram
 	}
-	promReg      *prometheus.Registry
+
+	promReg *prometheus.Registry
+	// prometheusHistograms cannot be stored in a NamedHistogram,
+	// as NamedHistogram objects get recycled. Prometheus histograms
+	// must be uniquely registered, and recreating a Histogram on
+	// each new NamedHistogram causes a panic.
 	prometheusMu struct {
 		syncutil.RWMutex
 		prometheusHistograms map[string]prometheus.Histogram
@@ -155,6 +161,12 @@ func (w *Registry) newHistogram() *hdrhistogram.Histogram {
 	return h
 }
 
+var invalidPrometheusMetricRe = regexp.MustCompile(`[^a-zA-Z0-9:_]`)
+
+func cleanPrometheusName(name string) string {
+	return invalidPrometheusMetricRe.ReplaceAllString(name, "_")
+}
+
 func makePrometheusLatencyHistogramBuckets() []float64 {
 	// This covers 0.5ms to 12 minutes at good resolution, using 150 buckets.
 	return prometheus.ExponentialBuckets(0.0005, 1.1, 150)
@@ -173,10 +185,12 @@ func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
 	defer w.prometheusMu.Unlock()
 	ph, ok = w.prometheusMu.prometheusHistograms[name]
 	if !ok {
+		// Metric names must be sanitized or NewHistogram will panic.
+		promName := cleanPrometheusName(name) + "_duration_seconds"
 		ph = promauto.With(w.promReg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: PrometheusNamespace,
-			Subsystem: w.workloadName,
-			Name:      name,
+			Subsystem: cleanPrometheusName(w.workloadName),
+			Name:      promName,
 			Buckets:   makePrometheusLatencyHistogramBuckets(),
 		})
 		w.prometheusMu.prometheusHistograms[name] = ph
