@@ -368,6 +368,14 @@ CREATE TABLE system.join_tokens (
     expiration   TIMESTAMPTZ NOT NULL,
     FAMILY "primary" (id, secret, expiration)
 )`
+
+	SQLInstancesTableSchema = `
+CREATE TABLE system.sql_instances (
+    id           INT NOT NULL PRIMARY KEY,
+    http_addr    STRING,
+    session_id   BYTES,
+    FAMILY "primary" (id, http_addr, session_id)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1747,6 +1755,39 @@ var (
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.JoinTokensTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// SQLInstancesTable is the descriptor for the sqlinstances table
+	// It stores information about all the SQL instances for a tenant
+	// and their associated session and address information.
+	SQLInstancesTable = makeTable(descpb.TableDescriptor{
+		Name:                    "sql_instances",
+		ID:                      keys.SQLInstancesTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int, Nullable: false},
+			{Name: "http_addr", ID: 2, Type: types.String, Nullable: true},
+			{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+		},
+		NextColumnID: 4,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"id", "http_addr", "session_id"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+				DefaultColumnID: 0,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("id"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.SQLInstancesTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
