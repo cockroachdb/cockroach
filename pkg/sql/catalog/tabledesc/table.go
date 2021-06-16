@@ -366,9 +366,7 @@ func FindFKReferencedUniqueConstraint(
 			continue
 		}
 
-		// TODO(rytaft): We should allow out-of-order unique constraints, as long
-		// as they have the same columns.
-		if descpb.ColumnIDs(c.ColumnIDs).Equals(referencedColIDs) {
+		if c.IsValidReferencedUniqueConstraint(referencedColIDs) {
 			return c, nil
 		}
 	}

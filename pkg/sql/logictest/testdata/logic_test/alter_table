@@ -1459,7 +1459,8 @@ statement ok
 CREATE TABLE uwi_child (
   d INT REFERENCES unique_without_index (d),
   e INT,
-  CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e)
+  CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e),
+  CONSTRAINT fk_e_d FOREIGN KEY (e, d) REFERENCES unique_without_index (e, d)
 )
 
 # We don't yet support adding a column marked as UNIQUE WITHOUT INDEX after a
@@ -1640,6 +1641,7 @@ SHOW CONSTRAINTS FROM uwi_child
 ----
 uwi_child  fk_d_e                         FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
 uwi_child  fk_d_ref_unique_without_index  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
+uwi_child  fk_e_d                         FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
 
 # Attempting to drop a column with a foreign key reference fails.
 statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
