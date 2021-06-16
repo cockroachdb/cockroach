@@ -644,10 +644,6 @@ func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
 	return s.w.PutEngineKey(key, value)
 }
 
-func (s spanSetWriter) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) {
-	return s.w.SafeToWriteSeparatedIntents(ctx)
-}
-
 func (s spanSetWriter) LogData(data []byte) error {
 	return s.w.LogData(data)
 }

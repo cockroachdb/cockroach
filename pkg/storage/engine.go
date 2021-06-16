@@ -654,11 +654,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutEngineKey(key EngineKey, value []byte) error
-	// SafeToWriteSeparatedIntents is only for internal use in the storage
-	// package. Returns an error if the callee does not know whether it is safe.
-	// This method is temporary, to handle the transition from clusters where
-	// not all nodes understand separated intents.
-	SafeToWriteSeparatedIntents(ctx context.Context) (bool, error)
 
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
