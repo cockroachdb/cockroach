@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,9 +30,7 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 	peb, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		CacheSize(testCacheSize),
-		Settings(makeSettingsForSeparatedIntents(
-			false /* oldClusterVersion */, true /* enabled */)))
+		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
@@ -41,15 +38,14 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 }
 
 func setupMVCCInMemPebble(b testing.TB, loc string) Engine {
-	return setupMVCCInMemPebbleWithSettings(b, makeSettingsForSeparatedIntents(
-		false /* oldClusterVersion */, true /* enabled */))
+	return setupMVCCInMemPebbleWithSeparatedIntents(b, false /* disabledSeparatedIntents */)
 }
 
-func setupMVCCInMemPebbleWithSettings(b testing.TB, settings *cluster.Settings) Engine {
+func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB, disableSeparatedIntents bool) Engine {
 	peb, err := Open(
 		context.Background(),
 		InMemory(),
-		Settings(settings),
+		SetSeparatedIntents(disableSeparatedIntents),
 		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
