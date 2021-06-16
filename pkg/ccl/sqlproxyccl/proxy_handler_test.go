@@ -137,17 +137,24 @@ func TestFailedConnection(t *testing.T) {
 
 	// TenantID rejected as malformed.
 	te.TestConnectErr(
-		ctx, t, u+"?options=--cluster=dim&sslmode=require",
-		codeParamsRoutingFailed, "invalid cluster name",
+		ctx, t, u+"?options=--cluster=dimdog&sslmode=require",
+		codeParamsRoutingFailed, "invalid cluster name 'dimdog'",
 	)
 	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
 
-	// No TenantID.
+	// No cluster name and TenantID.
 	te.TestConnectErr(
 		ctx, t, u+"?sslmode=require",
-		codeParamsRoutingFailed, "missing cluster name",
+		codeParamsRoutingFailed, "missing cluster name in connection string",
 	)
 	require.Equal(t, int64(2), s.metrics.RoutingErrCount.Count())
+
+	// Bad TenantID. Ensure that we don't leak any parsing errors.
+	te.TestConnectErr(
+		ctx, t, u+"?options=--cluster=dim-dog-foo3&sslmode=require",
+		codeParamsRoutingFailed, "invalid cluster name 'dim-dog-foo3'",
+	)
+	require.Equal(t, int64(3), s.metrics.RoutingErrCount.Count())
 }
 
 func TestUnexpectedError(t *testing.T) {
@@ -178,7 +185,7 @@ func TestUnexpectedError(t *testing.T) {
 	// to the 5s connect_timeout for pgx.Connect to give up.
 	start := timeutil.Now()
 	_, err := pgx.Connect(ctx, u)
-	require.Error(t, err)
+	require.Contains(t, err.Error(), "internal server error")
 	t.Log(err)
 	elapsed := timeutil.Since(start)
 	if elapsed >= 5*time.Second {
@@ -342,31 +349,6 @@ func TestInsecureProxy(t *testing.T) {
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
 }
 
-func TestInsecureDoubleProxy(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	te := newTester()
-	defer te.Close()
-
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
-	defer sql.Stopper().Stop(ctx)
-
-	// Test multiple proxies:  proxyB -> proxyA -> tc
-	_, proxyA := newProxyServer(ctx, t, sql.Stopper(),
-		&ProxyOptions{RoutingRule: sql.ServingSQLAddr(), Insecure: true},
-	)
-	_, proxyB := newProxyServer(ctx, t, sql.Stopper(),
-		&ProxyOptions{RoutingRule: proxyA, Insecure: true},
-	)
-
-	url := fmt.Sprintf("postgres://root:admin@%s/dim-dog-28.dim-dog-29.defaultdb?sslmode=disable", proxyB)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-}
-
 func TestErroneousFrontend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -387,9 +369,9 @@ func TestErroneousFrontend(t *testing.T) {
 	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
 
 	// Generic message here as the Frontend's error is not codeError and
-	// by default we don't pass back error's text. The startup message doesn't get
-	// processed in this case.
-	te.TestConnectErr(ctx, t, url, 0, "connection reset by peer|failed to receive message")
+	// by default we don't pass back error's text. The startup message doesn't
+	// get processed in this case.
+	te.TestConnectErr(ctx, t, url, 0, "internal server error")
 }
 
 func TestErroneousBackend(t *testing.T) {
@@ -412,9 +394,9 @@ func TestErroneousBackend(t *testing.T) {
 	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
 
 	// Generic message here as the Backend's error is not codeError and
-	// by default we don't pass back error's text. The startup message has already
-	// been processed.
-	te.TestConnectErr(ctx, t, url, 0, "failed to receive message")
+	// by default we don't pass back error's text. The startup message has
+	// already been processed.
+	te.TestConnectErr(ctx, t, url, 0, "internal server error")
 }
 
 func TestProxyRefuseConn(t *testing.T) {
@@ -657,6 +639,211 @@ func TestDirectoryConnect(t *testing.T) {
 			return true
 		}, 30*time.Second, 100*time.Millisecond)
 	})
+}
+
+func TestClusterNameAndTenantFromParams(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		name                string
+		params              map[string]string
+		expectedClusterName string
+		expectedTenantID    uint64
+		expectedParams      map[string]string
+		expectedError       string
+	}{
+		{
+			name:          "empty params",
+			params:        map[string]string{},
+			expectedError: "missing cluster name in connection string",
+		},
+		{
+			name: "cluster name is not provided",
+			params: map[string]string{
+				"database": "defaultdb",
+				"options":  "--foo=bar",
+			},
+			expectedError: "missing cluster name in connection string",
+		},
+		{
+			name: "multiple similar cluster names",
+			params: map[string]string{
+				"database": "happy-koala-7.defaultdb",
+				"options":  "--cluster=happy-koala",
+			},
+			expectedError: "multiple cluster names provided",
+		},
+		{
+			name: "multiple different cluster names",
+			params: map[string]string{
+				"database": "happy-koala-7.defaultdb",
+				"options":  "--cluster=happy-tiger",
+			},
+			expectedError: "multiple cluster names provided",
+		},
+		{
+			name: "invalid cluster name in database param",
+			params: map[string]string{
+				// Cluster names need to be between 6 to 20 alphanumeric characters.
+				"database": "short-0.defaultdb",
+			},
+			expectedError: "invalid cluster name 'short-0'",
+		},
+		{
+			name: "invalid cluster name in options param",
+			params: map[string]string{
+				// Cluster names need to be between 6 to 20 alphanumeric characters.
+				"options": "--cluster=cockroachlabsdotcomfoobarbaz-0",
+			},
+			expectedError: "invalid cluster name 'cockroachlabsdotcomfoobarbaz-0'",
+		},
+		{
+			name:          "invalid database param (1)",
+			params:        map[string]string{"database": "."},
+			expectedError: "invalid database param",
+		},
+		{
+			name:          "invalid database param (2)",
+			params:        map[string]string{"database": "a."},
+			expectedError: "invalid database param",
+		},
+		{
+			name:          "invalid database param (3)",
+			params:        map[string]string{"database": ".b"},
+			expectedError: "invalid database param",
+		},
+		{
+			name:          "invalid database param (4)",
+			params:        map[string]string{"database": "a.b.c"},
+			expectedError: "invalid database param",
+		},
+		{
+			name: "multiple cluster flags",
+			params: map[string]string{
+				"database": "hello-world.defaultdb",
+				"options":  "--cluster=foobar --cluster=barbaz --cluster=testbaz",
+			},
+			expectedError: "multiple cluster flags provided",
+		},
+		{
+			name: "invalid cluster flag",
+			params: map[string]string{
+				"database": "hello-world.defaultdb",
+				"options":  "--cluster=",
+			},
+			expectedError: "invalid cluster flag",
+		},
+		{
+			name:          "no tenant id",
+			params:        map[string]string{"database": "happy2koala.defaultdb"},
+			expectedError: "invalid cluster name 'happy2koala'",
+		},
+		{
+			name:          "missing tenant id",
+			params:        map[string]string{"database": "happy2koala-.defaultdb"},
+			expectedError: "invalid cluster name 'happy2koala-'",
+		},
+		{
+			name:          "missing cluster name",
+			params:        map[string]string{"database": "-7.defaultdb"},
+			expectedError: "invalid cluster name '-7'",
+		},
+		{
+			name:          "bad tenant id",
+			params:        map[string]string{"database": "happy-koala-0-7a.defaultdb"},
+			expectedError: "invalid cluster name 'happy-koala-0-7a'",
+		},
+		{
+			name:          "zero tenant id",
+			params:        map[string]string{"database": "happy-koala-0.defaultdb"},
+			expectedError: "invalid cluster name 'happy-koala-0'",
+		},
+		{
+			name: "cluster name in database param",
+			params: map[string]string{
+				"database": "happy-koala-7.defaultdb",
+				"foo":      "bar",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb", "foo": "bar"},
+		},
+		{
+			name: "valid cluster name with invalid arrangements",
+			params: map[string]string{
+				"database": "defaultdb",
+				"options":  "-c --cluster=happy-koala-7 -c -c -c",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
+		},
+		{
+			name: "short option: cluster name in options param",
+			params: map[string]string{
+				"database": "defaultdb",
+				"options":  "-ccluster=happy-koala-7",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
+		},
+		{
+			name: "short option with spaces: cluster name in options param",
+			params: map[string]string{
+				"database": "defaultdb",
+				"options":  "-c   cluster=happy-koala-7",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
+		},
+		{
+			name: "long option: cluster name in options param",
+			params: map[string]string{
+				"database": "defaultdb",
+				"options":  "--cluster=happy-koala-7\t--foo=test",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
+		},
+		{
+			name:                "leading 0s are ok",
+			params:              map[string]string{"database": "happy-koala-0-07.defaultdb"},
+			expectedClusterName: "happy-koala-0",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := &pgproto3.StartupMessage{Parameters: tc.params}
+
+			originalParams := make(map[string]string)
+			for k, v := range msg.Parameters {
+				originalParams[k] = v
+			}
+
+			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, msg)
+			if tc.expectedError == "" {
+				require.NoErrorf(t, err, "failed test case\n%+v", tc)
+
+				// When expectedError is specified, we always have a valid expectedTenantID.
+				require.Equal(t, roachpb.MakeTenantID(tc.expectedTenantID), tenantID)
+
+				require.Equal(t, tc.expectedClusterName, clusterName)
+				require.Equal(t, tc.expectedParams, outMsg.Parameters)
+			} else {
+				require.EqualErrorf(t, err, tc.expectedError, "failed test case\n%+v", tc)
+			}
+
+			// Check that the original parameters were not modified.
+			require.Equal(t, originalParams, msg.Parameters)
+		})
+	}
 }
 
 type tester struct {

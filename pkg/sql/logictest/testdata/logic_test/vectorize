@@ -191,8 +191,10 @@ SELECT a, b, (a + 1) * (b + 2) FROM a WHERE a < 3
 2  4  18
 2  5  21
 
-statement error .* unhandled cast decimal -> int
+query I
 SELECT (a + 1.0::DECIMAL)::INT FROM a LIMIT 1
+----
+1
 
 # Operations with constants on the left work.
 query I
@@ -223,8 +225,10 @@ statement ok
 CREATE TABLE intdecfloat (a INT, b DECIMAL, c INT4, d INT2, e FLOAT8);
 INSERT INTO intdecfloat VALUES (1, 2.0, 3, 4, 3.5);
 
-statement error .* unhandled cast decimal -> int
+query I
 SELECT (a + b)::INT FROM intdecfloat
+----
+3
 
 query BB
 SELECT b > a, e < b FROM intdecfloat

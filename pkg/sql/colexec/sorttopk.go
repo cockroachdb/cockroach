@@ -39,7 +39,7 @@ func NewTopKSorter(
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint64,
-) colexecop.Operator {
+) colexecop.ResettableOperator {
 	return &topKSorter{
 		allocator:    allocator,
 		OneInputNode: colexecop.NewOneInputNode(input),
@@ -50,6 +50,7 @@ func NewTopKSorter(
 }
 
 var _ colexecop.BufferingInMemoryOperator = &topKSorter{}
+var _ colexecop.Resetter = &topKSorter{}
 
 // topKSortState represents the state of the sort operator.
 type topKSortState int
@@ -138,6 +139,16 @@ func (t *topKSorter) Next() coldata.Batch {
 	}
 }
 
+func (t *topKSorter) Reset(ctx context.Context) {
+	if r, ok := t.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+	t.state = topKSortSpooling
+	t.firstUnprocessedTupleIdx = 0
+	t.topK.ResetInternalBatch()
+	t.emitted = 0
+}
+
 // spool reads in the entire input, always storing the top K rows it has seen so
 // far in o.topK. This is done by maintaining a max heap of indices into o.topK.
 // Whenever we encounter a row which is smaller than the max row in the heap,
@@ -169,7 +180,11 @@ func (t *topKSorter) spool() {
 	t.updateComparators(topKVecIdx, t.topK)
 
 	// Initialize the heap.
-	t.heap = make([]int, t.topK.Length())
+	if cap(t.heap) < t.topK.Length() {
+		t.heap = make([]int, t.topK.Length())
+	} else {
+		t.heap = t.heap[:t.topK.Length()]
+	}
 	for i := range t.heap {
 		t.heap[i] = i
 	}
