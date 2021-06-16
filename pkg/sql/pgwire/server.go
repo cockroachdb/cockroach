@@ -118,6 +118,12 @@ var (
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	MetaConnLatency = metric.Metadata{
+		Name:        "sql.conn.latency",
+		Help:        "Latency to establish and authenticate a SQL connection",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 const (
@@ -217,6 +223,7 @@ type ServerMetrics struct {
 	BytesOutCount  *metric.Counter
 	Conns          *metric.Gauge
 	NewConns       *metric.Counter
+	ConnLatency    *metric.Histogram
 	ConnMemMetrics sql.BaseMemoryMetrics
 	SQLMemMetrics  sql.MemoryMetrics
 }
@@ -229,6 +236,7 @@ func makeServerMetrics(
 		BytesOutCount:  metric.NewCounter(MetaBytesOut),
 		Conns:          metric.NewGauge(MetaConns),
 		NewConns:       metric.NewCounter(MetaNewConns),
+		ConnLatency:    metric.NewLatency(MetaConnLatency, histogramWindow),
 		ConnMemMetrics: sql.MakeBaseMemMetrics("conns", histogramWindow),
 		SQLMemMetrics:  sqlMemMetrics,
 	}
@@ -676,6 +684,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	s.serveConn(
 		ctx, conn, sArgs,
 		reserved,
+		connStart,
 		authOptions{
 			connType:        connType,
 			connDetails:     connDetails,
