@@ -1928,8 +1928,37 @@ CREATE TABLE regional (
   d INT,
   e INT,
   UNIQUE (r, a, b) STORING (c),
-  UNIQUE (r, d, e)
+  UNIQUE (r, d, e),
+  UNIQUE INDEX partial_a (r, a) WHERE b > 0
 )
+----
+
+exec-ddl
+ALTER TABLE regional INJECT STATISTICS '[
+  {
+    "columns": ["r"],
+    "distinct_count": 2,
+    "row_count": 100000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["a"],
+    "distinct_count": 100000,
+    "row_count": 100000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["b"],
+    "distinct_count": 100000,
+    "row_count": 100000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 99999, "distinct_range": 99999, "upper_bound": "100000"}
+    ]
+  }
+]'
 ----
 
 # This query mimics the validation query for new unique constraints in REGIONAL
@@ -2039,6 +2068,61 @@ project
       │    │    │         │    └── ordering: +42,+43
       │    │    │         └── filters
       │    │    │              └── e:43 IS NOT NULL [outer=(43), constraints=(/43: (/NULL - ]; tight)]
+      │    │    └── aggregations
+      │    │         └── count-rows [as=count_rows:10]
+      │    └── filters
+      │         └── count_rows:10 > 1 [outer=(10), constraints=(/10: [/2 - ]; tight)]
+      └── 1
+
+# This query mimics the validation query for new partial unique constraints in
+# REGIONAL BY ROW tables.
+opt expect=(SplitGroupByScanIntoUnionScans,EliminateIndexJoinInsideGroupBy)
+SELECT a
+FROM regional
+WHERE a IS NOT NULL AND b > 0
+GROUP BY a
+HAVING count(*) > 1
+LIMIT 1
+----
+project
+ ├── columns: a:2!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── limit
+      ├── columns: a:2!null count_rows:10!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2,10)
+      ├── select
+      │    ├── columns: a:2!null count_rows:10!null
+      │    ├── key: (2)
+      │    ├── fd: (2)-->(10)
+      │    ├── limit hint: 1.00
+      │    ├── group-by
+      │    │    ├── columns: a:2!null count_rows:10!null
+      │    │    ├── grouping columns: a:2!null
+      │    │    ├── internal-ordering: +2
+      │    │    ├── key: (2)
+      │    │    ├── fd: (2)-->(10)
+      │    │    ├── limit hint: 3.00
+      │    │    ├── union-all
+      │    │    │    ├── columns: a:2!null rowid:7!null
+      │    │    │    ├── left columns: a:48 rowid:53
+      │    │    │    ├── right columns: a:57 rowid:62
+      │    │    │    ├── ordering: +2
+      │    │    │    ├── scan regional@partial_a,partial
+      │    │    │    │    ├── columns: a:48!null rowid:53!null
+      │    │    │    │    ├── constraint: /47/48: [/'east' - /'east']
+      │    │    │    │    ├── key: (53)
+      │    │    │    │    ├── fd: (53)-->(48), (48)-->(53)
+      │    │    │    │    └── ordering: +48
+      │    │    │    └── scan regional@partial_a,partial
+      │    │    │         ├── columns: a:57!null rowid:62!null
+      │    │    │         ├── constraint: /56/57: [/'west' - /'west']
+      │    │    │         ├── key: (62)
+      │    │    │         ├── fd: (62)-->(57), (57)-->(62)
+      │    │    │         └── ordering: +57
       │    │    └── aggregations
       │    │         └── count-rows [as=count_rows:10]
       │    └── filters
@@ -2339,3 +2423,174 @@ group-by
  └── aggregations
       └── array-agg [as=array_agg:10, outer=(1)]
            └── r:1
+
+# ------------------------------------------------------------------------
+# EliminateIndexJoinInsideGroupBy
+# ------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE abcd (
+  a INT,
+  b FLOAT,
+  c INT,
+  d INT,
+  INDEX partial_ab (a, b) WHERE c > 0
+)
+----
+
+# Rule applies for group-by.
+opt expect=EliminateIndexJoinInsideGroupBy
+SELECT max(b), a FROM abcd WHERE c > 0 GROUP BY a
+----
+group-by
+ ├── columns: max:8 a:1
+ ├── grouping columns: a:1
+ ├── internal-ordering: +1
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── scan abcd@partial_ab,partial
+ │    ├── columns: a:1 b:2 rowid:5!null
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(1,2)
+ │    └── ordering: +1
+ └── aggregations
+      └── max [as=max:8, outer=(2)]
+           └── b:2
+
+# Rule applies for distinct-on.
+opt expect=EliminateIndexJoinInsideGroupBy
+SELECT DISTINCT a, b FROM abcd WHERE c > 0
+----
+distinct-on
+ ├── columns: a:1 b:2
+ ├── grouping columns: a:1 b:2
+ ├── internal-ordering: +1,+2
+ ├── key: (1,2)
+ └── scan abcd@partial_ab,partial
+      ├── columns: a:1 b:2 rowid:5!null
+      ├── key: (5)
+      ├── fd: (5)-->(1,2)
+      └── ordering: +1,+2
+
+# Rule applies for ensure-upsert-distinct-on.
+opt expect=EliminateIndexJoinInsideGroupBy
+INSERT INTO xyz SELECT a, a, b FROM abcd WHERE c > 0 ON CONFLICT (x) DO UPDATE SET z=2.0
+----
+upsert xyz
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: x:13
+ ├── fetch columns: x:13 y:14 z:15
+ ├── insert-mapping:
+ │    ├── a:6 => x:1
+ │    ├── a:6 => y:2
+ │    └── b:7 => z:3
+ ├── update-mapping:
+ │    └── upsert_z:21 => z:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: upsert_z:21 a:6 b:7 x:13 y:14 z:15
+      ├── lax-key: (6,13)
+      ├── fd: (6)~~>(7), (13)-->(14,15), (6,13)~~>(7,21)
+      ├── right-join (merge)
+      │    ├── columns: a:6 b:7 x:13 y:14 z:15
+      │    ├── left ordering: +13
+      │    ├── right ordering: +6
+      │    ├── lax-key: (6,13)
+      │    ├── fd: (6)~~>(7), (13)-->(14,15)
+      │    ├── scan xyz
+      │    │    ├── columns: x:13!null y:14 z:15
+      │    │    ├── key: (13)
+      │    │    ├── fd: (13)-->(14,15)
+      │    │    └── ordering: +13
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: a:6 b:7
+      │    │    ├── grouping columns: a:6
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── lax-key: (6)
+      │    │    ├── fd: (6)~~>(7)
+      │    │    ├── ordering: +6
+      │    │    ├── scan abcd@partial_ab,partial
+      │    │    │    ├── columns: a:6 b:7 rowid:10!null
+      │    │    │    ├── key: (10)
+      │    │    │    ├── fd: (10)-->(6,7)
+      │    │    │    └── ordering: +6
+      │    │    └── aggregations
+      │    │         └── first-agg [as=b:7, outer=(7)]
+      │    │              └── b:7
+      │    └── filters (true)
+      └── projections
+           └── CASE WHEN x:13 IS NULL THEN b:7 ELSE 2.0 END [as=upsert_z:21, outer=(7,13)]
+
+# Rule does not apply because c is used as a grouping column.
+opt expect-not=EliminateIndexJoinInsideGroupBy
+SELECT max(b), c FROM abcd WHERE c > 0 GROUP BY c
+----
+group-by
+ ├── columns: max:8 c:3!null
+ ├── grouping columns: c:3!null
+ ├── key: (3)
+ ├── fd: (3)-->(8)
+ ├── select
+ │    ├── columns: b:2 c:3!null
+ │    ├── scan abcd
+ │    │    ├── columns: b:2 c:3
+ │    │    └── partial index predicates
+ │    │         └── partial_ab: filters
+ │    │              └── c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ │    └── filters
+ │         └── c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ └── aggregations
+      └── max [as=max:8, outer=(2)]
+           └── b:2
+
+# Rule does not apply because c is used in an aggregate.
+opt expect-not=EliminateIndexJoinInsideGroupBy
+SELECT max(c), a FROM abcd WHERE c > 0 GROUP BY a
+----
+group-by
+ ├── columns: max:8!null a:1
+ ├── grouping columns: a:1
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── select
+ │    ├── columns: a:1 c:3!null
+ │    ├── scan abcd
+ │    │    ├── columns: a:1 c:3
+ │    │    └── partial index predicates
+ │    │         └── partial_ab: filters
+ │    │              └── c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ │    └── filters
+ │         └── c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ └── aggregations
+      └── max [as=max:8, outer=(3)]
+           └── c:3
+
+# Rule does not apply because c is needed for the ordering of array_agg.
+opt expect-not=EliminateIndexJoinInsideGroupBy
+SELECT a, array_agg(b)
+FROM (SELECT a, b FROM abcd WHERE c > 0 ORDER BY c)
+GROUP BY a
+----
+group-by
+ ├── columns: a:1 array_agg:8
+ ├── grouping columns: a:1
+ ├── internal-ordering: +3 opt(1)
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── sort
+ │    ├── columns: a:1 b:2 c:3!null
+ │    ├── ordering: +3 opt(1) [actual: +3]
+ │    └── select
+ │         ├── columns: a:1 b:2 c:3!null
+ │         ├── scan abcd
+ │         │    ├── columns: a:1 b:2 c:3
+ │         │    └── partial index predicates
+ │         │         └── partial_ab: filters
+ │         │              └── c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ │         └── filters
+ │              └── c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ └── aggregations
+      └── array-agg [as=array_agg:8, outer=(2)]
+           └── b:2
