@@ -366,22 +366,39 @@ if [ ! -f "{{.Store}}/CURRENT" ]; then
 fi
 {{- end}}
 
-lastpid=""
+# Init with -1 so that when cockroach is initially dead, we print
+# a dead event for it.
+lastpid=-1
 while :; do
 {{ if .Local }}
   pid=$(lsof -i :{{.Port}} -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
 	pid=${pid:-0} # default to 0
-	status=unknown
+	status="unknown"
 {{- else }}
+  # When CRDB is not running, this is zero.
 	pid=$(systemctl show cockroach --property MainPID --value)
 	status=$(systemctl show cockroach --property ExecMainStatus --value)
 {{- end }}
 
+  if [[ "${lastpid}" == -1 && "${pid}" != 0 ]]; then
+    # On the first iteration through the loop, if the process is running,
+    # don't register a PID change (which would trigger an erroneous dead
+    # event).
+    lastpid=0
+  fi
+  # Output a dead event whenever the PID changes from a nonzero value to
+  # any other value. In particular, we emit a dead event when the node stops
+  # (lastpid is nonzero, pid is zero), but not when the process then starts
+  # again (lastpid is zero, pid is nonzero).
   if [ "${pid}" != "${lastpid}" ]; then
-		# Output a dead event on every PID change, except if initial PID is live.
-		if [[ ! ("${lastpid}" == "" && "${pid}" != 0) ]]; then
+    if [ "${lastpid}" != 0 ]; then
+      if [ "${pid}" != 0 ]; then
+        # If the PID changed but neither is zero, then the status refers to
+        # the new incarnation. We lost the actual exit status of the old PID.
+        status="unknown"
+      fi
     	echo "dead (exit status ${status})"
-		fi
+    fi
 		if [ "${pid}" != 0 ]; then
 			echo "${pid}"
     fi
