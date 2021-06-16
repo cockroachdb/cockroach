@@ -64,7 +64,7 @@ func registerTypeORM(r *testRegistry) {
 			node,
 			"install dependencies",
 			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc g++ `+
-				`python-software-properties build-essential`,
+				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
 		}
