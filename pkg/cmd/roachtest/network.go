@@ -13,6 +13,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	_ "github.com/lib/pq"
 )
@@ -148,33 +150,42 @@ func runNetworkAuthentication(ctx context.Context, t *test, c Cluster) {
 	if _, err := db.Exec(`ALTER RANGE liveness CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec(`ALTER RANGE meta CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`ALTER RANGE system CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
 		t.Fatal(err)
 	}
 
-	var leaseholder int
-	if err := db.QueryRow(`
+	const expectedLeaseholder = 1
+	testutils.SucceedsSoon(t, func() error {
+		var leaseholder int
+		if err := db.QueryRow(`
 SELECT lease_holder FROM crdb_internal.ranges
 WHERE start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivenessMax'`,
-	).Scan(&leaseholder); err != nil {
-		t.Fatal(err)
-	}
-	if leaseholder != 1 {
-		t.Fatal("liveness leaseholder should be node 1")
-	}
-	if err := db.QueryRow(
-		"SELECT lease_holder FROM [SHOW RANGES FROM TABLE system.public.users]",
-	).Scan(&leaseholder); err != nil {
-		t.Fatal(err)
-	}
-	if leaseholder != 1 {
-		t.Fatal("system.users leaseholder should be node 1")
-	}
+		).Scan(&leaseholder); err != nil {
+			return err
+		}
+		if leaseholder != 1 {
+			return errors.New("liveness leaseholder should be node 1")
+		}
+		if err := db.QueryRow(
+			"SELECT lease_holder FROM [SHOW RANGES FROM TABLE system.public.users]",
+		).Scan(&leaseholder); err != nil {
+			return err
+		}
+		if leaseholder != 1 {
+			return errors.New("system.users leaseholder should be node 1")
+		}
+		return nil
+	})
 
-	if err := c.RunE(ctx, c.Node(leaseholder), `
-sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
-sudo iptables-save`); err != nil {
+	leaseholderIP, err := c.InternalIP(ctx, c.Node(expectedLeaseholder))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseholderExternalIP, err := c.ExternalIP(ctx, c.Node(expectedLeaseholder))
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -184,7 +195,7 @@ sudo iptables-save`); err != nil {
 		for attempt := 0; attempt < 10; attempt++ {
 			t.l.Printf("connection attempt %d\n", attempt)
 			for i := 1; i <= c.Spec().NodeCount; i++ {
-				if i == leaseholder {
+				if i == expectedLeaseholder {
 					continue
 				}
 
@@ -196,6 +207,7 @@ sudo iptables-save`); err != nil {
 					errorCount++
 				}
 			}
+			time.Sleep(1 * time.Second)
 		}
 
 		if errorCount >= 1 /*c.Spec().NodeCount*/ {
@@ -203,6 +215,29 @@ sudo iptables-save`); err != nil {
 		}
 		return nil
 	})
+
+	if err := c.RunE(ctx, c.Node(expectedLeaseholder), fmt.Sprintf(`
+# Setting default filter policy
+sudo iptables -P INPUT DROP;
+sudo iptables -P OUTPUT DROP;
+sudo iptables -P FORWARD DROP;
+
+# Allow unlimited traffic on loopback
+sudo iptables -A INPUT -i lo -j ACCEPT;
+sudo iptables -A OUTPUT -o lo -j ACCEPT;
+
+# Allow incoming ssh only
+sudo iptables -A INPUT -p tcp -s 0/0 -d %[1]s --sport 513:65535 --dport 22 -m state --state NEW, ESTABLISHED -j ACCEPT;
+sudo iptables -A OUTPUT -p tcp -s %[1]s -d 0/0 --sport 22 --dport 513:65535 -m state --state ESTABLISHED -j ACCEPT;
+sudo iptables -A INPUT -p tcp -s 0/0 -d %[2]s --sport 513:65535 --dport 22 -m state --state NEW, ESTABLISHED -j ACCEPT;
+sudo iptables -A OUTPUT -p tcp -s %[2]s -d 0/0 --sport 22 --dport 513:65535 -m state --state ESTABLISHED -j ACCEPT;
+
+# make sure nothing comes or goes out of this box
+sudo iptables -A INPUT -j DROP;
+sudo iptables -A OUTPUT -j DROP;
+sudo iptables-save`, leaseholderIP[0], leaseholderExternalIP[0])); err != nil {
+		t.Fatal(err)
+	}
 
 	m.Wait()
 }
