@@ -116,7 +116,6 @@ const (
 	binaryOverload overloadKind = iota
 	comparisonOverload
 	hashOverload
-	castOverload
 )
 
 func (b *overloadBase) String() string {
@@ -272,7 +271,6 @@ type lastArgWidthOverload struct {
 
 	AssignFunc  assignFunc
 	CompareFunc compareFunc
-	CastFunc    castFunc
 }
 
 // newLastArgWidthOverload creates a new lastArgWidthOverload. Note that it
@@ -399,16 +397,6 @@ func (o *lastArgWidthOverload) Compare(
 	return fmt.Sprintf(
 		"if %s < %s { %s = -1 } else if %s > %s { %s = 1 } else { %s = 0 }",
 		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
-}
-
-func (o *lastArgWidthOverload) Cast(to, from, fromCol, toType string) string {
-	if o.CastFunc != nil {
-		if ret := o.CastFunc(to, from, fromCol, toType); ret != "" {
-			return ret
-		}
-	}
-	// Default cast function is "identity" cast.
-	return fmt.Sprintf("%s = %s", to, from)
 }
 
 func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec string) string {
@@ -672,7 +660,6 @@ var (
 	lawo = &lastArgWidthOverload{}
 	_    = lawo.Assign
 	_    = lawo.Compare
-	_    = lawo.Cast
 	_    = lawo.UnaryAssign
 
 	awob = &argWidthOverloadBase{}
@@ -694,7 +681,6 @@ func init() {
 	populateBinOpOverloads()
 	populateCmpOpOverloads()
 	populateHashOverloads()
-	populateCastOverloads()
 }
 
 // typeCustomizer is a marker interface for something that implements one or
@@ -999,4 +985,9 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 	}
 	// This code is unreachable, but the compiler cannot infer that.
 	return ""
+}
+
+type familyWidthPair struct {
+	family types.Family
+	width  int32
 }
