@@ -230,6 +230,15 @@ func (*AlterDatabaseSurvivalGoal) StatementTag() string { return "ALTER DATABASE
 func (*AlterDatabaseSurvivalGoal) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterDefaultPrivileges) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterDefaultPrivileges) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDefaultPrivileges) StatementTag() string { return "ALTER DEFAULT PRIVILEGES" }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterIndex) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1542,6 +1551,7 @@ func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
 func (n *AlterDatabaseDropRegion) String() string        { return AsString(n) }
 func (n *AlterDatabaseSurvivalGoal) String() string      { return AsString(n) }
 func (n *AlterDatabasePrimaryRegion) String() string     { return AsString(n) }
+func (n *AlterDefaultPrivileges) String() string         { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }

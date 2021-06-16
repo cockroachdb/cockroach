@@ -1,0 +1,3 @@
+alter_default_privileges_stmt ::=
+	'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_role opt_in_schema abbreviated_grant_stmt
+	| 'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_role opt_in_schema abbreviated_revoke_stmt
