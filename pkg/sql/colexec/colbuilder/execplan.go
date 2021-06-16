@@ -565,7 +565,11 @@ func (r opResult) createAndWrapRowSource(
 	// releasables are put back into their pools upon the subquery's flow
 	// cleanup, yet the subquery planNode tree isn't closed yet since its
 	// closure is done when the main planNode tree is being closed.
-	materializerSafeToRelease := spec.Core.LocalPlanNode == nil
+	// TODO(yuzefovich): currently there are some other cases as well, figure
+	// those out. I believe all those cases can occur **only** if we have
+	// LocalPlanNode cores which is the case when we have non-empty
+	// LocalProcessors.
+	materializerSafeToRelease := len(args.LocalProcessors) == 0
 	c, releasables, err := wrapRowSources(
 		ctx,
 		flowCtx,
