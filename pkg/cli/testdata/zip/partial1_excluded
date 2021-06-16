@@ -66,7 +66,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 1] 1 log file ...
 [node 1] [log file ...
 [node 1] requesting ranges... received response... done
-[node 1] 41 ranges found
+[node 1] 42 ranges found
 [node 1] writing range 1... converting to JSON... writing binary output: debug/nodes/1/ranges/1.json... done
 [node 1] writing range 2... converting to JSON... writing binary output: debug/nodes/1/ranges/2.json... done
 [node 1] writing range 3... converting to JSON... writing binary output: debug/nodes/1/ranges/3.json... done
@@ -108,6 +108,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 1] writing range 39... converting to JSON... writing binary output: debug/nodes/1/ranges/39.json... done
 [node 1] writing range 40... converting to JSON... writing binary output: debug/nodes/1/ranges/40.json... done
 [node 1] writing range 41... converting to JSON... writing binary output: debug/nodes/1/ranges/41.json... done
+[node 1] writing range 42... converting to JSON... writing binary output: debug/nodes/1/ranges/42.json... done
 [node 2] skipping node... writing binary output: debug/nodes/2.skipped... done
 [node 3] node status... converting to JSON... writing binary output: debug/nodes/3/status.json... done
 [node 3] using SQL connection URL: postgresql://...
@@ -144,7 +145,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 3] 1 log file ...
 [node 3] [log file ...
 [node 3] requesting ranges... received response... done
-[node 3] 41 ranges found
+[node 3] 42 ranges found
 [node 3] writing range 1... converting to JSON... writing binary output: debug/nodes/3/ranges/1.json... done
 [node 3] writing range 2... converting to JSON... writing binary output: debug/nodes/3/ranges/2.json... done
 [node 3] writing range 3... converting to JSON... writing binary output: debug/nodes/3/ranges/3.json... done
@@ -186,6 +187,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 3] writing range 39... converting to JSON... writing binary output: debug/nodes/3/ranges/39.json... done
 [node 3] writing range 40... converting to JSON... writing binary output: debug/nodes/3/ranges/40.json... done
 [node 3] writing range 41... converting to JSON... writing binary output: debug/nodes/3/ranges/41.json... done
+[node 3] writing range 42... converting to JSON... writing binary output: debug/nodes/3/ranges/42.json... done
 [cluster] doctor examining cluster...... writing binary output: debug/reports/doctor.txt... done
 [cluster] requesting list of SQL databases... received response... done
 [cluster] 3 databases found
@@ -194,7 +196,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] [database: postgres] requesting database details... received response... converting to JSON... writing binary output: debug/schema/postgres@details.json... done
 [cluster] [database: postgres] 0 tables found
 [cluster] [database: system] requesting database details... received response... converting to JSON... writing binary output: debug/schema/system@details.json... done
-[cluster] [database: system] 34 tables found
+[cluster] [database: system] 35 tables found
 [cluster] [database: system] [table: public.comments] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_comments.json... done
 [cluster] [database: system] [table: public.database_role_settings] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_database_role_settings.json... done
 [cluster] [database: system] [table: public.descriptor] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_descriptor.json... done
@@ -216,6 +218,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] [database: system] [table: public.role_options] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_role_options.json... done
 [cluster] [database: system] [table: public.scheduled_jobs] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_scheduled_jobs.json... done
 [cluster] [database: system] [table: public.settings] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_settings.json... done
+[cluster] [database: system] [table: public.sql_instances] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_sql_instances.json... done
 [cluster] [database: system] [table: public.sqlliveness] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_sqlliveness.json... done
 [cluster] [database: system] [table: public.statement_bundle_chunks] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_statement_bundle_chunks.json... done
 [cluster] [database: system] [table: public.statement_diagnostics] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_statement_diagnostics.json... done
