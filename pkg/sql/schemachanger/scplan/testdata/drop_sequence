@@ -6,11 +6,8 @@ ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
   *scop.MarkDescriptorAsDropped
     TableID: 52
-Stage 1
   *scop.CreateGcJobForDescriptor
     DescID: 52
   *scop.DrainDescriptorName
@@ -28,21 +25,18 @@ ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 Stage 0
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 53
-  *scop.UpdateRelationDeps
-    TableID: 53
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
   *scop.MarkDescriptorAsDropped
     TableID: 52
-Stage 1
+  *scop.UpdateRelationDeps
+    TableID: 54
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 2
+    TableID: 54
+  *scop.UpdateRelationDeps
+    TableID: 53
+  *scop.RemoveColumnDefaultExpression
+    ColumnID: 2
+    TableID: 53
   *scop.CreateGcJobForDescriptor
     DescID: 52
   *scop.DrainDescriptorName
@@ -52,7 +46,7 @@ Stage 1
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- from: [Sequence:{DescID: 52}, DELETE_ONLY]
+- from: [Sequence:{DescID: 52}, PUBLIC]
   to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT]
-- from: [Sequence:{DescID: 52}, DELETE_ONLY]
+- from: [Sequence:{DescID: 52}, PUBLIC]
   to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT]
