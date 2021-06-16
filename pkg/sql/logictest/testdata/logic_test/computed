@@ -317,6 +317,20 @@ CREATE TABLE y (
   b TIMESTAMP AS (a::TIMESTAMP) STORED
 )
 
+# Make sure the error has a hint that mentions AT TIME ZONE.
+statement error context-dependent operators are not allowed in computed column.*\nHINT:.*AT TIME ZONE
+CREATE TABLE y (
+  a TIMESTAMPTZ,
+  b STRING AS (a::STRING) STORED
+)
+
+# Make sure the error has a hint that mentions AT TIME ZONE.
+statement error context-dependent operators are not allowed in computed column.*\nHINT:.*AT TIME ZONE
+CREATE TABLE y (
+  a TIMESTAMPTZ,
+  b TIMESTAMP AS (a::TIMESTAMP) STORED
+)
+
 statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMPTZ,
