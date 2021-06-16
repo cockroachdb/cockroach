@@ -8,6 +8,7 @@ set -euo pipefail
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 source "$(dirname "${0}")/teamcity-support.sh"
 log_into_gcloud
+export ROACHPROD_USER=teamcity
 
 set -x
 
