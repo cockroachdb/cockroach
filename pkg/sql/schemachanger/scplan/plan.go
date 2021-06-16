@@ -251,13 +251,47 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph, params Params) []Stage {
 		// Place non-revertible operations at the end
 		sort.SliceStable(opsSlice, func(i, j int) bool {
 			if opsSlice[i].Revertible() == opsSlice[j].Revertible() {
-				return false
+				return compareOps(g, opsSlice[i], opsSlice[j])
 			}
 			return opsSlice[i].Revertible()
 		})
 		stages = append(stages, s)
 		cur = s.After
-
 	}
 	return stages
+}
+
+// compareOps compares operations and orders them based on
+// an implicit order followed by the graph dependencies.
+func compareOps(graph *scgraph.Graph, firstOp scop.Op, secondOp scop.Op) (less bool) {
+	// Orders operators by a fixed ordering when
+	// sorting the operators in a stage.
+	implicitOrderMap := map[reflect.Type]int{
+		reflect.TypeOf(scop.MarkDescriptorAsDropped{}): 0,
+	}
+	noImplicitOrder := len(implicitOrderMap)
+	firstType := reflect.TypeOf(firstOp).Elem()
+	firstOrder, ok := implicitOrderMap[firstType]
+	if !ok {
+		firstOrder = noImplicitOrder
+	}
+	secondType := reflect.TypeOf(secondOp).Elem()
+	secondOrder, ok := implicitOrderMap[secondType]
+	if !ok {
+		secondOrder = noImplicitOrder
+	}
+	if firstOrder < secondOrder {
+		return true
+	} else if firstOrder > secondOrder {
+		return false
+	}
+	// Otherwise, lets compare attributes
+	first := graph.GetOpEdgeFromOp(firstOp)
+	firstDestAttrib := first.To().Element().GetAttributes()
+	second := graph.GetOpEdgeFromOp(secondOp)
+	secondSrcAttrib := second.From().Element().GetAttributes()
+	if firstDestAttrib.Equal(secondSrcAttrib) {
+		return false // B comes first
+	}
+	return true // A comes first.
 }

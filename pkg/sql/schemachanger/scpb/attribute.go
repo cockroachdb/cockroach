@@ -90,6 +90,25 @@ func makeAttributes(values []attributeValue) Attributes {
 	return Attributes{values: values}
 }
 
+// CompareAttribute compares a attribute between two
+// sets of attributes
+func (a Attributes) CompareAttribute(attribute Attribute, b *Attributes) bool {
+	idxSrc := sort.Search(len(a.values), func(i int) bool {
+		return a.values[i].key >= attribute
+	})
+	if idxSrc == len(a.values) {
+		return false
+	}
+	idxDest := sort.Search(len(b.values), func(i int) bool {
+		return a.values[i].key >= attribute
+	})
+	if idxDest == len(a.values) {
+		return false
+	}
+	_, equal := Compare(a.values[idxSrc], b.values[idxDest])
+	return equal
+}
+
 // Get fetches an attribute by the index.
 func (a Attributes) Get(attribute Attribute) AttributeValue {
 	idx := sort.Search(len(a.values), func(i int) bool {
