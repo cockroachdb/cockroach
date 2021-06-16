@@ -26,9 +26,10 @@ type depMatcher struct {
 }
 
 type decOpEdge struct {
-	nextState scpb.State
-	predicate interface{}
-	op        interface{}
+	nextState     scpb.State
+	predicate     interface{}
+	op            interface{}
+	nonRevertible bool
 }
 
 type targetRules struct {
@@ -212,9 +213,9 @@ func buildSchemaChangeOpGenFunc(e scpb.Element, forward, backwards targetOpRules
 				}
 				out := reflect.ValueOf(rule.op).Call(opsArgs)
 				if op, ok := out[0].Interface().(scop.Op); ok {
-					builder.AddOpEdges(t, cur, rule.nextState, op)
+					builder.AddOpEdges(t, cur, rule.nextState, !rule.nonRevertible, op)
 				} else if opArray, ok := out[0].Interface().([]scop.Op); ok {
-					builder.AddOpEdges(t, cur, rule.nextState, opArray...)
+					builder.AddOpEdges(t, cur, rule.nextState, !rule.nonRevertible, opArray...)
 				}
 
 				cur = rule.nextState

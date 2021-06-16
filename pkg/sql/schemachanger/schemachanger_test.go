@@ -233,7 +233,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 						return nil
 					}
 					for _, op := range ops.Slice() {
-						if backfillOp, ok := op.(scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
+						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
 							job1Backfill.Do(func() {
 								close(job1BackfillNotification)
 								<-job1ContinueNotification
@@ -345,7 +345,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 					return nil
 				}
 				for _, op := range ops.Slice() {
-					if _, ok := op.(scop.BackfillIndex); ok {
+					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
 							<-continueNotification
@@ -450,7 +450,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 					return nil
 				}
 				for _, op := range ops.Slice() {
-					if _, ok := op.(scop.BackfillIndex); ok {
+					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
 							<-continueNotification
