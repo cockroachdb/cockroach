@@ -17,19 +17,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -887,4 +891,133 @@ USE t;
 			})
 		}
 	}
+}
+
+// TestIndexDescriptorUpdateForImplicitColumns checks that the column ID slices
+// in the indexes of a table descriptor undergoing partitioning changes
+// involving implicit columns are correctly updated.
+func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	c, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{},
+	)
+	defer cleanup()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`)
+
+	fetchIndexes := func(tableName string) []catalog.Index {
+		kvDB := c.Servers[0].DB()
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		return desc.NonDropIndexes()
+	}
+
+	t.Run("primary index", func(t *testing.T) {
+		tdb.Exec(t, `CREATE TABLE test.t1 (
+			a INT PRIMARY KEY, 
+			b test.public.crdb_internal_region NOT NULL
+		) LOCALITY GLOBAL`)
+		indexes := fetchIndexes("t1")
+		require.Len(t, indexes, 1)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t1 SET LOCALITY REGIONAL BY ROW AS b`)
+		indexes = fetchIndexes("t1")
+		require.Len(t, indexes, 1)
+
+		require.EqualValues(t, []descpb.ColumnID{1, 2}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.Empty(t, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t1 SET LOCALITY GLOBAL`)
+		indexes = fetchIndexes("t1")
+		require.Len(t, indexes, 1)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+	})
+
+	t.Run("secondary index", func(t *testing.T) {
+		tdb.Exec(t, `CREATE TABLE test.t2 (
+			a INT PRIMARY KEY, 
+			b test.public.crdb_internal_region NOT NULL,
+			c INT NOT NULL,
+			d INT NOT NULL,
+			INDEX sec (c) STORING (d)
+		) LOCALITY GLOBAL`)
+		indexes := fetchIndexes("t2")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2, 3, 4}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{3}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{4}, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t2 SET LOCALITY REGIONAL BY ROW AS b`)
+		indexes = fetchIndexes("t2")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1, 2}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{3, 4}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{2, 3}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{4}, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t2 SET LOCALITY GLOBAL`)
+		indexes = fetchIndexes("t2")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2, 3, 4}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{3}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{4}, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+	})
+
+	t.Run("secondary index key suffix", func(t *testing.T) {
+		tdb.Exec(t, `CREATE TABLE test.t3 (
+			a test.public.crdb_internal_region PRIMARY KEY,
+			b INT NOT NULL,
+			INDEX sec (b)
+		) LOCALITY GLOBAL`)
+		indexes := fetchIndexes("t3")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t3 SET LOCALITY REGIONAL BY ROW AS a`)
+		indexes = fetchIndexes("t3")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{1, 2}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+
+		tdb.Exec(t, `ALTER TABLE test.t3 SET LOCALITY GLOBAL`)
+		indexes = fetchIndexes("t3")
+		require.Len(t, indexes, 2)
+
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[0].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[0].CollectPrimaryStoredColumnIDs().Ordered())
+
+		require.EqualValues(t, []descpb.ColumnID{2}, indexes[1].CollectKeyColumnIDs().Ordered())
+		require.EqualValues(t, []descpb.ColumnID{1}, indexes[1].CollectKeySuffixColumnIDs().Ordered())
+		require.Empty(t, indexes[1].CollectSecondaryStoredColumnIDs().Ordered())
+	})
 }
