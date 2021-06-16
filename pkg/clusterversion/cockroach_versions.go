@@ -165,8 +165,6 @@ const (
 	Start20_2
 	// GeospatialType enables the use of Geospatial features.
 	GeospatialType
-	// Enums enables the use of ENUM types.
-	Enums
 	// AlterColumnTypeGeneral enables the use of alter column type for
 	// conversions that require the column data to be rewritten.
 	AlterColumnTypeGeneral
@@ -344,10 +342,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     GeospatialType,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 2},
-	},
-	{
-		Key:     Enums,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 3},
 	},
 	{
 		Key:     AlterColumnTypeGeneral,
