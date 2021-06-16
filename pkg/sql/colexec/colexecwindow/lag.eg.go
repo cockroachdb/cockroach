@@ -261,7 +261,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i] = val
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -272,7 +272,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 				}
 				col := vec.Bool()
 				val := col.Get(idx)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -288,7 +288,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -299,7 +299,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 			}
 			col := vec.Bool()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -314,7 +314,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -325,7 +325,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 			}
 			col := vec.Bool()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -335,7 +335,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -346,7 +346,7 @@ func (w *lagBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) 
 		}
 		col := vec.Bool()
 		val := col.Get(idx)
-		leadLagCol[i] = val
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -601,7 +601,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i].Set(&val)
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -612,7 +612,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 				}
 				col := vec.Decimal()
 				val := col.Get(idx)
-				leadLagCol[i].Set(&val)
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -628,7 +628,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i].Set(&val)
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -639,7 +639,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 			}
 			col := vec.Decimal()
 			val := col.Get(idx)
-			leadLagCol[i].Set(&val)
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -654,7 +654,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i].Set(&val)
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -665,7 +665,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 			}
 			col := vec.Decimal()
 			val := col.Get(idx)
-			leadLagCol[i].Set(&val)
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -675,7 +675,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i].Set(&val)
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -686,7 +686,7 @@ func (w *lagDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx in
 		}
 		col := vec.Decimal()
 		val := col.Get(idx)
-		leadLagCol[i].Set(&val)
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -773,7 +773,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i] = val
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -784,7 +784,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				}
 				col := vec.Int16()
 				val := col.Get(idx)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -800,7 +800,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -811,7 +811,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			}
 			col := vec.Int16()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -826,7 +826,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -837,7 +837,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			}
 			col := vec.Int16()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -847,7 +847,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -858,7 +858,7 @@ func (w *lagInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		}
 		col := vec.Int16()
 		val := col.Get(idx)
-		leadLagCol[i] = val
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -945,7 +945,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i] = val
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -956,7 +956,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				}
 				col := vec.Int32()
 				val := col.Get(idx)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -972,7 +972,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -983,7 +983,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			}
 			col := vec.Int32()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -998,7 +998,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1009,7 +1009,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			}
 			col := vec.Int32()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1019,7 +1019,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1030,7 +1030,7 @@ func (w *lagInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		}
 		col := vec.Int32()
 		val := col.Get(idx)
-		leadLagCol[i] = val
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -1117,7 +1117,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i] = val
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1128,7 +1128,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				}
 				col := vec.Int64()
 				val := col.Get(idx)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -1144,7 +1144,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1155,7 +1155,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			}
 			col := vec.Int64()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1170,7 +1170,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1181,7 +1181,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			}
 			col := vec.Int64()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1191,7 +1191,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1202,7 +1202,7 @@ func (w *lagInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		}
 		col := vec.Int64()
 		val := col.Get(idx)
-		leadLagCol[i] = val
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -1289,7 +1289,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i] = val
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1300,7 +1300,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 				}
 				col := vec.Float64()
 				val := col.Get(idx)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -1316,7 +1316,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1327,7 +1327,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 			}
 			col := vec.Float64()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1342,7 +1342,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1353,7 +1353,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 			}
 			col := vec.Float64()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1363,7 +1363,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1374,7 +1374,7 @@ func (w *lagFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx in
 		}
 		col := vec.Float64()
 		val := col.Get(idx)
-		leadLagCol[i] = val
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -1461,7 +1461,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i] = val
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1472,7 +1472,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 				}
 				col := vec.Timestamp()
 				val := col.Get(idx)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -1488,7 +1488,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1499,7 +1499,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 			}
 			col := vec.Timestamp()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1514,7 +1514,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1525,7 +1525,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 			}
 			col := vec.Timestamp()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1535,7 +1535,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1546,7 +1546,7 @@ func (w *lagTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 		}
 		col := vec.Timestamp()
 		val := col.Get(idx)
-		leadLagCol[i] = val
+		leadLagCol.Set(i, val)
 	}
 }
 
@@ -1633,7 +1633,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 						continue
 					}
 					val := defaultCol.Get(i)
-					leadLagCol[i] = val
+					leadLagCol.Set(i, val)
 					continue
 				}
 				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1644,7 +1644,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 				}
 				col := vec.Interval()
 				val := col.Get(idx)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 			}
 			return
 		}
@@ -1660,7 +1660,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 				// The offset is out of range, so set the output value to the default.
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1671,7 +1671,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 			}
 			col := vec.Interval()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1686,7 +1686,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 					continue
 				}
 				val := defaultCol.Get(i)
-				leadLagCol[i] = val
+				leadLagCol.Set(i, val)
 				continue
 			}
 			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1697,7 +1697,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 			}
 			col := vec.Interval()
 			val := col.Get(idx)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 		}
 		return
 	}
@@ -1707,7 +1707,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
 			// The offset is out of range, so set the output value to the default.
 			val := defaultCol.Get(i)
-			leadLagCol[i] = val
+			leadLagCol.Set(i, val)
 			continue
 		}
 		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
@@ -1718,7 +1718,7 @@ func (w *lagIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 		}
 		col := vec.Interval()
 		val := col.Get(idx)
-		leadLagCol[i] = val
+		leadLagCol.Set(i, val)
 	}
 }
 

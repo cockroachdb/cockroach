@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -111,7 +110,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										outNulls.SetNull(outStartIdx)
 									} else {
 										val := srcCol.Get(srcStartIdx)
-										execgen.SET(outCol, outStartIdx, val)
+										outCol.Set(outStartIdx, val)
 									}
 									outStartIdx++
 									b.builderState.left.curSrcStartIdx++
@@ -164,7 +163,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 									} else {
 										val := srcCol.Get(srcStartIdx)
 										for i := 0; i < toAppend; i++ {
-											execgen.SET(outCol, outStartIdx, val)
+											outCol.Set(outStartIdx, val)
 											outStartIdx++
 										}
 									}
@@ -288,7 +287,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
-										execgen.SET(outCol, outStartIdx, v)
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(

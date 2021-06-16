@@ -43,9 +43,6 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Right", s)
 
-	s = strings.ReplaceAll(s, "_R_SET", "execgen.SET")
-	s = replaceManipulationFuncsAmbiguous(".Right", s)
-
 	tmpl, err := template.New("cast").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
