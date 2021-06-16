@@ -79,10 +79,7 @@ func TestStreamingMetadataHandler(t *testing.T) {
 				defer log.Info(flowCtx, "data producer exited")
 				defer producer.ProducerDone()
 
-				if err := producer.WaitForConsumer(flowCtx); err != nil {
-					return
-				}
-
+				<-producer.WaitForConsumer()
 				log.Info(flowCtx, "data producer performed a handshake with the consumer")
 				rng, _ := randutil.NewPseudoRand()
 				numBatches := rng.Intn(16) + 1

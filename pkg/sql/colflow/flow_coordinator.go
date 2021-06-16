@@ -151,8 +151,10 @@ func (f *flowCoordinatorBase) Run(flowCtx context.Context) {
 	go func(flowCtx context.Context) {
 		defer close(waitCh)
 		defer f.producer.ProducerDone()
-		if err := f.producer.WaitForConsumer(flowCtx); err != nil {
-			// We have been canceled. Log the error and exit.
+		<-f.producer.WaitForConsumer()
+		// Check whether we have been canceled while we were waiting for the
+		// consumer to arrive.
+		if err := flowCtx.Err(); err != nil {
 			log.VEventf(flowCtx, 1, "%s", err.Error())
 			return
 		}

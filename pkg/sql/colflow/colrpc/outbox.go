@@ -429,7 +429,11 @@ func (o *Outbox) runWithStream(
 		// See the comment on pushBatches on when this goroutine exits.
 		defer wg.Done()
 		defer o.producer.ProducerDone()
-		if err := o.producer.WaitForConsumer(streamCtx); err != nil {
+		<-o.producer.WaitForConsumer()
+		// Check whether we have been canceled while we were waiting for the
+		// consumer to arrive.
+		if err := streamCtx.Err(); err != nil {
+			log.VEventf(streamCtx, 1, "%s", err.Error())
 			return
 		}
 		if o.producerCtx == nil {

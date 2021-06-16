@@ -62,10 +62,9 @@ import (
 // input component and wants to push that data to the consumer in synchronous
 // fashion.
 type DataProducer interface {
-	// WaitForConsumer needs to be called in order to block the producer until
-	// the consumer arrives. A context cancellation error can be returned in
-	// which case the producer should exit right away.
-	WaitForConsumer(context.Context) error
+	// WaitForConsumer returns the channel from which the producer must receive
+	// in order to block itself until the consumer arrives.
+	WaitForConsumer() <-chan struct{}
 
 	// SendRow pushes a rowenc.EncDatumRow to the consumer. It blocks until the
 	// row has been received, and the caller is then free to reuse the row. A
@@ -112,8 +111,8 @@ type StreamingMetadataProducer interface {
 // the streaming metadata coming from StreamingMetadataProducer goroutines.
 type DataConsumer interface {
 	// ConsumerArrived notifies the DataProducer goroutine that the consumer is
-	// ready to receive data. It must be called exactly once before any of the
-	// Next* methods.
+	// ready to receive data. It must be called exactly once before any other
+	// methods.
 	ConsumerArrived()
 
 	// NextRowAndMeta returns the next row and metadata objects to consume. It
@@ -128,7 +127,8 @@ type DataConsumer interface {
 	NextRemoteProducerMsg(context.Context) *execinfrapb.ProducerMessage
 
 	// ConsumerClosed must be called exactly once when the consumer goroutine
-	// exits. No other calls are allowed after this.
+	// exits. No other calls are allowed after this. ConsumerArrived **must**
+	// have been called already.
 	ConsumerClosed()
 }
 
@@ -155,6 +155,10 @@ type StreamingMetadataHandler struct {
 		// retrieved.
 		err error
 	}
+
+	// waitForConsumer is used to block the DataProducer goroutine until the
+	// DataConsumer goroutine arrives.
+	waitForConsumer chan struct{}
 
 	// producerBlock is used to block the DataProducer goroutine from proceeding
 	// until the DataConsumer goroutine has communicated the previous result to
@@ -200,19 +204,15 @@ type nextChMsg struct {
 // Init initializes the handler.
 func (h *StreamingMetadataHandler) Init() {
 	h.producerMu.nextCh = make(chan nextChMsg)
+	h.waitForConsumer = make(chan struct{})
 	// This channel is buffered in order to not block the DataConsumer goroutine
 	// when it notifies the producer to proceed.
 	h.producerBlock = make(chan struct{}, 1)
 }
 
 // WaitForConsumer is part of the DataProducer interface.
-func (h *StreamingMetadataHandler) WaitForConsumer(ctx context.Context) error {
-	select {
-	case <-h.producerBlock:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+func (h *StreamingMetadataHandler) WaitForConsumer() <-chan struct{} {
+	return h.waitForConsumer
 }
 
 // sendInputMsg sends the scratch input message on nextCh. It blocks until the
@@ -314,8 +314,7 @@ func (h *StreamingMetadataHandler) SendRemoteStreamingMeta(
 
 // ConsumerArrived is part of the DataConsumer interface.
 func (h *StreamingMetadataHandler) ConsumerArrived() {
-	// The channel is buffered, so this send will never block.
-	h.producerBlock <- struct{}{}
+	close(h.waitForConsumer)
 }
 
 // next retrieves the next piece of data to consume, might block. If the
