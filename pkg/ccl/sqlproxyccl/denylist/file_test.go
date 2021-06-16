@@ -28,11 +28,10 @@ func TestDenyListFileParsing(t *testing.T) {
 		cases := []struct {
 			t        Type
 			expected string
-		}{{
-			IPAddrType, "ip",
-		}, {
-			ClusterType, "cluster",
-		}}
+		}{
+			{IPAddrType, "ip"},
+			{ClusterType, "cluster"},
+		}
 		for _, tc := range cases {
 			s, err := tc.t.MarshalYAML()
 			require.NoError(t, err)
@@ -44,26 +43,14 @@ func TestDenyListFileParsing(t *testing.T) {
 		cases := []struct {
 			raw      string
 			expected Type
-		}{{
-			"ip", IPAddrType,
-		}, {
-			"IP", IPAddrType,
-		},
-			{
-				"Ip", IPAddrType,
-			},
-			{
-				"Cluster", ClusterType,
-			},
-			{
-				"cluster", ClusterType,
-			},
-			{
-				"CLUSTER", ClusterType,
-			},
-			{
-				"random text", UnknownType,
-			},
+		}{
+			{"ip", IPAddrType},
+			{"IP", IPAddrType},
+			{"Ip", IPAddrType},
+			{"Cluster", ClusterType},
+			{"cluster", ClusterType},
+			{"CLUSTER", ClusterType},
+			{"random text", UnknownType},
 		}
 		for _, tc := range cases {
 			var parsed Type
@@ -85,31 +72,34 @@ func TestDenyListFileParsing(t *testing.T) {
 			expected map[DenyEntity]*DenyEntry
 		}{
 			{"text: ", emptyMap},
-			{"random text\n\n\nmore random text",
-				emptyMap},
+			{"random text\n\n\nmore random text", emptyMap},
 			{defaultEmptyDenylistText, emptyMap},
 			{"SequenceNumber: 7", emptyMap},
 			{
-				// old denylist format, making sure it won't break new denylist code
+				// Old denylist format; making sure it won't break new denylist code.
 				`
-			SequenceNumber: 8
-			1.1.1.1: some reason
-			61: another reason`,
+SequenceNumber: 8
+1.1.1.1: some reason
+61: another reason`,
 				emptyMap,
-			}, {
+			},
+			{
 				fmt.Sprintf(`
-             SequenceNumber: 9
-             denylist:
-              - entity: {"item":"1.2.3.4", "type": "ip"}
-                expiration: %s
-                reason: over quota
-`, expirationTimeString),
-				map[DenyEntity]*DenyEntry{{"1.2.3.4", IPAddrType}: {
-					DenyEntity{"1.2.3.4", IPAddrType},
-					expirationTime,
-					"over quota",
+SequenceNumber: 9
+denylist:
+- entity: {"item":"1.2.3.4", "type": "ip"}
+  expiration: %s
+  reason: over quota`,
+					expirationTimeString,
+				),
+				map[DenyEntity]*DenyEntry{
+					{"1.2.3.4", IPAddrType}: {
+						DenyEntity{"1.2.3.4", IPAddrType},
+						expirationTime,
+						"over quota",
+					},
 				},
-				}},
+			},
 		}
 
 		// use cancel to prevent leaked goroutines from file watches
@@ -162,19 +152,22 @@ func TestDenylistLogic(t *testing.T) {
 		outcome *Entry
 	}
 
-	// This is a time evolution of a denylist
+	// This is a time evolution of a denylist.
 	testCases := []struct {
 		input string
 		time  time.Time
 		specs []denyIOSpec
 	}{
+		// Blocks IP address only.
 		{
 			fmt.Sprintf(`
-             SequenceNumber: 9
-             denylist:
-              - entity: {"item": "1.2.3.4", "type": "IP"}
-                expiration: %s
-                reason: over quota`, expirationTimeString),
+SequenceNumber: 9
+denylist:
+- entity: {"item": "1.2.3.4", "type": "IP"}
+  expiration: %s
+  reason: over quota`,
+				expirationTimeString,
+			),
 			startTime.Add(10 * time.Second),
 			[]denyIOSpec{
 				{DenyEntity{"1.2.3.4", IPAddrType}, &Entry{"over quota"}},
@@ -182,37 +175,60 @@ func TestDenylistLogic(t *testing.T) {
 				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
 			},
 		},
+		// Blocks both IP address and tenant cluster.
 		{
 			fmt.Sprintf(`
-             SequenceNumber: 10
-             denylist:
-              - entity: {"item": "1.2.3.4", "type": "IP"}
-                expiration: %s
-                reason: over quota
-              - entity: {"item": 61, "type": "Cluster"}
-                expiration: %s
-                reason: splunk pipeline`, expirationTimeString, expirationTimeString),
+SequenceNumber: 10
+denylist:
+- entity: {"item": "1.2.3.4", "type": "IP"}
+  expiration: %s
+  reason: over quota
+- entity: {"item": 61, "type": "Cluster"}
+  expiration: %s
+  reason: splunk pipeline`,
+				expirationTimeString,
+				expirationTimeString,
+			),
 			startTime.Add(20 * time.Second),
 			[]denyIOSpec{
 				{DenyEntity{"1.2.3.4", IPAddrType}, &Entry{"over quota"}},
 				{DenyEntity{"61", ClusterType}, &Entry{"splunk pipeline"}},
 				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
-			}},
+			},
+		},
+		// Entry that has expired.
 		{
 			fmt.Sprintf(`
-             SequenceNumber: 11
-             denylist:
-              - entity: {"item": "1.2.3.4", "type": "ip"}
-                expiration: %s
-                reason: over quota`, expirationTimeString),
+SequenceNumber: 11
+denylist:
+- entity: {"item": "1.2.3.4", "type": "ip"}
+  expiration: %s
+  reason: over quota`,
+				expirationTimeString,
+			),
 			futureTime,
 			[]denyIOSpec{
 				{DenyEntity{"1.2.3.4", IPAddrType}, nil},
 				{DenyEntity{"61", ClusterType}, nil},
 				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
-			}},
+			},
+		},
+		// Entry without any expiration.
+		{
+			`
+SequenceNumber: 11
+denylist:
+- entity: {"item": "1.2.3.4", "type": "ip"}
+  reason: over quota`,
+			futureTime,
+			[]denyIOSpec{
+				{DenyEntity{"1.2.3.4", IPAddrType}, &Entry{"over quota"}},
+				{DenyEntity{"61", ClusterType}, nil},
+				{DenyEntity{"1.2.3.5", IPAddrType}, nil},
+			},
+		},
 	}
-	// use cancel to prevent leaked goroutines from file watches
+	// Use cancel to prevent leaked goroutines from file watches.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tempDir := t.TempDir()
