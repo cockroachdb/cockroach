@@ -90,7 +90,7 @@ func TestBackendDownRetry(t *testing.T) {
 	defer te.Close()
 
 	callCount := 0
-	defer testutils.TestingHook(&backendLookupAddr, func(addr string) (string, error) {
+	defer testutils.TestingHook(&backendLookupAddr, func(_ context.Context, addr string) (string, error) {
 		callCount++
 		if callCount >= 3 {
 			return "", errors.New("tenant not found")
@@ -559,7 +559,7 @@ func TestDirectoryConnect(t *testing.T) {
 	_, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
 	t.Run("fallback when tenant not found", func(t *testing.T) {
-		defer testutils.TestingHook(&backendLookupAddr, func(addr string) (string, error) {
+		defer testutils.TestingHook(&backendLookupAddr, func(_ context.Context, addr string) (string, error) {
 			// Expect fallback.
 			require.Equal(t, srv.ServingSQLAddr(), addr)
 			return addr, nil
@@ -864,9 +864,9 @@ type tester struct {
 func newTester() *tester {
 	te := &tester{}
 
-	// Override default lookup function so that it does not use net.LookupAddr.
+	// Override default lookup function so that it does not use base.LookupAddr.
 	te.restoreBackendLookupAddr =
-		testutils.TestingHook(&backendLookupAddr, func(addr string) (string, error) {
+		testutils.TestingHook(&backendLookupAddr, func(ctx context.Context, addr string) (string, error) {
 			return addr, nil
 		})
 

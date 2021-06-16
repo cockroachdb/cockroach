@@ -9,26 +9,45 @@
 package sqlproxyccl
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // backendLookupAddr looks up the given address using usual DNS resolution
 // mechanisms. It returns the first resolved address, or an error if the lookup
 // failed in some way. This can be overridden in tests.
-var backendLookupAddr = func(addr string) (string, error) {
-	names, err := net.LookupAddr(addr)
-	if err != nil || len(names) == 0 {
-		// Assume that any errors are due to missing or mismatched tenant.
-		return "", status.Errorf(codes.NotFound, "DNS lookup failed for '%s': %v", addr, err)
+var backendLookupAddr = func(ctx context.Context, addr string) (string, error) {
+	// Address must have a port. SplitHostPort returns an error if the address
+	// does not have a port.
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", err
 	}
-	return names[0], nil
+	if host == "" {
+		return "", fmt.Errorf("no host was provided for '%s'", addr)
+	}
+	if port == "" {
+		return "", fmt.Errorf("no port was provided for '%s'", addr)
+	}
+
+	// Note that LookupAddr might return an IPv6 address if no IPv4 addresses
+	// are found. We will punt on that since this function will go away soon,
+	// and we don't currently use IPv6.
+	ip, err := base.LookupAddr(ctx, net.DefaultResolver, host)
+	if err != nil {
+		// Assume that any errors are due to missing or mismatched tenant.
+		return "", errors.Wrapf(err, "DNS lookup failed for '%s'", addr)
+	}
+
+	return net.JoinHostPort(ip, port), nil
 }
 
 // backendDial is an example backend dialer that does a TCP/IP connection
