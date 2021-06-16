@@ -55,7 +55,7 @@ func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine(ctx context.Context) (storage.Engine, error) {
 	return storage.Open(ctx, storage.InMemory(),
-		storage.MaxSize(1<<20), storage.SettingsForTesting())
+		storage.MaxSize(1<<20), storage.ForTesting)
 }
 
 var engineImpls = []struct {

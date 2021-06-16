@@ -238,7 +238,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			storage.InMemory(),
 			storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
 			storage.MaxSize(1<<20),
-			storage.SettingsForTesting())
+			storage.ForTesting)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -6357,12 +6357,6 @@ func verifyRangeStats(
 	return nil
 }
 
-func accountForTxnDidNotUpdateMeta(t *testing.T, eng storage.Engine) bool {
-	accountFor, err := eng.SafeToWriteSeparatedIntents(context.Background())
-	require.NoError(t, err)
-	return accountFor
-}
-
 // TestRangeStatsComputation verifies that commands executed against a
 // range update the range stat counters. The stat values are
 // empirically derived; we're really just testing that they increment
@@ -6431,22 +6425,17 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:   101,
+		LiveBytes:   103,
 		KeyBytes:    28,
-		ValBytes:    73,
+		ValBytes:    75,
 		IntentBytes: 23,
 		LiveCount:   2,
 		KeyCount:    2,
 		ValCount:    2,
 		IntentCount: 1,
 	})
-	if accountForTxnDidNotUpdateMeta(t, tc.engine) {
-		// Account for TxnDidNotUpdateMeta
-		expMS.LiveBytes += 2
-		expMS.ValBytes += 2
-		if tc.engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-			expMS.SeparatedIntentCount++
-		}
+	if tc.engine.IsSeparatedIntentsEnabledForTesting(ctx) {
+		expMS.SeparatedIntentCount++
 	}
 	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)

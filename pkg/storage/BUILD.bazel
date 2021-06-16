@@ -35,12 +35,12 @@ go_library(
         "sst_writer.go",
         "temp_dir.go",
         "temp_engine.go",
+        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",

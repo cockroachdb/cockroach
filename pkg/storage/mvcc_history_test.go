@@ -94,32 +94,22 @@ func TestMVCCHistories(t *testing.T) {
 	datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
 		// Default to random behavior wrt cluster version and separated
 		// intents.
-		oldClusterVersion := rand.Intn(2) == 0
 		enabledSeparated := rand.Intn(2) == 0
 		overridden := false
 		if strings.Contains(path, "_disallow_separated") {
-			oldClusterVersion = true
-			enabledSeparated = false
-			overridden = true
-		}
-		if strings.Contains(path, "_allow_separated") {
-			oldClusterVersion = false
 			enabledSeparated = false
 			overridden = true
 		}
 		if strings.Contains(path, "_enable_separated") {
-			oldClusterVersion = false
 			enabledSeparated = true
 			overridden = true
 		}
 		if !overridden {
 			log.Infof(context.Background(),
-				"randomly setting oldClusterVersion: %t, enableSeparated: %t",
-				oldClusterVersion, enabledSeparated)
+				"randomly setting enableSeparated: %t", enabledSeparated)
 		}
-		settings := makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), Settings(settings))
+		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), SetSeparatedIntents(!enabledSeparated))
 		if err != nil {
 			t.Fatal(err)
 		}
