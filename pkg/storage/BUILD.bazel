@@ -35,6 +35,7 @@ go_library(
         "stacks.go",
         "temp_dir.go",
         "temp_engine.go",
+        "testing_knobs.go",
     ],
     # List out all the c-dependencies pkg/storage depends on.
     cdeps = [

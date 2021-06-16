@@ -1106,6 +1106,7 @@ func TestDecodeKey(t *testing.T) {
 		1<<20,   /* cacheSize */
 		512<<20, /* storeSize */
 		nil,     /* settings */
+		nil,     /* knobs */
 	)
 	defer e.Close()
 

@@ -1383,7 +1383,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 
 	for i, specs := range serverArgs.StoreSpecs {
-		if specs.StickyInMemoryEngineID == "" {
+		if specs.InMemory && specs.StickyInMemoryEngineID == "" {
 			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky engine", i)
 		}
 	}

@@ -18,38 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-)
-
-// SeparatedIntentsEnabled controls whether separated intents are written. A
-// true setting is also gated on clusterversion.SeparatedIntents. After all
-// nodes in a cluster are at or beyond clusterversion.SeparatedIntents,
-// different nodes will see the version state transition at different times.
-// Even nodes that have not yet seen the transition need to be able to read
-// separated intents and to write over separated intents (due to a lease
-// transfer from a node that has seen the transition to one that has not).
-// Therefore, the clusterversion and the value of this setting do not affect
-// whether intentDemuxWriter or intentInterleavingReader are used. They only
-// affect whether intentDemuxWriter will write separated intents. As expected,
-// this value can be set to false to disable writing of separated intents.
-//
-// Currently there is no long-running migration to replace all interleaved
-// intents with separated intents, but we expect that when a cluster has been
-// running with this flag set to true for some time, most ranges will only
-// have separated intents. Similarly, setting this to false will gradually
-// cause most ranges to only have interleaved intents.
-//
-// TODO(bilal): Remove this setting and replace it with a testing knob, as we
-// no longer expect this setting to be toggled to false outside of tests.
-var SeparatedIntentsEnabled = settings.RegisterBoolSetting(
-	"storage.transaction.separated_intents.enabled",
-	"if enabled, intents will be written to a separate lock table, instead of being "+
-		"interleaved with MVCC values",
-	true,
 )
 
 // This file defines wrappers for Reader and Writer, and functions to do the
@@ -68,11 +40,15 @@ type intentDemuxWriter struct {
 
 	cachedSettingsAreValid             bool
 	clusterVersionIsRecentEnoughCached bool
-	writeSeparatedIntentsCached        bool
+	disableSeparatedIntents            bool
 }
 
 func wrapIntentWriter(
-	ctx context.Context, w Writer, settings *cluster.Settings, isLongLived bool,
+	ctx context.Context,
+	w Writer,
+	settings *cluster.Settings,
+	isLongLived bool,
+	disableSeparatedIntents bool,
 ) intentDemuxWriter {
 	idw := intentDemuxWriter{w: w, settings: settings}
 	if !isLongLived && settings != nil {
@@ -81,10 +57,8 @@ func wrapIntentWriter(
 		// Be resilient to the version not yet being initialized.
 		idw.clusterVersionIsRecentEnoughCached = !idw.settings.Version.ActiveVersionOrEmpty(ctx).Less(
 			clusterversion.ByKey(clusterversion.SeparatedIntents))
-
-		idw.writeSeparatedIntentsCached =
-			SeparatedIntentsEnabled.Get(&idw.settings.SV)
 	}
+	idw.disableSeparatedIntents = disableSeparatedIntents
 	return idw
 }
 
@@ -138,7 +112,7 @@ func (idw intentDemuxWriter) PutIntent(
 	var writeSeparatedIntents bool
 	if idw.cachedSettingsAreValid {
 		// Fast-path
-		writeSeparatedIntents = idw.clusterVersionIsRecentEnoughCached && idw.writeSeparatedIntentsCached
+		writeSeparatedIntents = idw.clusterVersionIsRecentEnoughCached && !idw.disableSeparatedIntents
 	} else {
 		// Slow-path, when doing writes on the Engine directly. This should not be
 		// performance sensitive code.
@@ -146,7 +120,7 @@ func (idw intentDemuxWriter) PutIntent(
 			// Be resilient to the version not yet being initialized.
 			!idw.settings.Version.ActiveVersionOrEmpty(ctx).Less(
 				clusterversion.ByKey(clusterversion.SeparatedIntents)) &&
-				SeparatedIntentsEnabled.Get(&idw.settings.SV)
+				!idw.disableSeparatedIntents
 	}
 	var engineKey EngineKey
 	if state == ExistingIntentSeparated || writeSeparatedIntents {
