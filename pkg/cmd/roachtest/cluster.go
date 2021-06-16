@@ -723,7 +723,7 @@ func (c *cluster) Name() string {
 // EncryptAtRandom sets whether the cluster will start new nodes with
 // encryption enabled.
 func (c *cluster) EncryptAtRandom(b bool) {
-	c.encryptAtRandom = true
+	c.encryptAtRandom = b
 }
 
 // EncryptDefault sets the default for encryption-at-rest. This can be overridden
