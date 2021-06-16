@@ -12,7 +12,6 @@ DROP VIEW defaultdb.v1
 Stage 0
   *scop.MarkDescriptorAsDropped
     TableID: 53
-Stage 1
   *scop.CreateGcJobForDescriptor
     DescID: 53
   *scop.DrainDescriptorName
@@ -46,58 +45,57 @@ ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
 Stage 0
-  *scop.RemoveTypeBackRef
-    DescID: 59
-    TypeID: 57
+  *scop.MarkDescriptorAsDropped
+    TableID: 59
+  *scop.MarkDescriptorAsDropped
+    TableID: 56
+  *scop.MarkDescriptorAsDropped
+    TableID: 55
+  *scop.MarkDescriptorAsDropped
+    TableID: 54
+  *scop.MarkDescriptorAsDropped
+    TableID: 53
   *scop.RemoveTypeBackRef
     DescID: 59
     TypeID: 58
-  *scop.MarkDescriptorAsDropped
-    TableID: 53
-  *scop.MarkDescriptorAsDropped
-    TableID: 54
-  *scop.MarkDescriptorAsDropped
-    TableID: 55
-  *scop.MarkDescriptorAsDropped
-    TableID: 56
-  *scop.MarkDescriptorAsDropped
-    TableID: 59
-Stage 1
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
-  *scop.CreateGcJobForDescriptor
-    DescID: 54
-  *scop.CreateGcJobForDescriptor
-    DescID: 55
-  *scop.CreateGcJobForDescriptor
-    DescID: 56
+  *scop.RemoveTypeBackRef
+    DescID: 59
+    TypeID: 57
   *scop.CreateGcJobForDescriptor
     DescID: 59
   *scop.DrainDescriptorName
-    TableID: 53
-  *scop.DrainDescriptorName
-    TableID: 54
-  *scop.DrainDescriptorName
-    TableID: 55
+    TableID: 59
+  *scop.CreateGcJobForDescriptor
+    DescID: 56
   *scop.DrainDescriptorName
     TableID: 56
+  *scop.CreateGcJobForDescriptor
+    DescID: 55
   *scop.DrainDescriptorName
-    TableID: 59
+    TableID: 55
+  *scop.CreateGcJobForDescriptor
+    DescID: 54
+  *scop.DrainDescriptorName
+    TableID: 54
+  *scop.CreateGcJobForDescriptor
+    DescID: 53
+  *scop.DrainDescriptorName
+    TableID: 53
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- from: [View:{DescID: 53}, DELETE_ONLY]
-  to:   [View:{DescID: 54}, DELETE_ONLY]
-- from: [View:{DescID: 53}, DELETE_ONLY]
-  to:   [View:{DescID: 55}, DELETE_ONLY]
-- from: [View:{DescID: 54}, DELETE_ONLY]
-  to:   [View:{DescID: 55}, DELETE_ONLY]
-- from: [View:{DescID: 54}, DELETE_ONLY]
-  to:   [View:{DescID: 56}, DELETE_ONLY]
-- from: [View:{DescID: 56}, DELETE_ONLY]
-  to:   [View:{DescID: 59}, DELETE_ONLY]
-- from: [View:{DescID: 59}, DELETE_ONLY]
+- from: [View:{DescID: 53}, ABSENT]
+  to:   [View:{DescID: 54}, ABSENT]
+- from: [View:{DescID: 53}, ABSENT]
+  to:   [View:{DescID: 55}, ABSENT]
+- from: [View:{DescID: 54}, ABSENT]
+  to:   [View:{DescID: 55}, ABSENT]
+- from: [View:{DescID: 54}, ABSENT]
+  to:   [View:{DescID: 56}, ABSENT]
+- from: [View:{DescID: 56}, ABSENT]
+  to:   [View:{DescID: 59}, ABSENT]
+- from: [View:{DescID: 59}, ABSENT]
   to:   [TypeReference:{DescID: 59, DepID: 57}, ABSENT]
-- from: [View:{DescID: 59}, DELETE_ONLY]
+- from: [View:{DescID: 59}, ABSENT]
   to:   [TypeReference:{DescID: 59, DepID: 58}, ABSENT]

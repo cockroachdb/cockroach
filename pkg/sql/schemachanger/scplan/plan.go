@@ -250,14 +250,86 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph, params Params) []Stage {
 		}
 		// Place non-revertible operations at the end
 		sort.SliceStable(opsSlice, func(i, j int) bool {
-			if opsSlice[i].Revertible() == opsSlice[j].Revertible() {
-				return false
-			}
-			return opsSlice[i].Revertible()
+			return compareOps(g, opsSlice[i], opsSlice[j])
 		})
 		stages = append(stages, s)
 		cur = s.After
-
 	}
 	return stages
+}
+
+// Orders operators by a fixed ordering when
+// sorting the operators in a stage.
+var implicitOpOrderMap = map[reflect.Type]int{
+	reflect.TypeOf(scop.MarkDescriptorAsDropped{}): 0,
+}
+
+// Check if some route exists from curr to the
+// target node
+func doesPathExistToNode(graph *scgraph.Graph, start *scpb.Node, target *scpb.Node) bool {
+	nodesToVisit := []*scpb.Node{start}
+	visitedNodes := map[*scpb.Node]struct{}{}
+	for len(nodesToVisit) > 0 {
+		curr := nodesToVisit[0]
+		if curr == target {
+			return true
+		}
+		nodesToVisit = nodesToVisit[1:]
+		if _, ok := visitedNodes[curr]; !ok {
+			visitedNodes[curr] = struct{}{}
+			edges, ok := graph.GetDepEdgesFrom(curr)
+			if !ok {
+				return false
+			}
+			// Append all of the nodes to visit
+			for _, currEdge := range edges {
+				nodesToVisit = append(nodesToVisit, currEdge.To())
+			}
+		}
+	}
+	return false
+}
+
+// compareOps compares operations and orders them based on
+// an implicit order followed by the graph dependencies.
+func compareOps(graph *scgraph.Graph, firstOp scop.Op, secondOp scop.Op) (less bool) {
+	// If non-revertible ones will always be last.
+	if firstOp.Revertible() != secondOp.Revertible() {
+		return firstOp.Revertible()
+	}
+	// When no implicit operation order exists,  then we assign the last
+	// possible index, and these will only be sorted on attributes
+	noImplicitOpOrder := len(implicitOpOrderMap)
+	firstType := reflect.TypeOf(firstOp).Elem()
+	firstOrder, ok := implicitOpOrderMap[firstType]
+	if !ok {
+		firstOrder = noImplicitOpOrder
+	}
+	secondType := reflect.TypeOf(secondOp).Elem()
+	secondOrder, ok := implicitOpOrderMap[secondType]
+	if !ok {
+		secondOrder = noImplicitOpOrder
+	}
+	if firstOrder < secondOrder {
+		return true
+	} else if firstOrder > secondOrder {
+		return false
+	}
+	// Otherwise, lets compare attributes
+	firstNode := graph.GetNodeFromOp(firstOp)
+	secondNode := graph.GetNodeFromOp(secondOp)
+	firstExists := doesPathExistToNode(graph, firstNode, secondNode)
+	secondExists := doesPathExistToNode(graph, secondNode, firstNode)
+	if firstExists && secondExists {
+		if firstNode.Target.Direction == scpb.Target_DROP {
+			return true
+		} else if secondNode.Target.Direction == scpb.Target_DROP {
+			return false
+		} else {
+			panic("A potential cycle exists in plan the graph, without any" +
+				"nodes transitioning in opposite directions")
+		}
+	}
+	// Path exists from first to second, so we depend on second.
+	return !firstExists
 }

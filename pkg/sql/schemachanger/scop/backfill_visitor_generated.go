@@ -22,7 +22,13 @@ type BackfillOp interface {
 
 // BackfillVisitor is a visitor for BackfillOp operations.
 type BackfillVisitor interface {
+	backfillOp(context.Context, backfillOp) error
 	BackfillIndex(context.Context, BackfillIndex) error
+}
+
+// Visit is part of the BackfillOp interface.
+func (op backfillOp) Visit(ctx context.Context, v BackfillVisitor) error {
+	return v.backfillOp(ctx, op)
 }
 
 // Visit is part of the BackfillOp interface.

@@ -14,7 +14,11 @@ import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 //go:generate go run ./generate_visitor.go scop Validation validation.go validation_visitor_generated.go
 
-type validationOp struct{ baseOp }
+type validationOp struct {
+	revertibleOp
+}
+
+var _ = validationOp{revertibleOp: revertibleOp{}}
 
 func (validationOp) Type() Type { return ValidationType }
 

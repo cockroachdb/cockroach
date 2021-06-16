@@ -14,7 +14,11 @@ import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
 //go:generate go run ./generate_visitor.go scop Backfill backfill.go backfill_visitor_generated.go
 
-type backfillOp struct{ baseOp }
+type backfillOp struct {
+	revertibleOp
+}
+
+var _ = backfillOp{revertibleOp: revertibleOp{}}
 
 // Type implements the Op interface.
 func (backfillOp) Type() Type { return BackfillType }
