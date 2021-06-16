@@ -34,7 +34,7 @@ data: "a"/1.000000000,0 -> /BYTES/default
 >> txn_step k=a t=A
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
 >> put v=second k=a t=A
-called PutIntent("a", _, ExistingIntentInterleaved, TDNUM(false), 00000000-0000-0000-0000-000000000002)
+called PutIntent("a", _, ExistingIntentInterleaved, TDNUM(true), 00000000-0000-0000-0000-000000000002)
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=1} ts=2.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/2.000000000,0 -> /BYTES/second
 data: "a"/1.000000000,0 -> /BYTES/default
