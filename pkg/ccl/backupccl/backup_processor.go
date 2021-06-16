@@ -63,6 +63,12 @@ var (
 		time.Minute*5,
 		settings.NonNegativeDuration,
 	)
+	alwaysWriteInProc = settings.RegisterBoolSetting(
+		"bulkio.backup.proxy_file_writes.enabled",
+		"return files to the backup coordination processes to write to "+
+			"external storage instead of writing them directly from the storage layer",
+		false,
+	)
 )
 
 const backupProcessorName = "backupDataProcessor"
@@ -201,7 +207,7 @@ func runBackupProcessor(
 	exportRequestStoreByLocalityKV := storageConfByLocalityKV
 
 	// If this is a tenant backup, we need to write the file from the SQL layer.
-	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant()
+	writeSSTsInProcessor := !flowCtx.Cfg.Codec.ForSystemTenant() || alwaysWriteInProc.Get(&clusterSettings.SV)
 
 	var defaultStore cloud.ExternalStorage
 	if writeSSTsInProcessor {
