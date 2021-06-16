@@ -256,3 +256,13 @@ func (c *CustomFuncs) SplitGroupByScanIntoUnionScans(
 		intraOrd, scan, sp, cons, 0 /* limit */, keyPrefixLength,
 	)
 }
+
+// GroupingColumns returns the grouping columns from the grouping private.
+func (c *CustomFuncs) GroupingColumns(private *memo.GroupingPrivate) opt.ColSet {
+	return private.GroupingCols
+}
+
+// GroupingOrdering returns the ordering from the grouping private.
+func (c *CustomFuncs) GroupingOrdering(private *memo.GroupingPrivate) props.OrderingChoice {
+	return private.Ordering
+}
