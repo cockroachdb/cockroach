@@ -490,23 +490,16 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 
 	<-beforeBackfillNotification
 
-	conn, err := sqlDB.Conn(ctx)
-	require.NoError(t, err)
-
 	// At this point the backfill operation is paused as it's about to begin.
 	// The new column `b` is not yet public, so a concurrent insert should:
 	// - in the current primary index, only insert a value for `a`,
 	// - in the new secondary index, which will be the future primary index,
 	//   insert a value both for `a` and the default value for `b`, because that
 	//   new index is delete-and-write-only as it is being backfilled.
-	{
-		_, err = conn.ExecContext(ctx, `
-			SET tracing = on,kv;
-			INSERT INTO db.t (a) VALUES (10);
-			SET tracing = off;
-		`)
-		require.NoError(t, err)
-	}
+	tdb.Exec(t, `
+		SET tracing = on,kv;
+		INSERT INTO db.t (a) VALUES (10);
+		SET tracing = off;`)
 
 	// Trigger the resumption and conclusion of the backfill,
 	// and hence of the ADD COLUMN transaction.
@@ -514,18 +507,11 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	require.NoError(t, g.Wait())
 
 	// Check that the expectations set out above are verified.
-	{
-		rows, err := conn.QueryContext(ctx,
-			`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'CPut %' OR message LIKE 'InitPut %'`)
-		require.NoError(t, err)
-		defer rows.Close()
-		var msg string
-		require.True(t, rows.Next())
-		require.NoError(t, rows.Scan(&msg))
-		require.Equal(t, fmt.Sprintf("CPut /Table/%d/1/10/0 -> /TUPLE/", desc.GetID()), msg)
-		require.True(t, rows.Next())
-		require.NoError(t, rows.Scan(&msg))
-		require.Equal(t, fmt.Sprintf("InitPut /Table/%d/2/10/0 -> /TUPLE/2:2:Int/100", desc.GetID()), msg)
-		require.False(t, rows.Next())
-	}
+	results := tdb.QueryStr(t, `
+		SELECT message
+		FROM [SHOW KV TRACE FOR SESSION]
+		WHERE message LIKE 'CPut %' OR message LIKE 'InitPut %'`)
+	require.GreaterOrEqual(t, len(results), 2)
+	require.Equal(t, fmt.Sprintf("CPut /Table/%d/1/10/0 -> /TUPLE/", desc.GetID()), results[0][0])
+	require.Equal(t, fmt.Sprintf("InitPut /Table/%d/2/10/0 -> /TUPLE/2:2:Int/100", desc.GetID()), results[1][0])
 }
