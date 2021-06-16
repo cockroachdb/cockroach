@@ -16,6 +16,8 @@ import "github.com/cockroachdb/errors"
 type Op interface {
 	Type() Type
 	Revertible() bool
+	GetOpEdge() interface{}
+	SetOpEdge(interface{})
 }
 
 // Ops represents a slice of operations where all operations have the
@@ -88,6 +90,10 @@ var _ Ops = (mutationOps)(nil)
 var _ Ops = (backfillOps)(nil)
 var _ Ops = (validationOps)(nil)
 
-type baseOp struct{}
+type baseOp struct {
+	opEdge interface{}
+}
 
-func (baseOp) Revertible() bool { return true }
+func (baseOp) Revertible() bool              { return true }
+func (b *baseOp) SetOpEdge(edge interface{}) { b.opEdge = edge }
+func (b *baseOp) GetOpEdge() interface{}     { return b.opEdge }

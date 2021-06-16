@@ -67,15 +67,15 @@ type CreateGcJobForDescriptor struct {
 	DescID descpb.ID
 }
 
+// Revertible implements if this operation can be reverted.
+func (*CreateGcJobForDescriptor) Revertible() bool {
+	return false
+}
+
 // MarkDescriptorAsDropped marks a descriptor as dropped.
 type MarkDescriptorAsDropped struct {
 	mutationOp
 	TableID descpb.ID
-}
-
-// Revertible implements if this operation can be reverted.
-func (*MarkDescriptorAsDropped) Revertible() bool {
-	return false
 }
 
 // DrainDescriptorName marks a descriptor as dropped.

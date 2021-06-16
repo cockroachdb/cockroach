@@ -179,6 +179,9 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph, params Params) []Stage {
 			for _, e := range edges {
 				if e.From() == ts {
 					next[i] = e.To()
+					for _, op := range e.Op() {
+						op.SetOpEdge(e)
+					}
 					ops = append(ops, e.Op()...)
 					break
 				}
@@ -248,16 +251,46 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph, params Params) []Stage {
 				opsSlice[j] = tmp
 			})
 		}
+		compareEdges := func(first *scgraph.OpEdge, firstOp *scop.Op, second *scgraph.OpEdge, secondOp *scop.Op) bool {
+			// Orders operators by a fixed ordering when
+			// sorting the operators in a stage.
+			implicitOrderMap := map[reflect.Type]int{
+				reflect.TypeOf(scop.MarkDescriptorAsDropped{}): 0,
+			}
+			noImplicitOrder := len(implicitOrderMap)
+			firstType := reflect.TypeOf(*firstOp).Elem()
+			firstOrder, ok := implicitOrderMap[firstType]
+			if !ok {
+				firstOrder = noImplicitOrder
+			}
+			secondType := reflect.TypeOf(*secondOp).Elem()
+			secondOrder, ok := implicitOrderMap[secondType]
+			if !ok {
+				secondOrder = noImplicitOrder
+			}
+			if firstOrder < secondOrder {
+				return true
+			} else if firstOrder > secondOrder {
+				return false
+			}
+			// Otherwise, lets compare attributes
+			firstDestAttrib := first.To().Element().GetAttributes()
+			secondSrcAttrib := second.From().Element().GetAttributes()
+			if firstDestAttrib.Equal(secondSrcAttrib) {
+				return false // B comes first
+			}
+			return true // A comes first.
+		}
 		// Place non-revertible operations at the end
 		sort.SliceStable(opsSlice, func(i, j int) bool {
 			if opsSlice[i].Revertible() == opsSlice[j].Revertible() {
-				return false
+				return compareEdges(opsSlice[i].GetOpEdge().(*scgraph.OpEdge), &opsSlice[i],
+					opsSlice[j].GetOpEdge().(*scgraph.OpEdge), &opsSlice[j])
 			}
 			return opsSlice[i].Revertible()
 		})
 		stages = append(stages, s)
 		cur = s.After
-
 	}
 	return stages
 }

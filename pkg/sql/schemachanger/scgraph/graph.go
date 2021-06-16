@@ -131,8 +131,9 @@ func (g *Graph) AddDepEdge(
 	fromTarget *scpb.Target, fromState scpb.State, toTarget *scpb.Target, toState scpb.State,
 ) {
 	de := &DepEdge{
-		from: g.getOrCreateNode(fromTarget, fromState),
-		to:   g.getOrCreateNode(toTarget, toState),
+		from:          g.getOrCreateNode(fromTarget, fromState),
+		to:            g.getOrCreateNode(toTarget, toState),
+		implicitOrder: len(g.edges),
 	}
 	g.edges = append(g.edges, de)
 	g.nodeDepEdges[de.from] = append(g.nodeDepEdges[de.from], de)
@@ -166,7 +167,8 @@ func (oe *OpEdge) Op() []scop.Op { return oe.op }
 // implies that the To() state cannot be reached before the From() state. It
 // can be reached concurrently.
 type DepEdge struct {
-	from, to *scpb.Node
+	from, to      *scpb.Node
+	implicitOrder int
 }
 
 // From implements the Edge interface.
@@ -174,3 +176,6 @@ func (de *DepEdge) From() *scpb.Node { return de.from }
 
 // To implements the Edge interface.
 func (de *DepEdge) To() *scpb.Node { return de.to }
+
+// ImplicitOrder implements the Edge interface.
+func (de *DepEdge) ImplicitOrder() int { return de.implicitOrder }
