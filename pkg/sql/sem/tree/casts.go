@@ -39,6 +39,11 @@ type castInfo struct {
 	to         types.Family
 	volatility Volatility
 
+	// volatilityHint is an optional string for VolatilityStable casts. When set,
+	// it is used as an error hint suggesting a possible workaround when stable
+	// casts are not allowed.
+	volatilityHint string
+
 	// Telemetry counter; set by init().
 	counter telemetry.Counter
 
@@ -164,7 +169,10 @@ var validCasts = []castInfo{
 	{from: types.GeographyFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.BytesFamily, to: types.StringFamily, volatility: VolatilityStable},
 	{from: types.TimestampFamily, to: types.StringFamily, volatility: VolatilityImmutable},
-	{from: types.TimestampTZFamily, to: types.StringFamily, volatility: VolatilityStable},
+	{
+		from: types.TimestampTZFamily, to: types.StringFamily, volatility: VolatilityStable,
+		volatilityHint: "TIMESTAMPTZ to STRING casts depend on the current timezone; consider using (t AT TIME ZONE 'UTC')::STRING instead.",
+	},
 	{from: types.IntervalFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.UuidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.DateFamily, to: types.StringFamily, volatility: VolatilityImmutable},
@@ -240,11 +248,17 @@ var validCasts = []castInfo{
 
 	// Casts to TimestampFamily.
 	{from: types.UnknownFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
-	{from: types.StringFamily, to: types.TimestampFamily, volatility: VolatilityStable},
+	{
+		from: types.StringFamily, to: types.TimestampFamily, volatility: VolatilityStable,
+		volatilityHint: "STRING to TIMESTAMP casts are context-dependent because of relative timestamp strings like 'now'; use parse_timestamp() instead.",
+	},
 	{from: types.CollatedStringFamily, to: types.TimestampFamily, volatility: VolatilityStable},
 	{from: types.DateFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
 	{from: types.TimestampFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
-	{from: types.TimestampTZFamily, to: types.TimestampFamily, volatility: VolatilityStable},
+	{
+		from: types.TimestampTZFamily, to: types.TimestampFamily, volatility: VolatilityStable,
+		volatilityHint: "TIMESTAMPTZ to TIMESTAMP casts depend on the current timezone; consider using AT TIME ZONE 'UTC' instead",
+	},
 	{from: types.IntFamily, to: types.TimestampFamily, volatility: VolatilityImmutable},
 
 	// Casts to TimestampTZFamily.
