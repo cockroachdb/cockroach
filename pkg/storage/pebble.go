@@ -461,6 +461,9 @@ type Pebble struct {
 	diskSlowCount   int64
 	diskStallCount  int64
 
+	// Copied from testing knobs.
+	disableSeparatedIntents bool
+
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
 	logger        pebble.Logger
@@ -576,16 +579,17 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		depth: 1,
 	}
 	p := &Pebble{
-		path:             cfg.Dir,
-		auxDir:           auxDir,
-		maxSize:          cfg.MaxSize,
-		attrs:            cfg.Attrs,
-		settings:         cfg.Settings,
-		statsHandler:     statsHandler,
-		fileRegistry:     fileRegistry,
-		fs:               cfg.Opts.FS,
-		logger:           cfg.Opts.Logger,
-		storeIDPebbleLog: storeIDContainer,
+		path:                    cfg.Dir,
+		auxDir:                  auxDir,
+		maxSize:                 cfg.MaxSize,
+		attrs:                   cfg.Attrs,
+		settings:                cfg.Settings,
+		statsHandler:            statsHandler,
+		fileRegistry:            fileRegistry,
+		fs:                      cfg.Opts.FS,
+		logger:                  cfg.Opts.Logger,
+		storeIDPebbleLog:        storeIDContainer,
+		disableSeparatedIntents: cfg.DisableSeparatedIntents,
 	}
 	cfg.Opts.EventListener = pebble.TeeEventListener(
 		pebble.MakeLoggingEventListener(pebbleLogger{
@@ -595,7 +599,8 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		p.makeMetricEventListener(ctx),
 	)
 	p.eventListener = &cfg.Opts.EventListener
-	p.wrappedIntentWriter = wrapIntentWriter(ctx, p, cfg.Settings, true /* isLongLived */)
+	p.wrappedIntentWriter = wrapIntentWriter(
+		ctx, p, cfg.Settings, true /* isLongLived */, cfg.DisableSeparatedIntents)
 
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
@@ -923,7 +928,7 @@ func (p *Pebble) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) 
 // IsSeparatedIntentsEnabledForTesting implements the Engine interface.
 func (p *Pebble) IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool {
 	return !p.settings.Version.ActiveVersionOrEmpty(ctx).Less(
-		clusterversion.ByKey(clusterversion.SeparatedIntents)) && SeparatedIntentsEnabled.Get(&p.settings.SV)
+		clusterversion.ByKey(clusterversion.SeparatedIntents)) && !p.disableSeparatedIntents
 }
 
 func (p *Pebble) put(key MVCCKey, value []byte) error {
@@ -1148,7 +1153,9 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings)
+	return newPebbleBatch(
+		p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings,
+		p.disableSeparatedIntents)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1158,7 +1165,7 @@ func (p *Pebble) NewReadOnly() ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.settings)
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.settings, p.disableSeparatedIntents)
 }
 
 // NewSnapshot implements the Engine interface.

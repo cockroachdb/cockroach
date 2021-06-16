@@ -238,7 +238,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			storage.InMemory(),
 			storage.Attributes(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}),
 			storage.MaxSize(1<<20),
-			storage.SettingsForTesting())
+			storage.ForTesting)
 		if err != nil {
 			t.Fatal(err)
 		}
