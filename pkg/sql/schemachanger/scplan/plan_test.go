@@ -102,8 +102,7 @@ func TestPlanAlterTable(t *testing.T) {
 
 				plan, err := scplan.MakePlan(outputNodes,
 					scplan.Params{
-						ExecutionPhase:         scplan.PostCommitPhase,
-						DisableOpRandomization: true,
+						ExecutionPhase: scplan.PostCommitPhase,
 					})
 				require.NoError(t, err)
 

@@ -123,7 +123,7 @@ func (ex *Executor) executeBackfillOps(ctx context.Context, execute []scop.Op) e
 	for _, op := range execute {
 		var err error
 		switch op := op.(type) {
-		case scop.BackfillIndex:
+		case *scop.BackfillIndex:
 			err = ex.executeIndexBackfillOp(ctx, op)
 		default:
 			panic("unimplemented")
@@ -135,7 +135,7 @@ func (ex *Executor) executeBackfillOps(ctx context.Context, execute []scop.Op) e
 	return nil
 }
 
-func (ex *Executor) executeIndexBackfillOp(ctx context.Context, op scop.BackfillIndex) error {
+func (ex *Executor) executeIndexBackfillOp(ctx context.Context, op *scop.BackfillIndex) error {
 	// Note that the leasing here is subtle. We'll avoid the cache and ensure that
 	// the descriptor is read from the store. That means it will not be leased.
 	// This relies on changed to the descriptor not messing with this index
