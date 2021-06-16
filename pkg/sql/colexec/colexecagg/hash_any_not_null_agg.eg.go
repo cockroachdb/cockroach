@@ -188,7 +188,7 @@ func (a *anyNotNullBoolHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -418,7 +418,7 @@ func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -531,7 +531,7 @@ func (a *anyNotNullInt16HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -644,7 +644,7 @@ func (a *anyNotNullInt32HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -757,7 +757,7 @@ func (a *anyNotNullInt64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -870,7 +870,7 @@ func (a *anyNotNullFloat64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -983,7 +983,7 @@ func (a *anyNotNullTimestampHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1096,7 +1096,7 @@ func (a *anyNotNullIntervalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

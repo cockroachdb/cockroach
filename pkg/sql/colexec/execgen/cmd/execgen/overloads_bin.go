@@ -300,9 +300,9 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 				var r = []byte{}
 				r = append(r, %s...)
 				r = append(r, %s...)
-				%s
+				%s.Set(%s, r)
 			}
-			`, leftElem, rightElem, set(types.BytesFamily, caller, idx, "r"))
+			`, leftElem, rightElem, caller, idx)
 		} else {
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -960,9 +960,8 @@ func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumEl
 			if _res == tree.DNull {
 				_outNulls.SetNull(%s)
 			}
-			%s
-		`, prelude, leftColdataExtDatum, rightDatumElem, idxVariable,
-		set(typeconv.DatumVecCanonicalTypeFamily, vecVariable, idxVariable, "_res"),
+			%s.Set(%s, _res)
+		`, prelude, leftColdataExtDatum, rightDatumElem, idxVariable, vecVariable, idxVariable,
 	)
 }
 

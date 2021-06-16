@@ -121,7 +121,7 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
 		// {{else}}
 		v := c.vecs[srcVecIdx].Get(srcIdx)
-		execgen.SET(c.vecs[dstVecIdx], dstIdx, v)
+		c.vecs[dstVecIdx].Set(dstIdx, v)
 		// {{end}}
 	}
 }

@@ -179,7 +179,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		execgen.SET(a.col, outputIdx, a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
 	// Release the reference to curAgg eagerly.
@@ -246,9 +246,7 @@ func _FIND_ANY_NOT_NULL(
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
+				a.col.Set(a.curIdx, a.curAgg)
 			}
 			a.curIdx++
 			a.foundNonNullForCurrentGroup = false
@@ -270,8 +268,8 @@ func _FIND_ANY_NOT_NULL(
 		// {{if and (.Sliceable) (not .HasSel)}}
 		//gcassert:bce
 		// {{end}}
-		// {{with .Global}}
 		val := col.Get(i)
+		// {{with .Global}}
 		execgen.COPYVAL(a.curAgg, val)
 		// {{end}}
 		a.foundNonNullForCurrentGroup = true

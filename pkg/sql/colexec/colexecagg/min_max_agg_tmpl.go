@@ -180,7 +180,7 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		execgen.SET(a.col, outputIdx, a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
 	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
@@ -243,9 +243,7 @@ func _ACCUMULATE_MINMAX(
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
+				a.col.Set(a.curIdx, a.curAgg)
 			}
 			a.curIdx++
 			a.foundNonNullForCurrentGroup = false

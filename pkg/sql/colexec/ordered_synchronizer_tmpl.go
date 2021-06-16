@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -180,7 +179,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 							srcCol := vec._TYPE()
 							outCol := o.out_TYPECols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							execgen.SET(outCol, outputIdx, v)
+							outCol.Set(outputIdx, v)
 							// {{end}}
 						}
 						// {{end}}
