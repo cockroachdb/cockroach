@@ -16,6 +16,7 @@ package rdbms
 
 import (
 	"io"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 )
@@ -34,20 +35,38 @@ type columnMetadata struct {
 	dataTypeOid  uint32
 }
 
+type excludePattern struct {
+	pattern *regexp.Regexp
+	except  map[string]struct{}
+}
+
 // ColumnMetadataList is a list of rows coming from rdbms describing a column.
-type ColumnMetadataList []*columnMetadata
+type ColumnMetadataList struct {
+	data       []*columnMetadata
+	exclusions []*excludePattern
+}
 
 // DBMetadataConnection structs can describe a schema like pg_catalog or
 // information_schema.
 type DBMetadataConnection interface {
 	io.Closer
-	DescribeSchema() (ColumnMetadataList, error)
+	DescribeSchema() (*ColumnMetadataList, error)
 	DatabaseVersion() (string, error)
 }
 
 // ForEachRow iterates over the rows gotten from DescribeSchema() call.
-func (l ColumnMetadataList) ForEachRow(addRow func(string, string, string, uint32)) {
-	for _, c := range l {
-		addRow(c.tableName, c.columnName, c.dataTypeName, c.dataTypeOid)
+func (l *ColumnMetadataList) ForEachRow(addRow func(string, string, string, uint32)) {
+	addRowIfAllowed := func(metadata *columnMetadata) {
+		for _, exclusion := range l.exclusions {
+			tableName := metadata.tableName
+			if _, ok := exclusion.except[tableName]; exclusion.pattern.MatchString(tableName) && !ok {
+				return
+			}
+		}
+
+		addRow(metadata.tableName, metadata.columnName, metadata.dataTypeName, metadata.dataTypeOid)
+	}
+	for _, metadata := range l.data {
+		addRowIfAllowed(metadata)
 	}
 }
