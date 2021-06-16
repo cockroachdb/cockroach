@@ -408,6 +408,7 @@ const (
 	StatementStatisticsTableID          = 42
 	TransactionStatisticsTableID        = 43
 	DatabaseRoleSettingsTableID         = 44
+	SQLInstancesTableID                 = 45
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0

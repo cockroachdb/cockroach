@@ -346,6 +346,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.DatabaseRoleSettingsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
 	},
+	systemschema.SQLInstancesTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that

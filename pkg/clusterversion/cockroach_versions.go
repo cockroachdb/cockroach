@@ -264,6 +264,9 @@ const (
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
+	// SQLInstancesTable adds the system table for storing SQL instance information
+	// per tenant.
+	SQLInstancesTable
 
 	// Step (1): Add new versions here.
 )
@@ -421,6 +424,11 @@ var versionsSingleton = keyedVersions{
 		Key:     DatabaseRoleSettings,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
 	},
+	{
+		Key:     SQLInstancesTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
+	},
+
 	// Step (2): Add new versions here.
 }
 
