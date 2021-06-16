@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx"
@@ -101,6 +102,7 @@ func TestConn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	conn.startTime = timeutil.Now()
 
 	// Run the conn's loop in the background - it will push commands to the
 	// buffer.
@@ -1082,6 +1084,8 @@ func TestMaliciousInputs(t *testing.T) {
 				r, sql.SessionArgs{ConnResultsBufferSize: 10}, &metrics,
 				nil,
 			)
+			conn.startTime = timeutil.Now()
+
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
 			conn.serveImpl(
