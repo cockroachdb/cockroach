@@ -12,11 +12,7 @@ package storage
 
 import (
 	"context"
-	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -50,31 +46,9 @@ func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOptio
 // the default configuration. The caller must call the engine's Close method
 // when the engine is no longer needed.
 func NewDefaultInMemForTesting() Engine {
-	eng, err := Open(context.Background(), InMemory(), SettingsForTesting(), MaxSize(1<<20))
+	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20))
 	if err != nil {
 		panic(err)
 	}
 	return eng
-}
-
-// makeRandomSettingsForSeparatedIntents makes settings for which it randomly
-// picks whether the cluster understands separated intents, and if yes,
-// whether to write separated intents. Once made, these setting do not change.
-func makeRandomSettingsForSeparatedIntents() *cluster.Settings {
-	oldClusterVersion := rand.Intn(2) == 0
-	enabledSeparated := rand.Intn(2) == 0
-	log.Infof(context.Background(),
-		"engine creation is randomly setting oldClusterVersion: %t, enabledSeparated: %t",
-		oldClusterVersion, enabledSeparated)
-	return makeSettingsForSeparatedIntents(oldClusterVersion, enabledSeparated)
-}
-
-func makeSettingsForSeparatedIntents(oldClusterVersion bool, enabled bool) *cluster.Settings {
-	version := clusterversion.ByKey(clusterversion.SeparatedIntents)
-	if oldClusterVersion {
-		version = clusterversion.ByKey(clusterversion.V20_2)
-	}
-	settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
-	SeparatedIntentsEnabled.Override(context.TODO(), &settings.SV, enabled)
-	return settings
 }
