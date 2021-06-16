@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package kvfeed
+package kvevent
 
 import (
 	"time"
@@ -30,9 +30,6 @@ var (
 )
 
 // Metrics is a metric.Struct for kvfeed metrics.
-//
-// TODO(ajwerner): Make these metrics more reasonable given the removal of the
-// poller and polling in general.
 type Metrics struct {
 	BufferEntriesIn  *metric.Counter
 	BufferEntriesOut *metric.Counter
