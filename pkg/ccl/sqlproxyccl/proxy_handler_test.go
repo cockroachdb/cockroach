@@ -587,16 +587,16 @@ func TestDirectoryConnect(t *testing.T) {
 		// Ensure that Directory.ReportFailure is being called correctly.
 		countReports := 0
 		defer testutils.TestingHook(&reportFailureToDirectory, func(
-			ctx context.Context, tenantID roachpb.TenantID, ip string, directory *tenant.Directory,
+			ctx context.Context, tenantID roachpb.TenantID, addr string, directory *tenant.Directory,
 		) error {
 			require.Equal(t, roachpb.MakeTenantID(28), tenantID)
-			addrs, err := directory.LookupTenantIPs(ctx, tenantID)
+			addrs, err := directory.LookupTenantAddrs(ctx, tenantID)
 			require.NoError(t, err)
 			require.Len(t, addrs, 1)
-			require.Equal(t, addrs[0], ip)
+			require.Equal(t, addrs[0], addr)
 
 			countReports++
-			err = directory.ReportFailure(ctx, tenantID, ip)
+			err = directory.ReportFailure(ctx, tenantID, addr)
 			require.NoError(t, err)
 			return err
 		})()

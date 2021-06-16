@@ -394,13 +394,13 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 }
 
 // outgoingAddress resolves a tenant ID and a tenant cluster name to the address
-// of a backend endpoint.
+// of a backend pod.
 func (handler *proxyHandler) outgoingAddress(
 	ctx context.Context, name string, tenID roachpb.TenantID,
 ) (string, error) {
 	// First try to lookup tenant in the directory (if available).
 	if handler.directory != nil {
-		addr, err := handler.directory.EnsureTenantIP(ctx, tenID, name)
+		addr, err := handler.directory.EnsureTenantAddr(ctx, tenID, name)
 		if err != nil {
 			if status.Code(err) != codes.NotFound {
 				return "", err
@@ -473,7 +473,7 @@ func (handler *proxyHandler) validateAccess(
 	return nil
 }
 
-// incomingTLSConfig gets back the current TLS config for the incoiming client
+// incomingTLSConfig gets back the current TLS config for the incoming client
 // connection endpoint.
 func (handler *proxyHandler) incomingTLSConfig() *tls.Config {
 	if handler.incomingCert == nil {
@@ -526,9 +526,9 @@ func (handler *proxyHandler) setupIncomingCert() error {
 // reportFailureToDirectory is a hookable function that calls the given tenant
 // directory's ReportFailure method.
 var reportFailureToDirectory = func(
-	ctx context.Context, tenantID roachpb.TenantID, ip string, directory *tenant.Directory,
+	ctx context.Context, tenantID roachpb.TenantID, addr string, directory *tenant.Directory,
 ) error {
-	return directory.ReportFailure(ctx, tenantID, ip)
+	return directory.ReportFailure(ctx, tenantID, addr)
 }
 
 // clusterNameAndTenantFromParams extracts the cluster name from the connection

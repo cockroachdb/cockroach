@@ -34,7 +34,7 @@ type dirOptions struct {
 type DirOption func(opts *dirOptions)
 
 // RefreshDelay specifies the minimum amount of time that must elapse between
-// attempts to refresh endpoints for a given tenant after ReportFailure is
+// attempts to refresh pods for a given tenant after ReportFailure is
 // called. This delay has the effect of throttling calls to directory server, in
 // order to avoid overloading it.
 //
@@ -66,7 +66,7 @@ type Directory struct {
 	// calls.
 	client DirectoryClient
 
-	// stopper use used for graceful shutdown of the endpoint watcher.
+	// stopper is used for graceful shutdown of the pod watcher.
 	stopper *stop.Stopper
 
 	// options control how the environment operates.
@@ -87,7 +87,7 @@ type Directory struct {
 
 // NewDirectory constructs a new Directory instance that tracks SQL tenant
 // processes managed by a given Directory server. The given context is used for
-// tracing endpoint watcher activity.
+// tracing pod watcher activity.
 //
 // NOTE: stopper.Stop must be called on the directory when it is no longer
 // needed.
@@ -105,28 +105,28 @@ func NewDirectory(
 		dir.options.refreshDelay = 100 * time.Millisecond
 	}
 
-	// Starts the endpoint watcher and then returns
-	if err := dir.watchEndpoints(ctx, stopper); err != nil {
+	// Starts the pod watcher and then returns
+	if err := dir.watchPods(ctx, stopper); err != nil {
 		return nil, err
 	}
 
 	return dir, nil
 }
 
-// EnsureTenantIP returns the IP address of one of the given tenant's SQL
+// EnsureTenantAddr returns the IP address of one of the given tenant's SQL
 // processes. If the tenant was just created or is suspended, such that there
-// are no available processes, then EnsureTenantIP will trigger resumption of a
+// are no available processes, then EnsureTenantAddr will trigger resumption of a
 // new instance and block until the process is ready. If there are multiple
-// processes for the tenant, then LookupTenantIPs will choose one of them (note
+// processes for the tenant, then LookupTenantAddrs will choose one of them (note
 // that currently there is always at most one SQL process per tenant).
 //
 // If clusterName is non-empty, then a GRPC NotFound error is returned if no
-// endpoints match the cluster name. This can be used to ensure that the
+// pods match the cluster name. This can be used to ensure that the
 // incoming SQL connection "knows" some additional information about the tenant,
 // such as the name of the cluster, before being allowed to connect. Similarly,
-// if the tenant does not exist (e.g. because it was deleted), EnsureTenantIP
+// if the tenant does not exist (e.g. because it was deleted), EnsureTenantAddr
 // returns a GRPC NotFound error.
-func (d *Directory) EnsureTenantIP(
+func (d *Directory) EnsureTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
 	// Ensure that a directory entry has been created for this tenant.
@@ -144,22 +144,22 @@ func (d *Directory) EnsureTenantIP(
 	}
 
 	ctx, _ = d.stopper.WithCancelOnQuiesce(ctx)
-	ip, err := entry.ChooseEndpointIP(ctx, d.client, d.options.deterministic)
+	addr, err := entry.ChoosePodAddr(ctx, d.client, d.options.deterministic)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			d.deleteEntry(tenantID)
 		}
 	}
-	return ip, err
+	return addr, err
 }
 
-// LookupTenantIPs returns the IP addresses for all available SQL processes for
+// LookupTenantAddrs returns the IP addresses for all available SQL processes for
 // the given tenant. It returns a GRPC NotFound error if the tenant does not
 // exist (e.g. it has not yet been created) or if it has not yet been fetched
-// into the directory's cache (LookupTenantIPs will never attempt to fetch it).
-// If no processes are available for the tenant, LookupTenantIPs will return the
-// empty set (unlike EnsureTenantIP).
-func (d *Directory) LookupTenantIPs(
+// into the directory's cache (LookupTenantAddrs will never attempt to fetch it).
+// If no processes are available for the tenant, LookupTenantAddrs will return the
+// empty set (unlike EnsureTenantAddr).
+func (d *Directory) LookupTenantAddrs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
 	// Ensure that a directory entry has been created for this tenant.
@@ -172,18 +172,20 @@ func (d *Directory) LookupTenantIPs(
 		return nil, status.Errorf(
 			codes.NotFound, "tenant %d not in directory cache", tenantID.ToUint64())
 	}
-	return entry.getEndpointIPs(), nil
+	return entry.getPodAddrs(), nil
 }
 
 // ReportFailure should be called when attempts to connect to a particular SQL
-// tenant endpoint have failed. Since this could be due to a failed process,
+// tenant pod have failed. Since this could be due to a failed process,
 // ReportFailure will attempt to refresh the cache with the latest information
 // about available tenant processes.
 // TODO(andyk): In the future, the ip parameter will be used to mark a
-// particular endpoint as "unhealthy" so that it's less likely to be chosen.
-// However, today there can be at most one endpoint for a given tenant, so it
+// particular pod as "unhealthy" so that it's less likely to be chosen.
+// However, today there can be at most one pod for a given tenant, so it
 // must always be chosen. Keep the parameter as a placeholder for the future.
-func (d *Directory) ReportFailure(ctx context.Context, tenantID roachpb.TenantID, ip string) error {
+func (d *Directory) ReportFailure(
+	ctx context.Context, tenantID roachpb.TenantID, addr string,
+) error {
 	entry, err := d.getEntry(ctx, tenantID, false /* allowCreate */)
 	if err != nil {
 		return err
@@ -192,8 +194,8 @@ func (d *Directory) ReportFailure(ctx context.Context, tenantID roachpb.TenantID
 		return nil
 	}
 
-	// Refresh the entry in case there is a new endpoint IP address.
-	return entry.RefreshEndpoints(ctx, d.client)
+	// Refresh the entry in case there is a new pod IP address.
+	return entry.RefreshPods(ctx, d.client)
 }
 
 // getEntry returns a directory entry for the given tenant. If the directory
@@ -262,39 +264,39 @@ func (d *Directory) deleteEntry(tenantID roachpb.TenantID) {
 	delete(d.mut.tenants, tenantID)
 }
 
-// watchEndpoints establishes a watcher that looks for changes to tenant
-// endpoint addresses. Whenever tenant processes start or terminate, the watcher
+// watchPods establishes a watcher that looks for changes to tenant
+// pod addresses. Whenever tenant processes start or terminate, the watcher
 // will get a notification and update the directory to reflect that change.
-func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) error {
-	req := WatchEndpointsRequest{}
+func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error {
+	req := WatchPodsRequest{}
 
 	// The loop that processes the event stream is running in a separate go
 	// routine. It is desirable however, before we return, to have a guarantee
 	// that the separate go routine started processing events. This wait group
 	// helps us achieve this. Without the wait group, it will be possible to:
 	//
-	// 1. call watchEndpoints
-	// 2. call EnsureTenantIP
+	// 1. call watchPods
+	// 2. call EnsureTenantAddr
 	// 3. wait forever to receive notification about the tenant that just started.
 	//
 	// and the reason why the notification may not ever arrive is because the
-	// watchEndpoints go routine can start listening after the server started the
+	// watchPods go routine can start listening after the server started the
 	// tenant and sent notification.
 	var waitInit sync.WaitGroup
 	waitInit.Add(1)
 
-	err := stopper.RunAsyncTask(ctx, "watch-endpoints-client", func(ctx context.Context) {
-		var client Directory_WatchEndpointsClient
+	err := stopper.RunAsyncTask(ctx, "watch-pods-client", func(ctx context.Context) {
+		var client Directory_WatchPodsClient
 		var err error
 		firstRun := true
 		ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
-		watchEndpointsErr := log.Every(10 * time.Second)
+		watchPodsErr := log.Every(10 * time.Second)
 		recvErr := log.Every(10 * time.Second)
 
 		for {
 			if client == nil {
-				client, err = d.client.WatchEndpoints(ctx, &req)
+				client, err = d.client.WatchPods(ctx, &req)
 				if firstRun {
 					waitInit.Done()
 					firstRun = false
@@ -303,13 +305,13 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 					if grpcutil.IsContextCanceled(err) {
 						break
 					}
-					if watchEndpointsErr.ShouldLog() {
-						log.Errorf(ctx, "err creating new watch endpoint client: %s", err)
+					if watchPodsErr.ShouldLog() {
+						log.Errorf(ctx, "err creating new watch pod client: %s", err)
 					}
 					sleepContext(ctx, time.Second)
 					continue
 				} else {
-					log.Info(ctx, "established watch on endpoints")
+					log.Info(ctx, "established watch on pods")
 				}
 			}
 
@@ -331,8 +333,8 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 				continue
 			}
 
-			endpointIP := resp.IP
-			if endpointIP == "" {
+			podAddr := resp.Addr
+			if podAddr == "" {
 				// Nothing needs to be done if there is no IP address specified.
 				continue
 			}
@@ -350,16 +352,16 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 			}
 
 			if entry != nil {
-				// For now, all we care about is the IP addresses of the tenant endpoint.
+				// For now, all we care about is the IP addresses of the tenant pod.
 				switch resp.Typ {
 				case ADDED, MODIFIED:
-					if entry.AddEndpointIP(endpointIP) {
-						log.Infof(ctx, "added IP address %s for tenant %d", endpointIP, resp.TenantID)
+					if entry.AddPodAddr(podAddr) {
+						log.Infof(ctx, "added IP address %s for tenant %d", podAddr, resp.TenantID)
 					}
 
 				case DELETED:
-					if entry.RemoveEndpointIP(endpointIP) {
-						log.Infof(ctx, "deleted IP address %s for tenant %d", endpointIP, resp.TenantID)
+					if entry.RemovePodAddr(podAddr) {
+						log.Infof(ctx, "deleted IP address %s for tenant %d", podAddr, resp.TenantID)
 					}
 				}
 			}
@@ -369,7 +371,7 @@ func (d *Directory) watchEndpoints(ctx context.Context, stopper *stop.Stopper) e
 		return err
 	}
 
-	// Block until the initial endpoint watcher client stream is constructed.
+	// Block until the initial pod watcher client stream is constructed.
 	waitInit.Wait()
 	return err
 }
