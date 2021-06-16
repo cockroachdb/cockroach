@@ -1,0 +1,117 @@
+common
+{"severity": 1, "time": 12300000000, "goroutine": 456, "file": "somefile.go", "line": 136}
+----
+
+entries
+{"counter": 2, "message": ""}
+{"counter": 3, "message": "info"}
+----
+I000101 00:00:12.300000 456 somefile.go:136  2 
+I000101 00:00:12.300000 456 somefile.go:136  3 info
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹info›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+entries
+{"counter": 2, "message": "hello ‹world›"}
+{"counter": 3, "message": "hello ‹world›", "redactable": true}
+----
+I000101 00:00:12.300000 456 somefile.go:136  2 hello ‹world›
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ 3 hello ‹world›
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹hello ?world?›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"hello ‹world›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+
+entries
+{"counter": 2, "message": "multi-\nline"}
+{"counter": 3, "message": "multi-\nline", "redactable": true}
+----
+I000101 00:00:12.300000 456 somefile.go:136  2 multi-
+line
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ 3 multi-
+line
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹multi-›\n‹line›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"multi-\nline", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+
+entries
+{"counter": 2, "severity": 2, "message": "warning"}
+{"counter": 3, "severity": 3, "message": "error"}
+{"counter": 4, "severity": 4, "message": "fatal"}
+----
+W000101 00:00:12.300000 456 somefile.go:136  2 warning
+E000101 00:00:12.300000 456 somefile.go:136  3 error
+F000101 00:00:12.300000 456 somefile.go:136  4 fatal
+# after parse:
+logpb.Entry{Severity:2, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹warning›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+logpb.Entry{Severity:3, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹error›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+logpb.Entry{Severity:4, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹fatal›", Tags:"", Counter:0x4, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+subtest regression_56873
+
+entries
+{"counter": 2, "tags": "sometags", "message": "foo"}
+{"counter": 3, "tags": "", "message": "foo"}
+----
+I000101 00:00:12.300000 456 somefile.go:136  [sometags] 2 foo
+I000101 00:00:12.300000 456 somefile.go:136  3 foo
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"‹sometags›", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+subtest end
+
+subtest different_channel
+
+entries
+{"counter": 2, "channel": 2, "message": "foo"}
+----
+I000101 00:00:12.300000 456 2@somefile.go:136  2 foo
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"", Counter:0x2, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+subtest end
+
+subtest ipv6_in_tags
+
+entries
+{"counter": 2, "tags": "client=[1::]:2", "message": "foo"}
+----
+I000101 00:00:12.300000 456 somefile.go:136  [client=[1::]:2] 2 foo
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"‹client=[1::]:2›", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+subtest end
+
+subtest structured_entry
+
+entries
+{"counter": 2, "message": "Structured entry: {\"hello\":123}", "redactable": true}
+{"counter": 2, "message": "Structured entry: {\"hello\":123}\nstack trace:\nfoo", "redactable": true}
+----
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2 Structured entry: {"hello":123}
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2 Structured entry: {"hello":123}
+stack trace:
+foo
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"Structured entry: {\"hello\":123}", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x1f, StructuredStart:0x12, StackTraceStart:0x0}
+JSON payload in previous entry: map[hello:123]
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"Structured entry: {\"hello\":123}\nstack trace:\nfoo", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x1f, StructuredStart:0x12, StackTraceStart:0x20}
+JSON payload in previous entry: map[hello:123]
+
+# v2 entries are not treated specially in the v1 parser.
+entries
+{"counter": 2, "message": " ={\"hello\":123}", "redactable": true}
+{"counter": 2, "message": " ={\"hello\":123}\nstack trace:\nfoo", "redactable": true}
+----
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2  ={"hello":123}
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2  ={"hello":123}
+stack trace:
+foo
+# after parse:
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:" ={\"hello\":123}", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:" ={\"hello\":123}\nstack trace:\nfoo", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
+
+subtest end

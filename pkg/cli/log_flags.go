@@ -179,6 +179,11 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 		return err
 	}
 
+	// If using a custom config, report the configuration at the start of the logging stream.
+	if cliCtx.logConfigInput.isSet {
+		log.Ops.Infof(ctx, "using explicit logging configuration:\n%s", cliCtx.logConfigInput.s)
+	}
+
 	if cliCtx.ambiguousLogDir {
 		// Note that we can't report this message earlier, because the log directory
 		// may not have been ready before the call to MkdirAll() above.
