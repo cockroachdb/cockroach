@@ -280,6 +280,9 @@ select table_schema, table_name FROM information_schema.tables
 ----
 crdb_internal       backward_dependencies
 crdb_internal       builtin_functions
+crdb_internal       cluster_contended_indexes
+crdb_internal       cluster_contended_keys
+crdb_internal       cluster_contended_tables
 crdb_internal       cluster_contention_events
 crdb_internal       cluster_database_privileges
 crdb_internal       cluster_distsql_flows
@@ -487,6 +490,9 @@ SELECT table_name FROM "".information_schema.tables WHERE table_catalog = 'other
 ----
 backward_dependencies
 builtin_functions
+cluster_contended_indexes
+cluster_contended_keys
+cluster_contended_tables
 cluster_contention_events
 cluster_database_privileges
 cluster_distsql_flows
@@ -713,6 +719,9 @@ SELECT * FROM system.information_schema.tables
 table_catalog  table_schema        table_name                             table_type   is_insertable_into  version
 system         crdb_internal       backward_dependencies                  SYSTEM VIEW  NO                  1
 system         crdb_internal       builtin_functions                      SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_contended_indexes              SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_contended_keys                 SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_contended_tables               SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contention_events              SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_database_privileges            SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_distsql_flows                  SYSTEM VIEW  NO                  1
@@ -2022,6 +2031,9 @@ SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, 
 grantor  grantee  table_catalog  table_schema        table_name                             privilege_type  is_grantable  with_hierarchy
 NULL     public   system         crdb_internal       backward_dependencies                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       builtin_functions                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_contended_indexes              SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_contended_keys                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_contended_tables               SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_contention_events              SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_database_privileges            SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_distsql_flows                  SELECT          NULL          YES
@@ -2470,6 +2482,9 @@ SELECT * FROM system.information_schema.role_table_grants
 grantor  grantee  table_catalog  table_schema        table_name                             privilege_type  is_grantable  with_hierarchy
 NULL     public   system         crdb_internal       backward_dependencies                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       builtin_functions                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_contended_indexes              SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_contended_keys                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_contended_tables               SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_contention_events              SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_database_privileges            SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_distsql_flows                  SELECT          NULL          YES

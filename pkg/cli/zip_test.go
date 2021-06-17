@@ -66,6 +66,9 @@ table_name NOT IN (
 	-- allowlisted tables that don't need to be in debug zip
 	'backward_dependencies',
 	'builtin_functions',
+	'cluster_contended_keys',
+	'cluster_contended_indexes',
+	'cluster_contended_tables',
 	'create_statements',
 	'create_type_statements',
 	'cross_db_references',
