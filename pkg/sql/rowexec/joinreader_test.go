@@ -1321,12 +1321,51 @@ func TestIndexJoiner(t *testing.T) {
 	}
 }
 
-// BenchmarkJoinReader benchmarks different lookup join match ratios against a
+type JRBenchConfig struct {
+	rightSz                int
+	lookupExprs            []bool
+	ordering               []bool
+	numLookupRows          []int
+	memoryLimits           []int64
+	hideLookupExprFromName bool // omit /lookupExpr from benchmark name, see below
+}
+
+// BenchmarkJoinReader runs benchmarkJoinReader with the original config before
+// it was parameterized with a config struct. For continuity in benchmark result
+// comparisons this config matches exactly the original.
+func BenchmarkJoinReader(b *testing.B) {
+	skip.UnderShort(b)
+	config := JRBenchConfig{
+		rightSz:       1 << 19, /* 524,288 rows */
+		lookupExprs:   []bool{false},
+		ordering:      []bool{false, true},
+		numLookupRows: []int{1, 1 << 4 /* 16 */, 1 << 8 /* 256 */, 1 << 10 /* 1024 */, 1 << 12 /* 4096 */, 1 << 13 /* 8192 */, 1 << 14 /* 16384 */, 1 << 15 /* 32768 */, 1 << 16 /* 65,536 */, 1 << 19 /* 524,288 */},
+		memoryLimits:  []int64{100 << 10, math.MaxInt64},
+	}
+	benchmarkJoinReader(b, config)
+}
+
+// benchmarkJoinReader benchmarks different lookup join match ratios against a
 // table with half a million rows. A match ratio specifies how many rows are
 // returned for a single lookup row. Some cases will cause the join reader to
 // spill to disk, in which case the benchmark logs that the join spilled.
-func BenchmarkJoinReader(b *testing.B) {
-	skip.UnderShort(b)
+//
+// The input table is a 1 column row source where each value is the row number
+// (0 based). This is joined using a number of different rows per lookup on a
+// each column of the table. For example:
+//
+// input: 0,1,2,3,4 (size of input is 'numLookupRows')
+// table: one | four | sixteen |
+//          0 |    0 |       0
+//          1 |    0 |       0
+//          2 |    0 |       0
+//          3 |    0 |       0
+//          4 |    1 |       0
+//          5 |    1 |       0
+//  ...
+// SELECT one FROM input INNER LOOKUP JOIN t64 ON i = one;  -> 0,1,2,3,4
+// SELECT four FROM input INNER LOOKUP JOIN t64 ON i = four; -> 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3
+func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 	// Create an *on-disk* store spec for the primary store and temp engine to
 	// reflect the real costs of lookups and spilling.
@@ -1414,18 +1453,16 @@ func BenchmarkJoinReader(b *testing.B) {
 
 		sqlutils.CreateTable(
 			b, sqlDB, tableName, strings.Join(append(colDefs, indexDefs...), ", "), sz,
-			sqlutils.ToRowFn(genValueFns...),
-		)
+			sqlutils.ToRowFn(genValueFns...))
 	}
 
-	rightSz := 1 << 19 /* 524,288 rows */
-	createRightSideTable(rightSz)
+	createRightSideTable(bc.rightSz)
 	// Create a new txn after the table has been created.
 	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), s.NodeID())
-	for _, reqOrdering := range []bool{true, false} {
+	for _, reqOrdering := range bc.ordering {
 		for columnIdx, columnDef := range rightSideColumnDefs {
-			for _, numLookupRows := range []int{1, 1 << 4 /* 16 */, 1 << 8 /* 256 */, 1 << 10 /* 1024 */, 1 << 12 /* 4096 */, 1 << 13 /* 8192 */, 1 << 14 /* 16384 */, 1 << 15 /* 32768 */, 1 << 16 /* 65,536 */, 1 << 19 /* 524,288 */} {
-				for _, memoryLimit := range []int64{100 << 10, math.MaxInt64} {
+			for _, numLookupRows := range bc.numLookupRows {
+				for _, memoryLimit := range bc.memoryLimits {
 					memoryLimitStr := "mem=unlimited"
 					if memoryLimit != math.MaxInt64 {
 						if !reqOrdering {
@@ -1441,7 +1478,7 @@ func BenchmarkJoinReader(b *testing.B) {
 						//
 						// TODO(sumeer): add workload that can benefit from caching.
 					}
-					if rightSz/columnDef.matchesPerLookupRow < numLookupRows {
+					if bc.rightSz/columnDef.matchesPerLookupRow < numLookupRows {
 						// This case does not make sense since we won't have distinct lookup
 						// rows. We don't currently merge spans which could make this an
 						// interesting case to benchmark, but we probably should.
@@ -1454,82 +1491,265 @@ func BenchmarkJoinReader(b *testing.B) {
 						eqColsAreKey = []bool{true, false}
 					}
 					for _, parallel := range eqColsAreKey {
-						benchmarkName := fmt.Sprintf("reqOrdering=%t/matchratio=oneto%s/lookuprows=%d/%s",
-							reqOrdering, columnDef.name, numLookupRows, memoryLimitStr)
-						if parallel {
-							benchmarkName += "/parallel=true"
-						}
-						b.Run(benchmarkName, func(b *testing.B) {
-							tableName := tableSizeToName(rightSz)
+						for _, lookupExpr := range bc.lookupExprs {
+							benchmarkName := fmt.Sprintf("reqOrdering=%t/matchratio=oneto%s/lookuprows=%d/%s",
+								reqOrdering, columnDef.name, numLookupRows, memoryLimitStr)
+							if parallel {
+								benchmarkName += "/parallel=true"
+							}
+							if lookupExpr && !bc.hideLookupExprFromName {
+								benchmarkName += "/lookupexpr=true"
+							}
+							b.Run(benchmarkName, func(b *testing.B) {
+								tableName := tableSizeToName(bc.rightSz)
 
-							// Get the table descriptor and find the index that will provide us with
-							// the expected match ratio.
-							tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
-							foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idx catalog.Index) bool {
-								require.Equal(b, 1, idx.NumKeyColumns(), "all indexes created in this benchmark should only contain one column")
-								return idx.GetKeyColumnName(0) == columnDef.name
+								// Get the table descriptor and find the index that will provide us with
+								// the expected match ratio.
+								tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+								foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idx catalog.Index) bool {
+									require.Equal(b, 1, idx.NumKeyColumns(), "all indexes created in this benchmark should only contain one column")
+									return idx.GetKeyColumnName(0) == columnDef.name
+								})
+								if foundIndex == nil {
+									b.Fatalf("failed to find secondary index for column %s", columnDef.name)
+								}
+								indexIdx := uint32(foundIndex.Ordinal())
+								input := newRowGeneratingSource(types.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
+									// Convert to 0-based.
+									return tree.NewDInt(tree.DInt(rowIdx - 1))
+								}), numLookupRows)
+								output := rowDisposer{}
+
+								spec := execinfrapb.JoinReaderSpec{
+									Table:               *tableDesc.TableDesc(),
+									LookupColumnsAreKey: parallel,
+									IndexIdx:            indexIdx,
+									MaintainOrdering:    reqOrdering,
+								}
+								if lookupExpr {
+									// this is always @1 = @columnIdx+2 because @1 refers to column 0 of the input
+									// and the other refers to the column in the table of the index we supplied.
+									spec.LookupExpr = execinfrapb.Expression{Expr: fmt.Sprintf("@1 = @%d", columnIdx+2)}
+								} else {
+									// This is always zero because the input has one column
+									spec.LookupColumns = []uint32{0}
+								}
+								// Post specifies that only the columns contained in the secondary index
+								// need to be output.
+								post := execinfrapb.PostProcessSpec{
+									Projection:    true,
+									OutputColumns: []uint32{uint32(columnIdx + 1)},
+								}
+
+								expectedNumOutputRows := numLookupRows * columnDef.matchesPerLookupRow
+								b.ResetTimer()
+								// The number of bytes processed in this benchmark is the number of
+								// lookup bytes processed + the number of result bytes. We only look
+								// up using a single int column and the request only a single int column
+								// contained in the index.
+								b.SetBytes(int64((numLookupRows * 8) + (expectedNumOutputRows * 8)))
+
+								spilled := false
+								for i := 0; i < b.N; i++ {
+									flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+									jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output, lookupJoinReaderType)
+									if err != nil {
+										b.Fatal(err)
+									}
+									jr.Run(ctx)
+									if !spilled && jr.(*joinReader).Spilled() {
+										spilled = true
+									}
+
+									// RFC: are these metadata checks important?   they've been broken since 20.2 at least.
+									meta := output.bufferedMeta
+									if len(meta) == 0 || meta[0].Metrics == nil {
+										// Expect at least one metadata payload with Metrics set.
+										b.Fatalf("unexpected metadata(%d): %v", len(meta), meta[0].Metrics)
+									}
+									if output.NumRowsDisposed() != expectedNumOutputRows {
+										b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), expectedNumOutputRows)
+									}
+									output.ResetNumRowsDisposed()
+									input.Reset()
+								}
+								if spilled {
+									b.Log("joinReader spilled to disk in at least one of the benchmark iterations")
+								}
 							})
-							if foundIndex == nil {
-								b.Fatalf("failed to find secondary index for column %s", columnDef.name)
-							}
-							indexIdx := uint32(foundIndex.Ordinal())
-							input := newRowGeneratingSource(types.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
-								// Convert to 0-based.
-								return tree.NewDInt(tree.DInt(rowIdx - 1))
-							}), numLookupRows)
-							output := rowDisposer{}
-
-							spec := execinfrapb.JoinReaderSpec{
-								Table:               *tableDesc.TableDesc(),
-								LookupColumns:       []uint32{0},
-								LookupColumnsAreKey: parallel,
-								IndexIdx:            indexIdx,
-								MaintainOrdering:    reqOrdering,
-							}
-							// Post specifies that only the columns contained in the secondary index
-							// need to be output.
-							post := execinfrapb.PostProcessSpec{
-								Projection:    true,
-								OutputColumns: []uint32{uint32(columnIdx + 1)},
-							}
-
-							expectedNumOutputRows := numLookupRows * columnDef.matchesPerLookupRow
-							b.ResetTimer()
-							// The number of bytes processed in this benchmark is the number of
-							// lookup bytes processed + the number of result bytes. We only look
-							// up using a single int column and the request only a single int column
-							// contained in the index.
-							b.SetBytes(int64((numLookupRows * 8) + (expectedNumOutputRows * 8)))
-
-							spilled := false
-							for i := 0; i < b.N; i++ {
-								flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-								jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output, lookupJoinReaderType)
-								if err != nil {
-									b.Fatal(err)
-								}
-								jr.Run(ctx)
-								if !spilled && jr.(*joinReader).Spilled() {
-									spilled = true
-								}
-								meta := output.bufferedMeta
-								if len(meta) != 1 || meta[0].Metrics == nil {
-									// Expect a single metadata payload with Metrics set.
-									b.Fatalf("unexpected metadata: %v", meta)
-								}
-								if output.NumRowsDisposed() != expectedNumOutputRows {
-									b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), expectedNumOutputRows)
-								}
-								output.ResetNumRowsDisposed()
-								input.Reset()
-							}
-							if spilled {
-								b.Log("joinReader spilled to disk in at least one of the benchmark iterations")
-							}
-						})
+						}
 					}
 				}
 			}
 		}
+	}
+}
+
+var jrBenchConfigShort = JRBenchConfig{
+	rightSz:       1 << 16, /* 65,536 rows */
+	lookupExprs:   []bool{false},
+	ordering:      []bool{false},
+	numLookupRows: []int{1, 1 << 4 /* 16 */, 1 << 7 /* 128 */, 1 << 10 /* 1024 */, 1 << 13 /* 4096 */},
+	memoryLimits:  []int64{math.MaxInt64},
+}
+
+// BenchmarkJoinReaderShortCols runs the short config above, it takes about 1.5m
+// where the BenchmarkJoinReader can take over 10m.
+func BenchmarkJoinReaderShortCols(b *testing.B) {
+	benchmarkJoinReader(b, jrBenchConfigShort)
+}
+
+// BenchmarkJoinReaderShortExprs is identical to BenchmarkJoinReaderShortCols
+// but it uses LookupExprs and sets hideLookupExprFromName to allow A/B
+// comparisons of LookupExprs vs LookupColumns. The idea is to run
+// BenchmarkJoinReaderShortCols then run BenchmarkJoinReaderShortExprs and
+// compare to see what if any overhead LookupExprs imposes. See:
+// https://github.com/cockroachdb/cockroach/pull/66726#issuecomment-866433635
+func BenchmarkJoinReaderShortExprs(b *testing.B) {
+	config := jrBenchConfigShort
+	config.lookupExprs = []bool{true}
+	config.hideLookupExprFromName = true
+	benchmarkJoinReader(b, config)
+}
+
+// BenchmarkJoinReaderLookupStress is a variation on the join reader benchmark
+// that tests successively larger lookupExprs to get an idea what the cost is.
+func BenchmarkJoinReaderLookupStress(b *testing.B) {
+
+	// parameters
+	numCols := 65
+	tableSize := 1024
+
+	// this isn't configurable, the dataset is chosen to only ever return 1 row
+	numLookupRows := 1
+
+	// Create an *on-disk* store spec for the primary store and temp engine to
+	// reflect the real costs of lookups and spilling.
+	primaryStoragePath, cleanupPrimaryDir := testutils.TempDir(b)
+	defer cleanupPrimaryDir()
+	storeSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", primaryStoragePath))
+	require.NoError(b, err)
+
+	var (
+		logScope       = log.Scope(b)
+		ctx            = context.Background()
+		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{storeSpec},
+		})
+		st          = s.ClusterSettings()
+		evalCtx     = tree.MakeTestingEvalContext(st)
+		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
+		flowCtx     = execinfra.FlowCtx{
+			EvalCtx: &evalCtx,
+			Cfg: &execinfra.ServerConfig{
+				Settings: st,
+			},
+			DiskMonitor: diskMonitor,
+		}
+	)
+	defer logScope.Close(b)
+	defer s.Stopper().Stop(ctx)
+	defer evalCtx.Stop(ctx)
+	defer diskMonitor.Stop(ctx)
+
+	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
+	defer cleanupTempDir()
+	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
+	require.NoError(b, err)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{Path: tempStoragePath, Mon: diskMonitor}, tempStoreSpec)
+	require.NoError(b, err)
+	defer tempEngine.Close()
+	flowCtx.Cfg.TempStorage = tempEngine
+
+	tableSizeToName := func(sz int) string {
+		return fmt.Sprintf("t%d", sz)
+	}
+
+	createRightSideTable := func(sz, numCols int) {
+		colDefs := make([]string, 0, numCols)
+		genValueFns := make([]sqlutils.GenValueFn, 0, numCols)
+		indexCreateString := "INDEX ("
+
+		for i := 0; i < numCols; i++ {
+			colName := fmt.Sprintf("c%d", i)
+			colDefs = append(colDefs, colName+" INT")
+			genValueFns = append(genValueFns, func(row int) tree.Datum {
+				return tree.NewDInt(tree.DInt(row - 1))
+			})
+			indexCreateString += colName
+			if i+1 < numCols {
+				indexCreateString += ","
+			} else {
+				indexCreateString += ")"
+			}
+		}
+		tableName := tableSizeToName(sz)
+		indexDefs := []string{indexCreateString}
+		sqlutils.CreateTable(
+			b, sqlDB, tableName, strings.Join(append(colDefs, indexDefs...), ", "), sz,
+			sqlutils.ToRowFn(genValueFns...),
+		)
+	}
+
+	createRightSideTable(tableSize, numCols)
+	// Create a new txn after the table has been created.
+	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), s.NodeID())
+	for numExprs := 1; numExprs < numCols; numExprs = numExprs << 1 {
+		benchmarkName := fmt.Sprintf("exprs=%d", numExprs)
+
+		b.Run(benchmarkName, func(b *testing.B) {
+			tableName := tableSizeToName(tableSize)
+
+			// Get the table descriptor and find the index that will provide us with
+			// the expected match ratio.
+			tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+			foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idx catalog.Index) bool {
+				return idx.NumKeyColumns() == numCols
+			})
+			if foundIndex == nil {
+				b.Fatalf("failed to find secondary index!")
+			}
+			indexIdx := uint32(foundIndex.Ordinal())
+			input := newRowGeneratingSource(types.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
+				// Convert to 0-based.
+				return tree.NewDInt(tree.DInt(rowIdx - 1))
+			}), numLookupRows)
+			output := rowDisposer{}
+
+			spec := execinfrapb.JoinReaderSpec{
+				Table: *tableDesc.TableDesc(),
+				LookupColumnsAreKey:/*parallel=*/ true,
+				IndexIdx: indexIdx,
+				MaintainOrdering:/*reqOrdering=*/ false,
+			}
+			lookupExprString := "@1 = @2"
+			for i := 0; i < numExprs; i++ {
+				lookupExprString += fmt.Sprintf(" AND @%d = 0", 2+i+1)
+			}
+			spec.LookupExpr = execinfrapb.Expression{Expr: lookupExprString}
+
+			// Post specifies that only the columns contained in the secondary index
+			// need to be output.
+			post := execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{uint32(2)},
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output, lookupJoinReaderType)
+				if err != nil {
+					b.Fatal(err)
+				}
+				jr.Run(ctx)
+
+				if output.NumRowsDisposed() != numLookupRows {
+					b.Fatalf("got %d output rows, expected %d", output.NumRowsDisposed(), numLookupRows)
+				}
+				output.ResetNumRowsDisposed()
+				input.Reset()
+			}
+		})
 	}
 }
