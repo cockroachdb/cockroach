@@ -74,7 +74,7 @@ func QueryTxn(
 	} else {
 		// The transaction hasn't written a transaction record yet.
 		// Attempt to synthesize it from the provided TxnMeta.
-		reply.QueriedTxn = SynthesizeTxnFromMeta(cArgs.EvalCtx, args.Txn)
+		reply.QueriedTxn = SynthesizeTxnFromMeta(ctx, cArgs.EvalCtx, args.Txn)
 	}
 
 	// Get the list of txns waiting on this txn.

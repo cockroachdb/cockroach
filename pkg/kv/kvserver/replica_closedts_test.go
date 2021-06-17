@@ -416,7 +416,13 @@ func TestBumpSideTransportClosed(t *testing.T) {
 
 // Test that a lease proposal that gets rejected doesn't erroneously dictate the
 // closed timestamp of further requests. If it would, then writes could violate
-// that closed timestamp. The tricky scenario tested is the following:
+// that closed timestamp.
+//
+// NOTE: This test was written back when lease requests were closing the lease
+// start time. This is no longer true; currently lease requests don't carry a
+// closed timestamp. Still, we leave the test as a regression test.
+//
+// The tricky scenario tested is the following:
 //
 // 1. A lease held by rep1 is getting close to its expiration.
 // 2. Rep1 begins the process of transferring its lease to rep2 with a start
@@ -585,7 +591,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 			leaseAcqErrCh <- err
 			return
 		}
-		_, err = r.AcquireLease(ctx)
+		_, err = r.TestingAcquireLease(ctx)
 		leaseAcqErrCh <- err
 	}()
 	// Wait for the lease acquisition to be blocked.

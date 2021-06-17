@@ -478,7 +478,7 @@ func (r *Replica) applyTimestampCache(
 // system.
 //
 func (r *Replica) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
+	ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 ) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.
@@ -586,10 +586,12 @@ func collectReadSummaryFromTimestampCache(
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 	)
+	userKeys := desc.KeySpan()
 	s.Global.LowWater, _ = tc.GetMax(
-		desc.StartKey.AsRawKey(),
-		desc.EndKey.AsRawKey(),
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
 	)
+
 	return s
 }
 
@@ -605,9 +607,10 @@ func applyReadSummaryToTimestampCache(
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 		s.Local.LowWater,
 	)
+	userKeys := desc.KeySpan()
 	tc.SetLowWater(
-		desc.StartKey.AsRawKey(),
-		desc.EndKey.AsRawKey(),
+		userKeys.Key.AsRawKey(),
+		userKeys.EndKey.AsRawKey(),
 		s.Global.LowWater,
 	)
 }
