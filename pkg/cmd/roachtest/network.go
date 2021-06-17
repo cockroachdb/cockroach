@@ -13,7 +13,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -23,6 +22,7 @@ import (
 	toxiproxy "github.com/Shopify/toxiproxy/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 )
 
@@ -142,11 +142,9 @@ func runNetworkAuthentication(ctx context.Context, t *test, c Cluster) {
 	defer db.Close()
 	waitForFullReplication(t, db)
 
-	if err := c.RunE(ctx, c.Node(1),
-		`./cockroach sql --certs-dir /home/ubuntu/certs -e "CREATE USER testuser WITH PASSWORD 'password'"`); err != nil {
+	if _, err := db.Exec(`CREATE USER testuser WITH PASSWORD 'password'`); err != nil {
 		t.Fatal(err)
 	}
-
 	if _, err := db.Exec(`ALTER RANGE liveness CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
 		t.Fatal(err)
 	}
@@ -166,16 +164,16 @@ WHERE start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivene
 		).Scan(&leaseholder); err != nil {
 			return err
 		}
-		if leaseholder != 1 {
-			return errors.New("liveness leaseholder should be node 1")
+		if leaseholder != expectedLeaseholder {
+			return errors.Newf("liveness leaseholder should be node %d", expectedLeaseholder)
 		}
 		if err := db.QueryRow(
 			"SELECT lease_holder FROM [SHOW RANGES FROM TABLE system.public.users]",
 		).Scan(&leaseholder); err != nil {
 			return err
 		}
-		if leaseholder != 1 {
-			return errors.New("system.users leaseholder should be node 1")
+		if leaseholder != expectedLeaseholder {
+			return errors.Newf("system.users leaseholder should be node %d", expectedLeaseholder)
 		}
 		return nil
 	})
@@ -191,8 +189,16 @@ WHERE start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivene
 
 	m := newMonitor(ctx, c, c.All())
 	m.Go(func(ctx context.Context) error {
+		endTest := time.After(20 * time.Second)
+		tick := time.Tick(500 * time.Millisecond)
 		errorCount := 0
-		for attempt := 0; attempt < 10; attempt++ {
+		keepLooping := true
+		for attempt := 0; keepLooping; attempt++ {
+			select {
+			case <-endTest:
+				keepLooping = false
+			case <-tick:
+			}
 			t.l.Printf("connection attempt %d\n", attempt)
 			for i := 1; i <= c.Spec().NodeCount; i++ {
 				if i == expectedLeaseholder {
@@ -201,13 +207,12 @@ WHERE start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivene
 
 				url := "postgres://testuser:password@localhost:26257/defaultdb?sslmode=require"
 				b, err := c.RunWithBuffer(ctx, t.l, c.Node(i), "time", "-p", "./cockroach", "sql",
-					"--url", url, "-e", "'SELECT 1'")
+					"--url", url, "--certs-dir", certsDir, "-e", "'SELECT 1'")
 				t.l.Printf("%s\n", b)
 				if err != nil {
 					errorCount++
 				}
 			}
-			time.Sleep(1 * time.Second)
 		}
 
 		if errorCount >= 1 /*c.Spec().NodeCount*/ {
@@ -215,6 +220,8 @@ WHERE start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivene
 		}
 		return nil
 	})
+
+	time.Sleep(5 * time.Second)
 
 	if err := c.RunE(ctx, c.Node(expectedLeaseholder), fmt.Sprintf(`
 # Setting default filter policy
