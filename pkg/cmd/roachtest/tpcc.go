@@ -526,7 +526,9 @@ func (d tpccBenchDistribution) zones() []string {
 	case singleZone:
 		return []string{"us-central1-b"}
 	case multiZone:
-		return []string{"us-central1-a", "us-central1-b", "us-central1-c"}
+		// NB: us-central1-a has been causing issues, see:
+		// https://github.com/cockroachdb/cockroach/issues/66184
+		return []string{"us-central1-f", "us-central1-b", "us-central1-c"}
 	case multiRegion:
 		return []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	default:
