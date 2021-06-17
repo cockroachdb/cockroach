@@ -10,7 +10,7 @@
 
 package ssmemstorage
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 type stmtList []stmtKey
 
@@ -24,7 +24,7 @@ func (s stmtList) Less(i, j int) bool {
 	return s[i].anonymizedStmt < s[j].anonymizedStmt
 }
 
-type txnList []sqlstats.TransactionFingerprintID
+type txnList []roachpb.TransactionFingerprintID
 
 func (t txnList) Len() int {
 	return len(t)
