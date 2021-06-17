@@ -119,25 +119,33 @@ func (c Times) Set(idx int, val time.Time) { c[idx] = val }
 func (c Durations) Set(idx int, val duration.Duration) { c[idx] = val }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Bools) Len() int { return len(c) }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Int16s) Len() int { return len(c) }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Int32s) Len() int { return len(c) }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Int64s) Len() int { return len(c) }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Float64s) Len() int { return len(c) }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Decimals) Len() int { return len(c) }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Times) Len() int { return len(c) }
 
 // Len returns the length of the vector.
+//gcassert:inline
 func (c Durations) Len() int { return len(c) }
