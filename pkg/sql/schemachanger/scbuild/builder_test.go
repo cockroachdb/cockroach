@@ -149,7 +149,7 @@ func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
 		result.WriteString("- ")
 		result.WriteString(node.Target.Direction.String())
 		result.WriteString(" ")
-		result.WriteString(node.Element().GetAttributes().String())
+		scpb.FormatAttributes(node.Element(), &result)
 		result.WriteString("\n")
 		result.WriteString(indentText(fmt.Sprintf("state: %s\n", node.State.String()), "  "))
 		result.WriteString(indentText("details:\n", "  "))
