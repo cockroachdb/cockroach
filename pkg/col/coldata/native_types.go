@@ -211,3 +211,35 @@ func (c Times) CopySlice(src Times, destIdx, srcStartIdx, srcEndIdx int) {
 func (c Durations) CopySlice(src Durations, destIdx, srcStartIdx, srcEndIdx int) {
 	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
 }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Bools) Window(start, end int) Bools { return c[start:end] }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Int16s) Window(start, end int) Int16s { return c[start:end] }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Int32s) Window(start, end int) Int32s { return c[start:end] }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Int64s) Window(start, end int) Int64s { return c[start:end] }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Float64s) Window(start, end int) Float64s { return c[start:end] }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Decimals) Window(start, end int) Decimals { return c[start:end] }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Times) Window(start, end int) Times { return c[start:end] }
+
+// Window returns the window into the vector.
+//gcassert:inline
+func (c Durations) Window(start, end int) Durations { return c[start:end] }

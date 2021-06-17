@@ -22,7 +22,6 @@ var (
 	_ = COPYVAL
 	_ = APPENDSLICE
 	_ = APPENDVAL
-	_ = WINDOW
 	_ = SETVARIABLESIZE
 )
 
@@ -42,12 +41,6 @@ func APPENDSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
 // APPENDVAL is a template function.
 func APPENDVAL(target, v interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-}
-
-// WINDOW is a template function.
-func WINDOW(target, start, end interface{}) interface{} {
-	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-	return nil
 }
 
 // SETVARIABLESIZE is a template function.
