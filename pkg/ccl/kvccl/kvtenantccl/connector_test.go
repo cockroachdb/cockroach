@@ -10,7 +10,9 @@ package kvtenantccl
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 var rpcRetryOpts = retry.Options{
@@ -416,4 +420,103 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
 	require.Regexp(t, "unable to look up descriptor for n3", err)
+}
+
+// TestConnectorRetriesError tests that Connector iterates over each of
+// its provided addresses and retries if the error is retriable or bails out
+// immediately if it is not.
+func TestConnectorRetriesError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+
+	// Function to create rpc server that would delegate to gossip and range lookup
+	// callbacks.
+	// Returns address on which server is listening for use in connector.
+	createServer := func(
+		t *testing.T,
+		gossipSubFn func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error,
+		rangeLookupFn func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error),
+	) string {
+		internalServer := rpc.NewServer(rpcContext)
+		roachpb.RegisterInternalServer(internalServer, &mockServer{rangeLookupFn: rangeLookupFn, gossipSubFn: gossipSubFn})
+		ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+		require.NoError(t, err)
+		stopper.AddCloser(stop.CloserFn(internalServer.Stop))
+		_ = stopper.RunAsyncTask(ctx, "wait-quiesce", func(context.Context) {
+			<-stopper.ShouldQuiesce()
+			netutil.FatalIfUnexpected(ln.Close())
+		})
+		_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
+			netutil.FatalIfUnexpected(internalServer.Serve(ln))
+		})
+		return ln.Addr().String()
+	}
+
+	for _, spec := range []struct {
+		code        codes.Code
+		shouldRetry bool
+	}{
+		{codes.Unauthenticated, false},
+		{codes.PermissionDenied, false},
+		{codes.FailedPrecondition, true},
+	} {
+		t.Run(fmt.Sprintf("error %v retries %v", spec.code, spec.shouldRetry), func(t *testing.T) {
+
+			gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
+				return stream.Send(gossipEventForClusterID(rpcContext.ClusterID.Get()))
+			}
+
+			rangeLookupFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
+				descs := []roachpb.RangeDescriptor{{RangeID: 1}, {RangeID: 2}}
+				preDescs := []roachpb.RangeDescriptor{{RangeID: 3}, {RangeID: 4}}
+				return &roachpb.RangeLookupResponse{
+					Descriptors: descs, PrefetchedDescriptors: preDescs,
+				}, nil
+			}
+
+			var errorsReported int32 = 0
+			rangeLookupRejectorFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
+				// Respond with error always
+				atomic.AddInt32(&errorsReported, 1)
+				return nil, grpcstatus.Errorf(spec.code, "range lookup rejected")
+			}
+
+			addr1 := createServer(t, gossipSubFn, rangeLookupFn)
+			addr2 := createServer(t, gossipSubFn, rangeLookupRejectorFn)
+
+			// Add listen address into list of other bogus addresses.
+			cfg := kvtenant.ConnectorConfig{
+				AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+				RPCContext:      rpcContext,
+				RPCRetryOptions: rpcRetryOpts,
+			}
+			addrs := []string{addr1, addr2}
+			c := NewConnector(cfg, addrs)
+			c.rpcDialTimeout = 5 * time.Millisecond // speed up test
+			require.NoError(t, c.Start(ctx), "Connector can't start")
+
+			// Test will try to make range lookups until the server returning errors
+			// is hit. It then checks that error was propagated or not. We use multiple
+			// iterations as server choice is random and we need to hit failure only once
+			// to check if it was retried.
+			for i := 0; i < 100; i++ {
+				_, _, err := c.RangeLookup(ctx, roachpb.RKey("a"), false)
+				if atomic.LoadInt32(&errorsReported) == 0 {
+					continue
+				}
+				if spec.shouldRetry {
+					require.NoError(t, err, "Lookup should retry instead of failing")
+				} else {
+					require.Error(t, err, "Lookup should propagate error immediately")
+				}
+				break
+			}
+		})
+	}
 }
