@@ -25,7 +25,7 @@ import {
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import { StatementTableTitle } from "../statementsTable";
+import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { textCell } from "./transactionsCells";
 import { FixLong, longToInt } from "src/util";
@@ -36,7 +36,7 @@ import {
 } from "../transactionsPage/utils";
 import Long from "long";
 import classNames from "classnames/bind";
-import statementsPageStyles from "src/statementsTable/statementsTableContent.module.scss";
+import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
@@ -64,7 +64,7 @@ export interface TransactionInfo extends Transaction {
 
 const { latencyClasses } = tableClasses;
 
-const cx = classNames.bind(statementsPageStyles);
+const cx = classNames.bind(statsTablePageStyles);
 
 export const TransactionsTable: React.FC<TransactionsTable> = props => {
   const defaultBarChartOptions = {
@@ -134,14 +134,14 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "execution count",
-      title: StatementTableTitle.executionCount,
+      title: statisticsTableTitles.executionCount("transaction"),
       cell: countBar,
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.count)),
     },
     {
       name: "rows read",
-      title: StatementTableTitle.rowsRead,
+      title: statisticsTableTitles.rowsRead("transaction"),
       cell: rowsReadBar,
       className: cx("statements-table__col-rows-read"),
       sort: (item: TransactionInfo) =>
@@ -149,7 +149,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "bytes read",
-      title: StatementTableTitle.bytesRead,
+      title: statisticsTableTitles.bytesRead("transaction"),
       cell: bytesReadBar,
       className: cx("statements-table__col-bytes-read"),
       sort: (item: TransactionInfo) =>
@@ -157,14 +157,14 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "latency",
-      title: StatementTableTitle.transactionTime,
+      title: statisticsTableTitles.time("transaction"),
       cell: latencyBar,
       className: latencyClasses.column,
       sort: (item: TransactionInfo) => item.stats_data.stats.service_lat.mean,
     },
     {
       name: "contention",
-      title: StatementTableTitle.contention,
+      title: statisticsTableTitles.contention("transaction"),
       cell: contentionBar,
       className: cx("statements-table__col-contention"),
       sort: (item: TransactionInfo) =>
@@ -172,7 +172,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "max memory",
-      title: StatementTableTitle.maxMemUsage,
+      title: statisticsTableTitles.maxMemUsage("transaction"),
       cell: maxMemUsageBar,
       className: cx("statements-table__col-max-mem-usage"),
       sort: (item: TransactionInfo) =>
@@ -180,7 +180,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "network",
-      title: StatementTableTitle.networkBytes,
+      title: statisticsTableTitles.networkBytes("transaction"),
       cell: networkBytesBar,
       className: cx("statements-table__col-network-bytes"),
       sort: (item: TransactionInfo) =>
@@ -188,14 +188,14 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "retries",
-      title: StatementTableTitle.retries,
+      title: statisticsTableTitles.retries("transaction"),
       cell: retryBar,
       sort: (item: TransactionInfo) =>
         longToInt(Number(item.stats_data.stats.max_retries)),
     },
     {
       name: "regionNodes",
-      title: StatementTableTitle.regionNodes,
+      title: statisticsTableTitles.regionNodes("transaction"),
       className: cx("statements-table__col-regions"),
       cell: (item: TransactionInfo) => {
         return longListWithTooltip(item.regionNodes.sort().join(", "), 50);
