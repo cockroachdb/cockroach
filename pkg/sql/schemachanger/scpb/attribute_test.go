@@ -49,3 +49,30 @@ func TestGetAttribute(t *testing.T) {
 	require.Equal(t, "TypeReference", typeBackRef.GetAttributes().Get(AttributeType).String())
 	require.Equal(t, "4", seqElemDiff.GetAttributes().Get(AttributeColumnID).String())
 }
+
+func BenchmarkCompareElements(b *testing.B) {
+	var elements = []Element{
+		&Column{},
+		&PrimaryIndex{},
+		&SecondaryIndex{},
+		&SequenceDependency{},
+		&UniqueConstraint{},
+		&CheckConstraint{},
+		&Sequence{},
+		&DefaultExpression{},
+		&View{},
+		&TypeReference{},
+		&Table{},
+		&OutboundForeignKey{},
+		&InboundForeignKey{},
+		&RelationDependedOnBy{},
+		&SequenceOwnedBy{},
+	}
+	for i := 0; i < int(float64(b.N)/float64(len(elements)*len(elements))); i++ {
+		for _, a := range elements {
+			for _, b := range elements {
+				a.GetAttributes().Equal(b.GetAttributes())
+			}
+		}
+	}
+}
