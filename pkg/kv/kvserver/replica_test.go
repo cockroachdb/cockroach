@@ -10760,6 +10760,35 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 
 	const storeID = roachpb.StoreID(1)
 
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				ReplicaID: 1,
+				NodeID:    1,
+				StoreID:   1,
+			},
+			{
+				ReplicaID: 2,
+				NodeID:    2,
+				StoreID:   2,
+			},
+			{
+				ReplicaID: 3,
+				NodeID:    3,
+				StoreID:   3,
+			},
+		},
+		NextReplicaID: 4,
+	}
+	livenessMap := liveness.IsLiveMap{
+		1: liveness.IsLiveMapEntry{IsLive: true},
+		2: liveness.IsLiveMapEntry{IsLive: false},
+		4: liveness.IsLiveMapEntry{IsLive: false},
+	}
+
 	myLease := roachpb.Lease{
 		Replica: roachpb.ReplicaDescriptor{
 			StoreID: storeID,
@@ -10795,33 +10824,68 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			Lead:      1,
 		},
 	}
+	followerDeadLeader := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      2,
+		},
+	}
+	candidateDeadLeader := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateCandidate,
+			Lead:      2,
+		},
+	}
+	followerMissingLiveness := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      3,
+		},
+	}
+	followerMissingDesc := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      4,
+		},
+	}
 
 	tests := []struct {
-		leaseStatus kvserverpb.LeaseStatus
-		raftStatus  raft.BasicStatus
-		exp         bool
+		leaseStatus           kvserverpb.LeaseStatus
+		raftStatus            raft.BasicStatus
+		livenessMap           liveness.IsLiveMap
+		desc                  *roachpb.RangeDescriptor
+		requiresExpiringLease bool
+		exp                   bool
 	}{
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithoutLeader, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithoutLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, leader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithoutLeader, livenessMap, &desc, false, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithoutLeader, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithLeader, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithLeader, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, candidate, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, candidate, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, leader, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, leader, livenessMap, &desc, false, false},
 
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithoutLeader, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithoutLeader, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, leader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithoutLeader, livenessMap, &desc, false, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithoutLeader, livenessMap, &desc, false, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithoutLeader, livenessMap, &desc, true, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithoutLeader, livenessMap, &desc, true, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithLeader, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithLeader, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, candidate, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, candidate, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, leader, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, leader, livenessMap, &desc, false, false},
+
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerDeadLeader, livenessMap, &desc, false, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerDeadLeader, livenessMap, &desc, true, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerMissingLiveness, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerMissingDesc, livenessMap, &desc, false, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, candidateDeadLeader, livenessMap, &desc, false, false},
 	}
 
 	for i, test := range tests {
-		v := shouldCampaignOnWake(test.leaseStatus, storeID, test.raftStatus)
+		v := shouldCampaignOnWake(test.leaseStatus, storeID, test.raftStatus, test.livenessMap, test.desc, test.requiresExpiringLease)
 		if v != test.exp {
 			t.Errorf("%d: expected %v but got %v", i, test.exp, v)
 		}
