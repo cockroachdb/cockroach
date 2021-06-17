@@ -2538,7 +2538,10 @@ CREATE TABLE regional_by_row_unique_in_column (
   a INT PRIMARY KEY,
   b INT UNIQUE,
   c INT,
-  FAMILY (a, b, c)
+  d INT,
+  e INT,
+  UNIQUE (d, e),
+  FAMILY (a, b, c, d, e)
 ) LOCALITY REGIONAL BY ROW
 
 query TT
@@ -2548,34 +2551,43 @@ regional_by_row_unique_in_column  CREATE TABLE public.regional_by_row_unique_in_
                                   a INT8 NOT NULL,
                                   b INT8 NULL,
                                   c INT8 NULL,
+                                  d INT8 NULL,
+                                  e INT8 NULL,
                                   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                                   CONSTRAINT "primary" PRIMARY KEY (a ASC),
                                   UNIQUE INDEX regional_by_row_unique_in_column_b_key (b ASC),
-                                  FAMILY fam_0_a_b_c_crdb_region (a, b, c, crdb_region)
+                                  UNIQUE INDEX regional_by_row_unique_in_column_d_e_key (d ASC, e ASC),
+                                  FAMILY fam_0_a_b_c_d_e_crdb_region (a, b, c, d, e, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
 statement ok
 CREATE TABLE regional_by_row_fk (
-  d INT PRIMARY KEY,
-  e INT UNIQUE REFERENCES regional_by_row_unique_in_column(a),
-  f INT UNIQUE REFERENCES regional_by_row_unique_in_column(b),
-  FAMILY (d, e, f)
+  f INT PRIMARY KEY,
+  g INT UNIQUE REFERENCES regional_by_row_unique_in_column(a),
+  h INT UNIQUE REFERENCES regional_by_row_unique_in_column(b),
+  i INT,
+  j INT,
+  CONSTRAINT ij_fk FOREIGN KEY (i, j) REFERENCES regional_by_row_unique_in_column(e, d),
+  FAMILY (f, g, h, i, j)
 ) LOCALITY REGIONAL BY ROW
 
 query TT
 SHOW CREATE TABLE regional_by_row_fk
 ----
 regional_by_row_fk          CREATE TABLE public.regional_by_row_fk (
-                            d INT8 NOT NULL,
-                            e INT8 NULL,
-                            f INT8 NULL,
+                            f INT8 NOT NULL,
+                            g INT8 NULL,
+                            h INT8 NULL,
+                            i INT8 NULL,
+                            j INT8 NULL,
                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                            CONSTRAINT "primary" PRIMARY KEY (d ASC),
-                            CONSTRAINT fk_e_ref_regional_by_row_unique_in_column FOREIGN KEY (e) REFERENCES public.regional_by_row_unique_in_column(a),
-                            CONSTRAINT fk_f_ref_regional_by_row_unique_in_column FOREIGN KEY (f) REFERENCES public.regional_by_row_unique_in_column(b),
-                            UNIQUE INDEX regional_by_row_fk_e_key (e ASC),
-                            UNIQUE INDEX regional_by_row_fk_f_key (f ASC),
-                            FAMILY fam_0_d_e_f_crdb_region (d, e, f, crdb_region)
+                            CONSTRAINT "primary" PRIMARY KEY (f ASC),
+                            CONSTRAINT ij_fk FOREIGN KEY (i, j) REFERENCES public.regional_by_row_unique_in_column(e, d),
+                            CONSTRAINT fk_g_ref_regional_by_row_unique_in_column FOREIGN KEY (g) REFERENCES public.regional_by_row_unique_in_column(a),
+                            CONSTRAINT fk_h_ref_regional_by_row_unique_in_column FOREIGN KEY (h) REFERENCES public.regional_by_row_unique_in_column(b),
+                            UNIQUE INDEX regional_by_row_fk_g_key (g ASC),
+                            UNIQUE INDEX regional_by_row_fk_h_key (h ASC),
+                            FAMILY fam_0_f_g_h_i_j_crdb_region (f, g, h, i, j, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
 statement ok
