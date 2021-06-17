@@ -149,3 +149,65 @@ func (c Times) Len() int { return len(c) }
 // Len returns the length of the vector.
 //gcassert:inline
 func (c Durations) Len() int { return len(c) }
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//gcassert:inline
+func (c Bools) CopySlice(src Bools, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//gcassert:inline
+func (c Int16s) CopySlice(src Int16s, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//gcassert:inline
+func (c Int32s) CopySlice(src Int32s, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//gcassert:inline
+func (c Int64s) CopySlice(src Int64s, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//gcassert:inline
+func (c Float64s) CopySlice(src Float64s, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//
+// Note that this method is usually inlined, but it isn't in case of the
+// memColumn.Copy generated code (probably because of the size of that
+// function), so we don't assert the inlining with the GCAssert linter.
+func (c Decimals) CopySlice(src Decimals, destIdx, srcStartIdx, srcEndIdx int) {
+	srcSlice := src[srcStartIdx:srcEndIdx]
+	for i := range srcSlice {
+		c[destIdx+i].Set(&srcSlice[i])
+	}
+}
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//gcassert:inline
+func (c Times) CopySlice(src Times, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
+
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//gcassert:inline
+func (c Durations) CopySlice(src Durations, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
