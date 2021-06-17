@@ -388,3 +388,18 @@ SELECT c, c = c FROM t63792
 NULL  NULL
 1     true
 2     true
+
+# Regression test that we can run EXPLAIN (VEC) on a mutation that utilizes the
+# vectorized engine for some internal operations (#66568).
+statement ok
+CREATE TABLE t66568 (c INT PRIMARY KEY);
+
+query T
+EXPLAIN (VEC) INSERT INTO t66568 VALUES (1) ON CONFLICT DO NOTHING
+----
+│
+└ Node 1
+  └ *sql.planNodeToRowSource
+    └ *colexecjoin.crossJoiner
+      ├ *sql.planNodeToRowSource
+      └ *colfetcher.ColBatchScan
