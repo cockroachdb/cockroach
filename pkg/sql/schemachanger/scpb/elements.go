@@ -11,7 +11,6 @@
 package scpb
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -34,7 +33,6 @@ func (n *Node) Element() Element {
 // index or column in a table).
 type Element interface {
 	protoutil.Message
-	DescriptorID() descpb.ID
 
 	// getAttribute returns the value of a given attribute of an element.
 	// If the attribute is not defined on the element, nil will be returned.
@@ -58,9 +56,6 @@ func NewTarget(dir Target_Direction, elem Element) *Target {
 	return &t
 }
 
-// DescriptorID implements the Element interface.
-func (e *Column) DescriptorID() descpb.ID { return e.TableID }
-
 func (e *Column) getAttribute(attribute Attribute) attributeValue {
 	switch attribute {
 	case AttributeType:
@@ -75,9 +70,6 @@ func (e *Column) getAttribute(attribute Attribute) attributeValue {
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *PrimaryIndex) DescriptorID() descpb.ID { return e.TableID }
 
 func (e *PrimaryIndex) getAttribute(attr Attribute) attributeValue {
 	switch attr {
@@ -94,9 +86,6 @@ func (e *PrimaryIndex) getAttribute(attr Attribute) attributeValue {
 	}
 }
 
-// DescriptorID implements the Element interface.
-func (e *SecondaryIndex) DescriptorID() descpb.ID { return e.TableID }
-
 func (e *SecondaryIndex) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
@@ -111,9 +100,6 @@ func (e *SecondaryIndex) getAttribute(attr Attribute) attributeValue {
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *SequenceDependency) DescriptorID() descpb.ID { return e.SequenceID }
 
 func (e *SequenceDependency) getAttribute(attr Attribute) attributeValue {
 	switch attr {
@@ -130,9 +116,6 @@ func (e *SequenceDependency) getAttribute(attr Attribute) attributeValue {
 	}
 }
 
-// DescriptorID implements the Element interface.
-func (e *UniqueConstraint) DescriptorID() descpb.ID { return e.TableID }
-
 func (e *UniqueConstraint) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
@@ -145,9 +128,6 @@ func (e *UniqueConstraint) getAttribute(attr Attribute) attributeValue {
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *CheckConstraint) DescriptorID() descpb.ID { return e.TableID }
 
 func (e *CheckConstraint) getAttribute(attr Attribute) attributeValue {
 	switch attr {
@@ -162,9 +142,6 @@ func (e *CheckConstraint) getAttribute(attr Attribute) attributeValue {
 	}
 }
 
-// DescriptorID implements the Element interface.
-func (e *Sequence) DescriptorID() descpb.ID { return e.SequenceID }
-
 func (e *Sequence) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
@@ -175,9 +152,6 @@ func (e *Sequence) getAttribute(attr Attribute) attributeValue {
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *DefaultExpression) DescriptorID() descpb.ID { return e.TableID }
 
 func (e *DefaultExpression) getAttribute(attr Attribute) attributeValue {
 	switch attr {
@@ -192,9 +166,6 @@ func (e *DefaultExpression) getAttribute(attr Attribute) attributeValue {
 	}
 }
 
-// DescriptorID implements the Element interface.
-func (e *View) DescriptorID() descpb.ID { return e.TableID }
-
 func (e *View) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
@@ -206,24 +177,18 @@ func (e *View) getAttribute(attr Attribute) attributeValue {
 	}
 }
 
-// DescriptorID implements the Element interface.
-func (e *TypeReference) DescriptorID() descpb.ID { return e.DescID }
-
 func (e *TypeReference) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
 		return getElementTypeID(e)
 	case AttributeDescID:
-		return (*descID)(&e.TypeID)
-	case AttributeDepID:
 		return (*descID)(&e.DescID)
+	case AttributeDepID:
+		return (*descID)(&e.TypeID)
 	default:
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *Table) DescriptorID() descpb.ID { return e.TableID }
 
 func (e *Table) getAttribute(attr Attribute) attributeValue {
 	switch attr {
@@ -235,9 +200,6 @@ func (e *Table) getAttribute(attr Attribute) attributeValue {
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *InboundForeignKey) DescriptorID() descpb.ID { return e.OriginID }
 
 func (e *InboundForeignKey) getAttribute(attr Attribute) attributeValue {
 	switch attr {
@@ -253,9 +215,6 @@ func (e *InboundForeignKey) getAttribute(attr Attribute) attributeValue {
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *OutboundForeignKey) DescriptorID() descpb.ID { return e.OriginID }
 
 func (e *OutboundForeignKey) getAttribute(attr Attribute) attributeValue {
 	switch attr {
@@ -285,9 +244,6 @@ func (e *RelationDependedOnBy) getAttribute(attr Attribute) attributeValue {
 	}
 }
 
-// DescriptorID implements the Element interface.
-func (e *RelationDependedOnBy) DescriptorID() descpb.ID { return e.TableID }
-
 func (e *SequenceOwnedBy) getAttribute(attr Attribute) attributeValue {
 	switch attr {
 	case AttributeType:
@@ -300,6 +256,3 @@ func (e *SequenceOwnedBy) getAttribute(attr Attribute) attributeValue {
 		return nil
 	}
 }
-
-// DescriptorID implements the Element interface.
-func (e *SequenceOwnedBy) DescriptorID() descpb.ID { return e.SequenceID }

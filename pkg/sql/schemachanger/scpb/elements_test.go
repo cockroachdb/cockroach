@@ -13,6 +13,8 @@ package scpb
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestElementAttributeValueTypesMatch ensure that for all elements which
@@ -47,5 +49,16 @@ func TestGetElement(t *testing.T) {
 		if !f.Type.Implements(elementInterfaceType) {
 			t.Errorf("%v does not implement %v", f.Type, elementInterfaceType)
 		}
+	}
+}
+
+// TestAllElementsHaveDescID ensures that all element types do carry an
+// AttributeDescID.
+func TestAllElementsHaveDescID(t *testing.T) {
+	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		elem := reflect.New(f.Type.Elem()).Interface().(Element)
+		require.NotNilf(t, elem.getAttribute(AttributeDescID), "%s", f.Type.Elem())
 	}
 }
