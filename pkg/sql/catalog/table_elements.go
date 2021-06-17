@@ -236,6 +236,9 @@ type Column interface {
 	// IsHidden returns true iff the column is not visible.
 	IsHidden() bool
 
+	// IsInaccessible returns true iff the column is inaccessible.
+	IsInaccessible() bool
+
 	// NumUsesSequences returns the number of sequences used by this column.
 	NumUsesSequences() int
 

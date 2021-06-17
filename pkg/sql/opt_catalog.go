@@ -670,7 +670,9 @@ func newOptTable(
 		switch {
 		case col.Public():
 			kind = cat.Ordinary
-			if col.IsHidden() {
+			if col.IsInaccessible() {
+				visibility = cat.Inaccessible
+			} else if col.IsHidden() {
 				visibility = cat.Hidden
 			}
 		case col.WriteAndDeleteOnly():

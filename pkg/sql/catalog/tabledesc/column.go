@@ -127,6 +127,11 @@ func (w column) IsHidden() bool {
 	return w.desc.Hidden
 }
 
+// IsInaccessible returns true iff the column is inaccessible.
+func (w column) IsInaccessible() bool {
+	return w.desc.Inaccessible
+}
+
 // NumUsesSequences returns the number of sequences used by this column.
 func (w column) NumUsesSequences() int {
 	return len(w.desc.UsesSequenceIds)

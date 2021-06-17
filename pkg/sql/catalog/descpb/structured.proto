@@ -136,7 +136,18 @@ message ColumnDescriptor {
   // schemaexpr.FormatExpr* functions.
   optional string default_expr = 5;
   reserved 9;
+
+  // A hidden column does not appear in star expansion, but can be referenced in
+  // queries and can be viewed when inspecting a table via SHOW CREATE TABLE. A
+  // column cannot be both hidden and inaccessible.
   optional bool hidden = 6 [(gogoproto.nullable) = false];
+
+  // An inaccessible column does not appear in star expansion and cannot be
+  // referenced in queries. It cannot be viewed when inspecting a table via SHOW
+  // CREATE TABLE and is not shown as an attribute of its table in
+  // pg_catalog.pg_attribute. A column cannot be both hidden and inaccessible.
+  optional bool inaccessible = 17 [(gogoproto.nullable) = false];
+
   reserved 7;
   // Ids of sequences used in this column's DEFAULT expression, in calls to nextval().
   repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];
@@ -256,7 +267,7 @@ message InterleaveDescriptor {
 // As as example, sample field values for the following table:
 //
 // CREATE TABLE abc (
-//   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10,  // column id: 1 
+//   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10,  // column id: 1
 //   b BYTES
 // );
 //
@@ -266,9 +277,9 @@ message InterleaveDescriptor {
 //   column_names:  ["a"]
 message ShardedDescriptor {
   option (gogoproto.equal) = true;
-  
+
   // IsSharded indicates whether the index in question is a sharded one.
-  optional bool is_sharded = 1 [(gogoproto.nullable) = false]; 
+  optional bool is_sharded = 1 [(gogoproto.nullable) = false];
   // Name is the name of the shard column.
   optional string name = 2 [(gogoproto.nullable) = false];
 
