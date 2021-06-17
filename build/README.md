@@ -112,7 +112,7 @@ back to this document and perform these steps:
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
 * [ ] Bump the go version in `go.mod`. You may also need to rerun `make vendor_rebuild` if vendoring has changed.
-* [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh#L40-42)).
+* [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
 * [ ] Update the `builder.dockerImage` parameter in the TeamCity [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
 * [ ] Adjust `GO_VERSION` in the TeamCity agent image ([setup script](./packer/teamcity-agent.sh))
