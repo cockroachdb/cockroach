@@ -3140,3 +3140,43 @@ select generate_series('2020-10-25 00:00'::TIMESTAMPTZ, '2020-10-25 23:00'::TIME
 
 statement ok
 SET TIME ZONE +0
+
+query B
+SELECT 'AAA'::text ~ similar_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+false
+
+query B
+SELECT 'ACTIVE'::text ~ similar_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+true
+
+query B
+SELECT 'ACTIVE'::text ~ similar_escape(NULL::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'AAA'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text, NULL::text)
+----
+NULL
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text)
+----
+true
+
+query B
+SELECT 'AAA'::text ~ similar_to_escape('(ACTIVE|CLOSED|PENDING)'::text)
+----
+false
+
+query B
+SELECT 'ACTIVE'::text ~ similar_to_escape(NULL::text)
+----
+NULL
