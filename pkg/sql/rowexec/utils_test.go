@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -151,6 +152,7 @@ func (r *rowGeneratingSource) ConsumerClosed() {}
 type rowDisposer struct {
 	bufferedMeta    []execinfrapb.ProducerMetadata
 	numRowsDisposed int
+	logRows         bool
 }
 
 var _ execinfra.RowReceiver = &rowDisposer{}
@@ -160,6 +162,9 @@ func (r *rowDisposer) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if row != nil {
+		if r.logRows {
+			fmt.Printf("row #%d : %v\n", r.numRowsDisposed, row)
+		}
 		r.numRowsDisposed++
 	} else if meta != nil {
 		r.bufferedMeta = append(r.bufferedMeta, *meta)
