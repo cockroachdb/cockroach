@@ -53,13 +53,21 @@ type NamedHistogram struct {
 	}
 }
 
-func newNamedHistogram(reg *Registry, name string) *NamedHistogram {
-	w := &NamedHistogram{
+// newNamedHistogramLocked creates a new instance of a NamedHistogram for the
+// given name and adds it to the list of histograms tracked under this name. It
+// also creates a prometheus histogram, but it is shared across all
+// NamedHistograms for the same name (i.e. it is created when the respective
+// name is first seen). This is because the sharding within a name is a perf
+// optimization that doesn't apply to the prometheus histogram (plus everything
+// gets more complex once we have to merge multiple prom histograms together
+// for exposure via Gatherer()). See *Histograms for details.
+func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
+	hist := &NamedHistogram{
 		name:                name,
-		prometheusHistogram: reg.getPrometheusHistogram(name),
+		prometheusHistogram: w.getPrometheusHistogramLocked(name),
 	}
-	w.mu.current = reg.newHistogram()
-	return w
+	hist.mu.current = w.newHistogram()
+	return hist
 }
 
 // Record saves a new datapoint and should be called once per logical operation.
@@ -103,7 +111,10 @@ type Registry struct {
 	workloadName string // name of the workload reporting to this registry
 	mu           struct {
 		syncutil.Mutex
+		// maps histogram name to []{histogram created through handle 1, histogram created through handle 2, ...}
 		registered map[string][]*NamedHistogram
+		// maps histogram name to a single prometheus histogram shared by all handles.
+		prometheusHistograms map[string]prometheus.Histogram
 	}
 
 	promReg *prometheus.Registry
@@ -113,7 +124,6 @@ type Registry struct {
 	// each new NamedHistogram causes a panic.
 	prometheusMu struct {
 		syncutil.RWMutex
-		prometheusHistograms map[string]prometheus.Histogram
 	}
 
 	start         time.Time
@@ -142,7 +152,7 @@ func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 		},
 	}
 	r.mu.registered = make(map[string][]*NamedHistogram)
-	r.prometheusMu.prometheusHistograms = make(map[string]prometheus.Histogram)
+	r.mu.prometheusHistograms = make(map[string]prometheus.Histogram)
 	return r
 }
 
@@ -172,18 +182,9 @@ func makePrometheusLatencyHistogramBuckets() []float64 {
 	return prometheus.ExponentialBuckets(0.0005, 1.1, 150)
 }
 
-func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
-	w.prometheusMu.RLock()
-	ph, ok := w.prometheusMu.prometheusHistograms[name]
-	w.prometheusMu.RUnlock()
+func (w *Registry) getPrometheusHistogramLocked(name string) prometheus.Histogram {
+	ph, ok := w.mu.prometheusHistograms[name]
 
-	if ok {
-		return ph
-	}
-
-	w.prometheusMu.Lock()
-	defer w.prometheusMu.Unlock()
-	ph, ok = w.prometheusMu.prometheusHistograms[name]
 	if !ok {
 		// Metric names must be sanitized or NewHistogram will panic.
 		promName := cleanPrometheusName(name) + "_duration_seconds"
@@ -193,13 +194,15 @@ func (w *Registry) getPrometheusHistogram(name string) prometheus.Histogram {
 			Name:      promName,
 			Buckets:   makePrometheusLatencyHistogramBuckets(),
 		})
-		w.prometheusMu.prometheusHistograms[name] = ph
+		w.mu.prometheusHistograms[name] = ph
 	}
+
 	return ph
 }
 
 // GetHandle returns a thread-local handle for creating and registering
-// NamedHistograms.
+// NamedHistograms. A handle should be created for each long-lived goroutine
+// for best performance, see the comment on Histograms.
 func (w *Registry) GetHandle() *Histograms {
 	hists := &Histograms{
 		reg: w,
@@ -209,7 +212,8 @@ func (w *Registry) GetHandle() *Histograms {
 }
 
 // Tick aggregates all registered histograms, grouped by name. It is expected to
-// be called periodically from one goroutine.
+// be called periodically from one goroutine. The closure must not leak references
+// to the histograms contained in the Tick as their backing memory is pooled.
 func (w *Registry) Tick(fn func(Tick)) {
 	merged := make(map[string]*hdrhistogram.Histogram)
 	var names []string
@@ -263,7 +267,18 @@ func (w *Registry) Tick(fn func(Tick)) {
 }
 
 // Histograms is a thread-local handle for creating and registering
-// NamedHistograms.
+// NamedHistograms. A Histograms handle reduces mutex contention
+// in the common case of many worker goroutines reporting under the
+// same histogram name. It does so by collecting observations locally
+// (and thus avoiding contention that would arise from all workers
+// observing into the same histogram). When the parent Registry's Tick
+// method is called, all Histograms handles for the same name will be
+// visited and the observations merged.
+//
+// Note that there is also a cumulative shared prometheus histogram (exposed
+// under Registry.Gatherer) but since its implementation already optimizes for
+// concurrent access, a single instance per name is shared across all handles on
+// a Registry.
 type Histograms struct {
 	reg *Registry
 	mu  struct {
@@ -287,7 +302,7 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 	w.mu.Lock()
 	hist, ok = w.mu.hists[name]
 	if !ok {
-		hist = newNamedHistogram(w.reg, name)
+		hist = w.reg.newNamedHistogramLocked(name)
 		w.mu.hists[name] = hist
 	}
 	w.mu.Unlock()
