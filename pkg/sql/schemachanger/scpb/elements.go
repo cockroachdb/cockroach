@@ -11,10 +11,6 @@
 package scpb
 
 import (
-	"reflect"
-	"strconv"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -39,7 +35,10 @@ func (n *Node) Element() Element {
 type Element interface {
 	protoutil.Message
 	DescriptorID() descpb.ID
-	GetAttributes() Attributes
+
+	// getAttribute returns the value of a given attribute of an element.
+	// If the attribute is not defined on the element, nil will be returned.
+	getAttribute(Attribute) attributeValue
 }
 
 // Element returns an Element from its wrapper for serialization.
@@ -59,216 +58,247 @@ func NewTarget(dir Target_Direction, elem Element) *Target {
 	return &t
 }
 
-// ElementTypeID represents type ID of a element
-type ElementTypeID int
-
-var typeToElementID map[reflect.Type]ElementTypeID
-var elementIDToString map[ElementTypeID]string
-
-func init() {
-	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
-	typeToElementID = make(map[reflect.Type]ElementTypeID, typ.NumField())
-	elementIDToString = make(map[ElementTypeID]string, typ.NumField())
-	for i := 0; i < typ.NumField(); i++ {
-		f := typ.Field(i)
-		protoFlags := strings.Split(f.Tag.Get("protobuf"), ",")
-		id, err := strconv.Atoi(protoFlags[1])
-		if err != nil {
-			panic(errors.Wrapf(err, "failed to extract ID from protobuf tag: %q", protoFlags))
-		}
-		typeToElementID[f.Type] = ElementTypeID(id)
-		elementIDToString[ElementTypeID(id)] = strings.TrimPrefix(f.Type.String(), "*scpb.")
-	}
-}
-
-// ElementType determines the type ID of a element
-func ElementType(el Element) ElementTypeID {
-	return typeToElementID[reflect.TypeOf(el)]
-}
-
-// ElementIDToString determines the type ID of a element
-func ElementIDToString(id ElementTypeID) string {
-	return elementIDToString[id]
-}
-
 // DescriptorID implements the Element interface.
 func (e *Column) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
-func (e *Column) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-		{key: AttributeColumnID, value: ColumnID(e.Column.ID)},
-		{key: AttributeElementName, value: ElementName(e.Column.Name)},
-	})
+func (e *Column) getAttribute(attribute Attribute) attributeValue {
+	switch attribute {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeColumnID:
+		return (*columnID)(&e.Column.ID)
+	case AttributeElementName:
+		return (*elementName)(&e.Column.Name)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *PrimaryIndex) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
-func (e *PrimaryIndex) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-		{key: AttributeIndexID, value: IndexID(e.Index.ID)},
-		{key: AttributeElementName, value: ElementName(e.Index.Name)},
-	})
+func (e *PrimaryIndex) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeIndexID:
+		return (*indexID)(&e.Index.ID)
+	case AttributeElementName:
+		return (*elementName)(&e.Index.Name)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *SecondaryIndex) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
-func (e *SecondaryIndex) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-		{key: AttributeIndexID, value: IndexID(e.Index.ID)},
-		{key: AttributeElementName, value: ElementName(e.Index.Name)},
-	})
+func (e *SecondaryIndex) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeIndexID:
+		return (*indexID)(&e.Index.ID)
+	case AttributeElementName:
+		return (*elementName)(&e.Index.Name)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *SequenceDependency) DescriptorID() descpb.ID { return e.SequenceID }
 
-// GetAttributes implements the Element interface
-func (e *SequenceDependency) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.SequenceID)},
-		{key: AttributeDepID, value: DescID(e.TableID)},
-		{key: AttributeColumnID, value: ColumnID(e.ColumnID)},
-	})
+func (e *SequenceDependency) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.SequenceID)
+	case AttributeDepID:
+		return (*descID)(&e.TableID)
+	case AttributeColumnID:
+		return (*columnID)(&e.ColumnID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *UniqueConstraint) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
-func (e *UniqueConstraint) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-		{key: AttributeIndexID, value: IndexID(e.IndexID)},
-	})
+func (e *UniqueConstraint) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeIndexID:
+		return (*indexID)(&e.IndexID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *CheckConstraint) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
-func (e *CheckConstraint) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeElementName, value: ElementName(e.Name)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-	})
+func (e *CheckConstraint) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeElementName:
+		return (*elementName)(&e.Name)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *Sequence) DescriptorID() descpb.ID { return e.SequenceID }
 
-// GetAttributes implements the Element interface
-func (e *Sequence) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.SequenceID)},
-	})
+func (e *Sequence) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.SequenceID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *DefaultExpression) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface.
-func (e *DefaultExpression) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-		{key: AttributeColumnID, value: ColumnID(e.ColumnID)},
-	})
+func (e *DefaultExpression) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeColumnID:
+		return (*columnID)(&e.ColumnID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *View) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface.
-func (e *View) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-	})
+func (e *View) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *TypeReference) DescriptorID() descpb.ID { return e.DescID }
 
-// GetAttributes implements the Element interface.
-func (e *TypeReference) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TypeID)},
-		{key: AttributeDepID, value: DescID(e.DescID)},
-	})
+func (e *TypeReference) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.DescID)
+	case AttributeDepID:
+		return (*descID)(&e.TypeID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *Table) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
-func (e *Table) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-	})
+func (e *Table) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *InboundForeignKey) DescriptorID() descpb.ID { return e.OriginID }
 
-// GetAttributes implements the Element interface
-func (e *InboundForeignKey) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.OriginID)},
-		{key: AttributeDepID, value: DescID(e.ReferenceID)},
-		{key: AttributeElementName, value: ElementName(e.Name)},
-	})
+func (e *InboundForeignKey) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.OriginID)
+	case AttributeDepID:
+		return (*descID)(&e.ReferenceID)
+	case AttributeElementName:
+		return (*elementName)(&e.Name)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *OutboundForeignKey) DescriptorID() descpb.ID { return e.OriginID }
 
-// GetAttributes implements the Element interface
-func (e *OutboundForeignKey) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.OriginID)},
-		{key: AttributeDepID, value: DescID(e.ReferenceID)},
-		{key: AttributeElementName, value: ElementName(e.Name)},
-	})
+func (e *OutboundForeignKey) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.OriginID)
+	case AttributeDepID:
+		return (*descID)(&e.ReferenceID)
+	case AttributeElementName:
+		return (*elementName)(&e.Name)
+	default:
+		return nil
+	}
 }
 
-// GetAttributes implements the Element interface
-func (e *RelationDependedOnBy) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.TableID)},
-		{key: AttributeDepID, value: DescID(e.DependedOnBy)},
-	})
+func (e *RelationDependedOnBy) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.TableID)
+	case AttributeDepID:
+		return (*descID)(&e.DependedOnBy)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
 func (e *RelationDependedOnBy) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
-func (e *SequenceOwnedBy) GetAttributes() Attributes {
-	return makeAttributes([]attributeValue{
-		{key: AttributeType, value: ElementType(e)},
-		{key: AttributeDescID, value: DescID(e.SequenceID)},
-		{key: AttributeDepID, value: DescID(e.OwnerTableID)},
-	})
+func (e *SequenceOwnedBy) getAttribute(attr Attribute) attributeValue {
+	switch attr {
+	case AttributeType:
+		return getElementTypeID(e)
+	case AttributeDescID:
+		return (*descID)(&e.SequenceID)
+	case AttributeDepID:
+		return (*descID)(&e.OwnerTableID)
+	default:
+		return nil
+	}
 }
 
 // DescriptorID implements the Element interface.
