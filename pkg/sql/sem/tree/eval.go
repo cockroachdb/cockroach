@@ -5216,16 +5216,37 @@ func (k similarToKey) Pattern() (string, error) {
 // SimilarToEscape checks if 'unescaped' is SIMILAR TO 'pattern' using custom escape token 'escape'
 // which must be either empty (which disables the escape mechanism) or a single unicode character.
 func SimilarToEscape(ctx *EvalContext, unescaped, pattern, escape string) (Datum, error) {
+	key, err := makeSimilarToKey(pattern, escape)
+	if err != nil {
+		return DBoolFalse, err
+	}
+	return matchRegexpWithKey(ctx, NewDString(unescaped), key)
+}
+
+// SimilarPattern converts a SQL regexp 'pattern' to a POSIX regexp 'pattern' using custom escape token 'escape'
+// which must be either empty (which disables the escape mechanism) or a single unicode character.
+func SimilarPattern(pattern, escape string) (Datum, error) {
+	key, err := makeSimilarToKey(pattern, escape)
+	if err != nil {
+		return dEmptyString, err
+	}
+	pattern, err = key.Pattern()
+	if err != nil {
+		return dEmptyString, err
+	}
+	return NewDString(pattern), nil
+}
+
+// makeSimilarToKey makes a similarToKey using the given 'pattern' and 'escape'.
+func makeSimilarToKey(pattern, escape string) (similarToKey, error) {
 	var escapeRune rune
-	if len(escape) > 0 {
-		var width int
-		escapeRune, width = utf8.DecodeRuneInString(escape)
-		if len(escape) > width {
-			return DBoolFalse, pgerror.Newf(pgcode.InvalidEscapeSequence, "invalid escape string")
-		}
+	var width int
+	escapeRune, width = utf8.DecodeRuneInString(escape)
+	if len(escape) > width {
+		return similarToKey{}, pgerror.Newf(pgcode.InvalidEscapeSequence, "invalid escape string")
 	}
 	key := similarToKey{s: pattern, escape: escapeRune}
-	return matchRegexpWithKey(ctx, NewDString(unescaped), key)
+	return key, nil
 }
 
 type regexpKey struct {
