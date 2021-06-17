@@ -169,7 +169,8 @@ type Server struct {
 	protectedtsProvider   protectedts.Provider
 	protectedtsReconciler *ptreconcile.Reconciler
 
-	sqlServer *SQLServer
+	sqlServer    *SQLServer
+	drainSleepFn func(time.Duration)
 
 	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
 	externalStorageBuilder *externalStorageBuilder
@@ -590,7 +591,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeID:        nodeIDContainer.Get,
 		SQLInstanceID: idContainer.SQLInstanceID,
 	}
+
+	var drainSleepFn = time.Sleep
 	if cfg.TestingKnobs.Server != nil {
+		if cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn != nil {
+			drainSleepFn = cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn
+		}
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
@@ -740,6 +746,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
 		sqlServer:              sqlServer,
+		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
 	}
 	return lateBoundServer, err
