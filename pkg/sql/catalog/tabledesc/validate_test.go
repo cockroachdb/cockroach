@@ -175,7 +175,8 @@ var validationMap = []struct {
 			"DefaultExpr": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"Hidden": {status: thisFieldReferencesNoObjects},
+			"Hidden":       {status: iSolemnlySwearThisFieldIsValidated},
+			"Inaccessible": {status: iSolemnlySwearThisFieldIsValidated},
 			"UsesSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
@@ -432,6 +433,17 @@ func TestValidateTableDesc(t *testing.T) {
 				FormatVersion: descpb.FamilyFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
+				},
+				NextColumnID: 2,
+			}},
+		{`column "bar" cannot be hidden and inaccessible`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar", Hidden: true, Inaccessible: true},
 				},
 				NextColumnID: 2,
 			}},
