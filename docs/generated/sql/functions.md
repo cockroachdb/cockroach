@@ -305,8 +305,6 @@
 <tr><td><a name="not_like_escape"></a><code>not_like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr>
 <tr><td><a name="not_similar_to_escape"></a><code>not_similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
-</span></td></tr>
-<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -2613,6 +2611,16 @@ The output can be used to recreate a database.’</p>
 <tr><td><a name="sha512"></a><code>sha512(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
 </span></td></tr>
 <tr><td><a name="sha512"></a><code>sha512(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
+</span></td></tr>
+<tr><td><a name="similar_escape"></a><code>similar_escape(pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘’ as an escape token.</p>
+</span></td></tr>
+<tr><td><a name="similar_escape"></a><code>similar_escape(pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr>
+<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘’ as an escape token.</p>
+</span></td></tr>
+<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr>
+<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr>
 <tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
 </span></td></tr>
