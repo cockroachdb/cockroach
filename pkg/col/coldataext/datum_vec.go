@@ -117,8 +117,8 @@ func (dv *datumVec) Set(i int, v coldata.Datum) {
 	dv.data[i] = datum
 }
 
-// Slice implements coldata.DatumVec interface.
-func (dv *datumVec) Slice(start, end int) coldata.DatumVec {
+// Window implements coldata.DatumVec interface.
+func (dv *datumVec) Window(start, end int) coldata.DatumVec {
 	return &datumVec{
 		t:       dv.t,
 		data:    dv.data[start:end],

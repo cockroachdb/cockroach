@@ -489,18 +489,6 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 	return copyVal(b.CanonicalTypeFamily, dest, src)
 }
 
-// slice is a function that should only be used in templates.
-func (b *argWidthOverloadBase) slice(target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily:
-		// Bytes-like vector doesn't support slicing.
-		colexecerror.InternalError(errors.AssertionFailedf("slice method is attempted to be generated on Bytes vector"))
-	case typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
-	}
-	return fmt.Sprintf("%s[%s:%s]", target, start, end)
-}
-
 // sliceable returns whether the vector of canonicalTypeFamily can be sliced
 // (i.e. whether it is a Golang's slice).
 func sliceable(canonicalTypeFamily types.Family) bool {
@@ -577,15 +565,6 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
 
-// Window is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Window(target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily:
-		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
-	}
-	return b.slice(target, start, end)
-}
-
 // setVariableSize is a function that should only be used in templates. It
 // returns a string that contains a code snippet for computing the size of the
 // object named 'value' if it has variable size and assigns it to the variable
@@ -633,7 +612,6 @@ var (
 	_    = awob.Sliceable
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
-	_    = awob.Window
 	_    = awob.SetVariableSize
 	_    = awob.IsBytesLike
 )

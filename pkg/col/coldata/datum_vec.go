@@ -25,9 +25,9 @@ type DatumVec interface {
 	// Set sets the datum at index i in the vector. It must check whether the
 	// provided datum is compatible with the type that the DatumVec stores.
 	Set(i int, v Datum)
-	// Slice creates a "window" into the vector. It behaves similarly to
+	// Window creates a "window" into the vector. It behaves similarly to
 	// Golang's slice.
-	Slice(start, end int) DatumVec
+	Window(start, end int) DatumVec
 	// CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive
 	// tree.Datum values from src into the vector starting at destIdx.
 	CopySlice(src DatumVec, destIdx, srcStartIdx, srcEndIdx int)

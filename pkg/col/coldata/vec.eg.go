@@ -45,7 +45,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
@@ -114,7 +114,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				}
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, apd.Decimal{})
@@ -137,7 +137,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
@@ -156,7 +156,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
@@ -176,7 +176,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
@@ -199,7 +199,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
@@ -222,7 +222,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
@@ -245,7 +245,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol[0:args.DestIdx]
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
@@ -293,7 +293,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol.AppendSlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				toCol = toCol.Slice(0, args.DestIdx)
+				toCol = toCol.Window(0, args.DestIdx)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol.AppendVal(val)
@@ -1065,7 +1065,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
@@ -1089,7 +1089,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
@@ -1100,7 +1100,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		case 32:
@@ -1108,7 +1108,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		case -1:
@@ -1117,7 +1117,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
@@ -1129,7 +1129,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
@@ -1141,7 +1141,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
@@ -1153,7 +1153,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col[start:end],
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
@@ -1177,7 +1177,7 @@ func (m *memColumn) Window(start int, end int) Vec {
 			return &memColumn{
 				t:                   m.t,
 				canonicalTypeFamily: m.canonicalTypeFamily,
-				col:                 col.Slice(start, end),
+				col:                 col.Window(start, end),
 				nulls:               m.nulls.Slice(start, end),
 			}
 		}
