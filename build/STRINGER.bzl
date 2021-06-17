@@ -12,7 +12,8 @@ def stringer(src, typ, name):
       cmd = """
          GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
          GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
-         env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
+         # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
+         env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
          $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type={} $<
       """.format(typ),
       tools = [

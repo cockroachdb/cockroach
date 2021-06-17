@@ -27,7 +27,7 @@ http_archive(
 # repo.
 git_repository(
     name = "bazel_gazelle",
-    commit = "e9091445339de2ba7c01c3561f751b64a7fab4a5",
+    commit = "d038863ba2e096792c6bb6afca31f6514f1aeecd",
     remote = "https://github.com/bazelbuild/bazel-gazelle",
 )
 
@@ -108,7 +108,7 @@ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_depe
 
 go_rules_dependencies()
 
-go_register_toolchains(go_version = "1.15.11")
+go_register_toolchains(go_version = "1.16.5")
 
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
