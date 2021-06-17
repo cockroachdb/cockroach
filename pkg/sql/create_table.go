@@ -2736,7 +2736,7 @@ func makeShardCheckConstraintDef(
 	}, nil
 }
 
-func makeExpressionBasedIndexVirtualColumn(
+func makeExpressionIndexVirtualColumn(
 	colName string, typ *types.T, expr tree.Expr,
 ) *tree.ColumnTableDef {
 	c := &tree.ColumnTableDef{
@@ -2750,7 +2750,7 @@ func makeExpressionBasedIndexVirtualColumn(
 
 	// TODO(mgartner): If we can determine the expression will never evaluate to
 	// NULL, the optimizer might be able to better optimize queries using the
-	// expression-based index.
+	// expression index.
 	c.Nullable.Nullability = tree.Null
 
 	return c

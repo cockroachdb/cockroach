@@ -117,8 +117,8 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 type IndexElem struct {
 	// Column is set if this is a simple column reference (the common case).
 	Column Name
-	// Expr is set if the index element is an expression (part of an
-	// expression-based index). If set, Column is empty.
+	// Expr is set if the index element is an expression (part of an expression
+	// index). If set, Column is empty.
 	Expr       Expr
 	Direction  Direction
 	NullsOrder NullsOrder

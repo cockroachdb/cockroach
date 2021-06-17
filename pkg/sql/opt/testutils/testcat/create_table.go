@@ -893,7 +893,7 @@ func (tt *Table) addFamily(def *tree.FamilyTableDef) {
 }
 
 // addColumn adds a column to the index. If necessary, creates a virtual column
-// (for inverted and expression-based indexes).
+// (for inverted and expression indexes).
 //
 // isLastIndexCol indicates if this is the last explicit column in the index as
 // specified in the schema; it is used to indicate the inverted column if the
@@ -903,7 +903,7 @@ func (ti *Index) addColumn(
 ) *cat.Column {
 	if elem.Expr != nil {
 		if ti.Inverted && isLastIndexCol {
-			panic("expression-based inverted column not supported")
+			panic("inverted index expression element not supported")
 		}
 		col := columnForIndexElemExpr(tt, elem.Expr)
 		return ti.addColumnByOrdinal(tt, col.Ordinal(), elem.Direction, colType)

@@ -329,14 +329,14 @@ func replaceExpressionElemsWithVirtualCols(
 	for i := range n.Columns {
 		elem := &n.Columns[i]
 		if elem.Expr != nil {
-			if !params.SessionData().EnableExpressionBasedIndexes {
+			if !params.SessionData().EnableExpressionIndexes {
 				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
 			}
 
-			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionBasedIndexes) {
+			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionIndexes) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"version %v must be finalized to use expression-based indexes",
-					clusterversion.ExpressionBasedIndexes)
+					"version %v must be finalized to use expression indexes",
+					clusterversion.ExpressionIndexes)
 			}
 
 			expr, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
@@ -368,7 +368,7 @@ func replaceExpressionElemsWithVirtualCols(
 				return err == nil
 			})
 			addCol := &tree.AlterTableAddColumn{
-				ColumnDef: makeExpressionBasedIndexVirtualColumn(colName, typ, elem.Expr),
+				ColumnDef: makeExpressionIndexVirtualColumn(colName, typ, elem.Expr),
 			}
 
 			// Add the virtual column to desc as a mutation column.

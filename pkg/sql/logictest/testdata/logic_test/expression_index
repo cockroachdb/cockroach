@@ -12,7 +12,7 @@ statement error unimplemented: only simple columns are supported as index elemen
 CREATE INDEX err ON t ((a + b))
 
 statement ok
-SET experimental_enable_expression_based_indexes=true
+SET experimental_enable_expression_indexes=true
 
 statement ok
 CREATE INDEX t_a_plus_b_idx ON t ((a + b))
@@ -26,8 +26,8 @@ CREATE INDEX t_lower_c_a_plus_b_idx ON t (lower(c), (a + b))
 statement ok
 CREATE INDEX t_a_plus_ten_idx ON t ((a + 10))
 
-# TODO(mgartner): The expression should be printed in expression-based indexes
-# instead of the virtual column name.
+# TODO(mgartner): The expression should be printed in expression indexes instead
+# of the virtual column name.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -64,11 +64,11 @@ CREATE TABLE child (
   a INT
 )
 
-# An expression-based index cannot reference columns in other tables.
+# An expression index cannot reference columns in other tables.
 statement error no data source matches prefix: t in this context
 CREATE INDEX err ON child ((t.a + 10))
 
-# Querying expression-based indexes.
+# Querying expression indexes.
 
 statement ok
 INSERT INTO t VALUES
@@ -116,7 +116,7 @@ SELECT * FROM t@t_lower_c_a_plus_b_idx WHERE lower(c) = 'foo' AND a + b > 110
 k  a   b    c    comp
 2  20  200  FOO  30
 
-# Backfilling expression-based indexes.
+# Backfilling expression indexes.
 
 statement ok
 CREATE INDEX t_a_times_two_idx ON t ((a * 2))

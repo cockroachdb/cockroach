@@ -296,8 +296,8 @@ const (
 	// SerializeViewUDTs serializes user defined types used in views to allow
 	// for renaming of the referenced types.
 	SerializeViewUDTs
-	// ExpressionBasedIndexes is when expression-based indexes are supported.
-	ExpressionBasedIndexes
+	// ExpressionIndexes is when expression indexes are supported.
+	ExpressionIndexes
 	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
 	DeleteDeprecatedNamespaceTableDescriptorMigration
 
@@ -494,7 +494,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 8},
 	},
 	{
-		Key:     ExpressionBasedIndexes,
+		Key:     ExpressionIndexes,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 10},
 	},
 	{
