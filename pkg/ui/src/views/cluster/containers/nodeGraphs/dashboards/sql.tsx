@@ -46,7 +46,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Open SQL Transactions"
       sources={nodeSources}
-      tooltip={`The total number of SQL transactions currently open ${tooltipSelection}.`}
+      tooltip={`The total number of open SQL transactions  ${tooltipSelection}.`}
     >
       <Axis label="transactions">
         <Metric name="cr.node.sql.txns.open" title="Open Transactions" />
@@ -56,7 +56,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Active SQL Statements"
       sources={nodeSources}
-      tooltip={`The total number of SQL statements currently running ${tooltipSelection}.`}
+      tooltip={`The total number of running SQL statements ${tooltipSelection}.`}
     >
       <Axis label="queries">
         <Metric
@@ -273,8 +273,16 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Transaction Latency: 99th percentile"
-      tooltip={`The 99th percentile of total transaction time over a 1 minute period.
-        Values are displayed individually for each node.`}
+      tooltip={
+        <div>
+          Over the last minute, this node executed 99% of transactions within
+          this time.
+          <em>
+            This time does not include network latency between the node and
+            client.
+          </em>
+        </div>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, (node) => (
@@ -291,8 +299,16 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Transaction Latency: 90th percentile"
-      tooltip={`The 90th percentile of total transaction time over a 1 minute period.
-        Values are displayed individually for each node.`}
+      tooltip={
+        <div>
+          Over the last minute, this node executed 90% of transactions within
+          this time.
+          <em>
+            This time does not include network latency between the node and
+            client.
+          </em>
+        </div>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, (node) => (
@@ -309,7 +325,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="SQL Memory"
-      tooltip={`The current amount of allocated SQL memory. This amount is what is
+      tooltip={`The current amount of allocated SQL memory. This amount is
          compared against the node's --max-sql-memory flag.`}
     >
       <Axis units={AxisUnits.Bytes} label="allocated bytes">
