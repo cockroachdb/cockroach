@@ -81,6 +81,8 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, acc)
+		case isHTTPSink(u):
+			return makeHTTPSink(ctx, sinkURL{URL: u}, feedCfg.Opts)
 		case isCloudStorageSink(u):
 			return makeCloudStorageSink(
 				ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
@@ -88,6 +90,9 @@ func getSink(
 			)
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
+		case u.Scheme == changefeedbase.SinkSchemeHTTP || u.Scheme == changefeedbase.SinkSchemeHTTPS:
+			return nil, errors.Errorf(`unsupported sink: %s. HTTP endpoints can be used with %s and %s`,
+				u.Scheme, changefeedbase.SinkSchemeWebhookHTTPS, changefeedbase.SinkSchemeCloudStorageHTTPS)
 		default:
 			return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 		}
@@ -123,6 +128,31 @@ func (u *sinkURL) consumeParam(p string) string {
 	v := u.q.Get(p)
 	u.q.Del(p)
 	return v
+}
+
+func (u *sinkURL) consumeBool(param string, dest *bool) (wasSet bool, err error) {
+	if paramVal := u.consumeParam(param); paramVal != "" {
+		wasSet, err := strToBool(paramVal, dest)
+		if err != nil {
+			return false, errors.Wrapf(err, "param %s must be a bool", param)
+		}
+		return wasSet, err
+	}
+	return false, nil
+}
+
+func (u *sinkURL) decodeBase64(param string, dest *[]byte) error {
+	// TODO(dan): There's a straightforward and unambiguous transformation
+	//  between the base 64 encoding defined in RFC 4648 and the URL variant
+	//  defined in the same RFC: simply replace all `+` with `-` and `/` with
+	//  `_`. Consider always doing this for the user and accepting either
+	//  variant.
+	val := u.consumeParam(param)
+	err := decodeBase64FromString(val, dest)
+	if err != nil {
+		return errors.Wrapf(err, `param %s must be base 64 encoded`, param)
+	}
+	return nil
 }
 
 func (u *sinkURL) remainingQueryParams() (res []string) {
