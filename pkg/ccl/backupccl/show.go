@@ -205,11 +205,16 @@ func showBackupPlanHook(
 			manifests[i+1] = m
 		}
 
+		// Ensure that the descriptors in the backup manifests are up to date.
+		//
+		// This is necessary in particular for upgrading descriptors with old-style
+		// foreign keys which are no longer supported.
 		// If we are restoring a backup with old-style foreign keys, skip over the
 		// FKs for which we can't resolve the cross-table references. We can't
 		// display them anyway, because we don't have the referenced table names,
 		// etc.
-		if err := maybeUpgradeTableDescsInBackupManifests(ctx, manifests, true); err != nil {
+		err = maybeUpgradeDescriptorsInBackupManifests(ctx, manifests, true /* skipFKsWithNoMatchingTable */)
+		if err != nil {
 			return err
 		}
 

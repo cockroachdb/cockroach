@@ -332,28 +332,6 @@ func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string 
 	return buf.String()
 }
 
-func indexHasDeprecatedForeignKeyRepresentation(idx *descpb.IndexDescriptor) bool {
-	return idx.ForeignKey.IsSet() || len(idx.ReferencedBy) > 0
-}
-
-// TableHasDeprecatedForeignKeyRepresentation returns true if the table is not
-// dropped and any of the indexes on the table have deprecated foreign key
-// representations.
-func TableHasDeprecatedForeignKeyRepresentation(desc *descpb.TableDescriptor) bool {
-	if desc.Dropped() {
-		return false
-	}
-	if indexHasDeprecatedForeignKeyRepresentation(&desc.PrimaryIndex) {
-		return true
-	}
-	for i := range desc.Indexes {
-		if indexHasDeprecatedForeignKeyRepresentation(&desc.Indexes[i]) {
-			return true
-		}
-	}
-	return false
-}
-
 // ForEachExprStringInTableDesc runs a closure for each expression string
 // within a TableDescriptor. The closure takes in a string pointer so that
 // it can mutate the TableDescriptor if desired.

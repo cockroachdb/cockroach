@@ -191,6 +191,10 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t2 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t4 ORDER BY k`, results)
+
+		results = append(results, []string{"4", "5", "6"})
+		sqlDB.Exec(t, `INSERT INTO test.t1 VALUES (4, 5 ,6)`)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY k`, results)
 	}
 }
 
