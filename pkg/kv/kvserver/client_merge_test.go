@@ -476,6 +476,15 @@ func mergeCheckingTimestampCaches(
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+	defer func() {
+		if blockHBAndGCs != nil {
+			// If test failed before closing the channel, do so now
+			// to (maybe) avoid hangs. Note that this must execute
+			// before the Stopper().Stop() call above.
+			close(blockHBAndGCs)
+		}
+	}()
+
 	lhsStore := tc.GetFirstStoreFromServer(t, 0)
 	var rhsStore *kvserver.Store
 	if disjointLeaseholders {
@@ -765,14 +774,21 @@ func mergeCheckingTimestampCaches(
 			tc.Servers[i].RaftTransport().Listen(s.StoreID(), h)
 		}
 		close(blockHBAndGCs)
+		blockHBAndGCs = nil
 
 		t.Logf("waiting for snapshot to LHS leaseholder")
-		inSnap := <-snapChan
+		var inSnap kvserver.IncomingSnapshot
+		select {
+		case inSnap = <-snapChan:
+		case <-time.After(45 * time.Second):
+			t.Fatal("timed out waiting for snapChan")
+		}
 		inSnapDesc := inSnap.State.Desc
 		require.Equal(t, lhsDesc.StartKey, inSnapDesc.StartKey)
 		require.Equal(t, rhsDesc.EndKey, inSnapDesc.EndKey)
 
 		// Wait for all async ops to complete.
+		after45s := time.After(45 * time.Second)
 		for _, asyncRes := range []struct {
 			name string
 			ch   chan *roachpb.Error
@@ -782,7 +798,12 @@ func mergeCheckingTimestampCaches(
 			{"merge", mergeChan},
 		} {
 			t.Logf("waiting for result of %s", asyncRes.name)
-			err := <-asyncRes.ch
+			var err *roachpb.Error
+			select {
+			case err = <-asyncRes.ch:
+			case <-after45s:
+				t.Fatalf("timed out on %s", asyncRes.name)
+			}
 			require.NotNil(t, err, "%s should fail", asyncRes.name)
 			require.Regexp(t, "result is ambiguous", err, "%s's result should be ambiguous", asyncRes.name)
 		}
