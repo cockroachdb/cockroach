@@ -763,7 +763,7 @@ DELETE FROM u WHERE b IN (-10, -100, -1000)
 # Inserting multiple rows that conflict with each other inserts some of the
 # rows.
 statement ok
-INSERT INTO u VALUES (2, 2), (2, 20), (2, -2) ON CONFLICT DO NOTHING
+INSERT INTO u VALUES (2, 2), (2, 2), (2, -2) ON CONFLICT DO NOTHING
 
 query II rowsort
 SELECT * FROM u

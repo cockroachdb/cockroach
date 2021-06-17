@@ -45,7 +45,7 @@ func NewSortChunks(
 	for i := range alreadySortedCols {
 		alreadySortedCols[i] = orderingCols[i].ColIdx
 	}
-	chunker, err := newChunker(allocator, input, inputTypes, alreadySortedCols)
+	chunker, err := newChunker(allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
 	if err != nil {
 		return nil, err
 	}
@@ -215,6 +215,7 @@ type chunker struct {
 	// alreadySortedCols indicates the columns on which the input is already
 	// ordered.
 	alreadySortedCols []uint32
+	nullsAreDistinct  bool
 
 	// batch is the last read batch from input.
 	batch coldata.Batch
@@ -262,11 +263,12 @@ func newChunker(
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	alreadySortedCols []uint32,
+	nullsAreDistinct bool,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))
 	for i, col := range alreadySortedCols {
-		partitioners[i], err = newPartitioner(inputTypes[col])
+		partitioners[i], err = newPartitioner(inputTypes[col], nullsAreDistinct)
 		if err != nil {
 			return nil, err
 		}
@@ -277,6 +279,7 @@ func newChunker(
 		allocator:         allocator,
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,
+		nullsAreDistinct:  nullsAreDistinct,
 		partitioners:      partitioners,
 		state:             chunkerReading,
 	}, nil
@@ -355,6 +358,7 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 						0, /*aValueIdx */
 						s.batch.ColVec(int(s.alreadySortedCols[i])),
 						0, /* bValueIdx */
+						s.nullsAreDistinct,
 					)
 					i++
 				}
