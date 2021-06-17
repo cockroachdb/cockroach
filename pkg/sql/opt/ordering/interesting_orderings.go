@@ -202,5 +202,13 @@ func interestingOrderingsForSetOp(rel memo.RelExpr) props.OrderingSet {
 	for i := range ordRight {
 		ord.Add(&ordRight[i])
 	}
+
+	if !private.Ordering.Any() {
+		ordering := &private.Ordering
+		ord.RestrictToImplies(ordering)
+		if len(ord) == 0 {
+			ord.Add(ordering)
+		}
+	}
 	return ord
 }

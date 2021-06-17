@@ -17,9 +17,10 @@ import (
 )
 
 func setOpCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
-	// Set operations can provide any ordering by requiring that both inputs have
-	// the same ordering.
-	return true
+	// Set operations can provide the required ordering if it intersects with the
+	// set private ordering.
+	private := expr.Private().(*memo.SetPrivate)
+	return required.Intersects(&private.Ordering)
 }
 
 func setOpBuildChildReqOrdering(
@@ -53,11 +54,10 @@ func setOpBuildChildReqOrdering(
 }
 
 func setOpBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	// Set operations can always provide the required ordering. Don't use the
-	// provided ordering from the inputs in case they were trimmed to remove
-	// constant columns. Call remapProvided to remove columns that are now
-	// unnecessary (e.g. because the set op is guaranteed to provide at most one
-	// row).
+	// Don't use the provided ordering from the inputs in case they were trimmed
+	// to remove constant columns. Call remapProvided to remove columns that are
+	// now unnecessary (e.g. because the set op is guaranteed to produce at most
+	// one row).
 	rel := expr.Relational()
 	return remapProvided(required.ToOrdering(), &rel.FuncDeps, rel.OutputCols)
 }
@@ -67,34 +67,36 @@ func setOpBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.O
 // the execution engine can only use a streaming (merge join or distinct)
 // operation if the ordering involves all columns.
 func setOpBuildRequired(expr memo.RelExpr, required *props.OrderingChoice) *props.OrderingChoice {
+	private := expr.Private().(*memo.SetPrivate)
 	if required.Any() {
-		return required
+		return &private.Ordering
+	}
+
+	result := required.Intersection(&private.Ordering)
+	fds := &expr.Relational().FuncDeps
+	if result.CanSimplify(fds) {
+		result.Simplify(fds)
 	}
 
 	// UNION ALL is implemented with only an ordered synchronizer, so there is no
 	// need to add extra ordering columns.
 	if expr.Op() == opt.UnionAllOp {
-		return required
+		return &result
 	}
 
 	// If required includes some columns but not all, add the remaining columns in
 	// an arbitrary (but deterministic) order.
-	// TODO(rytaft): Use an "interesting ordering" provided from left side
-	// instead.
-	missing := expr.Relational().OutputCols.Difference(required.ColSet())
+	missing := expr.Relational().OutputCols.Difference(result.ColSet())
 	if !missing.Empty() {
-		copy := required.Copy()
 		missing.ForEach(func(col opt.ColumnID) {
-			copy.AppendCol(col, false /* descending */)
+			result.AppendCol(col, false /* descending */)
 		})
-		fds := &expr.Relational().FuncDeps
-		if copy.CanSimplify(fds) {
-			copy.Simplify(fds)
+		if result.CanSimplify(fds) {
+			result.Simplify(fds)
 		}
-		required = &copy
 	}
 
-	return required
+	return &result
 }
 
 // StreamingSetOpOrdering returns an ordering on the set operation output

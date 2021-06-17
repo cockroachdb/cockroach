@@ -1021,7 +1021,12 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	// A set operation must process every row from both tables once. UnionAll and
 	// LocalityOptimizedSearch can avoid any extra computation, but all other set
 	// operations must perform a hash table lookup or update for each input row.
-	if set.Op() != opt.UnionAllOp && set.Op() != opt.LocalityOptimizedSearchOp {
+	//
+	// The exception is if this is a streaming set operation, in which case there
+	// is no need to build a hash table. We can detect that this is a streaming
+	// operation by checking whether the ordering is defined in the set private.
+	if set.Op() != opt.UnionAllOp && set.Op() != opt.LocalityOptimizedSearchOp &&
+		set.Private().(*memo.SetPrivate).Ordering.Any() {
 		leftRowCount := set.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 		rightRowCount := set.Child(1).(memo.RelExpr).Relational().Stats.RowCount
 		cost += memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
