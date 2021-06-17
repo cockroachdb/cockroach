@@ -42,7 +42,7 @@ type StatementWriter interface {
 // TransactionWriter is the interface that provides methods to record
 // transaction stats for a given application name..
 type TransactionWriter interface {
-	RecordTransaction(ctx context.Context, key TransactionFingerprintID, value RecordedTxnStats) error
+	RecordTransaction(ctx context.Context, key roachpb.TransactionFingerprintID, value RecordedTxnStats) error
 }
 
 // Writer is the interface that provides methods to record statement and
@@ -79,7 +79,7 @@ type Reader interface {
 	GetStatementStats(key *roachpb.StatementStatisticsKey) (*roachpb.CollectedStatementStatistics, error)
 
 	// GetTransactionStats performs a point lookup of a transaction fingerprint key.
-	GetTransactionStats(appName string, key TransactionFingerprintID) (*roachpb.CollectedTransactionStatistics, error)
+	GetTransactionStats(appName string, key roachpb.TransactionFingerprintID) (*roachpb.CollectedTransactionStatistics, error)
 }
 
 // IteratorOptions provides the ability to the caller to change how it iterates
@@ -105,7 +105,7 @@ type StatementVisitor func(*roachpb.CollectedStatementStatistics) error
 // TransactionVisitor is the callback that is invoked when caller iterate through
 // all transaction statistics using IterateTransactionStats(). If an error is
 // encountered when calling the visitor, the iteration is aborted.
-type TransactionVisitor func(TransactionFingerprintID, *roachpb.CollectedTransactionStatistics) error
+type TransactionVisitor func(roachpb.TransactionFingerprintID, *roachpb.CollectedTransactionStatistics) error
 
 // AggregatedTransactionVisitor is the callback invoked when iterate through
 // transaction statistics collected at the application level using
@@ -149,15 +149,6 @@ type Provider interface {
 	Storage
 
 	Start(ctx context.Context, stopper *stop.Stopper)
-}
-
-// TransactionFingerprintID is the hashed string constructed using the
-// individual statement fingerprint IDs that comprise the transaction.
-type TransactionFingerprintID uint64
-
-// Size returns the size of the TransactionFingerprintID.
-func (t TransactionFingerprintID) Size() int64 {
-	return 8
 }
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.

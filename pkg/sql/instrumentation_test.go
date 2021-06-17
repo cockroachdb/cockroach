@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -126,7 +125,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		key := util.MakeFNV64()
 		key.Add(uint64(aggStats.ID))
 		key.Add(uint64(selectStats.ID))
-		txStats, err := s.SQLServer().(*Server).sqlStats.GetTransactionStats("", sqlstats.TransactionFingerprintID(key.Sum()))
+		txStats, err := s.SQLServer().(*Server).sqlStats.GetTransactionStats("", roachpb.TransactionFingerprintID(key.Sum()))
 		require.NoError(t, err)
 
 		require.Equal(t, int64(2), txStats.Stats.Count, "expected to have collected two sets of general stats")
