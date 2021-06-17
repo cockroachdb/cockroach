@@ -91,6 +91,23 @@ func IsClosedConnection(err error) bool {
 	return netutil.IsClosedConnection(err)
 }
 
+// IsConnectionRejected returns true if err's cause is an error produced by
+// gRPC due to remote node being unavailable and retrying immediately would
+// not fix the problem. It happens when either remote node is decommissioned
+// or caller is not authorized to talk to the node.
+// This check is helpful if caller doesn't want to distinguish between
+// authentication and decommissioning errors in specific ways and just want
+// to abort operations.
+func IsConnectionRejected(err error) bool {
+	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
+		switch s.Code() {
+		case codes.Unauthenticated, codes.PermissionDenied, codes.FailedPrecondition:
+			return true
+		}
+	}
+	return false
+}
+
 // IsAuthError returns true if err's Cause is an error produced by
 // gRPC due to an authentication or authorization error for the operation.
 func IsAuthError(err error) bool {
@@ -116,7 +133,8 @@ func IsAuthError(err error) bool {
 func RequestDidNotStart(err error) bool {
 	if errors.HasType(err, connectionNotReadyError{}) ||
 		errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
-		errors.Is(err, circuit.ErrBreakerOpen) {
+		errors.Is(err, circuit.ErrBreakerOpen) ||
+		IsConnectionRejected(err) {
 		return true
 	}
 	s, ok := status.FromError(errors.Cause(err))
