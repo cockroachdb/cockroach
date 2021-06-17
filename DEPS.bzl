@@ -2580,13 +2580,7 @@ def go_deps():
         sum = "h1:umdPgllno4d03WCBsA0UIwzGIJYV8FfV4325kOYIhBU=",
         version = "v1.0.0",
     )
-    go_repository(
-        name = "com_github_lusis_go_slackbot",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/lusis/go-slackbot",
-        sum = "h1:AsEBgzv3DhuYHI/GiQh2HxvTP71HCCE9E/tzGUzGdtU=",
-        version = "v0.0.0-20180109053408-401027ccfef5",
-    )
+
     go_repository(
         name = "com_github_lusis_slack_test",
         build_file_proto_mode = "disable_global",
