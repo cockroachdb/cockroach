@@ -39,10 +39,12 @@ import {
   AggregateStatistics,
   populateRegionNodeForStatements,
   makeStatementsColumns,
-  statementColumnLabels,
   StatementsSortedTable,
-  StatementTableColumnKeys,
 } from "../statementsTable";
+import {
+  statisticsColumnLabels,
+  StatisticTableColumnKeys,
+} from "../statsTableUtil/statsTableUtil";
 import {
   ActivateStatementDiagnosticsModal,
   ActivateDiagnosticsModalRef,
@@ -425,7 +427,7 @@ export class StatementsPage extends React.Component<
       .filter(c => !c.alwaysShow)
       .map(
         (c): SelectOption => ({
-          label: statementColumnLabels[c.name as StatementTableColumnKeys],
+          label: statisticsColumnLabels[c.name as StatisticTableColumnKeys],
           value: c.name,
           isSelected: isColumnSelected(c),
         }),
