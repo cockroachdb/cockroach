@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -50,6 +52,13 @@ const (
 	ledgerWorkloadType workloadType = "ledger"
 )
 
+type sinkType int32
+
+const (
+	cloudStorageSink sinkType = iota + 1
+	httpSink
+)
+
 type cdcTestArgs struct {
 	workloadType       workloadType
 	tpccWarehouseCount int
@@ -57,7 +66,7 @@ type cdcTestArgs struct {
 	initialScan        bool
 	kafkaChaos         bool
 	crdbChaos          bool
-	cloudStorageSink   bool
+	whichSink          sinkType
 	sinkURI            string
 
 	targetInitialScanLatency time.Duration
@@ -87,11 +96,33 @@ func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 	var sinkURI string
 	if args.sinkURI != "" {
 		sinkURI = args.sinkURI
-	} else if args.cloudStorageSink {
+	} else if args.whichSink == cloudStorageSink {
 		ts := timeutil.Now().Format(`20060102150405`)
 		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
 		// data.
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
+	} else if args.whichSink == httpSink {
+		// setup a sample cert for use by the mock sink
+		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sinkDest, err := cdctest.StartMockHTTPSinkWithTLS(cert)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer sinkDest.Close()
+
+		sinkDestHost, err := url.Parse(sinkDest.URL())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		params := sinkDestHost.Query()
+		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		sinkDestHost.RawQuery = params.Encode()
+
+		sinkURI = sinkDestHost.String()
 	} else {
 		t.Status("installing kafka")
 		kafka.install(ctx)
@@ -721,9 +752,25 @@ func registerCDC(r *testRegistry) {
 				tpccWarehouseCount:       50,
 				workloadDuration:         "30m",
 				initialScan:              true,
-				cloudStorageSink:         true,
+				whichSink:                cloudStorageSink,
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:            "cdc/http-sink",
+		Owner:           OwnerCDC,
+		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t *test, c Cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       1000,
+				workloadDuration:         "120m",
+				whichSink:                httpSink,
+				targetInitialScanLatency: 3 * time.Minute,
+				targetSteadyLatency:      10 * time.Minute,
 			})
 		},
 	})
@@ -1571,7 +1618,7 @@ func createChangefeed(db *gosql.DB, targets, sinkURL string, args cdcTestArgs) (
 	var jobID int
 	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1`, targets)
 	extraArgs := []interface{}{sinkURL}
-	if args.cloudStorageSink {
+	if args.whichSink == cloudStorageSink || args.whichSink == httpSink {
 		createStmt += ` WITH resolved='10s', envelope=wrapped`
 	} else {
 		createStmt += ` WITH resolved`
