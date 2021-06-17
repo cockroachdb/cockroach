@@ -21,6 +21,8 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",  # keep
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util/duration",  # keep

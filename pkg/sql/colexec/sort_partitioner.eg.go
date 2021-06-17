@@ -45,65 +45,65 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t *types.T) (partitioner, error) {
+func newPartitioner(t *types.T, nullsAreDistinct bool) (partitioner, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerBool{}, nil
+			return partitionerBool{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.BytesFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerBytes{}, nil
+			return partitionerBytes{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.DecimalFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerDecimal{}, nil
+			return partitionerDecimal{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
-			return partitionerInt16{}, nil
+			return partitionerInt16{nullsAreDistinct: nullsAreDistinct}, nil
 		case 32:
-			return partitionerInt32{}, nil
+			return partitionerInt32{nullsAreDistinct: nullsAreDistinct}, nil
 		case -1:
 		default:
-			return partitionerInt64{}, nil
+			return partitionerInt64{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.FloatFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerFloat64{}, nil
+			return partitionerFloat64{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.TimestampTZFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerTimestamp{}, nil
+			return partitionerTimestamp{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.IntervalFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerInterval{}, nil
+			return partitionerInterval{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case types.JsonFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerJSON{}, nil
+			return partitionerJSON{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
 		default:
-			return partitionerDatum{}, nil
+			return partitionerDatum{nullsAreDistinct: nullsAreDistinct}, nil
 		}
 	}
 	return nil, errors.Errorf("unsupported partition type %s", t)
@@ -113,7 +113,9 @@ func newPartitioner(t *types.T) (partitioner, error) {
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerBool struct{}
+type partitionerBool struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerBool) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -140,10 +142,13 @@ func (p partitionerBool) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -239,13 +244,16 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -324,7 +332,9 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerBytes struct{}
+type partitionerBytes struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerBytes) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -351,10 +361,13 @@ func (p partitionerBytes) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -434,13 +447,16 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -503,7 +519,9 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerDecimal struct{}
+type partitionerDecimal struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerDecimal) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -530,10 +548,13 @@ func (p partitionerDecimal) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -613,13 +634,16 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -682,7 +706,9 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInt16 struct{}
+type partitionerInt16 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInt16) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -709,10 +735,13 @@ func (p partitionerInt16) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -814,13 +843,16 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -905,7 +937,9 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInt32 struct{}
+type partitionerInt32 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInt32) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -932,10 +966,13 @@ func (p partitionerInt32) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1037,13 +1074,16 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1128,7 +1168,9 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInt64 struct{}
+type partitionerInt64 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInt64) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1155,10 +1197,13 @@ func (p partitionerInt64) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1260,13 +1305,16 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1351,7 +1399,9 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerFloat64 struct{}
+type partitionerFloat64 struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerFloat64) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1378,10 +1428,13 @@ func (p partitionerFloat64) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1499,13 +1552,16 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1606,7 +1662,9 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerTimestamp struct{}
+type partitionerTimestamp struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerTimestamp) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1633,10 +1691,13 @@ func (p partitionerTimestamp) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1730,13 +1791,16 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1813,7 +1877,9 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerInterval struct{}
+type partitionerInterval struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerInterval) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -1840,10 +1906,13 @@ func (p partitionerInterval) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1923,13 +1992,16 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -1992,7 +2064,9 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerJSON struct{}
+type partitionerJSON struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerJSON) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -2019,10 +2093,13 @@ func (p partitionerJSON) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -2114,13 +2191,16 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -2195,7 +2275,9 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitionerDatum struct{}
+type partitionerDatum struct {
+	nullsAreDistinct bool
+}
 
 func (p partitionerDatum) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -2222,10 +2304,13 @@ func (p partitionerDatum) partitionWithOrder(
 					__retval_lastValNull bool
 				)
 				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {
@@ -2309,13 +2394,16 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 				)
 				{
 					var (
-						checkIdx  int = idx
-						outputIdx int = idx
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
 					)
 					null := nulls.NullAt(checkIdx)
 					if null {
-						if !lastValNull {
-							// The current value is null while the previous was not.
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
 							outputCol[outputIdx] = true
 						}
 					} else {

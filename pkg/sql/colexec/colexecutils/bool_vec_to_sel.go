@@ -46,6 +46,10 @@ type BoolVecToSelOp struct {
 	// OutputCol is the boolean output column. It should be shared by other
 	// operators that write to it.
 	OutputCol []bool
+	// ProcessOnlyOneBatch indicates whether BoolVecToSelOp should always return
+	// a batch after it has processed the input batch (even if all tuples are
+	// deselected).
+	ProcessOnlyOneBatch bool
 }
 
 var _ colexecop.ResettableOperator = &BoolVecToSelOp{}
@@ -95,12 +99,10 @@ func (p *BoolVecToSelOp) Next() coldata.Batch {
 			}
 		}
 
-		if idx == 0 {
-			continue
+		if idx > 0 || p.ProcessOnlyOneBatch {
+			batch.SetLength(idx)
+			return batch
 		}
-
-		batch.SetLength(idx)
-		return batch
 	}
 }
 

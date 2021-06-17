@@ -44,7 +44,7 @@ func NewWindowPeerGrouper(
 			orderIdxs[i] = ordCol.ColIdx
 		}
 		input, distinctCol, err = colexecbase.OrderedDistinctColsToOperators(
-			input, orderIdxs, typs,
+			input, orderIdxs, typs, false, /* nullsAreDistinct */
 		)
 		if err != nil {
 			return nil, err

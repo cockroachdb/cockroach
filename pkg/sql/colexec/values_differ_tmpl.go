@@ -59,9 +59,10 @@ func _ASSIGN_NE(_, _, _, _, _, _ string) bool {
 // */}}
 
 // valuesDiffer takes in two ColVecs as well as values indices to check whether
-// the values differ. This function pays attention to NULLs, and two NULL
-// values do *not* differ.
-func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int) bool {
+// the values differ. This function pays attention to NULLs.
+func valuesDiffer(
+	aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int, nullsAreDistinct bool,
+) bool {
 	switch aColVec.CanonicalTypeFamily() {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -75,7 +76,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
 			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
 			if aNull && bNull {
-				return false
+				return nullsAreDistinct
 			} else if aNull || bNull {
 				return true
 			}

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -23,13 +24,20 @@ import (
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
 // columns.
 func NewUnorderedDistinct(
-	allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, typs []*types.T,
+	allocator *colmem.Allocator,
+	input colexecop.Operator,
+	distinctCols []uint32,
+	typs []*types.T,
+	nullsAreDistinct bool,
+	errorOnDup string,
 ) colexecop.ResettableOperator {
 	return &unorderedDistinct{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		allocator:    allocator,
-		distinctCols: distinctCols,
-		typs:         typs,
+		OneInputNode:         colexecop.NewOneInputNode(input),
+		allocator:            allocator,
+		distinctCols:         distinctCols,
+		typs:                 typs,
+		nullsAreDistinct:     nullsAreDistinct,
+		UpsertDistinctHelper: colexecbase.UpsertDistinctHelper{ErrorOnDup: errorOnDup},
 	}
 }
 
@@ -40,16 +48,22 @@ func NewUnorderedDistinct(
 type unorderedDistinct struct {
 	colexecop.InitHelper
 	colexecop.OneInputNode
+	colexecbase.UpsertDistinctHelper
 
-	allocator    *colmem.Allocator
-	distinctCols []uint32
-	typs         []*types.T
-	ht           *colexechash.HashTable
+	allocator        *colmem.Allocator
+	distinctCols     []uint32
+	typs             []*types.T
+	nullsAreDistinct bool
+
+	ht *colexechash.HashTable
 	// lastInputBatch tracks the last input batch read from the input and not
 	// emitted into the output. It is the only batch that we need to export when
 	// spilling to disk, and it will contain only the distinct tuples that need
 	// to be emitted into the output.
 	lastInputBatch coldata.Batch
+	// lastInputBatchOrigLen tracks the length of lastInputBatch before
+	// performing a distinct operation on it.
+	lastInputBatchOrigLen int
 }
 
 var _ colexecop.BufferingInMemoryOperator = &unorderedDistinct{}
@@ -70,7 +84,7 @@ func (op *unorderedDistinct) Init(ctx context.Context) {
 		hashTableNumBuckets,
 		op.typs,
 		op.distinctCols,
-		true, /* allowNullEquality */
+		!op.nullsAreDistinct, /* allowNullEquality */
 		colexechash.HashTableDistinctBuildMode,
 		colexechash.HashTableDefaultProbeMode,
 	)
@@ -79,7 +93,8 @@ func (op *unorderedDistinct) Init(ctx context.Context) {
 func (op *unorderedDistinct) Next() coldata.Batch {
 	for {
 		op.lastInputBatch = op.Input.Next()
-		if op.lastInputBatch.Length() == 0 {
+		op.lastInputBatchOrigLen = op.lastInputBatch.Length()
+		if op.lastInputBatchOrigLen == 0 {
 			return coldata.ZeroBatch
 		}
 		// DistinctBuild call might result in an OOM error after lastInputBatch
@@ -88,7 +103,9 @@ func (op *unorderedDistinct) Next() coldata.Batch {
 		// filtering has already been performed); if an OOM doesn't occur, we
 		// will emit the updated last input batch here.
 		op.ht.DistinctBuild(op.lastInputBatch)
-		if op.lastInputBatch.Length() > 0 {
+		updatedLen := op.lastInputBatch.Length()
+		op.MaybeEmitErrorOnDup(op.lastInputBatchOrigLen, updatedLen)
+		if updatedLen > 0 {
 			// We've just appended some distinct tuples to the hash table, so we
 			// will emit all of them as the output. Note that the selection
 			// vector on batch is set in such a manner that only the distinct
@@ -157,9 +174,11 @@ func (f *unorderedDistinctFilterer) Next() coldata.Batch {
 			// See https://github.com/cockroachdb/cockroach/pull/58006#pullrequestreview-565859919
 			// for all the gory details.
 			f.ud.ht.MaybeRepairAfterDistinctBuild()
+			f.ud.MaybeEmitErrorOnDup(f.ud.lastInputBatchOrigLen, batch.Length())
 			f.seenBatch = true
 			return batch
 		}
+		origLen := batch.Length()
 		// The unordered distinct has emitted some tuples, so we need to check
 		// all tuples in batch against the hash table.
 		f.ud.ht.ComputeHashAndBuildChains(batch)
@@ -167,6 +186,7 @@ func (f *unorderedDistinctFilterer) Next() coldata.Batch {
 		f.ud.ht.RemoveDuplicates(batch, f.ud.ht.Keys, f.ud.ht.ProbeScratch.First, f.ud.ht.ProbeScratch.Next, f.ud.ht.CheckProbeForDistinct)
 		// Remove the duplicates of already emitted distinct tuples.
 		f.ud.ht.RemoveDuplicates(batch, f.ud.ht.Keys, f.ud.ht.BuildScratch.First, f.ud.ht.BuildScratch.Next, f.ud.ht.CheckBuildForDistinct)
+		f.ud.MaybeEmitErrorOnDup(origLen, batch.Length())
 		if batch.Length() > 0 {
 			return batch
 		}
