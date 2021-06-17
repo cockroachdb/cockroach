@@ -150,7 +150,7 @@ func (s *Container) ShouldSaveLogicalPlanDesc(
 // RecordTransaction implements sqlstats.Writer interface and saves
 // per-transaction statistics.
 func (s *Container) RecordTransaction(
-	ctx context.Context, key sqlstats.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+	ctx context.Context, key roachpb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 

@@ -184,7 +184,7 @@ func (s *SQLStats) GetStatementStats(
 
 // GetTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) GetTransactionStats(
-	appName string, key sqlstats.TransactionFingerprintID,
+	appName string, key roachpb.TransactionFingerprintID,
 ) (*roachpb.CollectedTransactionStatistics, error) {
 	statsContainer := s.getStatsForApplication(appName)
 	if statsContainer == nil {

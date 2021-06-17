@@ -92,7 +92,7 @@ type Container struct {
 		acc mon.BoundAccount
 
 		stmts map[stmtKey]*stmtStats
-		txns  map[sqlstats.TransactionFingerprintID]*txnStats
+		txns  map[roachpb.TransactionFingerprintID]*txnStats
 	}
 
 	txnCounts transactionCounts
@@ -117,7 +117,7 @@ func New(
 
 	s.mu.acc = mon.MakeBoundAccount()
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
-	s.mu.txns = make(map[sqlstats.TransactionFingerprintID]*txnStats)
+	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats)
 
 	s.atomic.uniqueStmtFingerprintCount = uniqueStmtFingerprintCount
 	s.atomic.uniqueTxnFingerprintCount = uniqueTxnFingerprintCount
@@ -273,7 +273,7 @@ func (s *Container) GetStatementStats(
 
 // GetTransactionStats implements sqlstats.Provider interface.
 func (s *Container) GetTransactionStats(
-	appName string, key sqlstats.TransactionFingerprintID,
+	appName string, key roachpb.TransactionFingerprintID,
 ) (*roachpb.CollectedTransactionStatistics, error) {
 	txnStats, _, _ :=
 		s.getStatsForTxnWithKey(key, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
@@ -437,7 +437,7 @@ func (s *Container) getStatsForStmtWithKey(
 }
 
 func (s *Container) getStatsForTxnWithKey(
-	key sqlstats.TransactionFingerprintID,
+	key roachpb.TransactionFingerprintID,
 	stmtFingerprintIDs []roachpb.StmtFingerprintID,
 	createIfNonexistent bool,
 ) (stats *txnStats, created, throttled bool) {
@@ -497,7 +497,7 @@ func (s *Container) Clear(ctx context.Context) {
 	// Clear the map, to release the memory; make the new map somewhat already
 	// large for the likely future workload.
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
-	s.mu.txns = make(map[sqlstats.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
+	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
 
 	s.mu.acc.Empty(ctx)
 }
@@ -564,7 +564,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 
 	// Do what we did above for the statMap for the txn Map now.
 	other.mu.Lock()
-	txnMap := make(map[sqlstats.TransactionFingerprintID]*txnStats)
+	txnMap := make(map[roachpb.TransactionFingerprintID]*txnStats)
 	for k, v := range other.mu.txns {
 		txnMap[k] = v
 	}
