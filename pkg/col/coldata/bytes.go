@@ -372,6 +372,7 @@ func (b *Bytes) AppendVal(v []byte) {
 }
 
 // Len returns how many []byte values the receiver contains.
+//gcassert:inline
 func (b *Bytes) Len() int {
 	return len(b.offsets) - 1
 }
