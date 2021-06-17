@@ -151,10 +151,10 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 	var stages strings.Builder
 	err := plan.Graph.ForEachNode(func(n *scpb.Node) error {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
-			toAttr := de.To().Element().GetAttributes()
-			fromAttr := de.From().Element().GetAttributes()
-			fmt.Fprintf(&stages, "- from: [%s, %s]\n", fromAttr, de.From().State)
-			fmt.Fprintf(&stages, "  to:   [%s, %s]\n", toAttr, de.To().State)
+			fmt.Fprintf(&stages, "- from: [%s, %s]\n",
+				scpb.AttributesString(de.From().Element()), de.From().State)
+			fmt.Fprintf(&stages, "  to:   [%s, %s]\n",
+				scpb.AttributesString(de.To().Element()), de.To().State)
 			return nil
 		})
 	})

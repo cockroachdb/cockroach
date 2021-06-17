@@ -81,12 +81,12 @@ DROP VIEW defaultdb.v1 CASCADE
     dependsOn:
     - 56
     tableId: 59
-- DROP TypeReference:{DescID: 57, DepID: 59}
+- DROP TypeReference:{DescID: 59, DepID: 57}
   state: PUBLIC
   details:
     descriptorId: 59
     typeId: 57
-- DROP TypeReference:{DescID: 58, DepID: 59}
+- DROP TypeReference:{DescID: 59, DepID: 58}
   state: PUBLIC
   details:
     descriptorId: 59

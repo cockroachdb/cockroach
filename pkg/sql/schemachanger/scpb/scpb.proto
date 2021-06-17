@@ -141,10 +141,12 @@ message Table {
   repeated uint32 dependedOnBy = 2  [(gogoproto.customname) = "DependedOnBy", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
+// TypeReference is a reference to a type on a descriptor.
+// This correspond to an element in DescriptorID pointing to TypeID.
 message TypeReference {
   option (gogoproto.equal) = true;
-  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   uint32 descriptor_id = 2 [(gogoproto.customname) = "DescID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
 message OutboundForeignKey {
