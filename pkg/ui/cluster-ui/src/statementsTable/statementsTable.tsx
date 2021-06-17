@@ -38,10 +38,10 @@ import {
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
-  StatementTableTitle,
   StatementTableCell,
   NodeNames,
 } from "./statementsTableContent";
+import { StatisticTableTitle, contentModifiers } from "../table/statsTableContent"
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -87,14 +87,14 @@ function makeCommonColumns(
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       name: "executionCount",
-      title: StatementTableTitle.executionCount,
+      title: StatisticTableTitle.executionCount(false),
       className: cx("statements-table__col-count"),
       cell: countBar,
       sort: (stmt: AggregateStatistics) => FixLong(Number(stmt.stats.count)),
     },
     {
       name: "database",
-      title: StatementTableTitle.database,
+      title: StatisticTableTitle.database(false),
       className: cx("statements-table__col-database"),
       cell: (stmt: AggregateStatistics) => stmt.database,
       sort: (stmt: AggregateStatistics) => stmt.database,
@@ -102,7 +102,7 @@ function makeCommonColumns(
     },
     {
       name: "rowsRead",
-      title: StatementTableTitle.rowsRead,
+      title: StatisticTableTitle.rowsRead(false),
       className: cx("statements-table__col-rows-read"),
       cell: rowsReadBar,
       sort: (stmt: AggregateStatistics) =>
@@ -110,42 +110,42 @@ function makeCommonColumns(
     },
     {
       name: "bytesRead",
-      title: StatementTableTitle.bytesRead,
+      title: StatisticTableTitle.bytesRead(false),
       cell: bytesReadBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.bytes_read.mean)),
     },
     {
       name: "statementTime",
-      title: StatementTableTitle.statementTime,
+      title: StatisticTableTitle.time(false),
       className: cx("statements-table__col-latency"),
       cell: latencyBar,
       sort: (stmt: AggregateStatistics) => stmt.stats.service_lat.mean,
     },
     {
       name: "contention",
-      title: StatementTableTitle.contention,
+      title: StatisticTableTitle.contention(false),
       cell: contentionBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.contention_time.mean)),
     },
     {
       name: "maxMemUsage",
-      title: StatementTableTitle.maxMemUsage,
+      title: StatisticTableTitle.maxMemUsage(false),
       cell: maxMemUsageBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.max_mem_usage.mean)),
     },
     {
       name: "networkBytes",
-      title: StatementTableTitle.networkBytes,
+      title: StatisticTableTitle.networkBytes(false),
       cell: networkBytesBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.network_bytes.mean)),
     },
     {
       name: "retries",
-      title: StatementTableTitle.retries,
+      title: StatisticTableTitle.retries(false),
       className: cx("statements-table__col-retries"),
       cell: retryBar,
       sort: (stmt: AggregateStatistics) =>
@@ -153,7 +153,7 @@ function makeCommonColumns(
     },
     {
       name: "workloadPct",
-      title: StatementTableTitle.workloadPct,
+      title: StatisticTableTitle.workloadPct(false),
       cell: workloadPctBarChart(
         statements,
         defaultBarChartOptions,
@@ -165,7 +165,7 @@ function makeCommonColumns(
     },
     {
       name: "regionNodes",
-      title: StatementTableTitle.regionNodes,
+      title: StatisticTableTitle.regionNodes(false),
       className: cx("statements-table__col-regions"),
       cell: (stmt: AggregateStatistics) => {
         return longListWithTooltip(stmt.regionNodes.sort().join(", "), 50);
@@ -227,7 +227,7 @@ export function makeStatementsColumns(
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       name: "statements",
-      title: StatementTableTitle.statements,
+      title: StatisticTableTitle.statements(false),
       className: cx("cl-table__col-query-text"),
       cell: StatementTableCell.statements(
         search,
@@ -243,7 +243,7 @@ export function makeStatementsColumns(
   if (activateDiagnosticsRef) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
       name: "diagnostics",
-      title: StatementTableTitle.diagnostics,
+      title: StatisticTableTitle.diagnostics(false),
       cell: StatementTableCell.diagnostics(
         activateDiagnosticsRef,
         onDiagnosticsDownload,
