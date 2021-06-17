@@ -197,7 +197,10 @@ func (md *Metadata) Init() {
 //
 // Table annotations are not transferred over; all annotations are unset on
 // the copy.
-func (md *Metadata) CopyFrom(from *Metadata) {
+//
+// copyScalar must be a function that returns a copy of the given scalar
+// expression.
+func (md *Metadata) CopyFrom(from *Metadata, copyScalar func(Expr) Expr) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.deps) != 0 || len(md.views) != 0 ||
 		len(md.userDefinedTypes) != 0 || len(md.userDefinedTypesSlice) != 0 {
@@ -216,13 +219,13 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 		md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
 	}
 
-	// Clear table annotations. These objects can be mutable and can't be safely
-	// shared between different metadata instances.
+	// Clear table annotations and copy the scalar expressions. The annotations
+	// can be mutable and can't be safely shared between different metadata
+	// instances.
 	for i := range md.tables {
 		md.tables[i].clearAnnotations()
+		md.tables[i].copyScalars(copyScalar)
 	}
-	// TODO(radu): we aren't copying the scalar expressions in Constraints and
-	// ComputedCols..
 
 	md.sequences = append(md.sequences, from.sequences...)
 	md.deps = append(md.deps, from.deps...)

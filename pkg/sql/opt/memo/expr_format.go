@@ -356,7 +356,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 					f.formatExpr(tab.ComputedCols[col], c.Child(f.ColumnString(col)))
 				}
 			}
-			partialIndexPredicates := tab.PartialIndexPredicatesForFormattingOnly()
+			partialIndexPredicates := tab.PartialIndexPredicatesUnsafe()
 			if partialIndexPredicates != nil {
 				c := tp.Child("partial index predicates")
 				indexOrds := make([]cat.IndexOrdinal, 0, len(partialIndexPredicates))

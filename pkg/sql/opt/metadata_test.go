@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,9 +27,14 @@ import (
 )
 
 func TestMetadata(t *testing.T) {
-	var md opt.Metadata
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var f norm.Factory
+	f.Init(&evalCtx, nil /* catalog */)
+	md := f.Metadata()
+
 	schID := md.AddSchema(&testcat.Schema{})
 	colID := md.AddColumn("col", types.Int)
+	cmpID := md.AddColumn("cmp", types.Bool)
 	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
 	seqID := md.AddSequence(&testcat.Sequence{})
 	md.AddView(&testcat.View{})
@@ -38,6 +45,18 @@ func TestMetadata(t *testing.T) {
 	tab := &testcat.Table{Revoked: true}
 	testCat.AddTable(tab)
 
+	// Create a (col = 1) scalar expression.
+	scalar := &memo.EqExpr{
+		Left: &memo.VariableExpr{
+			Col: colID,
+			Typ: types.Int,
+		},
+		Right: &memo.ConstExpr{
+			Value: tree.NewDInt(1),
+			Typ:   types.Int,
+		},
+	}
+
 	md.Init()
 	if md.AddSchema(testCat.Schema()) != schID {
 		t.Fatalf("unexpected schema id")
@@ -45,9 +64,16 @@ func TestMetadata(t *testing.T) {
 	if md.AddColumn("col2", types.Int) != colID {
 		t.Fatalf("unexpected column id")
 	}
+	if md.AddColumn("cmp2", types.Bool) != cmpID {
+		t.Fatalf("unexpected column id")
+	}
 	if md.AddTable(tab, &tree.TableName{}) != tabID {
 		t.Fatalf("unexpected table id")
 	}
+	tabMeta := md.TableMeta(tabID)
+	tabMeta.SetConstraints(scalar)
+	tabMeta.AddComputedCol(cmpID, scalar)
+	tabMeta.AddPartialIndexPredicate(0, scalar)
 	if md.AddSequence(&testcat.Sequence{SeqID: 100}) != seqID {
 		t.Fatalf("unexpected sequence id")
 	}
@@ -73,7 +99,8 @@ func TestMetadata(t *testing.T) {
 	expr := &memo.ProjectExpr{}
 	md.AddWithBinding(1, expr)
 	var mdNew opt.Metadata
-	mdNew.CopyFrom(&md)
+	mdNew.CopyFrom(md, f.CopyScalarWithoutPlaceholders)
+
 	if mdNew.Schema(schID) != testCat.Schema() {
 		t.Fatalf("unexpected schema")
 	}
@@ -81,8 +108,21 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected column")
 	}
 
-	if mdNew.TableMeta(tabID).Table != tab {
+	tabMetaNew := mdNew.TableMeta(tabID)
+	if tabMetaNew.Table != tab {
 		t.Fatalf("unexpected table")
+	}
+
+	if tabMetaNew.Constraints == scalar {
+		t.Fatalf("expected constraints to be copied")
+	}
+
+	if tabMetaNew.ComputedCols[cmpID] == scalar {
+		t.Fatalf("expected computed column expression to be copied")
+	}
+
+	if tabMetaNew.PartialIndexPredicatesUnsafe()[0] == scalar {
+		t.Fatalf("expected partial index predicate to be copied")
 	}
 
 	if mdNew.Sequence(seqID).(*testcat.Sequence).SeqID != 100 {
@@ -102,16 +142,16 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
 	}
 
-	paniced := false
+	panicked := false
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				paniced = true
+				panicked = true
 			}
 		}()
 		mdNew.WithBinding(1)
 	}()
-	if !paniced {
+	if !panicked {
 		t.Fatalf("with bindings should not be copied!")
 	}
 }
