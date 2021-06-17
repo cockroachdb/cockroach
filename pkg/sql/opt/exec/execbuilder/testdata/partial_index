@@ -123,3 +123,26 @@ vectorized: true
       missing stats
       table: b@b_b_idx (partial index)
       spans: FULL SCAN
+
+# Regression test for #66465. Ensure that a prepared statement with a
+# placeholder or a stable function can use a partial index.
+
+statement ok
+CREATE TABLE t66465 (
+  k INT PRIMARY KEY,
+  i INT,
+  t TIMESTAMPTZ,
+  INDEX idx (i) WHERE k + i > 0
+)
+
+statement ok
+PREPARE q66465_a AS SELECT k FROM t66465@idx WHERE k + i > 0 AND i > $1
+
+statement ok
+EXECUTE q66465_a(1)
+
+statement ok
+PREPARE q66465_b AS SELECT k FROM t66465@idx WHERE k + i > 0 AND t > now()
+
+statement ok
+EXECUTE q66465_b
