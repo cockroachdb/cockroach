@@ -1391,7 +1391,7 @@ build
 SELECT t1.*, t2.* FROM t1 NATURAL JOIN t2
 ----
 project
- ├── columns: x:2!null y:4!null col1:1 col2:3 col3:7 col4:10
+ ├── columns: col1:1 x:2!null col2:3 y:4!null col3:7 y:8!null x:9!null col4:10
  └── inner-join (hash)
       ├── columns: col1:1 t1.x:2!null col2:3 t1.y:4!null t1.rowid:5!null t1.crdb_internal_mvcc_timestamp:6 col3:7 t2.y:8!null t2.x:9!null col4:10 t2.rowid:11!null t2.crdb_internal_mvcc_timestamp:12
       ├── scan t1
@@ -2670,3 +2670,158 @@ inner-join (hash)
  │              └── columns: c0:4 rowid:5!null crdb_internal_mvcc_timestamp:6
  └── filters
       └── c0:1 = c0:4
+
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT)
+----
+
+exec-ddl
+CREATE TABLE dxby (d INT, x INT, b INT, y INT)
+----
+
+build
+SELECT * FROM abcd NATURAL FULL OUTER JOIN dxby
+----
+project
+ ├── columns: b:13 d:14 a:1 c:3 x:8 y:10
+ └── project
+      ├── columns: b:13 d:14 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      │    └── filters
+      │         ├── abcd.b:2 = dxby.b:9
+      │         └── abcd.d:4 = dxby.d:7
+      └── projections
+           ├── COALESCE(abcd.b:2, dxby.b:9) [as=b:13]
+           └── COALESCE(abcd.d:4, dxby.d:7) [as=d:14]
+
+# Test that qualified stars expand to all table columns (even those that aren't
+# directly visible); see #66123.
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL INNER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2!null c:3 d:4!null d:7!null x:8 b:9!null y:10
+ └── inner-join (hash)
+      ├── columns: a:1 abcd.b:2!null c:3 abcd.d:4!null abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7!null x:8 dxby.b:9!null y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      ├── scan abcd
+      │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      ├── scan dxby
+      │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      └── filters
+           ├── abcd.b:2 = dxby.b:9
+           └── abcd.d:4 = dxby.d:7
+
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL LEFT OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:7 x:8 b:9 y:10
+ └── left-join (hash)
+      ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      ├── scan abcd
+      │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      ├── scan dxby
+      │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      └── filters
+           ├── abcd.b:2 = dxby.b:9
+           └── abcd.d:4 = dxby.d:7
+
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL RIGHT OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:7 x:8 b:9 y:10
+ └── right-join (hash)
+      ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      ├── scan abcd
+      │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      ├── scan dxby
+      │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      └── filters
+           ├── abcd.b:2 = dxby.b:9
+           └── abcd.d:4 = dxby.d:7
+
+build
+SELECT abcd.*, dxby.* FROM abcd NATURAL FULL OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:7 x:8 b:9 y:10
+ └── project
+      ├── columns: b:13 d:14 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      │    └── filters
+      │         ├── abcd.b:2 = dxby.b:9
+      │         └── abcd.d:4 = dxby.d:7
+      └── projections
+           ├── COALESCE(abcd.b:2, dxby.b:9) [as=b:13]
+           └── COALESCE(abcd.d:4, dxby.d:7) [as=d:14]
+
+build
+SELECT abcd.*, dxby.* FROM abcd FULL OUTER JOIN dxby USING (d, b)
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:7 x:8 b:9 y:10
+ └── project
+      ├── columns: d:13 b:14 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      │    └── filters
+      │         ├── abcd.d:4 = dxby.d:7
+      │         └── abcd.b:2 = dxby.b:9
+      └── projections
+           ├── COALESCE(abcd.d:4, dxby.d:7) [as=d:13]
+           └── COALESCE(abcd.b:2, dxby.b:9) [as=b:14]
+
+build
+SELECT abcd.a, abcd.b, abcd.c, abcd.d, dxby.d, dxby.x, dxby.b, dxby.y FROM abcd NATURAL FULL OUTER JOIN dxby
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:7 x:8 b:9 y:10
+ └── project
+      ├── columns: b:13 d:14 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      │    └── filters
+      │         ├── abcd.b:2 = dxby.b:9
+      │         └── abcd.d:4 = dxby.d:7
+      └── projections
+           ├── COALESCE(abcd.b:2, dxby.b:9) [as=b:13]
+           └── COALESCE(abcd.d:4, dxby.d:7) [as=d:14]
+
+build
+SELECT abcd.a, abcd.b, abcd.c, abcd.d, dxby.d, dxby.x, dxby.b, dxby.y FROM abcd FULL OUTER JOIN dxby USING (d, b)
+----
+project
+ ├── columns: a:1 b:2 c:3 d:4 d:7 x:8 b:9 y:10
+ └── project
+      ├── columns: d:13 b:14 a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      ├── full-join (hash)
+      │    ├── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5 abcd.crdb_internal_mvcc_timestamp:6 dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11 dxby.crdb_internal_mvcc_timestamp:12
+      │    ├── scan abcd
+      │    │    └── columns: a:1 abcd.b:2 c:3 abcd.d:4 abcd.rowid:5!null abcd.crdb_internal_mvcc_timestamp:6
+      │    ├── scan dxby
+      │    │    └── columns: dxby.d:7 x:8 dxby.b:9 y:10 dxby.rowid:11!null dxby.crdb_internal_mvcc_timestamp:12
+      │    └── filters
+      │         ├── abcd.d:4 = dxby.d:7
+      │         └── abcd.b:2 = dxby.b:9
+      └── projections
+           ├── COALESCE(abcd.d:4, dxby.d:7) [as=d:13]
+           └── COALESCE(abcd.b:2, dxby.b:9) [as=b:14]
