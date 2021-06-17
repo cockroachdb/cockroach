@@ -2732,8 +2732,8 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		states[i] = scs.nodes[i].State
 		// Depending on the element type either a single descriptor ID
 		// will exist or multiple (i.e. foreign keys).
-		if scs.nodes[i].Element().DescriptorID() != descpb.InvalidID {
-			descIDSet.Add(scs.nodes[i].Element().DescriptorID())
+		if id := scpb.GetDescID(scs.nodes[i].Element()); id != descpb.InvalidID {
+			descIDSet.Add(id)
 		}
 	}
 	descIDs := descIDSet.Ordered()

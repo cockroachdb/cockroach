@@ -17,12 +17,12 @@ import (
 )
 
 func TestGetAttribute(t *testing.T) {
-	seqElem := SequenceDependency{
+	seqElem := &SequenceDependency{
 		TableID:    1,
 		ColumnID:   2,
 		SequenceID: 3,
 	}
-	seqElemDiff := SequenceDependency{
+	seqElemDiff := &SequenceDependency{
 		TableID:    1,
 		ColumnID:   4,
 		SequenceID: 3,
@@ -31,21 +31,48 @@ func TestGetAttribute(t *testing.T) {
 	// Sanity: Validate basic string conversion, equality,
 	// and inequality.
 	expectedStr := `SequenceDependency:{DescID: 3, DepID: 1, ColumnID: 2}`
-	require.Equal(t, expectedStr, seqElem.GetAttributes().String(), "Attribute string conversion is broken.")
-	require.True(t, seqElem.GetAttributes().Equal(seqElem.GetAttributes()))
-	require.False(t, seqElem.GetAttributes().Equal(seqElemDiff.GetAttributes()))
+	require.Equal(t, expectedStr, AttributesString(seqElem), "Attribute string conversion is broken.")
+	require.True(t, EqualElements(seqElem, seqElem))
+	require.False(t, EqualElements(seqElem, seqElemDiff))
 
 	// Sanity: Validate type references, then check if type comparisons
 	// work.
-	typeBackRef := TypeReference{TypeID: 3, DescID: 1}
-	expectedStr = `TypeReference:{DescID: 3, DepID: 1}`
-	require.Equal(t, expectedStr, typeBackRef.GetAttributes().String(), "Attribute string conversion is broken.")
-	require.False(t, seqElem.GetAttributes().Equal(typeBackRef.GetAttributes()))
-	require.False(t, typeBackRef.GetAttributes().Equal(seqElem.GetAttributes()))
+	typeBackRef := &TypeReference{DescID: 1, TypeID: 3}
+	expectedStr = `TypeReference:{DescID: 1, DepID: 3}`
+	require.Equal(t, expectedStr, AttributesString(typeBackRef), "Attribute string conversion is broken.")
+	require.False(t, EqualElements(seqElem, typeBackRef))
+	require.False(t, EqualElements(typeBackRef, seqElem))
 
 	// Sanity: Validate attribute fetching for both types.
-	require.Equal(t, "1", typeBackRef.GetAttributes().Get(AttributeDepID).String())
-	require.Equal(t, "3", typeBackRef.GetAttributes().Get(AttributeDescID).String())
-	require.Equal(t, "TypeReference", typeBackRef.GetAttributes().Get(AttributeType).String())
-	require.Equal(t, "4", seqElemDiff.GetAttributes().Get(AttributeColumnID).String())
+	require.Equal(t, "3", typeBackRef.getAttribute(AttributeDepID).String())
+	require.Equal(t, "1", typeBackRef.getAttribute(AttributeDescID).String())
+	require.Equal(t, "TypeReference", typeBackRef.getAttribute(AttributeType).String())
+	require.Equal(t, "4", seqElemDiff.getAttribute(AttributeColumnID).String())
+}
+
+func BenchmarkCompareElements(b *testing.B) {
+	var elements = []Element{
+		&Column{},
+		&PrimaryIndex{},
+		&SecondaryIndex{},
+		&SequenceDependency{},
+		&UniqueConstraint{},
+		&CheckConstraint{},
+		&Sequence{},
+		&DefaultExpression{},
+		&View{},
+		&TypeReference{},
+		&Table{},
+		&OutboundForeignKey{},
+		&InboundForeignKey{},
+		&RelationDependedOnBy{},
+		&SequenceOwnedBy{},
+	}
+	for i := 0; i < int(float64(b.N)/float64(len(elements)*len(elements))); i++ {
+		for _, a := range elements {
+			for _, b := range elements {
+				CompareElements(a, b)
+			}
+		}
+	}
 }
