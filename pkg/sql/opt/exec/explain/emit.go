@@ -224,8 +224,16 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 		a := n.args.(*applyJoinArgs)
 		return e.joinNodeName("apply", a.JoinType), nil
 
-	case setOpOp:
-		a := n.args.(*setOpArgs)
+	case hashSetOpOp:
+		a := n.args.(*hashSetOpArgs)
+		name := strings.ToLower(a.Typ.String())
+		if a.All {
+			name += " all"
+		}
+		return name, nil
+
+	case streamingSetOpOp:
+		a := n.args.(*streamingSetOpArgs)
 		name := strings.ToLower(a.Typ.String())
 		if a.All {
 			name += " all"
@@ -287,7 +295,9 @@ var nodeNames = [...]string{
 	scanBufferOp:           "scan buffer",
 	scanOp:                 "", // This node does not have a fixed name.
 	sequenceSelectOp:       "sequence select",
-	setOpOp:                "", // This node does not have a fixed name.
+	hashSetOpOp:            "", // This node does not have a fixed name.
+	streamingSetOpOp:       "", // This node does not have a fixed name.
+	unionAllOp:             "union all",
 	showTraceOp:            "show trace",
 	simpleProjectOp:        "project",
 	serializingProjectOp:   "project",
@@ -472,8 +482,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attr("already ordered", colinfo.ColumnOrdering(a.Ordering[:p]).String(n.Columns()))
 		}
 
-	case setOpOp:
-		a := n.args.(*setOpArgs)
+	case unionAllOp:
+		a := n.args.(*unionAllArgs)
 		if a.HardLimit > 0 {
 			ob.Attr("limit", a.HardLimit)
 		}
@@ -756,6 +766,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		serializingProjectOp,
 		ordinalityOp,
 		max1RowOp,
+		hashSetOpOp,
+		streamingSetOpOp,
 		explainOptOp,
 		explainOp,
 		showTraceOp,

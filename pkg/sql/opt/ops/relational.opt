@@ -831,11 +831,25 @@ define Union {
 #
 # To make normalization rules and execution simpler, both inputs to the set op
 # must have matching types.
+#
+# SetPrivate can also contain an optional ordering, allowing for more efficient
+# streaming execution.
 [Private]
 define SetPrivate {
     LeftCols ColList
     RightCols ColList
     OutCols ColList
+
+    # Ordering specifies the order required of the input, allowing for more
+    # efficient streaming execution.
+    #
+    # The canonical operation always contains an empty ordering. Exploration
+    # rules can create versions of the operator with orderings on the OutCols.
+    # The ordering can be mapped to the input columns using the LeftCols and
+    # RightCols ColLists.
+    #
+    # This field cannot be set for LocalityOptimizedSearch.
+    Ordering OrderingChoice
 }
 
 # Intersect is an operator used to perform an intersection between the Left
