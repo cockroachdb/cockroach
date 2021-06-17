@@ -151,12 +151,6 @@ func (b *buildContext) build(
 	return b.outputNodes, nil
 }
 
-// checkIfElemHasSameObject checks if two elements are the same object
-// via their unique identifiers.
-func checkIfElemHasSameObject(first scpb.Element, second scpb.Element) bool {
-	return first.GetAttributes().Equal(second.GetAttributes())
-}
-
 // checkIfNodeExists checks if an existing node is already there,
 // in any direction.
 func (b *buildContext) checkIfNodeExists(
@@ -165,7 +159,7 @@ func (b *buildContext) checkIfNodeExists(
 	// Check if any existing node matches the new node we are
 	// trying to add.
 	for idx, node := range b.outputNodes {
-		if checkIfElemHasSameObject(node.Element(), elem) {
+		if scpb.EqualElements(node.Element(), elem) {
 			return true, idx
 		}
 	}
