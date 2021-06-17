@@ -1702,7 +1702,63 @@ var builtins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		)),
 
-	"similar_to_escape": makeBuiltin(defProps(),
+	"similar_escape": makeBuiltin(
+		tree.FunctionProperties{
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types:      tree.VariadicType{VarType: types.String},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				pattern := string(tree.MustBeDString(args[0]))
+				if args[1] == tree.DNull {
+					return tree.SimilarPattern(pattern, "")
+				}
+				escape := string(tree.MustBeDString(args[1]))
+				return tree.SimilarPattern(pattern, escape)
+			},
+			Info: "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using 'escape' as an escape token." +
+				"If 'escape' is not specified, '' will be used.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	"similar_to_escape": makeBuiltin(
+		tree.FunctionProperties{
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"pattern", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				pattern := string(tree.MustBeDString(args[0]))
+				return tree.SimilarPattern(pattern, "")
+			},
+			Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using '' as an escape token.",
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"pattern", types.String}, {"escape", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				pattern := string(tree.MustBeDString(args[0]))
+				if args[1] == tree.DNull {
+					return tree.DNull, nil
+				}
+				escape := string(tree.MustBeDString(args[1]))
+				return tree.SimilarPattern(pattern, escape)
+			},
+			Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using 'escape' as an escape token.",
+			Volatility: tree.VolatilityImmutable,
+		},
 		stringOverload3(
 			"unescaped", "pattern", "escape",
 			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {

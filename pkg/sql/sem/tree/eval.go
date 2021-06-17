@@ -5228,6 +5228,23 @@ func SimilarToEscape(ctx *EvalContext, unescaped, pattern, escape string) (Datum
 	return matchRegexpWithKey(ctx, NewDString(unescaped), key)
 }
 
+// SimilarPattern converts a SQL regexp 'pattern' to a POSIX regexp 'pattern' using custom escape token 'escape'
+// which must be either empty (which disables the escape mechanism) or a single unicode character.
+func SimilarPattern(pattern, escape string) (Datum, error) {
+	var escapeRune rune
+	var width int
+	escapeRune, width = utf8.DecodeRuneInString(escape)
+	if len(escape) > width {
+		return dEmptyString, pgerror.Newf(pgcode.InvalidEscapeSequence, "invalid escape string")
+	}
+	key := similarToKey{s: pattern, escape: escapeRune}
+	pattern, err := key.Pattern()
+	if err != nil {
+		return dEmptyString, err
+	}
+	return NewDString(pattern), nil
+}
+
 type regexpKey struct {
 	s               string
 	caseInsensitive bool
