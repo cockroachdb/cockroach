@@ -393,6 +393,9 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 
 		// Columns for table.
 		for _, column := range table.PublicColumns() {
+			if column.IsInaccessible() {
+				continue
+			}
 			tableID := tableOid(table.GetID())
 			if err := addColumn(column, tableID, column.GetPGAttributeNum()); err != nil {
 				return err
@@ -542,6 +545,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence = relPersistenceTemporary
 		}
 		namespaceOid := h.NamespaceOid(db.GetID(), scName)
+		relnatts := 0
+		for _, column := range table.PublicColumns() {
+			if !column.IsInaccessible() {
+				relnatts++
+			}
+		}
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
 			tree.NewDName(table.GetName()), // relname
@@ -557,12 +566,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			zeroVal,                        // relallvisible
 			oidZero,                        // reltoastrelid
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
-			tree.DBoolFalse, // relisshared
-			relPersistence,  // relPersistence
-			tree.DBoolFalse, // relistemp
-			relKind,         // relkind
-			tree.NewDInt(tree.DInt(len(table.PublicColumns()))), // relnatts
-			tree.NewDInt(tree.DInt(len(table.GetChecks()))),     // relchecks
+			tree.DBoolFalse,                   // relisshared
+			relPersistence,                    // relPersistence
+			tree.DBoolFalse,                   // relistemp
+			relKind,                           // relkind
+			tree.NewDInt(tree.DInt(relnatts)), // relnatts
+			tree.NewDInt(tree.DInt(len(table.GetChecks()))), // relchecks
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules
