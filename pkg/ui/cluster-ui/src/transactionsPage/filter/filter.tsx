@@ -131,7 +131,6 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
     const { hide, filters } = this.state;
     const { appNames, activeFilters } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
-    console.log(filters);
     // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
     const customStyles = {
       container: (provided: any) => ({
