@@ -237,7 +237,9 @@ GOFLAGS ?=
 TAR     ?= tar
 
 # Ensure we have an unambiguous GOPATH.
-GOPATH := $(shell $(GO) env GOPATH)
+GOPATH := /home/agent/work/.go
+
+$(info GOPATH set to $(GOPATH))
 
 ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
 $(error GOPATHs with multiple entries are not supported)
@@ -255,8 +257,6 @@ endif
 ifeq "$(GOPATH)" "/"
 $(error GOPATH=/ is not supported)
 endif
-
-$(info GOPATH set to $(GOPATH))
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.

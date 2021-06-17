@@ -42,9 +42,9 @@ apt-get install --yes \
   pass \
   unzip
 
-curl -fsSL https://dl.google.com/go/go1.15.11.linux-amd64.tar.gz > /tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.15.11.linux-arm64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-8825b72d74b14e82b54ba3697813772eb94add3abf70f021b6bdebe193ed01ec /tmp/go.tgz
+bfc8f07945296e97c6d28c7999d86b5cab51c7a87eb2b22ca6781c41a6bb6f2d /tmp/go.tgz
 EOF
 tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
@@ -99,20 +99,6 @@ cd "$repo"
 # which would corrupt the submodule defs. Probably good to remove once the
 # builder uses Ubuntu 18.04 or higher.
 git submodule update --init --recursive
-for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n1) master
-do
-  # Clean out all non-checked-in files. This is because of the check-in of
-  # the generated execgen files. Once we are no longer building 20.1 builds,
-  # the `git clean -dxf` line can be removed.
-  git clean -dxf
-
-  git checkout "$branch"
-  # Stupid submodules.
-  rm -rf vendor; git checkout vendor; git submodule update --init --recursive
-  COCKROACH_BUILDER_CCACHE=1 build/builder.sh make test testrace TESTTIMEOUT=45m TESTS=-
-  # TODO(benesch): store the acceptanceversion somewhere more accessible.
-  docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
-done
 cd -
 EOF
 write_teamcity_config
