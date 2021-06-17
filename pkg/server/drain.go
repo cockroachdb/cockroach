@@ -185,13 +185,17 @@ func (s *Server) isDraining() bool {
 
 // drainClients starts draining the SQL layer.
 func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.SafeString)) error {
+	shouldDelayDraining := !s.isDraining()
 	// Mark the server as draining in a way that probes to
 	// /health?ready=1 will notice.
 	s.grpc.setMode(modeDraining)
 	s.sqlServer.acceptingClients.Set(false)
 	// Wait for drainUnreadyWait. This will fail load balancer checks and
 	// delay draining so that client traffic can move off this node.
-	time.Sleep(drainWait.Get(&s.st.SV))
+	// Note delay only happens on first call to drain.
+	if shouldDelayDraining {
+		s.drainSleepFn(drainWait.Get(&s.st.SV))
+	}
 
 	// Disable incoming SQL clients up to the queryWait timeout.
 	drainMaxWait := queryWait.Get(&s.st.SV)
