@@ -12,6 +12,7 @@ package server
 
 import (
 	"net"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -91,6 +92,8 @@ type TestingKnobs struct {
 	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
 	// back to the KV layer upon server start.
 	ImportTimeseriesFile string
+	//
+	DrainSleepFn func(time.Duration)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
