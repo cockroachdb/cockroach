@@ -512,7 +512,7 @@ func (b *buildContext) nextColumnID(table catalog.TableDescriptor) descpb.Column
 	var maxColID descpb.ColumnID
 
 	for _, n := range b.outputNodes {
-		if n.Target.Direction != scpb.Target_ADD || n.Element().DescriptorID() != table.GetID() {
+		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n.Element()) != table.GetID() {
 			continue
 		}
 		if ac, ok := n.Element().(*scpb.Column); ok {
@@ -531,7 +531,7 @@ func (b *buildContext) nextIndexID(table catalog.TableDescriptor) descpb.IndexID
 	nextMaxID := table.GetNextIndexID()
 	var maxIdxID descpb.IndexID
 	for _, n := range b.outputNodes {
-		if n.Target.Direction != scpb.Target_ADD || n.Element().DescriptorID() != table.GetID() {
+		if n.Target.Direction != scpb.Target_ADD || scpb.GetDescID(n.Element()) != table.GetID() {
 			continue
 		}
 		if ai, ok := n.Element().(*scpb.SecondaryIndex); ok {
