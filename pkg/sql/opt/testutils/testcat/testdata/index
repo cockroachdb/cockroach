@@ -97,7 +97,7 @@ TABLE g
       ├── geog_inverted_key geography not null [virtual-inverted]
       └── k int not null
 
-# Test for expression-based index columns.
+# Test for expression index columns.
 exec-ddl
 CREATE TABLE xyz (
     x INT PRIMARY KEY,
