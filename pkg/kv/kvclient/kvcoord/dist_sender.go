@@ -1220,6 +1220,19 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		canParallelize = canParallelize && !isExpensive
 	}
 
+	// Iterate over the ranges that the batch touches. The iteration is done in
+	// key order - the order of requests in the batch is not relevant. Each
+	// iteration send for evaluation one sub-batch, to one range (i.e. executes
+	// the union of requests in the batch overlapping the current range).
+	// Depending on whether the sub-batches can be executed in parallel or not,
+	// each iteration either waits for the sub-batch results (in the
+	// no-parallelism case) or defers the results to a channel that will be
+	// processed in the defer above.
+	//
+	// After each sub-batch is executed, if ba has key or memory limits (which
+	// imply no parallelism), ba.MaxSpanRequestKeys and ba.TargetBytes are
+	// adjusted with the responses for the sub-batch. If a limit is exhausted, the
+	// loop breaks.
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		responseCh := make(chan response, 1)
 		responseChs = append(responseChs, responseCh)
