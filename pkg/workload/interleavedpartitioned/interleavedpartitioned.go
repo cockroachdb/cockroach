@@ -360,7 +360,9 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.IntVar(&g.rowsPerDelete, `rows-per-delete`, 1, `Number of rows per delete operation`)
 		g.flags.StringVar(&g.eastZoneName, `east-zone-name`, `us-east1-b`, `Name of the zone to be used as east`)
 		g.flags.StringVar(&g.westZoneName, `west-zone-name`, `us-west1-b`, `Name of the zone to be used as west`)
-		g.flags.StringVar(&g.centralZoneName, `central-zone-name`, `us-central1-a`, `Name of the zone to be used as central`)
+		// NB: us-central1-a has been causing issues, see:
+		// https://github.com/cockroachdb/cockroach/issues/66184
+		g.flags.StringVar(&g.centralZoneName, `central-zone-name`, `us-central1-f`, `Name of the zone to be used as central`)
 		g.flags.StringVar(&g.locality, `locality`, ``, `Which locality is the workload running in? (east,west,central)`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
