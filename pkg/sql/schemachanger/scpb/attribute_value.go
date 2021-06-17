@@ -31,6 +31,17 @@ type attributeValue interface {
 	compare(other attributeValue) (ok, less, eq bool)
 }
 
+// GetDescID returns the ID of the descriptor to which this element
+// corresponds.
+func GetDescID(e Element) descpb.ID {
+	if id, ok := e.getAttribute(AttributeDescID).(*descID); ok {
+		return descpb.ID(*id)
+	}
+	// See TestAllElementsHaveDescID for why this is safe.
+	panic(errors.AssertionFailedf(
+		"element of type %T returned a nil descriptor ID", e))
+}
+
 type descID descpb.ID
 
 func (id descID) String() string {

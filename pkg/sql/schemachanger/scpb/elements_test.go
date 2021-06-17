@@ -51,3 +51,14 @@ func TestGetElement(t *testing.T) {
 		}
 	}
 }
+
+// TestAllElementsHaveDescID ensures that all element types do carry an
+// AttributeDescID.
+func TestAllElementsHaveDescID(t *testing.T) {
+	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		elem := reflect.New(f.Type.Elem()).Interface().(Element)
+		require.NotNilf(t, elem.getAttribute(AttributeDescID), "%s", f.Type.Elem())
+	}
+}
