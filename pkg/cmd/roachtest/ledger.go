@@ -19,7 +19,9 @@ import (
 
 func registerLedger(r *testRegistry) {
 	const nodes = 6
-	const azs = "us-central1-a,us-central1-b,us-central1-c"
+	// NB: us-central1-a has been causing issues, see:
+	// https://github.com/cockroachdb/cockroach/issues/66184
+	const azs = "us-central1-f,us-central1-b,us-central1-c"
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
 		Owner:   OwnerKV,
