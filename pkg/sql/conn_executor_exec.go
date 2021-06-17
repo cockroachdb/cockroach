@@ -1597,7 +1597,7 @@ func (ex *connExecutor) recordTransaction(
 
 	return ex.statsCollector.RecordTransaction(
 		ctx,
-		sqlstats.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum()),
+		roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum()),
 		recordedTxnStats,
 	)
 }

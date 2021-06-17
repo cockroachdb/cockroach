@@ -46,6 +46,15 @@ func ConstructStatementFingerprintID(
 	return StmtFingerprintID(fnv.Sum())
 }
 
+// TransactionFingerprintID is the hashed string constructed using the
+// individual statement fingerprint IDs that comprise the transaction.
+type TransactionFingerprintID uint64
+
+// Size returns the size of the TransactionFingerprintID.
+func (t TransactionFingerprintID) Size() int64 {
+	return 8
+}
+
 // GetVariance retrieves the variance of the values.
 func (l *NumericStat) GetVariance(count int64) float64 {
 	return l.SquaredDiffs / (float64(count) - 1)
