@@ -517,39 +517,6 @@ func (b *argWidthOverloadBase) Sliceable() bool {
 	return sliceable(b.CanonicalTypeFamily)
 }
 
-// CopySlice is a function that should only be used in templates.
-func (b *argWidthOverloadBase) CopySlice(
-	target, src, destIdx, srcStartIdx, srcEndIdx string,
-) string {
-	var tmpl string
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, typeconv.DatumVecCanonicalTypeFamily:
-		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
-	case types.DecimalFamily:
-		tmpl = `{
-  __tgt_slice := {{.Tgt}}[{{.TgtIdx}}:]
-  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
-  for __i := range __src_slice {
-    __tgt_slice[__i].Set(&__src_slice[__i])
-  }
-}`
-	default:
-		tmpl = `copy({{.Tgt}}[{{.TgtIdx}}:], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}])`
-	}
-	args := map[string]string{
-		"Tgt":      target,
-		"Src":      src,
-		"TgtIdx":   destIdx,
-		"SrcStart": srcStartIdx,
-		"SrcEnd":   srcEndIdx,
-	}
-	var buf strings.Builder
-	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
-		colexecerror.InternalError(err)
-	}
-	return buf.String()
-}
-
 // AppendSlice is a function that should only be used in templates.
 func (b *argWidthOverloadBase) AppendSlice(
 	target, src, destIdx, srcStartIdx, srcEndIdx string,
@@ -664,7 +631,6 @@ var (
 	_    = awob.GoTypeSliceName
 	_    = awob.CopyVal
 	_    = awob.Sliceable
-	_    = awob.CopySlice
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
 	_    = awob.Window

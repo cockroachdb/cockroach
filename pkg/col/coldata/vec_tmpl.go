@@ -203,7 +203,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			execgen.COPYSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 			// {{end}}
 		}

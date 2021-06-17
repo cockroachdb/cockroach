@@ -387,7 +387,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		}
 	case types.BytesFamily:
@@ -519,13 +519,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			{
-				__tgt_slice := toCol[args.DestIdx:]
-				__src_slice := fromCol[args.SrcStartIdx:args.SrcEndIdx]
-				for __i := range __src_slice {
-					__tgt_slice[__i].Set(&__src_slice[__i])
-				}
-			}
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		}
 	case types.IntFamily:
@@ -592,7 +586,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		case 32:
 			fromCol := args.Src.Int32()
@@ -656,7 +650,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		case -1:
 		default:
@@ -721,7 +715,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		}
 	case types.FloatFamily:
@@ -789,7 +783,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		}
 	case types.TimestampTZFamily:
@@ -857,7 +851,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		}
 	case types.IntervalFamily:
@@ -925,7 +919,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 				return
 			}
 			// No Sel.
-			copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+			toCol.CopySlice(fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			m.nulls.set(args.SliceArgs)
 		}
 	case types.JsonFamily:
