@@ -83,6 +83,10 @@ func ShowCreateTable(
 	f.FormatNode(tn)
 	f.WriteString(" (")
 	for i, col := range desc.PublicColumns() {
+		// Inaccessible columns are not displayed in SHOW CREATE TABLE.
+		if col.IsInaccessible() {
+			continue
+		}
 		if i != 0 {
 			f.WriteString(",")
 		}
