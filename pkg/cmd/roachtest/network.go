@@ -145,13 +145,13 @@ func runNetworkAuthentication(ctx context.Context, t *test, c Cluster) {
 	if _, err := db.Exec(`CREATE USER testuser WITH PASSWORD 'password'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`ALTER RANGE liveness CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
+	if _, err := db.Exec(`ALTER RANGE liveness CONFIGURE ZONE USING lease_preferences = '[[+node=1]]', constraints = '{"+node=1": 1}'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`ALTER RANGE meta CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
+	if _, err := db.Exec(`ALTER RANGE meta CONFIGURE ZONE USING lease_preferences = '[[+node=1]]', constraints = '{"+node=1": 1}'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`ALTER RANGE system CONFIGURE ZONE USING lease_preferences = '[[+node=1]]'`); err != nil {
+	if _, err := db.Exec(`ALTER RANGE system CONFIGURE ZONE USING lease_preferences = '[[+node=1]]', constraints = '{"+node=1": 1}'`); err != nil {
 		t.Fatal(err)
 	}
 
