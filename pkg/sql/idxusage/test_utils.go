@@ -10,14 +10,17 @@
 
 package idxusage
 
-import "github.com/cockroachdb/cockroach/pkg/base"
+import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // TestingKnobs is the testing knobs that provides callbacks that unit tests
 // can hook into.
 type TestingKnobs struct {
 	// OnIndexUsageStatsProcessedCallback is invoked whenever a index usage event
 	// is processed.
-	OnIndexUsageStatsProcessedCallback func()
+	OnIndexUsageStatsProcessedCallback func(key roachpb.IndexUsageKey)
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}
