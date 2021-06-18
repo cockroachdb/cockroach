@@ -15,14 +15,21 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -30,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,6 +45,8 @@ const probabilityOfNewNumber = 0.5
 const orderColIdx = 0
 const peersColIdx = 1
 
+// TestWindowFramer runs the various windowFramer operators against the
+// WindowFrameRunner used by the row engine.
 func TestWindowFramer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -50,95 +59,130 @@ func TestWindowFramer(t *testing.T) {
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(evalCtx.Ctx())
 
-	spillingQueueUnlimitedAllocator := colmem.NewAllocator(evalCtx.Ctx(), &memAcc, testColumnFactory)
+	factory := coldataext.NewExtendedColumnFactory(evalCtx)
+	allocator := colmem.NewAllocator(evalCtx.Ctx(), &memAcc, factory)
 	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
 	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
-	partition := colexecutils.NewSpillingBuffer(
-		spillingQueueUnlimitedAllocator, math.MaxInt64, queueCfg,
-		colexecop.NewTestingSemaphore(2), []*types.T{types.Int, types.Bool}, testDiskAcc,
-	)
-
-	testWindowFramer := func(
-		count int, asc bool, mode tree.WindowFrameMode, startBound, endBound tree.WindowFrameBoundType,
-	) {
-		errorMsg := fmt.Sprintf("Count: %d\nMode: %s\nStart Bound: %s\nEnd Bound: %s",
-			count, mode, startBound, endBound)
-
-		colWindowFramer, rowWindowFramer := initWindowFramers(
-			t, rng, evalCtx, partition, count, asc, mode, startBound, endBound,
-		)
-
-		for i := 0; i < count; i++ {
-			// Advance the columnar framer.
-			colWindowFramer.next(evalCtx.Ctx())
-
-			// Advance the row-wise framer.
-			batch, batchIdx := partition.GetBatchWithTuple(evalCtx.Ctx(), i)
-			if i > 0 && batch.ColVec(peersColIdx).Bool()[batchIdx] {
-				rowWindowFramer.CurRowPeerGroupNum++
-				err := rowWindowFramer.PeerHelper.Update(rowWindowFramer)
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-			}
-			rowWindowFramer.RowIdx = i
-			rowStartIdx, err := rowWindowFramer.FrameStartIdx(evalCtx.Ctx(), evalCtx)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			rowEndIdx, err := rowWindowFramer.FrameEndIdx(evalCtx.Ctx(), evalCtx)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-
-			// Validate that the columnar window framer describes the same window
-			// frame as the row-wise one.
-			var colFrameIdx int
-			frameIsEmpty := true
-			for j := rowStartIdx; j < rowEndIdx; j++ {
-				skipped, err := rowWindowFramer.IsRowSkipped(evalCtx.Ctx(), j)
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if skipped {
-					continue
-				}
-				colFrameIdx++
-				frameIsEmpty = false
-				require.Equal(t, j, colWindowFramer.frameNthIdx(colFrameIdx), errorMsg)
-			}
-			if frameIsEmpty {
-				// The columnar window framer functions return -1 to signify an empty
-				// window frame.
-				require.Equal(t, -1, colWindowFramer.frameFirstIdx(), errorMsg)
-				require.Equal(t, -1, colWindowFramer.frameLastIdx(), errorMsg)
-				continue
-			}
-			require.Equal(t, rowStartIdx, colWindowFramer.frameFirstIdx(), errorMsg)
-			require.Equal(t, rowEndIdx, colWindowFramer.frameLastIdx()+1, errorMsg)
-		}
+	testCfg := &testConfig{
+		rng:       rng,
+		evalCtx:   evalCtx,
+		factory:   factory,
+		allocator: allocator,
+		queueCfg:  queueCfg,
 	}
 
-	// TODO(drewk): remember to add RANGE here once it is supported.
+	const randTypeProbability = 0.5
+	var randTypes = []*types.T{
+		types.Float, types.Decimal, types.Interval, types.TimestampTZ, types.Date, types.TimeTZ,
+	}
 	for _, count := range []int{1, 17, 42, 91} {
+		testCfg.count = count
 		for _, asc := range []bool{true, false} {
-			makeIntSortedPartition(evalCtx.Ctx(), testAllocator, count, asc, partition)
-			for _, mode := range []tree.WindowFrameMode{tree.ROWS, tree.GROUPS} {
+			typ := types.Int
+			if rng.Float64() < randTypeProbability {
+				typ = randTypes[rng.Intn(len(randTypes))]
+			}
+			testCfg.asc = asc
+			testCfg.typ = typ
+			for _, mode := range []tree.WindowFrameMode{tree.ROWS, tree.GROUPS, tree.RANGE} {
+				testCfg.mode = mode
 				for _, bound := range []tree.WindowFrameBoundType{
 					tree.UnboundedPreceding, tree.OffsetPreceding, tree.CurrentRow,
 					tree.OffsetFollowing, tree.UnboundedFollowing,
 				} {
 					if validForStart(bound) {
-						testWindowFramer(count, asc, mode, bound, getEndBound(rng, bound))
+						testCfg.startBound = bound
+						testCfg.endBound = getEndBound(rng, bound)
+						testWindowFramer(t, testCfg)
 					}
 					if validForEnd(bound) {
-						testWindowFramer(count, asc, mode, getStartBound(rng, bound), bound)
+						testCfg.startBound = getStartBound(rng, bound)
+						testCfg.endBound = bound
+						testWindowFramer(t, testCfg)
 					}
 				}
 			}
 		}
 	}
+}
+
+type testConfig struct {
+	rng        *rand.Rand
+	evalCtx    *tree.EvalContext
+	factory    coldata.ColumnFactory
+	allocator  *colmem.Allocator
+	queueCfg   colcontainer.DiskQueueCfg
+	typ        *types.T
+	count      int
+	asc        bool
+	mode       tree.WindowFrameMode
+	startBound tree.WindowFrameBoundType
+	endBound   tree.WindowFrameBoundType
+}
+
+func testWindowFramer(t *testing.T, testCfg *testConfig) {
+	errorMsg := func(assertion string) string {
+		return fmt.Sprintf("Assertion: %s\nOrder Column Type: %v\nRow Count: %d\n"+
+			"Ascending: %v\nMode: %s\nStart Bound: %s\nEnd Bound: %s\n",
+			assertion, testCfg.typ, testCfg.count, testCfg.asc,
+			testCfg.mode, testCfg.startBound, testCfg.endBound)
+	}
+
+	colWindowFramer, rowWindowFramer, partition := initWindowFramers(t, testCfg)
+
+	for i := 0; i < testCfg.count; i++ {
+		// Advance the columnar framer.
+		colWindowFramer.next(testCfg.evalCtx.Ctx())
+
+		// Advance the row-wise framer.
+		vec, vecIdx, _ := partition.GetVecWithTuple(testCfg.evalCtx.Ctx(), peersColIdx, i)
+		if i > 0 && vec.Bool()[vecIdx] {
+			rowWindowFramer.CurRowPeerGroupNum++
+			err := rowWindowFramer.PeerHelper.Update(rowWindowFramer)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		}
+		rowWindowFramer.RowIdx = i
+		rowStartIdx, err := rowWindowFramer.FrameStartIdx(testCfg.evalCtx.Ctx(), testCfg.evalCtx)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		rowEndIdx, err := rowWindowFramer.FrameEndIdx(testCfg.evalCtx.Ctx(), testCfg.evalCtx)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		// Validate that the columnar window framer describes the same window
+		// frame as the row-wise one.
+		var colFrameIdx int
+		frameIsEmpty := true
+		for j := rowStartIdx; j < rowEndIdx; j++ {
+			skipped, err := rowWindowFramer.IsRowSkipped(testCfg.evalCtx.Ctx(), j)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if skipped {
+				continue
+			}
+			colFrameIdx++
+			frameIsEmpty = false
+			require.Equal(t, j, colWindowFramer.frameNthIdx(colFrameIdx), errorMsg("NthIdx"))
+		}
+		if frameIsEmpty {
+			// The columnar window framer functions return -1 to signify an empty
+			// window frame.
+			require.Equal(t, -1, colWindowFramer.frameFirstIdx(), errorMsg("Empty FirstIdx"))
+			require.Equal(t, -1, colWindowFramer.frameLastIdx(), errorMsg("Empty LastIdx"))
+			require.Equal(t, -1, colWindowFramer.frameNthIdx(0 /* n */), errorMsg("Empty NthIdx"))
+			continue
+		}
+		require.Equal(t, rowStartIdx, colWindowFramer.frameFirstIdx(), errorMsg("FirstIdx"))
+		require.Equal(t, rowEndIdx, colWindowFramer.frameLastIdx()+1, errorMsg("LastIdx"))
+	}
+
+	partition.Close(testCfg.evalCtx.Ctx())
 }
 
 func validForStart(bound tree.WindowFrameBoundType) bool {
@@ -173,128 +217,197 @@ func getEndBound(rng *rand.Rand, startBound tree.WindowFrameBoundType) tree.Wind
 	}
 }
 
-func genRandomOffset(rng *rand.Rand, count int) uint64 {
-	return rng.Uint64() % uint64(count+1)
+type datumRows struct {
+	rows tree.Datums
+	asc  bool
+	ctx  *tree.EvalContext
 }
 
-// makeIntSortedPartition fills out the given buffer with sorted int values
-// (representing an ordering column for a window framer), as well as a boolean
-// peer groups column.
-func makeIntSortedPartition(
-	ctx context.Context,
-	allocator *colmem.Allocator,
-	count int,
-	asc bool,
-	partition *colexecutils.SpillingBuffer,
-) {
-	const minStart, maxStart = -100, 100
-	partition.Reset(ctx)
-	insertBatch := allocator.NewMemBatchWithFixedCapacity(
-		[]*types.T{types.Int, types.Bool},
+func (r *datumRows) Len() int {
+	return len(r.rows)
+}
+
+func (r *datumRows) Less(i, j int) bool {
+	cmp := r.rows[i].Compare(r.ctx, r.rows[j])
+	if r.asc {
+		return cmp < 0
+	}
+	return cmp > 0
+}
+
+func (r *datumRows) Swap(i, j int) {
+	r.rows[i], r.rows[j] = r.rows[j], r.rows[i]
+}
+
+func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.SpillingBuffer) {
+	datums := &datumRows{
+		rows: make(tree.Datums, testCfg.count),
+		asc:  testCfg.asc,
+		ctx:  testCfg.evalCtx,
+	}
+	const nullChance = 0.2
+	for i := range datums.rows {
+		if testCfg.rng.Float64() < nullChance {
+			datums.rows[i] = tree.DNull
+			continue
+		}
+		if i == 0 || testCfg.rng.Float64() < probabilityOfNewNumber {
+			datums.rows[i] = randgen.RandDatumSimple(testCfg.rng, testCfg.typ)
+			continue
+		}
+		datums.rows[i] = datums.rows[i-1]
+	}
+	sort.Sort(datums)
+
+	partition := colexecutils.NewSpillingBuffer(
+		testCfg.allocator, math.MaxInt64, testCfg.queueCfg,
+		colexecop.NewTestingSemaphore(2), []*types.T{testCfg.typ, types.Bool}, testDiskAcc,
+	)
+	insertBatch := testCfg.allocator.NewMemBatchWithFixedCapacity(
+		[]*types.T{testCfg.typ, types.Bool},
 		1, /* capacity */
 	)
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	number := int64(r.Intn(maxStart-minStart) + minStart)
-	for idx := 0; idx < count; idx++ {
-		insertBatch.ColVec(peersColIdx).Bool()[0] = idx == 0
-		if r.Float64() < probabilityOfNewNumber {
-			if asc {
-				number += int64(r.Intn(10)) + 1 // Ensure that the number changes.
-			} else {
-				number -= int64(r.Intn(10)) + 1
-			}
+	var last tree.Datum
+	for i, val := range datums.rows {
+		insertBatch.ColVec(orderColIdx).Nulls().UnsetNulls()
+		insertBatch.ColVec(peersColIdx).Bool()[0] = false
+		if i == 0 || (last != nil && val.Compare(testCfg.evalCtx, last) != 0) {
 			insertBatch.ColVec(peersColIdx).Bool()[0] = true
 		}
-		insertBatch.ColVec(orderColIdx).Int64()[0] = number
+		last = val
+		vec := insertBatch.ColVec(orderColIdx)
+		if val == tree.DNull {
+			vec.Nulls().SetNull(0)
+		} else {
+			switch t := val.(type) {
+			case *tree.DInt:
+				vec.Int64()[0] = int64(*t)
+			case *tree.DFloat:
+				vec.Float64()[0] = float64(*t)
+			case *tree.DDecimal:
+				vec.Decimal()[0] = t.Decimal
+			case *tree.DInterval:
+				vec.Interval()[0] = t.Duration
+			case *tree.DTimestampTZ:
+				vec.Timestamp()[0] = t.Time
+			case *tree.DDate:
+				vec.Int64()[0] = t.UnixEpochDaysWithOrig()
+			case *tree.DTimeTZ:
+				vec.Datum().Set(0, t)
+			default:
+				colexecerror.InternalError(errors.AssertionFailedf("unsupported datum: %v", t))
+			}
+		}
 		insertBatch.SetLength(1)
-		partition.AppendTuples(ctx, insertBatch, 0 /* startIdx */, insertBatch.Length())
+		partition.AppendTuples(
+			testCfg.evalCtx.Ctx(), insertBatch, 0 /* startIdx */, insertBatch.Length())
 	}
+	return datums.rows, partition
 }
 
 func initWindowFramers(
-	t *testing.T,
-	rng *rand.Rand,
-	evalCtx *tree.EvalContext,
-	partition *colexecutils.SpillingBuffer,
-	count int,
-	asc bool,
-	mode tree.WindowFrameMode,
-	startBound, endBound tree.WindowFrameBoundType,
-) (windowFramer, *tree.WindowFrameRun) {
-	startOffset, endOffset := genRandomOffset(rng, count), genRandomOffset(rng, count)
+	t *testing.T, testCfg *testConfig,
+) (windowFramer, *tree.WindowFrameRun, *colexecutils.SpillingBuffer) {
+	offsetType := types.Int
+	if testCfg.mode == tree.RANGE {
+		offsetType = getOffsetType(testCfg.typ)
+	}
+	startOffset := makeRandOffset(testCfg.rng, offsetType)
+	endOffset := makeRandOffset(testCfg.rng, offsetType)
 
+	datums, colBuffer := makeSortedPartition(testCfg)
+
+	datumEncoding := descpb.DatumEncoding_ASCENDING_KEY
+	if !testCfg.asc {
+		datumEncoding = descpb.DatumEncoding_DESCENDING_KEY
+	}
 	frame := &execinfrapb.WindowerSpec_Frame{
-		Mode: modeToExecinfrapb(mode),
+		Mode: modeToExecinfrapb(testCfg.mode),
 		Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
 			Start: execinfrapb.WindowerSpec_Frame_Bound{
-				BoundType: boundToExecinfrapb(startBound),
-				IntOffset: startOffset,
+				BoundType:   boundToExecinfrapb(testCfg.startBound),
+				TypedOffset: encodeOffset(startOffset),
+				OffsetType: execinfrapb.DatumInfo{
+					Type:     testCfg.typ,
+					Encoding: datumEncoding,
+				},
 			},
 			End: &execinfrapb.WindowerSpec_Frame_Bound{
-				BoundType: boundToExecinfrapb(endBound),
-				IntOffset: endOffset,
+				BoundType:   boundToExecinfrapb(testCfg.endBound),
+				TypedOffset: encodeOffset(endOffset),
+				OffsetType: execinfrapb.DatumInfo{
+					Type:     testCfg.typ,
+					Encoding: datumEncoding,
+				},
 			},
 		},
 	}
-	colWindowFramer := newWindowFramer(frame, peersColIdx)
-	colWindowFramer.startPartition(evalCtx.Ctx(), partition.Length(), partition)
+	if testCfg.mode != tree.RANGE {
+		frame.Bounds.Start.IntOffset = uint64(*(startOffset.(*tree.DInt)))
+		frame.Bounds.End.IntOffset = uint64(*(endOffset.(*tree.DInt)))
+	}
+	dir := execinfrapb.Ordering_Column_ASC
+	if !testCfg.asc {
+		dir = execinfrapb.Ordering_Column_DESC
+	}
+	ordering := &execinfrapb.Ordering{
+		Columns: []execinfrapb.Ordering_Column{{
+			ColIdx:    orderColIdx,
+			Direction: dir,
+		}},
+	}
+	colWindowFramer := newWindowFramer(
+		testCfg.evalCtx, frame, ordering, []*types.T{testCfg.typ, types.Bool}, peersColIdx)
+	colWindowFramer.startPartition(testCfg.evalCtx.Ctx(), colBuffer.Length(), colBuffer)
 
 	rowDir := encoding.Ascending
-	if !asc {
+	if !testCfg.asc {
 		rowDir = encoding.Descending
 	}
 	rowWindowFramer := &tree.WindowFrameRun{
-		Rows:         &indexedRows{partition: partition},
+		Rows:         &indexedRows{partition: datums, orderColType: testCfg.typ},
 		ArgsIdxs:     []uint32{0},
 		FilterColIdx: tree.NoColumnIdx,
 		Frame: &tree.WindowFrame{
-			Mode: mode,
+			Mode: testCfg.mode,
 			Bounds: tree.WindowFrameBounds{
 				StartBound: &tree.WindowFrameBound{
-					BoundType:  startBound,
-					OffsetExpr: tree.NewDInt(tree.DInt(startOffset)),
+					BoundType:  testCfg.startBound,
+					OffsetExpr: startOffset,
 				},
 				EndBound: &tree.WindowFrameBound{
-					BoundType:  endBound,
-					OffsetExpr: tree.NewDInt(tree.DInt(endOffset)),
+					BoundType:  testCfg.endBound,
+					OffsetExpr: endOffset,
 				},
 			},
 		},
-		StartBoundOffset: tree.NewDInt(tree.DInt(startOffset)),
-		EndBoundOffset:   tree.NewDInt(tree.DInt(endOffset)),
+		StartBoundOffset: startOffset,
+		EndBoundOffset:   endOffset,
 		OrdColIdx:        orderColIdx,
 		OrdDirection:     rowDir,
 	}
-	rowWindowFramer.PlusOp, rowWindowFramer.MinusOp, _ = tree.WindowFrameRangeOps{}.LookupImpl(types.Int, types.Int)
-	err := rowWindowFramer.PeerHelper.Init(rowWindowFramer, &peerGroupChecker{partition: partition})
+	rowWindowFramer.PlusOp, rowWindowFramer.MinusOp, _ = tree.WindowFrameRangeOps{}.LookupImpl(testCfg.typ, offsetType)
+	err := rowWindowFramer.PeerHelper.Init(rowWindowFramer, &peerGroupChecker{partition: datums})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	return colWindowFramer, rowWindowFramer
+	return colWindowFramer, rowWindowFramer, colBuffer
 }
 
 type indexedRows struct {
-	partition *colexecutils.SpillingBuffer
+	partition    tree.Datums
+	orderColType *types.T
 }
 
 var _ tree.IndexedRows = &indexedRows{}
 
 func (ir indexedRows) Len() int {
-	return ir.partition.Length()
+	return len(ir.partition)
 }
 
 func (ir indexedRows) GetRow(ctx context.Context, idx int) (tree.IndexedRow, error) {
-	batch, batchIdx := ir.partition.GetBatchWithTuple(ctx, idx)
-	orderCol := batch.ColVec(orderColIdx)
-	row := make(tree.Datums, 1)
-	if orderCol.Nulls().NullAt(batchIdx) {
-		row[orderColIdx] = tree.DNull
-	} else {
-		val := orderCol.Int64()[batchIdx]
-		row[orderColIdx] = tree.Datum(tree.NewDInt(tree.DInt(val)))
-	}
-	return &indexedRow{row: row, idx: idx}, nil
+	return indexedRow{row: tree.Datums{ir.partition[idx]}}, nil
 }
 
 type indexedRow struct {
@@ -318,27 +431,13 @@ func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error)
 
 type peerGroupChecker struct {
 	evalCtx   tree.EvalContext
-	partition *colexecutils.SpillingBuffer
+	partition tree.Datums
 }
 
 var _ tree.PeerGroupChecker = &peerGroupChecker{}
 
 func (c *peerGroupChecker) InSameGroup(i, j int) (bool, error) {
-	if i == j {
-		return true, nil
-	}
-	if j < i {
-		i, j = j, i
-	}
-	for idx := i + 1; idx <= j; idx++ {
-		batch, batchIdx := c.partition.GetBatchWithTuple(c.evalCtx.Ctx(), idx)
-		if batch.ColVec(peersColIdx).Bool()[batchIdx] {
-			// A new peer group has started, so the two given indices are not in the
-			// same group.
-			return false, nil
-		}
-	}
-	return true, nil
+	return c.partition[i].Compare(&c.evalCtx, c.partition[j]) == 0, nil
 }
 
 func modeToExecinfrapb(mode tree.WindowFrameMode) execinfrapb.WindowerSpec_Frame_Mode {
@@ -367,4 +466,41 @@ func boundToExecinfrapb(bound tree.WindowFrameBoundType) execinfrapb.WindowerSpe
 		return execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING
 	}
 	return 0
+}
+
+func encodeOffset(offset tree.Datum) []byte {
+	var encoded, scratch []byte
+	encoded, err := rowenc.EncodeTableValue(
+		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	return encoded
+}
+
+func makeRandOffset(rng *rand.Rand, typ *types.T) tree.Datum {
+	isNegative := func(val tree.Datum) bool {
+		switch t := val.(type) {
+		case *tree.DInt:
+			return int64(*t) < 0
+		case *tree.DFloat:
+			return float64(*t) < 0
+		case *tree.DDecimal:
+			return t.Negative
+		case *tree.DInterval, *tree.DTimestampTZ, *tree.DDate, *tree.DTimeTZ:
+			return false
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unsupported datum: %v", t))
+			return false
+		}
+	}
+
+	for {
+		val := randgen.RandDatumSimple(rng, typ)
+		if isNegative(val) {
+			// Offsets must be non-null and non-negative.
+			continue
+		}
+		return val
+	}
 }

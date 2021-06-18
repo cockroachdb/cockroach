@@ -746,6 +746,14 @@ type intervalDecimalCustomizer struct{}
 // left-hand side and an interval right-hand side.
 type decimalIntervalCustomizer struct{}
 
+// dateIntervalCustomizer supports mixed type expressions with a date left-hand
+// side and an interval right-hand side.
+type dateIntervalCustomizer struct{}
+
+// dateTimestampCustomizer supports mixed type expressions with a date left-hand
+// side and a timestamp right-hand side.
+type dateTimestampCustomizer struct{}
+
 // datumCustomizer supports overloads on tree.Datums.
 type datumCustomizer struct{}
 
@@ -802,6 +810,8 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}, intervalTimestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.DecimalFamily, anyWidth}, intervalDecimalCustomizer{})
 	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.IntervalFamily, anyWidth}, decimalIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.DateFamily, anyWidth, types.IntervalFamily, anyWidth}, dateIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.DateFamily, anyWidth, types.TimestampTZFamily, anyWidth}, dateTimestampCustomizer{})
 
 	for _, compatibleFamily := range compatibleCanonicalTypeFamilies[typeconv.DatumVecCanonicalTypeFamily] {
 		if compatibleFamily != typeconv.DatumVecCanonicalTypeFamily {

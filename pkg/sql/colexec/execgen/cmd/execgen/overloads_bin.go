@@ -936,6 +936,28 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
+func (c dateIntervalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		// Date rows are stored as int64s representing the number of days since the
+		// unix epoch. We have to convert to timestamps before executing the binary
+		// operator.
+		const castVarName = "t"
+		castStr := fmt.Sprintf(`
+    d, err := pgdate.MakeDateFromUnixEpoch(%s)
+    if err != nil {
+			colexecerror.InternalError(err)
+		}
+		%s, err := d.ToTime()
+		if err != nil {
+			colexecerror.InternalError(err)
+		}
+		`, leftElem, castVarName)
+		var o timestampIntervalCustomizer
+		return castStr + o.getBinOpAssignFunc()(
+			op, targetElem, castVarName, rightElem, targetCol, leftCol, rightCol)
+	}
+}
+
 // executeBinOpOnDatums returns a string that performs a binary operation on
 // two datum elements. It takes the following arguments:
 // - prelude - will be prepended before binary function evaluation and should
@@ -947,22 +969,34 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 // - rightDatumElem - the variable name of the right datum element which could
 // be *coldataext.Datum, tree.Datum, or nil.
 func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumElem string) string {
-	vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
-	if err != nil {
-		return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
-	}
-	return fmt.Sprintf(`
+	codeBlock := fmt.Sprintf(`
 			%s
 			_res, err := %s.BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, %s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
-			}
+			}`, prelude, leftColdataExtDatum, rightDatumElem,
+	)
+	if regexp.MustCompile(`.*\[.*]`).MatchString(targetElem) {
+		// targetElem is of the form 'vec[i]'.
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
+		}
+		codeBlock += fmt.Sprintf(`
 			if _res == tree.DNull {
 				_outNulls.SetNull(%s)
 			}
 			%s.Set(%s, _res)
-		`, prelude, leftColdataExtDatum, rightDatumElem, idxVariable, vecVariable, idxVariable,
-	)
+			`, idxVariable, vecVariable, idxVariable,
+		)
+	} else {
+		// targetElem is assumed to simply be the same type as res.
+		codeBlock += fmt.Sprintf(`
+			%s = _res
+    	`, targetElem,
+		)
+	}
+	return codeBlock
 }
 
 func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
