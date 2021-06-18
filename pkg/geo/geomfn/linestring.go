@@ -276,9 +276,11 @@ func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
 			"first parameter has to be of type LineString")
 	}
 
-	// Flat line should be return point empty immediately,
+	// Flat line should be return the first point.
 	if lineString.Length() == 0 {
-		return geo.MakeGeometryFromGeomT(geom.NewPointEmpty(geom.XY).SetSRID(lineString.SRID()))
+		return geo.MakeGeometryFromGeomT(
+			geom.NewPointFlat(geom.XY, lineString.FlatCoords()[0:2]).SetSRID(lineString.SRID()),
+		)
 	}
 
 	var newFlatCoords []float64
@@ -312,15 +314,15 @@ func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
 		// If we have already added a point, simply add the current coordinate in.
 		if currentLineString.Length() >= startDistance {
 			if len(newFlatCoords) == 0 {
+				// Add the initial point.
 				coords, err := interpolateFlatCoordsFromDistance(g, startDistance)
 				if err != nil {
 					return geo.Geometry{}, err
 				}
 				newFlatCoords = append(newFlatCoords, coords...)
 
-				// If it starts from 0, we don't need to add the first coords
-				// because has already added by the previous point.
-				if startDistance != 0 {
+				// Add the current point if it is not the same as the initial point.
+				if !currentLineString.Coord(i).Equal(geom.XY, geom.Coord(coords)) {
 					newFlatCoords = append(newFlatCoords, currentLineString.Coord(i)...)
 				}
 			} else {
