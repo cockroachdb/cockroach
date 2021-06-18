@@ -165,22 +165,9 @@ const (
 	Start20_2
 	// GeospatialType enables the use of Geospatial features.
 	GeospatialType
-	// Enums enables the use of ENUM types.
-	Enums
-	// RangefeedLeases is the enablement of leases uses rangefeeds. All nodes
-	// with this versions will have rangefeeds enabled on all system ranges.
-	// Once this version is finalized, gossip is not needed in the schema lease
-	// subsystem. Nodes which start with this version finalized will not pass
-	// gossip to the SQL layer.
-	RangefeedLeases
 	// AlterColumnTypeGeneral enables the use of alter column type for
 	// conversions that require the column data to be rewritten.
 	AlterColumnTypeGeneral
-	// AlterSystemJobsTable is a version which modified system.jobs table.
-	AlterSystemJobsAddCreatedByColumns
-	// AddScheduledJobsTable is a version which adds system.scheduled_jobs
-	// table.
-	AddScheduledJobsTable
 	// UserDefinedSchemas enables the creation of user defined schemas.
 	UserDefinedSchemas
 	// NoOriginFKIndexes allows for foreign keys to no longer need indexes on
@@ -194,16 +181,10 @@ const (
 	// AbortSpanBytes adds a field to MVCCStats
 	// (MVCCStats.AbortSpanBytes) that tracks the size of a range's abort span.
 	AbortSpanBytes
-	// AlterSystemJobsTableAddLeaseColumn is a version which modified
-	// system.jobs table.
-	AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	// MaterializedViews enables the use of materialized views.
 	MaterializedViews
 	// Box2DType enables the use of the box2d type.
 	Box2DType
-	// UpdateScheduledJobsSchema drops schedule_changes and adds
-	// schedule_status.
-	UpdateScheduledJobsSchema
 	// CreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN are introduced.
 	//
 	// It represents adding authn principal management via CREATELOGIN role
@@ -352,24 +333,8 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 2},
 	},
 	{
-		Key:     Enums,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 3},
-	},
-	{
-		Key:     RangefeedLeases,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 4},
-	},
-	{
 		Key:     AlterColumnTypeGeneral,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 5},
-	},
-	{
-		Key:     AlterSystemJobsAddCreatedByColumns,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 6},
-	},
-	{
-		Key:     AddScheduledJobsTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 7},
 	},
 	{
 		Key:     UserDefinedSchemas,
@@ -392,20 +357,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 14},
 	},
 	{
-		Key:     AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 15},
-	},
-	{
 		Key:     MaterializedViews,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 16},
 	},
 	{
 		Key:     Box2DType,
 		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 17},
-	},
-	{
-		Key:     UpdateScheduledJobsSchema,
-		Version: roachpb.Version{Major: 20, Minor: 1, Internal: 19},
 	},
 	{
 		Key:     CreateLoginPrivilege,
