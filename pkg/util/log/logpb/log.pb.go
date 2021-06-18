@@ -133,8 +133,7 @@ const (
 	Channel_STORAGE Channel = 3
 	// SESSIONS is used to report client network activity when enabled via
 	// the `server.auth_log.sql_connections.enabled` and/or
-	// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
-	// [cluster settings](cluster-settings.html):
+	// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html):
 	//
 	// - Connections opened/closed
 	// - Authentication events: logins, failed attempts
