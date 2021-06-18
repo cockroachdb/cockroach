@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 )
 
@@ -50,9 +49,11 @@ func New(
 	}
 }
 
-// Iterator can be used to return RecordedSpans from all live
-// nodes in the cluster, in a streaming manner. The iterator buffers the
-// RecordedSpans of one node at a time.
+// Iterator can be used to return tracing.Recordings from all live nodes in the
+// cluster, in a streaming manner. The iterator buffers the tracing.Recordings
+// of one node at a time.
+// A tracing.Recording is defined as span recordings for all
+// spans rooted at a fixed root span.
 type Iterator struct {
 	collector *TraceCollector
 
@@ -64,19 +65,24 @@ type Iterator struct {
 	// and will be contacted for inflight trace spans by the iterator.
 	liveNodes []roachpb.NodeID
 
-	// curNodeIndex maintains the node from which the iterator has pulled inflight
-	// span recordings and buffered them in `recordedSpans` for consumption via
-	// the iterator.
+	// curNodeIndex maintains the index in liveNodes from which the iterator has
+	// pulled inflight span recordings and buffered them in `recordedSpans` for
+	// consumption via the iterator.
 	curNodeIndex int
 
-	// recordedSpanIndex maintains the current position of of the iterator in the
-	// list of recorded spans. The recorded spans that the iterator points to are
-	// buffered in `recordedSpans`.
-	recordedSpanIndex int
+	// curNode maintains the node from which the iterator has pulled inflight span
+	// recordings and buffered them in `recordings` for consumption via the
+	// iterator.
+	curNode roachpb.NodeID
 
-	// recordedSpans represents all recorded spans for a given node currently
+	// recordingIndex maintains the current position of the iterator in the list
+	// of tracing.Recordings. The tracing.Recording that the iterator points to is
+	// buffered in `recordings`.
+	recordingIndex int
+
+	// recordings represent all the tracing.Recordings for a given node currently
 	// accessed by the iterator.
-	recordedSpans []tracingpb.RecordedSpan
+	recordings []tracing.Recording
 
 	iterErr error
 }
@@ -104,9 +110,9 @@ func (i *Iterator) Valid() bool {
 		return false
 	}
 
-	// If recordedSpanIndex is within recordedSpans and there are some buffered
-	// recordedSpans, it is valid to return from the buffer.
-	if i.recordedSpans != nil && i.recordedSpanIndex < len(i.recordedSpans) {
+	// If recordingIndex is within recordings and there are some buffered
+	// recordings, it is valid to return from the buffer.
+	if i.recordings != nil && i.recordingIndex < len(i.recordings) {
 		return true
 	}
 
@@ -117,29 +123,29 @@ func (i *Iterator) Valid() bool {
 
 // Next sets the Iterator to point to the next value to be returned.
 func (i *Iterator) Next() {
-	i.recordedSpanIndex++
+	i.recordingIndex++
 
-	// If recordedSpanIndex is within recordedSpans and there are some buffered
-	// recordedSpans, then we can return them when Value() is called.
-	if i.recordedSpans != nil && i.recordedSpanIndex < len(i.recordedSpans) {
+	// If recordingIndex is within recordings and there are some buffered
+	// recordings, it is valid to return from the buffer.
+	if i.recordings != nil && i.recordingIndex < len(i.recordings) {
 		return
 	}
 
 	// Reset buffer variables.
-	i.recordedSpans = nil
-	i.recordedSpanIndex = 0
+	i.recordings = nil
+	i.recordingIndex = 0
 
 	// Either there are no more spans or we have exhausted the recordings from the
 	// current node, and we need to pull the inflight recordings from another
 	// node.
 	// Keep searching for recordings from all live nodes in the cluster.
-	for i.recordedSpans == nil {
+	for i.recordings == nil {
 		// No more spans to return from any of the live nodes in the cluster.
 		if !(i.curNodeIndex < len(i.liveNodes)) {
 			return
 		}
-		i.recordedSpans, i.iterErr = i.collector.getTraceSpanRecordingsForNode(i.ctx, i.traceID,
-			i.liveNodes[i.curNodeIndex])
+		i.curNode = i.liveNodes[i.curNodeIndex]
+		i.recordings, i.iterErr = i.collector.getTraceSpanRecordingsForNode(i.ctx, i.traceID, i.curNode)
 		// TODO(adityamaru): We might want to consider not failing if a single node
 		// fails to return span recordings.
 		if i.iterErr != nil {
@@ -149,9 +155,19 @@ func (i *Iterator) Next() {
 	}
 }
 
+// NodeRecording contains the node and a Recording i.e. span recordings for all
+// spans rooted at a fixed root span.
+type NodeRecording struct {
+	NodeID    roachpb.NodeID
+	Recording tracing.Recording
+}
+
 // Value returns the current value pointed to by the Iterator.
-func (i *Iterator) Value() tracingpb.RecordedSpan {
-	return i.recordedSpans[i.recordedSpanIndex]
+func (i *Iterator) Value() NodeRecording {
+	return NodeRecording{
+		NodeID:    i.curNode,
+		Recording: i.recordings[i.recordingIndex],
+	}
 }
 
 // Error returns the error encountered by the Iterator during iteration.
@@ -166,7 +182,7 @@ func (i *Iterator) Error() error {
 // inflight spans, and relies on gRPC short circuiting local requests.
 func (t *TraceCollector) getTraceSpanRecordingsForNode(
 	ctx context.Context, traceID uint64, nodeID roachpb.NodeID,
-) ([]tracingpb.RecordedSpan, error) {
+) ([]tracing.Recording, error) {
 	log.Infof(ctx, "getting span recordings from node %s", nodeID.String())
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
@@ -179,9 +195,19 @@ func (t *TraceCollector) getTraceSpanRecordingsForNode(
 		return nil, err
 	}
 
-	sort.SliceStable(resp.SpanRecordings, func(i, j int) bool {
-		return resp.SpanRecordings[i].StartTime.Before(resp.SpanRecordings[j].StartTime)
+	var res []tracing.Recording
+	for _, recording := range resp.Recordings {
+		if recording.RecordedSpans == nil {
+			continue
+		}
+		res = append(res, recording.RecordedSpans)
+	}
+
+	// This sort ensures that if a node has multiple trace.Recordings then they
+	// are ordered relative to each other by StartTime.
+	sort.SliceStable(res, func(i, j int) bool {
+		return res[i][0].StartTime.Before(res[j][0].StartTime)
 	})
 
-	return resp.SpanRecordings, nil
+	return res, nil
 }
