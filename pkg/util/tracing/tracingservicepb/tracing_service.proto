@@ -15,14 +15,19 @@ option go_package = "tracingservicepb";
 import "gogoproto/gogo.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 
-message SpanRecordingRequest {
+// GetSpanRecordingsRequest requests a nodes' inflight span registry to return
+// the tracing.Recordings for each root span with a matching trace_id.
+message GetSpanRecordingsRequest {
   uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
 }
 
-message SpanRecordingResponse {
-  repeated tracing.tracingpb.RecordedSpan span_recordings = 1 [(gogoproto.nullable) = false];
+message GetSpanRecordingsResponse {
+  message Recording {
+    repeated tracing.tracingpb.RecordedSpan recorded_spans = 1 [(gogoproto.nullable) = false];
+  }
+  repeated Recording recordings = 1 [(gogoproto.nullable) = false];
 }
 
 service Tracing {
-  rpc GetSpanRecordings(SpanRecordingRequest) returns (SpanRecordingResponse) {}
+  rpc GetSpanRecordings(GetSpanRecordingsRequest) returns (GetSpanRecordingsResponse) {}
 }

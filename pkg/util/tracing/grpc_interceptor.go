@@ -421,6 +421,6 @@ func (cs *tracingClientStream) CloseSend() error {
 	return err
 }
 
-// Recording represents a group of RecordedSpans, as returned by GetRecording.
-// Spans are sorted by StartTime.
+// Recording represents a group of RecordedSpans rooted at a fixed root span, as
+// returned by GetRecording. Spans are sorted by StartTime.
 type Recording []tracingpb.RecordedSpan
