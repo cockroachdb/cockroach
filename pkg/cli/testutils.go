@@ -116,6 +116,10 @@ func createTestCerts(certsDir string) (cleanup func() error) {
 
 // NewCLITest export for cclcli.
 func NewCLITest(params TestCLIParams) TestCLI {
+	return newCLITestWithArgs(params, nil)
+}
+
+func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerArgs)) TestCLI {
 	c := TestCLI{t: params.T}
 
 	certsDir, err := ioutil.TempDir("", "cli-test")
@@ -141,6 +145,9 @@ func NewCLITest(params TestCLIParams) TestCLI {
 			StoreSpecs:    params.StoreSpecs,
 			Locality:      params.Locality,
 			ExternalIODir: filepath.Join(certsDir, "extern"),
+		}
+		if argsFn != nil {
+			argsFn(&args)
 		}
 		if params.NoNodelocal {
 			args.ExternalIODir = ""

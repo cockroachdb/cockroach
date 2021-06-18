@@ -19,8 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -76,9 +76,11 @@ func TestDebugJobTrace(t *testing.T) {
 	skip.UnderRace(t, "test timing out")
 
 	ctx := context.Background()
-	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+	argsFn := func(args *base.TestServerArgs) {
+		args.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	}
 
-	c := NewCLITest(TestCLIParams{T: t})
+	c := newCLITestWithArgs(TestCLIParams{T: t}, argsFn)
 	defer c.Cleanup()
 	c.omitArgs = true
 

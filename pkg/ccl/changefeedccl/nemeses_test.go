@@ -14,10 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,8 +25,6 @@ func TestChangefeedNemeses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
-
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
@@ -42,6 +38,7 @@ func TestChangefeedNemeses(t *testing.T) {
 			t.Error(failure)
 		}
 	}
+
 	// Tenant tests disabled because ALTER TABLE .. SPLIT is not
 	// support in multi-tenancy mode:
 	//

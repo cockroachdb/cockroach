@@ -257,7 +257,10 @@ CREATE DATABASE d;
 func startTestServer(
 	t testing.TB, argsFn updateArgsFn,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
-	knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}}}
+	knobs := base.TestingKnobs{
+		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
 	args := base.TestServerArgs{
 		Knobs:       knobs,
 		UseDatabase: `d`,
@@ -268,13 +271,10 @@ func startTestServer(
 
 	ctx := context.Background()
 	resetFlushFrequency := changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)
-	resetAdoptionIntervals := jobs.TestingSetAdoptAndCancelIntervals(
-		10*time.Millisecond, 10*time.Millisecond)
 	s, db, _ := serverutils.StartServer(t, args)
 
 	cleanup := func() {
 		s.Stopper().Stop(ctx)
-		resetAdoptionIntervals()
 		resetFlushFrequency()
 	}
 	var err error
