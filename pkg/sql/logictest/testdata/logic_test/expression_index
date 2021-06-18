@@ -4,8 +4,9 @@ CREATE TABLE t (
   a INT,
   b INT,
   c STRING,
+  j JSON,
   comp INT AS (a + 10) VIRTUAL,
-  FAMILY (a, b, c)
+  FAMILY (k, a, b, c, j)
 )
 
 statement error unimplemented: only simple columns are supported as index elements
@@ -36,13 +37,14 @@ CREATE TABLE public.t (
    a INT8 NULL,
    b INT8 NULL,
    c STRING NULL,
+   j JSONB NULL,
    comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
    CONSTRAINT "primary" PRIMARY KEY (k ASC),
    INDEX t_a_plus_b_idx (crdb_internal_idx_expr ASC),
    INDEX t_lower_c_idx (crdb_internal_idx_expr_1 ASC),
    INDEX t_lower_c_a_plus_b_idx (crdb_internal_idx_expr_2 ASC, crdb_internal_idx_expr_3 ASC),
    INDEX t_a_plus_ten_idx (crdb_internal_idx_expr_4 ASC),
-   FAMILY fam_0_a_b_c_k (a, b, c, k)
+   FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
 )
 
 statement error volatile functions are not allowed in index element
@@ -54,15 +56,35 @@ CREATE INDEX err ON t ((a + z))
 statement error index element expression cannot reference computed columns
 CREATE INDEX err ON t ((comp + 10))
 
+statement error type of index element NULL is ambiguous.*\nHINT: consider adding a type cast to the expression
+CREATE INDEX err ON t (a, (NULL), b)
+
 statement ok
-CREATE TABLE child (
-  fk INT REFERENCES t (k) ON UPDATE CASCADE,
+CREATE INDEX t_cast_idx ON t (a, (NULL::TEXT), b)
+
+statement error index element j->'a' of type jsonb is not indexable
+CREATE INDEX err ON t (a, (j->'a'));
+
+statement error index element \(a, b\) of type record is not indexable
+CREATE INDEX err ON t (a, (row(a, b)));
+
+statement error index element j->'a' of type jsonb is not allowed as a prefix column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes
+CREATE INVERTED INDEX err ON t ((j->'a'), j);
+
+statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes
+CREATE INVERTED INDEX err ON t (a, (a + b));
+
+statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes
+CREATE INVERTED INDEX err ON t (a, (row(a, b)));
+
+statement ok
+CREATE TABLE other (
   a INT
 )
 
 # An expression index cannot reference columns in other tables.
 statement error no data source matches prefix: t in this context
-CREATE INDEX err ON child ((t.a + 10))
+CREATE INDEX err ON other ((t.a + 10))
 
 # An inaccessible column used in an expression index cannot be referenced in
 # queries.
@@ -80,7 +102,7 @@ INSERT INTO t VALUES
   (5, 100, 10, 'Food')
 
 query IIITI colnames,rowsort
-SELECT * FROM t@t_a_plus_b_idx WHERE a + b = 110
+SELECT k, a, b, c, comp FROM t@t_a_plus_b_idx WHERE a + b = 110
 ----
 k  a    b    c     comp
 1  10   100  Foo   20
@@ -88,14 +110,14 @@ k  a    b    c     comp
 5  100  10   Food  110
 
 query IIITI colnames,rowsort
-SELECT * FROM t@t_a_plus_b_idx WHERE a + b > 110
+SELECT k, a, b, c, comp FROM t@t_a_plus_b_idx WHERE a + b > 110
 ----
 k  a   b    c    comp
 2  20  200  FOO  30
 4  40  400  BAR  50
 
 query IIITI colnames,rowsort
-SELECT * FROM t@t_lower_c_idx WHERE lower(c) = 'foo'
+SELECT k, a, b, c, comp FROM t@t_lower_c_idx WHERE lower(c) = 'foo'
 ----
 k  a   b    c    comp
 1  10  100  Foo  20
@@ -103,7 +125,7 @@ k  a   b    c    comp
 3  10  100  foo  20
 
 query IIITI colnames,rowsort
-SELECT * FROM t@t_lower_c_idx WHERE lower(c) LIKE 'foo%'
+SELECT k, a, b, c, comp FROM t@t_lower_c_idx WHERE lower(c) LIKE 'foo%'
 ----
 k  a    b    c     comp
 1  10   100  Foo   20
@@ -112,7 +134,7 @@ k  a    b    c     comp
 5  100  10   Food  110
 
 query IIITI colnames,rowsort
-SELECT * FROM t@t_lower_c_a_plus_b_idx WHERE lower(c) = 'foo' AND a + b > 110
+SELECT k, a, b, c, comp FROM t@t_lower_c_a_plus_b_idx WHERE lower(c) = 'foo' AND a + b > 110
 ----
 k  a   b    c    comp
 2  20  200  FOO  30
@@ -123,14 +145,14 @@ statement ok
 CREATE INDEX t_a_times_two_idx ON t ((a * 2))
 
 query IIITI colnames,rowsort
-SELECT * FROM t@t_a_times_two_idx WHERE a * 2 = 20
+SELECT k, a, b, c, comp FROM t@t_a_times_two_idx WHERE a * 2 = 20
 ----
 k  a   b    c    comp
 1  10  100  Foo  20
 3  10  100  foo  20
 
 query IIITI colnames,rowsort
-SELECT * FROM t@t_a_times_two_idx WHERE a * 2 < 100
+SELECT k, a, b, c, comp FROM t@t_a_times_two_idx WHERE a * 2 < 100
 ----
 k  a   b    c    comp
 1  10  100  Foo  20
