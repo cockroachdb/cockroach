@@ -96,6 +96,8 @@ type extendedEvalContext struct {
 
 	indexUsageStatsWriter idxusage.Writer
 
+	clusterIndexUsageStats *idxusage.ClusterIndexUsageStats
+
 	SchemaChangerState *SchemaChangerState
 }
 

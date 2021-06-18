@@ -272,6 +272,8 @@ type Server struct {
 	// indexUsageStats tracks the index usage statistics.
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
+	// clusterIndexUsageStats is used to fetch cluster-wide index usage statistics.
+	clusterIndexUsageStats *idxusage.ClusterIndexUsageStats
 	// Metrics is used to account normal queries.
 	Metrics Metrics
 
@@ -334,7 +336,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
+			Knobs:       cfg.IndexUsageStatsTestingKnobs,
 		}),
+		clusterIndexUsageStats: idxusage.NewClusterIndexUsageStats(idxusage.NewLocalIndexUsageStats(&idxusage.Config{
+			Setting: cfg.Settings,
+		}), cfg.SQLStatusServer),
 	}
 
 	return s
@@ -626,6 +632,17 @@ func (s *Server) ServeConn(
 	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
+// GetLocalIndexStatisticsReader returns a node-local indexusagestats.Reader.
+func (s *Server) GetLocalIndexStatisticsReader() idxusage.Reader {
+	return s.indexUsageStats
+}
+
+// GetClusterIndexStatisticsProvider returns a cluster-wide
+// clusterindexusagestats.Provider.
+func (s *Server) GetClusterIndexStatisticsProvider() *idxusage.ClusterIndexUsageStats {
+	return s.clusterIndexUsageStats
+}
+
 // newSessionData a SessionData that can be passed to newConnExecutor.
 func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
@@ -745,7 +762,8 @@ func (s *Server) newConnExecutor(
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
-		indexUsageStatsWriter:     s.indexUsageStats,
+		indexUsageStats:           s.indexUsageStats,
+		clusterIndexUsageStats:    s.GetClusterIndexStatisticsProvider(),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1293,8 +1311,12 @@ type connExecutor struct {
 	// information collected.
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 
-	// indexUsageStatsWriter is used to track index usage stats.
-	indexUsageStatsWriter idxusage.Writer
+	// indexUsageStats is used to track index usage stats.
+	indexUsageStats *idxusage.LocalIndexUsageStats
+
+	// clusterIndexUsageStats is used to surface cluster-wide index usage
+	// statistics.
+	clusterIndexUsageStats *idxusage.ClusterIndexUsageStats
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -2296,20 +2318,21 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsResetter:   ex.server,
 			CompactEngineSpan:  ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutator:        ex.dataMutator,
-		VirtualSchemas:        ex.server.cfg.VirtualSchemas,
-		Tracing:               &ex.sessionTracing,
-		NodesStatusServer:     ex.server.cfg.NodesStatusServer,
-		SQLStatusServer:       ex.server.cfg.SQLStatusServer,
-		MemMetrics:            &ex.memMetrics,
-		Descs:                 &ex.extraTxnState.descCollection,
-		ExecCfg:               ex.server.cfg,
-		DistSQLPlanner:        ex.server.cfg.DistSQLPlanner,
-		TxnModesSetter:        ex,
-		Jobs:                  &ex.extraTxnState.jobs,
-		SchemaChangeJobCache:  ex.extraTxnState.schemaChangeJobsCache,
-		statsStorage:          ex.server.sqlStats,
-		indexUsageStatsWriter: ex.indexUsageStatsWriter,
+		SessionMutator:         ex.dataMutator,
+		VirtualSchemas:         ex.server.cfg.VirtualSchemas,
+		Tracing:                &ex.sessionTracing,
+		NodesStatusServer:      ex.server.cfg.NodesStatusServer,
+		SQLStatusServer:        ex.server.cfg.SQLStatusServer,
+		MemMetrics:             &ex.memMetrics,
+		Descs:                  &ex.extraTxnState.descCollection,
+		ExecCfg:                ex.server.cfg,
+		DistSQLPlanner:         ex.server.cfg.DistSQLPlanner,
+		TxnModesSetter:         ex,
+		Jobs:                   &ex.extraTxnState.jobs,
+		SchemaChangeJobCache:   ex.extraTxnState.schemaChangeJobsCache,
+		statsStorage:           ex.server.sqlStats,
+		indexUsageStatsWriter:  ex.indexUsageStats,
+		clusterIndexUsageStats: ex.clusterIndexUsageStats,
 	}
 }
 
