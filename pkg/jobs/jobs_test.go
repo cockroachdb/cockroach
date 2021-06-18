@@ -153,16 +153,15 @@ type counters struct {
 }
 
 type registryTestSuite struct {
-	ctx             context.Context
-	cleanupSettings func()
-	s               serverutils.TestServerInterface
-	outerDB         *gosql.DB
-	sqlDB           *sqlutils.SQLRunner
-	registry        *jobs.Registry
-	done            chan struct{}
-	mockJob         jobs.Record
-	job             *jobs.StartableJob
-	mu              struct {
+	ctx      context.Context
+	s        serverutils.TestServerInterface
+	outerDB  *gosql.DB
+	sqlDB    *sqlutils.SQLRunner
+	registry *jobs.Registry
+	done     chan struct{}
+	mockJob  jobs.Record
+	job      *jobs.StartableJob
+	mu       struct {
 		syncutil.Mutex
 		a counters
 		e counters
@@ -189,8 +188,6 @@ func noopPauseRequestFunc(
 }
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
-
-	rts.cleanupSettings = func() {}
 	rts.ctx = context.Background()
 
 	var args base.TestServerArgs
@@ -293,7 +290,6 @@ func (rts *registryTestSuite) tearDown() {
 	close(rts.resumeCheckCh)
 	close(rts.done)
 	rts.s.Stopper().Stop(rts.ctx)
-	rts.cleanupSettings()
 	jobs.ResetConstructors()()
 }
 
