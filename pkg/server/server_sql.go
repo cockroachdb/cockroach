@@ -490,15 +490,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeID:    cfg.nodeIDContainer,
 	}
 
-	var isLive func(roachpb.NodeID) (bool, error)
+	var isAvailable func(roachpb.NodeID) bool
 	nodeLiveness, ok := cfg.nodeLiveness.Optional(47900)
 	if ok {
-		isLive = nodeLiveness.IsLive
+		isAvailable = nodeLiveness.IsAvailableNotDraining
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
 		// schedule on - always returning true is fine.
-		isLive = func(roachpb.NodeID) (bool, error) {
-			return true, nil
+		isAvailable = func(roachpb.NodeID) bool {
+			return true
 		}
 	}
 
@@ -544,7 +544,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.nodeDescs,
 			cfg.gossip,
 			cfg.stopper,
-			isLive,
+			isAvailable,
 			cfg.nodeDialer,
 		),
 
