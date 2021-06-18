@@ -344,6 +344,27 @@ if err != nil {
 	}
 }
 
+func (c dateTimestampCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
+		// Date rows are stored as int64s representing the number of days since the
+		// unix epoch. We have to convert to timestamps before executing the
+		// comparison operator.
+		const castVarName = "t"
+		castStr := fmt.Sprintf(`
+    d, err := pgdate.MakeDateFromUnixEpoch(%s)
+    if err != nil {
+			colexecerror.InternalError(err)
+		}
+		%s, err := d.ToTime()
+		if err != nil {
+			colexecerror.InternalError(err)
+		}
+		`, leftElem, castVarName)
+		var o timestampCustomizer
+		return castStr + o.getCmpOpCompareFunc()(targetElem, castVarName, rightElem, leftCol, rightCol)
+	}
+}
+
 // getDatumVecVariableName returns the variable name for a datumVec given
 // leftCol and rightCol (either of which could be "_" - meaning there is no
 // vector in scope for the corresponding side).
