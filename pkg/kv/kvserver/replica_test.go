@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -68,6 +69,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
@@ -13356,6 +13359,96 @@ func TestRangeInfoReturned(t *testing.T) {
 			} else {
 				require.Len(t, br.RangeInfos, 1)
 				require.Equal(t, br.RangeInfos[0], *test.exp)
+			}
+		})
+	}
+}
+
+type mockIntentResolver struct {
+	eng storage.Engine
+	b   *testing.B
+}
+
+func (m mockIntentResolver) PushTransaction(
+	ctx context.Context, pushTxn *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
+) (*roachpb.Transaction, *roachpb.Error) {
+	return &roachpb.Transaction{
+		TxnMeta:                *pushTxn,
+		Status:                 roachpb.PENDING,
+		ReadTimestamp:          pushTxn.WriteTimestamp,
+		GlobalUncertaintyLimit: pushTxn.WriteTimestamp,
+	}, nil
+}
+
+func (m mockIntentResolver) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *roachpb.Error {
+	b := m.eng.NewBatch()
+	for _, intent := range intents {
+		_, err := storage.MVCCResolveWriteIntent(ctx, b, nil, intent)
+		if err != nil {
+			m.b.Fatal(err)
+		}
+	}
+	// Don't commit.
+	b.Close()
+	return nil
+}
+
+var _ intentResolver = &mockIntentResolver{}
+
+func BenchmarkRunLockTableMigration(b *testing.B) {
+	skip.UnderShort(b, "setting up unflushed data takes too long")
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+
+	newPebble := func() storage.Engine {
+		opts := storage.DefaultPebbleOptions()
+		opts.FS = vfs.NewMem()
+		opts.Cache = pebble.NewCache(1 << 30)
+		defer opts.Cache.Unref()
+
+		peb, err := storage.NewPebble(
+			context.Background(),
+			storage.PebbleConfig{
+				Opts: opts,
+				StorageConfig: base.StorageConfig{
+					Settings:                settings,
+					DisableSeparatedIntents: true,
+				},
+			})
+		if err != nil {
+			b.Fatalf("could not create new in-mem pebble instance: %+v", err)
+		}
+		return peb
+	}
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+
+	for _, numKeys := range []int{10, 100, 200, 400} {
+		b.Run(fmt.Sprintf("keys=%d", numKeys), func(b *testing.B) {
+			for _, numVersions := range []int{10, 100, 200, 400} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, percentFlushed := range []int{0, 50, 90, 100} {
+						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
+							eng := newPebble()
+							defer eng.Close()
+							ir := &mockIntentResolver{eng: eng, b: b}
+							numFlushedVersions := (percentFlushed * numVersions) / 100
+							storage.SetupKeysWithIntentForBench(b, eng, numVersions, numFlushedVersions, false /* resolveAll */, numKeys)
+							snap := eng.NewSnapshot()
+							defer snap.Close()
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								err := runLockTableMigration(ctx, roachpb.KeyMin, roachpb.KeyMax, snap, clock, ir)
+								if err != nil {
+									b.Fatalf("unexpected error %s", err)
+								}
+							}
+						})
+					}
+				})
 			}
 		})
 	}

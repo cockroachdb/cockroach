@@ -33,10 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/stretchr/testify/require"
 )
 
 // Note: most benchmarks in this package have an engine-specific Benchmark
@@ -143,64 +140,6 @@ func BenchmarkExportToSst(b *testing.B) {
 
 const numIntentKeys = 1000
 
-func setupKeysWithIntent(
-	b *testing.B, eng Engine, numVersions int, numFlushedVersions int, resolveAll bool,
-) roachpb.LockUpdate {
-	txnIDCount := 2 * numVersions
-	val := []byte("value")
-	var lockUpdate roachpb.LockUpdate
-	for i := 1; i <= numVersions; i++ {
-		// Assign txn IDs in a deterministic way that will mimic the end result of
-		// random assignment -- the live intent is centered between dead intents,
-		// when we have separated intents.
-		txnID := i
-		if i%2 == 0 {
-			txnID = txnIDCount - txnID
-		}
-		txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txnID)))
-		ts := hlc.Timestamp{WallTime: int64(i)}
-		txn := roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				ID:             txnUUID,
-				Key:            []byte("foo"),
-				WriteTimestamp: ts,
-				MinTimestamp:   ts,
-			},
-			Status:                 roachpb.PENDING,
-			ReadTimestamp:          ts,
-			GlobalUncertaintyLimit: ts,
-		}
-		value := roachpb.Value{RawBytes: val}
-		batch := eng.NewBatch()
-		for j := 0; j < numIntentKeys; j++ {
-			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(context.Background(), batch, nil, key, ts, value, &txn))
-		}
-		require.NoError(b, batch.Commit(true))
-		batch.Close()
-		lockUpdate = roachpb.LockUpdate{
-			Txn:    txn.TxnMeta,
-			Status: roachpb.COMMITTED,
-		}
-		if i < numVersions || resolveAll {
-			batch := eng.NewBatch()
-			for j := 0; j < numIntentKeys; j++ {
-				key := makeKey(nil, j)
-				lockUpdate.Key = key
-				found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate)
-				require.Equal(b, true, found)
-				require.NoError(b, err)
-			}
-			require.NoError(b, batch.Commit(true))
-			batch.Close()
-		}
-		if i == numFlushedVersions {
-			require.NoError(b, eng.Flush())
-		}
-	}
-	return lockUpdate
-}
-
 // BenchmarkIntentScan compares separated and interleaved intents, when
 // reading the intent and latest version for a range of keys.
 func BenchmarkIntentScan(b *testing.B) {
@@ -216,7 +155,7 @@ func BenchmarkIntentScan(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false), sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false /* resolveAll */)
+							SetupKeysWithIntentForBench(b, eng, numVersions, numFlushedVersions, false /* resolveAll */, numIntentKeys)
 							lower := makeKey(nil, 0)
 							iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
@@ -280,7 +219,7 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false), sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true /* resolveAll */)
+							SetupKeysWithIntentForBench(b, eng, numVersions, numFlushedVersions, true /* resolveAll */, numIntentKeys)
 							lower := makeKey(nil, 0)
 							var iter MVCCIterator
 							var buf []byte
@@ -351,7 +290,7 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false), sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true /* resolveAll */)
+							SetupKeysWithIntentForBench(b, eng, numVersions, numFlushedVersions, true /* resolveAll */, numIntentKeys)
 							lower := makeKey(nil, 0)
 							upper := makeKey(nil, numIntentKeys)
 							buf := append([]byte(nil), lower...)
@@ -403,7 +342,7 @@ func BenchmarkIntentResolution(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false), sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false /* resolveAll */)
+							lockUpdate := SetupKeysWithIntentForBench(b, eng, numVersions, numFlushedVersions, false /* resolveAll */, numIntentKeys)
 							keys := make([]roachpb.Key, numIntentKeys)
 							for i := range keys {
 								keys[i] = makeKey(nil, i)
@@ -447,7 +386,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 							eng := setupMVCCInMemPebbleWithSettings(
 								b, makeSettingsForSeparatedIntents(false), sep)
 							numFlushedVersions := (percentFlushed * numVersions) / 100
-							lockUpdate := setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false /* resolveAll */)
+							lockUpdate := SetupKeysWithIntentForBench(b, eng, numVersions, numFlushedVersions, false /* resolveAll */, numIntentKeys)
 							keys := make([]roachpb.Key, numIntentKeys+1)
 							for i := range keys {
 								keys[i] = makeKey(nil, i)
