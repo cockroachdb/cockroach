@@ -12,6 +12,7 @@ package log
 
 import (
 	"bufio"
+	"hash/adler32"
 	"io"
 	"regexp"
 	"strconv"
@@ -27,10 +28,77 @@ import (
 
 // FormatLegacyEntry writes the legacy log entry to the specified writer.
 func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
-	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, nil)
+	return formatLegacyEntry(e, w, nil /* cp */)
+}
+
+// FormatLegacyEntryTTY writes the legacy log entry to the specified writer,
+// using colors if possible.
+func FormatLegacyEntryTTY(e logpb.Entry, w io.Writer) error {
+	cp := ttycolor.StderrProfile
+	if logging.stderrSink.noColor.Get() {
+		cp = nil
+	}
+	return formatLegacyEntry(e, w, cp)
+}
+
+func formatLegacyEntry(e logpb.Entry, w io.Writer, cp ttycolor.Profile) error {
+	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, cp)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
+}
+
+// FormatLegacyEntryPrefixTTY writes a color-decorated prefix to the specified
+// writer. The color is rendered in the background of the prefix and is chosen
+// from an arbitrary but deterministic mapping from the prefix bytes to the
+// color profile entries.
+func FormatLegacyEntryPrefixTTY(prefix []byte, w io.Writer) (err error) {
+	if prefix == nil {
+		return nil
+	}
+	cp := ttycolor.StderrProfile
+	if logging.stderrSink.noColor.Get() {
+		cp = nil
+	}
+	// Map the prefix bytes to a color from the color profile.
+	// This mapping is deterministic and makes no assumptions on the values in the
+	// ttycolor.Code enum.
+	prefixCode := ttycolor.Reset
+	{
+		n := len(cp)
+		counter := adler32.Checksum(prefix) % uint32(n-1)
+		for i := 0; i < n; i++ {
+			code := ttycolor.Code(i)
+			if code == ttycolor.Reset {
+				continue
+			}
+			if counter == 0 {
+				prefixCode = code
+				break
+			}
+			counter--
+		}
+	}
+	// Set the prefix background color by printing the color code followed by
+	// a color inversion sequence.
+	if prefixCode != ttycolor.Reset {
+		if _, err = w.Write(cp[prefixCode]); err != nil {
+			return err
+		}
+		if _, err = w.Write([]byte("\033[7m")); err != nil {
+			return err
+		}
+	}
+	// Print the prefix and reset the colors.
+	if _, err = w.Write(prefix); err != nil {
+		return err
+	}
+	if prefixCode != ttycolor.Reset {
+		if _, err = w.Write(cp[ttycolor.Reset]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // formatCrdbV1 is the pre-v21.1 canonical log format, without a
