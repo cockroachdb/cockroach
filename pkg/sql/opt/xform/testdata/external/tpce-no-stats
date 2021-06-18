@@ -1235,10 +1235,8 @@ project
 # Q10
 #
 # TODO:
-#   1. Allow limit push-down for semi-joins. Or normalize semi-joins to
-#      inner-joins.
-#   2. Adding explorer support for norm rules would allow the projects to be
-#      merged and the limit to be pushed down.
+#   1. Adding explorer support for norm rules would allow the projects to be
+#      merged.
 #
 opt
 SELECT hh_h_t_id, hh_t_id, hh_before_qty, hh_after_qty
@@ -1263,23 +1261,27 @@ limit
  │         ├── limit hint: 20.00
  │         └── inner-join (lookup holding_history)
  │              ├── columns: hh_h_t_id:1!null hh_t_id:2!null hh_before_qty:3!null hh_after_qty:4!null hh_h_t_id:7!null hh_t_id:8!null
- │              ├── key columns: [1 14] = [7 8]
- │              ├── lookup columns are key
+ │              ├── key columns: [7] = [1]
  │              ├── key: (2,7)
  │              ├── fd: ()-->(8), (1,2)-->(3,4), (1)==(7), (7)==(1)
  │              ├── limit hint: 20.00
- │              ├── project
- │              │    ├── columns: "lookup_join_const_col_@8":14!null hh_h_t_id:1!null hh_t_id:2!null hh_before_qty:3!null hh_after_qty:4!null
- │              │    ├── key: (1,2)
- │              │    ├── fd: ()-->(14), (1,2)-->(3,4)
- │              │    ├── limit hint: 200.00
- │              │    ├── scan holding_history
- │              │    │    ├── columns: hh_h_t_id:1!null hh_t_id:2!null hh_before_qty:3!null hh_after_qty:4!null
- │              │    │    ├── key: (1,2)
- │              │    │    ├── fd: (1,2)-->(3,4)
- │              │    │    └── limit hint: 200.00
- │              │    └── projections
- │              │         └── 0 [as="lookup_join_const_col_@8":14]
+ │              ├── limit
+ │              │    ├── columns: hh_h_t_id:7!null hh_t_id:8!null
+ │              │    ├── cardinality: [0 - 20]
+ │              │    ├── key: (7)
+ │              │    ├── fd: ()-->(8)
+ │              │    ├── limit hint: 10.00
+ │              │    ├── select
+ │              │    │    ├── columns: hh_h_t_id:7!null hh_t_id:8!null
+ │              │    │    ├── key: (7)
+ │              │    │    ├── fd: ()-->(8)
+ │              │    │    ├── limit hint: 20.00
+ │              │    │    ├── scan holding_history
+ │              │    │    │    ├── columns: hh_h_t_id:7!null hh_t_id:8!null
+ │              │    │    │    └── key: (7,8)
+ │              │    │    └── filters
+ │              │    │         └── hh_t_id:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
+ │              │    └── 20
  │              └── filters (true)
  └── 20
 

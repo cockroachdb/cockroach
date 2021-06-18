@@ -147,7 +147,9 @@ $input
 # have matches, and would be outputted by the FullJoin with the left side
 # (t_r columns) null-extended. Therefore, pushing the limit into a join input
 # that may be null-extended (either input of a FullJoin) can lead to output rows
-# being replaced with null values.
+# being replaced with null values. This rule does not match a SemiJoin because
+# in any case where it is valid to push a limit into the left side of a
+# SemiJoin, the SemiJoin can just be eliminated.
 [PushLimitIntoJoinLeft, Normalize]
 (Limit
     $input:(InnerJoin | LeftJoin
@@ -178,16 +180,24 @@ $input
     $ordering
 )
 
-# PushLimitIntoJoinRight mirrors PushLimitIntoJoinLeft.
+# PushLimitIntoJoinRight mirrors PushLimitIntoJoinLeft. We use
+# JoinFiltersMatchAllRightRows instead of JoinPreservesRightRows because
+# SemiJoins do not project right rows. This does not change the behavior for
+# InnerJoins, since they do have any additional effect beyond their filters.
+#
+# TODO(drewk): for the SemiJoin case, consider attempting to remap the limit
+# ordering into right input columns using the join filters. As-is, the limit
+# ordering must be empty in the SemiJoin case since it cannot refer to right
+# input columns.
 [PushLimitIntoJoinRight, Normalize]
 (Limit
-    $input:(InnerJoin
+    $input:(InnerJoin | SemiJoin
             $left:*
             $right:* & ^(HasOuterCols $right)
             $on:*
             $private:*
         ) &
-        (JoinPreservesRightRows $input)
+        (JoinFiltersMatchAllRightRows $input)
     $limitExpr:(Const $limit:*) &
         (IsPositiveInt $limit) &
         ^(LimitGeMaxRows $limit $right)

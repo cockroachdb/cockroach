@@ -824,6 +824,46 @@ inner-join (hash)
  └── filters
       └── u:1 = r:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
+# SemiJoin case for PushLimitIntoJoinRight
+norm expect=PushLimitIntoJoinRight
+SELECT * FROM ab WHERE a IN (SELECT a FROM ab WHERE b > 4) LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── semi-join (hash)
+ │    ├── columns: a:1!null b:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── limit hint: 10.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── limit
+ │    │    ├── columns: a:5!null b:6!null
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    ├── select
+ │    │    │    ├── columns: a:5!null b:6!null
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: (5)-->(6)
+ │    │    │    ├── limit hint: 10.00
+ │    │    │    ├── scan ab
+ │    │    │    │    ├── columns: a:5!null b:6
+ │    │    │    │    ├── key: (5)
+ │    │    │    │    ├── fd: (5)-->(6)
+ │    │    │    │    └── limit hint: 30.00
+ │    │    │    └── filters
+ │    │    │         └── b:6 > 4 [outer=(6), constraints=(/6: [/5 - ]; tight)]
+ │    │    └── 10
+ │    └── filters
+ │         └── a:1 = a:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ └── 10
+
 # Ordering can be pushed down.
 norm expect=PushLimitIntoJoinLeft
 SELECT * FROM ab LEFT JOIN uv ON a = u ORDER BY a LIMIT 10
@@ -1204,6 +1244,62 @@ limit
  │    │    └── fd: (5)-->(6)
  │    └── filters
  │         └── a:1 = u:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ └── 10
+
+# The SemiJoin can be eliminated, so don't push the limit into its left side.
+norm expect-not=(PushLimitIntoJoinLeft, PushLimitIntoJoinRight)
+SELECT * FROM kvr_fk WHERE EXISTS (SELECT * FROM uv WHERE u = r) LIMIT 10
+----
+limit
+ ├── columns: k:1!null v:2 r:3!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan kvr_fk
+ │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── limit hint: 10.00
+ └── 10
+
+# The limit ordering does not (cannot) reference right input columns, so don't
+# push the limit into the right side of the join.
+norm expect-not=(PushLimitIntoJoinLeft, PushLimitIntoJoinRight)
+SELECT * FROM ab WHERE a IN (SELECT a FROM ab WHERE b > 4) ORDER BY b DESC LIMIT 10
+----
+limit
+ ├── columns: a:1!null b:2
+ ├── internal-ordering: -2
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── ordering: -2
+ ├── sort
+ │    ├── columns: a:1!null b:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: -2
+ │    ├── limit hint: 10.00
+ │    └── semi-join (hash)
+ │         ├── columns: a:1!null b:2
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2)
+ │         ├── scan ab
+ │         │    ├── columns: a:1!null b:2
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── select
+ │         │    ├── columns: a:5!null b:6!null
+ │         │    ├── key: (5)
+ │         │    ├── fd: (5)-->(6)
+ │         │    ├── scan ab
+ │         │    │    ├── columns: a:5!null b:6
+ │         │    │    ├── key: (5)
+ │         │    │    └── fd: (5)-->(6)
+ │         │    └── filters
+ │         │         └── b:6 > 4 [outer=(6), constraints=(/6: [/5 - ]; tight)]
+ │         └── filters
+ │              └── a:1 = a:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── 10
 
 # ----------

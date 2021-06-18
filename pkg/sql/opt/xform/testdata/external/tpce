@@ -1228,10 +1228,8 @@ project
 # Q10
 #
 # TODO:
-#   1. Allow limit push-down for semi-joins. Or normalize semi-joins to
-#      inner-joins.
-#   2. Adding explorer support for norm rules would allow the projects to be
-#      merged and the limit to be pushed down.
+#   1. Adding explorer support for norm rules would allow the projects to be
+#      merged.
 #
 opt
 SELECT hh_h_t_id, hh_t_id, hh_before_qty, hh_after_qty
@@ -1260,15 +1258,22 @@ limit
  │              ├── key: (2,7)
  │              ├── fd: ()-->(8), (1,2)-->(3,4), (1)==(7), (7)==(1)
  │              ├── limit hint: 20.00
- │              ├── select
+ │              ├── limit
  │              │    ├── columns: hh_h_t_id:7!null hh_t_id:8!null
+ │              │    ├── cardinality: [0 - 20]
  │              │    ├── key: (7)
  │              │    ├── fd: ()-->(8)
- │              │    ├── scan holding_history
+ │              │    ├── select
  │              │    │    ├── columns: hh_h_t_id:7!null hh_t_id:8!null
- │              │    │    └── key: (7,8)
- │              │    └── filters
- │              │         └── hh_t_id:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
+ │              │    │    ├── key: (7)
+ │              │    │    ├── fd: ()-->(8)
+ │              │    │    ├── limit hint: 20.00
+ │              │    │    ├── scan holding_history
+ │              │    │    │    ├── columns: hh_h_t_id:7!null hh_t_id:8!null
+ │              │    │    │    └── key: (7,8)
+ │              │    │    └── filters
+ │              │    │         └── hh_t_id:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
+ │              │    └── 20
  │              └── filters (true)
  └── 20
 

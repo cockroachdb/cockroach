@@ -42,7 +42,7 @@ func initJoinMultiplicity(in RelExpr) {
 // join operator will affect the rows of its left and right inputs (e.g.
 // duplicated and/or filtered). Panics if the method is called on an operator
 // that does not support JoinMultiplicity (any operator other than an InnerJoin,
-// LeftJoin, or FullJoin).
+// LeftJoin, FullJoin, or SemiJoin).
 func GetJoinMultiplicity(in RelExpr) props.JoinMultiplicity {
 	if join, ok := in.(joinWithMultiplicity); ok {
 		// JoinMultiplicity has already been initialized during construction of the
