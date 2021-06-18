@@ -3195,6 +3195,53 @@ Response object returned by ResetSQLStats.
 
 
 
+## IndexUsageStatistics
+
+`GET /_status/indexusagestatistics`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing IndexUsageStatistics request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.IndexUsageStatisticsRequest-string) |  | node_id is the ID of the node where the stats data shall be retrieved from. If this is left empty, the cluster-wide aggregated result will be returned. | [reserved](#support-status) |
+| ordered_table_id | [bool](#cockroach.server.serverpb.IndexUsageStatisticsRequest-bool) |  | ordered_table_id specifies that if the returned stats data will be ordered based on the table_id. | [reserved](#support-status) |
+| ordered_index_id | [bool](#cockroach.server.serverpb.IndexUsageStatisticsRequest-bool) |  | ordered_index_id specifies that if the returned stats data's index ID will be ordered. | [reserved](#support-status) |
+| max_limit | [uint64](#cockroach.server.serverpb.IndexUsageStatisticsRequest-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object returned by IndexUsageStatistics.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statistics | [cockroach.sql.CollectedIndexUsageStatistics](#cockroach.server.serverpb.IndexUsageStatisticsResponse-cockroach.sql.CollectedIndexUsageStatistics) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`
