@@ -11,6 +11,8 @@
 package idxusage
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 )
@@ -41,6 +43,20 @@ func NewClusterIndexUsageStats(
 // Clear clears all the currently stored data inside ClusterIndexUsageStats.
 func (c *ClusterIndexUsageStats) Clear() {
 	c.storage.clear()
+}
+
+// FetchClusterIndexStats is called to fetch and refresh the cluster-wide index usage
+// statistics before calling the Reader interface.
+func (c *ClusterIndexUsageStats) FetchClusterIndexStats(ctx context.Context) error {
+	_, err := c.statusServer.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{
+		Max: &serverpb.IndexUsageStatisticsRequest_MaxLimit{MaxLimit: 0},
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // BatchInsert insert all the roachpb.CollectedIndexUsageStatistics in the
