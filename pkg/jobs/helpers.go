@@ -101,6 +101,16 @@ func (nl *FakeNodeLiveness) IsLive(roachpb.NodeID) (bool, error) {
 	return false, errors.New("FakeNodeLiveness.IsLive is unimplemented")
 }
 
+// IsAvailable is unimplemented.
+func (nl *FakeNodeLiveness) IsAvailable(roachpb.NodeID) bool {
+	panic("not implemented")
+}
+
+// IsAvailableNotDraining is unimplemented.
+func (nl *FakeNodeLiveness) IsAvailableNotDraining(roachpb.NodeID) bool {
+	panic("not implemented")
+}
+
 // FakeIncrementEpoch increments the epoch for the node with the specified ID.
 func (nl *FakeNodeLiveness) FakeIncrementEpoch(id roachpb.NodeID) {
 	nl.mu.Lock()

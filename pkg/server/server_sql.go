@@ -467,15 +467,20 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeID:    cfg.nodeIDContainer,
 	}
 
-	var isLive func(roachpb.NodeID) (bool, error)
+	var isAvailable func(roachpb.NodeID) bool
 	nodeLiveness, ok := cfg.nodeLiveness.Optional(47900)
 	if ok {
-		isLive = nodeLiveness.IsLive
+		// TODO(erikgrinaker): We may want to use IsAvailableNotDraining instead, to
+		// avoid scheduling long-running flows (e.g. rangefeeds or backups) on nodes
+		// that are being drained/decommissioned. However, these nodes can still be
+		// leaseholders, and preventing processor scheduling on them can cause a
+		// performance cliff for e.g. table reads that then hit the network.
+		isAvailable = nodeLiveness.IsAvailable
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
 		// schedule on - always returning true is fine.
-		isLive = func(roachpb.NodeID) (bool, error) {
-			return true, nil
+		isAvailable = func(roachpb.NodeID) bool {
+			return true
 		}
 	}
 
@@ -519,7 +524,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.nodeDescs,
 			cfg.gossip,
 			cfg.stopper,
-			isLive,
+			isAvailable,
 			cfg.nodeDialer,
 		),
 

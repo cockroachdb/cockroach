@@ -137,7 +137,7 @@ func NewDistSQLPlanner(
 	nodeDescs kvcoord.NodeDescStore,
 	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
-	isLive func(roachpb.NodeID) (bool, error),
+	isAvailable func(roachpb.NodeID) bool,
 	nodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
@@ -149,9 +149,9 @@ func NewDistSQLPlanner(
 		gossip:        gw,
 		nodeDialer:    nodeDialer,
 		nodeHealth: distSQLNodeHealth{
-			gossip:     gw,
-			connHealth: nodeDialer.ConnHealth,
-			isLive:     isLive,
+			gossip:      gw,
+			connHealth:  nodeDialer.ConnHealth,
+			isAvailable: isAvailable,
 		},
 		distSender:            distSender,
 		nodeDescs:             nodeDescs,
@@ -793,9 +793,9 @@ type SpanPartition struct {
 }
 
 type distSQLNodeHealth struct {
-	gossip     gossip.OptionalGossip
-	isLive     func(roachpb.NodeID) (bool, error)
-	connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
+	gossip      gossip.OptionalGossip
+	isAvailable func(roachpb.NodeID) bool
+	connHealth  func(roachpb.NodeID, rpc.ConnectionClass) error
 }
 
 func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) error {
@@ -816,16 +816,8 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 			return err
 		}
 	}
-	{
-		live, err := h.isLive(nodeID)
-		if err == nil && !live {
-			err = pgerror.Newf(pgcode.CannotConnectNow,
-				"node n%d is not live", errors.Safe(nodeID))
-		}
-		if err != nil {
-			return pgerror.Wrapf(err, pgcode.CannotConnectNow,
-				"not using n%d due to liveness", errors.Safe(nodeID))
-		}
+	if !h.isAvailable(nodeID) {
+		return pgerror.Newf(pgcode.CannotConnectNow, "not using n%d since it is not available", nodeID)
 	}
 
 	// Check that the node is not draining.
@@ -843,7 +835,7 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 		}
 
 		if drainingInfo.Draining {
-			err := errors.Newf("not using n%d because it is draining", log.Safe(nodeID))
+			err := errors.Newf("not using n%d because it is draining", nodeID)
 			log.VEventf(ctx, 1, "%v", err)
 			return err
 		}

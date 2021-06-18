@@ -23,6 +23,8 @@ type Interface interface {
 	Self() (livenesspb.Liveness, bool)
 	GetLivenesses() []livenesspb.Liveness
 	GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error)
+	IsAvailable(roachpb.NodeID) bool
+	IsAvailableNotDraining(roachpb.NodeID) bool
 	IsLive(roachpb.NodeID) (bool, error)
 }
 

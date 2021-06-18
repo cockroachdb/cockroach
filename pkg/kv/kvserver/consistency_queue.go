@@ -66,7 +66,7 @@ type consistencyQueue struct {
 type consistencyShouldQueueData struct {
 	desc                      *roachpb.RangeDescriptor
 	getQueueLastProcessed     func(ctx context.Context) (hlc.Timestamp, error)
-	isNodeLive                func(nodeID roachpb.NodeID) (bool, error)
+	isNodeAvailable           func(nodeID roachpb.NodeID) bool
 	disableLastProcessedCheck bool
 	interval                  time.Duration
 }
@@ -105,12 +105,12 @@ func (q *consistencyQueue) shouldQueue(
 			getQueueLastProcessed: func(ctx context.Context) (hlc.Timestamp, error) {
 				return repl.getQueueLastProcessed(ctx, q.name)
 			},
-			isNodeLive: func(nodeID roachpb.NodeID) (bool, error) {
+			isNodeAvailable: func(nodeID roachpb.NodeID) bool {
 				if repl.store.cfg.NodeLiveness != nil {
-					return repl.store.cfg.NodeLiveness.IsLive(nodeID)
+					return repl.store.cfg.NodeLiveness.IsAvailableNotDraining(nodeID)
 				}
 				// Some tests run without a NodeLiveness configured.
-				return true, nil
+				return true
 			},
 			disableLastProcessedCheck: repl.store.cfg.TestingKnobs.DisableLastProcessedCheck,
 			interval:                  q.interval(),
@@ -136,12 +136,9 @@ func consistencyQueueShouldQueueImpl(
 			return false, 0
 		}
 	}
-	// Check if all replicas are live.
+	// Check if all replicas are available.
 	for _, rep := range data.desc.Replicas().Descriptors() {
-		if live, err := data.isNodeLive(rep.NodeID); err != nil {
-			log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
-			return false, 0
-		} else if !live {
+		if !data.isNodeAvailable(rep.NodeID) {
 			return false, 0
 		}
 	}

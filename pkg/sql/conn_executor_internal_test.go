@@ -285,7 +285,7 @@ func startConnExecutor(
 			nil, /* nodeDescs */
 			gw,
 			stopper,
-			func(roachpb.NodeID) (bool, error) { return true, nil }, // everybody is live
+			func(roachpb.NodeID) bool { return true }, // everybody is available
 			nil, /* nodeDialer */
 		),
 		QueryCache:              querycache.New(0),

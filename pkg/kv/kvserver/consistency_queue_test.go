@@ -70,12 +70,12 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 		return testStart, nil
 	}
 
-	isNodeLive := func(nodeID roachpb.NodeID) (bool, error) {
-		return live, nil
+	isNodeAvailable := func(nodeID roachpb.NodeID) bool {
+		return live
 	}
 
 	if shouldQ, priority := kvserver.ConsistencyQueueShouldQueue(
-		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeLive,
+		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeAvailable,
 		false, interval); !shouldQ {
 		t.Fatalf("expected shouldQ true; got %t, %f", shouldQ, priority)
 	}
@@ -83,7 +83,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	live = false
 
 	if shouldQ, priority := kvserver.ConsistencyQueueShouldQueue(
-		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeLive,
+		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeAvailable,
 		false, interval); shouldQ {
 		t.Fatalf("expected shouldQ false; got %t, %f", shouldQ, priority)
 	}
