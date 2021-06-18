@@ -220,24 +220,24 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	}, /* expectedKeys */ 4 /* expectedEventCnt*/, 5*time.Second /* timeout */)
 
 	// First node should have nothing.
-	stats := firstLocalStatsReader.Get(indexKeyA)
+	stats := firstLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
 
-	stats = firstLocalStatsReader.Get(indexKeyB)
+	stats = firstLocalStatsReader.Get(indexKeyB.TableID, indexKeyB.IndexID)
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
 
 	// Third node should have nothing.
-	stats = thirdLocalStatsReader.Get(indexKeyA)
+	stats = thirdLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 3, but found %v", stats)
 
-	stats = thirdLocalStatsReader.Get(indexKeyB)
+	stats = thirdLocalStatsReader.Get(indexKeyB.TableID, indexKeyB.IndexID)
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
 
 	// Second server should have nonempty local storage.
-	stats = secondLocalStatsReader.Get(indexKeyA)
+	stats = secondLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
 	compareStatsHelper(t, expectedStatsIndexA, stats, time.Minute)
 
-	stats = secondLocalStatsReader.Get(indexKeyB)
+	stats = secondLocalStatsReader.Get(indexKeyB.TableID, indexKeyB.IndexID)
 	compareStatsHelper(t, expectedStatsIndexB, stats, time.Minute)
 
 	// Test cluster-wide RPC.

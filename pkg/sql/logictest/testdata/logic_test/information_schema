@@ -421,6 +421,7 @@ crdb_internal       gossip_liveness
 crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
+crdb_internal       index_usage_statistics
 crdb_internal       interleaved
 crdb_internal       invalid_objects
 crdb_internal       jobs
@@ -728,6 +729,7 @@ gossip_liveness
 gossip_network
 gossip_nodes
 index_columns
+index_usage_statistics
 interleaved
 invalid_objects
 jobs
@@ -1070,6 +1072,7 @@ system         crdb_internal       gossip_liveness                        SYSTEM
 system         crdb_internal       gossip_network                         SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
+system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       interleaved                            SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
@@ -2600,6 +2603,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
+NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
@@ -3186,6 +3190,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
+NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
