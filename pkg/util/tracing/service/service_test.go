@@ -56,17 +56,25 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 
 	ctx := context.Background()
 	s := New(tracer1)
-	resp, err := s.GetSpanRecordings(ctx, &tracingservicepb.SpanRecordingRequest{TraceID: traceID1})
+	resp, err := s.GetSpanRecordings(ctx, &tracingservicepb.GetSpanRecordingsRequest{TraceID: traceID1})
 	require.NoError(t, err)
-	sort.SliceStable(resp.SpanRecordings, func(i, j int) bool {
-		return resp.SpanRecordings[i].StartTime.Before(resp.SpanRecordings[j].StartTime)
+	// We expect two Recordings.
+	// 1. root1, root1.child
+	// 2. fork1
+	require.Equal(t, 2, len(resp.Recordings))
+	// Sort the response based on the start time of the root spans in the
+	// recordings.
+	sort.SliceStable(resp.Recordings, func(i, j int) bool {
+		return resp.Recordings[i].RecordedSpans[0].StartTime.Before(resp.Recordings[j].RecordedSpans[0].StartTime)
 	})
-	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.SpanRecordings, `
+	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.Recordings[0].RecordedSpans, `
 			span: root1
 				tags: _unfinished=1 _verbose=1
 				span: root1.child
 					tags: _unfinished=1 _verbose=1
-				span: fork1
-					tags: _unfinished=1 _verbose=1
+`))
+	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.Recordings[1].RecordedSpans, `
+			span: fork1
+				tags: _unfinished=1 _verbose=1
 `))
 }
