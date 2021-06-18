@@ -479,7 +479,7 @@ func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
 			ret := "REGIONAL BY ROW"
 			if columnForAs.typ.TypeMeta.Name != nil {
 				if columnForAs.typ.TypeMeta.Name.Basename() == tree.RegionEnum {
-					ret += "AS " + columnForAs.name
+					ret += " AS " + columnForAs.name
 				}
 			}
 			return ret, nil
