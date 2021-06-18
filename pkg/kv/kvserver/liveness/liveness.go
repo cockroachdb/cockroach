@@ -642,6 +642,30 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now().GoTime()), nil
 }
 
+// IsAvailable returns whether or not the specified node is available to serve
+// requests. It checks both the liveness and decommissioned states, but not
+// draining or decommissioning (since it may still be a leaseholder for ranges).
+// Returns false if the node is not in the local liveness table.
+func (nl *NodeLiveness) IsAvailable(nodeID roachpb.NodeID) bool {
+	liveness, ok := nl.GetLiveness(nodeID)
+	return ok && liveness.IsLive(nl.clock.Now().GoTime()) && !liveness.Membership.Decommissioned()
+}
+
+// IsAvailableNotDraining returns whether or not the specified node is available
+// to serve requests (i.e. it is live and not decommissioned) and is not in the
+// process of draining/decommissioning. Note that draining/decommissioning nodes
+// could still be leaseholders for ranges until drained, so this should not be
+// used when the caller needs to be able to contact leaseholders directly.
+// Returns false if the node is not in the local liveness table.
+func (nl *NodeLiveness) IsAvailableNotDraining(nodeID roachpb.NodeID) bool {
+	liveness, ok := nl.GetLiveness(nodeID)
+	return ok &&
+		liveness.IsLive(nl.clock.Now().GoTime()) &&
+		!liveness.Membership.Decommissioning() &&
+		!liveness.Membership.Decommissioned() &&
+		!liveness.Draining
+}
+
 // NodeLivenessStartOptions are the arguments to `NodeLiveness.Start`.
 type NodeLivenessStartOptions struct {
 	Stopper *stop.Stopper
