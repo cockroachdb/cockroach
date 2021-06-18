@@ -339,53 +339,43 @@ func replaceExpressionElemsWithVirtualCols(
 					clusterversion.ExpressionIndexes)
 			}
 
-			expr, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
+			// Create a dummy ColumnTableDef to use for validating the
+			// expression. The type is Any because it is unknown until
+			// validation is performed.
+			colDef := &tree.ColumnTableDef{
+				Type: types.Any,
+			}
+			colDef.Computed.Computed = true
+			colDef.Computed.Expr = elem.Expr
+			colDef.Computed.Virtual = true
+
+			// Validate the expression and resolve its type.
+			expr, typ, err := schemaexpr.ValidateComputedColumnExpression(
 				params.ctx,
 				desc,
-				elem.Expr,
-				types.Any,
-				"index expression",
-				params.p.SemaCtx(),
-				tree.VolatilityImmutable,
+				colDef,
 				tn,
+				"index element",
+				params.p.SemaCtx(),
 			)
 			if err != nil {
 				return err
 			}
 
-			// If a virtual column with the same expression already exists, use
-			// it instead of creating a new virtual column.
-			if col, ok := desc.FindVirtualColumnWithExpr(expr); ok {
-				elem.Column = col.ColName()
-				elem.Expr = nil
-				continue
-			}
-
-			// Otherwise, create a new virtual column and add it to the table
-			// descriptor.
-			colName := tabledesc.GenerateUniqueName("crdb_idx_expr", func(name string) bool {
+			// Create a new virtual column and add it to the table descriptor.
+			colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) bool {
 				_, err := desc.FindColumnWithName(tree.Name(name))
 				return err == nil
 			})
-			addCol := &tree.AlterTableAddColumn{
-				ColumnDef: makeExpressionIndexVirtualColumn(colName, typ, elem.Expr),
+			col := &descpb.ColumnDescriptor{
+				Name:         colName,
+				Inaccessible: true,
+				Type:         typ,
+				ComputeExpr:  &expr,
+				Virtual:      true,
+				Nullable:     true,
 			}
-
-			// Add the virtual column to desc as a mutation column.
-			if err := params.p.addColumnImpl(
-				params,
-				&alterTableNode{
-					tableDesc: desc,
-					n: &tree.AlterTable{
-						Cmds: []tree.AlterTableCmd{addCol},
-					},
-				},
-				tn,
-				desc,
-				addCol,
-			); err != nil {
-				return err
-			}
+			desc.AddColumn(col)
 
 			// Set the column name and unset the expression.
 			elem.Column = tree.Name(colName)
