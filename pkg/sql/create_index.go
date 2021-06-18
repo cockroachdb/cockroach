@@ -326,6 +326,7 @@ func replaceExpressionElemsWithVirtualCols(
 		return err
 	}
 
+	lastColumnIdx := len(n.Columns) - 1
 	for i := range n.Columns {
 		elem := &n.Columns[i]
 		if elem.Expr != nil {
@@ -360,6 +361,52 @@ func replaceExpressionElemsWithVirtualCols(
 			)
 			if err != nil {
 				return err
+			}
+
+			// The expression type cannot be ambiguous.
+			if typ.IsAmbiguous() {
+				return errors.WithHint(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						"type of index element %s is ambiguous",
+						elem.Expr.String(),
+					),
+					"consider adding a type cast to the expression",
+				)
+			}
+
+			if !n.Inverted && !colinfo.ColumnTypeIsIndexable(typ) {
+				return pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"index element %s of type %s is not indexable",
+					elem.Expr.String(),
+					typ.Name(),
+				)
+			}
+
+			if n.Inverted {
+				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"index element %s of type %s is not allowed as a prefix column in an inverted index",
+							elem.Expr.String(),
+							typ.Name(),
+						),
+						"see the documentation for more information about inverted indexes",
+					)
+				}
+				if i == lastColumnIdx && !colinfo.ColumnTypeIsInvertedIndexable(typ) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"index element %s of type %s is not allowed as the last column in an inverted index",
+							elem.Expr.String(),
+							typ.Name(),
+						),
+						"see the documentation for more information about inverted indexes",
+					)
+				}
 			}
 
 			// Create a new virtual column and add it to the table descriptor.
