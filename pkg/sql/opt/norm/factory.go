@@ -215,14 +215,22 @@ func (f *Factory) CopyAndReplace(
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
-	// Copy all metadata to the target memo so that referenced tables and columns
-	// can keep the same ids they had in the "from" memo.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata())
+	// Copy all metadata to the target memo so that referenced tables and
+	// columns can keep the same ids they had in the "from" memo. Scalar
+	// expressions in the metadata cannot have placeholders, so we simply copy
+	// the expressions without replacement.
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyScalarWithoutPlaceholders)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
 	to := f.invokeReplace(from, replace).(memo.RelExpr)
 	f.Memo().SetRoot(to, fromProps)
+}
+
+// CopyScalarWithoutPlaceholders returns a copy of the given scalar expression.
+// It does not attempt to replace placeholders with values.
+func (f *Factory) CopyScalarWithoutPlaceholders(e opt.Expr) opt.Expr {
+	return f.CopyAndReplaceDefault(e, f.CopyScalarWithoutPlaceholders)
 }
 
 // AssignPlaceholders is used just before execution of a prepared Memo. It makes
