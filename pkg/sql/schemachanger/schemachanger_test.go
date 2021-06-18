@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -42,7 +41,6 @@ import (
 
 func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	t.Run("wait for old-style schema changes", func(t *testing.T) {
 		// This test starts an old-style schema change job (job 1), and then starts
@@ -110,6 +108,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					})
 				},
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		}
 		var sqlDB *gosql.DB
 		s, sqlDB, kvDB = serverutils.StartServer(t, params)
@@ -310,7 +309,6 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	ctx := context.Background()
 
@@ -357,6 +355,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				return nil
 			},
 		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
 	var s serverutils.TestServerInterface

@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -598,8 +597,6 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// out any errors that may occur if some of the system table restoration
 	// functions are not idempotent.
 	t.Run("retry-during-custom-system-table-restore", func(t *testing.T) {
-		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
-
 		customRestoreSystemTables := make([]string, 0)
 		for table, config := range systemTableBackupConfiguration {
 			if config.customRestoreFunc != nil {
@@ -608,7 +605,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		}
 		for _, customRestoreSystemTable := range customRestoreSystemTables {
 			t.Run(customRestoreSystemTable, func(t *testing.T) {
-				_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+				args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+				}}
+				_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
 				defer cleanupEmptyCluster()
 
 				// Inject a retry error, that returns once.
@@ -912,8 +912,10 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	})
 
 	t.Run("restore-canceled", func(t *testing.T) {
-		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
-		_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}},
+		}
+		_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
 		defer cleanupDst()
 
 		destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsMidRestore, clusterBackupLoc)
