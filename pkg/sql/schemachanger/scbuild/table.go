@@ -140,8 +140,8 @@ func (b *buildContext) alterTableAddColumn(
 	if d.IsComputed() {
 		// TODO (lucy): This is not going to work when the computed column
 		// references columns created in the same transaction.
-		serializedExpr, err := schemaexpr.ValidateComputedColumnExpression(
-			ctx, table, d, tn, b.SemaCtx,
+		serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
+			ctx, table, d, tn, "computed column", b.SemaCtx,
 		)
 		if err != nil {
 			panic(err)
