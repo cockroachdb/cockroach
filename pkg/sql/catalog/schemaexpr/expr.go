@@ -39,7 +39,7 @@ func DequalifyAndValidateExpr(
 	desc catalog.TableDescriptor,
 	expr tree.Expr,
 	typ *types.T,
-	op string,
+	context string,
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
@@ -65,7 +65,7 @@ func DequalifyAndValidateExpr(
 		ctx,
 		replacedExpr,
 		typ,
-		op,
+		context,
 		semaCtx,
 		maxVolatility,
 	)
