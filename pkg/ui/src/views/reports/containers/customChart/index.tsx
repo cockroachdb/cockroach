@@ -40,6 +40,13 @@ import { INodeStatus } from "src/util/proto";
 import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
 import { queryByName } from "src/util/query";
+import { PayloadAction } from "src/interfaces/action";
+import {
+  TimeWindow,
+  TimeScale,
+  setTimeRange,
+  setTimeScale,
+} from "src/redux/timewindow";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -47,6 +54,8 @@ export interface CustomChartProps {
   nodesSummary: NodesSummary;
   refreshMetricMetadata: typeof refreshMetricMetadata;
   metricsMetadata: MetricsMetadata;
+  setTimeRange: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 }
 
 interface UrlState {
@@ -193,7 +202,12 @@ export class CustomChart extends React.Component<
     const { nodesSummary } = this.props;
 
     return (
-      <MetricsDataProvider id={`debug-custom-chart.${index}`} key={index}>
+      <MetricsDataProvider
+        id={`debug-custom-chart.${index}`}
+        key={index}
+        setTimeRange={this.props.setTimeRange}
+        setTimeScale={this.props.setTimeScale}
+      >
         <LineGraph>
           <Axis units={units}>
             {metrics.map((m, i) => {
@@ -313,6 +327,8 @@ const mapStateToProps = (state: AdminUIState) => ({
 const mapDispatchToProps = {
   refreshNodes,
   refreshMetricMetadata,
+  setTimeRange,
+  setTimeScale,
 };
 
 export default withRouter(
