@@ -20,7 +20,10 @@ message SpanRecordingRequest {
 }
 
 message SpanRecordingResponse {
-  repeated tracing.tracingpb.RecordedSpan span_recordings = 1 [(gogoproto.nullable) = false];
+  message Recording {
+    repeated tracing.tracingpb.RecordedSpan recorded_spans = 1 [(gogoproto.nullable) = false];
+  }
+  repeated Recording recordings = 1 [(gogoproto.nullable) = false];
 }
 
 service Tracing {

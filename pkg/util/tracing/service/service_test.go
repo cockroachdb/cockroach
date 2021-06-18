@@ -12,7 +12,6 @@ package service
 
 import (
 	"context"
-	"sort"
 	"testing"
 	"time"
 
@@ -58,15 +57,18 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 	s := New(tracer1)
 	resp, err := s.GetSpanRecordings(ctx, &tracingservicepb.SpanRecordingRequest{TraceID: traceID1})
 	require.NoError(t, err)
-	sort.SliceStable(resp.SpanRecordings, func(i, j int) bool {
-		return resp.SpanRecordings[i].StartTime.Before(resp.SpanRecordings[j].StartTime)
-	})
-	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.SpanRecordings, `
+	// We expect two Recordings.
+	// 1. root1, root1.child
+	// 2. fork1
+	require.Equal(t, 2, len(resp.Recordings))
+	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.Recordings[0].RecordedSpans, `
 			span: root1
 				tags: _unfinished=1 _verbose=1
 				span: root1.child
 					tags: _unfinished=1 _verbose=1
-				span: fork1
-					tags: _unfinished=1 _verbose=1
+`))
+	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.Recordings[1].RecordedSpans, `
+			span: fork1
+				tags: _unfinished=1 _verbose=1
 `))
 }

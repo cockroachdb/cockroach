@@ -13,12 +13,12 @@ package collector_test
 import (
 	"context"
 	"fmt"
-	"sort"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -129,51 +129,63 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
-	getSpansFromAllNodes := func(traceID uint64) tracing.Recording {
-		res := make(tracing.Recording, 0)
+	getSpansFromAllNodes := func(traceID uint64) map[roachpb.NodeID][]tracing.Recording {
+		res := make(map[roachpb.NodeID][]tracing.Recording, 0)
 
 		var iter *collector.Iterator
 		for iter = traceCollector.StartIter(ctx, traceID); iter.Valid(); iter.Next() {
-			res = append(res, iter.Value())
+			val := iter.Value()
+			res[val.NodeID] = append(res[val.NodeID], val.Recording)
 		}
 		require.NoError(t, iter.Error())
-
-		sort.SliceStable(res, func(i, j int) bool {
-			return res[i].StartTime.Before(res[j].StartTime)
-		})
 		return res
 	}
 
 	t.Run("fetch-local-recordings", func(t *testing.T) {
-		recordedSpan := getSpansFromAllNodes(localTraceID)
-		require.NoError(t, tracing.TestingCheckRecordedSpans(recordedSpan, `
-			span: root
-				tags: _unfinished=1 _verbose=1
-				event: structured=root
-				span: root.child
+		nodeRecordings := getSpansFromAllNodes(localTraceID)
+		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
+		require.Equal(t, 1, len(node1Recordings))
+		require.NoError(t, tracing.TestingCheckRecordedSpans(node1Recordings[0], `
+				span: root
 					tags: _unfinished=1 _verbose=1
-					span: root.child.remotechild
+					event: structured=root
+					span: root.child
 						tags: _unfinished=1 _verbose=1
-						event: structured=root.child.remotechild
-					span: root.child.remotechilddone
-						tags: _verbose=1
-`))
+						span: root.child.remotechilddone
+							tags: _verbose=1
+	`))
+		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
+		require.Equal(t, 1, len(node2Recordings))
+		require.NoError(t, tracing.TestingCheckRecordedSpans(node2Recordings[0], `
+				span: root.child.remotechild
+					tags: _unfinished=1 _verbose=1
+					event: structured=root.child.remotechild
+	`))
 	})
 
 	// The traceCollector is running on node 1, so most of the recordings for this
 	// subtest will be passed back by node 2 over RPC.
 	t.Run("fetch-remote-recordings", func(t *testing.T) {
-		recordedSpan := getSpansFromAllNodes(remoteTraceID)
-		require.NoError(t, tracing.TestingCheckRecordedSpans(recordedSpan, `
-			span: root2
-				tags: _unfinished=1 _verbose=1
-				event: structured=root2
-				span: root2.child
+		nodeRecordings := getSpansFromAllNodes(remoteTraceID)
+		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
+		require.Equal(t, 2, len(node1Recordings))
+		require.NoError(t, tracing.TestingCheckRecordedSpans(node1Recordings[0], `
+				span: root2.child.remotechild
 					tags: _unfinished=1 _verbose=1
-					span: root2.child.remotechild
+	`))
+		require.NoError(t, tracing.TestingCheckRecordedSpans(node1Recordings[1], `
+				span: root2.child.remotechild2
+					tags: _unfinished=1 _verbose=1
+	`))
+
+		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
+		require.Equal(t, 1, len(node2Recordings))
+		require.NoError(t, tracing.TestingCheckRecordedSpans(node2Recordings[0], `
+				span: root2
+					tags: _unfinished=1 _verbose=1
+					event: structured=root2
+					span: root2.child
 						tags: _unfinished=1 _verbose=1
-					span: root2.child.remotechild2
-						tags: _unfinished=1 _verbose=1
-`))
+	`))
 	})
 }
