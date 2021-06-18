@@ -15,7 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -65,7 +67,13 @@ type windowFramer interface {
 	close()
 }
 
-func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) windowFramer {
+func newWindowFramer(
+	evalCtx *tree.EvalContext,
+	frame *execinfrapb.WindowerSpec_Frame,
+	ordering *execinfrapb.Ordering,
+	inputTypes []*types.T,
+	peersColIdx int,
+) windowFramer {
 	startBound := frame.Bounds.Start
 	endBound := frame.Bounds.End
 	switch frame.Mode {
@@ -77,31 +85,37 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerRowsUnboundedPrecedingOffsetPreceding{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
 				op := &windowFramerRowsUnboundedPrecedingCurrentRow{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 				op := &windowFramerRowsUnboundedPrecedingOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerRowsUnboundedPrecedingUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
@@ -110,35 +124,37 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerRowsOffsetPrecedingOffsetPreceding{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
 				op := &windowFramerRowsOffsetPrecedingCurrentRow{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 				op := &windowFramerRowsOffsetPrecedingOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerRowsOffsetPrecedingUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -147,23 +163,28 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerRowsCurrentRowCurrentRow{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 				op := &windowFramerRowsCurrentRowOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerRowsCurrentRowUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -172,18 +193,19 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerRowsOffsetFollowingOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerRowsOffsetFollowingUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		}
@@ -195,31 +217,37 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerGroupsUnboundedPrecedingOffsetPreceding{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
 				op := &windowFramerGroupsUnboundedPrecedingCurrentRow{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 				op := &windowFramerGroupsUnboundedPrecedingOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerGroupsUnboundedPrecedingUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
@@ -228,35 +256,37 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerGroupsOffsetPrecedingOffsetPreceding{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
 				op := &windowFramerGroupsOffsetPrecedingCurrentRow{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 				op := &windowFramerGroupsOffsetPrecedingOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerGroupsOffsetPrecedingUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
@@ -265,23 +295,28 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerGroupsCurrentRowCurrentRow{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 				op := &windowFramerGroupsCurrentRowOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerGroupsCurrentRowUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
@@ -290,18 +325,151 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &windowFramerGroupsOffsetFollowingOffsetFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
-				op.endOffset = int(endBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 				op := &windowFramerGroupsOffsetFollowingUnboundedFollowing{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				op.startOffset = int(startBound.IntOffset)
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			}
+		}
+	case execinfrapb.WindowerSpec_Frame_RANGE:
+		switch startBound.BoundType {
+		case execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING:
+			switch endBound.BoundType {
+			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
+				op := &windowFramerRangeUnboundedPrecedingOffsetPreceding{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
+				op := &windowFramerRangeUnboundedPrecedingCurrentRow{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
+				op := &windowFramerRangeUnboundedPrecedingOffsetFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
+				op := &windowFramerRangeUnboundedPrecedingUnboundedFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			}
+		case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
+			switch endBound.BoundType {
+			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
+				op := &windowFramerRangeOffsetPrecedingOffsetPreceding{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
+				op := &windowFramerRangeOffsetPrecedingCurrentRow{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
+				op := &windowFramerRangeOffsetPrecedingOffsetFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
+				op := &windowFramerRangeOffsetPrecedingUnboundedFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			}
+		case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
+			switch endBound.BoundType {
+			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
+				op := &windowFramerRangeCurrentRowCurrentRow{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
+				op := &windowFramerRangeCurrentRowOffsetFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
+				op := &windowFramerRangeCurrentRowUnboundedFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			}
+		case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
+			switch endBound.BoundType {
+			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
+				op := &windowFramerRangeOffsetFollowingOffsetFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+				return op
+			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
+				op := &windowFramerRangeOffsetFollowingUnboundedFollowing{
+					windowFramerBase: windowFramerBase{
+						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
+					},
+				}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 			}
 		}
@@ -340,10 +508,19 @@ type windowFramerBase struct {
 	endIdx   int // Exclusive end of the window frame ignoring exclusion.
 
 	peersColIdx int // Indicates the beginning of each peer group. Can be unset.
+	ordColIdx   int // The single ordering column for RANGE mode with offset.
 
 	// startOffset and endOffset store the integer offsets for ROWS and GROUPS
 	// modes with OFFSET PRECEDING or OFFSET FOLLOWING.
 	startOffset, endOffset int
+
+	// startHandler and endHandler are used to calculate the start and end indexes
+	// in RANGE mode with OFFSET PRECEDING or OFFSET FOLLOWING.
+	startHandler, endHandler rangeOffsetHandler
+
+	// datumAlloc is used to decode the offsets in RANGE mode. It is initialized
+	// lazily.
+	datumAlloc *rowenc.DatumAlloc
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -404,6 +581,9 @@ func (b *windowFramerBase) getColsToStore(oldColsToStore []int) (colsToStore []i
 	if b.peersColIdx != tree.NoColumnIdx {
 		b.peersColIdx = storeCol(b.peersColIdx)
 	}
+	if b.ordColIdx != tree.NoColumnIdx {
+		b.ordColIdx = storeCol(b.ordColIdx)
+	}
 	return colsToStore
 }
 
@@ -441,9 +621,11 @@ func (b *windowFramerBase) incrementPeerGroup(ctx context.Context, index, groups
 			return b.partitionSize
 		}
 		vec, vecIdx, n := b.storedCols.GetVecWithTuple(ctx, b.peersColIdx, index)
-		col := vec.Bool()
+		peersCol := vec.Bool()
+		_, _ = peersCol[vecIdx], peersCol[n-1]
 		for ; vecIdx < n; vecIdx++ {
-			if col[vecIdx] {
+			//gcassert:bce
+			if peersCol[vecIdx] {
 				// We have reached the start of the next peer group (the end of the
 				// current one).
 				groups--
@@ -456,6 +638,8 @@ func (b *windowFramerBase) incrementPeerGroup(ctx context.Context, index, groups
 	}
 }
 
+// isFirstPeer returns true if the row at the given index into the current
+// partition is the first in its peer group.
 func (b *windowFramerBase) isFirstPeer(ctx context.Context, idx int) bool {
 	if idx == 0 {
 		// The first row in the partition is always the first in its peer group.
@@ -1387,4 +1571,519 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) next(ctx context.C
 
 func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) close() {
 	*f = windowFramerGroupsOffsetFollowingUnboundedFollowing{}
+}
+
+type windowFramerRangeUnboundedPrecedingOffsetPreceding struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingOffsetPreceding{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+}
+
+func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) close() {
+	f.endHandler.close()
+	*f = windowFramerRangeUnboundedPrecedingOffsetPreceding{}
+}
+
+type windowFramerRangeUnboundedPrecedingCurrentRow struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingCurrentRow{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRow) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRow) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+}
+
+func (f *windowFramerRangeUnboundedPrecedingCurrentRow) close() {
+	*f = windowFramerRangeUnboundedPrecedingCurrentRow{}
+}
+
+type windowFramerRangeUnboundedPrecedingOffsetFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingOffsetFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+}
+
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) close() {
+	f.endHandler.close()
+	*f = windowFramerRangeUnboundedPrecedingOffsetFollowing{}
+}
+
+type windowFramerRangeUnboundedPrecedingUnboundedFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingUnboundedFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) next(ctx context.Context) {
+	f.currentRow++
+	// Handle the start bound.
+	f.startIdx = 0
+
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+}
+
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) close() {
+	*f = windowFramerRangeUnboundedPrecedingUnboundedFollowing{}
+}
+
+type windowFramerRangeOffsetPrecedingOffsetPreceding struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingOffsetPreceding{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+}
+
+func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) close() {
+	f.startHandler.close()
+	f.endHandler.close()
+	*f = windowFramerRangeOffsetPrecedingOffsetPreceding{}
+}
+
+type windowFramerRangeOffsetPrecedingCurrentRow struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingCurrentRow{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeOffsetPrecedingCurrentRow) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingCurrentRow) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+}
+
+func (f *windowFramerRangeOffsetPrecedingCurrentRow) close() {
+	f.startHandler.close()
+	*f = windowFramerRangeOffsetPrecedingCurrentRow{}
+}
+
+type windowFramerRangeOffsetPrecedingOffsetFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingOffsetFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+}
+
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) close() {
+	f.startHandler.close()
+	f.endHandler.close()
+	*f = windowFramerRangeOffsetPrecedingOffsetFollowing{}
+}
+
+type windowFramerRangeOffsetPrecedingUnboundedFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingUnboundedFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+}
+
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) close() {
+	f.startHandler.close()
+	*f = windowFramerRangeOffsetPrecedingUnboundedFollowing{}
+}
+
+type windowFramerRangeCurrentRowCurrentRow struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeCurrentRowCurrentRow{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeCurrentRowCurrentRow) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeCurrentRowCurrentRow) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+}
+
+func (f *windowFramerRangeCurrentRowCurrentRow) close() {
+	*f = windowFramerRangeCurrentRowCurrentRow{}
+}
+
+type windowFramerRangeCurrentRowOffsetFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeCurrentRowOffsetFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeCurrentRowOffsetFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeCurrentRowOffsetFollowing) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+}
+
+func (f *windowFramerRangeCurrentRowOffsetFollowing) close() {
+	f.endHandler.close()
+	*f = windowFramerRangeCurrentRowOffsetFollowing{}
+}
+
+type windowFramerRangeCurrentRowUnboundedFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeCurrentRowUnboundedFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeCurrentRowUnboundedFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeCurrentRowUnboundedFollowing) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+}
+
+func (f *windowFramerRangeCurrentRowUnboundedFollowing) close() {
+	*f = windowFramerRangeCurrentRowUnboundedFollowing{}
+}
+
+type windowFramerRangeOffsetFollowingOffsetFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetFollowingOffsetFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowing) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+}
+
+func (f *windowFramerRangeOffsetFollowingOffsetFollowing) close() {
+	f.startHandler.close()
+	f.endHandler.close()
+	*f = windowFramerRangeOffsetFollowingOffsetFollowing{}
+}
+
+type windowFramerRangeOffsetFollowingUnboundedFollowing struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetFollowingUnboundedFollowing{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+}
+
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) close() {
+	f.startHandler.close()
+	*f = windowFramerRangeOffsetFollowingUnboundedFollowing{}
+}
+
+// handleOffsets populates the offset fields of the window framer operator, if
+// one or both bounds are OFFSET PRECEDING or OFFSET FOLLOWING.
+func (b *windowFramerBase) handleOffsets(
+	evalCtx *tree.EvalContext,
+	frame *execinfrapb.WindowerSpec_Frame,
+	ordering *execinfrapb.Ordering,
+	inputTypes []*types.T,
+) {
+	startBound, endBound := &frame.Bounds.Start, frame.Bounds.End
+	startHasOffset := startBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+		startBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING
+	endHasOffset := endBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+		endBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING
+	if !(startHasOffset || endHasOffset) {
+		return
+	}
+
+	if frame.Mode != execinfrapb.WindowerSpec_Frame_RANGE {
+		// For ROWS or GROUPS mode, the offset is of type int64 and the ordering
+		// column(s) is not stored.
+		if startHasOffset {
+			b.startOffset = int(startBound.IntOffset)
+		}
+		if endHasOffset {
+			b.endOffset = int(endBound.IntOffset)
+		}
+		return
+	}
+
+	// For RANGE mode with an offset, there is a single ordering column. The
+	// offset type depends on the ordering column type. In addition, the ordering
+	// column must be stored.
+	if len(ordering.Columns) != 1 {
+		colexecerror.InternalError(
+			errors.AssertionFailedf("expected exactly one ordering column for RANGE mode with offset"))
+	}
+	// Only initialize the DatumAlloc field when we know we will need it.
+	b.datumAlloc = &rowenc.DatumAlloc{}
+	b.ordColIdx = int(ordering.Columns[0].ColIdx)
+	ordColType := inputTypes[b.ordColIdx]
+	ordColAsc := ordering.Columns[0].Direction == execinfrapb.Ordering_Column_ASC
+	if startHasOffset {
+		b.startHandler = newRangeOffsetHandler(
+			evalCtx, b.datumAlloc, startBound, ordColType, ordColAsc, true, /* isStart */
+		)
+	}
+	if endHasOffset {
+		b.endHandler = newRangeOffsetHandler(
+			evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
+		)
+	}
 }
