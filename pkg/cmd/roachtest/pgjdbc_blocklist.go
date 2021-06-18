@@ -1168,7 +1168,6 @@ var pgjdbcBlockList21_1 = blocklist{
 	"org.postgresql.test.jdbc2.NotifyTest.testAsyncNotifyWithTimeoutAndSocketThatBecomesClosed":                                                                                "41522",
 	"org.postgresql.test.jdbc2.NotifyTest.testNotify":                                                                                                                          "41522",
 	"org.postgresql.test.jdbc2.NotifyTest.testNotifyArgument":                                                                                                                  "41522",
-	"org.postgresql.test.jdbc2.NumericTransferTest.receive100000[binary = FORCE]":                                                                                              "unknown",
 	"org.postgresql.test.jdbc2.NumericTransferTest.receive100000[binary = REGULAR]":                                                                                            "unknown",
 	"org.postgresql.test.jdbc2.PGObjectGetTest.getAsPGobjectSubtype[binary = FORCE, sql = null::box, type = class org.postgresql.geometric.PGbox]":                             "21286",
 	"org.postgresql.test.jdbc2.PGObjectGetTest.getAsPGobjectSubtype[binary = FORCE, sql = null::circle, type = class org.postgresql.geometric.PGcircle]":                       "21286",
