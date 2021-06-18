@@ -130,6 +130,17 @@ func NewLocalIndexUsageStats(cfg *Config) *LocalIndexUsageStats {
 	return is
 }
 
+// NewLocalIndexUsageStatsFromExistingStats returns a new instance of
+// LocalIndexUsageStats that is populated using given
+// []roachpb.CollectedIndexUsageStatistics.
+func NewLocalIndexUsageStatsFromExistingStats(
+	cfg *Config, stats []roachpb.CollectedIndexUsageStatistics,
+) *LocalIndexUsageStats {
+	s := NewLocalIndexUsageStats(cfg)
+	s.batchInsertUnsafe(stats)
+	return s
+}
+
 // Start starts the background goroutine that is responsible for collecting
 // index usage statistics.
 func (s *LocalIndexUsageStats) Start(ctx context.Context, stopper *stop.Stopper) {
@@ -209,7 +220,7 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 	s.mu.RUnlock()
 
 	for _, tableID := range tableIDLists {
-		tableIdxStats := s.getStatsForTableID(tableID, false /* createIfNotExists */)
+		tableIdxStats := s.getStatsForTableID(tableID, false /* createIfNotExists */, false /* unsafe */)
 
 		// This means the data s being cleared before we can fetch it. It's not an
 		// error, so we simply just skip over it.
@@ -231,6 +242,20 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 	return nil
 }
 
+// batchInsertUnsafe inserts otherStats into s without taking on write lock.
+// This should only be called during initialization and we can be sure there's
+// not other users of s. This avoids the locking overhead when it's not
+// necessary.
+func (s *LocalIndexUsageStats) batchInsertUnsafe(
+	otherStats []roachpb.CollectedIndexUsageStatistics,
+) {
+	for _, newStats := range otherStats {
+		tableIndexStats := s.getStatsForTableID(newStats.Key.TableID, true /* createIfNotExists */, true /* unsafe */)
+		stats := tableIndexStats.getStatsForIndexID(newStats.Key.IndexID, true /* createIfNotExists */, true /* unsafe */)
+		stats.Add(&newStats.Stats)
+	}
+}
+
 func (s *LocalIndexUsageStats) clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -241,8 +266,8 @@ func (s *LocalIndexUsageStats) clear() {
 }
 
 func (s *LocalIndexUsageStats) insertIndexUsage(idxUse *indexUse) {
-	tableStats := s.getStatsForTableID(idxUse.key.TableID, true /* createIfNotExists */)
-	indexStats := tableStats.getStatsForIndexID(idxUse.key.IndexID, true /* createIfNotExists */)
+	tableStats := s.getStatsForTableID(idxUse.key.TableID, true /* createIfNotExists */, false /* unsafe */)
+	indexStats := tableStats.getStatsForIndexID(idxUse.key.IndexID, true /* createIfNotExists */, false /* unsafe */)
 	indexStats.Lock()
 	defer indexStats.Unlock()
 	switch idxUse.usageTyp {
@@ -260,14 +285,16 @@ func (s *LocalIndexUsageStats) insertIndexUsage(idxUse *indexUse) {
 }
 
 func (s *LocalIndexUsageStats) getStatsForTableID(
-	id roachpb.TableID, createIfNotExists bool,
+	id roachpb.TableID, createIfNotExists bool, unsafe bool,
 ) *tableIndexStats {
-	if createIfNotExists {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-	} else {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
+	if !unsafe {
+		if createIfNotExists {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+		} else {
+			s.mu.RLock()
+			defer s.mu.RUnlock()
+		}
 	}
 
 	if tableIndexStats, ok := s.mu.usageStats[id]; ok {
@@ -287,14 +314,17 @@ func (s *LocalIndexUsageStats) getStatsForTableID(
 }
 
 func (t *tableIndexStats) getStatsForIndexID(
-	id roachpb.IndexID, createIfNotExists bool,
+	id roachpb.IndexID, createIfNotExists bool, unsafe bool,
 ) *indexStats {
-	if createIfNotExists {
-		t.Lock()
-		defer t.Unlock()
-	} else {
-		t.RLock()
-		defer t.RUnlock()
+	if !unsafe {
+		if createIfNotExists {
+			t.Lock()
+			defer t.Unlock()
+		} else {
+			t.RLock()
+			defer t.RUnlock()
+		}
+
 	}
 
 	if stats, ok := t.stats[id]; ok {
@@ -329,7 +359,7 @@ func (t *tableIndexStats) iterateIndexStats(
 	}
 
 	for _, indexID := range indexIDs {
-		indexStats := t.getStatsForIndexID(indexID, false /* createIfNotExists */)
+		indexStats := t.getStatsForIndexID(indexID, false /* createIfNotExists */, false /* unsafe */)
 
 		// This means the data is being cleared  before we can fetch it. It's not an
 		// error, so we simply just skip over it.
