@@ -652,7 +652,7 @@ func getAllDescChanges(
 				// changed during truncate.
 				r.Desc = &desc
 				t := descpb.TableFromDescriptor(&desc, rev.Timestamp)
-				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
+				if priorIDs != nil && t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
 			}
