@@ -61,10 +61,11 @@ func writeLogStream(
 		if prefixBytes, err = getPrefix(ei.fileInfo); err != nil {
 			return err
 		}
-		if _, err = w.Write(prefixBytes); err != nil {
+		err = log.FormatLegacyEntryPrefixTTY(prefixBytes, w)
+		if err != nil {
 			return err
 		}
-		return log.FormatLegacyEntry(ei.Entry, w)
+		return log.FormatLegacyEntryTTY(ei.Entry, w)
 	}
 
 	g, ctx := errgroup.WithContext(context.Background())

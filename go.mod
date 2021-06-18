@@ -47,7 +47,7 @@ require (
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
 	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a
-	github.com/cockroachdb/ttycolor v0.0.0-20180709150743-a1d5aaeb377d
+	github.com/cockroachdb/ttycolor v0.0.0-20210717002733-a2a538deeb8c
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/containerd/containerd v1.4.6
 	github.com/coreos/go-oidc v2.2.1+incompatible
