@@ -2282,8 +2282,8 @@ func NewTableDesc(
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
-				serializedExpr, err := schemaexpr.ValidateComputedColumnExpression(
-					ctx, &desc, d, &n.Table, semaCtx,
+				serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
+					ctx, &desc, d, &n.Table, "computed column", semaCtx,
 				)
 				if err != nil {
 					return nil, err
@@ -2734,26 +2734,6 @@ func makeShardCheckConstraintDef(
 		},
 		Hidden: true,
 	}, nil
-}
-
-func makeExpressionIndexVirtualColumn(
-	colName string, typ *types.T, expr tree.Expr,
-) *tree.ColumnTableDef {
-	c := &tree.ColumnTableDef{
-		Name:   tree.Name(colName),
-		Type:   typ,
-		Hidden: true,
-	}
-	c.Computed.Computed = true
-	c.Computed.Expr = expr
-	c.Computed.Virtual = true
-
-	// TODO(mgartner): If we can determine the expression will never evaluate to
-	// NULL, the optimizer might be able to better optimize queries using the
-	// expression index.
-	c.Nullable.Nullability = tree.Null
-
-	return c
 }
 
 // incTelemetryForNewColumn increments relevant telemetry every time a new column

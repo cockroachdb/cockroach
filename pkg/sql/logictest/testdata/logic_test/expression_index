@@ -37,25 +37,21 @@ CREATE TABLE public.t (
    b INT8 NULL,
    c STRING NULL,
    comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
-   crdb_idx_expr INT8 NOT VISIBLE NULL AS (a + b) VIRTUAL,
-   crdb_idx_expr_1 STRING NOT VISIBLE NULL AS (lower(c)) VIRTUAL,
    CONSTRAINT "primary" PRIMARY KEY (k ASC),
-   INDEX t_a_plus_b_idx (crdb_idx_expr ASC),
-   INDEX t_lower_c_idx (crdb_idx_expr_1 ASC),
-   INDEX t_lower_c_a_plus_b_idx (crdb_idx_expr_1 ASC, crdb_idx_expr ASC),
-   INDEX t_a_plus_ten_idx (comp ASC),
+   INDEX t_a_plus_b_idx (crdb_internal_idx_expr ASC),
+   INDEX t_lower_c_idx (crdb_internal_idx_expr_1 ASC),
+   INDEX t_lower_c_a_plus_b_idx (crdb_internal_idx_expr_2 ASC, crdb_internal_idx_expr_3 ASC),
+   INDEX t_a_plus_ten_idx (crdb_internal_idx_expr_4 ASC),
    FAMILY fam_0_a_b_c_k (a, b, c, k)
 )
 
-statement error volatile functions are not allowed in index expression
+statement error volatile functions are not allowed in index element
 CREATE INDEX err ON t ((a + random()::INT))
 
 statement error column \"z\" does not exist
 CREATE INDEX err ON t ((a + z))
 
-# TODO(mgartner): This error message should be more clear. The user would not
-# think that they are creating a computed column at all.
-statement error computed columns cannot reference other computed columns
+statement error index element expression cannot reference computed columns
 CREATE INDEX err ON t ((comp + 10))
 
 statement ok
@@ -67,6 +63,11 @@ CREATE TABLE child (
 # An expression index cannot reference columns in other tables.
 statement error no data source matches prefix: t in this context
 CREATE INDEX err ON child ((t.a + 10))
+
+# An inaccessible column used in an expression index cannot be referenced in
+# queries.
+statement error column \"crdb_internal_idx_expr\" does not exist
+SELECT * FROM t WHERE crdb_internal_idx_expr > 0
 
 # Querying expression indexes.
 

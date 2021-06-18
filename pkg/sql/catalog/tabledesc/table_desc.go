@@ -438,18 +438,6 @@ func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) 
 	return nil, colinfo.NewUndefinedColumnError(string(name))
 }
 
-// FindVirtualColumnWithExpr returns the first virtual computed column whose
-// expression matches the provided target expression, in the canonical order. If
-// no column is found then ok=false is returned.
-func (desc *wrapper) FindVirtualColumnWithExpr(expr string) (_ catalog.Column, ok bool) {
-	for _, col := range desc.AllColumns() {
-		if col.IsVirtual() && col.GetComputeExpr() == expr {
-			return col, true
-		}
-	}
-	return nil, false
-}
-
 // getExistingOrNewMutationCache should be the only place where the
 // mutationCache field in wrapper is ever read.
 func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
