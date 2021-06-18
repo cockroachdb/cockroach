@@ -97,7 +97,7 @@ type extendedEvalContext struct {
 
 	statsStorage sqlstats.Storage
 
-	indexUsageStatsWriter idxusage.Writer
+	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
 }
@@ -416,7 +416,7 @@ func internalExtendedEvalCtx(
 ) extendedEvalContext {
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
-	var indexUsageStats idxusage.Writer
+	var indexUsageStats *idxusage.LocalIndexUsageStats
 	var sqlStatsResetter tree.SQLStatsResetter
 	if execCfg.InternalExecutor != nil {
 		sqlStatsResetter = execCfg.InternalExecutor.s
@@ -448,15 +448,15 @@ func internalExtendedEvalCtx(
 			InternalExecutor: execCfg.InternalExecutor,
 			SQLStatsResetter: sqlStatsResetter,
 		},
-		SessionMutator:        dataMutator,
-		VirtualSchemas:        execCfg.VirtualSchemas,
-		Tracing:               &SessionTracing{},
-		NodesStatusServer:     execCfg.NodesStatusServer,
-		RegionsServer:         execCfg.RegionsServer,
-		Descs:                 tables,
-		ExecCfg:               execCfg,
-		DistSQLPlanner:        execCfg.DistSQLPlanner,
-		indexUsageStatsWriter: indexUsageStats,
+		SessionMutator:    dataMutator,
+		VirtualSchemas:    execCfg.VirtualSchemas,
+		Tracing:           &SessionTracing{},
+		NodesStatusServer: execCfg.NodesStatusServer,
+		RegionsServer:     execCfg.RegionsServer,
+		Descs:             tables,
+		ExecCfg:           execCfg,
+		DistSQLPlanner:    execCfg.DistSQLPlanner,
+		indexUsageStats:   indexUsageStats,
 	}
 }
 

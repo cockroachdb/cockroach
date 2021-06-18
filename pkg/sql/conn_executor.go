@@ -334,6 +334,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
+			Knobs:       cfg.IndexUsageStatsTestingKnobs,
 		}),
 	}
 
@@ -626,6 +627,11 @@ func (s *Server) ServeConn(
 	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
+// GetLocalIndexStatistics returns a idxusage.LocalIndexUsageStats.
+func (s *Server) GetLocalIndexStatistics() *idxusage.LocalIndexUsageStats {
+	return s.indexUsageStats
+}
+
 // newSessionData a SessionData that can be passed to newConnExecutor.
 func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
@@ -745,7 +751,7 @@ func (s *Server) newConnExecutor(
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
-		indexUsageStatsWriter:     s.indexUsageStats,
+		indexUsageStats:           s.indexUsageStats,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1293,8 +1299,8 @@ type connExecutor struct {
 	// information collected.
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 
-	// indexUsageStatsWriter is used to track index usage stats.
-	indexUsageStatsWriter idxusage.Writer
+	// indexUsageStats is used to track index usage stats.
+	indexUsageStats *idxusage.LocalIndexUsageStats
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -2302,21 +2308,21 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SQLStatsResetter:   ex.server,
 			CompactEngineSpan:  ex.server.cfg.CompactEngineSpanFunc,
 		},
-		SessionMutator:        ex.dataMutator,
-		VirtualSchemas:        ex.server.cfg.VirtualSchemas,
-		Tracing:               &ex.sessionTracing,
-		NodesStatusServer:     ex.server.cfg.NodesStatusServer,
-		RegionsServer:         ex.server.cfg.RegionsServer,
-		SQLStatusServer:       ex.server.cfg.SQLStatusServer,
-		MemMetrics:            &ex.memMetrics,
-		Descs:                 &ex.extraTxnState.descCollection,
-		ExecCfg:               ex.server.cfg,
-		DistSQLPlanner:        ex.server.cfg.DistSQLPlanner,
-		TxnModesSetter:        ex,
-		Jobs:                  &ex.extraTxnState.jobs,
-		SchemaChangeJobCache:  ex.extraTxnState.schemaChangeJobsCache,
-		statsStorage:          ex.server.sqlStats,
-		indexUsageStatsWriter: ex.indexUsageStatsWriter,
+		SessionMutator:       ex.dataMutator,
+		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
+		Tracing:              &ex.sessionTracing,
+		NodesStatusServer:    ex.server.cfg.NodesStatusServer,
+		RegionsServer:        ex.server.cfg.RegionsServer,
+		SQLStatusServer:      ex.server.cfg.SQLStatusServer,
+		MemMetrics:           &ex.memMetrics,
+		Descs:                &ex.extraTxnState.descCollection,
+		ExecCfg:              ex.server.cfg,
+		DistSQLPlanner:       ex.server.cfg.DistSQLPlanner,
+		TxnModesSetter:       ex,
+		Jobs:                 &ex.extraTxnState.jobs,
+		SchemaChangeJobCache: ex.extraTxnState.schemaChangeJobsCache,
+		statsStorage:         ex.server.sqlStats,
+		indexUsageStats:      ex.indexUsageStats,
 	}
 }
 

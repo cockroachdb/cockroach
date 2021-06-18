@@ -38,4 +38,5 @@ type TestingKnobs struct {
 	JobsTestingKnobs        ModuleTestingKnobs
 	BackupRestore           ModuleTestingKnobs
 	MigrationManager        ModuleTestingKnobs
+	IndexUsageStatsKnobs    ModuleTestingKnobs
 }
