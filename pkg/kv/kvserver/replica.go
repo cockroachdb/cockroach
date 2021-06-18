@@ -1872,37 +1872,37 @@ func (r *Replica) markSystemConfigGossipFailed() {
 	r.mu.failureToGossipSystemConfig = true
 }
 
-// migrateLockTable runs a migration of all interleaved intents in the provided
-// snapshot into separated intents. It does this by queueing up all txns that
-// have interleaved intents in the specified key range, and then pushing
-// those txns with PUSH_ABORT. This could result in those txns getting aborted.
-// That is okay for our purpose as the new iteration of that txn is guaranteed
-// to write separated intents.
-func (r *Replica) migrateLockTable(
-	ctx context.Context, req *roachpb.MigrateLockTableRequest, res *roachpb.MigrateLockTableResponse,
-) error {
-	if res.NoIntents {
-		// This range is guaranteed to not contain any intents.
-		return nil
-	}
-	snap := batcheval.GetAndRemoveLockTableMigrationSnapshot(res.SnapshotId)
-	ir := r.store.intentResolver
-	if snap == nil {
-		return errors.New("expected non-nil snapshot from migrate lock table command")
-	}
-	defer snap.Close()
+// intentResolver is an interface for pushing txns and resolving intents.
+// Used as part of the lock table migration below.
+type intentResolver interface {
+	// PushTransaction takes a transaction and pushes its record using the specified
+	// push type and request header. It returns the transaction proto corresponding
+	// to the pushed transaction.
+	PushTransaction(
+		ctx context.Context, pushTxn *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
+	) (*roachpb.Transaction, *roachpb.Error)
 
+	// ResolveIntents synchronously resolves intents according to opts.
+	ResolveIntents(
+		ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+	) *roachpb.Error
+}
+
+func runLockTableMigration(
+	ctx context.Context, start, end roachpb.Key, snap storage.Reader,
+	clock *hlc.Clock, ir intentResolver,
+) error {
 	// Put a limit on memory usage by scanning for at least intentBatchSize
 	// intents, then pushing those. Pushing a transaction multiple times is okay
 	// and so is resolving an intent that no longer exists; neither of those will
 	// error out.
 	const intentBatchSize = 100
-	resumeKey := storage.EngineKey{Key: req.Key}
+	resumeKey := storage.EngineKey{Key: start}
 
 	for resumeKey.Key != nil {
 		iter := snap.NewEngineIterator(storage.IterOptions{
 			LowerBound: resumeKey.Key,
-			UpperBound: req.EndKey,
+			UpperBound: end,
 		})
 		defer func() {
 			if iter != nil {
@@ -1980,7 +1980,7 @@ func (r *Replica) migrateLockTable(
 			// a clean new transaction. If this transaction is still running, it will
 			// abort. The retry of that transaction will then write separated intents.
 			h := roachpb.Header{
-				Timestamp:    r.Clock().Now(),
+				Timestamp:    clock.Now(),
 				UserPriority: roachpb.MaxUserPriority,
 			}
 			h.Txn = &roachpb.Transaction{
@@ -2004,6 +2004,29 @@ func (r *Replica) migrateLockTable(
 		}
 	}
 	return nil
+}
+
+// migrateLockTable runs a migration of all interleaved intents in the provided
+// snapshot into separated intents. It does this by queueing up all txns that
+// have interleaved intents in the specified key range, and then pushing
+// those txns with PUSH_ABORT. This could result in those txns getting aborted.
+// That is okay for our purpose as the new iteration of that txn is guaranteed
+// to write separated intents.
+func (r *Replica) migrateLockTable(
+	ctx context.Context, req *roachpb.MigrateLockTableRequest, res *roachpb.MigrateLockTableResponse,
+) error {
+	if res.NoIntents {
+		// This range is guaranteed to not contain any intents.
+		return nil
+	}
+	snap := batcheval.GetAndRemoveLockTableMigrationSnapshot(res.SnapshotId)
+	ir := r.store.intentResolver
+	if snap == nil {
+		return errors.New("expected non-nil snapshot from migrate lock table command")
+	}
+	defer snap.Close()
+
+	return runLockTableMigration(ctx, req.Key, req.EndKey, snap, r.Clock(), ir)
 }
 
 func init() {
