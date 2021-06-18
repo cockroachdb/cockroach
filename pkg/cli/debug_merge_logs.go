@@ -57,14 +57,19 @@ func writeLogStream(
 		*fileInfo
 	}
 	render := func(ei entryInfo, w io.Writer) (err error) {
+		// TODO(postamar): add support for other output formats
+		// Currently, `render` applies the `crdb-v1-tty` format regardless of the
+		// output logging format defined for the stderr sink. It should instead
+		// apply the selected output format.
 		var prefixBytes []byte
 		if prefixBytes, err = getPrefix(ei.fileInfo); err != nil {
 			return err
 		}
-		if _, err = w.Write(prefixBytes); err != nil {
+		err = log.FormatLegacyEntryPrefixTTY(prefixBytes, w)
+		if err != nil {
 			return err
 		}
-		return log.FormatLegacyEntry(ei.Entry, w)
+		return log.FormatLegacyEntryTTY(ei.Entry, w)
 	}
 
 	g, ctx := errgroup.WithContext(context.Background())

@@ -664,8 +664,8 @@ def go_deps():
         name = "com_github_cockroachdb_ttycolor",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/ttycolor",
-        sum = "h1:TNsiMS1Ij2aleP/05UNSPzsOu9eJm9mfUGLm7Ylt7Dg=",
-        version = "v0.0.0-20180709150743-a1d5aaeb377d",
+        sum = "h1:S2vg+TZySZ0jBGFPM2kmcYr0OwIPRoMX8/AMTajFmzE=",
+        version = "v0.0.0-20210717002733-a2a538deeb8c",
     )
     go_repository(
         name = "com_github_codahale_hdrhistogram",
