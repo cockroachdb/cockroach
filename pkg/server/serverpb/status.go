@@ -29,6 +29,7 @@ type SQLStatusServer interface {
 	Statements(context.Context, *StatementsRequest) (*StatementsResponse, error)
 	ListDistSQLFlows(context.Context, *ListDistSQLFlowsRequest) (*ListDistSQLFlowsResponse, error)
 	ListLocalDistSQLFlows(context.Context, *ListDistSQLFlowsRequest) (*ListDistSQLFlowsResponse, error)
+	IndexUsageStatistics(context.Context, *IndexUsageStatisticsRequest) (*IndexUsageStatisticsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
