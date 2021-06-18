@@ -18,29 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type windowFrameModeInfo struct {
-	ModeType        tree.WindowFrameMode
-	StartBoundTypes []windowFramerStartBoundInfo
-}
-
-type windowFramerStartBoundInfo struct {
-	BoundType     tree.WindowFrameBoundType
-	EndBoundTypes []windowFramerEndBoundInfo
-}
-
-type windowFramerEndBoundInfo struct {
-	windowFrameTmplInfo
-	BoundType tree.WindowFrameBoundType
-}
-
-type windowFrameTmplInfo struct {
-	OpString       string
-	ModeType       tree.WindowFrameMode
-	StartBoundType tree.WindowFrameBoundType
-	EndBoundType   tree.WindowFrameBoundType
-}
-
 const windowFramerTmpl = "pkg/sql/colexec/colexecwindow/window_framer_tmpl.go"
+
+var windowFrameModes = []tree.WindowFrameMode{tree.ROWS, tree.GROUPS, tree.RANGE}
+var windowFrameStartBoundTypes = []tree.WindowFrameBoundType{
+	tree.UnboundedPreceding, tree.OffsetPreceding, tree.CurrentRow, tree.OffsetFollowing,
+}
+var windowFrameEndBoundTypes = []tree.WindowFrameBoundType{
+	tree.OffsetPreceding, tree.CurrentRow, tree.OffsetFollowing, tree.UnboundedFollowing,
+}
 
 func windowFramerGenerator(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
@@ -61,27 +47,23 @@ func windowFramerGenerator(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	var tmplInfos []windowFrameModeInfo
-	for _, modeType := range []tree.WindowFrameMode{tree.ROWS, tree.GROUPS} {
-		modeInfo := windowFrameModeInfo{
+	var windowFrameTmplInfos []windowFramerModeInfo
+	for _, modeType := range windowFrameModes {
+		modeInfo := windowFramerModeInfo{
 			ModeType: modeType,
 		}
-		for _, startBoundType := range []tree.WindowFrameBoundType{
-			tree.UnboundedPreceding, tree.OffsetPreceding, tree.CurrentRow, tree.OffsetFollowing,
-		} {
+		for _, startBoundType := range windowFrameStartBoundTypes {
 			startBoundInfo := windowFramerStartBoundInfo{
 				BoundType: startBoundType,
 			}
-			for _, endBoundType := range []tree.WindowFrameBoundType{
-				tree.OffsetPreceding, tree.CurrentRow, tree.OffsetFollowing, tree.UnboundedFollowing,
-			} {
+			for _, endBoundType := range windowFrameEndBoundTypes {
 				if endBoundType < startBoundType {
 					// This pair of bounds would entail a syntax error.
 					continue
 				}
 				opString := "windowFramer" + modeType.Name() + startBoundType.Name() + endBoundType.Name()
 				endBoundInfo := windowFramerEndBoundInfo{
-					windowFrameTmplInfo: windowFrameTmplInfo{
+					windowFramerTmplInfo: windowFramerTmplInfo{
 						OpString:       opString,
 						ModeType:       modeType,
 						StartBoundType: startBoundType,
@@ -93,13 +75,104 @@ func windowFramerGenerator(inputFileContents string, wr io.Writer) error {
 			}
 			modeInfo.StartBoundTypes = append(modeInfo.StartBoundTypes, startBoundInfo)
 		}
-		tmplInfos = append(tmplInfos, modeInfo)
+		windowFrameTmplInfos = append(windowFrameTmplInfos, modeInfo)
 	}
-	return tmpl.Execute(wr, tmplInfos)
+
+	return tmpl.Execute(wr, windowFrameTmplInfos)
 }
 
 func init() {
 	registerGenerator(windowFramerGenerator, "window_framer.eg.go", windowFramerTmpl)
+}
+
+type windowFramerModeInfo struct {
+	ModeType        tree.WindowFrameMode
+	StartBoundTypes []windowFramerStartBoundInfo
+}
+
+type windowFramerStartBoundInfo struct {
+	BoundType     tree.WindowFrameBoundType
+	EndBoundTypes []windowFramerEndBoundInfo
+}
+
+type windowFramerEndBoundInfo struct {
+	windowFramerTmplInfo
+	BoundType tree.WindowFrameBoundType
+}
+
+type windowFramerTmplInfo struct {
+	OpString       string
+	ModeType       tree.WindowFrameMode
+	StartBoundType tree.WindowFrameBoundType
+	EndBoundType   tree.WindowFrameBoundType
+}
+
+func (overload windowFramerTmplInfo) GroupsMode() bool {
+	return overload.ModeType == tree.GROUPS
+}
+
+func (overload windowFramerTmplInfo) RowsMode() bool {
+	return overload.ModeType == tree.ROWS
+}
+
+func (overload windowFramerTmplInfo) RangeMode() bool {
+	return overload.ModeType == tree.RANGE
+}
+
+func (overload windowFramerTmplInfo) StartUnboundedPreceding() bool {
+	return overload.StartBoundType == tree.UnboundedPreceding
+}
+
+func (overload windowFramerTmplInfo) StartOffsetPreceding() bool {
+	return overload.StartBoundType == tree.OffsetPreceding
+}
+
+func (overload windowFramerTmplInfo) StartCurrentRow() bool {
+	return overload.StartBoundType == tree.CurrentRow
+}
+
+func (overload windowFramerTmplInfo) StartOffsetFollowing() bool {
+	return overload.StartBoundType == tree.OffsetFollowing
+}
+
+func (overload windowFramerTmplInfo) EndOffsetPreceding() bool {
+	return overload.EndBoundType == tree.OffsetPreceding
+}
+
+func (overload windowFramerTmplInfo) EndCurrentRow() bool {
+	return overload.EndBoundType == tree.CurrentRow
+}
+
+func (overload windowFramerTmplInfo) EndOffsetFollowing() bool {
+	return overload.EndBoundType == tree.OffsetFollowing
+}
+
+func (overload windowFramerTmplInfo) EndUnboundedFollowing() bool {
+	return overload.EndBoundType == tree.UnboundedFollowing
+}
+
+func (overload windowFramerTmplInfo) OffsetPreceding() bool {
+	return overload.StartBoundType == tree.OffsetPreceding ||
+		overload.EndBoundType == tree.OffsetPreceding
+}
+
+func (overload windowFramerTmplInfo) StartHasOffset() bool {
+	return overload.StartBoundType == tree.OffsetPreceding ||
+		overload.StartBoundType == tree.OffsetFollowing
+}
+
+func (overload windowFramerTmplInfo) EndHasOffset() bool {
+	return overload.EndBoundType == tree.OffsetPreceding ||
+		overload.EndBoundType == tree.OffsetFollowing
+}
+
+func (overload windowFramerTmplInfo) HasOffset() bool {
+	return overload.StartHasOffset() || overload.EndHasOffset()
+}
+
+func (overload windowFramerTmplInfo) BothUnbounded() bool {
+	return overload.StartBoundType == tree.UnboundedPreceding &&
+		overload.EndBoundType == tree.UnboundedFollowing
 }
 
 func modeToExecinfrapb(mode tree.WindowFrameMode) string {
@@ -128,72 +201,4 @@ func boundToExecinfrapb(bound tree.WindowFrameBoundType) string {
 		return "execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING"
 	}
 	return ""
-}
-
-func (overload windowFrameTmplInfo) GroupsMode() bool {
-	return overload.ModeType == tree.GROUPS
-}
-
-func (overload windowFrameTmplInfo) RowsMode() bool {
-	return overload.ModeType == tree.ROWS
-}
-
-func (overload windowFrameTmplInfo) RangeMode() bool {
-	return overload.ModeType == tree.RANGE
-}
-
-func (overload windowFrameTmplInfo) StartUnboundedPreceding() bool {
-	return overload.StartBoundType == tree.UnboundedPreceding
-}
-
-func (overload windowFrameTmplInfo) StartOffsetPreceding() bool {
-	return overload.StartBoundType == tree.OffsetPreceding
-}
-
-func (overload windowFrameTmplInfo) StartCurrentRow() bool {
-	return overload.StartBoundType == tree.CurrentRow
-}
-
-func (overload windowFrameTmplInfo) StartOffsetFollowing() bool {
-	return overload.StartBoundType == tree.OffsetFollowing
-}
-
-func (overload windowFrameTmplInfo) EndOffsetPreceding() bool {
-	return overload.EndBoundType == tree.OffsetPreceding
-}
-
-func (overload windowFrameTmplInfo) EndCurrentRow() bool {
-	return overload.EndBoundType == tree.CurrentRow
-}
-
-func (overload windowFrameTmplInfo) EndOffsetFollowing() bool {
-	return overload.EndBoundType == tree.OffsetFollowing
-}
-
-func (overload windowFrameTmplInfo) EndUnboundedFollowing() bool {
-	return overload.EndBoundType == tree.UnboundedFollowing
-}
-
-func (overload windowFrameTmplInfo) OffsetPreceding() bool {
-	return overload.StartBoundType == tree.OffsetPreceding ||
-		overload.EndBoundType == tree.OffsetPreceding
-}
-
-func (overload windowFrameTmplInfo) StartHasOffset() bool {
-	return overload.StartBoundType == tree.OffsetPreceding ||
-		overload.StartBoundType == tree.OffsetFollowing
-}
-
-func (overload windowFrameTmplInfo) EndHasOffset() bool {
-	return overload.EndBoundType == tree.OffsetPreceding ||
-		overload.EndBoundType == tree.OffsetFollowing
-}
-
-func (overload windowFrameTmplInfo) HasOffset() bool {
-	return overload.StartHasOffset() || overload.EndHasOffset()
-}
-
-func (overload windowFrameTmplInfo) BothUnbounded() bool {
-	return overload.StartBoundType == tree.UnboundedPreceding &&
-		overload.EndBoundType == tree.UnboundedFollowing
 }

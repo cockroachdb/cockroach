@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,7 +87,13 @@ type windowFramer interface {
 	close()
 }
 
-func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) windowFramer {
+func newWindowFramer(
+	evalCtx *tree.EvalContext,
+	frame *execinfrapb.WindowerSpec_Frame,
+	ordering *execinfrapb.Ordering,
+	inputTypes []*types.T,
+	peersColIdx int,
+) windowFramer {
 	startBound := frame.Bounds.Start
 	endBound := frame.Bounds.End
 	switch frame.Mode {
@@ -100,14 +108,10 @@ func newWindowFramer(frame *execinfrapb.WindowerSpec_Frame, peersColIdx int) win
 				op := &_OP_STRING{
 					windowFramerBase: windowFramerBase{
 						peersColIdx: peersColIdx,
+						ordColIdx:   tree.NoColumnIdx,
 					},
 				}
-				// {{if .StartHasOffset}}
-				op.startOffset = int(startBound.IntOffset)
-				// {{end}}
-				// {{if .EndHasOffset}}
-				op.endOffset = int(endBound.IntOffset)
-				// {{end}}
+				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
 				return op
 				// {{end}}
 			}
@@ -150,10 +154,19 @@ type windowFramerBase struct {
 	endIdx   int // Exclusive end of the window frame ignoring exclusion.
 
 	peersColIdx int // Indicates the beginning of each peer group. Can be unset.
+	ordColIdx   int // The single ordering column for RANGE mode with offset.
 
 	// startOffset and endOffset store the integer offsets for ROWS and GROUPS
 	// modes with OFFSET PRECEDING or OFFSET FOLLOWING.
 	startOffset, endOffset int
+
+	// startHandler and endHandler are used to calculate the start and end indexes
+	// in RANGE mode with OFFSET PRECEDING or OFFSET FOLLOWING.
+	startHandler, endHandler rangeOffsetHandler
+
+	// datumAlloc is used to decode the offsets in RANGE mode. It is initialized
+	// lazily.
+	datumAlloc *rowenc.DatumAlloc
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -214,6 +227,9 @@ func (b *windowFramerBase) getColsToStore(oldColsToStore []int) (colsToStore []i
 	if b.peersColIdx != tree.NoColumnIdx {
 		b.peersColIdx = storeCol(b.peersColIdx)
 	}
+	if b.ordColIdx != tree.NoColumnIdx {
+		b.ordColIdx = storeCol(b.ordColIdx)
+	}
 	return colsToStore
 }
 
@@ -251,9 +267,11 @@ func (b *windowFramerBase) incrementPeerGroup(ctx context.Context, index, groups
 			return b.partitionSize
 		}
 		vec, vecIdx, n := b.storedCols.GetVecWithTuple(ctx, b.peersColIdx, index)
-		col := vec.Bool()
+		peersCol := vec.Bool()
+		_, _ = peersCol[vecIdx], peersCol[n-1]
 		for ; vecIdx < n; vecIdx++ {
-			if col[vecIdx] {
+			//gcassert:bce
+			if peersCol[vecIdx] {
 				// We have reached the start of the next peer group (the end of the
 				// current one).
 				groups--
@@ -266,6 +284,8 @@ func (b *windowFramerBase) incrementPeerGroup(ctx context.Context, index, groups
 	}
 }
 
+// isFirstPeer returns true if the row at the given index into the current
+// partition is the first in its peer group.
 func (b *windowFramerBase) isFirstPeer(ctx context.Context, idx int) bool {
 	if idx == 0 {
 		// The first row in the partition is always the first in its peer group.
@@ -311,6 +331,17 @@ func (f *_OP_STRING) startPartition(
 	// f.endIdx must be advanced by 'endOffset' peer groups.
 	f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, f.endOffset)
 	// {{end}}
+	// {{/*
+	// In RANGE mode, rows which are within 'offset' logical units of the current
+	// row on the ordering column are within the frame of the first row, so they
+	// need to be processed up front.
+	// */}}
+	// {{if and .RangeMode .StartHasOffset}}
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	// {{end}}
+	// {{if and .RangeMode .EndHasOffset}}
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	// {{end}}
 }
 
 // next is called for each row in the partition. It advances to the next row and
@@ -318,12 +349,12 @@ func (f *_OP_STRING) startPartition(
 // called beyond the end of the partition, or undefined behavior may result.
 func (f *_OP_STRING) next(ctx context.Context) {
 	f.currentRow++
-	// {{if and .GroupsMode (not .BothUnbounded)}}
+	// {{if and (or .GroupsMode .RangeMode) (not .BothUnbounded)}}
 	// {{/*
 	// We need to keep track of whether the current row is the first of its peer
-	// group in GROUPS mode when one of the bounds is not a variant of UNBOUNDED.
-	// The information is used to trigger updates on the start and end indexes
-	// whenever we have advanced to a new peer group.
+	// group in GROUPS or RANGE mode when one of the bounds is not a variant of
+	// UNBOUNDED. The information is used to trigger updates on the start and end
+	// indexes whenever the current row has advanced to a new peer group.
 	// */}}
 	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
 	// {{end}}
@@ -342,12 +373,16 @@ func (f *_OP_STRING) next(ctx context.Context) {
 		// Advance the start index to the start of the next peer group.
 		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
 	}
+	// {{else if .RangeMode}}
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
 	// {{end}}
 	// {{end}}
 	// {{if .StartCurrentRow}}
 	// {{if .RowsMode}}
 	f.startIdx = f.currentRow
-	// {{else if .GroupsMode}}
+	// {{else if or .GroupsMode .RangeMode}}
 	if currRowIsGroupStart {
 		f.startIdx = f.currentRow
 	}
@@ -366,6 +401,10 @@ func (f *_OP_STRING) next(ctx context.Context) {
 		// whenever the currentRow pointer enters a new peers group.
 		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
 	}
+	// {{else if .RangeMode}}
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
 	// {{end}}
 	// {{end}}
 
@@ -381,12 +420,16 @@ func (f *_OP_STRING) next(ctx context.Context) {
 		// Advance the end index to the start of the next peer group.
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	// {{else if .RangeMode}}
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
 	// {{end}}
 	// {{end}}
 	// {{if .EndCurrentRow}}
 	// {{if .RowsMode}}
 	f.endIdx = f.currentRow + 1
-	// {{else if .GroupsMode}}
+	// {{else if or .GroupsMode .RangeMode}}
 	if currRowIsGroupStart {
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
@@ -405,6 +448,10 @@ func (f *_OP_STRING) next(ctx context.Context) {
 		// whenever the currentRow pointer enters a new peers group.
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	// {{else if .RangeMode}}
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
 	// {{end}}
 	// {{end}}
 	// {{if .EndUnboundedFollowing}}
@@ -418,9 +465,68 @@ func (f *_OP_STRING) next(ctx context.Context) {
 }
 
 func (f *_OP_STRING) close() {
+	// {{if and .RangeMode .StartHasOffset}}
+	f.startHandler.close()
+	// {{end}}
+	// {{if and .RangeMode .EndHasOffset}}
+	f.endHandler.close()
+	// {{end}}
 	*f = _OP_STRING{}
 }
 
 // {{end}}
 // {{end}}
 // {{end}}
+
+// handleOffsets populates the offset fields of the window framer operator, if
+// one or both bounds are OFFSET PRECEDING or OFFSET FOLLOWING.
+func (b *windowFramerBase) handleOffsets(
+	evalCtx *tree.EvalContext,
+	frame *execinfrapb.WindowerSpec_Frame,
+	ordering *execinfrapb.Ordering,
+	inputTypes []*types.T,
+) {
+	startBound, endBound := &frame.Bounds.Start, frame.Bounds.End
+	startHasOffset := startBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+		startBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING
+	endHasOffset := endBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING ||
+		endBound.BoundType == execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING
+	if !(startHasOffset || endHasOffset) {
+		return
+	}
+
+	if frame.Mode != execinfrapb.WindowerSpec_Frame_RANGE {
+		// For ROWS or GROUPS mode, the offset is of type int64 and the ordering
+		// column(s) is not stored.
+		if startHasOffset {
+			b.startOffset = int(startBound.IntOffset)
+		}
+		if endHasOffset {
+			b.endOffset = int(endBound.IntOffset)
+		}
+		return
+	}
+
+	// For RANGE mode with an offset, there is a single ordering column. The
+	// offset type depends on the ordering column type. In addition, the ordering
+	// column must be stored.
+	if len(ordering.Columns) != 1 {
+		colexecerror.InternalError(
+			errors.AssertionFailedf("expected exactly one ordering column for RANGE mode with offset"))
+	}
+	// Only initialize the DatumAlloc field when we know we will need it.
+	b.datumAlloc = &rowenc.DatumAlloc{}
+	b.ordColIdx = int(ordering.Columns[0].ColIdx)
+	ordColType := inputTypes[b.ordColIdx]
+	ordColAsc := ordering.Columns[0].Direction == execinfrapb.Ordering_Column_ASC
+	if startHasOffset {
+		b.startHandler = newRangeOffsetHandler(
+			evalCtx, b.datumAlloc, startBound, ordColType, ordColAsc, true, /* isStart */
+		)
+	}
+	if endHasOffset {
+		b.endHandler = newRangeOffsetHandler(
+			evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
+		)
+	}
+}
