@@ -20,6 +20,8 @@ import (
 type Interface interface {
 	Self() (kvserverpb.Liveness, error)
 	GetLivenesses() []kvserverpb.Liveness
+	IsAvailable(roachpb.NodeID) bool
+	IsAvailableNotDraining(roachpb.NodeID) bool
 	IsLive(roachpb.NodeID) (bool, error)
 }
 
