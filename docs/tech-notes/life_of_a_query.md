@@ -24,6 +24,34 @@ doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md). It
 will hopefully also be helpful for open source contributors and new Cockroach
 Labs engineers.
 
+### Background Material
+
+This document is meant to be self-contained, and does not assume the reader has
+a strong background in database internals. However, due to the brisk pace and
+wide scope, some familiarity with the following topics may be helpful:
+
+* [TCP/IP](https://en.wikipedia.org/wiki/Internet_protocol_suite) networking,
+  [gRPC](https://en.wikipedia.org/wiki/GRPC), and
+  [Protobuf](https://en.wikipedia.org/wiki/Protocol_Buffers)
+* [Parsers](https://en.wikipedia.org/wiki/Parsing) and
+  [interpreters](https://en.wikipedia.org/wiki/Interpreter_(computing))
+* [Key/value databases](https://en.wikipedia.org/wiki/Key–value_database),
+  [storage](https://en.wikipedia.org/wiki/Database_storage_structures),
+  and [serialization](https://en.wikipedia.org/wiki/Serialization)
+* [SQL](https://en.wikipedia.org/wiki/SQL) and
+  [relational algebra](https://en.wikipedia.org/wiki/Relational_algebra)
+* [ACID transactions](https://en.wikipedia.org/wiki/ACID) and
+  [MVCC](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)
+* [Distributed systems](https://en.wikipedia.org/wiki/Distributed_computing)
+  and [Raft](https://en.wikipedia.org/wiki/Raft_(algorithm))
+
+Good high-level introductory materials on these topics include:
+
+* [Designing Data-Intensive Applications](https://dataintensive.net)
+* [Database Internals](https://www.oreilly.com/library/view/database-internals/9781492040330/)
+* [Writing an Interpreter in Go](https://interpreterbook.com)
+* [CMU Intro to Database Systems](https://www.youtube.com/playlist?list=PLSE8ODhjZXjbohkNBWQs_otTrBTrjyohi)
+
 ## PostgreSQL Client Protocol
 
 A SQL query arrives at the server through the [PostgreSQL wire
