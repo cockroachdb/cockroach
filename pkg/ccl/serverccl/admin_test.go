@@ -75,3 +75,18 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 		t.Fatalf("expected zone config names %v; got %v", expectedZoneConfigNames, actualZoneConfigNames)
 	}
 }
+
+// TestAdminAPIChartCatalog verifies that a error doesn't happen.
+func TestAdminAPIChartCatalog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServer := testCluster.Server(0)
+
+	var resp serverpb.ChartCatalogResponse
+	if err := serverutils.GetJSONProto(firstServer, adminPrefix+"chartcatalog", &resp); err != nil {
+		t.Fatal(err)
+	}
+}
