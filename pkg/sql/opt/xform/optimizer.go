@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -586,11 +585,16 @@ func (o *Optimizer) enforceProps(
 		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
 		fullyOptimized = o.optimizeEnforcer(state, enforcer, required, member, memberProps)
 
-		// Try Sort enforcer that requires a partial ordering from its input.
-		longestCommonPrefix := deriveInterestingOrderingPrefix(member, required.Ordering)
-		if !longestCommonPrefix.Implies(&required.Ordering) {
+		// Try Sort enforcer that requires a partial ordering from its input. Choose
+		// the interesting ordering that forms the longest common prefix with the
+		// required ordering. We do not need to add the enforcer if the required
+		// ordering is implied by the input ordering (in which case the returned
+		// prefix is nil).
+		interestingOrderings := ordering.DeriveInterestingOrderings(member)
+		longestCommonPrefix := interestingOrderings.LongestCommonPrefix(&required.Ordering)
+		if longestCommonPrefix != nil {
 			enforcer := &memo.SortExpr{Input: state.best}
-			enforcer.InputOrdering = longestCommonPrefix
+			enforcer.InputOrdering = *longestCommonPrefix
 			memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
 			if o.optimizeEnforcer(state, enforcer, required, member, memberProps) {
 				fullyOptimized = true
@@ -601,25 +605,6 @@ func (o *Optimizer) enforceProps(
 	}
 
 	return true
-}
-
-// deriveInterestingOrderingPrefix finds the longest prefix of the required ordering
-// that is "interesting" as defined in Relational.Rule.InterestingOrderings.
-func deriveInterestingOrderingPrefix(
-	member memo.RelExpr, requiredOrdering props.OrderingChoice,
-) props.OrderingChoice {
-	// Find the interesting orderings of the member expression.
-	interestingOrderings := ordering.DeriveInterestingOrderings(member)
-
-	// Find the longest interesting ordering that is a prefix of the required ordering.
-	var longestCommonPrefix props.OrderingChoice
-	for _, ordering := range interestingOrderings {
-		commonPrefix := ordering.CommonPrefix(&requiredOrdering)
-		if commonPrefix.ColSet().Len() > longestCommonPrefix.ColSet().Len() {
-			longestCommonPrefix = commonPrefix
-		}
-	}
-	return longestCommonPrefix
 }
 
 // optimizeEnforcer optimizes and costs the enforcer.
