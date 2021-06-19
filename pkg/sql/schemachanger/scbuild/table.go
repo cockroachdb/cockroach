@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // alterTable builds targets and transforms the provided schema change nodes
@@ -147,6 +149,34 @@ func (b *buildContext) alterTableAddColumn(
 			panic(err)
 		}
 		col.ComputeExpr = &serializedExpr
+	}
+
+	if toType.UserDefined() {
+		typeID, err := typedesc.UserDefinedTypeOIDToID(toType.Oid())
+		if err != nil {
+			panic(err)
+		}
+		typeDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, typeID, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			panic(err)
+		}
+		// Only add a type reference node only if there isn't
+		// any existing reference inside this table. This makes
+		// it easier to handle drop columns and other operations,
+		// since those can for example only remove nodes.
+		found := false
+		for _, refID := range typeDesc.GetReferencingDescriptorIDs() {
+			if refID == table.GetID() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			b.addNode(scpb.Target_ADD, &scpb.TypeReference{
+				TypeID: typeDesc.GetID(),
+				DescID: table.GetID(),
+			})
+		}
 	}
 
 	b.addNode(scpb.Target_ADD, &scpb.Column{
@@ -289,6 +319,34 @@ func (b *buildContext) alterTableDropColumn(
 	// drop check constraints
 	// remove comments
 	// drop foreign keys
+
+	// Clean up type backreferences if no other column
+	// refers to the same type.
+	if colToDrop.HasType() && colToDrop.GetType().UserDefined() {
+		colType := colToDrop.GetType()
+		needsDrop := true
+		for _, column := range table.AllColumns() {
+			if column.HasType() && column.GetID() != colToDrop.GetID() &&
+				column.GetType().Oid() == colType.Oid() {
+				needsDrop = false
+				break
+			}
+		}
+		if needsDrop {
+			typeID, err := typedesc.UserDefinedTypeOIDToID(colType.Oid())
+			if err != nil {
+				panic(err)
+			}
+			typeDesc, err := b.Descs.GetMutableTypeByID(ctx, b.EvalCtx.Txn, typeID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				panic(err)
+			}
+			b.addNode(scpb.Target_DROP, &scpb.TypeReference{
+				TypeID: typeDesc.GetID(),
+				DescID: table.GetID(),
+			})
+		}
+	}
 
 	// TODO(ajwerner): Add family information to the column.
 	b.addNode(scpb.Target_DROP, &scpb.Column{
@@ -600,15 +658,43 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 			}
 			b.dropSequenceDesc(ctx, table, tree.DropCascade)
 		}
-		// Setup logic to clean up the default expression,
-		// only if sequences are depending on it.
+		// Setup logic to clean up the default expression always.
+		defaultExpr := &scpb.DefaultExpression{
+			DefaultExpr:     col.GetDefaultExpr(),
+			TableID:         table.GetID(),
+			UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
+			ColumnID:        col.GetID()}
+		if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
+			b.addNode(scpb.Target_DROP, defaultExpr)
+		}
+		// Get all available type references and create nodes
+		// for dropping these type references.
+		visitor := &tree.TypeCollectorVisitor{
+			OIDs: make(map[oid.Oid]struct{}),
+		}
+		if col.HasDefault() && !col.ColumnDesc().HasNullDefault() {
+			expr, err := parser.ParseExpr(col.GetDefaultExpr())
+			if err != nil {
+				panic(err)
+			}
+			tree.WalkExpr(visitor, expr)
+			for oid := range visitor.OIDs {
+				typeID, err := typedesc.UserDefinedTypeOIDToID(oid)
+				if err != nil {
+					panic(err)
+				}
+				typeRef := &scpb.TypeReference{
+					TypeID: typeID,
+					DescID: table.GetID(),
+				}
+				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, typeRef); !exists {
+					b.addNode(scpb.Target_DROP, typeRef)
+				}
+			}
+		}
+
+		// If there was a sequence dependency clean that up next.
 		if col.NumUsesSequences() > 0 {
-			b.addNode(scpb.Target_DROP,
-				&scpb.DefaultExpression{
-					DefaultExpr:     col.GetDefaultExpr(),
-					TableID:         table.GetID(),
-					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-					ColumnID:        col.GetID()})
 			// Drop the depends on within the sequence side.
 			for seqOrd := 0; seqOrd < col.NumUsesSequences(); seqOrd++ {
 				seqID := col.GetUsesSequenceID(seqOrd)
@@ -625,8 +711,7 @@ func (b *buildContext) maybeCleanTableSequenceRefs(
 
 func (b *buildContext) maybeCleanTableFKs(
 	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
-) {
-	// Loop through and update inbound and outbound
+) { // Loop through and update inbound and outbound
 	// foreign key references.
 	for _, fk := range table.GetInboundFKs() {
 		dependentTable, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, fk.OriginTableID, tree.ObjectLookupFlagsWithRequired())
@@ -740,7 +825,6 @@ func (b *buildContext) dropTableDesc(
 	b.addNode(scpb.Target_DROP,
 		&scpb.Table{TableID: table.GetID()})
 }
-
 func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 	// Find the table first.
 	for _, name := range n.Names {

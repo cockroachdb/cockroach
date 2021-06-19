@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestPlanAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-view", "create-sequence", "create-table", "create-type":
+			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
@@ -68,6 +69,10 @@ func TestPlanAlterTable(t *testing.T) {
 				case *tree.CreateView:
 					tableName = node.Name.String()
 				case *tree.CreateType:
+					tableName = ""
+				case *tree.CreateDatabase:
+					tableName = ""
+				case *tree.CreateSchema:
 					tableName = ""
 				default:
 					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
@@ -136,9 +141,6 @@ func indentText(input string, tab string) string {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) == 0 {
-			continue
-		}
 		result.WriteString(tab)
 		result.WriteString(line)
 		result.WriteString("\n")
@@ -148,18 +150,27 @@ func indentText(input string, tab string) string {
 
 // marshalDeps marshals dependencies in scplan.Plan to a string.
 func marshalDeps(t *testing.T, plan *scplan.Plan) string {
-	var stages strings.Builder
+	var sortedDeps []string
 	err := plan.Graph.ForEachNode(func(n *scpb.Node) error {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
-			fmt.Fprintf(&stages, "- from: [%s, %s]\n",
+			var deps strings.Builder
+			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
 				scpb.AttributesString(de.From().Element()), de.From().State)
-			fmt.Fprintf(&stages, "  to:   [%s, %s]\n",
+			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
 				scpb.AttributesString(de.To().Element()), de.To().State)
+			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})
 	})
 	if err != nil {
 		panic(errors.Wrap(err, "failed marshaling dependencies."))
+	}
+	// Lexicographically sort the dependencies,
+	// since the order is not fully deterministic.
+	sort.Strings(sortedDeps)
+	var stages strings.Builder
+	for _, dep := range sortedDeps {
+		fmt.Fprintf(&stages, "%s", dep)
 	}
 	return stages.String()
 }

@@ -102,6 +102,13 @@ type RemoveColumnDefaultExpression struct {
 	ColumnID descpb.ColumnID
 }
 
+// AddTypeBackRef adds a type back references from a relation.
+type AddTypeBackRef struct {
+	mutationOp
+	DescID descpb.ID
+	TypeID descpb.ID
+}
+
 // RemoveRelationDependedOnBy removes a depended on by reference from a given relation.
 type RemoveRelationDependedOnBy struct {
 	mutationOp

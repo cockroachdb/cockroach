@@ -47,10 +47,22 @@ func newMutationDescGetter(
 	}
 }
 
+func (m *mutationDescGetter) GetAnyDescriptorByID(
+	ctx context.Context, id descpb.ID,
+) (catalog.MutableDescriptor, error) {
+	desc, err := m.descs.GetMutableDescriptorByID(ctx, id, m.txn)
+	if err != nil {
+		return nil, err
+	}
+	desc.MaybeIncrementVersion()
+	m.retrieved.Add(desc.GetID())
+	return desc, nil
+}
+
 func (m *mutationDescGetter) GetMutableTypeByID(
 	ctx context.Context, id descpb.ID,
 ) (*typedesc.Mutable, error) {
-	typeDesc, err := m.descs.GetMutableTypeByID(ctx, m.txn, id, tree.ObjectLookupFlagsWithRequired())
+	typeDesc, err := m.descs.GetMutableTypeVersionByID(ctx, m.txn, id)
 	if err != nil {
 		return nil, err
 	}
