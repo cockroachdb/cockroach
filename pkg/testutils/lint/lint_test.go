@@ -1725,6 +1725,7 @@ func TestLint(t *testing.T) {
 			// (see git help gitglossary) makes * behave like a normal, single dir
 			// glob, and exclude is the synonym of !.
 			":(glob,exclude)sql/colexec/execgen/*.go",
+			":!sql/colexec/execgen/testdata",
 		)
 		if err != nil {
 			t.Fatal(err)
