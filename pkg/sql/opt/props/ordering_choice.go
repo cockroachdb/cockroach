@@ -457,10 +457,19 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 
 	result := make([]OrderingColumnChoice, 0, len(oc.Columns))
 
-	// Copy the optional columns so we can add to the sets. All group columns
-	// become optional after one column in the group is used.
-	leftOptional := oc.Optional.Copy()
-	rightOptional := other.Optional.Copy()
+	leftOptional := oc.Optional
+	rightOptional := other.Optional
+
+	var copied bool
+	ensureCopied := func() {
+		// Lazily copy the optional columns so we can add to the sets. All group
+		// columns become optional after one column in the group is used.
+		if !copied {
+			copied = true
+			leftOptional = leftOptional.Copy()
+			rightOptional = rightOptional.Copy()
+		}
+	}
 
 	left, right := 0, 0
 	for left < len(oc.Columns) && right < len(other.Columns) {
@@ -473,6 +482,7 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 				Group:      leftCol.Group.Intersection(rightCol.Group),
 				Descending: leftCol.Descending,
 			})
+			ensureCopied()
 			leftOptional.UnionWith(leftCol.Group)
 			rightOptional.UnionWith(rightCol.Group)
 			left, right = left+1, right+1
@@ -483,6 +493,7 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 				Group:      leftCol.Group.Intersection(rightOptional),
 				Descending: leftCol.Descending,
 			})
+			ensureCopied()
 			leftOptional.UnionWith(leftCol.Group)
 			left++
 
@@ -492,6 +503,7 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 				Group:      rightCol.Group.Intersection(leftOptional),
 				Descending: rightCol.Descending,
 			})
+			ensureCopied()
 			rightOptional.UnionWith(rightCol.Group)
 			right++
 
@@ -518,6 +530,76 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 		Optional: oc.Optional.Intersection(other.Optional),
 		Columns:  result,
 	}
+}
+
+// CommonPrefixLength returns the length of the OrderingChoice that would be
+// returned by CommonPrefix, along with a boolean indicating whether the common
+// prefix between the receiver and 'other' implies 'other'.
+func (oc *OrderingChoice) CommonPrefixLength(other *OrderingChoice) (length int, implies bool) {
+	if oc.Any() || other.Any() {
+		return length, other.Any()
+	}
+
+	leftOptional := oc.Optional
+	rightOptional := other.Optional
+
+	var copied bool
+	ensureCopied := func() {
+		// Lazily copy the optional columns so we can add to the sets. All group
+		// columns become optional after one column in the group is used.
+		if !copied {
+			copied = true
+			leftOptional = leftOptional.Copy()
+			rightOptional = rightOptional.Copy()
+		}
+	}
+
+	left, right := 0, 0
+	for left < len(oc.Columns) && right < len(other.Columns) {
+		leftCol, rightCol := &oc.Columns[left], &other.Columns[right]
+
+		switch {
+		case leftCol.Descending == rightCol.Descending && leftCol.Group.Intersects(rightCol.Group):
+			// The columns match.
+			length++
+			ensureCopied()
+			leftOptional.UnionWith(leftCol.Group)
+			rightOptional.UnionWith(rightCol.Group)
+			left, right = left+1, right+1
+
+		case leftCol.Group.Intersects(rightOptional):
+			// Left column is optional in the right set.
+			length++
+			ensureCopied()
+			leftOptional.UnionWith(leftCol.Group)
+			left++
+
+		case rightCol.Group.Intersects(leftOptional):
+			// Right column is optional in the left set.
+			length++
+			ensureCopied()
+			rightOptional.UnionWith(rightCol.Group)
+			right++
+
+		default:
+			// If we have reached this point, the common prefix will not include all
+			// of the non-optional columns from the 'other' OrderingChoice, and
+			// therefore will not imply 'other'.
+			return length, false
+		}
+	}
+	// oc matched a prefix of other. Append the tail of the other ordering that is
+	// included in the optional columns of oc.
+	for ; right < len(other.Columns); right++ {
+		rightCol := &other.Columns[right]
+		if !rightCol.Group.Intersects(leftOptional) {
+			break
+		}
+		length++
+	}
+	// The common prefix will imply 'other' if and only if it includes all of the
+	// non-optional columns from 'other'.
+	return length, right == len(other.Columns)
 }
 
 // SubsetOfCols is true if the OrderingChoice only references columns in the
