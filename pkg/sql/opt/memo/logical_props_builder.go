@@ -2341,24 +2341,26 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 
 func (h *joinPropsHelper) cardinality() props.Cardinality {
 	left := h.leftProps.Cardinality
+	right := h.rightProps.Cardinality
+	var innerJoinCard props.Cardinality
 
 	switch h.joinType {
-	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		// Semi/Anti join cardinality never exceeds left input cardinality, and
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// Anti join cardinality never exceeds left input cardinality, and
 		// allows zero rows.
 		return left.AsLowAs(0)
-	}
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp: // Semi joins will be handled below.
+	default:
+		// Other join types can return up to cross product of rows.
+		innerJoinCard = left.Product(right)
 
-	// Other join types can return up to cross product of rows.
-	right := h.rightProps.Cardinality
-	innerJoinCard := left.Product(right)
-
-	// Apply filter to cardinality.
-	if !h.filterIsTrue {
-		if h.filterIsFalse {
-			innerJoinCard = props.ZeroCardinality
-		} else {
-			innerJoinCard = innerJoinCard.AsLowAs(0)
+		// Apply filter to cardinality.
+		if !h.filterIsTrue {
+			if h.filterIsFalse {
+				innerJoinCard = props.ZeroCardinality
+			} else {
+				innerJoinCard = innerJoinCard.AsLowAs(0)
+			}
 		}
 	}
 
@@ -2421,6 +2423,21 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 			}
 		}
 		return innerJoinCard.AtLeast(c)
+
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+		// Semi join cardinality never exceeds left input cardinality, and
+		// allows zero rows.
+		semiJoinCard := left.AsLowAs(0)
+		if isJoinWithMult {
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinFiltersDoNotDuplicateRightRows() {
+				// Each right row matches at most one left row on the join filters, so
+				// the Semi join output cardinality is at most the cardinality of the
+				// right input.
+				semiJoinCard = semiJoinCard.Limit(right.Max)
+			}
+		}
+		return semiJoinCard
 
 	default:
 		panic(errors.AssertionFailedf("unexpected operator: %v", h.joinType))

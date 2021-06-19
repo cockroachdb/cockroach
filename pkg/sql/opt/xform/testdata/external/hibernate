@@ -980,6 +980,7 @@ where
 ----
 project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
+ ├── cardinality: [0 - 1]
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
@@ -1033,6 +1034,7 @@ where
 ----
 project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
+ ├── cardinality: [0 - 1]
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)

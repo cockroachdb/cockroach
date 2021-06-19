@@ -1377,9 +1377,11 @@ SELECT k FROM a WHERE (k, i) IN (SELECT b, a FROM (VALUES (1, 1), (2, 2), (3, 3)
 ----
 project
  ├── columns: k:1!null
+ ├── cardinality: [0 - 3]
  ├── key: (1)
  └── semi-join (hash)
       ├── columns: k:1!null i:2
+      ├── cardinality: [0 - 3]
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan a
