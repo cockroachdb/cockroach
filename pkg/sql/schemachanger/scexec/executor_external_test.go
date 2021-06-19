@@ -372,7 +372,7 @@ func TestSchemaChanger(t *testing.T) {
 				resolver.SchemaResolver
 				SemaCtx() *tree.SemaContext
 				EvalContext() *tree.EvalContext
-				sql.AuthorizationAccessor
+				scbuild.AuthorizationAccessor
 			})
 			defer cleanup()
 			buildDeps := scbuild.Dependencies{

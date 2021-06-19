@@ -17,6 +17,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestBuilderAlterTable(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-table", "create-view", "create-type", "create-sequence":
+			case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
@@ -68,8 +69,12 @@ func TestBuilderAlterTable(t *testing.T) {
 					tableName = node.Name.String()
 				case *tree.CreateType:
 					tableName = ""
+				case *tree.CreateSchema:
+					tableName = ""
+				case *tree.CreateDatabase:
+					tableName = ""
 				default:
-					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
+					t.Fatal("not a supported CREATE statement")
 				}
 				tdb.Exec(t, d.Input)
 
@@ -126,9 +131,6 @@ func indentText(input string, tab string) string {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) == 0 {
-			continue
-		}
 		result.WriteString(tab)
 		result.WriteString(line)
 		result.WriteString("\n")
@@ -138,26 +140,31 @@ func indentText(input string, tab string) string {
 
 // marshalNodes marshals a []*scpb.Node to YAML.
 func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
-	result := strings.Builder{}
+	var sortedEntries []string
 	for _, node := range nodes {
 		var buf bytes.Buffer
 		require.NoError(t, (&jsonpb.Marshaler{}).Marshal(&buf, node.Target.Element()))
-
 		target := make(map[string]interface{})
 		require.NoError(t, gojson.Unmarshal(buf.Bytes(), &target))
-
-		result.WriteString("- ")
-		result.WriteString(node.Target.Direction.String())
-		result.WriteString(" ")
-		scpb.FormatAttributes(node.Element(), &result)
-		result.WriteString("\n")
-		result.WriteString(indentText(fmt.Sprintf("state: %s\n", node.State.String()), "  "))
-		result.WriteString(indentText("details:\n", "  "))
+		entry := strings.Builder{}
+		entry.WriteString("- ")
+		entry.WriteString(node.Target.Direction.String())
+		entry.WriteString(" ")
+		scpb.FormatAttributes(node.Element(), &entry)
+		entry.WriteString("\n")
+		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.State.String()), "  "))
+		entry.WriteString(indentText("details:\n", "  "))
 		out, err := yaml.Marshal(target)
 		require.NoError(t, err)
-		result.WriteString(indentText(string(out), "    "))
+		entry.WriteString(indentText(string(out), "    "))
+		sortedEntries = append(sortedEntries, entry.String())
 	}
-
+	// Sort the output buffer of nodes for determinism.
+	result := strings.Builder{}
+	sort.Strings(sortedEntries)
+	for _, entry := range sortedEntries {
+		result.WriteString(entry)
+	}
 	return result.String()
 }
 

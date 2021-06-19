@@ -12,10 +12,8 @@ package scmutationexec
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -25,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,6 +32,8 @@ type DescriptorReader interface {
 	GetMutableTypeByID(ctx context.Context, id descpb.ID) (*typedesc.Mutable, error)
 	GetImmutableDatabaseByID(ctx context.Context, id descpb.ID) (catalog.DatabaseDescriptor, error)
 	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
+	GetAnyDescriptorByID(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
+	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
 }
 
 // NamespaceWriter encapsulates operations used to manipulate
@@ -60,7 +59,7 @@ type Catalog interface {
 // MutationJobs encapsulates the logic to create different types
 // of jobs.
 type MutationJobs interface {
-	AddNewGCJob(job jobspb.SchemaChangeGCDetails, description string)
+	AddNewGCJobForDescriptor(descriptor catalog.Descriptor)
 }
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
@@ -153,6 +152,28 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	return nil
 }
 
+func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) error {
+	mutDesc, err := m.catalog.GetMutableTypeByID(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	mutDesc.AddReferencingDescriptorID(op.DescID)
+	// Sanity: Validate that a back reference exists by now.
+	desc, err := m.catalog.GetAnyDescriptorByID(ctx, op.DescID)
+	if err != nil {
+		return err
+	}
+	refDescs, err := desc.GetReferencedDescIDs()
+	if err != nil {
+		return err
+	}
+	if !refDescs.Contains(op.TypeID) {
+		return errors.AssertionFailedf("Back reference for type %d is missing inside descriptor %d.",
+			op.TypeID, op.DescID)
+	}
+	return nil
+}
+
 func (m *visitor) RemoveRelationDependedOnBy(
 	ctx context.Context, op scop.RemoveRelationDependedOnBy,
 ) error {
@@ -190,45 +211,39 @@ func (m *visitor) RemoveTypeBackRef(ctx context.Context, op scop.RemoveTypeBackR
 }
 
 func (m *visitor) CreateGcJobForDescriptor(
-	_ context.Context, op scop.CreateGcJobForDescriptor,
+	ctx context.Context, op scop.CreateGcJobForDescriptor,
 ) error {
-	// Setup a GC job for this object
-	tablesToDrop := []jobspb.SchemaChangeGCDetails_DroppedID{{
-		ID:       op.DescID,
-		DropTime: timeutil.Now().UnixNano(),
-	},
+	desc, err := m.catalog.GetAnyDescriptorByID(ctx, op.DescID)
+	if err != nil {
+		return err
 	}
-	job := jobspb.SchemaChangeGCDetails{
-		Tables: tablesToDrop,
-	}
-	m.jobs.AddNewGCJob(job, fmt.Sprintf("DROP %s %d", "TABLE", op.DescID))
+	m.jobs.AddNewGCJobForDescriptor(desc)
 	return nil
 }
 
 func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
-	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+	descriptor, err := m.catalog.GetAnyDescriptorByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	// Mark table as dropped
-	tableDesc.SetDropped()
+	descriptor.SetDropped()
 	return nil
 }
 
 func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
-	tableDesc, err := m.catalog.GetMutableTableByID(ctx, op.TableID)
+	descriptor, err := m.catalog.GetAnyDescriptorByID(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	// Queue up names for draining.
-	parentSchemaID := tableDesc.GetParentSchemaID()
 	nameDetails := descpb.NameInfo{
-		ParentID:       tableDesc.ParentID,
-		ParentSchemaID: parentSchemaID,
-		Name:           tableDesc.Name}
-	m.catalog.AddDrainedName(tableDesc.GetID(), nameDetails)
+		ParentID:       descriptor.GetParentID(),
+		ParentSchemaID: descriptor.GetParentSchemaID(),
+		Name:           descriptor.GetName()}
+	m.catalog.AddDrainedName(descriptor.GetID(), nameDetails)
 	return nil
 }
 
