@@ -126,7 +126,7 @@ var (
 	metaChangefeedFailures = metric.Metadata{
 		Name:        "changefeed.failures",
 		Help:        "Total number of changefeed jobs which have failed",
-		Measurement: "Changefeed Jobs",
+		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
 
