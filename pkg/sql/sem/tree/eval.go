@@ -5228,11 +5228,11 @@ func SimilarToEscape(ctx *EvalContext, unescaped, pattern, escape string) (Datum
 func SimilarPattern(pattern, escape string) (Datum, error) {
 	key, err := makeSimilarToKey(pattern, escape)
 	if err != nil {
-		return dEmptyString, err
+		return nil, err
 	}
 	pattern, err = key.Pattern()
 	if err != nil {
-		return dEmptyString, err
+		return nil, err
 	}
 	return NewDString(pattern), nil
 }

@@ -290,7 +290,7 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><a name="ilike_escape"></a><code>ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches case insensetively <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="ilike_escape"></a><code>ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches case insensetively <code>unescaped</code> with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr>
 <tr><td><a name="inet_contained_by_or_equals"></a><code>inet_contained_by_or_equals(val: <a href="inet.html">inet</a>, container: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
 </span></td></tr>
@@ -298,13 +298,13 @@
 </span></td></tr>
 <tr><td><a name="inet_same_family"></a><code>inet_same_family(val: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks if two IP addresses are of the same IP family.</p>
 </span></td></tr>
-<tr><td><a name="like_escape"></a><code>like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="like_escape"></a><code>like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr>
-<tr><td><a name="not_ilike_escape"></a><code>not_ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches case insensetively with <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="not_ilike_escape"></a><code>not_ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches case insensetively with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr>
-<tr><td><a name="not_like_escape"></a><code>not_like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="not_like_escape"></a><code>not_like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr>
-<tr><td><a name="not_similar_to_escape"></a><code>not_similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="not_similar_to_escape"></a><code>not_similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -2612,15 +2612,15 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="sha512"></a><code>sha512(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA512 hash value of a set of values.</p>
 </span></td></tr>
-<tr><td><a name="similar_escape"></a><code>similar_escape(pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘’ as an escape token.</p>
+<tr><td><a name="similar_escape"></a><code>similar_escape(pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code>.</p>
 </span></td></tr>
-<tr><td><a name="similar_escape"></a><code>similar_escape(pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="similar_escape"></a><code>similar_escape(pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr>
-<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘’ as an escape token.</p>
+<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(pattern: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code>.</p>
 </span></td></tr>
-<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a SQL regexp <code>pattern</code> to a POSIX regexp <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr>
-<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
+<tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td></tr>
 <tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
 </span></td></tr>
