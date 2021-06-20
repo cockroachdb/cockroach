@@ -1654,7 +1654,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
 			},
 			types.Bool,
-			"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
+			"Matches `unescaped` with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		),
 	),
@@ -1671,7 +1671,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(!bmatch), err
 			},
 			types.Bool,
-			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+			"Checks whether `unescaped` not matches with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -1682,7 +1682,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
 			},
 			types.Bool,
-			"Matches case insensetively `unescaped` with `pattern` using 'escape' as an escape token.",
+			"Matches case insensetively `unescaped` with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -1698,20 +1698,31 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(!bmatch), err
 			},
 			types.Bool,
-			"Checks whether `unescaped` not matches case insensetively with `pattern` using 'escape' as an escape token.",
+			"Checks whether `unescaped` not matches case insensetively with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
-	"similar_to_escape": makeBuiltin(defProps(),
-		stringOverload3(
-			"unescaped", "pattern", "escape",
-			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
-				return tree.SimilarToEscape(evalCtx, unescaped, pattern, escape)
-			},
-			types.Bool,
-			"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
-			tree.VolatilityImmutable,
-		)),
+	"similar_escape": makeBuiltin(
+		tree.FunctionProperties{
+			NullableArgs: true,
+		},
+		similarOverloads...),
+
+	"similar_to_escape": makeBuiltin(
+		defProps(),
+		append(
+			similarOverloads,
+			stringOverload3(
+				"unescaped", "pattern", "escape",
+				func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+					return tree.SimilarToEscape(evalCtx, unescaped, pattern, escape)
+				},
+				types.Bool,
+				"Matches `unescaped` with `pattern` using `escape` as an escape token.",
+				tree.VolatilityImmutable,
+			),
+		)...,
+	),
 
 	"not_similar_to_escape": makeBuiltin(defProps(),
 		stringOverload3(
@@ -1725,7 +1736,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(!bmatch), err
 			},
 			types.Bool,
-			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+			"Checks whether `unescaped` not matches with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -6165,6 +6176,39 @@ var jsonArrayLengthImpl = tree.Overload{
 	},
 	Info:       "Returns the number of elements in the outermost JSON or JSONB array.",
 	Volatility: tree.VolatilityImmutable,
+}
+
+var similarOverloads = []tree.Overload{
+	{
+		Types:      tree.ArgTypes{{"pattern", types.String}},
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			if args[0] == tree.DNull {
+				return tree.DNull, nil
+			}
+			pattern := string(tree.MustBeDString(args[0]))
+			return tree.SimilarPattern(pattern, "")
+		},
+		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern`.",
+		Volatility: tree.VolatilityImmutable,
+	},
+	{
+		Types:      tree.ArgTypes{{"pattern", types.String}, {"escape", types.String}},
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			if args[0] == tree.DNull {
+				return tree.DNull, nil
+			}
+			pattern := string(tree.MustBeDString(args[0]))
+			if args[1] == tree.DNull {
+				return tree.SimilarPattern(pattern, "")
+			}
+			escape := string(tree.MustBeDString(args[1]))
+			return tree.SimilarPattern(pattern, escape)
+		},
+		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using `escape` as an escape token.",
+		Volatility: tree.VolatilityImmutable,
+	},
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
