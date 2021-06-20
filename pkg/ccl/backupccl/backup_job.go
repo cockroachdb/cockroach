@@ -240,6 +240,7 @@ func backup(
 	checkpointLoop := func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
+		defer close(requestFinishedCh)
 		for progress := range progCh {
 			var progDetails BackupManifest_Progress
 			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
@@ -254,7 +255,9 @@ func backup(
 			}
 
 			// Signal that an ExportRequest finished to update job progress.
-			requestFinishedCh <- struct{}{}
+			for i := int32(0); i < progDetails.CompletedSpans; i++ {
+				requestFinishedCh <- struct{}{}
+			}
 			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
 				err := writeBackupManifest(
 					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
