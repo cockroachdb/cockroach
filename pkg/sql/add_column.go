@@ -164,6 +164,22 @@ func (p *planner) addColumnImpl(
 		col.ComputeExpr = &serializedExpr
 	}
 
+	// We need to allocate new IDs in case we need to configure their zone
+	// partitioning.
+	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+		return err
+	}
+
+	if idx != nil {
+		if err := p.configureZoneConfigForNewIndexPartitioning(
+			params.ctx,
+			n.tableDesc,
+			*idx,
+		); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
