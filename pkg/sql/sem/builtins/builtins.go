@@ -1654,7 +1654,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
 			},
 			types.Bool,
-			"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
+			"Matches `unescaped` with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		),
 	),
@@ -1671,7 +1671,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(!bmatch), err
 			},
 			types.Bool,
-			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+			"Checks whether `unescaped` not matches with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -1682,7 +1682,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
 			},
 			types.Bool,
-			"Matches case insensetively `unescaped` with `pattern` using 'escape' as an escape token.",
+			"Matches case insensetively `unescaped` with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -1698,7 +1698,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(!bmatch), err
 			},
 			types.Bool,
-			"Checks whether `unescaped` not matches case insensetively with `pattern` using 'escape' as an escape token.",
+			"Checks whether `unescaped` not matches case insensetively with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -1718,9 +1718,11 @@ var builtins = map[string]builtinDefinition{
 					return tree.SimilarToEscape(evalCtx, unescaped, pattern, escape)
 				},
 				types.Bool,
-				"Matches `unescaped` with `pattern` using 'escape' as an escape token.",
+				"Matches `unescaped` with `pattern` using `escape` as an escape token.",
 				tree.VolatilityImmutable,
-			))...),
+			),
+		)...,
+	),
 
 	"not_similar_to_escape": makeBuiltin(defProps(),
 		stringOverload3(
@@ -1734,7 +1736,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(!bmatch), err
 			},
 			types.Bool,
-			"Checks whether `unescaped` not matches with `pattern` using 'escape' as an escape token.",
+			"Checks whether `unescaped` not matches with `pattern` using `escape` as an escape token.",
 			tree.VolatilityImmutable,
 		)),
 
@@ -6187,7 +6189,7 @@ var similarOverloads = []tree.Overload{
 			pattern := string(tree.MustBeDString(args[0]))
 			return tree.SimilarPattern(pattern, "")
 		},
-		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using '' as an escape token.",
+		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern`.",
 		Volatility: tree.VolatilityImmutable,
 	},
 	{
@@ -6204,7 +6206,7 @@ var similarOverloads = []tree.Overload{
 			escape := string(tree.MustBeDString(args[1]))
 			return tree.SimilarPattern(pattern, escape)
 		},
-		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using 'escape' as an escape token.",
+		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using `escape` as an escape token.",
 		Volatility: tree.VolatilityImmutable,
 	},
 }
