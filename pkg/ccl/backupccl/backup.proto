@@ -66,6 +66,7 @@ message BackupManifest {
   message Progress {
     repeated File files = 1 [(gogoproto.nullable) = false];
     util.hlc.Timestamp rev_start_time = 2 [(gogoproto.nullable) = false];
+    int32 completed_spans = 3;
   }
 
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
