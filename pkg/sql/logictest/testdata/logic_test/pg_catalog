@@ -334,6 +334,7 @@ CREATE TABLE constraint_db.t6 (
 );
 CREATE INDEX ON constraint_db.t6 ((a + b));
 CREATE INDEX ON constraint_db.t6 (lower(c), (a + b));
+CREATE UNIQUE INDEX ON constraint_db.t6 (lower(c));
 
 ## pg_catalog.pg_namespace
 
@@ -470,6 +471,7 @@ oid         relname            relnamespace  reltype  reloftype  relowner    rel
 4179599057  primary            2332901747    0        0          1546506610  2631952481  0            0
 4179599058  t6_expr_idx        2332901747    0        0          1546506610  2631952481  0            0
 4179599059  t6_expr_expr1_idx  2332901747    0        0          1546506610  2631952481  0            0
+4179599060  t6_expr_key        2332901747    0        0          1546506610  2631952481  0            0
 62          mv1                2332901747    100062   0          1546506610  0           0            0
 3919862786  primary            2332901747    0        0          1546506610  2631952481  0            0
 
@@ -499,6 +501,7 @@ t6                 NULL      NULL       0              0              true      
 primary            NULL      NULL       0              0              false        false        p
 t6_expr_idx        NULL      NULL       0              0              false        false        p
 t6_expr_expr1_idx  NULL      NULL       0              0              false        false        p
+t6_expr_key        NULL      NULL       0              0              false        false        p
 mv1                NULL      NULL       0              0              true         false        p
 primary            NULL      NULL       0              0              false        false        p
 
@@ -528,6 +531,7 @@ t6                 false      r        4         0          false       true
 primary            false      i        1         0          false       false
 t6_expr_idx        false      i        1         0          false       false
 t6_expr_expr1_idx  false      i        2         0          false       false
+t6_expr_key        false      i        1         0          false       false
 mv1                false      m        2         0          false       true
 primary            false      i        1         0          false       false
 
@@ -557,6 +561,7 @@ t6                 false        false           false           0             NU
 primary            false        false           false           0             NULL    NULL
 t6_expr_idx        false        false           false           0             NULL    NULL
 t6_expr_expr1_idx  false        false           false           0             NULL    NULL
+t6_expr_key        false        false           false           0             NULL    NULL
 mv1                false        false           false           0             NULL    NULL
 primary            false        false           false           0             NULL    NULL
 
@@ -620,6 +625,7 @@ attrelid    relname            attname                   atttypid  attstattarget
 4179599058  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
 4179599059  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      6       0         -1
 4179599059  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       7       0         -1
+4179599060  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      8       0         -1
 62          mv1                ?column?                  20        0              8       1       0         -1
 62          mv1                rowid                     20        0              8       2       0         -1
 3919862786  primary            rowid                     20        0              8       2       0         -1
@@ -682,6 +688,7 @@ primary            rowid                     -1         NULL      NULL        NU
 t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_key        crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -744,6 +751,7 @@ primary            rowid                     false         true        0        
 t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
 t6_expr_expr1_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
+t6_expr_key        crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
 mv1                ?column?                  false         true        0            NULL    NULL        NULL
 mv1                rowid                     false         true        0            NULL    NULL        NULL
 primary            rowid                     false         true        0            NULL    NULL        NULL
@@ -803,6 +811,7 @@ WHERE n.nspname = 'public'
 ----
 relname            attname                   typname   attcollation  collname
 t1                 d                         varchar   3403232968    default
+t6_expr_key        crdb_internal_idx_expr_3  text      3403232968    default
 t6_expr_expr1_idx  crdb_internal_idx_expr_1  text      3403232968    default
 t6                 c                         text      3403232968    default
 t5                 c                         text      3403232968    default
@@ -863,6 +872,7 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 4179599057  public      t6         primary            NULL
 4179599058  public      t6         t6_expr_idx        NULL
 4179599059  public      t6         t6_expr_expr1_idx  NULL
+4179599060  public      t6         t6_expr_key        NULL
 3919862786  public      mv1        primary            NULL
 
 query OTTT colnames
@@ -881,8 +891,9 @@ crdb_oid    tablename  indexname          indexdef
 3660126519  t4         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t4 USING btree (rowid ASC)
 1229708768  t5         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t5 USING btree (rowid ASC)
 4179599057  t6         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t6 USING btree (rowid ASC)
-4179599058  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree (crdb_internal_idx_expr ASC)
-4179599059  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (crdb_internal_idx_expr_1 ASC, crdb_internal_idx_expr_2 ASC)
+4179599058  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
+4179599059  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
+4179599060  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
 3919862786  mv1        primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
@@ -1083,6 +1094,7 @@ oid         conname        connamespace  contype  condef
 2355671820  fk_b_c         2332901747    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
 2792001267  check_b        2332901747    c        CHECK ((b > 11))
 3572320190  primary        2332901747    p        PRIMARY KEY (p ASC)
+3723881944  t6_expr_key    2332901747    u        UNIQUE (lower(c) ASC)
 3911002394  fk_a_ref_t4    2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
 4089604113  fk             2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
 4243354484  t1_a_key       2332901747    u        UNIQUE (a ASC)
@@ -1104,6 +1116,7 @@ fk             f        false          false        true          57        0   
 fk_b_c         f        false          false        true          60        0         0
 check_b        c        false          false        true          57        0         0
 primary        p        false          false        true          55        0         450499963
+t6_expr_key    u        false          false        true          61        0         4179599060
 fk_a_ref_t4    f        false          false        true          60        0         0
 fk             f        false          false        true          56        0         450499960
 t1_a_key       u        false          false        true          55        0         450499960
@@ -1131,6 +1144,7 @@ unique_a       0          NULL         NULL         NULL
 uwi_b_c        0          NULL         NULL         NULL
 check_b        0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
+t6_expr_key    0          NULL         NULL         NULL
 t1_a_key       0          NULL         NULL         NULL
 index_key      0          NULL         NULL         NULL
 
@@ -1163,6 +1177,7 @@ fk             true        0            true          {1,2}
 fk_b_c         true        0            true          {2,3}
 check_b        true        0            true          {2}
 primary        true        0            true          {1}
+t6_expr_key    true        0            true          {8}
 fk_a_ref_t4    true        0            true          {1}
 fk             true        0            true          {1}
 t1_a_key       true        0            true          {2}
@@ -1182,6 +1197,7 @@ unique_a       NULL     NULL       NULL       NULL       NULL       NULL        
 uwi_b_c        NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
 check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
+t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
 t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
 index_key      NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
 

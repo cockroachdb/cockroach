@@ -20,8 +20,11 @@ import (
 // testCol includes the information needed to create a column descriptor for
 // testing purposes.
 type testCol struct {
-	name string
-	typ  *types.T
+	id           descpb.ColumnID
+	name         string
+	typ          *types.T
+	expr         string
+	inaccessible bool
 }
 
 // testTableDesc is a helper functions for creating table descriptors in a
@@ -32,10 +35,11 @@ func testTableDesc(
 	cols := make([]descpb.ColumnDescriptor, len(columns))
 	for i := range columns {
 		cols[i] = descpb.ColumnDescriptor{
-			Name: columns[i].name,
-			Type: columns[i].typ,
-			// Column IDs start at 1 to mimic "real" table descriptors.
-			ID: descpb.ColumnID(i + 1),
+			ID:           columns[i].id,
+			Name:         columns[i].name,
+			Type:         columns[i].typ,
+			ComputeExpr:  &columns[i].expr,
+			Inaccessible: columns[i].inaccessible,
 		}
 	}
 

@@ -28,18 +28,22 @@ func TestIndexForDisplay(t *testing.T) {
 	table := tree.Name("bar")
 	tableName := tree.MakeTableNameWithSchema(database, tree.PublicSchemaName, table)
 
-	colNames := []string{"a", "b"}
 	tableDesc := testTableDesc(
 		string(table),
-		[]testCol{{colNames[0], types.Int}, {colNames[1], types.Int}},
+		[]testCol{
+			{id: 1, name: "a", typ: types.Int},
+			{id: 2, name: "b", typ: types.Int},
+			{id: 3, name: "c", typ: types.Int},
+			{id: 4, name: "d", typ: types.Int, expr: "a + b", inaccessible: true},
+		},
 		nil,
 	)
 
-	indexName := "baz"
 	baseIndex := descpb.IndexDescriptor{
-		Name:                indexName,
+		Name:                "baz",
 		ID:                  0x0,
-		KeyColumnNames:      colNames,
+		KeyColumnNames:      []string{"a", "b"},
+		KeyColumnIDs:        descpb.ColumnIDs{1, 2},
 		KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC},
 	}
 
@@ -49,12 +53,20 @@ func TestIndexForDisplay(t *testing.T) {
 	invertedIndex := baseIndex
 	invertedIndex.Type = descpb.IndexDescriptor_INVERTED
 	invertedIndex.KeyColumnNames = []string{"a"}
+	invertedIndex.KeyColumnIDs = descpb.ColumnIDs{1}
 
 	storingIndex := baseIndex
 	storingIndex.StoreColumnNames = []string{"c"}
 
 	partialIndex := baseIndex
 	partialIndex.Predicate = "a > 1:::INT8"
+
+	expressionIndex := baseIndex
+	expressionIndex.KeyColumnNames = []string{"a", "d", "b"}
+	expressionIndex.KeyColumnIDs = descpb.ColumnIDs{1, 4, 2}
+	expressionIndex.KeyColumnDirections = []descpb.IndexDescriptor_Direction{
+		descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC, descpb.IndexDescriptor_ASC,
+	}
 
 	testData := []struct {
 		index      descpb.IndexDescriptor
@@ -69,6 +81,7 @@ func TestIndexForDisplay(t *testing.T) {
 		{invertedIndex, descpb.AnonymousTable, "", "", "INVERTED INDEX baz (a)"},
 		{storingIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, b DESC) STORING (c)"},
 		{partialIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8"},
+		{expressionIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, (a + b) DESC, b ASC)"},
 		{
 			partialIndex,
 			descpb.AnonymousTable,
