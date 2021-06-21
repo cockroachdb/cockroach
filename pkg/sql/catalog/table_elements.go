@@ -241,6 +241,11 @@ type Column interface {
 	// IsInaccessible returns true iff the column is inaccessible.
 	IsInaccessible() bool
 
+	// IsExpressionIndexColumn returns true iff the column is an an inaccessible
+	// virtual computed column that represents an expression in an expression
+	// index.
+	IsExpressionIndexColumn() bool
+
 	// NumUsesSequences returns the number of sequences used by this column.
 	NumUsesSequences() int
 

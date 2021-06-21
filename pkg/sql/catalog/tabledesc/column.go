@@ -132,6 +132,12 @@ func (w column) IsInaccessible() bool {
 	return w.desc.Inaccessible
 }
 
+// IsExpressionIndexColumn returns true iff the column is an an inaccessible
+// virtual computed column that represents an expression in an expression index.
+func (w column) IsExpressionIndexColumn() bool {
+	return w.IsInaccessible() && w.IsVirtual()
+}
+
 // NumUsesSequences returns the number of sequences used by this column.
 func (w column) NumUsesSequences() int {
 	return len(w.desc.UsesSequenceIds)
