@@ -358,9 +358,18 @@ func (desc *wrapper) NonDropColumns() []catalog.Column {
 }
 
 // VisibleColumns returns a slice of Column interfaces containing the
-// table's visible columns , in the canonical order.
+// table's visible columns, in the canonical order. Visible columns are public
+// columns with Hidden=false.
 func (desc *wrapper) VisibleColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().visible
+}
+
+// AccessibleColumns returns a slice of Column interfaces containing the table's
+// accessible columns, in the canonical order. Accessible columns are public
+// columns with Inaccessible=false. See ColumnDescriptor.Inaccessible for more
+// details.
+func (desc *wrapper) AccessibleColumns() []catalog.Column {
+	return desc.getExistingOrNewColumnCache().accessible
 }
 
 // UserDefinedTypeColumns returns a slice of Column interfaces
