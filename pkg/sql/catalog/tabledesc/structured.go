@@ -1019,7 +1019,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []strin
 							col.GetName(),
 							col.GetType().Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/stable/inverted-indexes.html",
 					)
 
 				}
@@ -1032,7 +1032,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []strin
 							col.GetName(),
 							col.GetType().Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/stable/inverted-indexes.html",
 					)
 				}
 			}

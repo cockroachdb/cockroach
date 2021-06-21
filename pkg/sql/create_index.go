@@ -393,7 +393,7 @@ func replaceExpressionElemsWithVirtualCols(
 							elem.Expr.String(),
 							typ.Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/stable/inverted-indexes.html",
 					)
 				}
 				if i == lastColumnIdx && !colinfo.ColumnTypeIsInvertedIndexable(typ) {
@@ -404,7 +404,7 @@ func replaceExpressionElemsWithVirtualCols(
 							elem.Expr.String(),
 							typ.Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/stable/inverted-indexes.html",
 					)
 				}
 			}

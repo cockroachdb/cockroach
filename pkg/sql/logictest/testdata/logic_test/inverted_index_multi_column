@@ -1,15 +1,15 @@
 # Tests for multi-column inverted indexes.
 
 # Err if the last column is not an invertable type.
-statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/stable/inverted-indexes.html
 CREATE TABLE m_err (k INT PRIMARY KEY, a INT, b INT, geom GEOMETRY, INVERTED INDEX (a, b))
 
 # Err if a non-last column is not a non-invertable type.
-statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/stable/inverted-indexes.html
 CREATE TABLE m_err (k INT PRIMARY KEY, j JSON, geom GEOMETRY, INVERTED INDEX (j, geom))
 
 # Err if a non-last column is not a non-invertable type.
-statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
+statement error column j of type jsonb is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/stable/inverted-indexes.html
 CREATE TABLE m_err (k INT PRIMARY KEY, a INT, j JSON, geom GEOMETRY, INVERTED INDEX (a, j, geom))
 
 statement ok
