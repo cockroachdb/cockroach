@@ -91,6 +91,39 @@ CREATE INDEX err ON other ((t.a + 10))
 statement error column \"crdb_internal_idx_expr\" does not exist
 SELECT * FROM t WHERE crdb_internal_idx_expr > 0
 
+# Test anonymous index name generation.
+
+statement ok
+CREATE TABLE anon (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c STRING,
+  FAMILY (k, a, b, c)
+);
+CREATE INDEX ON anon ((a + b));
+CREATE INDEX ON anon ((a + 10), b);
+CREATE INDEX ON anon (lower(c), b);
+CREATE INDEX ON anon ((a + 10), b, lower(c));
+CREATE INDEX ON anon ((a + 10), (b + 100), lower(c));
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE anon]
+----
+CREATE TABLE public.anon (
+   k INT8 NOT NULL,
+   a INT8 NULL,
+   b INT8 NULL,
+   c STRING NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   INDEX anon_expr_idx (crdb_internal_idx_expr ASC),
+   INDEX anon_expr_b_idx (crdb_internal_idx_expr_1 ASC, b ASC),
+   INDEX anon_expr_b_idx1 (crdb_internal_idx_expr_2 ASC, b ASC),
+   INDEX anon_expr_b_expr1_idx (crdb_internal_idx_expr_3 ASC, b ASC, crdb_internal_idx_expr_4 ASC),
+   INDEX anon_expr_expr1_expr2_idx (crdb_internal_idx_expr_5 ASC, crdb_internal_idx_expr_6 ASC, crdb_internal_idx_expr_7 ASC),
+   FAMILY fam_0_k_a_b_c (k, a, b, c)
+)
+
 # Querying expression indexes.
 
 statement ok
