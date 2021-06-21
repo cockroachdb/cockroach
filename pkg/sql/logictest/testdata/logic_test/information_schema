@@ -610,6 +610,8 @@ pg_catalog          pg_shdescription
 pg_catalog          pg_shmem_allocations
 pg_catalog          pg_shseclabel
 pg_catalog          pg_stat_activity
+pg_catalog          pg_stat_database
+pg_catalog          pg_stat_database_conflicts
 pg_catalog          pg_statistic_ext
 pg_catalog          pg_subscription
 pg_catalog          pg_subscription_rel
@@ -881,6 +883,8 @@ pg_shdescription
 pg_shmem_allocations
 pg_shseclabel
 pg_stat_activity
+pg_stat_database
+pg_stat_database_conflicts
 pg_statistic_ext
 pg_subscription
 pg_subscription_rel
@@ -1187,6 +1191,8 @@ system         pg_catalog          pg_shdescription                       SYSTEM
 system         pg_catalog          pg_shmem_allocations                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_shseclabel                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_stat_activity                       SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_database                       SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_stat_database_conflicts             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_statistic_ext                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_subscription                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_subscription_rel                    SYSTEM VIEW  NO                  1
@@ -2639,6 +2645,8 @@ NULL     public   system         pg_catalog          pg_shdescription           
 NULL     public   system         pg_catalog          pg_shmem_allocations                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shseclabel                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_database                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_database_conflicts             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
@@ -3159,6 +3167,8 @@ NULL     public   system         pg_catalog          pg_shdescription           
 NULL     public   system         pg_catalog          pg_shmem_allocations                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shseclabel                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_database                       SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_stat_database_conflicts             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
