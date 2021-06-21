@@ -633,6 +633,125 @@ func TestShowQueries(t *testing.T) {
 	}
 }
 
+// #61569 sql: placeholder values for prepared statements should be visible in SHOW QUERIES
+func TestShowQueriesPlaceholders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var applicationConnection *gosql.DB
+	var operatorConnection *gosql.DB
+
+	recordedQueries := make(map[string]string)
+
+	testServerArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				// Record the results of SHOW QUERIES for each statement run on the applicationConnection,
+				// so that we can make assertions on them below.
+				StatementFilter: func(ctx context.Context, session *sessiondata.SessionData, stmt string, err error) {
+					// Only observe queries when we're in an application session,
+					// to limit concurrent access to the recordedQueries map.
+					if session.ApplicationName == "application" {
+						// Only select queries run by the test application itself,
+						// so that we filter out the SELECT query FROM [SHOW QUERIES] statement.
+						// (It's the "grep shows up in `ps | grep foo`" problem.)
+						// And we can assume that there will be only one result row because we do not run
+						// the below test cases in parallel.
+						row := operatorConnection.QueryRow(
+							"SELECT query FROM [SHOW QUERIES] WHERE application_name = 'application'",
+						)
+						var query string
+						err := row.Scan(&query)
+						if err != nil {
+							t.Fatal(err)
+						}
+						recordedQueries[stmt] = query
+					}
+				},
+			},
+		},
+	}
+
+	tc := serverutils.StartNewTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      testServerArgs,
+		},
+	)
+
+	defer tc.Stopper().Stop(context.Background())
+
+	applicationConnection = tc.ServerConn(0)
+	operatorConnection = tc.ServerConn(1)
+
+	// Mark all queries on this connection as coming from the "driver,"
+	// so we can identify them in our filter above.
+	_, err := applicationConnection.Exec("SET application_name TO 'application'")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// For a given statement-with-placeholders and its arguments, how should it look in SHOW QUERIES?
+	testCases := []struct {
+		statement string
+		args      []interface{}
+		expected  string
+	}{
+		{
+			"SELECT upper($1)",
+			[]interface{}{"hello"},
+			"SELECT upper('hello')",
+		},
+	}
+
+	// Perform both as a simple execution and as a prepared statement,
+	// to make sure we're exercising both code paths.
+	queryExecutionMethods := []struct {
+		label string
+		exec  func(*gosql.DB, string, ...interface{}) (gosql.Result, error)
+	}{
+		{
+			"Exec",
+			func(conn *gosql.DB, statement string, args ...interface{}) (gosql.Result, error) {
+				return conn.Exec(statement, args...)
+			},
+		}, {
+			"PrepareAndExec",
+			func(conn *gosql.DB, statement string, args ...interface{}) (gosql.Result, error) {
+				stmt, err := conn.Prepare(statement)
+				if err != nil {
+					return nil, err
+				}
+				defer stmt.Close()
+				return stmt.Exec(args...)
+			},
+		},
+	}
+
+	for _, method := range queryExecutionMethods {
+		for _, test := range testCases {
+			t.Run(fmt.Sprintf("%v/%v", method.label, test.statement), func(t *testing.T) {
+				_, err := method.exec(applicationConnection, test.statement, test.args...)
+
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				actual := recordedQueries[test.statement]
+
+				if actual != test.expected {
+					t.Errorf(
+						"Expected %s to have its placeholders filled in as %s, but was %s",
+						test.statement,
+						test.expected,
+						actual,
+					)
+				}
+			})
+		}
+	}
+}
+
 func TestShowSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
