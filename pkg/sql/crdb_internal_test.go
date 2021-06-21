@@ -13,6 +13,7 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -805,4 +807,93 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setupTraces takes two tracers (potentially on different nodes), and creates
+// two span hierarchies as depicted below. The method returns the traceIDs for
+// both these span hierarchies, along with a cleanup method to Finish() all the
+// opened spans.
+//
+// Traces on node1:
+// -------------
+// root													<-- traceID1
+// 		root.child								<-- traceID1
+// root.child.remotechild 			<-- traceID1
+//
+// Traces on node2:
+// -------------
+// root.child.remotechild2			<-- traceID1
+// root.child.remotechilddone		<-- traceID1
+// root2												<-- traceID2
+// 		root2.child								<-- traceID2
+func setupTraces(t1, t2 *tracing.Tracer) (uint64, func()) {
+	// Start a root span on "node 1".
+	root := t1.StartSpan("root", tracing.WithForceRealSpan())
+	root.SetVerbose(true)
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Start a child span on "node 1".
+	child := t1.StartSpan("root.child", tracing.WithParentAndAutoCollection(root))
+
+	// Sleep a bit so that everything that comes afterwards has higher timestamps
+	// than the one we just assigned. Otherwise the sorting is not deterministic.
+	time.Sleep(10 * time.Millisecond)
+
+	// Start a forked child span on "node 1".
+	childRemoteChild := t1.StartSpan("root.child.remotechild", tracing.WithParentAndManualCollection(child.Meta()))
+
+	// Start a remote child span on "node 2".
+	childRemoteChild2 := t2.StartSpan("root.child.remotechild2", tracing.WithParentAndManualCollection(child.Meta()))
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Start another remote child span on "node 2" that we finish.
+	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithParentAndManualCollection(child.Meta()))
+	childRemoteChildFinished.Finish()
+	child.ImportRemoteSpans(childRemoteChildFinished.GetRecording())
+
+	// Start another remote child span on "node 2" that we finish. This will have
+	// a different trace_id from the spans created above.
+	root2 := t2.StartSpan("root2", tracing.WithForceRealSpan())
+	root2.SetVerbose(true)
+
+	// Start a child span on "node 2".
+	child2 := t2.StartSpan("root2.child", tracing.WithParentAndAutoCollection(root2))
+	return root.TraceID(), func() {
+		for _, span := range []*tracing.Span{root, child, childRemoteChild,
+			childRemoteChild2, root2, child2} {
+			span.Finish()
+		}
+	}
+}
+
+func TestClusterInflightTracesVirtualTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	args := base.TestClusterArgs{}
+	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	node1Tracer := tc.Server(0).Tracer().(*tracing.Tracer)
+	node2Tracer := tc.Server(1).Tracer().(*tracing.Tracer)
+
+	traceID, cleanup := setupTraces(node1Tracer, node2Tracer)
+	defer cleanup()
+
+	t.Run("no-index-constraint", func(t *testing.T) {
+		sqlDB.CheckQueryResults(t, `SELECT * from crdb_internal.cluster_inflight_traces`, [][]string{})
+	})
+
+	t.Run("with-index-constraint", func(t *testing.T) {
+		// We expect there to be 3 tracing.Recordings rooted at
+		// root, root.child.remotechild, root.child.remotechild2.
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT trace_id, node_id from crdb_internal.cluster_inflight_traces WHERE trace_id=%d`, traceID),
+			[][]string{{strconv.Itoa(int(traceID)), `1`}, {strconv.Itoa(int(traceID)), `1`},
+				{strconv.Itoa(int(traceID)), `2`}})
+	})
 }

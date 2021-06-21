@@ -12,6 +12,7 @@ package service
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -61,6 +62,11 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 	// 1. root1, root1.child
 	// 2. fork1
 	require.Equal(t, 2, len(resp.Recordings))
+	// Sort the response based on the start time of the root spans in the
+	// recordings.
+	sort.SliceStable(resp.Recordings, func(i, j int) bool {
+		return resp.Recordings[i].RecordedSpans[0].StartTime.Before(resp.Recordings[j].RecordedSpans[0].StartTime)
+	})
 	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.Recordings[0].RecordedSpans, `
 			span: root1
 				tags: _unfinished=1 _verbose=1

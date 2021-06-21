@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 	"github.com/cockroachdb/errors"
@@ -162,6 +163,9 @@ type sqlServerOptionalKVArgs struct {
 	// Used by backup/restore.
 	externalStorage        cloud.ExternalStorageFactory
 	externalStorageFromURI cloud.ExternalStorageFromURIFactory
+
+	// Used to collect inflight spans from all nodes in the cluster.
+	tracingCollector *collector.TraceCollector
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -532,6 +536,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RootMemoryMonitor:       rootSQLMemoryMonitor,
 		TestingKnobs:            sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
+		TraceCollector:          cfg.tracingCollector,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
