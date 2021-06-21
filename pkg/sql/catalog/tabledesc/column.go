@@ -183,15 +183,16 @@ func (w column) IsSystemColumn() bool {
 
 // columnCache contains precomputed slices of catalog.Column interfaces.
 type columnCache struct {
-	all       []catalog.Column
-	public    []catalog.Column
-	writable  []catalog.Column
-	deletable []catalog.Column
-	nonDrop   []catalog.Column
-	visible   []catalog.Column
-	readable  []catalog.Column
-	withUDTs  []catalog.Column
-	system    []catalog.Column
+	all        []catalog.Column
+	public     []catalog.Column
+	writable   []catalog.Column
+	deletable  []catalog.Column
+	nonDrop    []catalog.Column
+	visible    []catalog.Column
+	accessible []catalog.Column
+	readable   []catalog.Column
+	withUDTs   []catalog.Column
+	system     []catalog.Column
 }
 
 // newColumnCache returns a fresh fully-populated columnCache struct for the
@@ -255,8 +256,11 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 		}
 	}
 	for _, col := range c.deletable {
-		if col.Public() && !col.IsHidden() {
+		if col.Public() && !col.IsHidden() && !col.IsInaccessible() {
 			lazyAllocAppendColumn(&c.visible, col, numPublic)
+		}
+		if col.Public() && !col.IsInaccessible() {
+			lazyAllocAppendColumn(&c.accessible, col, numPublic)
 		}
 		if col.HasType() && col.GetType().UserDefined() {
 			lazyAllocAppendColumn(&c.withUDTs, col, numDeletable)
