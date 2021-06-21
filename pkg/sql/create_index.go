@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -393,7 +394,7 @@ func replaceExpressionElemsWithVirtualCols(
 							elem.Expr.String(),
 							typ.Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
 					)
 				}
 				if i == lastColumnIdx && !colinfo.ColumnTypeIsInvertedIndexable(typ) {
@@ -404,7 +405,7 @@ func replaceExpressionElemsWithVirtualCols(
 							elem.Expr.String(),
 							typ.Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
 					)
 				}
 			}
