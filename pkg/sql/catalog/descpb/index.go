@@ -44,22 +44,6 @@ func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 	return start
 }
 
-// ColNamesFormat writes a string describing the column names and directions
-// in this index to the given buffer.
-func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
-	startIdx := desc.ExplicitColumnStartIdx()
-	for i := startIdx; i < len(desc.KeyColumnNames); i++ {
-		if i > startIdx {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNameP(&desc.KeyColumnNames[i])
-		if desc.Type != IndexDescriptor_INVERTED {
-			ctx.WriteByte(' ')
-			ctx.WriteString(desc.KeyColumnDirections[i].String())
-		}
-	}
-}
-
 // FillColumns sets the column names and directions in desc.
 func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.KeyColumnNames = make([]string, 0, len(elems))
@@ -80,20 +64,6 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	}
 	return nil
 }
-
-// TODO (tyler): Issue #39771 This method needs more thorough testing, probably
-// in structured_test.go. Or possibly replace it with a format method taking
-// a format context as argument.
-
-// ColNamesString returns a string describing the column names and directions
-// in this index.
-func (desc *IndexDescriptor) ColNamesString() string {
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	desc.ColNamesFormat(f)
-	return f.CloseAndGetString()
-}
-
-// TODO (tyler): Issue #39771 Same comment as ColNamesString above.
 
 // IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
 // key constraint with the provided set of originColIDs.
