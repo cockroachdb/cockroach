@@ -190,6 +190,13 @@ func StartTenant(
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
+	provider := args.tenantConnect
+	// TODO(radu): allow injecting a different provider through testing knobs.
+	_, err = NewTenantSideCostController(ctx, args.TenantID, stopper, provider)
+	if err != nil {
+		return nil, "", "", err
+	}
+
 	if err := s.startServeSQL(ctx,
 		args.stopper,
 		s.connManager,
@@ -370,4 +377,18 @@ func makeTenantSQLServerArgs(
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 	}, nil
+}
+
+// TenantSideCostController is an interface through which tenants report and
+// throttle resource usage.
+type TenantSideCostController interface {
+	// TODO(radu)
+}
+
+// NewTenantSideCostController is a hook for CCL code which implements the
+// controller.
+var NewTenantSideCostController = func(
+	ctx context.Context, tenantID roachpb.TenantID, stopper *stop.Stopper, provider kvtenant.TokenBucketProvider,
+) (TenantSideCostController, error) {
+	return nil, errors.Errorf("token cost control requires a CCL binary")
 }
