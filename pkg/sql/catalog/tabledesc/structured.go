@@ -175,7 +175,7 @@ func buildIndexName(tableDesc *Mutable, index catalog.Index) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if col.IsInaccessible() {
+		if col.IsExpressionIndexColumn() {
 			if exprCount == 0 {
 				segmentName = "expr"
 			} else {
@@ -1020,15 +1020,29 @@ func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
 // PrimaryKeyString returns the pretty-printed primary key declaration for a
 // table descriptor.
 func (desc *wrapper) PrimaryKeyString() string {
-	var primaryKeyString strings.Builder
-	primaryKeyString.WriteString("PRIMARY KEY (%s)")
-	if desc.PrimaryIndex.IsSharded() {
-		fmt.Fprintf(&primaryKeyString, " USING HASH WITH BUCKET_COUNT = %v",
-			desc.PrimaryIndex.Sharded.ShardBuckets)
+	primaryIdx := &desc.PrimaryIndex
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.WriteString("PRIMARY KEY (")
+	startIdx := primaryIdx.ExplicitColumnStartIdx()
+	for i, n := startIdx, len(primaryIdx.KeyColumnNames); i < n; i++ {
+		if i > startIdx {
+			f.WriteString(", ")
+		}
+		// Primary key columns cannot be inaccessible computed columns, so it is
+		// safe to always print the column name. For secondary indexes, we have
+		// to print inaccessible computed column expressions. See
+		// catformat.FormatIndexElements.
+		f.FormatNameP(&primaryIdx.KeyColumnNames[i])
+		f.WriteByte(' ')
+		f.WriteString(primaryIdx.KeyColumnDirections[i].String())
 	}
-	return fmt.Sprintf(primaryKeyString.String(),
-		desc.PrimaryIndex.ColNamesString(),
-	)
+	f.WriteByte(')')
+	if desc.PrimaryIndex.IsSharded() {
+		f.WriteString(
+			fmt.Sprintf(" USING HASH WITH BUCKET_COUNT = %v", primaryIdx.Sharded.ShardBuckets),
+		)
+	}
+	return f.CloseAndGetString()
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
