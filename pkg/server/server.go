@@ -525,7 +525,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
-	// need an InternalExecutor, but the InternalExecutor needs an ExecutorConfig,
+	// need an InternalExecutor, but the InternalExecutor needs an xecutorConfig,
 	// which in turn needs many things. That's why everybody that needs an
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
@@ -629,10 +629,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
+	tenantUsage := NewTenantUsageServer(db, internalExecutor)
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
-		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID)
-	node.admissionQ = gcoord.GetWorkQueue(admission.KVWork)
+		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID,
+		gcoord.GetWorkQueue(admission.KVWork),
+		tenantUsage,
+	)
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -739,6 +742,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
 		regionsServer:            sStatus,
+		tenantUsageServer:        tenantUsage,
 	})
 	if err != nil {
 		return nil, err
