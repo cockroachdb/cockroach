@@ -450,28 +450,28 @@ FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-oid         relname                                                   relnamespace  reltype  reloftype  relowner    relam       relfilenode  reltablespace
-55          t1                                                        2332901747    100055   0          1546506610  2631952481  0            0
-450499963   primary                                                   2332901747    0        0          1546506610  2631952481  0            0
-450499960   t1_a_key                                                  2332901747    0        0          1546506610  2631952481  0            0
-450499961   index_key                                                 2332901747    0        0          1546506610  2631952481  0            0
-56          t2                                                        2332901747    100056   0          1546506610  2631952481  0            0
-2315049508  primary                                                   2332901747    0        0          1546506610  2631952481  0            0
-2315049511  t2_t1_id_idx                                              2332901747    0        0          1546506610  2631952481  0            0
-57          t3                                                        2332901747    100057   0          1546506610  2631952481  0            0
-969972501   primary                                                   2332901747    0        0          1546506610  2631952481  0            0
-969972502   t3_a_b_idx                                                2332901747    0        0          1546506610  2631952481  0            0
-58          v1                                                        2332901747    100058   0          1546506610  0           0            0
-59          t4                                                        2332901747    100059   0          1546506610  2631952481  0            0
-3660126519  primary                                                   2332901747    0        0          1546506610  2631952481  0            0
-60          t5                                                        2332901747    100060   0          1546506610  2631952481  0            0
-1229708768  primary                                                   2332901747    0        0          1546506610  2631952481  0            0
-61          t6                                                        2332901747    100061   0          1546506610  2631952481  0            0
-4179599057  primary                                                   2332901747    0        0          1546506610  2631952481  0            0
-4179599058  t6_crdb_internal_idx_expr_idx                             2332901747    0        0          1546506610  2631952481  0            0
-4179599059  t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  2332901747    0        0          1546506610  2631952481  0            0
-62          mv1                                                       2332901747    100062   0          1546506610  0           0            0
-3919862786  primary                                                   2332901747    0        0          1546506610  2631952481  0            0
+oid         relname            relnamespace  reltype  reloftype  relowner    relam       relfilenode  reltablespace
+55          t1                 2332901747    100055   0          1546506610  2631952481  0            0
+450499963   primary            2332901747    0        0          1546506610  2631952481  0            0
+450499960   t1_a_key           2332901747    0        0          1546506610  2631952481  0            0
+450499961   index_key          2332901747    0        0          1546506610  2631952481  0            0
+56          t2                 2332901747    100056   0          1546506610  2631952481  0            0
+2315049508  primary            2332901747    0        0          1546506610  2631952481  0            0
+2315049511  t2_t1_id_idx       2332901747    0        0          1546506610  2631952481  0            0
+57          t3                 2332901747    100057   0          1546506610  2631952481  0            0
+969972501   primary            2332901747    0        0          1546506610  2631952481  0            0
+969972502   t3_a_b_idx         2332901747    0        0          1546506610  2631952481  0            0
+58          v1                 2332901747    100058   0          1546506610  0           0            0
+59          t4                 2332901747    100059   0          1546506610  2631952481  0            0
+3660126519  primary            2332901747    0        0          1546506610  2631952481  0            0
+60          t5                 2332901747    100060   0          1546506610  2631952481  0            0
+1229708768  primary            2332901747    0        0          1546506610  2631952481  0            0
+61          t6                 2332901747    100061   0          1546506610  2631952481  0            0
+4179599057  primary            2332901747    0        0          1546506610  2631952481  0            0
+4179599058  t6_expr_idx        2332901747    0        0          1546506610  2631952481  0            0
+4179599059  t6_expr_expr1_idx  2332901747    0        0          1546506610  2631952481  0            0
+62          mv1                2332901747    100062   0          1546506610  0           0            0
+3919862786  primary            2332901747    0        0          1546506610  2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -479,28 +479,28 @@ FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname                                                   relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared  relpersistence
-t1                                                        NULL      NULL       0              0              true         false        p
-primary                                                   NULL      NULL       0              0              false        false        p
-t1_a_key                                                  NULL      NULL       0              0              false        false        p
-index_key                                                 NULL      NULL       0              0              false        false        p
-t2                                                        NULL      NULL       0              0              true         false        p
-primary                                                   NULL      NULL       0              0              false        false        p
-t2_t1_id_idx                                              NULL      NULL       0              0              false        false        p
-t3                                                        NULL      NULL       0              0              true         false        p
-primary                                                   NULL      NULL       0              0              false        false        p
-t3_a_b_idx                                                NULL      NULL       0              0              false        false        p
-v1                                                        NULL      NULL       0              0              false        false        p
-t4                                                        NULL      NULL       0              0              true         false        p
-primary                                                   NULL      NULL       0              0              false        false        p
-t5                                                        NULL      NULL       0              0              true         false        p
-primary                                                   NULL      NULL       0              0              false        false        p
-t6                                                        NULL      NULL       0              0              true         false        p
-primary                                                   NULL      NULL       0              0              false        false        p
-t6_crdb_internal_idx_expr_idx                             NULL      NULL       0              0              false        false        p
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  NULL      NULL       0              0              false        false        p
-mv1                                                       NULL      NULL       0              0              true         false        p
-primary                                                   NULL      NULL       0              0              false        false        p
+relname            relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared  relpersistence
+t1                 NULL      NULL       0              0              true         false        p
+primary            NULL      NULL       0              0              false        false        p
+t1_a_key           NULL      NULL       0              0              false        false        p
+index_key          NULL      NULL       0              0              false        false        p
+t2                 NULL      NULL       0              0              true         false        p
+primary            NULL      NULL       0              0              false        false        p
+t2_t1_id_idx       NULL      NULL       0              0              false        false        p
+t3                 NULL      NULL       0              0              true         false        p
+primary            NULL      NULL       0              0              false        false        p
+t3_a_b_idx         NULL      NULL       0              0              false        false        p
+v1                 NULL      NULL       0              0              false        false        p
+t4                 NULL      NULL       0              0              true         false        p
+primary            NULL      NULL       0              0              false        false        p
+t5                 NULL      NULL       0              0              true         false        p
+primary            NULL      NULL       0              0              false        false        p
+t6                 NULL      NULL       0              0              true         false        p
+primary            NULL      NULL       0              0              false        false        p
+t6_expr_idx        NULL      NULL       0              0              false        false        p
+t6_expr_expr1_idx  NULL      NULL       0              0              false        false        p
+mv1                NULL      NULL       0              0              true         false        p
+primary            NULL      NULL       0              0              false        false        p
 
 query TBTIIBB colnames
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
@@ -508,28 +508,28 @@ FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname                                                   relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
-t1                                                        false      r        13        0          false       true
-primary                                                   false      i        1         0          false       false
-t1_a_key                                                  false      i        1         0          false       false
-index_key                                                 false      i        2         0          false       false
-t2                                                        false      r        2         0          false       true
-primary                                                   false      i        1         0          false       false
-t2_t1_id_idx                                              false      i        1         0          false       false
-t3                                                        false      r        4         2          false       true
-primary                                                   false      i        1         0          false       false
-t3_a_b_idx                                                false      i        2         0          false       false
-v1                                                        false      v        4         0          false       false
-t4                                                        false      r        4         0          false       true
-primary                                                   false      i        1         0          false       false
-t5                                                        false      r        4         0          false       true
-primary                                                   false      i        1         0          false       false
-t6                                                        false      r        4         0          false       true
-primary                                                   false      i        1         0          false       false
-t6_crdb_internal_idx_expr_idx                             false      i        1         0          false       false
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  false      i        2         0          false       false
-mv1                                                       false      m        2         0          false       true
-primary                                                   false      i        1         0          false       false
+relname            relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
+t1                 false      r        13        0          false       true
+primary            false      i        1         0          false       false
+t1_a_key           false      i        1         0          false       false
+index_key          false      i        2         0          false       false
+t2                 false      r        2         0          false       true
+primary            false      i        1         0          false       false
+t2_t1_id_idx       false      i        1         0          false       false
+t3                 false      r        4         2          false       true
+primary            false      i        1         0          false       false
+t3_a_b_idx         false      i        2         0          false       false
+v1                 false      v        4         0          false       false
+t4                 false      r        4         0          false       true
+primary            false      i        1         0          false       false
+t5                 false      r        4         0          false       true
+primary            false      i        1         0          false       false
+t6                 false      r        4         0          false       true
+primary            false      i        1         0          false       false
+t6_expr_idx        false      i        1         0          false       false
+t6_expr_expr1_idx  false      i        2         0          false       false
+mv1                false      m        2         0          false       true
+primary            false      i        1         0          false       false
 
 query TBBBITT colnames
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
@@ -537,28 +537,28 @@ FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname                                                   relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions
-t1                                                        false        false           false           0             NULL    NULL
-primary                                                   false        false           false           0             NULL    NULL
-t1_a_key                                                  false        false           false           0             NULL    NULL
-index_key                                                 false        false           false           0             NULL    NULL
-t2                                                        false        false           false           0             NULL    NULL
-primary                                                   false        false           false           0             NULL    NULL
-t2_t1_id_idx                                              false        false           false           0             NULL    NULL
-t3                                                        false        false           false           0             NULL    NULL
-primary                                                   false        false           false           0             NULL    NULL
-t3_a_b_idx                                                false        false           false           0             NULL    NULL
-v1                                                        false        false           false           0             NULL    NULL
-t4                                                        false        false           false           0             NULL    NULL
-primary                                                   false        false           false           0             NULL    NULL
-t5                                                        false        false           false           0             NULL    NULL
-primary                                                   false        false           false           0             NULL    NULL
-t6                                                        false        false           false           0             NULL    NULL
-primary                                                   false        false           false           0             NULL    NULL
-t6_crdb_internal_idx_expr_idx                             false        false           false           0             NULL    NULL
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  false        false           false           0             NULL    NULL
-mv1                                                       false        false           false           0             NULL    NULL
-primary                                                   false        false           false           0             NULL    NULL
+relname            relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions
+t1                 false        false           false           0             NULL    NULL
+primary            false        false           false           0             NULL    NULL
+t1_a_key           false        false           false           0             NULL    NULL
+index_key          false        false           false           0             NULL    NULL
+t2                 false        false           false           0             NULL    NULL
+primary            false        false           false           0             NULL    NULL
+t2_t1_id_idx       false        false           false           0             NULL    NULL
+t3                 false        false           false           0             NULL    NULL
+primary            false        false           false           0             NULL    NULL
+t3_a_b_idx         false        false           false           0             NULL    NULL
+v1                 false        false           false           0             NULL    NULL
+t4                 false        false           false           0             NULL    NULL
+primary            false        false           false           0             NULL    NULL
+t5                 false        false           false           0             NULL    NULL
+primary            false        false           false           0             NULL    NULL
+t6                 false        false           false           0             NULL    NULL
+primary            false        false           false           0             NULL    NULL
+t6_expr_idx        false        false           false           0             NULL    NULL
+t6_expr_expr1_idx  false        false           false           0             NULL    NULL
+mv1                false        false           false           0             NULL    NULL
+primary            false        false           false           0             NULL    NULL
 
 ## pg_catalog.pg_attribute
 
@@ -569,60 +569,60 @@ JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-attrelid    relname                                                   attname                   atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
-55          t1                                                        p                         701       0              8       1       0         -1
-55          t1                                                        a                         20        0              8       2       0         -1
-55          t1                                                        b                         20        0              8       3       0         -1
-55          t1                                                        c                         20        0              8       4       0         -1
-55          t1                                                        d                         1043      0              -1      5       0         -1
-55          t1                                                        e                         1560      0              -1      6       0         -1
-55          t1                                                        f                         1700      0              -1      7       0         -1
-55          t1                                                        g                         20        0              8       8       0         -1
-55          t1                                                        h                         1014      0              -1      9       0         -1
-55          t1                                                        i                         1015      0              -1      10      0         -1
-55          t1                                                        j                         18        0              1       11      0         -1
-55          t1                                                        k                         1043      0              -1      12      0         -1
-55          t1                                                        l                         20        0              8       13      0         -1
-450499963   primary                                                   p                         701       0              8       1       0         -1
-450499960   t1_a_key                                                  a                         20        0              8       2       0         -1
-450499961   index_key                                                 b                         20        0              8       3       0         -1
-450499961   index_key                                                 c                         20        0              8       4       0         -1
-56          t2                                                        t1_id                     20        0              8       1       0         -1
-56          t2                                                        rowid                     20        0              8       2       0         -1
-2315049508  primary                                                   rowid                     20        0              8       2       0         -1
-2315049511  t2_t1_id_idx                                              t1_id                     20        0              8       1       0         -1
-57          t3                                                        a                         20        0              8       1       0         -1
-57          t3                                                        b                         20        0              8       2       0         -1
-57          t3                                                        c                         25        0              -1      3       0         -1
-57          t3                                                        rowid                     20        0              8       4       0         -1
-969972501   primary                                                   rowid                     20        0              8       4       0         -1
-969972502   t3_a_b_idx                                                a                         20        0              8       1       0         -1
-969972502   t3_a_b_idx                                                b                         20        0              8       2       0         -1
-58          v1                                                        p                         701       0              8       1       0         -1
-58          v1                                                        a                         20        0              8       2       0         -1
-58          v1                                                        b                         20        0              8       3       0         -1
-58          v1                                                        c                         20        0              8       4       0         -1
-59          t4                                                        a                         20        0              8       1       0         -1
-59          t4                                                        b                         701       0              8       2       0         -1
-59          t4                                                        c                         25        0              -1      3       0         -1
-59          t4                                                        rowid                     20        0              8       4       0         -1
-3660126519  primary                                                   rowid                     20        0              8       4       0         -1
-60          t5                                                        a                         20        0              8       1       0         -1
-60          t5                                                        b                         701       0              8       2       0         -1
-60          t5                                                        c                         25        0              -1      3       0         -1
-60          t5                                                        rowid                     20        0              8       4       0         -1
-1229708768  primary                                                   rowid                     20        0              8       4       0         -1
-61          t6                                                        a                         20        0              8       1       0         -1
-61          t6                                                        b                         20        0              8       2       0         -1
-61          t6                                                        c                         25        0              -1      3       0         -1
-61          t6                                                        rowid                     20        0              8       4       0         -1
-4179599057  primary                                                   rowid                     20        0              8       4       0         -1
-4179599058  t6_crdb_internal_idx_expr_idx                             crdb_internal_idx_expr    20        0              8       5       0         -1
-4179599059  t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  crdb_internal_idx_expr_1  25        0              -1      6       0         -1
-4179599059  t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  crdb_internal_idx_expr_2  20        0              8       7       0         -1
-62          mv1                                                       ?column?                  20        0              8       1       0         -1
-62          mv1                                                       rowid                     20        0              8       2       0         -1
-3919862786  primary                                                   rowid                     20        0              8       2       0         -1
+attrelid    relname            attname                   atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
+55          t1                 p                         701       0              8       1       0         -1
+55          t1                 a                         20        0              8       2       0         -1
+55          t1                 b                         20        0              8       3       0         -1
+55          t1                 c                         20        0              8       4       0         -1
+55          t1                 d                         1043      0              -1      5       0         -1
+55          t1                 e                         1560      0              -1      6       0         -1
+55          t1                 f                         1700      0              -1      7       0         -1
+55          t1                 g                         20        0              8       8       0         -1
+55          t1                 h                         1014      0              -1      9       0         -1
+55          t1                 i                         1015      0              -1      10      0         -1
+55          t1                 j                         18        0              1       11      0         -1
+55          t1                 k                         1043      0              -1      12      0         -1
+55          t1                 l                         20        0              8       13      0         -1
+450499963   primary            p                         701       0              8       1       0         -1
+450499960   t1_a_key           a                         20        0              8       2       0         -1
+450499961   index_key          b                         20        0              8       3       0         -1
+450499961   index_key          c                         20        0              8       4       0         -1
+56          t2                 t1_id                     20        0              8       1       0         -1
+56          t2                 rowid                     20        0              8       2       0         -1
+2315049508  primary            rowid                     20        0              8       2       0         -1
+2315049511  t2_t1_id_idx       t1_id                     20        0              8       1       0         -1
+57          t3                 a                         20        0              8       1       0         -1
+57          t3                 b                         20        0              8       2       0         -1
+57          t3                 c                         25        0              -1      3       0         -1
+57          t3                 rowid                     20        0              8       4       0         -1
+969972501   primary            rowid                     20        0              8       4       0         -1
+969972502   t3_a_b_idx         a                         20        0              8       1       0         -1
+969972502   t3_a_b_idx         b                         20        0              8       2       0         -1
+58          v1                 p                         701       0              8       1       0         -1
+58          v1                 a                         20        0              8       2       0         -1
+58          v1                 b                         20        0              8       3       0         -1
+58          v1                 c                         20        0              8       4       0         -1
+59          t4                 a                         20        0              8       1       0         -1
+59          t4                 b                         701       0              8       2       0         -1
+59          t4                 c                         25        0              -1      3       0         -1
+59          t4                 rowid                     20        0              8       4       0         -1
+3660126519  primary            rowid                     20        0              8       4       0         -1
+60          t5                 a                         20        0              8       1       0         -1
+60          t5                 b                         701       0              8       2       0         -1
+60          t5                 c                         25        0              -1      3       0         -1
+60          t5                 rowid                     20        0              8       4       0         -1
+1229708768  primary            rowid                     20        0              8       4       0         -1
+61          t6                 a                         20        0              8       1       0         -1
+61          t6                 b                         20        0              8       2       0         -1
+61          t6                 c                         25        0              -1      3       0         -1
+61          t6                 rowid                     20        0              8       4       0         -1
+4179599057  primary            rowid                     20        0              8       4       0         -1
+4179599058  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
+4179599059  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      6       0         -1
+4179599059  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       7       0         -1
+62          mv1                ?column?                  20        0              8       1       0         -1
+62          mv1                rowid                     20        0              8       2       0         -1
+3919862786  primary            rowid                     20        0              8       2       0         -1
 
 query TTIBTTBBTT colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -631,60 +631,60 @@ JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname                                                   attname                   atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef  attidentity  attgenerated
-t1                                                        p                         -1         NULL      NULL        NULL      true        false      ·            ·
-t1                                                        a                         -1         NULL      NULL        NULL      false       false      ·            ·
-t1                                                        b                         -1         NULL      NULL        NULL      false       false      ·            ·
-t1                                                        c                         -1         NULL      NULL        NULL      false       true       ·            ·
-t1                                                        d                         9          NULL      NULL        NULL      false       false      ·            ·
-t1                                                        e                         5          NULL      NULL        NULL      false       false      ·            ·
-t1                                                        f                         655371     NULL      NULL        NULL      false       false      ·            ·
-t1                                                        g                         -1         NULL      NULL        NULL      false       false      ·            s
-t1                                                        h                         16         NULL      NULL        NULL      false       false      ·            ·
-t1                                                        i                         24         NULL      NULL        NULL      false       false      ·            ·
-t1                                                        j                         -1         NULL      NULL        NULL      false       false      ·            ·
-t1                                                        k                         14         NULL      NULL        NULL      false       false      ·            ·
-t1                                                        l                         -1         NULL      NULL        NULL      false       false      ·            v
-primary                                                   p                         -1         NULL      NULL        NULL      true        false      ·            ·
-t1_a_key                                                  a                         -1         NULL      NULL        NULL      false       false      ·            ·
-index_key                                                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
-index_key                                                 c                         -1         NULL      NULL        NULL      false       true       ·            ·
-t2                                                        t1_id                     -1         NULL      NULL        NULL      false       false      ·            ·
-t2                                                        rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary                                                   rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-t2_t1_id_idx                                              t1_id                     -1         NULL      NULL        NULL      false       false      ·            ·
-t3                                                        a                         -1         NULL      NULL        NULL      false       false      ·            ·
-t3                                                        b                         -1         NULL      NULL        NULL      false       false      ·            ·
-t3                                                        c                         -1         NULL      NULL        NULL      false       true       ·            ·
-t3                                                        rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary                                                   rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-t3_a_b_idx                                                a                         -1         NULL      NULL        NULL      false       false      ·            ·
-t3_a_b_idx                                                b                         -1         NULL      NULL        NULL      false       false      ·            ·
-v1                                                        p                         -1         NULL      NULL        NULL      false       false      ·            ·
-v1                                                        a                         -1         NULL      NULL        NULL      false       false      ·            ·
-v1                                                        b                         -1         NULL      NULL        NULL      false       false      ·            ·
-v1                                                        c                         -1         NULL      NULL        NULL      false       false      ·            ·
-t4                                                        a                         -1         NULL      NULL        NULL      false       false      ·            ·
-t4                                                        b                         -1         NULL      NULL        NULL      false       false      ·            ·
-t4                                                        c                         -1         NULL      NULL        NULL      false       false      ·            ·
-t4                                                        rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary                                                   rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-t5                                                        a                         -1         NULL      NULL        NULL      false       false      ·            ·
-t5                                                        b                         -1         NULL      NULL        NULL      false       false      ·            ·
-t5                                                        c                         -1         NULL      NULL        NULL      false       false      ·            ·
-t5                                                        rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary                                                   rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-t6                                                        a                         -1         NULL      NULL        NULL      false       false      ·            ·
-t6                                                        b                         -1         NULL      NULL        NULL      false       false      ·            ·
-t6                                                        c                         -1         NULL      NULL        NULL      false       false      ·            ·
-t6                                                        rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary                                                   rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-t6_crdb_internal_idx_expr_idx                             crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
-mv1                                                       ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
-mv1                                                       rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-primary                                                   rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+relname            attname                   atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef  attidentity  attgenerated
+t1                 p                         -1         NULL      NULL        NULL      true        false      ·            ·
+t1                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
+t1                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
+t1                 c                         -1         NULL      NULL        NULL      false       true       ·            ·
+t1                 d                         9          NULL      NULL        NULL      false       false      ·            ·
+t1                 e                         5          NULL      NULL        NULL      false       false      ·            ·
+t1                 f                         655371     NULL      NULL        NULL      false       false      ·            ·
+t1                 g                         -1         NULL      NULL        NULL      false       false      ·            s
+t1                 h                         16         NULL      NULL        NULL      false       false      ·            ·
+t1                 i                         24         NULL      NULL        NULL      false       false      ·            ·
+t1                 j                         -1         NULL      NULL        NULL      false       false      ·            ·
+t1                 k                         14         NULL      NULL        NULL      false       false      ·            ·
+t1                 l                         -1         NULL      NULL        NULL      false       false      ·            v
+primary            p                         -1         NULL      NULL        NULL      true        false      ·            ·
+t1_a_key           a                         -1         NULL      NULL        NULL      false       false      ·            ·
+index_key          b                         -1         NULL      NULL        NULL      false       false      ·            ·
+index_key          c                         -1         NULL      NULL        NULL      false       true       ·            ·
+t2                 t1_id                     -1         NULL      NULL        NULL      false       false      ·            ·
+t2                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t2_t1_id_idx       t1_id                     -1         NULL      NULL        NULL      false       false      ·            ·
+t3                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
+t3                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
+t3                 c                         -1         NULL      NULL        NULL      false       true       ·            ·
+t3                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t3_a_b_idx         a                         -1         NULL      NULL        NULL      false       false      ·            ·
+t3_a_b_idx         b                         -1         NULL      NULL        NULL      false       false      ·            ·
+v1                 p                         -1         NULL      NULL        NULL      false       false      ·            ·
+v1                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
+v1                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
+v1                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
+t4                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
+t4                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
+t4                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
+t4                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t5                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
+t5                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
+t5                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
+t5                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t6                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
+t6                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
+t6                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
+t6                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_expr1_idx  crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
+mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
+mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
+primary            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 
 query TTBBITTT colnames
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
@@ -693,60 +693,60 @@ JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname                                                   attname                   attisdropped  attislocal  attinhcount  attacl  attoptions  attfdwoptions
-t1                                                        p                         false         true        0            NULL    NULL        NULL
-t1                                                        a                         false         true        0            NULL    NULL        NULL
-t1                                                        b                         false         true        0            NULL    NULL        NULL
-t1                                                        c                         false         true        0            NULL    NULL        NULL
-t1                                                        d                         false         true        0            NULL    NULL        NULL
-t1                                                        e                         false         true        0            NULL    NULL        NULL
-t1                                                        f                         false         true        0            NULL    NULL        NULL
-t1                                                        g                         false         true        0            NULL    NULL        NULL
-t1                                                        h                         false         true        0            NULL    NULL        NULL
-t1                                                        i                         false         true        0            NULL    NULL        NULL
-t1                                                        j                         false         true        0            NULL    NULL        NULL
-t1                                                        k                         false         true        0            NULL    NULL        NULL
-t1                                                        l                         false         true        0            NULL    NULL        NULL
-primary                                                   p                         false         true        0            NULL    NULL        NULL
-t1_a_key                                                  a                         false         true        0            NULL    NULL        NULL
-index_key                                                 b                         false         true        0            NULL    NULL        NULL
-index_key                                                 c                         false         true        0            NULL    NULL        NULL
-t2                                                        t1_id                     false         true        0            NULL    NULL        NULL
-t2                                                        rowid                     false         true        0            NULL    NULL        NULL
-primary                                                   rowid                     false         true        0            NULL    NULL        NULL
-t2_t1_id_idx                                              t1_id                     false         true        0            NULL    NULL        NULL
-t3                                                        a                         false         true        0            NULL    NULL        NULL
-t3                                                        b                         false         true        0            NULL    NULL        NULL
-t3                                                        c                         false         true        0            NULL    NULL        NULL
-t3                                                        rowid                     false         true        0            NULL    NULL        NULL
-primary                                                   rowid                     false         true        0            NULL    NULL        NULL
-t3_a_b_idx                                                a                         false         true        0            NULL    NULL        NULL
-t3_a_b_idx                                                b                         false         true        0            NULL    NULL        NULL
-v1                                                        p                         false         true        0            NULL    NULL        NULL
-v1                                                        a                         false         true        0            NULL    NULL        NULL
-v1                                                        b                         false         true        0            NULL    NULL        NULL
-v1                                                        c                         false         true        0            NULL    NULL        NULL
-t4                                                        a                         false         true        0            NULL    NULL        NULL
-t4                                                        b                         false         true        0            NULL    NULL        NULL
-t4                                                        c                         false         true        0            NULL    NULL        NULL
-t4                                                        rowid                     false         true        0            NULL    NULL        NULL
-primary                                                   rowid                     false         true        0            NULL    NULL        NULL
-t5                                                        a                         false         true        0            NULL    NULL        NULL
-t5                                                        b                         false         true        0            NULL    NULL        NULL
-t5                                                        c                         false         true        0            NULL    NULL        NULL
-t5                                                        rowid                     false         true        0            NULL    NULL        NULL
-primary                                                   rowid                     false         true        0            NULL    NULL        NULL
-t6                                                        a                         false         true        0            NULL    NULL        NULL
-t6                                                        b                         false         true        0            NULL    NULL        NULL
-t6                                                        c                         false         true        0            NULL    NULL        NULL
-t6                                                        rowid                     false         true        0            NULL    NULL        NULL
-primary                                                   rowid                     false         true        0            NULL    NULL        NULL
-t6_crdb_internal_idx_expr_idx                             crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
-mv1                                                       ?column?                  false         true        0            NULL    NULL        NULL
-mv1                                                       rowid                     false         true        0            NULL    NULL        NULL
-primary                                                   rowid                     false         true        0            NULL    NULL        NULL
+relname            attname                   attisdropped  attislocal  attinhcount  attacl  attoptions  attfdwoptions
+t1                 p                         false         true        0            NULL    NULL        NULL
+t1                 a                         false         true        0            NULL    NULL        NULL
+t1                 b                         false         true        0            NULL    NULL        NULL
+t1                 c                         false         true        0            NULL    NULL        NULL
+t1                 d                         false         true        0            NULL    NULL        NULL
+t1                 e                         false         true        0            NULL    NULL        NULL
+t1                 f                         false         true        0            NULL    NULL        NULL
+t1                 g                         false         true        0            NULL    NULL        NULL
+t1                 h                         false         true        0            NULL    NULL        NULL
+t1                 i                         false         true        0            NULL    NULL        NULL
+t1                 j                         false         true        0            NULL    NULL        NULL
+t1                 k                         false         true        0            NULL    NULL        NULL
+t1                 l                         false         true        0            NULL    NULL        NULL
+primary            p                         false         true        0            NULL    NULL        NULL
+t1_a_key           a                         false         true        0            NULL    NULL        NULL
+index_key          b                         false         true        0            NULL    NULL        NULL
+index_key          c                         false         true        0            NULL    NULL        NULL
+t2                 t1_id                     false         true        0            NULL    NULL        NULL
+t2                 rowid                     false         true        0            NULL    NULL        NULL
+primary            rowid                     false         true        0            NULL    NULL        NULL
+t2_t1_id_idx       t1_id                     false         true        0            NULL    NULL        NULL
+t3                 a                         false         true        0            NULL    NULL        NULL
+t3                 b                         false         true        0            NULL    NULL        NULL
+t3                 c                         false         true        0            NULL    NULL        NULL
+t3                 rowid                     false         true        0            NULL    NULL        NULL
+primary            rowid                     false         true        0            NULL    NULL        NULL
+t3_a_b_idx         a                         false         true        0            NULL    NULL        NULL
+t3_a_b_idx         b                         false         true        0            NULL    NULL        NULL
+v1                 p                         false         true        0            NULL    NULL        NULL
+v1                 a                         false         true        0            NULL    NULL        NULL
+v1                 b                         false         true        0            NULL    NULL        NULL
+v1                 c                         false         true        0            NULL    NULL        NULL
+t4                 a                         false         true        0            NULL    NULL        NULL
+t4                 b                         false         true        0            NULL    NULL        NULL
+t4                 c                         false         true        0            NULL    NULL        NULL
+t4                 rowid                     false         true        0            NULL    NULL        NULL
+primary            rowid                     false         true        0            NULL    NULL        NULL
+t5                 a                         false         true        0            NULL    NULL        NULL
+t5                 b                         false         true        0            NULL    NULL        NULL
+t5                 c                         false         true        0            NULL    NULL        NULL
+t5                 rowid                     false         true        0            NULL    NULL        NULL
+primary            rowid                     false         true        0            NULL    NULL        NULL
+t6                 a                         false         true        0            NULL    NULL        NULL
+t6                 b                         false         true        0            NULL    NULL        NULL
+t6                 c                         false         true        0            NULL    NULL        NULL
+t6                 rowid                     false         true        0            NULL    NULL        NULL
+primary            rowid                     false         true        0            NULL    NULL        NULL
+t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
+t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
+t6_expr_expr1_idx  crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
+mv1                ?column?                  false         true        0            NULL    NULL        NULL
+mv1                rowid                     false         true        0            NULL    NULL        NULL
+primary            rowid                     false         true        0            NULL    NULL        NULL
 
 # Check relkind codes.
 statement ok
@@ -801,17 +801,17 @@ JOIN pg_catalog.pg_collation k ON a.attcollation = k.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname                                                   attname                   typname   attcollation  collname
-t1                                                        d                         varchar   3403232968    default
-t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  crdb_internal_idx_expr_1  text      3403232968    default
-t6                                                        c                         text      3403232968    default
-t5                                                        c                         text      3403232968    default
-t4                                                        c                         text      3403232968    default
-t3                                                        c                         text      3403232968    default
-t1                                                        j                         char      3403232968    default
-t1                                                        i                         _varchar  3403232968    default
-t1                                                        h                         _bpchar   3403232968    default
-t1                                                        k                         varchar   999873346     sv
+relname            attname                   typname   attcollation  collname
+t1                 d                         varchar   3403232968    default
+t6_expr_expr1_idx  crdb_internal_idx_expr_1  text      3403232968    default
+t6                 c                         text      3403232968    default
+t5                 c                         text      3403232968    default
+t4                 c                         text      3403232968    default
+t3                 c                         text      3403232968    default
+t1                 j                         char      3403232968    default
+t1                 i                         _varchar  3403232968    default
+t1                 h                         _bpchar   3403232968    default
+t1                 k                         varchar   999873346     sv
 
 
 ## pg_catalog.pg_am
@@ -850,40 +850,40 @@ SELECT crdb_oid, schemaname, tablename, indexname, tablespace
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
-crdb_oid    schemaname  tablename  indexname                                                 tablespace
-450499963   public      t1         primary                                                   NULL
-450499960   public      t1         t1_a_key                                                  NULL
-450499961   public      t1         index_key                                                 NULL
-2315049508  public      t2         primary                                                   NULL
-2315049511  public      t2         t2_t1_id_idx                                              NULL
-969972501   public      t3         primary                                                   NULL
-969972502   public      t3         t3_a_b_idx                                                NULL
-3660126519  public      t4         primary                                                   NULL
-1229708768  public      t5         primary                                                   NULL
-4179599057  public      t6         primary                                                   NULL
-4179599058  public      t6         t6_crdb_internal_idx_expr_idx                             NULL
-4179599059  public      t6         t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  NULL
-3919862786  public      mv1        primary                                                   NULL
+crdb_oid    schemaname  tablename  indexname          tablespace
+450499963   public      t1         primary            NULL
+450499960   public      t1         t1_a_key           NULL
+450499961   public      t1         index_key          NULL
+2315049508  public      t2         primary            NULL
+2315049511  public      t2         t2_t1_id_idx       NULL
+969972501   public      t3         primary            NULL
+969972502   public      t3         t3_a_b_idx         NULL
+3660126519  public      t4         primary            NULL
+1229708768  public      t5         primary            NULL
+4179599057  public      t6         primary            NULL
+4179599058  public      t6         t6_expr_idx        NULL
+4179599059  public      t6         t6_expr_expr1_idx  NULL
+3919862786  public      mv1        primary            NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
 ----
-crdb_oid    tablename  indexname                                                 indexdef
-450499963   t1         primary                                                   CREATE UNIQUE INDEX "primary" ON constraint_db.public.t1 USING btree (p ASC)
-450499960   t1         t1_a_key                                                  CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 USING btree (a ASC)
-450499961   t1         index_key                                                 CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 USING btree (b ASC, c ASC)
-2315049508  t2         primary                                                   CREATE UNIQUE INDEX "primary" ON constraint_db.public.t2 USING btree (rowid ASC)
-2315049511  t2         t2_t1_id_idx                                              CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
-969972501   t3         primary                                                   CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 USING btree (rowid ASC)
-969972502   t3         t3_a_b_idx                                                CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
-3660126519  t4         primary                                                   CREATE UNIQUE INDEX "primary" ON constraint_db.public.t4 USING btree (rowid ASC)
-1229708768  t5         primary                                                   CREATE UNIQUE INDEX "primary" ON constraint_db.public.t5 USING btree (rowid ASC)
-4179599057  t6         primary                                                   CREATE UNIQUE INDEX "primary" ON constraint_db.public.t6 USING btree (rowid ASC)
-4179599058  t6         t6_crdb_internal_idx_expr_idx                             CREATE INDEX t6_crdb_internal_idx_expr_idx ON constraint_db.public.t6 USING btree (crdb_internal_idx_expr ASC)
-4179599059  t6         t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx  CREATE INDEX t6_crdb_internal_idx_expr_1_crdb_internal_idx_expr_2_idx ON constraint_db.public.t6 USING btree (crdb_internal_idx_expr_1 ASC, crdb_internal_idx_expr_2 ASC)
-3919862786  mv1        primary                                                   CREATE UNIQUE INDEX "primary" ON constraint_db.public.mv1 USING btree (rowid ASC)
+crdb_oid    tablename  indexname          indexdef
+450499963   t1         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t1 USING btree (p ASC)
+450499960   t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 USING btree (a ASC)
+450499961   t1         index_key          CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 USING btree (b ASC, c ASC)
+2315049508  t2         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t2 USING btree (rowid ASC)
+2315049511  t2         t2_t1_id_idx       CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
+969972501   t3         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 USING btree (rowid ASC)
+969972502   t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
+3660126519  t4         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t4 USING btree (rowid ASC)
+1229708768  t5         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t5 USING btree (rowid ASC)
+4179599057  t6         primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.t6 USING btree (rowid ASC)
+4179599058  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree (crdb_internal_idx_expr ASC)
+4179599059  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (crdb_internal_idx_expr_1 ASC, crdb_internal_idx_expr_2 ASC)
+3919862786  mv1        primary            CREATE UNIQUE INDEX "primary" ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
