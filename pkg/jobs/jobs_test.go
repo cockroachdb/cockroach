@@ -2718,7 +2718,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Disable the loops from messing with the job execution.
-	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
+	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour)}
 
 	ctx := context.Background()
 
