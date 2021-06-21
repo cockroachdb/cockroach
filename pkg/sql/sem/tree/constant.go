@@ -554,12 +554,7 @@ func (expr *StrVal) ResolveAsType(
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:
-			// bpchar types truncate trailing whitespace.
-			if typ.Oid() == oid.T_bpchar {
-				expr.resString = DString(strings.TrimRight(expr.s, " "))
-				return &expr.resString, nil
-			}
-			expr.resString = DString(expr.s)
+			expr.resString = DString(adjustStringValueToType(typ, expr.s))
 			return &expr.resString, nil
 		}
 		return nil, errors.AssertionFailedf("attempt to type byte array literal to %T", typ)
@@ -572,12 +567,7 @@ func (expr *StrVal) ResolveAsType(
 			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
 		}
-		// bpchar types truncate trailing whitespace.
-		if typ.Oid() == oid.T_bpchar {
-			expr.resString = DString(strings.TrimRight(expr.s, " "))
-			return &expr.resString, nil
-		}
-		expr.resString = DString(expr.s)
+		expr.resString = DString(adjustStringValueToType(typ, expr.s))
 		return &expr.resString, nil
 
 	case types.BytesFamily:
