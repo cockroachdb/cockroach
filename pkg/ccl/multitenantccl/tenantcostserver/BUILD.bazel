@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tenantcostserver",
+    srcs = ["token_bucket.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
