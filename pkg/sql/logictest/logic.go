@@ -3188,9 +3188,6 @@ func RunLogicTestWithDefaultConfig(
 		globs = []string{*logictestdata}
 	}
 
-	// Set time.Local to time.UTC to circumvent pq's timetz parsing flaw.
-	time.Local = time.UTC
-
 	// A new cluster is set up for each separate file in the test.
 	var paths []string
 	for _, g := range globs {
