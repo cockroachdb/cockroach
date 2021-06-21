@@ -480,7 +480,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if perr, ok := retPayload.(payloadWithError); ok {
 				execErr = perr.errorCause()
 			}
-			filter(ctx, ast.String(), execErr)
+			filter(ctx, ex.sessionData, ast.String(), execErr)
 		}
 
 		// Do the auto-commit, if necessary.
