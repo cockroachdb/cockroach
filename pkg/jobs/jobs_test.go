@@ -153,16 +153,15 @@ type counters struct {
 }
 
 type registryTestSuite struct {
-	ctx             context.Context
-	cleanupSettings func()
-	s               serverutils.TestServerInterface
-	outerDB         *gosql.DB
-	sqlDB           *sqlutils.SQLRunner
-	registry        *jobs.Registry
-	done            chan struct{}
-	mockJob         jobs.Record
-	job             *jobs.StartableJob
-	mu              struct {
+	ctx      context.Context
+	s        serverutils.TestServerInterface
+	outerDB  *gosql.DB
+	sqlDB    *sqlutils.SQLRunner
+	registry *jobs.Registry
+	done     chan struct{}
+	mockJob  jobs.Record
+	job      *jobs.StartableJob
+	mu       struct {
 		syncutil.Mutex
 		a counters
 		e counters
@@ -173,6 +172,10 @@ type registryTestSuite struct {
 	resumeCheckCh       chan struct{}
 	failOrCancelCheckCh chan struct{}
 	onPauseRequest      jobs.OnPauseRequestFunc
+
+	// beforeUpdate is invoked in the BeforeUpdate testing knob if non-nil.
+	beforeUpdate func(orig, updated jobs.JobMetadata) error
+
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
 	successErr error
@@ -185,14 +188,20 @@ func noopPauseRequestFunc(
 }
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
-	adopt := time.Millisecond
-	cancel := 2 * time.Millisecond
-	args := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(adopt, cancel)},
+	rts.ctx = context.Background()
+
+	var args base.TestServerArgs
+	{
+		knobs := jobs.NewTestingKnobsWithShortIntervals()
+		knobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			if rts.beforeUpdate != nil {
+				return rts.beforeUpdate(orig, updated)
+			}
+			return nil
+		}
+		args.Knobs.JobsTestingKnobs = knobs
 	}
 
-	rts.cleanupSettings = func() {}
-	rts.ctx = context.Background()
 	rts.s, rts.outerDB, _ = serverutils.StartServer(t, args)
 	rts.sqlDB = sqlutils.MakeSQLRunner(rts.outerDB)
 	rts.registry = rts.s.JobRegistry().(*jobs.Registry)
@@ -281,7 +290,6 @@ func (rts *registryTestSuite) tearDown() {
 	close(rts.resumeCheckCh)
 	close(rts.done)
 	rts.s.Stopper().Stop(rts.ctx)
-	rts.cleanupSettings()
 	jobs.ResetConstructors()()
 }
 
@@ -690,6 +698,10 @@ func TestRegistryLifecycle(t *testing.T) {
 	})
 
 	// Attempt to mark success, but fail, but fail that also.
+	// TODO(ajwerner): This test seems a bit stale in that it really
+	// fails the resume rather than succeeding but failing to mark success.
+	// I think this is due to changes in responsibilities of the jobs
+	// lifecycle.
 	t.Run("fail marking success and fail OnFailOrCancel", func(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
@@ -720,6 +732,51 @@ func TestRegistryLifecycle(t *testing.T) {
 		close(rts.failOrCancelCheckCh)
 		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
 		rts.check(t, jobs.StatusRevertFailed)
+	})
+	// Succeed the job but inject an error actually marking the jobs successful.
+	// This could happen due to a transient network error or something like that.
+	// It would not make sense to revert a job in this scenario.
+	t.Run("fail marking success", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		// Inject an error in the update to move the job to "succeeeded" one time.
+		var failed atomic.Value
+		failed.Store(false)
+		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			if updated.Status == jobs.StatusSucceeded && !failed.Load().(bool) {
+				failed.Store(true)
+				return errors.New("boom")
+			}
+			return nil
+		}
+
+		j, err := jobs.TestingCreateAndStartJob(rts.ctx, rts.registry, rts.s.DB(), rts.mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rts.job = j
+
+		// Make sure the job hits the error when it attempts to succeed.
+		rts.mu.e.ResumeStart = true
+		rts.resumeCheckCh <- struct{}{}
+		rts.check(t, jobs.StatusRunning)
+		rts.resumeCh <- nil
+		testutils.SucceedsSoon(t, func() error {
+			if !failed.Load().(bool) {
+				return errors.New("not yet failed")
+			}
+			return nil
+		})
+		rts.mu.e.ResumeExit++
+
+		// Make sure the job retries and then succeeds.
+		rts.resumeCheckCh <- struct{}{}
+		rts.resumeCh <- nil
+		rts.mu.e.ResumeExit++
+		rts.mu.e.Success = true
+		rts.check(t, jobs.StatusSucceeded)
 	})
 
 	// Fail the job, but also fail to mark it failed.
