@@ -44,13 +44,14 @@ const (
 )
 
 type tpccOptions struct {
-	Warehouses     int
-	ExtraRunArgs   string
-	ExtraSetupArgs string
-	Chaos          func() Chaos                // for late binding of stopper
-	During         func(context.Context) error // for running a function during the test
-	Duration       time.Duration               // if zero, TPCC is not invoked
-	SetupType      tpccSetupType
+	Warehouses       int
+	ExtraRunArgs     string
+	ExtraSetupArgs   string
+	Chaos            func() Chaos                // for late binding of stopper
+	During           func(context.Context) error // for running a function during the test
+	Duration         time.Duration               // if zero, TPCC is not invoked
+	SetupType        tpccSetupType
+	PrometheusConfig *prometheusConfig
 	// If specified, called to stage+start cockroach. If not
 	// specified, defaults to uploading the default binary to
 	// all nodes, and starting it on all but the last node.
@@ -134,6 +135,11 @@ func setupTPCC(
 }
 
 func runTPCC(ctx context.Context, t *test, c Cluster, opts tpccOptions) {
+	if p := opts.PrometheusConfig; p != nil {
+		p.run(ctx, t, c)
+		defer p.cleanup(ctx, t, c)
+	}
+
 	rampDuration := 5 * time.Minute
 	if c.isLocal() {
 		opts.Warehouses = 1
@@ -376,6 +382,8 @@ func registerTPCC(r *testRegistry) {
 					strings.Join(regions, ","),
 					len(regions),
 				)
+				workloadNode := c.Node(c.Spec().NodeCount)
+
 				// TODO(#multiregion): setup workload to run specifically for a given partition
 				// on each node of a cluster, instead of one node using a workload on all clusters.
 				runTPCC(ctx, t, c, tpccOptions{
@@ -395,6 +403,16 @@ func registerTPCC(r *testRegistry) {
 						}
 					},
 					SetupType: usingInit,
+					PrometheusConfig: &prometheusConfig{
+						prometheusNode: workloadNode,
+						jobName:        "workload",
+						scrapeNodes: []prometheusScrapeNode{
+							{
+								node: workloadNode,
+								port: 2112,
+							},
+						},
+					},
 				})
 			},
 		})
