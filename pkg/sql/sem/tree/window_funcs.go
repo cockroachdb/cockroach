@@ -406,7 +406,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case OffsetPreceding:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum - int(offset)
-			if peerGroupNum < 0 {
+			if peerGroupNum < wfr.PeerHelper.headPeerGroupNum {
 				// EndBound's peer group is "outside" of the partition.
 				return 0, nil
 			}

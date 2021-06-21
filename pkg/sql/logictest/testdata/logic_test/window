@@ -4034,3 +4034,18 @@ SELECT max(c) OVER (ORDER BY c ROWS BETWEEN UNBOUNDED PRECEDING AND 922337203685
 ----
 NULL
 NULL
+
+# Regression test for out-of-range error when computing window frame end index
+# for GROUPS mode with OFFSET PRECEDING (#66580).
+query II
+SELECT k, first_value(k) OVER (ORDER BY v GROUPS BETWEEN 0 PRECEDING AND 2 PRECEDING) FROM kv ORDER BY 1
+----
+1   NULL
+3   NULL
+5   NULL
+6   NULL
+7   NULL
+8   NULL
+9   NULL
+10  NULL
+11  NULL
