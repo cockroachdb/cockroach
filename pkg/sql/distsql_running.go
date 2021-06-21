@@ -854,7 +854,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		}
 		var ev roachpb.ContentionEvent
 		for i := range meta.TraceData {
-			meta.TraceData[i].Structured(func(any *pbtypes.Any) {
+			meta.TraceData[i].Structured(func(any *pbtypes.Any, _ time.Time) {
 				if !pbtypes.Is(any, &ev) {
 					return
 				}
