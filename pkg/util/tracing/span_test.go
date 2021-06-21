@@ -208,11 +208,18 @@ func TestSpanRecordStructured(t *testing.T) {
 	sp.RecordStructured(&types.Int32Value{Value: 4})
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].InternalStructured, 1)
-	item := rec[0].InternalStructured[0]
+	require.Len(t, rec[0].DeprecatedInternalStructured, 1)
+	deprecatedItem := rec[0].DeprecatedInternalStructured[0]
+	var deprecatedStructured types.DynamicAny
+	require.NoError(t, types.UnmarshalAny(deprecatedItem, &deprecatedStructured))
+	require.IsType(t, (*types.Int32Value)(nil), deprecatedStructured.Message)
+
+	require.Len(t, rec[0].StructuredRecords, 1)
+	item := rec[0].StructuredRecords[0]
 	var d1 types.DynamicAny
-	require.NoError(t, types.UnmarshalAny(item, &d1))
+	require.NoError(t, types.UnmarshalAny(item.Payload, &d1))
 	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
+
 	require.NoError(t, TestingCheckRecordedSpans(rec, `
 		span: root
 		`))
@@ -230,31 +237,40 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 
 	pad := func(i int) string { return fmt.Sprintf("%06d", i) }
 	payload := func(i int) Structured { return &types.StringValue{Value: pad(i)} }
+	anyPayload, err := types.MarshalAny(payload(42))
+	require.NoError(t, err)
+	structuredRecord := &tracingpb.StructuredRecord{
+		Time:    timeutil.Now(),
+		Payload: anyPayload,
+	}
 
-	numPayloads := maxStructuredBytesPerSpan / payload(42).Size()
+	numStructuredRecordings := maxStructuredBytesPerSpan / structuredRecord.Size()
 	const extra = 10
-	for i := 1; i <= numPayloads+extra; i++ {
+	for i := 1; i <= numStructuredRecordings+extra; i++ {
 		sp.RecordStructured(payload(i))
 	}
 
 	sp.SetVerbose(true)
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].InternalStructured, numPayloads)
+	require.Len(t, rec[0].StructuredRecords, numStructuredRecordings)
 	require.Equal(t, "1", rec[0].Tags["_dropped"])
 
-	first := rec[0].InternalStructured[0]
-	last := rec[0].InternalStructured[len(rec[0].InternalStructured)-1]
+	first := rec[0].StructuredRecords[0]
+	last := rec[0].StructuredRecords[len(rec[0].StructuredRecords)-1]
 	var d1 types.DynamicAny
-	require.NoError(t, types.UnmarshalAny(first, &d1))
+	require.NoError(t, types.UnmarshalAny(first.Payload, &d1))
 	require.IsType(t, (*types.StringValue)(nil), d1.Message)
 
 	var res string
-	require.NoError(t, types.StdStringUnmarshal(&res, first.Value))
+	require.NoError(t, types.StdStringUnmarshal(&res, first.Payload.Value))
 	require.Equal(t, pad(extra+1), res)
 
-	require.NoError(t, types.StdStringUnmarshal(&res, last.Value))
-	require.Equal(t, pad(numPayloads+extra), res)
+	var d2 types.DynamicAny
+	require.NoError(t, types.UnmarshalAny(last.Payload, &d2))
+	require.IsType(t, (*types.StringValue)(nil), d2.Message)
+	require.NoError(t, types.StdStringUnmarshal(&res, last.Payload.Value))
+	require.Equal(t, pad(numStructuredRecordings+extra), res)
 }
 
 // TestSpanRecordLimit tests recording behavior when the amount of data logged
@@ -398,7 +414,8 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
 	require.Len(t, rec, 2)
-	require.Len(t, rec[1].InternalStructured, 1)
+	require.Len(t, rec[1].DeprecatedInternalStructured, 1)
+	require.Len(t, rec[1].StructuredRecords, 1)
 }
 
 // TestSpanMaxChildren verifies that a Span can

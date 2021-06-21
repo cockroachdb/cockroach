@@ -11,7 +11,9 @@
 package execinfrapb
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -334,7 +336,7 @@ func ExtractStatsFromSpans(
 	var componentStats ComponentStats
 	for i := range spans {
 		span := &spans[i]
-		span.Structured(func(item *types.Any) {
+		span.Structured(func(item *types.Any, _ time.Time) {
 			if !types.Is(item, &componentStats) {
 				return
 			}
@@ -370,14 +372,14 @@ func ExtractStatsFromSpans(
 
 // ExtractNodesFromSpans extracts a list of node ids from a set of tracing
 // spans.
-func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) util.FastIntSet {
+func ExtractNodesFromSpans(ctx context.Context, spans []tracingpb.RecordedSpan) util.FastIntSet {
 	var nodes util.FastIntSet
 	// componentStats is only used to check whether a structured payload item is
 	// of ComponentStats type.
 	var componentStats ComponentStats
 	for i := range spans {
 		span := &spans[i]
-		span.Structured(func(item *types.Any) {
+		span.Structured(func(item *types.Any, _ time.Time) {
 			if !types.Is(item, &componentStats) {
 				return
 			}

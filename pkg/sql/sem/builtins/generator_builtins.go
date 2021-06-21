@@ -1548,7 +1548,7 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 			return false, nil
 		}
 		currRecording := p.span.GetRecording()[p.recordingIndex]
-		currRecording.Structured(func(item *pbtypes.Any) {
+		currRecording.Structured(func(item *pbtypes.Any, _ time.Time) {
 			payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
 			if err != nil {
 				return
@@ -1575,9 +1575,11 @@ func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 	// leftover from JSON value conversion.
 	payloadTypeAsString := strings.TrimSuffix(
 		strings.TrimPrefix(
-			payloadTypeAsJSON.String(),
-			"\"type.googleapis.com/cockroach.",
-		),
+			strings.TrimPrefix(
+				payloadTypeAsJSON.String(),
+				"\"type.googleapis.com/",
+			),
+			"cockroach."),
 		"\"",
 	)
 
