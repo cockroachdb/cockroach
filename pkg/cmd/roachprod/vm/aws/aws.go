@@ -201,6 +201,10 @@ type providerOpts struct {
 	// Overrides config.json AMI.
 	ImageAMI string
 
+	// IAMProfile designates the name of the instance profile to use for created
+	// EC2 instances if non-empty.
+	IAMProfile string
+
 	// CreateZones stores the list of zones for used cluster creation.
 	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
 	// on the geo flag being set. If no zones specified, defaultCreateZones are
@@ -281,6 +285,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
 		" limits from aws, which can vary based on the region, and the size of the cluster being"+
 		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
+	flags.StringVar(&o.IAMProfile, ProviderName+"-	iam-profile", "roachprod-testing",
+		"the IAM instance profile to associate with created VMs if non-empty")
+
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -845,6 +852,10 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 
 	if cpuOptions != "" {
 		args = append(args, "--cpu-options", cpuOptions)
+	}
+
+	if p.opts.IAMProfile != "" {
+		args = append(args, "--iam-instance-profile", "Name="+p.opts.IAMProfile)
 	}
 
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
