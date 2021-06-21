@@ -11,10 +11,6 @@ Stage 0
   *scop.MarkDescriptorAsDropped
     TableID: 53
 Stage 1
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
   *scop.DrainDescriptorName
     TableID: 52
   *scop.DrainDescriptorName

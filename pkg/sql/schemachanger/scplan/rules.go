@@ -266,9 +266,6 @@ var rules = map[scpb.Element]targetRules{
 					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.Database) []scop.Op {
 						ops := []scop.Op{
-							&scop.CreateGcJobForDescriptor{
-								DescID: this.DatabaseID,
-							},
 							&scop.DrainDescriptorName{TableID: this.DatabaseID},
 						}
 						return ops
@@ -334,9 +331,6 @@ var rules = map[scpb.Element]targetRules{
 					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.Schema) []scop.Op {
 						ops := []scop.Op{
-							&scop.CreateGcJobForDescriptor{
-								DescID: this.SchemaID,
-							},
 							&scop.DrainDescriptorName{TableID: this.SchemaID},
 						}
 						return ops
@@ -511,9 +505,6 @@ var rules = map[scpb.Element]targetRules{
 					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.Type) []scop.Op {
 						ops := []scop.Op{
-							&scop.CreateGcJobForDescriptor{
-								DescID: this.TypeID,
-							},
 							&scop.DrainDescriptorName{TableID: this.TypeID},
 						}
 						return ops
