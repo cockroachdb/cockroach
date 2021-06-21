@@ -1370,3 +1370,41 @@ CREATE TABLE pg_catalog.pg_subscription_rel (
 	srsublsn STRING,
 	srsubstate "char"
 )`
+
+//PgCatalogStatDatabase is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatDatabase = `
+CREATE TABLE pg_catalog.pg_stat_database (
+	conflicts INT,
+	numbackends INT4,
+	stats_reset TIMESTAMPTZ,
+	tup_inserted INT,
+	tup_returned INT,
+	xact_rollback INT,
+	blks_hit INT,
+	checksum_last_failure TIMESTAMPTZ,
+	datid OID,
+	datname NAME,
+	deadlocks INT,
+	tup_fetched INT,
+	tup_updated INT,
+	blks_read INT,
+	temp_bytes INT,
+	temp_files INT,
+	tup_deleted INT,
+	blk_write_time FLOAT,
+	checksum_failures INT,
+	xact_commit INT,
+	blk_read_time FLOAT
+)`
+
+//PgCatalogStatDatabaseConflicts is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatDatabaseConflicts = `
+CREATE TABLE pg_catalog.pg_stat_database_conflicts (
+	confl_snapshot INT,
+	confl_tablespace INT,
+	datid OID,
+	datname NAME,
+	confl_bufferpin INT,
+	confl_deadlock INT,
+	confl_lock INT
+)`

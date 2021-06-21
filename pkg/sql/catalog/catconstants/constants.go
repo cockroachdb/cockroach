@@ -227,6 +227,8 @@ const (
 	PgCatalogShdependTableID
 	PgCatalogShmemAllocationsTableID
 	PgCatalogStatActivityTableID
+	PgCatalogStatDatabaseConflictsTableID
+	PgCatalogStatDatabaseTableID
 	PgCatalogStatisticExtTableID
 	PgCatalogSubscriptionRelTableID
 	PgCatalogSubscriptionTableID
