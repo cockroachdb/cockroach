@@ -110,8 +110,12 @@ func distChangefeedFlow(
 		}
 	}
 
+	var checkpoint jobspb.ChangefeedProgress_Checkpoint
+	if cf := progress.GetChangefeed(); cf != nil && cf.Checkpoint != nil {
+		checkpoint = *cf.Checkpoint
+	}
 	return changefeeddist.StartDistChangefeed(
-		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, resultsCh)
+		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh)
 }
 
 func fetchSpansForTargets(

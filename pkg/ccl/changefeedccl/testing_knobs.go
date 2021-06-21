@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -28,6 +29,11 @@ type TestingKnobs struct {
 	// It allows the tests to muck with the Sink, and even return altogether different
 	// implementation.
 	WrapSink func(s Sink, jobID jobspb.JobID) Sink
+	// ShouldSkipResolved is a filter returning true if the resolved span event should
+	// be skipped.
+	ShouldSkipResolved func(resolved *jobspb.ResolvedSpan) bool
+	// FeedKnobs are kvfeed testing knobs.
+	FeedKnobs kvfeed.TestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -38,6 +38,7 @@ func StartDistChangefeed(
 	details jobspb.ChangefeedDetails,
 	trackedSpans []roachpb.Span,
 	initialHighWater hlc.Timestamp,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
 	resultsCh chan<- tree.Datums,
 ) error {
 	// Changefeed flows handle transactional consistency themselves.
@@ -48,23 +49,28 @@ func StartDistChangefeed(
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
 		execCtx.ExecCfg().Codec.ForSystemTenant() /* distribute */)
 
-	var err error
 	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {
 		// Sinkless feeds get one ChangeAggregator on the gateway.
 		spanPartitions = []sql.SpanPartition{{Node: dsp.GatewayID(), Spans: trackedSpans}}
 	} else {
 		// All other feeds get a ChangeAggregator local on the leaseholder.
+		var err error
 		spanPartitions, err = dsp.PartitionSpans(planCtx, trackedSpans)
 		if err != nil {
 			return err
 		}
 	}
 
+	// Use the same checkpoint for all aggregators; each aggregator will only look at
+	// spans that are assigned to it.
+	// We could compute per-aggregator checkpoint, but that's probably an overkill.
+	aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
+		Spans: checkpoint.Spans,
+	}
+
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
 	for i, sp := range spanPartitions {
-		// TODO(dan): Merge these watches with the span-level resolved
-		// timestamps from the job progress.
 		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 		for watchIdx, nodeSpan := range sp.Spans {
 			watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
@@ -73,14 +79,17 @@ func StartDistChangefeed(
 			}
 		}
 
-		corePlacement[i].NodeID = sp.Node
-		corePlacement[i].Core.ChangeAggregator = &execinfrapb.ChangeAggregatorSpec{
-			Watches:   watches,
-			Feed:      details,
-			UserProto: execCtx.User().EncodeProto(),
-			JobID:     jobID,
+		spec := &execinfrapb.ChangeAggregatorSpec{
+			Watches:    watches,
+			Checkpoint: aggregatorCheckpoint,
+			Feed:       details,
+			UserProto:  execCtx.User().EncodeProto(),
+			JobID:      jobID,
 		}
+		corePlacement[i].NodeID = sp.Node
+		corePlacement[i].Core.ChangeAggregator = spec
 	}
+
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
 	// static. Currently there is no way for them to change after the changefeed
 	// is created, even if it is paused and unpaused, but #28982 describes some

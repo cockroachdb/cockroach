@@ -42,6 +42,7 @@ type Config struct {
 	Clock              *hlc.Clock
 	Gossip             gossip.OptionalGossip
 	Spans              []roachpb.Span
+	BackfillCheckpoint []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
 	Sink               kvevent.Writer
 	Metrics            *kvevent.Metrics
@@ -60,6 +61,9 @@ type Config struct {
 	// InitialHighWater is the timestamp after which new events are guaranteed to
 	// be produced.
 	InitialHighWater hlc.Timestamp
+
+	// Knobs are kvfeed testing knobs.
+	Knobs TestingKnobs
 }
 
 // Run will run the kvfeed. The feed runs synchronously and returns an
@@ -86,13 +90,13 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	f := newKVFeed(
-		cfg.Sink, cfg.Spans,
+		cfg.Sink, cfg.Spans, cfg.BackfillCheckpoint,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf)
+		sc, pff, bf, cfg.Knobs)
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
@@ -132,6 +136,7 @@ func (e unsupportedSchemaChangeDetected) Error() string {
 
 type kvFeed struct {
 	spans               []roachpb.Span
+	checkpoint          []roachpb.Span
 	withDiff            bool
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
@@ -146,11 +151,14 @@ type kvFeed struct {
 	tableFeed     schemafeed.SchemaFeed
 	scanner       kvScanner
 	physicalFeed  physicalFeedFactory
+	knobs         TestingKnobs
 }
 
+// TODO(yevgeniy): This method is a kitchen sink. Refactor.
 func newKVFeed(
 	sink kvevent.Writer,
 	spans []roachpb.Span,
+	checkpoint []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff bool,
@@ -160,10 +168,12 @@ func newKVFeed(
 	sc kvScanner,
 	pff physicalFeedFactory,
 	bf func() kvevent.Buffer,
+	knobs TestingKnobs,
 ) *kvFeed {
 	return &kvFeed{
 		sink:                sink,
 		spans:               spans,
+		checkpoint:          checkpoint,
 		withInitialBackfill: withInitialBackfill,
 		withDiff:            withDiff,
 		initialHighWater:    initialHighWater,
@@ -174,6 +184,7 @@ func newKVFeed(
 		scanner:             sc,
 		physicalFeed:        pff,
 		bufferFactory:       bf,
+		knobs:               knobs,
 	}
 }
 
@@ -186,6 +197,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if err = f.scanIfShould(ctx, initialScan, highWater); err != nil {
 			return err
 		}
+
 		highWater, err = f.runUntilTableEvent(ctx, highWater)
 		if err != nil {
 			return err
@@ -213,8 +225,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		// we should do so.
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||
 			boundaryType == jobspb.ResolvedSpan_RESTART {
-			for _, span := range f.spans {
-				if err := f.sink.AddResolved(ctx, span, highWater, boundaryType); err != nil {
+			for _, sp := range f.spans {
+				if err := f.sink.AddResolved(ctx, sp, highWater, boundaryType); err != nil {
 					return err
 				}
 			}
@@ -242,6 +254,15 @@ func isRegionalByRowChange(events []schemafeed.TableEvent) bool {
 		}
 	}
 	return false
+}
+
+// filterCheckpointSpans filters spans which have already been completed,
+// and returns the list of spans that still need to be done.
+func filterCheckpointSpans(spans []roachpb.Span, completed []roachpb.Span) []roachpb.Span {
+	var sg roachpb.SpanGroup
+	sg.Add(spans...)
+	sg.Sub(completed...)
+	return sg.Slice()
 }
 
 func (f *kvFeed) scanIfShould(
@@ -297,6 +318,12 @@ func (f *kvFeed) scanIfShould(
 		return err
 	}
 
+	// If we have initial checkpoint information specified, filter out
+	// spans which we no longer need to scan.
+	if initialScan {
+		spansToBackfill = filterCheckpointSpans(spansToBackfill, f.checkpoint)
+	}
+
 	if (!isInitialScan && f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyNoBackfill) ||
 		len(spansToBackfill) == 0 {
 		return nil
@@ -306,6 +333,7 @@ func (f *kvFeed) scanIfShould(
 		Spans:     spansToBackfill,
 		Timestamp: scanTime,
 		WithDiff:  !isInitialScan && f.withDiff,
+		Knobs:     f.knobs,
 	}); err != nil {
 		return err
 	}
@@ -329,7 +357,12 @@ func (f *kvFeed) runUntilTableEvent(
 	defer memBuf.Close(ctx)
 
 	g := ctxgroup.WithContext(ctx)
-	physicalCfg := physicalConfig{Spans: f.spans, Timestamp: startFrom, WithDiff: f.withDiff}
+	physicalCfg := physicalConfig{
+		Spans:     f.spans,
+		Timestamp: startFrom,
+		WithDiff:  f.withDiff,
+		Knobs:     f.knobs,
+	}
 	g.GoCtx(func(ctx context.Context) error {
 		return copyFromSourceToSinkUntilTableEvent(ctx, f.sink, memBuf, physicalCfg, f.tableFeed)
 	})

@@ -29,6 +29,7 @@ type physicalConfig struct {
 	Spans     []roachpb.Span
 	Timestamp hlc.Timestamp
 	WithDiff  bool
+	Knobs     TestingKnobs
 }
 
 type rangefeedFactory func(
