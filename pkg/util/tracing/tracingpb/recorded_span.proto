@@ -109,5 +109,6 @@ message NormalizedSpan {
   google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,
                                         (gogoproto.stdduration) = true];
   repeated LogRecord logs = 5 [(gogoproto.nullable) = false];
+  repeated StructuredRecord structured_records = 7 [(gogoproto.nullable) = false];
   repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
 }

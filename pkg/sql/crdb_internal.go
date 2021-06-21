@@ -141,6 +141,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalInterleaved:                      crdbInternalInterleaved,
 		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
 		catconstants.CrdbInternalLostTableDescriptors:             crdbLostTableDescriptors,
+		catconstants.CrdbInternalClusterInflightTracesTable:       crdbInternalClusterInflightTracesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -1193,6 +1194,82 @@ CREATE TABLE crdb_internal.session_trace (
 				return err
 			}
 		}
+		return nil
+	},
+}
+
+// crdbInternalClusterInflightTracesTable exposes cluster-wide inflight spans
+// for a trace_id.
+//
+// crdbInternalClusterInflightTracesTable is an indexed, virtual table that only
+// returns rows when accessed with an index constraint specifying the trace_id
+// for which inflight spans need to be aggregated from all nodes in the cluster.
+//
+// Each row in the virtual table corresponds to a single `tracing.Recording` on
+// a particular node. A `tracing.Recording` is the trace of a single operation
+// rooted at a root span on that node. Under the hood, the virtual table
+// contacts all "live" nodes in the cluster via the trace collector which
+// streams back a recording at a time.
+//
+// The underlying trace collector only buffers recordings one node at a time.
+// The virtual table also produces rows lazily, i.e. as and when they are
+// consumed by the consumer. Therefore, the memory overhead of querying this
+// table will be the size of all the `tracing.Recordings` of a particular
+// `trace_id` on a single node in the cluster. Each `tracing.Recording` has its
+// own memory protections via ring buffers, and so we do not expect this
+// overhead to grow in an unbounded manner.
+var crdbInternalClusterInflightTracesTable = virtualSchemaTable{
+	comment: `traces for in-flight spans across all nodes in the cluster (cluster RPC; expensive!)`,
+	schema: `
+CREATE TABLE crdb_internal.cluster_inflight_traces (
+  trace_id    INT NOT NULL,   -- The trace's ID.
+  node_id     INT NOT NULL,   -- The node's ID.
+  trace_json  STRING NULL,    -- JSON representation of the traced remote operation.
+  trace_str   STRING NULL,    -- human readable representation of the traced remote operation.
+  jaeger_json STRING NULL,    -- Jaeger JSON representation of the traced remote operation.
+  INDEX(trace_id)
+)`,
+	indexes: []virtualIndex{{populate: func(ctx context.Context, constraint tree.Datum, p *planner,
+		db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+		var traceID uint64
+		d := tree.UnwrapDatum(p.EvalContext(), constraint)
+		if d == tree.DNull {
+			return false, nil
+		}
+		switch t := d.(type) {
+		case *tree.DInt:
+			traceID = uint64(*t)
+		default:
+			return false, errors.AssertionFailedf(
+				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", d)
+		}
+
+		traceCollector := p.ExecCfg().TraceCollector
+		for iter := traceCollector.StartIter(ctx, traceID); iter.Valid(); iter.Next() {
+			nodeID, recording := iter.Value()
+			traceJSON, err := tracing.TraceToJSON(recording)
+			if err != nil {
+				return false, err
+			}
+			traceString := recording.String()
+			traceJaegerJSON, err := recording.ToJaegerJSON("", "", fmt.Sprintf("node %d", nodeID))
+			if err != nil {
+				return false, err
+			}
+			if err := addRow(tree.NewDInt(tree.DInt(traceID)), tree.NewDInt(tree.DInt(nodeID)),
+				tree.NewDString(traceJSON), tree.NewDString(traceString),
+				tree.NewDString(traceJaegerJSON)); err != nil {
+				return false, err
+			}
+		}
+
+		return true, nil
+	}}},
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor,
+		addRow func(...tree.Datum) error) error {
+		// We only want to generate rows when an index constraint is provided on the
+		// query accessing this vtable. This index constraint will provide the
+		// trace_id for which we will collect inflight trace spans from the cluster.
 		return nil
 	},
 }

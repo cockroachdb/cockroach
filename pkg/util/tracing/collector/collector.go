@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 )
@@ -36,6 +37,7 @@ type TraceCollector struct {
 	tracer       *tracing.Tracer
 	dialer       *nodedialer.Dialer
 	nodeliveness NodeLiveness
+	mon          *mon.BytesMonitor
 }
 
 // New returns a TraceCollector.
@@ -190,6 +192,7 @@ func (t *TraceCollector) getTraceSpanRecordingsForNode(
 		}
 		res = append(res, recording.RecordedSpans)
 	}
+	resp.Recordings = nil
 
 	// This sort ensures that if a node has multiple trace.Recordings then they
 	// are ordered relative to each other by StartTime.

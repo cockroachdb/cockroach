@@ -1889,6 +1889,7 @@ objoid      classoid    objsubid  description
 4294967288  4294967161  0         contention information (cluster RPC; expensive!)
 4294967243  4294967161  0         virtual table with database privileges
 4294967287  4294967161  0         DistSQL remote flows information (cluster RPC; expensive!)
+4294967239  4294967160  0         traces for in-flight spans across all nodes in the cluster (cluster RPC; expensive!)
 4294967286  4294967161  0         running queries visible by current user (cluster RPC; expensive!)
 4294967284  4294967161  0         running sessions visible to current user (cluster RPC; expensive!)
 4294967283  4294967161  0         cluster settings (RAM)

@@ -104,6 +104,42 @@ CREATE TABLE crdb_internal.cluster_distsql_flows (
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.cluster_inflight_traces (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  CREATE TABLE crdb_internal.cluster_inflight_traces (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_queries (
+   query_id STRING NULL,
+   txn_id UUID NULL,
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   start TIMESTAMP NULL,
+   query STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   distributed BOOL NULL,
+   phase STRING NULL
+)  CREATE TABLE crdb_internal.cluster_queries (
+   query_id STRING NULL,
+   txn_id UUID NULL,
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   start TIMESTAMP NULL,
+   query STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   distributed BOOL NULL,
+   phase STRING NULL
+)  {}  {}
 CREATE TABLE crdb_internal.cluster_queries (
    query_id STRING NULL,
    txn_id UUID NULL,

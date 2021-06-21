@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 	"github.com/cockroachdb/errors"
@@ -491,8 +492,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	var isLive func(roachpb.NodeID) (bool, error)
-	nodeLiveness, ok := cfg.nodeLiveness.Optional(47900)
-	if ok {
+	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
+	if hasNodeLiveness {
 		isLive = nodeLiveness.IsLive
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
@@ -500,6 +501,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		isLive = func(roachpb.NodeID) (bool, error) {
 			return true, nil
 		}
+	}
+
+	// Setup the trace collector that is used to fetch inflight trace spans from
+	// all nodes in the cluster.
+	// The collector requires nodeliveness to get a list of all the nodes in the
+	// cluster.
+	var traceCollector *collector.TraceCollector
+	if hasNodeLiveness {
+		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Settings.Tracer)
 	}
 
 	*execCfg = sql.ExecutorConfig{
@@ -532,6 +542,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RootMemoryMonitor:       rootSQLMemoryMonitor,
 		TestingKnobs:            sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
+		TraceCollector:          traceCollector,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
