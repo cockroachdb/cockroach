@@ -51,7 +51,14 @@ func keysToString(keys []Key, bbox geopb.BoundingBox, err error) string {
 	for _, k := range keys {
 		cells = append(cells, k.String())
 	}
-	return fmt.Sprintf("%s\nBoundingBox: %s", strings.Join(cells, ", "), bbox.String())
+	return fmt.Sprintf(
+		"%s\nBoundingBox: lo_x:%.6f hi_x:%.6f lo_y:%.6f hi_y:%.6f",
+		strings.Join(cells, ", "),
+		bbox.LoX,
+		bbox.HiX,
+		bbox.LoY,
+		bbox.HiY,
+	)
 }
 
 func cellUnionToString(cells s2.CellUnion) string {
