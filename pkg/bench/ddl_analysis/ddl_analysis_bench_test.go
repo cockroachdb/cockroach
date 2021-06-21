@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
@@ -49,7 +48,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 			defer log.Scope(b).Close(b)
 			var stmtToKvBatchRequests sync.Map
 
-			beforePlan := func(trace tracing.Recording, stmt string) {
+			beforePlan := func(trace tracingpb.Recording, stmt string) {
 				if _, ok := stmtToKvBatchRequests.Load(stmt); ok {
 					stmtToKvBatchRequests.Store(stmt, trace)
 				}
@@ -75,7 +74,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 			roundTrips := 0
 			b.ResetTimer()
 			b.StopTimer()
-			var r tracing.Recording
+			var r tracingpb.Recording
 			for i := 0; i < b.N; i++ {
 				sql.Exec(b, "CREATE DATABASE bench;")
 				sql.Exec(b, tc.setup)
@@ -87,7 +86,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 
 				out, _ := stmtToKvBatchRequests.Load(tc.stmt)
 				var ok bool
-				if r, ok = out.(tracing.Recording); !ok {
+				if r, ok = out.(tracingpb.Recording); !ok {
 					b.Fatalf(
 						"could not find number of round trips for statement: %s",
 						tc.stmt,
@@ -121,12 +120,12 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 
 // count the number of KvBatchRequests inside a recording, this is done by
 // counting each "txn coordinator send" operation.
-func countKvBatchRequestsInRecording(r tracing.Recording) (sends int, hasRetry bool) {
-	root := r[0]
+func countKvBatchRequestsInRecording(r tracingpb.Recording) (sends int, hasRetry bool) {
+	root := r.RecordedSpans[0]
 	return countKvBatchRequestsInSpan(r, root)
 }
 
-func countKvBatchRequestsInSpan(r tracing.Recording, sp tracingpb.RecordedSpan) (int, bool) {
+func countKvBatchRequestsInSpan(r tracingpb.Recording, sp tracingpb.RecordedSpan) (int, bool) {
 	count := 0
 	// Count the number of OpTxnCoordSender operations while traversing the
 	// tree of spans.
@@ -137,7 +136,7 @@ func countKvBatchRequestsInSpan(r tracing.Recording, sp tracingpb.RecordedSpan) 
 		return 0, true
 	}
 
-	for _, osp := range r {
+	for _, osp := range r.RecordedSpans {
 		if osp.ParentSpanID != sp.SpanID {
 			continue
 		}

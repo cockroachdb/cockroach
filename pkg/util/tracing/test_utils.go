@@ -18,8 +18,8 @@ import (
 
 // FindMsgInRecording returns the index of the first Span containing msg in its
 // logs, or -1 if no Span is found.
-func FindMsgInRecording(recording Recording, msg string) int {
-	for i, sp := range recording {
+func FindMsgInRecording(recording tracingpb.Recording, msg string) int {
+	for i, sp := range recording.RecordedSpans {
 		if LogsContainMsg(sp, msg) {
 			return i
 		}

@@ -1547,7 +1547,7 @@ func (p *payloadsForSpanGenerator) Next(_ context.Context) (bool, error) {
 		if !(p.recordingIndex < p.span.GetRecording().Len()) {
 			return false, nil
 		}
-		currRecording := p.span.GetRecording()[p.recordingIndex]
+		currRecording := p.span.GetRecording().RecordedSpans[p.recordingIndex]
 		currRecording.Structured(func(item *pbtypes.Any, _ time.Time) {
 			payload, err := protoreflect.MessageToJSON(item, true /* emitDefaults */)
 			if err != nil {

@@ -161,9 +161,9 @@ func (b *sizeLimitedBuffer) Reset() {
 	b.size = 0
 }
 
-func (s *crdbSpan) recordingType() RecordingType {
+func (s *crdbSpan) recordingType() tracingpb.RecordingType {
 	if s == nil {
-		return RecordingOff
+		return tracingpb.RecordingOff
 	}
 	return s.mu.recording.recordingType.load()
 }
@@ -173,18 +173,18 @@ func (s *crdbSpan) recordingType() RecordingType {
 //
 // If parent != nil, the Span will be registered as a child of the respective
 // parent. If nil, the parent's recording will not include this child.
-func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
+func (s *crdbSpan) enableRecording(parent *crdbSpan, recType tracingpb.RecordingType) {
 	if parent != nil {
 		parent.addChild(s)
 	}
-	if recType == RecordingOff || s.recordingType() == recType {
+	if recType == tracingpb.RecordingOff || s.recordingType() == recType {
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.recording.recordingType.swap(recType)
-	if recType == RecordingVerbose {
+	if recType == tracingpb.RecordingVerbose {
 		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
 	}
 }
@@ -206,23 +206,23 @@ func (s *crdbSpan) resetRecording() {
 }
 
 func (s *crdbSpan) disableRecording() {
-	if s.recordingType() == RecordingOff {
+	if s.recordingType() == tracingpb.RecordingOff {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	oldRecType := s.mu.recording.recordingType.swap(RecordingOff)
+	oldRecType := s.mu.recording.recordingType.swap(tracingpb.RecordingOff)
 	// We test the duration as a way to check if the Span has been finished. If it
 	// has, we don't want to do the call below as it might crash (at least if
 	// there's a netTr).
-	if (s.mu.duration == -1) && (oldRecType == RecordingVerbose) {
+	if (s.mu.duration == -1) && (oldRecType == tracingpb.RecordingVerbose) {
 		// Clear the verboseTracingBaggageKey baggage item, assuming that it was set by
 		// enableRecording().
 		s.setBaggageItemLocked(verboseTracingBaggageKey, "")
 	}
 }
 
-func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
+func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) *tracingpb.Recording {
 	if s == nil {
 		return nil // noop span
 	}
@@ -235,7 +235,7 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 		// that v20.2 is not around any longer.
 		//
 		// TODO(tbg): remove this in the v21.2 cycle.
-		if s.recordingType() == RecordingOff {
+		if s.recordingType() == tracingpb.RecordingOff {
 			return nil
 		}
 	}
@@ -244,35 +244,38 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 	// no recordings or baggage. If the trace is verbose, we'll still recurse in
 	// order to pick up all the operations that were part of the trace, despite
 	// nothing having any actual data in them.
-	if s.recordingType() != RecordingVerbose && s.inAnEmptyTrace() {
+	if s.recordingType() != tracingpb.RecordingVerbose && s.inAnEmptyTrace() {
 		return nil
 	}
 
 	s.mu.Lock()
 	// The capacity here is approximate since we don't know how many
 	// grandchildren there are.
-	result := make(Recording, 0, 1+s.mu.recording.children.len()+len(s.mu.recording.remoteSpans))
+	result := tracingpb.Recording{
+		RecordedSpans: make([]tracingpb.RecordedSpan, 0, 1+s.mu.recording.children.len()+len(s.mu.recording.remoteSpans)),
+	}
 	// Shallow-copy the children so we can process them without the lock.
 	var children []*crdbSpan
 	for i := 0; i < s.mu.recording.children.len(); i++ {
 		children = append(children, s.mu.recording.children.get(i))
 	}
-	result = append(result, s.getRecordingLocked(wantTags))
-	result = append(result, s.mu.recording.remoteSpans...)
+	result.RecordedSpans = append(result.RecordedSpans, s.getRecordingLocked(wantTags))
+	result.RecordedSpans = append(result.RecordedSpans, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
 
 	for _, child := range children {
-		result = append(result, child.getRecording(everyoneIsV211, wantTags)...)
+		childRec := child.getRecording(everyoneIsV211, wantTags)
+		result.RecordedSpans = append(result.RecordedSpans, childRec.RecordedSpans...)
 	}
 
 	// Sort the spans by StartTime, except the first Span (the root of this
 	// recording) which stays in place.
-	toSort := sortPool.Get().(*Recording) // avoids allocations in sort.Sort
-	*toSort = result[1:]
+	toSort := sortPool.Get().(*tracingpb.Recording) // avoids allocations in sort.Sort
+	toSort.RecordedSpans = result.RecordedSpans[1:]
 	sort.Sort(toSort)
-	*toSort = nil
+	*toSort = tracingpb.Recording{}
 	sortPool.Put(toSort)
-	return result
+	return &result
 }
 
 func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
@@ -292,7 +295,7 @@ func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 func (s *crdbSpan) setTagLocked(key string, value interface{}) {
-	if s.recordingType() != RecordingVerbose {
+	if s.recordingType() != tracingpb.RecordingVerbose {
 		// Don't bother storing tags if we're unlikely to retrieve them.
 		return
 	}
@@ -304,7 +307,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 }
 
 func (s *crdbSpan) record(msg string) {
-	if s.recordingType() != RecordingVerbose {
+	if s.recordingType() != tracingpb.RecordingVerbose {
 		return
 	}
 
@@ -440,7 +443,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		if s.mu.duration == -1 {
 			addTag("_unfinished", "1")
 		}
-		if s.mu.recording.recordingType.load() == RecordingVerbose {
+		if s.mu.recording.recordingType.load() == tracingpb.RecordingVerbose {
 			addTag("_verbose", "1")
 		}
 		if s.mu.recording.dropped {
@@ -504,7 +507,7 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 // recurses on its list of children.
 func (s *crdbSpan) setVerboseRecursively(to bool) {
 	if to {
-		s.enableRecording(nil /* parent */, RecordingVerbose)
+		s.enableRecording(nil /* parent */, tracingpb.RecordingVerbose)
 	} else {
 		s.disableRecording()
 	}
@@ -523,33 +526,18 @@ func (s *crdbSpan) setVerboseRecursively(to bool) {
 
 var sortPool = sync.Pool{
 	New: func() interface{} {
-		return &Recording{}
+		return &tracingpb.Recording{}
 	},
 }
 
-// Less implements sort.Interface.
-func (r Recording) Less(i, j int) bool {
-	return r[i].StartTime.Before(r[j].StartTime)
-}
-
-// Swap implements sort.Interface.
-func (r Recording) Swap(i, j int) {
-	r[i], r[j] = r[j], r[i]
-}
-
-// Len implements sort.Interface.
-func (r Recording) Len() int {
-	return len(r)
-}
-
-type atomicRecordingType RecordingType
+type atomicRecordingType tracingpb.RecordingType
 
 // load returns the recording type.
-func (art *atomicRecordingType) load() RecordingType {
-	return RecordingType(atomic.LoadInt32((*int32)(art)))
+func (art *atomicRecordingType) load() tracingpb.RecordingType {
+	return tracingpb.RecordingType(atomic.LoadInt32((*int32)(art)))
 }
 
 // swap stores the new recording type and returns the old one.
-func (art *atomicRecordingType) swap(recType RecordingType) RecordingType {
-	return RecordingType(atomic.SwapInt32((*int32)(art), int32(recType)))
+func (art *atomicRecordingType) swap(recType tracingpb.RecordingType) tracingpb.RecordingType {
+	return tracingpb.RecordingType(atomic.SwapInt32((*int32)(art), int32(recType)))
 }

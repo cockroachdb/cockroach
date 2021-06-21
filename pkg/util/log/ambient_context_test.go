@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -59,7 +60,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	sp2.Finish()
 	sp1.Finish()
 
-	if err := tracing.TestingCheckRecordedSpans(sp1.GetRecording(), `
+	if err := tracingpb.TestingCheckRecordedSpans(sp1.GetRecording(), `
 		span: root
 			tags: _verbose=1
 			event: a

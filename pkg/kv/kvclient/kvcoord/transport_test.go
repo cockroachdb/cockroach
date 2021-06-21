@@ -127,7 +127,7 @@ func TestSpanImport(t *testing.T) {
 		t.Fatalf("expected err: %s, got: %q", expectedErr, br.Error)
 	}
 	expectedMsg := "mockInternalClient processing batch"
-	if tracing.FindMsgInRecording(getRec(), expectedMsg) == -1 {
+	if tracing.FindMsgInRecording(*getRec(), expectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", expectedMsg)
 	}
 }
@@ -160,7 +160,7 @@ func (m *mockInternalClient) Batch(
 	br := &roachpb.BatchResponse{}
 	br.Error = m.pErr
 	if rec := sp.GetRecording(); rec != nil {
-		br.CollectedSpans = append(br.CollectedSpans, rec...)
+		br.CollectedSpans = append(br.CollectedSpans, rec.RecordedSpans...)
 	}
 	return br, nil
 }

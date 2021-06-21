@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -123,9 +123,10 @@ func TestProtectedTimestamps(t *testing.T) {
 	}
 
 	thresholdRE := regexp.MustCompile(`(?s).*Threshold:(?P<threshold>[^\s]*)`)
-	thresholdFromTrace := func(trace tracing.Recording) hlc.Timestamp {
+	thresholdFromTrace := func(trace tracingpb.Recording) hlc.Timestamp {
 		threshStr := string(thresholdRE.ExpandString(nil, "$threshold",
-			trace.String(), thresholdRE.FindStringSubmatchIndex(trace.String())))
+			tracingpb.RecordingToString(&trace),
+			thresholdRE.FindStringSubmatchIndex(tracingpb.RecordingToString(&trace))))
 		thresh, err := hlc.ParseTimestamp(threshStr)
 		require.NoError(t, err)
 		return thresh
@@ -168,7 +169,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	trace, _, err = s.ManuallyEnqueue(ctx, "gc", repl, true /* skipShouldQueue */)
 	require.NoError(t, err)
 	require.Regexp(t, "(?s)done with GC evaluation for 0 keys", trace.String())
-	thresh := thresholdFromTrace(trace)
+	thresh := thresholdFromTrace(*trace)
 	require.Truef(t, thresh.Less(ptsRec.Timestamp), "threshold: %v, protected %v %q", thresh, ptsRec.Timestamp, trace)
 
 	// Verify that the record indeed did apply as far as the replica is concerned.
@@ -208,7 +209,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		if !processedRegexp.MatchString(trace.String()) {
 			return errors.Errorf("%q does not match %q", trace.String(), processedRegexp)
 		}
-		thresh := thresholdFromTrace(trace)
+		thresh := thresholdFromTrace(*trace)
 		require.Truef(t, ptsRec.Timestamp.Less(thresh), "%v >= %v",
 			ptsRec.Timestamp, thresh)
 		require.Truef(t, thresh.Less(laterRec.Timestamp), "%v >= %v",

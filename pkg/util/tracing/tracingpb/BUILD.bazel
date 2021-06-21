@@ -4,11 +4,21 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "tracingpb",
-    srcs = ["recorded_span.go"],
+    srcs = [
+        "recorded_span.go",
+        "recording.go",
+    ],
     embed = [":tracingpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//types"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_jaegertracing_jaeger//model/json",
+        "@com_github_opentracing_opentracing_go//:opentracing-go",
+        "@com_github_opentracing_opentracing_go//log",
+        "@com_github_pmezard_go_difflib//difflib",
+    ],
 )
 
 proto_library(

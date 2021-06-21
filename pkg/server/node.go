@@ -1012,7 +1012,7 @@ func (n *Node) setupSpanForIncomingRPC(
 			// end of the RPC (i.e. the !isLocalRequest) case,
 			// attach the span recording to the batch response.
 			if rec := grpcSpan.GetRecording(); rec != nil {
-				br.CollectedSpans = append(br.CollectedSpans, rec...)
+				br.CollectedSpans = append(br.CollectedSpans, rec.RecordedSpans...)
 			}
 		}
 	}

@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/opentracing/opentracing-go"
 )
@@ -53,8 +54,8 @@ func (opts *spanOptions) deriveRootSpan() *crdbSpan {
 	return nil
 }
 
-func (opts *spanOptions) recordingType() RecordingType {
-	recordingType := RecordingOff
+func (opts *spanOptions) recordingType() tracingpb.RecordingType {
+	recordingType := tracingpb.RecordingOff
 	if opts.Parent != nil && !opts.Parent.i.isNoop() {
 		recordingType = opts.Parent.i.crdb.recordingType()
 	} else if !opts.RemoteParent.Empty() {

@@ -2480,7 +2480,7 @@ func (s *adminServer) enqueueRangeLocal(
 		response.Details[0].Error = err.Error()
 		return response, nil
 	}
-	response.Details[0].Events = recordedSpansToTraceEvents(traceSpans)
+	response.Details[0].Events = recordedSpansToTraceEvents(traceSpans.RecordedSpans)
 	if processErr != nil {
 		response.Details[0].Error = processErr.Error()
 	}

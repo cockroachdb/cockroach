@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -426,7 +427,7 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 	)
 	require.NoError(t, pErr)
 	require.NoError(t, err)
-	trace := recording.String()
+	trace := tracingpb.RecordingToString(recording)
 	require.Regexp(t, "streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", trace)
 	require.NoError(t, g.Wait())
 }
@@ -527,7 +528,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
-		formattedTrace := trace.String()
+		formattedTrace := tracingpb.RecordingToString(trace)
 		expectedMessages := []string{
 			`transitioning out of joint configuration`,
 		}
@@ -567,7 +568,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
-		require.Contains(t, trace.String(), msg)
+		require.Contains(t, tracingpb.RecordingToString(trace), msg)
 		return tc.LookupRangeOrFatal(t, scratchStartKey)
 	}
 	desc := checkNoGC()
@@ -631,7 +632,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 			return processErr
 		}
 		const msg = `skipping snapshot; replica is likely a LEARNER in the process of being added: (n2,s2):2LEARNER`
-		formattedTrace := trace.String()
+		formattedTrace := tracingpb.RecordingToString(trace)
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
 		}
@@ -766,7 +767,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 			if !strings.Contains(processErr.Error(), `descriptor changed`) {
 				return errors.Errorf(`expected "descriptor changed" error got: %+v`, processErr)
 			}
-			formattedTrace := trace.String()
+			formattedTrace := tracingpb.RecordingToString(trace)
 			expectedMessages := []string{
 				`could not promote .*?n3,s3.*? to voter, rolling back:.*?change replicas of r\d+ failed: descriptor changed`,
 				`learner to roll back not found`,
@@ -906,7 +907,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 				return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
 			}
 			const msg = `cannot serve follower reads`
-			formattedTrace := collect().String()
+			formattedTrace := tracingpb.RecordingToString(collect())
 			if !strings.Contains(formattedTrace, msg) {
 				return errors.Errorf("expected a trace with `%s` got:\n%s", msg, formattedTrace)
 			}
@@ -1121,7 +1122,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
-		formattedTrace := trace.String()
+		formattedTrace := tracingpb.RecordingToString(trace)
 		expectedMessages := []string{
 			`removing learner replicas \[n2,s2\]`,
 			`merging to produce range: /Table/Max-/Max`,
@@ -1156,7 +1157,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 			trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 			require.NoError(t, err)
 			require.NoError(t, processErr)
-			formattedTrace := trace.String()
+			formattedTrace := tracingpb.RecordingToString(trace)
 			expectedMessages := []string{
 				`transitioning out of joint configuration`,
 				`merging to produce range: /Table/Max-/Max`,

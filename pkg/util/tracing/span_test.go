@@ -58,7 +58,7 @@ func TestRecordingString(t *testing.T) {
 	remoteChild.Record("remote child 1")
 	remoteChild.Finish()
 
-	remoteRec := remoteChild.GetRecording()
+	remoteRec := remoteChild.GetRecording().RecordedSpans
 	root.ImportRemoteSpans(remoteRec)
 
 	root.Record("root 3")
@@ -74,7 +74,7 @@ func TestRecordingString(t *testing.T) {
 	rec := root.GetRecording()
 	// Sanity check that the recording looks like we want. Note that this is not
 	// its String() representation; this just lists all the spans in order.
-	require.NoError(t, TestingCheckRecordedSpans(rec, `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(rec, `
 		span: root
 			tags: _verbose=1
 			event: root 1
@@ -90,7 +90,7 @@ func TestRecordingString(t *testing.T) {
 				event: local child 1
 		`))
 
-	require.NoError(t, TestingCheckRecording(rec, `
+	require.NoError(t, tracingpb.TestingCheckRecording(rec, `
 		=== operation:root _verbose:1
 		event:root 1
 			=== operation:remote child _verbose:1
@@ -103,7 +103,7 @@ func TestRecordingString(t *testing.T) {
 		event:root 5
 		`))
 	// Check the timing info on the first two lines.
-	lines := strings.Split(rec.String(), "\n")
+	lines := strings.Split(tracingpb.RecordingToString(rec), "\n")
 	l, err := parseLine(lines[0])
 	require.NoError(t, err)
 	require.Equal(t, traceLine{
@@ -152,12 +152,12 @@ func TestRecordingInRecording(t *testing.T) {
 	// code at the RPC boundaries).
 	grandChild := tr.StartSpan("grandchild", WithParentAndManualCollection(child.Meta()))
 	grandChild.Finish()
-	child.ImportRemoteSpans(grandChild.GetRecording())
+	child.ImportRemoteSpans(grandChild.GetRecording().RecordedSpans)
 	child.Finish()
 	root.Finish()
 
 	rootRec := root.GetRecording()
-	require.NoError(t, TestingCheckRecordedSpans(rootRec, `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(rootRec, `
 		span: root
 			tags: _verbose=1
 			span: child
@@ -167,14 +167,14 @@ func TestRecordingInRecording(t *testing.T) {
 		`))
 
 	childRec := child.GetRecording()
-	require.NoError(t, TestingCheckRecordedSpans(childRec, `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(childRec, `
 		span: child
 			tags: _verbose=1
 			span: grandchild
 				tags: _verbose=1
 		`))
 
-	require.NoError(t, TestingCheckRecording(childRec, `
+	require.NoError(t, tracingpb.TestingCheckRecording(childRec, `
 		=== operation:child _verbose:1
 			=== operation:grandchild _verbose:1
 		`))
@@ -190,10 +190,10 @@ func TestSpan_ImportRemoteSpans(t *testing.T) {
 	ch.Record("foo")
 	ch.SetVerbose(false)
 	ch.Finish()
-	sp.ImportRemoteSpans(ch.GetRecording())
+	sp.ImportRemoteSpans(ch.GetRecording().RecordedSpans)
 	sp.Finish()
 
-	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(sp.GetRecording(), `
 		span: root
 			span: child
 				event: foo
@@ -208,22 +208,22 @@ func TestSpanRecordStructured(t *testing.T) {
 	sp.RecordStructured(&types.Int32Value{Value: 4})
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].DeprecatedInternalStructured, 1)
-	deprecatedItem := rec[0].DeprecatedInternalStructured[0]
+	require.Len(t, rec.RecordedSpans[0].DeprecatedInternalStructured, 1)
+	deprecatedItem := rec.RecordedSpans[0].DeprecatedInternalStructured[0]
 	var deprecatedStructured types.DynamicAny
 	require.NoError(t, types.UnmarshalAny(deprecatedItem, &deprecatedStructured))
 	require.IsType(t, (*types.Int32Value)(nil), deprecatedStructured.Message)
 
-	require.Len(t, rec[0].StructuredRecords, 1)
-	item := rec[0].StructuredRecords[0]
+	require.Len(t, rec.RecordedSpans[0].StructuredRecords, 1)
+	item := rec.RecordedSpans[0].StructuredRecords[0]
 	var d1 types.DynamicAny
 	require.NoError(t, types.UnmarshalAny(item.Payload, &d1))
 	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
 
-	require.NoError(t, TestingCheckRecordedSpans(rec, `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(rec, `
 		span: root
 		`))
-	require.NoError(t, TestingCheckRecording(rec, `
+	require.NoError(t, tracingpb.TestingCheckRecording(rec, `
 		=== operation:root
 	`))
 }
@@ -251,7 +251,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	}
 
 	sp.SetVerbose(true)
-	rec := sp.GetRecording()
+	rec := sp.GetRecording().RecordedSpans
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, numStructuredRecordings)
 	require.Equal(t, "1", rec[0].Tags["_dropped"])
@@ -290,7 +290,7 @@ func TestSpanRecordLimit(t *testing.T) {
 
 	// Determine the size of a log record by actually recording once.
 	sp.Record(msg(42))
-	logSize := sp.GetRecording()[0].Logs[0].Size()
+	logSize := sp.GetRecording().RecordedSpans[0].Logs[0].Size()
 	sp.ResetRecording()
 
 	numLogs := maxLogBytesPerSpan / logSize
@@ -300,12 +300,12 @@ func TestSpanRecordLimit(t *testing.T) {
 	}
 
 	rec := sp.GetRecording()
-	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Logs, numLogs)
-	require.Equal(t, rec[0].Tags["_dropped"], "1")
+	require.Len(t, rec.RecordedSpans, 1)
+	require.Len(t, rec.RecordedSpans[0].Logs, numLogs)
+	require.Equal(t, rec.RecordedSpans[0].Tags["_dropped"], "1")
 
-	first := rec[0].Logs[0]
-	last := rec[0].Logs[len(rec[0].Logs)-1]
+	first := rec.RecordedSpans[0].Logs[0]
+	last := rec.RecordedSpans[0].Logs[len(rec.RecordedSpans[0].Logs)-1]
 
 	require.Equal(t, first.Fields[0].Value, msg(extra+1))
 	require.Equal(t, last.Fields[0].Value, msg(numLogs+extra))
@@ -348,7 +348,7 @@ func TestSpanReset(t *testing.T) {
 		}
 	}
 
-	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(sp.GetRecording(), `
 		span: root
 			tags: _unfinished=1 _verbose=1
 			event: 1
@@ -362,7 +362,7 @@ func TestSpanReset(t *testing.T) {
 			event: 9
 			event: structured=10
 		`))
-	require.NoError(t, TestingCheckRecording(sp.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecording(sp.GetRecording(), `
 		=== operation:root _unfinished:1 _verbose:1
 		event:1
 		event:structured=2
@@ -378,17 +378,17 @@ func TestSpanReset(t *testing.T) {
 
 	sp.ResetRecording()
 
-	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(sp.GetRecording(), `
 		span: root
 			tags: _unfinished=1 _verbose=1
 		`))
-	require.NoError(t, TestingCheckRecording(sp.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecording(sp.GetRecording(), `
 		=== operation:root _unfinished:1 _verbose:1
 	`))
 
 	msg := func(i int) string { return fmt.Sprintf("msg: %010d", i) }
 	sp.Record(msg(42))
-	logSize := sp.GetRecording()[0].Logs[0].Size()
+	logSize := sp.GetRecording().RecordedSpans[0].Logs[0].Size()
 	numLogs := maxLogBytesPerSpan / logSize
 	const extra = 10
 
@@ -396,9 +396,9 @@ func TestSpanReset(t *testing.T) {
 		sp.Record(msg(i))
 	}
 
-	require.Equal(t, sp.GetRecording()[0].Tags["_dropped"], "1")
+	require.Equal(t, sp.GetRecording().RecordedSpans[0].Tags["_dropped"], "1")
 	sp.ResetRecording()
-	_, found := sp.GetRecording()[0].Tags["_dropped"]
+	_, found := sp.GetRecording().RecordedSpans[0].Tags["_dropped"]
 	require.False(t, found)
 }
 
@@ -413,9 +413,9 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
-	require.Len(t, rec, 2)
-	require.Len(t, rec[1].DeprecatedInternalStructured, 1)
-	require.Len(t, rec[1].StructuredRecords, 1)
+	require.Len(t, rec.RecordedSpans, 2)
+	require.Len(t, rec.RecordedSpans[1].DeprecatedInternalStructured, 1)
+	require.Len(t, rec.RecordedSpans[1].StructuredRecords, 1)
 }
 
 // TestSpanMaxChildren verifies that a Span can
@@ -525,13 +525,13 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	sp.SetVerbose(true)
 	rec = sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 3) // _unfinished:1 _verbose:1 tagfoo:tagbar
+	require.Len(t, rec.RecordedSpans[0].Tags, 3) // _unfinished:1 _verbose:1 tagfoo:tagbar
 	require.Zero(t, int(counter))
 
 	// Verify that subsequent tags are captured.
 	sp.SetTag("foo2", &counter)
 	rec = sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 4)
+	require.Len(t, rec.RecordedSpans[0].Tags, 4)
 	require.Equal(t, 1, int(counter))
 }

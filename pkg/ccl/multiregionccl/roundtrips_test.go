@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,15 +33,15 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 
 	// ensureOnlyLocalReads looks at a trace to ensure that reads were served
 	// locally. It returns true if the read was served as a follower read.
-	ensureOnlyLocalReads := func(t *testing.T, rec tracing.Recording) (servedUsingFollowerReads bool) {
-		for _, sp := range rec {
+	ensureOnlyLocalReads := func(t *testing.T, rec tracingpb.Recording) (servedUsingFollowerReads bool) {
+		for _, sp := range rec.RecordedSpans {
 			if sp.Operation == "dist sender send" {
 				require.True(t, tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg),
 					"query was not served locally: %s", rec)
 
 				// Check the child span to find out if the query was served using a
 				// follower read.
-				for _, span := range rec {
+				for _, span := range rec.RecordedSpans {
 					if span.ParentSpanID == sp.SpanID {
 						if tracing.LogsContainMsg(span, kvbase.FollowerReadServingMsg) {
 							servedUsingFollowerReads = true
@@ -53,11 +54,11 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 	}
 
 	presentTimeRead := `SELECT * FROM t.test_table WHERE k=2`
-	recCh := make(chan tracing.Recording, 1)
+	recCh := make(chan tracingpb.Recording, 1)
 
 	knobs := base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{
-			WithStatementTrace: func(trace tracing.Recording, stmt string) {
+			WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 				if stmt == presentTimeRead {
 					recCh <- trace
 				}

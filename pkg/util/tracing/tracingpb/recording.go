@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tracing
+package tracingpb
 
 import (
 	"encoding/json"
@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	jaegerjson "github.com/jaegertracing/jaeger/model/json"
 	"github.com/opentracing/opentracing-go"
@@ -73,13 +72,13 @@ type traceLogData struct {
 //
 // TODO(andrei): this should be unified with
 // SessionTracing.generateSessionTraceVTable().
-func (r Recording) String() string {
-	if len(r) == 0 {
+func RecordingToString(r *Recording) string {
+	if len(r.RecordedSpans) == 0 {
 		return "<empty recording>"
 	}
 
 	var buf strings.Builder
-	start := r[0].StartTime
+	start := r.RecordedSpans[0].StartTime
 	writeLogs := func(logs []traceLogData) {
 		for _, entry := range logs {
 			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
@@ -96,7 +95,7 @@ func (r Recording) String() string {
 		}
 	}
 
-	logs := r.visitSpan(r[0], 0 /* depth */)
+	logs := r.visitSpan(r.RecordedSpans[0], 0 /* depth */)
 	writeLogs(logs)
 
 	// Check if there's any orphan spans (spans for which the parent is missing).
@@ -116,14 +115,14 @@ func (r Recording) String() string {
 }
 
 // OrphanSpans returns the spans with parents missing from the recording.
-func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
+func (r *Recording) OrphanSpans() []RecordedSpan {
 	spanIDs := make(map[uint64]struct{})
-	for _, sp := range r {
+	for _, sp := range r.RecordedSpans {
 		spanIDs[sp.SpanID] = struct{}{}
 	}
 
-	var orphans []tracingpb.RecordedSpan
-	for i, sp := range r {
+	var orphans []RecordedSpan
+	for i, sp := range r.RecordedSpans {
 		if i == 0 {
 			// The first Span can be a root Span. Note that any other root Span will
 			// be considered an orphan.
@@ -138,9 +137,9 @@ func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
 
 // FindLogMessage returns the first log message in the recording that matches
 // the given regexp. The bool return value is true if such a message is found.
-func (r Recording) FindLogMessage(pattern string) (string, bool) {
+func (r *Recording) FindLogMessage(pattern string) (string, bool) {
 	re := regexp.MustCompile(pattern)
-	for _, sp := range r {
+	for _, sp := range r.RecordedSpans {
 		for _, l := range sp.Logs {
 			msg := l.Msg()
 			if re.MatchString(msg) {
@@ -153,20 +152,20 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 
 // FindSpan returns the Span with the given operation. The bool retval is false
 // if the Span is not found.
-func (r Recording) FindSpan(operation string) (tracingpb.RecordedSpan, bool) {
-	for _, sp := range r {
+func (r *Recording) FindSpan(operation string) (RecordedSpan, bool) {
+	for _, sp := range r.RecordedSpans {
 		if sp.Operation == operation {
 			return sp, true
 		}
 	}
-	return tracingpb.RecordedSpan{}, false
+	return RecordedSpan{}, false
 }
 
 // visitSpan returns the log messages for sp, and all of sp's children.
 //
 // All messages from a Span are kept together. Sibling spans are ordered within
 // the parent in their start order.
-func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogData {
+func (r *Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
 
 	conv := func(l opentracing.LogRecord, ref time.Time) traceLogData {
@@ -214,7 +213,7 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 	}
 
 	childSpans := make([][]traceLogData, 0)
-	for _, osp := range r {
+	for _, osp := range r.RecordedSpans {
 		if osp.ParentSpanID != sp.SpanID {
 			continue
 		}
@@ -261,20 +260,20 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 // The format is described here: https://github.com/jaegertracing/jaeger-ui/issues/381#issuecomment-494150826
 //
 // The statement is passed in so it can be included in the trace.
-func (r Recording) ToJaegerJSON(stmt string) (string, error) {
-	if len(r) == 0 {
+func (r *Recording) ToJaegerJSON(stmt string) (string, error) {
+	if len(r.RecordedSpans) == 0 {
 		return "", nil
 	}
 
-	cpy := make(Recording, len(r))
-	copy(cpy, r)
-	r = cpy
+	cpy := make([]RecordedSpan, len(r.RecordedSpans))
+	copy(cpy, r.RecordedSpans)
+	r.RecordedSpans = cpy
 	tagsCopy := make(map[string]string)
-	for k, v := range r[0].Tags {
+	for k, v := range r.RecordedSpans[0].Tags {
 		tagsCopy[k] = v
 	}
 	tagsCopy["statement"] = stmt
-	r[0].Tags = tagsCopy
+	r.RecordedSpans[0].Tags = tagsCopy
 
 	toJaegerSpanID := func(spanID uint64) jaegerjson.SpanID {
 		return jaegerjson.SpanID(strconv.FormatUint(spanID, 10))
@@ -287,7 +286,7 @@ func (r Recording) ToJaegerJSON(stmt string) (string, error) {
 	// getProcessID figures out what "process" a Span belongs to. It looks for an
 	// "node: <node id>" tag. The processes map is populated with an entry for every
 	// node present in the trace.
-	getProcessID := func(sp tracingpb.RecordedSpan) jaegerjson.ProcessID {
+	getProcessID := func(sp RecordedSpan) jaegerjson.ProcessID {
 		node := "unknown node"
 		for k, v := range sp.Tags {
 			if k == "node" {
@@ -306,10 +305,10 @@ func (r Recording) ToJaegerJSON(stmt string) (string, error) {
 	}
 
 	var t jaegerjson.Trace
-	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(r[0].TraceID, 10))
+	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(r.RecordedSpans[0].TraceID, 10))
 	t.Processes = processes
 
-	for _, sp := range r {
+	for _, sp := range r.RecordedSpans {
 		var s jaegerjson.Span
 
 		s.TraceID = t.TraceID
@@ -394,7 +393,7 @@ type TraceCollection struct {
 // Note: this test function is in this file because it needs to be used by
 // both tests in the tracing package and tests outside of it, and the function
 // itself depends on tracing.
-func TestingCheckRecordedSpans(rec Recording, expected string) error {
+func TestingCheckRecordedSpans(rec *Recording, expected string) error {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//
@@ -427,7 +426,7 @@ func TestingCheckRecordedSpans(rec Recording, expected string) error {
 	}
 
 	mapping := make(map[uint64]uint64) // spanID -> parentSpanID
-	for _, rs := range rec {
+	for _, rs := range rec.RecordedSpans {
 		mapping[rs.SpanID] = rs.ParentSpanID
 	}
 	depth := func(spanID uint64) int {
@@ -445,7 +444,7 @@ func TestingCheckRecordedSpans(rec Recording, expected string) error {
 		return d
 	}
 
-	for _, rs := range rec {
+	for _, rs := range rec.RecordedSpans {
 		d := depth(rs.SpanID)
 		row(d, "span: %s", rs.Operation)
 		if len(rs.Tags) > 0 {
@@ -476,7 +475,7 @@ func TestingCheckRecordedSpans(rec Recording, expected string) error {
 			Context:  4,
 		}
 		diffText, _ := difflib.GetUnifiedDiffString(diff)
-		return errors.Newf("unexpected diff:\n%s\n\nrecording:\n%s", diffText, rec.String())
+		return errors.Newf("unexpected diff:\n%s\n\nrecording:\n%s", diffText, RecordingToString(rec))
 	}
 	return nil
 }
@@ -494,7 +493,7 @@ func TestingCheckRecordedSpans(rec Recording, expected string) error {
 //           t.Fatal(err)
 //       }
 //
-func TestingCheckRecording(rec Recording, expected string) error {
+func TestingCheckRecording(rec *Recording, expected string) error {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//
@@ -522,7 +521,7 @@ func TestingCheckRecording(rec Recording, expected string) error {
 	}
 
 	exp := normalize(expected)
-	got := normalize(rec.String())
+	got := normalize(RecordingToString(rec))
 	if got != exp {
 		diff := difflib.UnifiedDiff{
 			A:        difflib.SplitLines(exp),
@@ -535,4 +534,19 @@ func TestingCheckRecording(rec Recording, expected string) error {
 		return errors.Newf("unexpected diff:\n%s", diffText)
 	}
 	return nil
+}
+
+// Less implements sort.Interface.
+func (r *Recording) Less(i, j int) bool {
+	return r.RecordedSpans[i].StartTime.Before(r.RecordedSpans[j].StartTime)
+}
+
+// Swap implements sort.Interface.
+func (r *Recording) Swap(i, j int) {
+	r.RecordedSpans[i], r.RecordedSpans[j] = r.RecordedSpans[j], r.RecordedSpans[i]
+}
+
+// Len implements sort.Interface.
+func (r *Recording) Len() int {
+	return len(r.RecordedSpans)
 }

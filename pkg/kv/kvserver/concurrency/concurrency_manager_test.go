@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -940,7 +941,7 @@ type monitoredGoroutine struct {
 	finished int32
 
 	ctx        context.Context
-	collect    func() tracing.Recording
+	collect    func() *tracingpb.Recording
 	cancel     func()
 	prevEvents int
 }
@@ -1004,7 +1005,7 @@ func (m *monitor) collectRecordings() string {
 	for g := range m.gs {
 		prev := g.prevEvents
 		rec := g.collect()
-		for _, span := range rec {
+		for _, span := range rec.RecordedSpans {
 			for _, log := range span.Logs {
 				for _, field := range log.Fields {
 					if prev > 0 {
@@ -1055,7 +1056,7 @@ var reFileLinePrefix = regexp.MustCompile(`^[^:]+:\d+ `)
 func (m *monitor) hasNewEvents(g *monitoredGoroutine) bool {
 	events := 0
 	rec := g.collect()
-	for _, span := range rec {
+	for _, span := range rec.RecordedSpans {
 		for _, log := range span.Logs {
 			for range log.Fields {
 				events++

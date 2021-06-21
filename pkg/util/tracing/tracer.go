@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -660,9 +661,9 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		return noopSpanMeta, nil
 	}
 
-	var recordingType RecordingType
+	var recordingType tracingpb.RecordingType
 	if baggage[verboseTracingBaggageKey] != "" {
-		recordingType = RecordingVerbose
+		recordingType = tracingpb.RecordingVerbose
 	}
 
 	var shadowCtx opentracing.SpanContext
@@ -864,7 +865,7 @@ func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.
 // Recording.String(). Tests can also use FindMsgInRecording().
 func ContextWithRecordingSpan(
 	ctx context.Context, tr *Tracer, opName string,
-) (_ context.Context, getRecording func() Recording, cancel func()) {
+) (_ context.Context, getRecording func() *tracingpb.Recording, cancel func()) {
 	ctx, sp := tr.StartSpanCtx(ctx, opName, WithForceRealSpan())
 	sp.SetVerbose(true)
 	ctx, cancelCtx := context.WithCancel(ctx)

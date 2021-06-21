@@ -618,7 +618,7 @@ func (s *statusServer) Allocator(
 					}
 					output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
 						RangeID: desc.RangeID,
-						Events:  recordedSpansToTraceEvents(allocatorSpans),
+						Events:  recordedSpansToTraceEvents(allocatorSpans.RecordedSpans),
 					})
 					return nil
 				})
@@ -641,7 +641,7 @@ func (s *statusServer) Allocator(
 			}
 			output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
 				RangeID: rep.RangeID,
-				Events:  recordedSpansToTraceEvents(allocatorSpans),
+				Events:  recordedSpansToTraceEvents(allocatorSpans.RecordedSpans),
 			})
 		}
 		return nil

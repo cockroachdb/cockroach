@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
@@ -92,8 +91,8 @@ func setExplainBundleResult(
 //
 // traceToJSON assumes that the first span in the recording contains all the
 // other spans.
-func traceToJSON(trace tracing.Recording) (string, error) {
-	root := normalizeSpan(trace[0], trace)
+func traceToJSON(trace tracingpb.Recording) (string, error) {
+	root := normalizeSpan(trace.RecordedSpans[0], trace)
 	marshaller := jsonpb.Marshaler{
 		Indent: "\t",
 	}
@@ -104,7 +103,7 @@ func traceToJSON(trace tracing.Recording) (string, error) {
 	return str, nil
 }
 
-func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.NormalizedSpan {
+func normalizeSpan(s tracingpb.RecordedSpan, trace tracingpb.Recording) tracingpb.NormalizedSpan {
 	var n tracingpb.NormalizedSpan
 	n.Operation = s.Operation
 	n.StartTime = s.StartTime
@@ -112,7 +111,7 @@ func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.
 	n.Tags = s.Tags
 	n.Logs = s.Logs
 
-	for _, ss := range trace {
+	for _, ss := range trace.RecordedSpans {
 		if ss.ParentSpanID != s.SpanID {
 			continue
 		}
@@ -142,7 +141,7 @@ func buildStatementBundle(
 	ie *InternalExecutor,
 	plan *planTop,
 	planString string,
-	trace tracing.Recording,
+	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) diagnosticsBundle {
 	if plan == nil {
@@ -200,7 +199,7 @@ type stmtBundleBuilder struct {
 	ie *InternalExecutor
 
 	plan         *planTop
-	trace        tracing.Recording
+	trace        tracingpb.Recording
 	placeholders *tree.PlaceholderInfo
 
 	z memZipper
@@ -210,7 +209,7 @@ func makeStmtBundleBuilder(
 	db *kv.DB,
 	ie *InternalExecutor,
 	plan *planTop,
-	trace tracing.Recording,
+	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) stmtBundleBuilder {
 	b := stmtBundleBuilder{db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders}
@@ -281,7 +280,7 @@ func (b *stmtBundleBuilder) addExecPlan(plan string) {
 
 func (b *stmtBundleBuilder) addDistSQLDiagrams() {
 	for i, d := range b.plan.distSQLFlowInfos {
-		d.diagram.AddSpans(b.trace)
+		d.diagram.AddSpans(b.trace.RecordedSpans)
 		_, url, err := d.diagram.ToURL()
 
 		var contents string

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 	"github.com/stretchr/testify/require"
 )
@@ -61,7 +62,8 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 	sort.SliceStable(resp.SpanRecordings, func(i, j int) bool {
 		return resp.SpanRecordings[i].StartTime.Before(resp.SpanRecordings[j].StartTime)
 	})
-	require.NoError(t, tracing.TestingCheckRecordedSpans(resp.SpanRecordings, `
+	rec := &tracingpb.Recording{RecordedSpans: resp.SpanRecordings}
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(rec, `
 			span: root1
 				tags: _unfinished=1 _verbose=1
 				span: root1.child

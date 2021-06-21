@@ -49,7 +49,7 @@ func (s *spanInner) isNoop() bool {
 }
 
 func (s *spanInner) IsVerbose() bool {
-	return s.crdb.recordingType() == RecordingVerbose
+	return s.crdb.recordingType() == tracingpb.RecordingVerbose
 }
 
 func (s *spanInner) SetVerbose(to bool) {
@@ -60,7 +60,7 @@ func (s *spanInner) SetVerbose(to bool) {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
 	if to {
-		s.crdb.enableRecording(nil /* parent */, RecordingVerbose)
+		s.crdb.enableRecording(nil /* parent */, tracingpb.RecordingVerbose)
 	} else {
 		s.crdb.disableRecording()
 	}
@@ -75,13 +75,13 @@ func (s *spanInner) ResetRecording() {
 	s.crdb.resetRecording()
 }
 
-func (s *spanInner) GetRecording() Recording {
+func (s *spanInner) GetRecording() *tracingpb.Recording {
 	if s.isNoop() {
 		return nil
 	}
 	// If the span is not verbose, optimize by avoiding the tags.
 	// This span is likely only used to carry payloads around.
-	wantTags := s.crdb.recordingType() == RecordingVerbose
+	wantTags := s.crdb.recordingType() == tracingpb.RecordingVerbose
 	return s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive(), wantTags)
 }
 
@@ -129,7 +129,7 @@ func (s *spanInner) Finish() {
 func (s *spanInner) Meta() SpanMeta {
 	var traceID uint64
 	var spanID uint64
-	var recordingType RecordingType
+	var recordingType tracingpb.RecordingType
 	var baggage map[string]string
 
 	if s.crdb != nil {

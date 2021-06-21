@@ -18,6 +18,7 @@ go_test(
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
         "@com_github_stretchr_testify//require",
     ],

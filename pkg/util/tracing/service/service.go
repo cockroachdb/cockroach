@@ -49,7 +49,7 @@ func (s *Service) GetSpanRecordings(
 		if span.TraceID() != request.TraceID {
 			return nil
 		}
-		for _, rec := range span.GetRecording() {
+		for _, rec := range span.GetRecording().RecordedSpans {
 			resp.SpanRecordings = append(resp.SpanRecordings, rec)
 		}
 		return nil

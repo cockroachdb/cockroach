@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestTrace(t *testing.T) {
 				return ctxWithSpan, sp
 			},
 			check: func(t *testing.T, _ context.Context, sp *tracing.Span) {
-				if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
+				if err := tracingpb.TestingCheckRecordedSpans(sp.GetRecording(), `
 		span: s
 			tags: _verbose=1
 			event: test1
@@ -105,7 +106,7 @@ func TestTraceWithTags(t *testing.T) {
 	log.Info(ctxWithSpan, "log")
 
 	sp.Finish()
-	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
+	if err := tracingpb.TestingCheckRecordedSpans(sp.GetRecording(), `
 		span: s
 			tags: _verbose=1
 			event: [tag=1] test1

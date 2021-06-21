@@ -1223,7 +1223,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
 		}
 		return p.ExecCfg().Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
-			for _, rec := range span.GetRecording() {
+			for _, rec := range span.GetRecording().RecordedSpans {
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
 				spanID := rec.SpanID

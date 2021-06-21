@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -882,7 +883,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 			return false
 		}
 		if matched, err := regexp.Match("rebalance target found for non-voter, enqueuing",
-			[]byte(recording.String())); !matched {
+			[]byte(tracingpb.RecordingToString(recording))); !matched {
 			require.NoError(t, err)
 			return false
 		}

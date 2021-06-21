@@ -95,7 +95,7 @@ func (sp *Span) Finish() {
 //    "_unfinished"	The span was never Finish()ed
 //    "_verbose"	The span is a verbose one
 //    "_dropped"	The span dropped recordings due to sizing constraints
-func (sp *Span) GetRecording() Recording {
+func (sp *Span) GetRecording() *tracingpb.Recording {
 	// It's always valid to get the recording, even for a finished span.
 	return sp.i.GetRecording()
 }
@@ -244,7 +244,7 @@ type SpanMeta struct {
 	//
 	// NB: at the time of writing, this is only ever set to RecordingVerbose
 	// and only if Baggage[verboseTracingBaggageKey] is set.
-	recordingType RecordingType
+	recordingType tracingpb.RecordingType
 
 	// The Span's associated baggage.
 	Baggage map[string]string

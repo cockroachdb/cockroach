@@ -1009,7 +1009,7 @@ type ExecutorTestingKnobs struct {
 
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
-	WithStatementTrace func(trace tracing.Recording, stmt string)
+	WithStatementTrace func(trace tracingpb.Recording, stmt string)
 
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.
@@ -1651,7 +1651,7 @@ type SessionTracing struct {
 
 	// If recording==true, recordingType indicates the type of the current
 	// recording.
-	recordingType tracing.RecordingType
+	recordingType tracingpb.RecordingType
 
 	// ex is the connExecutor to which this SessionTracing is tied.
 	ex *connExecutor
@@ -1683,9 +1683,9 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 func (st *SessionTracing) getRecording() []tracingpb.RecordedSpan {
 	var spans []tracingpb.RecordedSpan
 	if st.firstTxnSpan != nil {
-		spans = append(spans, st.firstTxnSpan.GetRecording()...)
+		spans = append(spans, st.firstTxnSpan.GetRecording().RecordedSpans...)
 	}
-	return append(spans, st.connSpan.GetRecording()...)
+	return append(spans, st.connSpan.GetRecording().RecordedSpans...)
 }
 
 // StartTracing starts "session tracing". From this moment on, everything
@@ -1707,7 +1707,7 @@ func (st *SessionTracing) getRecording() []tracingpb.RecordedSpan {
 //   are per-row.
 // showResults: If set, result rows are reported in the trace.
 func (st *SessionTracing) StartTracing(
-	recType tracing.RecordingType, kvTracingEnabled, showResults bool,
+	recType tracingpb.RecordingType, kvTracingEnabled, showResults bool,
 ) error {
 	if st.enabled {
 		// We're already tracing. Only treat as no-op if the same options
@@ -1785,16 +1785,16 @@ func (st *SessionTracing) StopTracing() error {
 	st.enabled = false
 	st.kvTracingEnabled = false
 	st.showResults = false
-	st.recordingType = tracing.RecordingOff
+	st.recordingType = tracingpb.RecordingOff
 
 	// Accumulate all recordings and finish the tracing spans.
 	var spans []tracingpb.RecordedSpan
 	if st.firstTxnSpan != nil {
-		spans = append(spans, st.firstTxnSpan.GetRecording()...)
+		spans = append(spans, st.firstTxnSpan.GetRecording().RecordedSpans...)
 		st.firstTxnSpan.Finish()
 		st.firstTxnSpan = nil
 	}
-	spans = append(spans, st.connSpan.GetRecording()...)
+	spans = append(spans, st.connSpan.GetRecording().RecordedSpans...)
 	st.connSpan.Finish()
 	st.connSpan = nil
 	st.ex.ctxHolder.unhijack()

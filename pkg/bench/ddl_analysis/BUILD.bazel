@@ -34,7 +34,6 @@ go_test(
         "//pkg/util/encoding/csv",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

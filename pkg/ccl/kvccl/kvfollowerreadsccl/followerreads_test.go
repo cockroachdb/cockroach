@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -503,7 +504,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	historicalQuery := `SELECT * FROM test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
-	recCh := make(chan tracing.Recording, 1)
+	recCh := make(chan tracingpb.Recording, 1)
 
 	var n2Addr, n3Addr syncutil.AtomicString
 	tc := testcluster.StartTestCluster(t, 4,
@@ -526,7 +527,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 							},
 						},
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							WithStatementTrace: func(trace tracing.Recording, stmt string) {
+							WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 								if stmt == historicalQuery {
 									recCh <- trace
 								}

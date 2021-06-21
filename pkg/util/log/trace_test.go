@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"golang.org/x/net/trace"
 )
 
@@ -130,7 +131,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	sp.Finish()
 	el.Finish()
 
-	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
+	if err := tracingpb.TestingCheckRecordedSpans(sp.GetRecording(), `
 		span: s
 			tags: _verbose=1
 			event: test3

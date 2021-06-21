@@ -93,7 +93,7 @@ type instrumentationHelper struct {
 
 	diagRequestID               stmtdiagnostics.RequestID
 	finishCollectionDiagnostics func()
-	withStatementTrace          func(trace tracing.Recording, stmt string)
+	withStatementTrace          func(trace tracingpb.Recording, stmt string)
 
 	sp      *tracing.Span
 	origCtx context.Context
@@ -237,13 +237,13 @@ func (ih *instrumentationHelper) Finish(
 	trace := ih.sp.GetRecording()
 
 	if ih.withStatementTrace != nil {
-		ih.withStatementTrace(trace, stmtRawSQL)
+		ih.withStatementTrace(*trace, stmtRawSQL)
 	}
 
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.regions = ih.traceMetadata.annotateExplain(
 			ih.explainPlan,
-			trace,
+			trace.RecordedSpans,
 			cfg.TestingKnobs.DeterministicExplain,
 			p,
 		)
@@ -254,7 +254,7 @@ func (ih *instrumentationHelper) Finish(
 	for _, flowInfo := range p.curPlan.distSQLFlowInfos {
 		flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
 	}
-	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata)
+	queryLevelStats, err := execstats.GetQueryLevelStats(trace.RecordedSpans, cfg.TestingKnobs.DeterministicExplain, flowsMetadata)
 	if err != nil {
 		const msg = "error getting query level stats for statement: %s: %+v"
 		if util.CrdbTestBuild {
@@ -289,7 +289,7 @@ func (ih *instrumentationHelper) Finish(
 			&queryLevelStats,
 		)
 		bundle = buildStatementBundle(
-			ih.origCtx, cfg.DB, ie, &p.curPlan, ob.BuildString(), trace, placeholders,
+			ih.origCtx, cfg.DB, ie, &p.curPlan, ob.BuildString(), *trace, placeholders,
 		)
 		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
 		if ih.finishCollectionDiagnostics != nil {
@@ -313,7 +313,8 @@ func (ih *instrumentationHelper) Finish(
 		if ih.outputMode == explainAnalyzeDistSQLOutput {
 			flows = p.curPlan.distSQLFlowInfos
 		}
-		return ih.setExplainAnalyzeResult(ctx, res, statsCollector.PhaseTimes(), &queryLevelStats, flows, trace)
+		return ih.setExplainAnalyzeResult(ctx, res, statsCollector.PhaseTimes(), &queryLevelStats,
+			flows, *trace)
 
 	default:
 		return nil
@@ -454,7 +455,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	phaseTimes *sessionphase.Times,
 	queryLevelStats *execstats.QueryLevelStats,
 	distSQLFlowInfos []flowInfo,
-	trace tracing.Recording,
+	trace tracingpb.Recording,
 ) (commErr error) {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
 	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
@@ -475,7 +476,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 			} else {
 				buf.WriteString("Diagram: ")
 			}
-			d.diagram.AddSpans(trace)
+			d.diagram.AddSpans(trace.RecordedSpans)
 			_, url, err := d.diagram.ToURL()
 			if err != nil {
 				buf.WriteString(err.Error())

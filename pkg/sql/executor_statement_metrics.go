@@ -224,7 +224,7 @@ func getNodesFromPlanner(planner *planner) []int64 {
 	if planner.instrumentation.sp != nil {
 		trace := planner.instrumentation.sp.GetRecording()
 		// ForEach returns nodes in order.
-		execinfrapb.ExtractNodesFromSpans(planner.EvalContext().Context, trace).ForEach(func(i int) {
+		execinfrapb.ExtractNodesFromSpans(planner.EvalContext().Context, trace.RecordedSpans).ForEach(func(i int) {
 			nodes = append(nodes, int64(i))
 		})
 	}

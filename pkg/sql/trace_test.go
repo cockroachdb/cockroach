@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -583,7 +583,7 @@ func TestTraceDistSQL(t *testing.T) {
 
 	ctx := context.Background()
 	countStmt := "SELECT count(1) FROM test.a"
-	recCh := make(chan tracing.Recording, 2)
+	recCh := make(chan tracingpb.Recording, 2)
 
 	const numNodes = 2
 	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
@@ -592,7 +592,7 @@ func TestTraceDistSQL(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(trace tracing.Recording, stmt string) {
+					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 						if stmt == countStmt {
 							recCh <- trace
 						}

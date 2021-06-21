@@ -13,6 +13,7 @@ package tracing
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
@@ -36,7 +37,7 @@ func TestLogTags(t *testing.T) {
 	sp1 := tr.StartSpan("foo", WithForceRealSpan(), WithLogTags(l))
 	sp1.SetVerbose(true)
 	sp1.Finish()
-	require.NoError(t, TestingCheckRecordedSpans(sp1.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(sp1.GetRecording(), `
 		span: foo
 			tags: _verbose=1 tag1=val1 tag2=val2
 	`))
@@ -55,7 +56,7 @@ func TestLogTags(t *testing.T) {
 	sp2 := tr.StartSpan("bar", WithForceRealSpan(), WithLogTags(l))
 	sp2.SetVerbose(true)
 	sp2.Finish()
-	require.NoError(t, TestingCheckRecordedSpans(sp2.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(sp2.GetRecording(), `
 		span: bar
 			tags: _verbose=1 one=val1 two=val2
 	`))
@@ -72,7 +73,7 @@ func TestLogTags(t *testing.T) {
 	sp3 := tr.StartSpan("baz", WithLogTags(l), WithForceRealSpan())
 	sp3.SetVerbose(true)
 	sp3.Finish()
-	require.NoError(t, TestingCheckRecordedSpans(sp3.GetRecording(), `
+	require.NoError(t, tracingpb.TestingCheckRecordedSpans(sp3.GetRecording(), `
 		span: baz
 			tags: _verbose=1 one=val1 two=val2
 	`))

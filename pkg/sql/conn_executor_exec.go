@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -1394,7 +1395,7 @@ func (ex *connExecutor) runSetTracing(
 
 func (ex *connExecutor) enableTracing(modes []string) error {
 	traceKV := false
-	recordingType := tracing.RecordingVerbose
+	recordingType := tracingpb.RecordingVerbose
 	enableMode := true
 	showResults := false
 
@@ -1409,7 +1410,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 		case "kv":
 			traceKV = true
 		case "cluster":
-			recordingType = tracing.RecordingVerbose
+			recordingType = tracingpb.RecordingVerbose
 		default:
 			return pgerror.Newf(pgcode.Syntax,
 				"set tracing: unknown mode %q", s)
@@ -1616,7 +1617,7 @@ func createRootOrChildSpan(
 // given threshold. It is used when txn or stmt threshold tracing is enabled.
 // This function assumes that sp is non-nil and threshold tracing was enabled.
 func logTraceAboveThreshold(
-	ctx context.Context, r tracing.Recording, opName string, threshold, elapsed time.Duration,
+	ctx context.Context, r *tracingpb.Recording, opName string, threshold, elapsed time.Duration,
 ) {
 	if elapsed < threshold {
 		return
@@ -1625,7 +1626,7 @@ func logTraceAboveThreshold(
 		log.Warning(ctx, "missing trace when threshold tracing was enabled")
 		return
 	}
-	dump := r.String()
+	dump := tracingpb.RecordingToString(r)
 	if len(dump) == 0 {
 		return
 	}

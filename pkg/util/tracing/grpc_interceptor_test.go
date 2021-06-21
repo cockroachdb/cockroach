@@ -63,7 +63,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		if sp == nil {
 			return nil, errors.New("no span in ctx")
 		}
-		actV, ok := sp.GetRecording()[0].Baggage[k]
+		actV, ok := sp.GetRecording().RecordedSpans[0].Baggage[k]
 		if !ok {
 			return nil, errors.Newf("%s not set in baggage", k)
 		}
@@ -73,7 +73,7 @@ func TestGRPCInterceptors(t *testing.T) {
 
 		sp.RecordStructured(newTestStructured(magicValue))
 		sp.SetVerbose(true) // want the tags
-		recs := sp.GetRecording()
+		recs := sp.GetRecording().RecordedSpans
 		sp.SetVerbose(false)
 		if len(recs) != 1 {
 			return nil, errors.Newf("expected exactly one recorded span, not %+v", recs)
@@ -217,7 +217,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			var n int
 			finalRecs := sp.GetRecording()
 			sp.SetVerbose(false)
-			for _, rec := range finalRecs {
+			for _, rec := range finalRecs.RecordedSpans {
 				deprecatedN += len(rec.DeprecatedInternalStructured)
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
@@ -240,12 +240,12 @@ func TestGRPCInterceptors(t *testing.T) {
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: component=gRPC span.kind=server test-baggage-key=test-baggage-value
 						event: structured=magic-value`, tc.name)
-			require.NoError(t, tracing.TestingCheckRecordedSpans(finalRecs, exp))
+			require.NoError(t, tracingpb.TestingCheckRecordedSpans(finalRecs, exp))
 		})
 	}
 	testutils.SucceedsSoon(t, func() error {
 		return tr.VisitSpans(func(sp *tracing.Span) error {
-			return errors.Newf("leaked span: %s", sp.GetRecording()[0].Operation)
+			return errors.Newf("leaked span: %s", sp.GetRecording().RecordedSpans[0].Operation)
 		})
 	})
 }
