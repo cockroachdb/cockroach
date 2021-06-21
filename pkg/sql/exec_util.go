@@ -129,7 +129,7 @@ var defaultIntSize = func() *settings.IntSetting {
 				return errors.New("only 4 or 8 are valid values")
 			}
 			return nil
-		})
+		}).WithPublic()
 	s.SetVisibility(settings.Public)
 	return s
 }()
@@ -228,51 +228,51 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
 	false,
-)
+).WithPublic()
 
 var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_implicit_column_partitioning.enabled",
 	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning",
 	false,
-)
+).WithPublic()
 
 var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.drop_enum_value.enabled",
 	"default value for enable_drop_enum_value; allows for dropping enum values",
 	false,
-)
+).WithPublic()
 
 var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.override_multi_region_zone_config.enabled",
 	"default value for override_multi_region_zone_config; "+
 		"allows for overriding the zone configs of a multi-region table or database",
 	false,
-)
+).WithPublic()
 
 var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_hash_sharded_indexes.enabled",
 	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
 	false,
-)
+).WithPublic()
 
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
 	true,
-)
+).WithPublic()
 
 var optDrivenFKCascadesClusterLimit = settings.RegisterIntSetting(
 	"sql.defaults.foreign_key_cascades_limit",
 	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query",
 	10000,
 	settings.NonNegativeInt,
-)
+).WithPublic()
 
 var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled",
 	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible",
 	false,
-)
+).WithPublic()
 
 // InterleavedTablesEnabled is the setting that controls whether it's possible
 // to create interleaved indexes or tables.
@@ -280,7 +280,7 @@ var InterleavedTablesEnabled = settings.RegisterBoolSetting(
 	"sql.defaults.interleaved_tables.enabled",
 	"allows creation of interleaved tables or indexes",
 	false,
-)
+).WithPublic()
 
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
@@ -292,7 +292,7 @@ var optUseHistogramsClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.optimizer_use_histograms.enabled",
 	"default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default",
 	true,
-)
+).WithPublic()
 
 // optUseMultiColStatsClusterMode controls the cluster default for whether
 // multi-column stats are used by the optimizer for cardinality estimation.
@@ -304,7 +304,7 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.optimizer_use_multicol_stats.enabled",
 	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default",
 	true,
-)
+).WithPublic()
 
 // localityOptimizedSearchMode controls the cluster default for the use of
 // locality optimized search. If enabled, the optimizer will try to plan scans
@@ -316,26 +316,26 @@ var localityOptimizedSearchMode = settings.RegisterBoolSetting(
 	"default value for locality_optimized_partitioned_index_scan session setting; "+
 		"enables searching for rows in the current region before searching remote regions",
 	true,
-)
+).WithPublic()
 
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.implicit_select_for_update.enabled",
 	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
 	true,
-)
+).WithPublic()
 
 var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.insert_fast_path.enabled",
 	"default value for enable_insert_fast_path session setting; enables a specialized insert path",
 	true,
-)
+).WithPublic()
 
 var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_alter_column_type.enabled",
 	"default value for experimental_alter_column_type session setting; "+
 		"enables the use of ALTER COLUMN TYPE for general conversions",
 	false,
-)
+).WithPublic()
 
 var clusterStatementTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.statement_timeout",
@@ -371,7 +371,7 @@ var experimentalExpressionIndexesMode = settings.RegisterBoolSetting(
 	"default value for experimental_enable_expression_indexes session setting;"+
 		"disables expression indexes by default",
 	false,
-)
+).WithPublic()
 
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
@@ -380,7 +380,7 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	"default value for experimental_enable_unique_without_index_constraints session setting;"+
 		"disables unique without index constraints by default",
 	false,
-)
+).WithPublic()
 
 var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	"sql.defaults.experimental_new_schema_changer.enabled",
@@ -392,20 +392,20 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 		int64(sessiondata.UseNewSchemaChangerOn):           "on",
 		int64(sessiondata.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
 	},
-)
+).WithPublic()
 
 var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_stream_replication.enabled",
 	"default value for experimental_stream_replication session setting;"+
 		"enables the ability to setup a replication stream",
 	false,
-)
+).WithPublic()
 
 var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
 	`sql.defaults.stub_catalog_tables.enabled`,
 	`default value for stub_catalog_tables session setting`,
 	true,
-)
+).WithPublic()
 
 // settingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
@@ -430,7 +430,7 @@ var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
 		int64(sessiondata.ExperimentalDistSQLPlanningOff): "off",
 		int64(sessiondata.ExperimentalDistSQLPlanningOn):  "on",
 	},
-)
+).WithPublic()
 
 // VectorizeClusterSettingName is the name for the cluster setting that controls
 // the VectorizeClusterMode below.
@@ -448,7 +448,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 		int64(sessiondatapb.VectorizeExperimentalAlways): "experimental_always",
 		int64(sessiondatapb.VectorizeOff):                "off",
 	},
-)
+).WithPublic()
 
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
@@ -460,7 +460,7 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 		int64(sessiondata.DistSQLAuto): "auto",
 		int64(sessiondata.DistSQLOn):   "on",
 	},
-)
+).WithPublic()
 
 // SerialNormalizationMode controls how the SERIAL type is interpreted in table
 // definitions.
