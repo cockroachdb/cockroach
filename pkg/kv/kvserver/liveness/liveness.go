@@ -639,7 +639,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	}
 	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() in order to
 	// consider clock signals from other nodes.
-	return liveness.IsLive(nl.clock.Now().GoTime()), nil
+	return liveness.IsLive(nl.clock.Now().GoTime()) && liveness.Membership.Active(), nil
 }
 
 // NodeLivenessStartOptions are the arguments to `NodeLiveness.Start`.
