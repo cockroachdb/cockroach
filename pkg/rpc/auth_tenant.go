@@ -52,6 +52,11 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*roachpb.GossipSubscriptionRequest))
 
+	case "/cockroach.roachpb.Internal/TokenBucket":
+		// No authorization required for TokenBucket; the request is inherently
+		// scoped to a single tenant.
+		return nil
+
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no authorization
 

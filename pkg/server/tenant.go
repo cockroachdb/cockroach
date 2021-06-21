@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -190,6 +191,16 @@ func StartTenant(
 	clusterID := args.rpcContext.ClusterID.Get().String()
 	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
 	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
+
+	provider := args.tenantConnect
+	// TODO(radu): allow injecting a different provider through testing knobs.
+	costController, err := NewTenantSideCostController(ctx, args.TenantID, provider)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if err := costController.Start(ctx, args.stopper); err != nil {
+		return nil, "", "", err
+	}
 
 	if err := s.startServeSQL(ctx,
 		args.stopper,
@@ -376,4 +387,21 @@ func makeTenantSQLServerArgs(
 		rangeFeedFactory:         rangeFeedFactory,
 		regionsServer:            tenantConnect,
 	}, nil
+}
+
+// NewTenantSideCostController is a hook for CCL code which implements the
+// controller.
+var NewTenantSideCostController = func(
+	ctx context.Context, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
+) (multitenant.TenantSideCostController, error) {
+	// Return a no-op implementation.
+	return noopTenantSideCostController{}, nil
+}
+
+// noopTenantSideCostController is a no-op implementation of
+// TenantSideCostController.
+type noopTenantSideCostController struct{}
+
+func (noopTenantSideCostController) Start(ctx context.Context, stopper *stop.Stopper) error {
+	return nil
 }

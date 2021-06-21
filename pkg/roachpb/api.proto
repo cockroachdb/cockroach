@@ -23,6 +23,7 @@ import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -2201,6 +2202,27 @@ message GossipSubscriptionEvent {
   kv.kvpb.Error error = 4;
 }
 
+message TokenBucketRequest {
+  message Consumption {
+    double r_u = 1;
+    uint64 read_requests = 2;
+    uint64 read_bytes = 3;
+    uint64 write_requests = 4;
+    uint64 write_bytes = 5;
+    double sql_pod_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodCPUSeconds"];
+  }
+
+  // Consumption that occurred since this node's last request.
+  Consumption consumption_since_last_request = 1 [(gogoproto.nullable) = false];
+
+  // TODO(radu): add remaining fields.
+}
+
+message TokenBucketResponse {
+  // TODO(radu): add fields.
+}
+
+
 // JoinNodeRequest is used to specify to the server node what the client's
 // binary version is. If it's not compatible with the rest of the cluster, the
 // join attempt is refused.
@@ -2225,6 +2247,10 @@ service Internal {
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
+
+  // TokenBucket is used by tenants to obtain Request Units and report
+  // consumption.
+  rpc TokenBucket        (TokenBucketRequest)        returns (TokenBucketResponse)            {}
 
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.

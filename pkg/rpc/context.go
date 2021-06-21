@@ -452,34 +452,42 @@ func (ctx *Context) GetLocalInternalClientForAddr(
 }
 
 type internalClientAdapter struct {
-	roachpb.InternalServer
+	server roachpb.InternalServer
 }
 
 // Batch implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	return a.InternalServer.Batch(ctx, ba)
+	return a.server.Batch(ctx, ba)
 }
 
 // RangeLookup implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) RangeLookup(
 	ctx context.Context, rl *roachpb.RangeLookupRequest, _ ...grpc.CallOption,
 ) (*roachpb.RangeLookupResponse, error) {
-	return a.InternalServer.RangeLookup(ctx, rl)
+	return a.server.RangeLookup(ctx, rl)
 }
 
 // Join implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Join(
 	ctx context.Context, req *roachpb.JoinNodeRequest, _ ...grpc.CallOption,
 ) (*roachpb.JoinNodeResponse, error) {
-	return a.InternalServer.Join(ctx, req)
+	return a.server.Join(ctx, req)
 }
 
+// ResetQuorum is part of the roachpb.InternalClient interface.
 func (a internalClientAdapter) ResetQuorum(
 	ctx context.Context, req *roachpb.ResetQuorumRequest, _ ...grpc.CallOption,
 ) (*roachpb.ResetQuorumResponse, error) {
-	return a.InternalServer.ResetQuorum(ctx, req)
+	return a.server.ResetQuorum(ctx, req)
+}
+
+// TokenBucket is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest, opts ...grpc.CallOption,
+) (*roachpb.TokenBucketResponse, error) {
+	return a.server.TokenBucket(ctx, in)
 }
 
 type respStreamClientAdapter struct {
@@ -570,7 +578,7 @@ func (a internalClientAdapter) RangeFeed(
 
 	go func() {
 		defer cancel()
-		err := a.InternalServer.RangeFeed(args, rfAdapter)
+		err := a.server.RangeFeed(args, rfAdapter)
 		if err == nil {
 			err = io.EOF
 		}
@@ -601,7 +609,7 @@ func (a gossipSubscriptionClientAdapter) Send(e *roachpb.GossipSubscriptionEvent
 var _ roachpb.Internal_GossipSubscriptionClient = gossipSubscriptionClientAdapter{}
 var _ roachpb.Internal_GossipSubscriptionServer = gossipSubscriptionClientAdapter{}
 
-// GossipSubscription implements the roachpb.InternalClient interface.
+// GossipSubscription is part of the roachpb.InternalClient interface.
 func (a internalClientAdapter) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
@@ -612,7 +620,7 @@ func (a internalClientAdapter) GossipSubscription(
 
 	go func() {
 		defer cancel()
-		err := a.InternalServer.GossipSubscription(args, gsAdapter)
+		err := a.server.GossipSubscription(args, gsAdapter)
 		if err == nil {
 			err = io.EOF
 		}

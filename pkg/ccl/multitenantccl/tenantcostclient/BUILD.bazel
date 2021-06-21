@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tenantcostclient",
+    srcs = ["tenant_side.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostclient",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/multitenant",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/server",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

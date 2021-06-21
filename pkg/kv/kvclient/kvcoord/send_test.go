@@ -74,6 +74,12 @@ func (n Node) ResetQuorum(
 	panic("unimplemented")
 }
 
+func (n Node) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {

@@ -156,6 +156,26 @@ func (mr *MockInternalClientMockRecorder) ResetQuorum(arg0, arg1 interface{}, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetQuorum", reflect.TypeOf((*MockInternalClient)(nil).ResetQuorum), varargs...)
 }
 
+// TokenBucket mocks base method.
+func (m *MockInternalClient) TokenBucket(arg0 context.Context, arg1 *TokenBucketRequest, arg2 ...grpc.CallOption) (*TokenBucketResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "TokenBucket", varargs...)
+	ret0, _ := ret[0].(*TokenBucketResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TokenBucket indicates an expected call of TokenBucket.
+func (mr *MockInternalClientMockRecorder) TokenBucket(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TokenBucket", reflect.TypeOf((*MockInternalClient)(nil).TokenBucket), varargs...)
+}
+
 // MockInternal_RangeFeedClient is a mock of Internal_RangeFeedClient interface.
 type MockInternal_RangeFeedClient struct {
 	ctrl     *gomock.Controller
