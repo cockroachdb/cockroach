@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -44,7 +45,7 @@ func TestTransform(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			ret, err := transform(tc.t, tc.from, tc.to, tc.srid)
 			require.NoError(t, err)
-			require.InEpsilonSlicef(t, tc.expectedFlatCoords, ret.FlatCoords(), 0.001, "expected %#v, got %#v", tc.expectedFlatCoords, ret.FlatCoords())
+			require.InEpsilonSlicef(t, tc.expectedFlatCoords, ret.FlatCoords(), geotest.Epsilon, "expected %#v, got %#v", tc.expectedFlatCoords, ret.FlatCoords())
 			require.Equal(t, tc.srid, geopb.SRID(ret.SRID()))
 		})
 	}

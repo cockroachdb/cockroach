@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -121,11 +122,11 @@ func TestCentroid(t *testing.T) {
 			require.NoError(t, err)
 
 			// Ensure points are close in terms of precision.
-			require.InEpsilon(t, expGeomSphereCentroid.(*geom.Point).X(), retGeomSphereCentroid.(*geom.Point).X(), 1e-6)
-			require.InEpsilon(t, expGeomSphereCentroid.(*geom.Point).Y(), retGeomSphereCentroid.(*geom.Point).Y(), 1e-6)
+			require.InEpsilon(t, expGeomSphereCentroid.(*geom.Point).X(), retGeomSphereCentroid.(*geom.Point).X(), geotest.Epsilon)
+			require.InEpsilon(t, expGeomSphereCentroid.(*geom.Point).Y(), retGeomSphereCentroid.(*geom.Point).Y(), geotest.Epsilon)
 			require.Equal(t, retSpheroidCentroid.SRID(), expSphereCentroid.SRID())
-			require.InEpsilon(t, expGeomSpheroidCentroid.(*geom.Point).X(), retGeomSpheroidCentroid.(*geom.Point).X(), 1e-6)
-			require.InEpsilon(t, expGeomSpheroidCentroid.(*geom.Point).Y(), retGeomSpheroidCentroid.(*geom.Point).Y(), 1e-6)
+			require.InEpsilon(t, expGeomSpheroidCentroid.(*geom.Point).X(), retGeomSpheroidCentroid.(*geom.Point).X(), geotest.Epsilon)
+			require.InEpsilon(t, expGeomSpheroidCentroid.(*geom.Point).Y(), retGeomSpheroidCentroid.(*geom.Point).Y(), geotest.Epsilon)
 			require.Equal(t, retSpheroidCentroid.SRID(), expSphereCentroid.SRID())
 		})
 	}
