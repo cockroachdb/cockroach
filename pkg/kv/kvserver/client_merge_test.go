@@ -411,19 +411,22 @@ func TestStoreRangeMergeTimestampCache(t *testing.T) {
 func mergeCheckingTimestampCaches(
 	t *testing.T, disjointLeaseholders, throughSnapshot, futureRead bool,
 ) {
-	// mergeCommitFilter is used to issue a sequence of operations on the LHS of
-	// a range merge immediately before it.
-	var mergeCommitFilter func()
-	// blockHBAndGCs is used to black hole Heartbeat and GC requests for the
-	// duration of the merge on the throughSnapshot path. Neither request type
-	// is needed and both can create issues by holding latches during the split
-	// leader-leaseholder state.
-	var blockHBAndGCs chan struct{}
-	var filterMu syncutil.Mutex
+
+	var filterMu struct {
+		syncutil.Mutex
+		// mergeCommitFilter is used to issue a sequence of operations on the LHS of
+		// a range merge immediately before it.
+		mergeCommitFilter func()
+		// blockHBAndGCs is used to black hole Heartbeat and GC requests for the
+		// duration of the merge on the throughSnapshot path. Neither request type
+		// is needed and both can create issues by holding latches during the split
+		// leader-leaseholder state.
+		blockHBAndGCs chan struct{}
+	}
 	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		filterMu.Lock()
-		mergeCommitFilterCopy := mergeCommitFilter
-		blockHBAndGCsCopy := blockHBAndGCs
+		mergeCommitFilterCopy := filterMu.mergeCommitFilter
+		blockHBAndGCsCopy := filterMu.blockHBAndGCs
 		filterMu.Unlock()
 		for _, req := range ba.Requests {
 			switch v := req.GetInner().(type) {
@@ -476,6 +479,17 @@ func mergeCheckingTimestampCaches(
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+	defer func() {
+		filterMu.Lock()
+		defer filterMu.Unlock()
+		if filterMu.blockHBAndGCs != nil {
+			// If test failed before closing the channel, do so now
+			// to (maybe) avoid hangs. Note that this must execute
+			// before the Stopper().Stop() call above.
+			close(filterMu.blockHBAndGCs)
+		}
+	}()
+
 	lhsStore := tc.GetFirstStoreFromServer(t, 0)
 	var rhsStore *kvserver.Store
 	if disjointLeaseholders {
@@ -642,7 +656,7 @@ func mergeCheckingTimestampCaches(
 		snapChan := make(chan kvserver.IncomingSnapshot, 1)
 
 		filterMu.Lock()
-		mergeCommitFilter = func() {
+		filterMu.mergeCommitFilter = func() {
 			// Install leader-leaseholder partition.
 			for i, s := range lhsStores {
 				var funcs unreliableRaftHandlerFuncs
@@ -720,7 +734,7 @@ func mergeCheckingTimestampCaches(
 		// Begin blocking txn heartbeats and GC requests. They cause issues
 		// because they can grab latches and then get stuck once in the split
 		// leader-leaseholder state.
-		blockHBAndGCs = make(chan struct{})
+		filterMu.blockHBAndGCs = make(chan struct{})
 
 		// Install a filter to capture the Raft snapshot.
 		snapshotFilter = func(inSnap kvserver.IncomingSnapshot) {
@@ -764,15 +778,24 @@ func mergeCheckingTimestampCaches(
 			}
 			tc.Servers[i].RaftTransport().Listen(s.StoreID(), h)
 		}
-		close(blockHBAndGCs)
+		close(filterMu.blockHBAndGCs)
+		filterMu.Lock()
+		filterMu.blockHBAndGCs = nil
+		filterMu.Unlock()
 
 		t.Logf("waiting for snapshot to LHS leaseholder")
-		inSnap := <-snapChan
+		var inSnap kvserver.IncomingSnapshot
+		select {
+		case inSnap = <-snapChan:
+		case <-time.After(45 * time.Second):
+			t.Fatal("timed out waiting for snapChan")
+		}
 		inSnapDesc := inSnap.State.Desc
 		require.Equal(t, lhsDesc.StartKey, inSnapDesc.StartKey)
 		require.Equal(t, rhsDesc.EndKey, inSnapDesc.EndKey)
 
 		// Wait for all async ops to complete.
+		after45s := time.After(45 * time.Second)
 		for _, asyncRes := range []struct {
 			name string
 			ch   chan *roachpb.Error
@@ -782,7 +805,12 @@ func mergeCheckingTimestampCaches(
 			{"merge", mergeChan},
 		} {
 			t.Logf("waiting for result of %s", asyncRes.name)
-			err := <-asyncRes.ch
+			var err *roachpb.Error
+			select {
+			case err = <-asyncRes.ch:
+			case <-after45s:
+				t.Fatalf("timed out on %s", asyncRes.name)
+			}
 			require.NotNil(t, err, "%s should fail", asyncRes.name)
 			require.Regexp(t, "result is ambiguous", err, "%s's result should be ambiguous", asyncRes.name)
 		}
