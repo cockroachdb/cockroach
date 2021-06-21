@@ -32,10 +32,9 @@ func ProcessTargetColumns(
 ) ([]catalog.Column, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
-			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
-			// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
-			// hidden columns. At present, the only hidden column is the implicit rowid
-			// primary key column.
+			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES
+			// (...) (as opposed to INSERT INTO <table> (...) VALUES (...)) from
+			// writing hidden columns.
 			return tableDesc.VisibleColumns(), nil
 		}
 		return nil, nil
