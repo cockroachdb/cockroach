@@ -1,5 +1,12 @@
 {
-  "pgVersion": "13.2",
+  "pgVersion": "13.3",
+  "diffSummary": {
+    "TotalTables": 0,
+    "TotalColumns": 0,
+    "MissingTables": 0,
+    "MissingColumns": 0,
+    "DatatypeMismatches": 0
+  },
   "pgMetadata": {
     "pg_aggregate": {
       "aggcombinefn": {
@@ -3653,6 +3660,178 @@
       "provider": {
         "oid": 25,
         "dataType": "text",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "pg_stat_database": {
+      "blk_read_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "blk_write_time": {
+        "oid": 701,
+        "dataType": "float8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "blks_hit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "blks_read": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "checksum_failures": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "checksum_last_failure": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "conflicts": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "deadlocks": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "numbackends": {
+        "oid": 23,
+        "dataType": "int4",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "stats_reset": {
+        "oid": 1184,
+        "dataType": "timestamptz",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "temp_bytes": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "temp_files": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tup_deleted": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tup_fetched": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tup_inserted": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tup_returned": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "tup_updated": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "xact_commit": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "xact_rollback": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      }
+    },
+    "pg_stat_database_conflicts": {
+      "confl_bufferpin": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "confl_deadlock": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "confl_lock": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "confl_snapshot": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "confl_tablespace": {
+        "oid": 20,
+        "dataType": "int8",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "datid": {
+        "oid": 26,
+        "dataType": "oid",
+        "expectedOid": null,
+        "expectedDataType": null
+      },
+      "datname": {
+        "oid": 19,
+        "dataType": "name",
         "expectedOid": null,
         "expectedDataType": null
       }

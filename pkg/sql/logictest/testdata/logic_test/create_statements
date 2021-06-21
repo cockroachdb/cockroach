@@ -54,16 +54,16 @@ CREATE TABLE crdb_internal.backward_dependencies (
    dependson_details STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.builtin_functions (
-   function STRING NOT NULL,
-   signature STRING NOT NULL,
-   category STRING NOT NULL,
-   details STRING NOT NULL
-)  CREATE TABLE crdb_internal.builtin_functions (
-   function STRING NOT NULL,
-   signature STRING NOT NULL,
-   category STRING NOT NULL,
-   details STRING NOT NULL
-)  {}  {}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          function STRING NOT NULL,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          signature STRING NOT NULL,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          category STRING NOT NULL,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          details STRING NOT NULL
+)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         CREATE TABLE crdb_internal.builtin_functions (
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          function STRING NOT NULL,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          signature STRING NOT NULL,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          category STRING NOT NULL,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          details STRING NOT NULL
+)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         {}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        {}
 CREATE VIEW crdb_internal.cluster_contended_indexes (database_name, schema_name, table_name, index_name, num_contention_events) AS SELECT DISTINCT database_name, schema_name, name, index_name, num_contention_events FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id)                                                                             CREATE VIEW crdb_internal.cluster_contended_indexes (database_name, schema_name, table_name, index_name, num_contention_events) AS SELECT DISTINCT database_name, schema_name, name, index_name, num_contention_events FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id)                                                                             {}  {}
 CREATE VIEW crdb_internal.cluster_contended_keys (database_name, schema_name, table_name, index_name, key, num_contention_events) AS SELECT database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count) FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name, index_name, key  CREATE VIEW crdb_internal.cluster_contended_keys (database_name, schema_name, table_name, index_name, key, num_contention_events) AS SELECT database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count) FROM crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes WHERE (crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id) AND (crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name, index_name, key  {}  {}
 CREATE VIEW crdb_internal.cluster_contended_tables (database_name, schema_name, table_name, num_contention_events) AS SELECT database_name, schema_name, name, sum(num_contention_events) FROM (SELECT DISTINCT database_name, schema_name, name, index_id, num_contention_events FROM crdb_internal.cluster_contention_events JOIN crdb_internal.tables ON crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name                                                                                                   CREATE VIEW crdb_internal.cluster_contended_tables (database_name, schema_name, table_name, num_contention_events) AS SELECT database_name, schema_name, name, sum(num_contention_events) FROM (SELECT DISTINCT database_name, schema_name, name, index_id, num_contention_events FROM crdb_internal.cluster_contention_events JOIN crdb_internal.tables ON crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id) GROUP BY database_name, schema_name, name                                                                                                   {}  {}
@@ -3332,6 +3332,68 @@ CREATE TABLE pg_catalog.pg_stat_activity (
    query STRING NULL,
    backend_type STRING NULL,
    leader_pid INT4 NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_stat_database (
+   conflicts INT8 NULL,
+   numbackends INT4 NULL,
+   stats_reset TIMESTAMPTZ NULL,
+   tup_inserted INT8 NULL,
+   tup_returned INT8 NULL,
+   xact_rollback INT8 NULL,
+   blks_hit INT8 NULL,
+   checksum_last_failure TIMESTAMPTZ NULL,
+   datid OID NULL,
+   datname NAME NULL,
+   deadlocks INT8 NULL,
+   tup_fetched INT8 NULL,
+   tup_updated INT8 NULL,
+   blks_read INT8 NULL,
+   temp_bytes INT8 NULL,
+   temp_files INT8 NULL,
+   tup_deleted INT8 NULL,
+   blk_write_time FLOAT8 NULL,
+   checksum_failures INT8 NULL,
+   xact_commit INT8 NULL,
+   blk_read_time FLOAT8 NULL
+)  CREATE TABLE pg_catalog.pg_stat_database (
+   conflicts INT8 NULL,
+   numbackends INT4 NULL,
+   stats_reset TIMESTAMPTZ NULL,
+   tup_inserted INT8 NULL,
+   tup_returned INT8 NULL,
+   xact_rollback INT8 NULL,
+   blks_hit INT8 NULL,
+   checksum_last_failure TIMESTAMPTZ NULL,
+   datid OID NULL,
+   datname NAME NULL,
+   deadlocks INT8 NULL,
+   tup_fetched INT8 NULL,
+   tup_updated INT8 NULL,
+   blks_read INT8 NULL,
+   temp_bytes INT8 NULL,
+   temp_files INT8 NULL,
+   tup_deleted INT8 NULL,
+   blk_write_time FLOAT8 NULL,
+   checksum_failures INT8 NULL,
+   xact_commit INT8 NULL,
+   blk_read_time FLOAT8 NULL
+)  {}  {}
+CREATE TABLE pg_catalog.pg_stat_database_conflicts (
+   confl_snapshot INT8 NULL,
+   confl_tablespace INT8 NULL,
+   datid OID NULL,
+   datname NAME NULL,
+   confl_bufferpin INT8 NULL,
+   confl_deadlock INT8 NULL,
+   confl_lock INT8 NULL
+)  CREATE TABLE pg_catalog.pg_stat_database_conflicts (
+   confl_snapshot INT8 NULL,
+   confl_tablespace INT8 NULL,
+   datid OID NULL,
+   datname NAME NULL,
+   confl_bufferpin INT8 NULL,
+   confl_deadlock INT8 NULL,
+   confl_lock INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_statistic_ext (
    stxrelid OID NULL,

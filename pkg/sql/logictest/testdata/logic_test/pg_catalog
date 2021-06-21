@@ -88,6 +88,8 @@ pg_catalog  pg_shdescription                 table  NULL  NULL  NULL
 pg_catalog  pg_shmem_allocations             table  NULL  NULL  NULL
 pg_catalog  pg_shseclabel                    table  NULL  NULL  NULL
 pg_catalog  pg_stat_activity                 table  NULL  NULL  NULL
+pg_catalog  pg_stat_database                 table  NULL  NULL  NULL
+pg_catalog  pg_stat_database_conflicts       table  NULL  NULL  NULL
 pg_catalog  pg_statistic_ext                 table  NULL  NULL  NULL
 pg_catalog  pg_subscription                  table  NULL  NULL  NULL
 pg_catalog  pg_subscription_rel              table  NULL  NULL  NULL
@@ -204,6 +206,8 @@ pg_catalog  pg_shdescription                 table  NULL  NULL  NULL
 pg_catalog  pg_shmem_allocations             table  NULL  NULL  NULL
 pg_catalog  pg_shseclabel                    table  NULL  NULL  NULL
 pg_catalog  pg_stat_activity                 table  NULL  NULL  NULL
+pg_catalog  pg_stat_database                 table  NULL  NULL  NULL
+pg_catalog  pg_stat_database_conflicts       table  NULL  NULL  NULL
 pg_catalog  pg_statistic_ext                 table  NULL  NULL  NULL
 pg_catalog  pg_subscription                  table  NULL  NULL  NULL
 pg_catalog  pg_subscription_rel              table  NULL  NULL  NULL
@@ -2029,28 +2033,30 @@ objoid      classoid    objsubid  description
 4294967141  4294967199  0         pg_shmem_allocations was created for compatibility and is currently unimplemented
 4294967143  4294967199  0         shared security labels (empty - feature not supported)
 4294967140  4294967199  0         backend access statistics (empty - monitoring works differently in CockroachDB)
-4294967139  4294967199  0         pg_statistic_ext was created for compatibility and is currently unimplemented
-4294967137  4294967199  0         pg_subscription was created for compatibility and is currently unimplemented
-4294967138  4294967199  0         pg_subscription_rel was created for compatibility and is currently unimplemented
-4294967136  4294967199  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967135  4294967199  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967134  4294967199  0         pg_timezone_abbrevs was created for compatibility and is currently unimplemented
-4294967133  4294967199  0         pg_timezone_names was created for compatibility and is currently unimplemented
-4294967132  4294967199  0         pg_transform was created for compatibility and is currently unimplemented
-4294967131  4294967199  0         triggers (empty - feature does not exist)
-4294967129  4294967199  0         pg_ts_config was created for compatibility and is currently unimplemented
-4294967130  4294967199  0         pg_ts_config_map was created for compatibility and is currently unimplemented
-4294967128  4294967199  0         pg_ts_dict was created for compatibility and is currently unimplemented
-4294967127  4294967199  0         pg_ts_parser was created for compatibility and is currently unimplemented
-4294967126  4294967199  0         pg_ts_template was created for compatibility and is currently unimplemented
-4294967125  4294967199  0         scalar types (incomplete)
-4294967122  4294967199  0         database users
-4294967124  4294967199  0         local to remote user mapping (empty - feature does not exist)
-4294967123  4294967199  0         pg_user_mappings was created for compatibility and is currently unimplemented
-4294967121  4294967199  0         view definitions (incomplete - see also information_schema.views)
-4294967119  4294967199  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
-4294967118  4294967199  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
-4294967117  4294967199  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+4294967138  4294967199  0         pg_stat_database was created for compatibility and is currently unimplemented
+4294967139  4294967199  0         pg_stat_database_conflicts was created for compatibility and is currently unimplemented
+4294967137  4294967199  0         pg_statistic_ext was created for compatibility and is currently unimplemented
+4294967135  4294967199  0         pg_subscription was created for compatibility and is currently unimplemented
+4294967136  4294967199  0         pg_subscription_rel was created for compatibility and is currently unimplemented
+4294967134  4294967199  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967133  4294967199  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967132  4294967199  0         pg_timezone_abbrevs was created for compatibility and is currently unimplemented
+4294967131  4294967199  0         pg_timezone_names was created for compatibility and is currently unimplemented
+4294967130  4294967199  0         pg_transform was created for compatibility and is currently unimplemented
+4294967129  4294967199  0         triggers (empty - feature does not exist)
+4294967127  4294967199  0         pg_ts_config was created for compatibility and is currently unimplemented
+4294967128  4294967199  0         pg_ts_config_map was created for compatibility and is currently unimplemented
+4294967126  4294967199  0         pg_ts_dict was created for compatibility and is currently unimplemented
+4294967125  4294967199  0         pg_ts_parser was created for compatibility and is currently unimplemented
+4294967124  4294967199  0         pg_ts_template was created for compatibility and is currently unimplemented
+4294967123  4294967199  0         scalar types (incomplete)
+4294967120  4294967199  0         database users
+4294967122  4294967199  0         local to remote user mapping (empty - feature does not exist)
+4294967121  4294967199  0         pg_user_mappings was created for compatibility and is currently unimplemented
+4294967119  4294967199  0         view definitions (incomplete - see also information_schema.views)
+4294967117  4294967199  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+4294967116  4294967199  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+4294967115  4294967199  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
 
 ## pg_catalog.pg_shdescription
 
@@ -3242,7 +3248,7 @@ indoption
 query TTI
 SELECT database_name, descriptor_name, descriptor_id from test.crdb_internal.create_statements where descriptor_name = 'pg_views'
 ----
-test  pg_views  4294967121
+test  pg_views  4294967119
 
 # Verify INCLUDED columns appear in pg_index. See issue #59563
 statement ok

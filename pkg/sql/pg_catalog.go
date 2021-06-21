@@ -90,8 +90,6 @@ var pgCatalog = virtualSchema{
 		"pg_stat_all_tables",
 		"pg_stat_archiver",
 		"pg_stat_bgwriter",
-		"pg_stat_database",
-		"pg_stat_database_conflicts",
 		"pg_stat_progress_vacuum",
 		"pg_stat_replication",
 		"pg_stat_ssl",
@@ -190,6 +188,8 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogShdependTableID:                   pgCatalogShdependTable,
 		catconstants.PgCatalogShmemAllocationsTableID:           pgCatalogShmemAllocationsTable,
 		catconstants.PgCatalogStatActivityTableID:               pgCatalogStatActivityTable,
+		catconstants.PgCatalogStatDatabaseConflictsTableID:      pgCatalogStatDatabaseConflictsTable,
+		catconstants.PgCatalogStatDatabaseTableID:               pgCatalogStatDatabaseTable,
 		catconstants.PgCatalogStatisticExtTableID:               pgCatalogStatisticExtTable,
 		catconstants.PgCatalogSubscriptionRelTableID:            pgCatalogSubscriptionRelTable,
 		catconstants.PgCatalogSubscriptionTableID:               pgCatalogSubscriptionTable,
@@ -2967,6 +2967,24 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 			},
 		)
 	},
+}
+
+var pgCatalogStatDatabaseTable = virtualSchemaTable{
+	comment: "pg_stat_database was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatDatabase,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatDatabaseConflictsTable = virtualSchemaTable{
+	comment: "pg_stat_database_conflicts was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatDatabaseConflicts,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because
