@@ -88,6 +88,7 @@ const (
 	CrdbInternalInterleaved
 	CrdbInternalCrossDbRefrences
 	CrdbInternalLostTableDescriptors
+	CrdbInternalClusterInflightTracesTable
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

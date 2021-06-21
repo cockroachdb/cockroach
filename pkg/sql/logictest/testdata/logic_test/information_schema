@@ -362,6 +362,7 @@ crdb_internal       cluster_contended_tables
 crdb_internal       cluster_contention_events
 crdb_internal       cluster_database_privileges
 crdb_internal       cluster_distsql_flows
+crdb_internal       cluster_inflight_traces
 crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
@@ -610,6 +611,7 @@ cluster_contended_tables
 cluster_contention_events
 cluster_database_privileges
 cluster_distsql_flows
+cluster_inflight_traces
 cluster_queries
 cluster_sessions
 cluster_settings
@@ -888,6 +890,7 @@ system         crdb_internal       cluster_contended_tables               SYSTEM
 system         crdb_internal       cluster_contention_events              SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_database_privileges            SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_distsql_flows                  SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_inflight_traces                SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_queries                        SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_sessions                       SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_settings                       SYSTEM VIEW  NO                  1
@@ -2238,6 +2241,7 @@ NULL     public   system         crdb_internal       cluster_contended_tables   
 NULL     public   system         crdb_internal       cluster_contention_events              SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_database_privileges            SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_distsql_flows                  SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_inflight_traces                SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_queries                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES
@@ -2727,6 +2731,7 @@ NULL     public   system         crdb_internal       cluster_contended_tables   
 NULL     public   system         crdb_internal       cluster_contention_events              SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_database_privileges            SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_distsql_flows                  SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_inflight_traces                SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_queries                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES

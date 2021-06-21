@@ -22,6 +22,7 @@ crdb_internal  cluster_contended_tables     view   NULL  NULL  NULL
 crdb_internal  cluster_contention_events    table  NULL  NULL  NULL
 crdb_internal  cluster_database_privileges  table  NULL  NULL  NULL
 crdb_internal  cluster_distsql_flows        table  NULL  NULL  NULL
+crdb_internal  cluster_inflight_traces      table  NULL  NULL  NULL
 crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL  NULL
@@ -270,6 +271,12 @@ SELECT * FROM crdb_internal.zones WHERE false
 ----
 zone_id  subzone_id  target  range_name  database_name  schema_name  table_name  index_name  partition_name
 raw_config_yaml  raw_config_sql  raw_config_protobuf full_config_yaml full_config_sql
+
+
+query IITTT colnames
+SELECT * FROM crdb_internal.cluster_inflight_traces WHERE trace_id=123
+----
+trace_id  node_id  trace_json  trace_str  jaeger_json
 
 query IIIIBTIT colnames
 SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0

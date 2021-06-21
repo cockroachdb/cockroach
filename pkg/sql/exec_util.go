@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -918,6 +919,10 @@ type ExecutorConfig struct {
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
 	// perform compaction over a key span.
 	CompactEngineSpanFunc tree.CompactEngineSpanFunc
+
+	// TraceCollector is used to contact all live nodes in the cluster, and
+	// collect trace spans from their inflight node registries.
+	TraceCollector *collector.TraceCollector
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.

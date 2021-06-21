@@ -225,6 +225,7 @@ func TestSpanRecordStructured(t *testing.T) {
 		`))
 	require.NoError(t, TestingCheckRecording(rec, `
 		=== operation:root
+        structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
 }
 

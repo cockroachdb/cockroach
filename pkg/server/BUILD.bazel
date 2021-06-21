@@ -173,6 +173,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/collector",
         "//pkg/util/tracing/service",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
