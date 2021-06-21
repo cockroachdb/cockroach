@@ -432,9 +432,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 			sv = v.Contents
 		}
 
-		if typ.Oid() == oid.T_bpchar {
-			sv = strings.TrimRight(sv, " ")
-		}
+		sv = adjustStringValueToType(typ, sv)
 
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
 			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
@@ -442,11 +440,11 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				typ.SQLString())
 		}
 
-		if typ.Oid() == oid.T_bpchar {
+		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char {
 			if _, ok := AsDString(inVal); ok {
-				return NewDString(strings.TrimRight(sv, " ")), nil
+				return NewDString(sv), nil
 			} else if _, ok := inVal.(*DCollatedString); ok {
-				return NewDCollatedString(strings.TrimRight(sv, " "), typ.Locale(), &CollationEnvironment{})
+				return NewDCollatedString(sv, typ.Locale(), &CollationEnvironment{})
 			}
 		}
 	case types.IntFamily:
@@ -577,6 +575,20 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 	}
 	return inVal, nil
+}
+
+// adjustStringToType checks that the width for strings fits the
+// specified column type.
+func adjustStringValueToType(typ *types.T, sv string) string {
+	switch typ.Oid() {
+	case oid.T_char:
+		// "char" is supposed to truncate long values
+		return util.TruncateString(sv, 1)
+	case oid.T_bpchar:
+		// bpchar types truncate trailing whitespace.
+		return strings.TrimRight(sv, " ")
+	}
+	return sv
 }
 
 // formatBitArrayToType formats bit arrays such that they fill the total width
