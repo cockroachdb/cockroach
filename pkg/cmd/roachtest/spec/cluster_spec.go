@@ -153,7 +153,7 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 	if localSSD && s.SSDs != 0 {
 		switch s.Cloud {
 		case GCE:
-			args = append(args, fmt.Sprintf("--gce-local-SSD-count=%d", s.SSDs))
+			args = append(args, fmt.Sprintf("--gce-local-ssd-count=%d", s.SSDs))
 		default:
 			return nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
 		}
