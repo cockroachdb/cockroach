@@ -77,9 +77,15 @@ func (*mockServer) RangeFeed(*roachpb.RangeFeedRequest, roachpb.Internal_RangeFe
 	panic("unimplemented")
 }
 
-func (m *mockServer) Join(
+func (*mockServer) Join(
 	context.Context, *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {
+	panic("unimplemented")
+}
+
+func (*mockServer) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
 	panic("unimplemented")
 }
 

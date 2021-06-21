@@ -44,12 +44,17 @@ func init() {
 }
 
 // Connector mediates the communication of cluster-wide state to sandboxed
-// SQL-only tenant processes through a restricted interface. A Connector is
-// seeded with a set of one or more network addresses that reference existing KV
-// nodes in the cluster (or a load-balancer which fans out to some/all KV
-// nodes). On startup, it establishes contact with one of these nodes to learn
-// about the topology of the cluster and bootstrap the rest of SQL <-> KV
-// network communication.
+// SQL-only tenant processes through a restricted interface.
+//
+// A Connector is instantiated inside a tenant's SQL process and is seeded with
+// a set of one or more network addresses that reference existing KV nodes in
+// the host cluster (or a load-balancer which fans out to some/all KV nodes). On
+// startup, it establishes contact with one of these nodes to learn about the
+// topology of the cluster and bootstrap the rest of SQL <-> KV network
+// communication.
+//
+// The Connector communicates with the host cluster through the roachpb.Internal
+// API.
 //
 // See below for the Connector's roles.
 type Connector struct {
@@ -376,6 +381,33 @@ func (c *Connector) Regions(
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
 func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
+}
+
+// TokenBucket implements the kvtenant.TokenBucketProvider interface.
+func (c *Connector) TokenBucket(
+	ctx context.Context, in *roachpb.TokenBucketRequest,
+) (*roachpb.TokenBucketResponse, error) {
+	// Proxy token bucket requests through the Internal service.
+	ctx = c.AnnotateCtx(ctx)
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		resp, err := client.TokenBucket(ctx, in)
+		if err != nil {
+			log.Warningf(ctx, "error issuing TokenBucket RPC: %v", err)
+			if grpcutil.IsAuthError(err) {
+				// Authentication or authorization error. Propagate.
+				return nil, err
+			}
+			// Soft RPC error. Drop client and retry.
+			c.tryForgetClient(ctx, client)
+			continue
+		}
+		return resp, nil
+	}
+	return nil, ctx.Err()
 }
 
 // getClient returns the singleton InternalClient if one is currently active. If

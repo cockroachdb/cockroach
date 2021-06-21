@@ -64,6 +64,18 @@ type Connector interface {
 	// This is necessary for region validation for zone configurations and
 	// multi-region primitives.
 	serverpb.RegionsServer
+
+	// Connector is capable of providing an endpoint for the TokenBucket API.
+	TokenBucketProvider
+}
+
+// TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
+// (defined in roachpb.Internal), used to interact with the tenant cost control
+// token bucket.
+type TokenBucketProvider interface {
+	TokenBucket(
+		ctx context.Context, in *roachpb.TokenBucketRequest,
+	) (*roachpb.TokenBucketResponse, error)
 }
 
 // ConnectorConfig encompasses the configuration required to create a Connector.
