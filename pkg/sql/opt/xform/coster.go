@@ -142,6 +142,24 @@ const (
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
 	preferLookupJoinFactor = 1e-6
+
+	// noSpillRowCount represents the maximum number of rows that should have no
+	// buffering cost because we expect they will never need to be spilled to
+	// disk. Since 64MB is the default work mem limit, 64 rows will not cause a
+	// disk spill unless the rows are at least 1 MB on average.
+	noSpillRowCount = 64
+
+	// spillRowCount represents the minimum number of rows that we expect will
+	// always need to be spilled to disk. Since 64MB is the default work mem
+	// limit, 6400000 rows with an average of at least 10 bytes per row will cause
+	// a disk spill.
+	spillRowCount = 6400000
+
+	// spillCostFactor is the cost of spilling to disk. We use seqIOCostFactor to
+	// model the cost of spilling to disk, because although there will be some
+	// random I/O required to insert rows into a sorted structure, the inherent
+	// batching in the LSM tree should amortize the cost.
+	spillCostFactor = seqIOCostFactor
 )
 
 // fnCost maps some functions to an execution cost. Currently this list
@@ -1016,7 +1034,8 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 
 func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
-	cost := memo.Cost(set.Relational().Stats.RowCount) * cpuCostFactor
+	outputRowCount := set.Relational().Stats.RowCount
+	cost := memo.Cost(outputRowCount) * cpuCostFactor
 
 	// A set operation must process every row from both tables once. UnionAll and
 	// LocalityOptimizedSearch can avoid any extra computation, but all other set
@@ -1030,9 +1049,29 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 		leftRowCount := set.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 		rightRowCount := set.Child(1).(memo.RelExpr).Relational().Stats.RowCount
 		cost += memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
-	}
 
-	// TODO(rytaft): add rowBufferCost for non-streaming set ops.
+		// Add a cost for buffering rows that takes into account increased memory
+		// pressure and the possibility of spilling to disk.
+		switch set.Op() {
+		case opt.UnionOp:
+			// Hash Union is implemented as UnionAll followed by Hash Distinct.
+			cost += c.rowBufferCost(outputRowCount)
+
+		case opt.IntersectOp, opt.ExceptOp:
+			// Hash Intersect and Except are implemented as Hash Distinct on each
+			// input followed by a Hash Join that builds the hash table from the right
+			// input.
+			cost += c.rowBufferCost(leftRowCount) + 2*c.rowBufferCost(rightRowCount)
+
+		case opt.IntersectAllOp, opt.ExceptAllOp:
+			// Hash IntersectAll and ExceptAll are implemented as a Hash Join that
+			// builds the hash table from the right input.
+			cost += c.rowBufferCost(rightRowCount)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled operator %s", set.Op()))
+		}
+	}
 
 	return cost
 }
@@ -1182,37 +1221,38 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	return memo.Cost(numCols+numScannedCols) * costFactor
 }
 
-// rowBufferCost adds a cost for buffering n rows according to a logistic
-// function (https://en.wikipedia.org/wiki/Logistic_function):
+// rowBufferCost adds a cost for buffering rows according to a ramp function:
 //
-//             ⎛         L           ⎞
-//   cost(n) = ⎜ ------------------- ⎟
-//             ⎝ 1 + e^(-k*(n - n0)) ⎠
+//                  cost
+//                 factor
 //
-// where
-//
-//   L is the curve's maximum value
-//   n0 is the number of rows marking the midpoint of the curve
-//   k is the logistic growth rate or steepness of the curve
+//                    |               spillRowCount
+//   spillCostFactor _|                  ___________ _ _ _
+//                    |                 /
+//                    |                /
+//                    |               /
+//                0  _| _ _ _________/______________________    row
+//                    |                                        count
+//                         noSpillRowCount
 //
 // This function models the fact that operators that buffer rows become more
 // expensive the more rows they need to buffer, since eventually they will need
 // to spill to disk. The exact number of rows that cause spilling to disk varies
 // depending on a number of factors that we don't model here. Therefore, we use
-// a logistic function rather than a step function to account for the
-// uncertainty and avoid sudden surprising plan changes due to a small change in
-// stats.
+// a ramp function rather than a step function to account for the uncertainty
+// and avoid sudden surprising plan changes due to a small change in stats.
 func (c *coster) rowBufferCost(rowCount float64) memo.Cost {
-	var factor memo.Cost
-	if rowCount > 1 {
-		const (
-			L  = seqIOCostFactor
-			n0 = 100000
-			k  = 0.001
-		)
-		factor = memo.Cost(L / (1 + math.Exp(-k*(rowCount-n0))))
+	if rowCount <= noSpillRowCount {
+		return 0
 	}
-	return memo.Cost(rowCount) * factor
+	var fraction memo.Cost
+	if rowCount >= spillRowCount {
+		fraction = 1
+	} else {
+		fraction = memo.Cost(rowCount-noSpillRowCount) / (spillRowCount - noSpillRowCount)
+	}
+
+	return memo.Cost(rowCount) * spillCostFactor * fraction
 }
 
 // localityMatchScore returns a number from 0.0 to 1.0 that describes how well

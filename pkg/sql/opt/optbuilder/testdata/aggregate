@@ -3660,7 +3660,7 @@ group-by
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- ├── cost: 1144.84
+ ├── cost: 1144.98625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1)
