@@ -116,3 +116,8 @@ func (i *instancemanager) GetInstanceAddr(id base.SQLInstanceID) (httpAddr strin
 	// to cache
 	return "", fmt.Errorf("non existent instance id %d", id)
 }
+
+// TODO(davidh): Placeholder. Reconcile w/ Rima's work once she's done
+func (i *instancemanager) GetAllInstancesForTenant() ([]sqlinstance.SQLInstance, error) {
+	return nil, nil
+}

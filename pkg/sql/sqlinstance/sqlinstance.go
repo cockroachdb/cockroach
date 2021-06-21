@@ -45,5 +45,7 @@ type Writer interface {
 type InstanceManager interface {
 	AddressResolver
 	Writer
+	// TODO(davidh): Placeholder. Reconcile w/ Rima's work once she's done
+	GetAllInstancesForTenant() ([]SQLInstance, error)
 	ShutdownInstance(context.Context, sqlliveness.SessionID)
 }

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -491,6 +492,20 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 	return nodeID, nodeID == s.gossip.NodeID.Get(), nil
 }
 
+func (s *statusServer) parseInstanceID(nodeIDParam string) (base.SQLInstanceID, bool, error) {
+	// No parameter provided or set to local.
+	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
+		return s.rpcCtx.InstanceID, true, nil
+	}
+
+	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
+	if err != nil {
+		return 0, false, errors.Wrap(err, "node ID could not be parsed")
+	}
+	instanceID := base.SQLInstanceID(id)
+	return instanceID, instanceID == s.rpcCtx.InstanceID, nil
+}
+
 func (s *statusServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.StatusClient, error) {
@@ -500,6 +515,30 @@ func (s *statusServer) dialNode(
 	}
 	conn, err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID,
 		rpc.DefaultClass).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverpb.NewStatusClient(conn), nil
+}
+
+func (s *statusServer) getInstanceAddress(
+	instanceID base.SQLInstanceID,
+) (*util.UnresolvedAddr, error) {
+	addr, err := s.sqlServer.sqlInstanceManager.GetInstanceAddr(instanceID)
+	if err != nil {
+		return nil, err
+	}
+	return &util.UnresolvedAddr{AddressField: addr}, nil
+}
+
+func (s *statusServer) dialPod(
+	ctx context.Context, instanceID base.SQLInstanceID,
+) (serverpb.StatusClient, error) {
+	addr, err := s.getInstanceAddress(instanceID)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := s.rpcCtx.GRPCDialPod(addr.String(), instanceID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1899,6 +1938,86 @@ func (s *statusServer) ListLocalSessions(
 		sessions[i].NodeID = s.gossip.NodeID.Get()
 	}
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
+}
+
+func (s *statusServer) iteratePods(
+	ctx context.Context,
+	errorCtx string,
+	dialFn func(ctx context.Context, instanceID base.SQLInstanceID) (interface{}, error),
+	instanceFn func(ctx context.Context, client interface{}, instanceID base.SQLInstanceID) (interface{}, error),
+	responseFn func(instanceID base.SQLInstanceID, resp interface{}),
+	errorFn func(instanceID base.SQLInstanceID, nodeFnError error),
+) error {
+	tenantInstances, err := s.sqlServer.sqlInstanceManager.GetAllInstancesForTenant()
+	if err != nil {
+		return err
+	}
+
+	type instanceResponse struct {
+		instanceID base.SQLInstanceID
+		response   interface{}
+		err        error
+	}
+
+	numInstances := len(tenantInstances)
+	responseChan := make(chan instanceResponse, numInstances)
+
+	// TODO(davidh): somehow the tenantInstances above must either have a liveness state
+	// or have a liveness that can be queried
+	TODO_MISSING_INSTANCE_LIVENESS := "<TODO>"
+
+	instanceQuery := func(ctx context.Context, instanceID base.SQLInstanceID) {
+		var client interface{}
+		err := contextutil.RunWithTimeout(ctx, "dial instance", base.NetworkTimeout, func(ctx context.Context) error {
+			var err error
+			client, err = dialFn(ctx, instanceID)
+			return err
+		})
+		if err != nil {
+			err = errors.Wrapf(err, "failed to dial into node %d (%s)",
+				instanceID, TODO_MISSING_INSTANCE_LIVENESS)
+			responseChan <- instanceResponse{instanceID: instanceID, err: err}
+			return
+		}
+
+		res, err := instanceFn(ctx, client, instanceID)
+		if err != nil {
+			err = errors.Wrapf(err, "error requesting %s from instance %d (%s)",
+				errorCtx, instanceID, TODO_MISSING_INSTANCE_LIVENESS)
+		}
+		responseChan <- instanceResponse{instanceID: instanceID, response: res}
+	}
+
+	sem := quotapool.NewIntPool("instance status", maxConcurrentRequests)
+	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+
+	for _, instanceID := range tenantInstances {
+		instanceID := instanceID
+		if err := s.stopper.RunLimitedAsyncTask(
+			ctx, fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+			sem, true /* wait */, func(ctx context.Context) {
+				instanceQuery(ctx, instanceID.InstanceID())
+			}); err != nil {
+			return err
+		}
+	}
+
+	var resultErr error
+	for numInstances > 0 {
+		select {
+		case res := <-responseChan:
+			if res.err != nil {
+				errorFn(res.instanceID, res.err)
+			} else {
+				responseFn(res.instanceID, res.response)
+			}
+		case <-ctx.Done():
+			resultErr = errors.Errorf("request of %s cancelled before completion", errorCtx)
+		}
+		numInstances--
+	}
+	return resultErr
 }
 
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
