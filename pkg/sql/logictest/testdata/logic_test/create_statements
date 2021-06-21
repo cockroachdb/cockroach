@@ -104,6 +104,21 @@ CREATE TABLE crdb_internal.cluster_distsql_flows (
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.cluster_inflight_traces (
+   trace_id INT8 NOT NULL,
+   node_id INT8 NOT NULL,
+   trace_json STRING NULL,
+   trace_str STRING NULL,
+   jaeger_json STRING NULL,
+   INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, trace_json, trace_str, jaeger_json)
+)  CREATE TABLE crdb_internal.cluster_inflight_traces (
+   trace_id INT8 NOT NULL,
+   node_id INT8 NOT NULL,
+   trace_json STRING NULL,
+   trace_str STRING NULL,
+   jaeger_json STRING NULL,
+   INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, trace_json, trace_str, jaeger_json)
+)  {}  {}
 CREATE TABLE crdb_internal.cluster_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
