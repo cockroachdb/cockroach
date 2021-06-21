@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -423,7 +424,7 @@ func TestRotate(t *testing.T) {
 			actual, err := Rotate(geometry, tc.rotRadians)
 			require.NoError(t, err)
 
-			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
+			geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
@@ -523,7 +524,7 @@ func TestRotateWithPointOrigin(t *testing.T) {
 				require.EqualError(t, err, tt.wantErrStr)
 			} else {
 				require.NoError(t, err)
-				requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeom), got, 1e-5)
+				geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeom), got, 1e-5)
 			}
 		})
 	}
@@ -669,7 +670,7 @@ func TestRotateX(t *testing.T) {
 			actual, err := RotateX(geometry, tc.rotRadians)
 			require.NoError(t, err)
 
-			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
+			geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
@@ -744,7 +745,7 @@ func TestRotateY(t *testing.T) {
 
 			actual, err := RotateY(geometry, tc.rotRadians)
 			require.NoError(t, err)
-			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
+			geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
@@ -819,7 +820,7 @@ func TestRotateZ(t *testing.T) {
 
 			actual, err := RotateZ(geometry, tc.rotRadians)
 			require.NoError(t, err)
-			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
+			geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }

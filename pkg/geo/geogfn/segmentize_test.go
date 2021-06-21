@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -130,7 +131,7 @@ func TestSegmentize(t *testing.T) {
 			require.NoError(t, err)
 			expectedGeog, err := geo.ParseGeography(test.expectedWKT)
 			require.NoError(t, err)
-			require.Equal(t, expectedGeog, modifiedGeog)
+			geotest.RequireGeographyInEpsilon(t, expectedGeog, modifiedGeog, geotest.Epsilon)
 		})
 	}
 	// Test for segment maximum length as negative.
@@ -216,7 +217,7 @@ func TestSegmentizeCoords(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			convertedPoints, err := segmentizeCoords(test.a, test.b, test.segmentMaxAngle)
 			require.NoError(t, err)
-			require.Equal(t, test.resultantCoordinates, convertedPoints)
+			geotest.FlatCoordsInEpsilon(t, test.resultantCoordinates, convertedPoints, geotest.Epsilon)
 		})
 	}
 

@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
@@ -75,7 +76,7 @@ func TestCentroid(t *testing.T) {
 			require.NoError(t, err)
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
-			requireGeometryWithinEpsilon(t, expected, ret, 2e-10)
+			geotest.RequireGeometryInEpsilon(t, expected, ret, 2e-10)
 		})
 	}
 }
@@ -300,7 +301,7 @@ func TestPointOnSurface(t *testing.T) {
 			require.NoError(t, err)
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
-			requireGeometryWithinEpsilon(t, expected, ret, 2e-10)
+			geotest.RequireGeometryInEpsilon(t, expected, ret, 2e-10)
 		})
 	}
 }
