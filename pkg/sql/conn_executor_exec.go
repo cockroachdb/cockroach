@@ -283,9 +283,15 @@ func (ex *connExecutor) execStmtInOpenState(
 	queryTimedOut := false
 	doneAfterFunc := make(chan struct{}, 1)
 
+	// Early-associate placeholder info with the eval context,
+	// so that we can fill in placeholder values in our call to addActiveQuery, below.
+	if !ex.planner.EvalContext().HasPlaceholders() {
+		ex.planner.EvalContext().Placeholders = pinfo
+	}
+
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(ast, stmt.SQL, queryID, ex.state.cancel)
+	unregisterFn := ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, ex.state.cancel)
 
 	// queryDone is a cleanup function dealing with unregistering a query.
 	// It also deals with overwriting res.Error to a more user-friendly message in
@@ -719,6 +725,26 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// No event was generated.
 	return nil, nil, nil
+}
+
+func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) string {
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+
+	if evalCtx.HasPlaceholders() {
+		fmtCtx.SetPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+			d, err := placeholder.Eval(evalCtx)
+			if err != nil {
+				// fall back to the default behavior if something goes wrong
+				ctx.Printf("$%d", placeholder.Idx+1)
+				return
+			}
+			d.Format(ctx)
+		})
+	}
+
+	fmtCtx.FormatNode(ast)
+
+	return fmtCtx.CloseAndGetString()
 }
 
 func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) error {
