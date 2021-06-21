@@ -641,3 +641,8 @@ DROP DATABASE db1
 
 statement ok
 DROP DATABASE db1 CASCADE
+
+# Works around view back references to tables not being cleaned up.
+# see issue #66677
+statement ok
+SET experimental_use_new_schema_changer = 'off'

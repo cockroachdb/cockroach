@@ -12,8 +12,10 @@ package scbuild
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -40,9 +42,17 @@ func (b *buildContext) dropDatabase(ctx context.Context, n *tree.DropDatabase) {
 	if err != nil {
 		panic(err)
 	}
-
-	dropIDs := catalog.DescriptorIDSet{}
+	// Order schemas to guarantee the order in which operations
+	// are generated for testing.
+	schemaIDs := make([]descpb.ID, 0, len(schemas))
 	for schemaID := range schemas {
+		schemaIDs = append(schemaIDs, schemaID)
+	}
+	sort.SliceStable(schemaIDs, func(i, j int) bool {
+		return schemaIDs[i] < schemaIDs[j]
+	})
+	dropIDs := catalog.DescriptorIDSet{}
+	for _, schemaID := range schemaIDs {
 		dropIDs.Add(schemaID)
 		schemaDesc, err := b.Descs.GetImmutableSchemaByID(ctx, b.EvalCtx.Txn, schemaID, tree.SchemaLookupFlags{Required: true})
 		if err != nil {
