@@ -722,6 +722,8 @@ message Progress {
     NewSchemaChangeProgress newSchemaChange = 19;
     MigrationProgress migration = 20;
   }
+
+  uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
 }
 
 enum Type {
