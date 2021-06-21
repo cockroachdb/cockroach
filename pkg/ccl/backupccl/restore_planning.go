@@ -862,81 +862,73 @@ func resolveTargetDB(
 	return database.Name, nil
 }
 
-// maybeUpgradeTableDescsInSlice updates the passed slice of table descriptors
-// to use the newer 19.2-style foreign key representation, if they are not
-// already upgraded. This requires resolving cross-table FK references, which is
-// done by looking up all table descriptors in the slice provided.
+// maybeUpgradeDescriptors performs post-deserialization upgrades on the
+// descriptors.
+//
+// This is done, for instance, to use the newer 19.2-style foreign key
+// representation, if they are not already upgraded.
 //
 // if skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
 // the set provided are omitted during the upgrade, instead of causing an error
 // to be returned.
-func maybeUpgradeTableDescsInSlice(
+func maybeUpgradeDescriptors(
 	ctx context.Context, descs []catalog.Descriptor, skipFKsWithNoMatchingTable bool,
 ) error {
 	descGetter := catalog.MakeMapDescGetter()
 
-	// Populate the protoGetter with all table descriptors in all backup
-	// descriptors so that they can be looked up.
+	// Populate the catalog.DescGetter with all table descriptors in the backup.
 	for _, desc := range descs {
 		descGetter.Descriptors[desc.GetID()] = desc
 	}
 
 	for j, desc := range descs {
-		tableDesc, isTable := desc.(catalog.TableDescriptor)
-		if !isTable {
-			continue
+		var b catalog.DescriptorBuilder
+		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
+			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
+		} else {
+			b = catalogkv.NewBuilder(desc.DescriptorProto())
 		}
-		if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(tableDesc.TableDesc()) {
-			continue
-		}
-		b := tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
 		err := b.RunPostDeserializationChanges(ctx, descGetter)
 		if err != nil {
 			return err
 		}
-		descs[j] = b.BuildExistingMutableTable()
+		descs[j] = b.BuildExistingMutable()
 	}
 	return nil
 }
 
-// maybeUpgradeTableDescsInBackupManifests updates the backup descriptors'
-// table descriptors to use the newer 19.2-style foreign key representation,
-// if they are not already upgraded. This requires resolving cross-table FK
-// references, which is done by looking up all table descriptors across all
-// backup descriptors provided. if skipFKsWithNoMatchingTable is set, FKs whose
+// maybeUpgradeDescriptorsInBackupManifests updates the descriptors in the
+// manifests. This is done in particular to use the newer 19.2-style foreign
+// key representation, if they are not already upgraded.
+// This requires resolving cross-table FK references, which is done by looking
+// up all table descriptors across all backup descriptors provided.
+// If skipFKsWithNoMatchingTable is set, FKs whose
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
-func maybeUpgradeTableDescsInBackupManifests(
+func maybeUpgradeDescriptorsInBackupManifests(
 	ctx context.Context, backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
-	descGetter := catalog.MakeMapDescGetter()
-
-	// Populate the descGetter with all table descriptors in all backup
-	// descriptors so that they can be looked up.
+	if len(backupManifests) == 0 {
+		return nil
+	}
+	descs := make([]catalog.Descriptor, 0, len(backupManifests[0].Descriptors))
 	for _, backupManifest := range backupManifests {
-		for _, desc := range backupManifest.Descriptors {
-			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil {
-				descGetter.Descriptors[table.ID] = tabledesc.NewBuilder(table).BuildImmutable()
-			}
+		for _, pb := range backupManifest.Descriptors {
+			descs = append(descs, catalogkv.NewBuilder(&pb).BuildExistingMutable())
 		}
 	}
 
+	err := maybeUpgradeDescriptors(ctx, descs, skipFKsWithNoMatchingTable)
+	if err != nil {
+		return err
+	}
+
+	k := 0
 	for i := range backupManifests {
-		backupManifest := &backupManifests[i]
-		for j := range backupManifest.Descriptors {
-			table, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[j])
-			if table == nil {
-				continue
-			}
-			if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(table) {
-				continue
-			}
-			b := tabledesc.NewBuilderForFKUpgrade(table, skipFKsWithNoMatchingTable)
-			err := b.RunPostDeserializationChanges(ctx, descGetter)
-			if err != nil {
-				return err
-			}
-			backupManifest.Descriptors[j] = *b.BuildExistingMutable().DescriptorProto()
+		manifest := &backupManifests[i]
+		for j := range manifest.Descriptors {
+			manifest.Descriptors[j] = *descs[k].DescriptorProto()
+			k++
 		}
 	}
 	return nil
@@ -1717,7 +1709,7 @@ func doRestorePlan(
 		}
 	}
 
-	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
+	if err := maybeUpgradeDescriptors(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
 		return err
 	}
 
