@@ -102,8 +102,9 @@ func newPebbleTempEngine(
 	p, err := NewPebble(
 		ctx,
 		PebbleConfig{
-			StorageConfig: storageConfig,
-			Opts:          opts,
+			StorageConfig:             storageConfig,
+			Opts:                      opts,
+			PebbleStoreIDLogContainer: base.InitTempStoreIDPebbleLog(true),
 		},
 	)
 	if err != nil {

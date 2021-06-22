@@ -1381,6 +1381,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
+	// Set the store ID for Pebble logs if the engine is Pebble underneath the hood. This couldn't be set before because
+	// the store ID wasn't known at the time the Pebble log was initialized.
+	if logSetter, ok := s.engine.(storage.LogStoreIDSetter); ok {
+		logSetter.SetStoreIDForLog(ctx, int32(s.StoreID()))
+	}
+
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
 	// Note that this is just a hacky way of getting around that without
