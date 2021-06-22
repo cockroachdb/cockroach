@@ -219,7 +219,7 @@ var opWeights = []int{
 	renameView:              1,
 	setColumnDefault:        1,
 	setColumnNotNull:        1,
-	setColumnType:           1,
+	setColumnType:           0, // Disabled and tracked with #66662.
 	survive:                 1,
 	insertRow:               0,
 	validate:                2, // validate twice more often
@@ -473,15 +473,35 @@ func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
 		},
 		func() (string, error) {
 			columnForAs, err := og.randColumnWithMeta(tx, *tableName, og.alwaysExisting())
+			columnForAsUsed := false
 			if err != nil {
 				return "", err
 			}
 			ret := "REGIONAL BY ROW"
 			if columnForAs.typ.TypeMeta.Name != nil {
-				if columnForAs.typ.TypeMeta.Name.Basename() == tree.RegionEnum {
-					ret += "AS " + columnForAs.name
+				if columnForAs.typ.TypeMeta.Name.Basename() == tree.RegionEnum &&
+					!columnForAs.nullable {
+					ret += " AS " + columnForAs.name
+					columnForAsUsed = true
 				}
 			}
+			// If the table has a crdb_region column, make sure that it's not
+			// nullable. This is required to handle the case where there's an
+			// existing crdb_region column, but it is nullable, and therefore
+			// cannot be used as the implicit partitioning column.
+			if !columnForAsUsed {
+				columnNames, err := og.getTableColumns(tx, tableName.String(), true)
+				if err != nil {
+					return "", err
+				}
+				for _, col := range columnNames {
+					if col.name == tree.RegionalByRowRegionDefaultCol &&
+						col.nullable {
+						og.expectedExecErrors.add(pgcode.InvalidTableDefinition)
+					}
+				}
+			}
+
 			return ret, nil
 		},
 	}
@@ -785,13 +805,33 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 		IfNotExists: og.randIntn(2) == 0,  // 50% IF NOT EXISTS
 	}
 
+	regionColumn := ""
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if tableIsRegionalByRow {
+		regionColumn, err = getRegionColumn(tx, tableName)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	// Define columns on which to create an index. Check for types which cannot be indexed.
+	duplicateRegionColumn := false
 	nonIndexableType := false
 	def.Columns = make(tree.IndexElemList, 1+og.randIntn(len(columnNames)))
 	for i := range def.Columns {
 		def.Columns[i].Column = tree.Name(columnNames[i].name)
 		def.Columns[i].Direction = tree.Direction(og.randIntn(1 + int(tree.Descending)))
 
+		// When creating an index, the column being used as the region column
+		// for a REGIONAL BY ROW table can only be included in indexes as the
+		// first column. If it's not the first column, we need to add an error
+		// below.
+		if columnNames[i].name == regionColumn && i != 0 {
+			duplicateRegionColumn = true
+		}
 		if def.Inverted {
 			// We can have an inverted index on a set of columns if the last column
 			// is an inverted indexable type and the preceding columns are not.
@@ -811,11 +851,18 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 	// as stored columns.
 	duplicateStore := false
 	virtualComputedStored := false
+	regionColStored := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
 		for i := range def.Storing {
 			def.Storing[i] = tree.Name(columnNames[i].name)
+
+			// The region column can not be stored.
+			if tableIsRegionalByRow && columnNames[i].name == regionColumn {
+				regionColStored = true
+			}
+
 			// Virtual computed columns are not allowed to be indexed
 			if columnNames[i].generated && !virtualComputedStored {
 				isStored, err := columnIsStoredComputed(tx, tableName, columnNames[i].name)
@@ -861,10 +908,6 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
-	if err != nil {
-		return "", err
-	}
 	if databaseHasRegionChange && tableIsRegionalByRow {
 		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
@@ -885,6 +928,8 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
+			{code: pgcode.FeatureNotSupported, condition: regionColStored},
+			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
 			{code: pgcode.Uncategorized, condition: virtualComputedStored},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 		}.add(og.expectedExecErrors)
@@ -1375,6 +1420,16 @@ func (og *operationGenerator) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 	}.add(og.expectedExecErrors)
 	if !columnExists {
 		og.expectedExecErrors.add(pgcode.UndefinedColumn)
+	}
+
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if hasAlterPKSchemaChange {
+		// Possible timing hole. Don't issue this schema change with a
+		// background PK change in progress. Tracked with #66663.
+		return `SELECT 'avoiding timing hole'`, nil
 	}
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
@@ -1930,6 +1985,16 @@ func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
 		}
 	}
 
+	hasPKSchemaChanges, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if hasPKSchemaChanges {
+		// Possible timing hole. Don't issue this schema change with a
+		// background PK change in progress. Tracked with #66663.
+		return `SELECT 'avoiding timing hole'`, nil
+	}
+
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
 }
 
@@ -1939,13 +2004,15 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	const setSessionVariableString = `SET enable_experimental_alter_column_type_general = true;`
+
 	tableExists, err := tableExists(tx, tableName)
 	if err != nil {
 		return "", err
 	}
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
-		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, tableName), nil
+		return fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, setSessionVariableString, tableName), nil
 	}
 
 	columnForTypeChange, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
@@ -1959,8 +2026,8 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 	}
 	if !columnExists {
 		og.expectedExecErrors.add(pgcode.UndefinedColumn)
-		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
-			tableName, columnForTypeChange.name), nil
+		return fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
+			setSessionVariableString, tableName, columnForTypeChange.name), nil
 	}
 
 	newTypeName, newType, err := og.randType(tx, og.pctExisting(true))
@@ -1974,6 +2041,8 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 	}
 
 	if newType != nil {
+		// Ignoring the error here intentionally, as we want to carry on with
+		// the operation and not fail it prematurely.
 		kind, _ := schemachange.ClassifyConversion(context.Background(), columnForTypeChange.typ, newType)
 		codesWithConditions{
 			{code: pgcode.CannotCoerce, condition: kind == schemachange.ColumnConversionImpossible},
@@ -1986,8 +2055,8 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
 	}.add(og.expectedExecErrors)
 
-	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
-		tableName, columnForTypeChange.name, newTypeName.SQLString()), nil
+	return fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
+		setSessionVariableString, tableName, columnForTypeChange.name, newTypeName.SQLString()), nil
 }
 
 func (og *operationGenerator) survive(tx *pgx.Tx) (string, error) {

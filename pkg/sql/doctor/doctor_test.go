@@ -51,7 +51,8 @@ var validTableDesc = &descpb.Descriptor{
 				KeyColumnNames:      []string{"col"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				EncodingType:        descpb.PrimaryIndexEncoding,
 			},
 			NextIndexID: 2,
 			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
@@ -489,6 +490,8 @@ func TestExamineDescriptors(t *testing.T) {
 			expected: `Examining 6 descriptors and 6 namespace entries...
   ParentID  57, ParentSchemaID 29: relation "a" (58): failed to upgrade descriptor: index-id "2" does not exist
   ParentID  57, ParentSchemaID 29: relation "b" (59): failed to upgrade descriptor: referenced table ID 52: descriptor not found
+  ParentID  57, ParentSchemaID 29: relation "a" (58): primary index "primary" has invalid version 0, expected 4
+  ParentID  57, ParentSchemaID 29: relation "b" (59): primary index "primary" has invalid version 0, expected 4
   ParentID  57, ParentSchemaID 29: relation "c" (60): missing fk back reference "fk_i_ref_b" to "c" from "a"
 `,
 		},

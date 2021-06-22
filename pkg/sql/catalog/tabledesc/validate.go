@@ -519,18 +519,10 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// We maintain forward compatibility, so if you see this error message with a
 	// version older that what this client supports, then there's a
 	// maybeFillInDescriptor missing from some codepath.
-	if v := desc.GetFormatVersion(); v != descpb.FamilyFormatVersion && v != descpb.InterleavedFormatVersion {
-		// TODO(dan): We're currently switching from FamilyFormatVersion to
-		// InterleavedFormatVersion. After a beta is released with this dual version
-		// support, then:
-		// - Upgrade the bidirectional reference version to that beta
-		// - Start constructing all TableDescriptors with InterleavedFormatVersion
-		// - Change maybeUpgradeFormatVersion to output InterleavedFormatVersion
-		// - Change this check to only allow InterleavedFormatVersion
+	if desc.GetFormatVersion() < descpb.InterleavedFormatVersion {
 		vea.Report(errors.AssertionFailedf(
-			"table %q is encoded using using version %d, but this client only supports version %d and %d",
-			desc.Name, errors.Safe(desc.GetFormatVersion()),
-			errors.Safe(descpb.FamilyFormatVersion), errors.Safe(descpb.InterleavedFormatVersion)))
+			"table is encoded using using version %d, but this client only supports version %d",
+			desc.GetFormatVersion(), descpb.InterleavedFormatVersion))
 		return
 	}
 
@@ -598,13 +590,13 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			if alterPKMutation == m.MutationID {
 				vea.Report(unimplemented.NewWithIssue(
 					45615,
-					"cannot perform other schema changes in the same transaction as a primary key change",
-				))
+					"cannot perform other schema changes in the same transaction as a primary key change"),
+				)
 			} else {
 				vea.Report(unimplemented.NewWithIssue(
 					45615,
-					"cannot perform a schema change operation while a primary key change is in progress",
-				))
+					"cannot perform a schema change operation while a primary key change is in progress"),
+				)
 			}
 			return
 		}
@@ -891,17 +883,15 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		return ErrMissingPrimaryKey
 	}
 
-	var virtualCols catalog.TableColSet
-	for i := range desc.Columns {
-		if desc.Columns[i].Virtual {
-			virtualCols.Add(desc.Columns[i].ID)
-		}
+	columnsByID := make(map[descpb.ColumnID]catalog.Column)
+	for _, col := range desc.DeletableColumns() {
+		columnsByID[col.GetID()] = col
 	}
 
 	// Verify that the primary index columns are not virtual.
-	for i, col := range desc.PrimaryIndex.KeyColumnIDs {
-		if virtualCols.Contains(col) {
-			return fmt.Errorf("primary index column %q cannot be virtual", desc.PrimaryIndex.KeyColumnNames[i])
+	for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
+		if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
+			return fmt.Errorf("primary index column %q cannot be virtual", col.GetName())
 		}
 	}
 
@@ -969,7 +959,7 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 					idx.GetName(), name, colID, idx.IndexDesc().KeyColumnIDs[i])
 			}
 			if validateIndexDup.Contains(colID) {
-				return fmt.Errorf("index %q contains duplicate column %q", idx.GetName(), name)
+				return pgerror.Newf(pgcode.FeatureNotSupported, "index %q contains duplicate column %q", idx.GetName(), name)
 			}
 			validateIndexDup.Add(colID)
 		}
@@ -997,20 +987,36 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 		}
 		// Ensure that indexes do not STORE virtual columns.
-		for _, col := range idx.IndexDesc().KeySuffixColumnIDs {
-			if virtualCols.Contains(col) {
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
 				return fmt.Errorf("index %q cannot store virtual column %d", idx.GetName(), col)
 			}
 		}
-		for i, col := range idx.IndexDesc().StoreColumnIDs {
-			if virtualCols.Contains(col) {
+		for i, colID := range idx.IndexDesc().StoreColumnIDs {
+			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
 				return fmt.Errorf("index %q cannot store virtual column %q",
 					idx.GetName(), idx.IndexDesc().StoreColumnNames[i])
+			}
+		}
+		if idx.Primary() {
+			if idx.GetVersion() != descpb.PrimaryIndexWithStoredColumnsVersion {
+				return errors.AssertionFailedf("primary index %q has invalid version %d, expected %d",
+					idx.GetName(), idx.GetVersion(), descpb.PrimaryIndexWithStoredColumnsVersion)
+			}
+			if idx.IndexDesc().EncodingType != descpb.PrimaryIndexEncoding {
+				return errors.AssertionFailedf("primary index %q has invalid encoding type %d in proto, expected %d",
+					idx.GetName(), idx.IndexDesc().EncodingType, descpb.PrimaryIndexEncoding)
 			}
 		}
 		// Ensure that index column ID subsets are well formed.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
 			continue
+		}
+		if !idx.Primary() && idx.Public() {
+			if idx.GetVersion() == descpb.PrimaryIndexWithStoredColumnsVersion {
+				return errors.AssertionFailedf("secondary index %q has invalid version %d which is for primary indexes",
+					idx.GetName(), idx.GetVersion())
+			}
 		}
 		slices := []struct {
 			name  string

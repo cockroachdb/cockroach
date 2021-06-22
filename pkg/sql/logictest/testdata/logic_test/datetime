@@ -1094,9 +1094,9 @@ query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
 a  INT8         false  NULL  ·  {primary}  false
-b  TIMESTAMP    true   NULL  ·  {}         false
-c  TIMESTAMPTZ  true   NULL  ·  {}         false
-d  TIMESTAMPTZ  true   NULL  ·  {}         false
+b  TIMESTAMP    true   NULL  ·  {primary}  false
+c  TIMESTAMPTZ  true   NULL  ·  {primary}  false
+d  TIMESTAMPTZ  true   NULL  ·  {primary}  false
 
 statement ok
 INSERT INTO tz VALUES

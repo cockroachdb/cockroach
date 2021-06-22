@@ -111,6 +111,14 @@ const (
 	// each column ID in the ColumnIDs, StoreColumnIDs and KeySuffixColumnIDs
 	// slices are unique within each slice, and the slices form disjoint sets.
 	StrictIndexColumnIDGuaranteesVersion
+	// PrimaryIndexWithStoredColumnsVersion corresponds to the encoding of
+	// primary indexes that is identical to the unspecified scheme previously in
+	// use (the IndexDescriptorVersion type was originally only used for
+	// secondary indexes) but with the guarantee that the StoreColumnIDs and
+	// StoreColumnNames slices are explicitly populated and maintained. Previously
+	// these were implicitly derived based on the set of non-virtual columns in
+	// the table.
+	PrimaryIndexWithStoredColumnsVersion
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.

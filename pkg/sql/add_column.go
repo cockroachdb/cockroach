@@ -164,6 +164,14 @@ func (p *planner) addColumnImpl(
 		col.ComputeExpr = &serializedExpr
 	}
 
+	if !col.Virtual {
+		// Add non-virtual column name and ID to primary index.
+		primaryIndex := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
+		primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, col.Name)
+		primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, col.ID)
+		n.tableDesc.SetPrimaryIndex(primaryIndex)
+	}
+
 	// Zone configuration logic is only required for REGIONAL BY ROW tables
 	// with newly created indexes.
 	if n.tableDesc.IsLocalityRegionalByRow() && idx != nil {

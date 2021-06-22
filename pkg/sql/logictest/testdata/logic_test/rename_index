@@ -33,6 +33,8 @@ users       bar         false       2             name         ASC        false 
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users_dupe
@@ -43,6 +45,8 @@ users_dupe  bar         false       2             name         ASC        false 
 users_dupe  foo         true        1             name         ASC        false    false
 users_dupe  foo         true        2             id           ASC        false    true
 users_dupe  primary     false       1             id           ASC        false    false
+users_dupe  primary     false       2             name         N/A        true     false
+users_dupe  primary     false       3             title        N/A        true     false
 
 statement error pgcode 42P07 index name "bar" already exists
 ALTER INDEX users@foo RENAME TO bar
@@ -85,6 +89,8 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 users       ufo         true        1             name         ASC        false    false
 users       ufo         true        2             id           ASC        false    true
 
@@ -108,6 +114,8 @@ SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
+users       primary     false       2             name         N/A        true     false
+users       primary     false       3             title        N/A        true     false
 users       rar         false       1             id           ASC        false    false
 users       rar         false       2             name         ASC        false    false
 users       ufo         true        1             name         ASC        false    false

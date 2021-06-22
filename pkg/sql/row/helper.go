@@ -38,7 +38,8 @@ type rowHelper struct {
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
-	primaryIndexCols      catalog.TableColSet
+	primaryIndexKeyCols   catalog.TableColSet
+	primaryIndexValueCols catalog.TableColSet
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
 }
 
@@ -130,20 +131,19 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 	return rh.indexEntries, nil
 }
 
-// skipColumnInPK returns true if the value at column colID does not need
-// to be encoded because it is already part of the primary key. Composite
+// skipColumnNotInPrimaryIndexValue returns true if the value at column colID
+// does not need to be encoded, either because it is already part of the primary
+// key, or because it is not part of the primary index altogether. Composite
 // datums are considered too, so a composite datum in a PK will return false.
-// TODO(dan): This logic is common and being moved into TableDescriptor (see
-// #6233). Once it is, use the shared one.
-func (rh *rowHelper) skipColumnInPK(colID descpb.ColumnID, value tree.Datum) (bool, error) {
-	if rh.primaryIndexCols.Empty() {
-		for i := 0; i < rh.TableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
-			pkColID := rh.TableDesc.GetPrimaryIndex().GetKeyColumnID(i)
-			rh.primaryIndexCols.Add(pkColID)
-		}
+func (rh *rowHelper) skipColumnNotInPrimaryIndexValue(
+	colID descpb.ColumnID, value tree.Datum,
+) (bool, error) {
+	if rh.primaryIndexKeyCols.Empty() {
+		rh.primaryIndexKeyCols = rh.TableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
+		rh.primaryIndexValueCols = rh.TableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
 	}
-	if !rh.primaryIndexCols.Contains(colID) {
-		return false, nil
+	if !rh.primaryIndexKeyCols.Contains(colID) {
+		return !rh.primaryIndexValueCols.Contains(colID), nil
 	}
 	if cdatum, ok := value.(tree.CompositeDatum); ok {
 		// Composite columns are encoded in both the key and the value.

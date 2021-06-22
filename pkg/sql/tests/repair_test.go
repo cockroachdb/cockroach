@@ -208,7 +208,8 @@ SELECT crdb_internal.unsafe_upsert_descriptor(
                 ARRAY['table', 'columns', '0', 'usesSequenceIds'],
                 '[]'
             )
-        )
+        ),
+        true
        )
   FROM system.descriptor
  WHERE id = $1;`,
@@ -520,12 +521,12 @@ const (
       ],
       "compositeColumnIds": [],
       "createdExplicitly": false,
-      "encodingType": 0,
+      "encodingType": 1,
       "id": 1,
       "name": "primary",
       "type": "FORWARD",
       "unique": true,
-      "version": 2
+      "version": 4
     },
     "privileges": {
       "ownerProto": "root",
@@ -622,6 +623,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
     "nextMutationId": 1,
     "parentId": 52,
     "primaryIndex": {
+      "encodingType": 1,
       "keyColumnDirections": [ "ASC" ],
       "keyColumnIds": [ 1 ],
       "keyColumnNames": [ "i" ],
@@ -629,7 +631,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
       "name": "primary",
       "type": "FORWARD",
       "unique": true,
-      "version": 1
+      "version": 4
     },
     "privileges": {
       "owner_proto": "root",
@@ -675,6 +677,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
     "nextMutationId": 1,
     "parentId": 52,
     "primaryIndex": {
+      "encodingType": 1,
       "keyColumnDirections": [ "ASC" ],
       "keyColumnIds": [ 1 ],
       "keyColumnNames": [ "i" ],
@@ -682,7 +685,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
       "name": "primary",
       "type": "FORWARD",
       "unique": true,
-      "version": 1
+      "version": 4
     },
     "privileges": {
       "owner_proto": "admin",

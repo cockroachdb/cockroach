@@ -137,7 +137,10 @@ func (w index) IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnI
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
-// format (data encoded the same way as if they were in an implicit column).
+// format, in which the IDs of the stored columns were kept in the "extra"
+// column IDs slice, which is now called KeySuffixColumnIDs. Thus their data
+// was encoded the same way as if they were in an implicit column.
+// TODO(postamar): this concept should be migrated away.
 func (w index) HasOldStoredColumns() bool {
 	return w.NumKeySuffixColumns() > 0 &&
 		!w.Primary() &&
@@ -162,6 +165,15 @@ func (w index) InvertedColumnName() string {
 // of this index.
 func (w index) CollectKeyColumnIDs() catalog.TableColSet {
 	return catalog.MakeTableColSet(w.desc.KeyColumnIDs...)
+}
+
+// CollectPrimaryStoredColumnIDs creates a new set containing the column IDs
+// stored in this index if it is a primary index.
+func (w index) CollectPrimaryStoredColumnIDs() catalog.TableColSet {
+	if !w.Primary() {
+		return catalog.TableColSet{}
+	}
+	return catalog.MakeTableColSet(w.desc.StoreColumnIDs...)
 }
 
 // CollectSecondaryStoredColumnIDs creates a new set containing the column IDs
@@ -262,6 +274,16 @@ func (w index) GetKeyColumnName(columnOrdinal int) string {
 // the index key.
 func (w index) GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction {
 	return w.desc.KeyColumnDirections[columnOrdinal]
+}
+
+// NumPrimaryStoredColumns returns the number of columns which the index
+// stores in addition to the columns which are part of the primary key.
+// Returns 0 if the index isn't primary.
+func (w index) NumPrimaryStoredColumns() int {
+	if !w.Primary() {
+		return 0
+	}
+	return len(w.desc.StoreColumnIDs)
 }
 
 // NumSecondaryStoredColumns returns the number of columns which the index

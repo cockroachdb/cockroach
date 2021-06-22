@@ -101,13 +101,15 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeyColumnNames:      []string{"a"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				EncodingType:        descpb.PrimaryIndexEncoding,
+				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 			},
 			Privileges:     descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 			NextColumnID:   2,
 			NextFamilyID:   1,
 			NextIndexID:    2,
 			NextMutationID: 1,
-			FormatVersion:  descpb.FamilyFormatVersion,
+			FormatVersion:  descpb.InterleavedFormatVersion,
 		}).BuildCreatedMutableTable()
 		b := txn.NewBatch()
 

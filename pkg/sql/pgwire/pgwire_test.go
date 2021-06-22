@@ -533,8 +533,8 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).
-				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}", false).
-				Results("isRole", "BOOL", false, false, "", "{}", false),
+				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{primary}", false).
+				Results("isRole", "BOOL", false, false, "", "{primary}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
 			baseTest.Results("d", security.RootUser).
@@ -555,7 +555,9 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", security.RootUser, "UPDATE"),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
-			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false),
+			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
+				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false).
+				Results("users", "primary", false, 3, "isRole", "N/A", true, false),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
 			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(29),

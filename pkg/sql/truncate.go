@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -212,6 +214,16 @@ func (p *planner) truncateTable(
 
 	if err := checkTableForDisallowedMutationsWithTruncate(tableDesc); err != nil {
 		return err
+	}
+
+	// Exit early with an error if the table is undergoing a new-style schema
+	// change, before we try to get job IDs and update job statuses later. See
+	// createOrUpdateSchemaChangeJob.
+	if tableDesc.NewSchemaChangeJobID != 0 {
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
+			tableDesc.GetName(),
+		)
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
