@@ -608,6 +608,24 @@ func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
 			regionResult.regionNamesInCluster[idx],
 		), nil
 	}
+	// If the database is undergoing a regional by row related change on the
+	// database, error out.
+	if len(regionResult.regionNamesInDatabase) > 0 {
+		databaseHasRegionalByRowChange, err := databaseHasRegionalByRowChange(tx)
+		if err != nil {
+			return "", err
+		}
+		if databaseHasRegionalByRowChange {
+			// There's a timing hole here, as by the time we issue the ADD
+			// REGION statement, the above REGIONAL BY ROW change may have
+			// already completed. Either way, we'll get one of the following
+			// two errors (the first, if the schema change has completed, and
+			// the second, if it has not).
+			og.expectedExecErrors.add(pgcode.InvalidName)
+			og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+			return fmt.Sprintf(`ALTER DATABASE %s ADD REGION "invalid-region"`, database), nil
+		}
+	}
 	// All regions are already in the database, expect an error with adding an existing one.
 	if len(regionResult.regionNamesNotInDatabase) == 0 {
 		idx := og.params.rng.Intn(len(regionResult.regionNamesInDatabase))
@@ -617,18 +635,6 @@ func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
 			database,
 			regionResult.regionNamesInDatabase[idx],
 		), nil
-	}
-	// If the database is undergoing a regional by row related change on the
-	// database, error out.
-	if len(regionResult.regionNamesInDatabase) > 0 {
-		databaseHasRegionalByRowChange, err := databaseHasRegionalByRowChange(tx)
-		if err != nil {
-			return "", err
-		}
-		if databaseHasRegionalByRowChange {
-			og.expectedExecErrors.add(pgcode.InvalidName)
-			return fmt.Sprintf(`ALTER DATABASE %s ADD REGION "invalid-region"`, database), nil
-		}
 	}
 	// Here we have a region that is not yet marked as public on the enum.
 	// Double check this first.
@@ -873,16 +879,18 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 					virtualComputedStored = true
 				}
 			}
-		}
 
-		// If the column is already used in the primary key, then attempting to store
-		// it using an index will produce a pgcode.DuplicateColumn error.
-		colUsedInPrimaryIdx, err := columnsStoredInPrimaryIdx(tx, tableName, def.Storing)
-		if err != nil {
-			return "", err
-		}
-		if colUsedInPrimaryIdx {
-			duplicateStore = true
+			// If the column is already used in the primary key, then attempting to store
+			// it using an index will produce a pgcode.DuplicateColumn error.
+			if !duplicateStore {
+				colUsedInPrimaryIdx, err := colIsPrimaryKey(tx, tableName, columnNames[i].name)
+				if err != nil {
+					return "", err
+				}
+				if colUsedInPrimaryIdx {
+					duplicateStore = true
+				}
+			}
 		}
 	}
 
@@ -1414,14 +1422,6 @@ func (og *operationGenerator) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	codesWithConditions{
-		{pgcode.UndefinedColumn, !columnExists},
-		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
-	}.add(og.expectedExecErrors)
-	if !columnExists {
-		og.expectedExecErrors.add(pgcode.UndefinedColumn)
-	}
-
 	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
 	if err != nil {
 		return "", err
@@ -1431,6 +1431,12 @@ func (og *operationGenerator) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 		// background PK change in progress. Tracked with #66663.
 		return `SELECT 'avoiding timing hole'`, nil
 	}
+
+	codesWithConditions{
+		{pgcode.UndefinedColumn, !columnExists},
+		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
+	}.add(og.expectedExecErrors)
+
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
 
