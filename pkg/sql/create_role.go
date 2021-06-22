@@ -322,7 +322,7 @@ func (p *planner) checkPasswordAndGetHash(
 		}
 	}
 
-	hashedPassword, err = security.HashPassword(password)
+	hashedPassword, err = security.HashPassword(ctx, password)
 	if err != nil {
 		return hashedPassword, err
 	}
