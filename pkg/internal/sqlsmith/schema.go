@@ -438,6 +438,14 @@ func (s *Smither) extractIndexes(
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
+		// Remove indexes with empty Columns. This is the case for rowid indexes
+		// where the only index column, rowid, is ignored in the SQL statement
+		// above, but the stored columns are not.
+		for name, idx := range indexes {
+			if len(idx.Columns) == 0 {
+				delete(indexes, name)
+			}
+		}
 		ret[*t.TableName] = indexes
 	}
 	return ret, nil
