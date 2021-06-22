@@ -75,6 +75,81 @@ func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 	atomic.StoreInt32(&n.nodeID, int32(val))
 }
 
+// StoreIDContainer is added as a logtag in the pebbleLogger's context.
+// The storeID value is later set atomically. The storeID can only be
+// set after engine creation because the storeID is determined only after the
+// pebbleLogger's context is created.
+type StoreIDContainer struct {
+	_ util.NoCopy
+
+	// After the struct is initially created, storeID is atomically
+	// updated under the mutex; it can be read atomically without the mutex.
+	storeID int32
+}
+
+const TempStoreID = -1
+
+// InitStoreIDContainer initializes a StoreIDContainer
+// as a container for an uninitialized storeID of 0,
+// which will be initialized later.
+func InitStoreIDContainer() *StoreIDContainer {
+	s := &StoreIDContainer{}
+	return s
+}
+
+// String returns "temp" for temp stores, and the storeID for main
+// stores if they haven't been initialized. If a main store hasn't
+// been initialized, then "?" is returned.
+func (s *StoreIDContainer) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s *StoreIDContainer) SafeFormat(w redact.SafePrinter, _ rune) {
+	if s == nil {
+		return
+	}
+	val := s.Get()
+	if val == 0 {
+		w.SafeRune('?')
+	} else if val == TempStoreID {
+		w.Print("temp")
+	} else {
+		w.Print(val)
+	}
+}
+
+// Get returns the current storeID; 0 if it is unset.
+func (s *StoreIDContainer) Get() int32 {
+	if s == nil {
+		return 0
+	}
+	return atomic.LoadInt32(&s.storeID)
+}
+
+// Set sets the current storeID. If it is already set, the value should match.
+func (s *StoreIDContainer) Set(ctx context.Context, val int32) {
+	if s == nil {
+		return
+	}
+	if val != TempStoreID && val <= 0 {
+		if log.V(2) {
+			log.Infof(
+				ctx, "trying to set invalid storeID for the store in the Pebble log: %d",
+				val)
+		}
+		return
+	}
+	oldVal := atomic.SwapInt32(&s.storeID, val)
+	if oldVal != 0 && oldVal != val {
+		if log.V(2) {
+			log.Infof(
+				ctx, "different storeIDs set for the store in the Pebble log: %d, then %d",
+				oldVal, val)
+		}
+	}
+}
+
 // A SQLInstanceID is an ephemeral ID assigned to a running instance of the SQL
 // server. This is distinct from a NodeID, which is a long-lived identifier
 // assigned to a node in the KV layer which is unique across all KV nodes in the
