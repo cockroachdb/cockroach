@@ -107,9 +107,13 @@ func newPebbleTempEngine(
 			Opts:          opts,
 		},
 	)
+
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Set store ID for the pebble engine.
+	p.SetStoreID(ctx, base.TempStoreID)
 
 	return &pebbleTempEngine{db: p.db}, p, nil
 }
