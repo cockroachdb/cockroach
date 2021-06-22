@@ -41,16 +41,22 @@ func New(tracer *tracing.Tracer) *Service {
 }
 
 // GetSpanRecordings implements the tracingpb.TraceServer interface.
+//
+// This method iterates over all active root spans registered with the nodes'
+// local inflight span registry, and returns a tracing.Recording for each root
+// span with a matching trace_id.
 func (s *Service) GetSpanRecordings(
-	_ context.Context, request *tracingservicepb.SpanRecordingRequest,
-) (*tracingservicepb.SpanRecordingResponse, error) {
-	var resp tracingservicepb.SpanRecordingResponse
+	_ context.Context, request *tracingservicepb.GetSpanRecordingsRequest,
+) (*tracingservicepb.GetSpanRecordingsResponse, error) {
+	var resp tracingservicepb.GetSpanRecordingsResponse
 	err := s.tracer.VisitSpans(func(span *tracing.Span) error {
 		if span.TraceID() != request.TraceID {
 			return nil
 		}
-		for _, rec := range span.GetRecording() {
-			resp.SpanRecordings = append(resp.SpanRecordings, rec)
+		recording := span.GetRecording()
+		if recording != nil {
+			resp.Recordings = append(resp.Recordings,
+				tracingservicepb.GetSpanRecordingsResponse_Recording{RecordedSpans: recording})
 		}
 		return nil
 	})

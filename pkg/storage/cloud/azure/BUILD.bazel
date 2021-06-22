@@ -12,8 +12,10 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage/cloud",
         "//pkg/util/contextutil",
+        "//pkg/util/tracing",
         "@com_github_azure_azure_storage_blob_go//azblob",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
