@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 )
 
 const (
@@ -333,7 +334,7 @@ func newClient(
 
 	region := conf.region
 	if region == "" {
-		if err := cloud.DelayedRetry(ctx, s3ErrDelay, func() error {
+		if err := cloud.DelayedRetry(ctx, "s3manager.GetBucketRegion", s3ErrDelay, func() error {
 			region, err = s3manager.GetBucketRegion(ctx, sess, conf.bucket, "us-east-1")
 			return nil
 		}); err != nil {
@@ -391,6 +392,10 @@ func (s *s3Storage) Settings() *cluster.Settings {
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
+	defer sp.Finish()
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
+
 	uploader, err := s.getUploader(ctx)
 	if err != nil {
 		return nil, err
@@ -446,6 +451,10 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 func (s *s3Storage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFileAt")
+	defer sp.Finish()
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path.Join(s.prefix, basename))})
+
 	stream, err := s.openStreamAt(ctx, basename, offset)
 	if err != nil {
 		return nil, 0, err
@@ -486,6 +495,11 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 		}
 		pattern = path.Join(pattern, patternSuffix)
 	}
+
+	ctx, sp := tracing.ChildSpan(ctx, "s3.ListFiles")
+	defer sp.Finish()
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ListFiles: %s", pattern)})
+
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err

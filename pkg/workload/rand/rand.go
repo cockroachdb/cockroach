@@ -108,6 +108,7 @@ type col struct {
 	dataScale     int
 	cdefault      gosql.NullString
 	isNullable    bool
+	isComputed    bool
 }
 
 // Ops implements the Opser interface.
@@ -138,7 +139,7 @@ func (w *random) Ops(
 
 	rows, err := db.Query(
 		`
-SELECT attname, atttypid, adsrc, NOT attnotnull
+SELECT attname, atttypid, adsrc, NOT attnotnull, attgenerated != ''
 FROM pg_catalog.pg_attribute
 LEFT JOIN pg_catalog.pg_attrdef
 ON attrelid=adrelid AND attnum=adnum
@@ -157,7 +158,7 @@ WHERE attrelid=$1`, relid)
 		c.dataScale = 0
 
 		var typOid int
-		if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable); err != nil {
+		if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable, &c.isComputed); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		datumType := types.OidToType[oid.Oid(typOid)]
@@ -237,8 +238,15 @@ AND    i.indisprimary`, relid)
 		return workload.QueryLoad{}, errors.Errorf("%s DML method not valid", w.primaryKey)
 	}
 
+	var nonComputedCols []col
+	for _, c := range cols {
+		if !c.isComputed {
+			nonComputedCols = append(nonComputedCols, c)
+		}
+	}
+
 	fmt.Fprintf(&buf, `%s INTO %s.%s (`, dmlMethod, sqlDatabase, tableName)
-	for i, c := range cols {
+	for i, c := range nonComputedCols {
 		if i > 0 {
 			buf.WriteString(",")
 		}
@@ -246,13 +254,13 @@ AND    i.indisprimary`, relid)
 	}
 	buf.WriteString(`) VALUES `)
 
-	nCols := len(cols)
+	nCols := len(nonComputedCols)
 	for i := 0; i < w.batchSize; i++ {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
 		buf.WriteString("(")
-		for j := range cols {
+		for j := range nonComputedCols {
 			if j > 0 {
 				buf.WriteString(", ")
 			}
@@ -275,7 +283,7 @@ AND    i.indisprimary`, relid)
 			config:    w,
 			hists:     reg.GetHandle(),
 			db:        db,
-			cols:      cols,
+			cols:      nonComputedCols,
 			rng:       rand.New(rand.NewSource(w.seed + int64(i))),
 			writeStmt: writeStmt,
 		}
