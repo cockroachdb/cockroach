@@ -56,8 +56,16 @@ func ValidateComputedColumnExpression(
 	}
 
 	var depColIDs catalog.TableColSet
-	// First, check that no column in the expression is a computed column.
+	// First, check that no column in the expression is an inaccessible or
+	// computed column.
 	err := iterColDescriptors(desc, d.Computed.Expr, func(c catalog.Column) error {
+		if c.IsInaccessible() {
+			return pgerror.Newf(
+				pgcode.UndefinedColumn,
+				"column %q is inaccessible and cannot be referenced in a computed column expression",
+				c.GetName(),
+			)
+		}
 		if c.IsComputed() {
 			return pgerror.Newf(
 				pgcode.InvalidTableDefinition,
