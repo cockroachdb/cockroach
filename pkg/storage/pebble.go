@@ -459,6 +459,8 @@ type Pebble struct {
 	logger pebble.Logger
 
 	wrappedIntentWriter intentDemuxWriter
+
+	storeIDPebbleLog *base.StoreIDPebbleLog
 }
 
 var _ Engine = &Pebble{}
@@ -468,6 +470,24 @@ var _ Engine = &Pebble{}
 // NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
 // code does not depend on CCL code.
 var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, EncryptionStatsHandler, error)
+
+// LogStoreIDSetter is used to set the store id in the log.
+type LogStoreIDSetter interface {
+	// SetStoreIDForLog can be used to atomically set the store
+	// id as a tag in the pebble logs. Once set, the store id will be visible
+	// in pebble logs in cockroach.
+	SetStoreIDForLog(ctx context.Context, storeId int32)
+}
+
+func (p *Pebble) SetStoreIDForLog(ctx context.Context, storeID int32) {
+	if p == nil {
+		return
+	}
+	if p.storeIDPebbleLog == nil {
+		return
+	}
+	p.storeIDPebbleLog.Set(ctx, storeID)
+}
 
 // ResolveEncryptedEnvOptions fills in cfg.Opts.FS with an encrypted vfs if this
 // store has encryption-at-rest enabled. Also returns the associated file
@@ -537,6 +557,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// timeouts that has a copy of the log tags.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
+	// The store id, could not necessarily be determined when this function
+	// is called. Therefore, we use a container for the store id.
+	storeIDContainer := base.InitStoreIDPebbleLog()
+	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
+
 	cfg.Opts.Logger = pebbleLogger{
 		ctx:   logCtx,
 		depth: 1,
@@ -546,15 +571,16 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		depth: 2, // skip over the EventListener stack frame
 	})
 	p := &Pebble{
-		path:         cfg.Dir,
-		auxDir:       auxDir,
-		maxSize:      cfg.MaxSize,
-		attrs:        cfg.Attrs,
-		settings:     cfg.Settings,
-		statsHandler: statsHandler,
-		fileRegistry: fileRegistry,
-		fs:           cfg.Opts.FS,
-		logger:       cfg.Opts.Logger,
+		path:             cfg.Dir,
+		auxDir:           auxDir,
+		maxSize:          cfg.MaxSize,
+		attrs:            cfg.Attrs,
+		settings:         cfg.Settings,
+		statsHandler:     statsHandler,
+		fileRegistry:     fileRegistry,
+		fs:               cfg.Opts.FS,
+		logger:           cfg.Opts.Logger,
+		storeIDPebbleLog: storeIDContainer,
 	}
 	p.connectEventMetrics(ctx, &cfg.Opts.EventListener)
 	p.eventListener = &cfg.Opts.EventListener

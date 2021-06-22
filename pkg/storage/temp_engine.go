@@ -106,6 +106,8 @@ func newPebbleTempEngine(
 			Opts:          opts,
 		},
 	)
+	// Set store ID for the pebble engine.
+	LogStoreIDSetter(p).SetStoreIDForLog(ctx, base.TempStoreIDPebbleLog)
 	if err != nil {
 		return nil, nil, err
 	}
