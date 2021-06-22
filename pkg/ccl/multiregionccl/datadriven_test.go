@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -88,6 +89,9 @@ import (
 // the given query to refresh the range descriptor cache. Then, using the
 // table-name argument, the closed timestamp policy is returned.
 //
+// "sleep duration=duration": sleeps for duration time. The duration is parsed
+// using the go duration format.
+//
 // "cleanup-cluster": destroys the cluster. Must be done before creating a new
 // cluster.
 func TestMultiRegionDataDriven(t *testing.T) {
@@ -105,6 +109,15 @@ func TestMultiRegionDataDriven(t *testing.T) {
 		var recCh chan tracing.Recording
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "sleep":
+				mustHaveArgOrFatal(t, d, sleepDuration)
+				var rawDuration string
+				d.ScanArgs(t, sleepDuration, &rawDuration)
+				dur, err := time.ParseDuration(rawDuration)
+				if err != nil {
+					t.Fatalf("could not parse sleep duration: %v", err)
+				}
+				time.Sleep(dur)
 			case "new-cluster":
 				if ds.tc != nil {
 					t.Fatal("cluster already exists, cleanup cluster first")
@@ -348,6 +361,7 @@ const (
 	numVoters               = "num-voters"
 	numNonVoters            = "num-non-voters"
 	expectedLeaseHolderNode = "lease-holder-node"
+	sleepDuration           = "duration"
 )
 
 type datadrivenTestState struct {
