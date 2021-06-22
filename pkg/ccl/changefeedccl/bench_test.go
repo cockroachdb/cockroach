@@ -199,7 +199,7 @@ func createBenchmarkChangefeed(
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
-	encoder, err := makeJSONEncoder(details.Opts)
+	encoder, err := makeJSONEncoder(details.Opts, details.Targets)
 	if err != nil {
 		return nil, nil, err
 	}
