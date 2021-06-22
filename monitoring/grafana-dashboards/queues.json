@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "iteration": 1623784563652,
+  "iteration": 1623959585344,
   "links": [],
   "panels": [
     {
@@ -24,7 +24,6 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "Usage of disk space across all nodes\n\n**Capacity**: Maximum store size across all nodes. This value may be explicitly set per node using [--store](https://www.cockroachlabs.com/docs/v21.1/cockroach-start.html#store). If a store size has not been set, this metric displays the actual disk capacity.\n\n**Available**: Free disk space available to CockroachDB data across all nodes.\n\n**Used**: Disk space in use by CockroachDB data across all nodes. This excludes the Cockroach binary, operating system, and other system files.\n\n[How are these metrics calculated?](https://www.cockroachlabs.com/docs/v21.1/ui-storage-dashboard.html#capacity-metrics)",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -49,8 +48,8 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -66,31 +65,74 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(sum(capacity{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(rate(queue_gc_process_failure{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "GC",
+          "refId": "H"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicagc_process_failure{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "Max",
+          "legendFormat": "Replica GC",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_process_failure{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Replication",
           "refId": "B"
         },
         {
-          "expr": " sum(sum(capacity_available{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "exemplar": true,
+          "expr": "sum(rate(queue_split_process_failure{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Available",
+          "intervalFactor": 2,
+          "legendFormat": "Split",
           "refId": "C"
         },
         {
-          "expr": "sum(sum(capacity{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance)) - sum(sum(capacity_available{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "exemplar": true,
+          "expr": "sum(rate(queue_consistency_process_failure{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "Used",
-          "refId": "A"
+          "legendFormat": "Consistency",
+          "refId": "D"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftlog_process_failure{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Raft Log",
+          "refId": "E"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftsnapshot_process_failure{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Raft Snapshot",
+          "refId": "F"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_tsmaintenance_process_failure{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Time Series Maintenance",
+          "refId": "G"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Capacity",
+      "title": "Queue Processing Failures",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -106,16 +148,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:99",
-          "format": "bytes",
-          "label": "capacity",
+          "$$hashKey": "object:405",
+          "format": "short",
+          "label": "failures",
           "logBase": 1,
-          "max": null,
+          "max": "1",
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:100",
+          "$$hashKey": "object:406",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -134,8 +176,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "Amount of data that can be read by applications and CockroachDB.\n\n**Live**: Number of logical bytes stored in live [key-value pairs](https://www.cockroachlabs.com/docs/v21.1/architecture/distribution-layer.html#table-data) across all nodes. Live data excludes historical and deleted data.\n\n**System**: Number of physical bytes stored in [system key-value pairs](https://www.cockroachlabs.com/docs/v21.1/architecture/distribution-layer.html#table-data).",
+      "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -160,7 +201,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 1,
       "nullPointMode": "null",
       "options": {
         "alertThreshold": true
@@ -176,25 +217,67 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(livebytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "exemplar": true,
+          "expr": "sum(rate(queue_gc_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Live",
+          "legendFormat": "GC",
+          "refId": "G"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicagc_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Replica GC",
           "refId": "A"
         },
         {
-          "expr": "sum(sum(sysbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "System",
+          "legendFormat": "Replication",
+          "refId": "C"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_split_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Split",
           "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_consistency_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Consistency",
+          "refId": "D"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftlog_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Raft Log",
+          "refId": "E"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftsnapshot_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Raft Snapshot",
+          "refId": "F"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_tsmaintenance_processingnanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Time Series Maintenance",
+          "refId": "H"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Live Bytes",
+      "title": "Queue Processing Times",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -210,16 +293,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:323",
-          "format": "bytes",
-          "label": "live bytes",
+          "$$hashKey": "object:458",
+          "format": "ns",
+          "label": "processing time",
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:324",
+          "$$hashKey": "object:459",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -238,8 +321,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The 99th %ile latency for commits to the Raft Log. This measures essentially an fdatasync to the storage engine's write-ahead log.",
+      "datasource": null,
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -265,297 +347,6 @@
       },
       "lines": true,
       "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99,rate(raft_process_logcommit_latency_bucket{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Log Commit Latency: 99th Percentile",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:474",
-          "format": "ns",
-          "label": "latency",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:475",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The 50th %ile latency for commits to the Raft Log. This measures essentially an fdatasync to the storage engine's write-ahead log.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 24
-      },
-      "hiddenSeries": false,
-      "id": 8,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50,rate(raft_process_logcommit_latency_bucket{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Log Commit Latency: 50th Percentile",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:550",
-          "format": "ns",
-          "label": "latency",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:551",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The 99th %ile latency for commits of Raft commands. This measures applying a batch to the storage engine (including writes to the write-ahead log), but no fsync.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 30
-      },
-      "hiddenSeries": false,
-      "id": 10,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99,rate(raft_process_commandcommit_latency_bucket{job=\"cockroachdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$__rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Command Commit Latency: 99th Percentile ",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:774",
-          "format": "ns",
-          "label": "latency",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:775",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "The 50th %ile latency for commits of Raft commands. This measures applying a batch to the storage engine (including writes to the write-ahead log), but no fsync.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 38
-      },
-      "hiddenSeries": false,
-      "id": 12,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
       "nullPointMode": "null",
       "options": {
         "alertThreshold": true
@@ -571,17 +362,34 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.50,rate(raft_process_commandcommit_latency_bucket{job=\"cockroachdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$__rate_interval]))",
+          "exemplar": true,
+          "expr": "sum(rate(queue_gc_info_transactionspangccommitted{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "{{instance}}",
+          "intervalFactor": 2,
+          "legendFormat": "Successful Actions / sec",
           "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_gc_info_transactionspangcpending{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Pending Actions",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_removedeadreplica{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Replicas Removed / sec",
+          "refId": "C"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Command Commit Latency: 50th percentile ",
+      "title": "Replica GC Queue",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -597,16 +405,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:850",
-          "format": "ns",
-          "label": "latency",
+          "$$hashKey": "object:562",
+          "format": "short",
+          "label": "actions",
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:851",
+          "$$hashKey": "object:563",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -626,7 +434,6 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "The average number of real read operations executed per logical read operation.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -637,7 +444,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 24
       },
       "hiddenSeries": false,
       "id": 20,
@@ -667,17 +474,82 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "avg(avg(rocksdb_read_amplification{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_process_success{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Read Amplification",
+          "legendFormat": "Successful Actions / sec",
           "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_pending{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Pending Actions",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_addreplica{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Replicas Added / sec",
+          "refId": "C"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_removereplica{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Replicas Removed / sec",
+          "refId": "D"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_removedeadreplica{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Dead Replicas Removed / sec",
+          "refId": "E"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_removelearnerreplica{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Learner Replicas Removed / sec",
+          "refId": "F"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_rebalancereplica{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Replicas Rebalanced / sec",
+          "refId": "G"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_transferlease{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Leases Transferred / sec",
+          "refId": "H"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_replicate_purgatory{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Replicas in Purgatory",
+          "refId": "I"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Read Amplification",
+      "title": "Replication Queue",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -693,16 +565,119 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:926",
+          "$$hashKey": "object:83",
           "format": "short",
-          "label": "factor",
+          "label": "actions",
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:927",
+          "$$hashKey": "object:84",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "hiddenSeries": false,
+      "id": 8,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_split_process_success{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Successful Actions / sec",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_split_pending{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Pending Actions",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Split Queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:615",
+          "format": "short",
+          "label": "actions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:616",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -722,7 +697,6 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "The number of SSTables in use.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -733,7 +707,522 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 40
+      },
+      "hiddenSeries": false,
+      "id": 17,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_merge_process_success{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Successful Actions / sec",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_merge_pending{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Pending Actions",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Merge Queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:615",
+          "format": "short",
+          "label": "actions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:616",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "hiddenSeries": false,
+      "id": 18,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_gc_process_success{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Successful Actions / sec",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_gc_pending{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Pending Actions",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "GC Queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:615",
+          "format": "short",
+          "label": "actions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:616",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "hiddenSeries": false,
+      "id": 10,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftlog_process_success{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Successful Actions / sec",
+          "refId": "B"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftlog_pending{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Pending Actions",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Raft Log Queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:719",
+          "format": "short",
+          "label": "actions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:720",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "hiddenSeries": false,
+      "id": 12,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftsnapshot_process_success{job=\"cockroachdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Successful Actions / sec",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_raftsnapshot_pending{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Pending Actions",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Raft Snapshot Queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:772",
+          "format": "short",
+          "label": "actions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:773",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "hiddenSeries": false,
+      "id": 14,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(rate(queue_consistency_process_success{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Successful Actions / sec",
+          "refId": "A"
+        },
+        {
+          "exemplar": true,
+          "expr": "sum(queue_consistency_pending{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "interval": "",
+          "legendFormat": "Pending Actions",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Consistency Checker Queue",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:825",
+          "format": "short",
+          "label": "actions",
+          "logBase": 1,
+          "max": null,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:826",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 80
       },
       "hiddenSeries": false,
       "id": 16,
@@ -764,113 +1253,16 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum(rocksdb_num_sstables{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "sum(rate(queue_tsmaintenance_process_success{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "SSTables",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "SSTables",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:1002",
-          "format": "short",
-          "label": "sstables",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:1003",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "The number of open file descriptors, compared with the file descriptor limit.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 62
-      },
-      "hiddenSeries": false,
-      "id": 14,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(sum(sys_fd_open{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Open",
+          "legendFormat": "Successful Actions / sec",
           "refId": "A"
         },
         {
-          "expr": "sum(sum(sys_fd_softlimit{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "exemplar": true,
+          "expr": "sum(rate(queue_tsmaintenance_pending{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Limit",
+          "legendFormat": "Pending Actions",
           "refId": "B"
         }
       ],
@@ -878,7 +1270,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "File Descriptors",
+      "title": "Time Series Maintenance Queue",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -894,319 +1286,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1226",
+          "$$hashKey": "object:1031",
           "format": "short",
-          "label": "descriptors",
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:1227",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "The number of compactions and memtable flushes per second.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 70
-      },
-      "hiddenSeries": false,
-      "id": 18,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(rate(rocksdb_compactions{job=\"cockroachdb\",cluster=\"$cluster\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Compactions",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(rocksdb_flushes{job=\"cockroachdb\",cluster=\"$cluster\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Flushes",
-          "refId": "B"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Compactions/Flushes",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:1376",
-          "format": "short",
-          "label": "count",
+          "label": "actions",
           "logBase": 1,
           "max": null,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:1377",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "The number of successfully written time series samples, and number of errors attempting to write time series, per second.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 78
-      },
-      "hiddenSeries": false,
-      "id": 24,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum(rate(timeseries_write_samples{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Samples Written",
-          "refId": "A"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(rate(timeseries_write_errors{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Errors",
-          "refId": "B"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Time Series Writes",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:1452",
-          "format": "short",
-          "label": "count",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:1453",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "The number of bytes written by the time series system per second.  \nNote that this does not reflect the rate at which disk space is consumed by time series; the data is highly compressed on disk. This rate is instead intended to indicate the amount of network traffic and disk activity generated by time series writes.\nSee the \"databases\" tab to find the current disk usage for time series data.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 86
-      },
-      "hiddenSeries": false,
-      "id": 22,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum(rate(timeseries_write_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Bytes Written",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Time Series Bytes Written",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:1528",
-          "format": "bytes",
-          "label": "bytes",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:1529",
+          "$$hashKey": "object:1032",
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -1221,6 +1310,7 @@
       }
     }
   ],
+  "refresh": false,
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -1382,8 +1472,8 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "utc",
-  "title": "CRDB Console: Storage",
-  "uid": "crdb-console-storage",
-  "version": 6
+  "timezone": "browser",
+  "title": "CRDB Console: Queues",
+  "uid": "crdb-console-queues",
+  "version": 2
 }
