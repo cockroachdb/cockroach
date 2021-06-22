@@ -47,3 +47,33 @@ func TestNodeIDContainer(t *testing.T) {
 		t.Errorf("string should be 6, not %s", str)
 	}
 }
+
+func TestStoreIDPebbleLog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store := base.InitStoreIDPebbleLog(false)
+	tempstore := base.InitStoreIDPebbleLog(true)
+
+	if val := tempstore.Get(); val != -1 {
+		t.Errorf("StoreID for temp store should be -1, not %d", val)
+	}
+
+	if str := tempstore.String(); str != "temp" {
+		t.Errorf("initial string should be stemp, not %s", str)
+	}
+
+	if val := store.Get(); val != 0 {
+		t.Errorf("StoreID for store should initially be 0, not %d", val)
+	}
+
+	if str := store.String(); str != "?" {
+		t.Errorf("initial string should be ?, not %s", str)
+	}
+
+	store.Set(context.Background(), 5)
+	if val := store.Get(); val != 5 {
+		t.Errorf("value should be 5, not %d", val)
+	}
+	if str := store.String(); str != "5" {
+		t.Errorf("string should be 5, not %s", str)
+	}
+}

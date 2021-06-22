@@ -538,8 +538,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				EncryptionOptions: spec.EncryptionOptions,
 			}
 			pebbleConfig := storage.PebbleConfig{
-				StorageConfig: storageConfig,
-				Opts:          storage.DefaultPebbleOptions(),
+				StorageConfig:             storageConfig,
+				Opts:                      storage.DefaultPebbleOptions(),
+				PebbleStoreIDLogContainer: base.InitStoreIDPebbleLog(false),
 			}
 			pebbleConfig.Opts.Cache = pebbleCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
