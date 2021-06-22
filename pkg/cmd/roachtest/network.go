@@ -270,6 +270,177 @@ SELECT DISTINCT * FROM report;
 	m.Wait()
 }
 
+// runNetworkAZOutage creates a network black hole to an entire locality of a
+// 15-node cluster, then confirms that the cluster is still able to maintain
+// quorum.
+func runNetworkAZOutage(ctx context.Context, t *test, c Cluster) {
+	c.Put(ctx, cockroach, "./cockroach", c.All())
+
+	c.Start(ctx, t, c.Range(1, 5), startArgs("--secure", "--args=--locality=az=1"))
+	c.Start(ctx, t, c.Range(6, 10), startArgs("--secure", "--args=--locality=az=2"))
+	c.Start(ctx, t, c.Range(11, 15), startArgs("--secure", "--args=--locality=az=3"))
+
+	certsDir := "/home/ubuntu/certs"
+	localCertsDir, err := filepathAbs("./certs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(localCertsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.Get(ctx, t.l, certsDir, localCertsDir, c.Node(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Certs can have at max 0600 privilege.
+	if err := filepath.Walk(localCertsDir, func(path string, info os.FileInfo, err error) error {
+		// Don't change permissions for the certs directory.
+		if path == localCertsDir {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, os.FileMode(0600))
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := c.ConnSecure(ctx, 1, "root", localCertsDir, 26257)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	waitForFullReplication(t, db)
+
+	if _, err := db.Exec(`CREATE USER testuser WITH PASSWORD 'password'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`ALTER RANGE liveness CONFIGURE ZONE USING lease_preferences = '[[+az=1]]', constraints = '{"+az=1": 1}'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER RANGE meta CONFIGURE ZONE USING lease_preferences = '[[+az=1]]', constraints = '{"+az=1": 1}'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER RANGE system CONFIGURE ZONE USING lease_preferences = '[[+az=1]]', constraints = '{"+az=1": 1}'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER DATABASE system CONFIGURE ZONE USING lease_preferences = '[[+az=1]]', constraints = '{"+az=1": 1}'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER RANGE default CONFIGURE ZONE USING lease_preferences = '[[+az=1]]', constraints = '{"+az=1": 1}'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE system.public.replication_constraint_stats CONFIGURE ZONE USING lease_preferences = '[[+az=1]]', constraints = '{"+az=1": 1}', num_replicas = 3`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE system.public.replication_stats CONFIGURE ZONE USING lease_preferences = '[[+az=1]]', constraints = '{"+az=1": 1}', num_replicas = 3`); err != nil {
+		t.Fatal(err)
+	}
+
+	const expectedLargestLeaseholder = 5
+	testutils.SucceedsSoon(t, func() error {
+		var leaseholder int
+		if err := db.QueryRow(`
+SELECT lease_holder FROM crdb_internal.ranges
+WHERE start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivenessMax'`,
+		).Scan(&leaseholder); err != nil {
+			return err
+		}
+		if leaseholder > expectedLargestLeaseholder {
+			return errors.Newf("liveness leaseholder should be node %d", expectedLargestLeaseholder)
+		}
+		if err := db.QueryRow(
+			"SELECT lease_holder FROM [SHOW RANGES FROM TABLE system.public.users]",
+		).Scan(&leaseholder); err != nil {
+			return err
+		}
+		if leaseholder > expectedLargestLeaseholder {
+			return errors.Newf("system.users leaseholder should be node %d", expectedLargestLeaseholder)
+		}
+		return nil
+	})
+
+	rows, err := db.Query(`
+WITH
+    at_risk_zones AS (
+            SELECT
+                zone_id, locality, at_risk_ranges
+            FROM
+                system.replication_critical_localities
+            WHERE
+                at_risk_ranges > 0
+        ),
+    report AS (
+            SELECT
+                crdb_internal.zones.zone_id,
+                target,
+                database_name,
+                table_name,
+                index_name,
+                at_risk_zones.at_risk_ranges
+            FROM
+                crdb_internal.zones, at_risk_zones
+            WHERE
+                crdb_internal.zones.zone_id
+                = at_risk_zones.zone_id
+        )
+SELECT DISTINCT * FROM report;
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var at_risk_target string
+		err := rows.Scan(&at_risk_target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.l.Printf("found at risk range. target: %s\n", at_risk_target)
+	}
+
+	m := newMonitor(ctx, c, c.All())
+	m.Go(func(ctx context.Context) error {
+		endTest := time.After(120 * time.Second)
+		tick := time.Tick(2 * time.Second)
+		errorCount := 0
+		keepLooping := true
+		for attempt := 0; keepLooping; attempt++ {
+			select {
+			case <-endTest:
+				keepLooping = false
+			case <-tick:
+			}
+			t.l.Printf("status check %d\n", attempt)
+
+			b, err := c.RunWithBuffer(ctx, t.l, c.Node(6),
+				"time", "-p", "./cockroach", "node", "status",
+				"--certs-dir", certsDir)
+			t.l.Printf("liveness report:\n%s\n", b)
+			if err != nil {
+				errorCount++
+			}
+		}
+
+		if errorCount > 0 {
+			return errors.Newf("failed node status check %d times", errorCount)
+		}
+		return nil
+	})
+
+	time.Sleep(5 * time.Second)
+	for i := 1; i <= 5; i++ {
+		// Avoid using the loop variable inside the closure.
+		i := i
+		m.Go(func(ctx context.Context) error {
+			return blackholeNode(ctx, c, i)
+		})
+	}
+	m.Wait()
+}
+
 func runNetworkTPCC(ctx context.Context, t *test, origC Cluster, nodes int) {
 	n := origC.Spec().NodeCount
 	serverNodes, workerNode := origC.Range(1, n-1), origC.Node(n)
@@ -461,6 +632,14 @@ func registerNetwork(r *testRegistry) {
 		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runNetworkAuthentication(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
+		Name:    fmt.Sprintf("network/azblackhole/nodes=15"),
+		Owner:   OwnerKV,
+		Cluster: makeClusterSpec(15),
+		Run: func(ctx context.Context, t *test, c Cluster) {
+			runNetworkAZOutage(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{
