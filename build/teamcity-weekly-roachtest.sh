@@ -30,7 +30,7 @@ fi
 
 chmod +x cockroach.linux-2.6.32-gnu-amd64
 
-artifacts=$PWD/artifacts/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
+artifacts=$PWD/artifacts/$(date +"%Y%m%d")-${TC_BUILD_ID}
 mkdir -p "$artifacts"
 # See https://github.com/cockroachdb/cockroach/issues/54570#issuecomment-706324593
 chmod o+rwx "${artifacts}"
@@ -41,7 +41,7 @@ chmod o+rwx "${artifacts}"
 # kill with SIGINT which will allow roachtest to fail tests and
 # cleanup.
 #
-# NB(2): We specify --zones below so that nodes are created in us-central1-b 
+# NB(2): We specify --zones below so that nodes are created in us-central1-b
 # by default. This reserves us-east1-b (the roachprod default zone) for use
 # by manually created clusters.
 exit_status=0
