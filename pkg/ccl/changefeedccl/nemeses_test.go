@@ -50,6 +50,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`http`, webhookTest(testFn))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)

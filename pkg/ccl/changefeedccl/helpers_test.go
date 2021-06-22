@@ -479,6 +479,21 @@ func kafkaTestWithServerArgs(
 	}
 }
 
+func webhookTest(testFn cdcTestFn) func(t *testing.T) {
+	return webhookTestWithServerArgs(nil, testFn)
+}
+
+func webhookTestWithServerArgs(
+	argsFn func(args *base.TestServerArgs), testFn cdcTestFn,
+) func(*testing.T) {
+	return func(t *testing.T) {
+		s, db, stopServer := startTestServer(t, argsFn)
+		defer stopServer()
+		f := makeWebhookFeedFactory(s, db)
+		testFn(t, db, f)
+	}
+}
+
 func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
