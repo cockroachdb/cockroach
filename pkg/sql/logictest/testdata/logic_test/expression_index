@@ -45,6 +45,38 @@ CREATE TABLE public.t (
    FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
 )
 
+# Referencing an inaccessible column in a CHECK constraint is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
+ALTER TABLE t ADD CONSTRAINT err CHECK (crdb_internal_idx_expr_4 > 0)
+
+# Referencing an inaccessible column in a UNIQUE constraint is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced by a unique constraint
+ALTER TABLE t ADD CONSTRAINT err UNIQUE (crdb_internal_idx_expr_4)
+
+# Referencing an inaccessible column in a computed column expression is not
+# allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced in a computed column expression
+ALTER TABLE t ADD COLUMN err INT AS (crdb_internal_idx_expr_4 + 10) STORED
+
+# Referencing an inaccessible column in an index is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be indexed
+CREATE INDEX err ON t (crdb_internal_idx_expr_4)
+
+# Referencing an inaccessible column in a partial index predicate expression is
+# not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
+CREATE INDEX err ON t (a) WHERE crdb_internal_idx_expr_4 > 0
+
+# Referencing an inaccessible column in a FK is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced by a foreign key
+CREATE TABLE child (a INT REFERENCES t(crdb_internal_idx_expr_4))
+
+statement ok
+CREATE TABLE child (a INT)
+
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced by a foreign key
+ALTER TABLE child ADD CONSTRAINT err FOREIGN KEY (a) REFERENCES t(crdb_internal_idx_expr_4)
+
 statement error volatile functions are not allowed in index element
 CREATE INDEX err ON t ((a + random()::INT))
 

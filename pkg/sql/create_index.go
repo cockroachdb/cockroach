@@ -159,6 +159,13 @@ func (p *planner) setupFamilyAndConstraintForShard(
 func MakeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
+	// Ensure that the columns we want to index are accessible before trying to
+	// create the index. This must be checked before inaccessible columns are
+	// created for expression indexes in replaceExpressionElemsWithVirtualCols.
+	if err := validateIndexColumnsAreAccessible(tableDesc, n.Columns); err != nil {
+		return nil, err
+	}
+
 	// Replace expression index elements with hidden virtual computed columns.
 	// The virtual columns are added as mutation columns to tableDesc.
 	if err := replaceExpressionElemsWithVirtualCols(params, tableDesc, &n); err != nil {
@@ -296,6 +303,30 @@ func MakeIndexDescriptor(
 	}
 
 	return &indexDesc, nil
+}
+
+// validateIndexColumnsAreAccessible validates that the columns for an index are
+// accessible. This check must be performed before creating inaccessible columns
+// for expression indexes with replaceExpressionElemsWithVirtualCols.
+func validateIndexColumnsAreAccessible(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
+	for _, column := range columns {
+		// Skip expression elements.
+		if column.Expr != nil {
+			continue
+		}
+		foundColumn, err := desc.FindColumnWithName(column.Column)
+		if err != nil {
+			return err
+		}
+		if foundColumn.IsInaccessible() {
+			return pgerror.Newf(
+				pgcode.UndefinedColumn,
+				"column %q is inaccessible and cannot be indexed",
+				foundColumn.GetName(),
+			)
+		}
+	}
+	return nil
 }
 
 // validateIndexColumnsExists validates that the columns for an index exist
