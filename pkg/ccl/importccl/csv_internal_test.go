@@ -50,6 +50,10 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			error: `this IMPORT format does not support foreign keys`,
 		},
 		{
+			stmt:  "create table a (i int, j int as (i + 10) virtual)",
+			error: `to import into a table with virtual computed columns, use IMPORT INTO`,
+		},
+		{
 			stmt: `create table a (
 				i int check (i > 0),
 				b int default 1,
