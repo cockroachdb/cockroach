@@ -46,6 +46,12 @@ func EvalAddSSTable(
 	// defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
+	if !args.Deadline.IsEmpty() {
+		if now := cArgs.EvalCtx.Clock().Now(); args.Deadline.LessEq(now) {
+			return result.Result{}, errors.Errorf("AddSSTable has deadline %s <= %s", args.Deadline, now)
+		}
+	}
+
 	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
 	// entries - #38044.
 	var skippedKVStats enginepb.MVCCStats
