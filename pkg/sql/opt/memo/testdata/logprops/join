@@ -742,6 +742,47 @@ project
       │    └── key: ()
       └── filters (true)
 
+# Maximum cardinality of the right input is propagated to the SemiJoin when
+# right rows are guaranteed at most one match each over the join filters.
+norm
+SELECT * FROM mn WHERE m IN (SELECT u FROM uv WHERE v > 20 LIMIT 10)
+----
+semi-join (hash)
+ ├── columns: m:1(int!null) n:2(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)~~>(1)
+ ├── prune: (2)
+ ├── interesting orderings: (+1) (+2,+1)
+ ├── scan mn
+ │    ├── columns: m:1(int!null) n:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (2)~~>(1)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1) (+2,+1)
+ │    └── unfiltered-cols: (1-4)
+ ├── limit
+ │    ├── columns: u:5(int) v:6(int!null)
+ │    ├── cardinality: [0 - 10]
+ │    ├── prune: (5)
+ │    ├── select
+ │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    ├── limit hint: 10.00
+ │    │    ├── prune: (5)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:5(int) v:6(int!null)
+ │    │    │    ├── limit hint: 30.00
+ │    │    │    └── prune: (5,6)
+ │    │    └── filters
+ │    │         └── gt [type=bool, outer=(6), constraints=(/6: [/21 - ]; tight)]
+ │    │              ├── variable: v:6 [type=int]
+ │    │              └── const: 20 [type=int]
+ │    └── const: 10 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: m:1 [type=int]
+           └── variable: u:5 [type=int]
+
 # Calculate semi-join-apply cardinality.
 expr
 (SemiJoinApply
