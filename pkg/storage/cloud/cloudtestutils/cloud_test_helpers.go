@@ -508,7 +508,7 @@ func CheckListFilesCanonical(
 				s := storeFromURI(ctx, t, tc.URI, clientFactory, user, ie, kvDB, testSettings)
 				filesList, err := s.ListFiles(ctx, tc.suffix)
 				require.NoError(t, err)
-				require.Equal(t, filesList, tc.resultList)
+				require.Equal(t, tc.resultList, filesList)
 			})
 		}
 	})

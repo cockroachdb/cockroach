@@ -23,5 +23,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/storage/cloud/httpsink"
 	_ "github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
 	_ "github.com/cockroachdb/cockroach/pkg/storage/cloud/nullsink"
+	_ "github.com/cockroachdb/cockroach/pkg/storage/cloud/memstorage"
 	_ "github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
 )
