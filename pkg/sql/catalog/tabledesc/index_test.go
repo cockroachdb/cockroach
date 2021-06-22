@@ -239,8 +239,13 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsDisabled", idx.GetName())
 		require.False(t, idx.IsCreatedExplicitly(),
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
-		require.Equal(t, descpb.IndexDescriptorVersion(0x3), idx.GetVersion(),
-			errMsgFmt, "GetVersion", idx.GetName())
+		if idx.Primary() {
+			require.Equal(t, descpb.IndexDescriptorVersion(0x4), idx.GetVersion(),
+				errMsgFmt, "GetVersion", idx.GetName())
+		} else {
+			require.Equal(t, descpb.IndexDescriptorVersion(0x3), idx.GetVersion(),
+				errMsgFmt, "GetVersion", idx.GetName())
+		}
 		require.Equal(t, 0, idx.NumInterleaveAncestors(),
 			errMsgFmt, "NumInterleaveAncestors", idx.GetName())
 		require.Equal(t, 0, idx.NumInterleavedBy(),

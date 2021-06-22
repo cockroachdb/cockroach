@@ -168,6 +168,7 @@ SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 descriptor  primary     false       1             id           ASC        false    false
+descriptor  primary     false       2             descriptor   N/A        true     false
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
@@ -180,6 +181,7 @@ SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 descriptor  primary     false       1             id           ASC        false    false
+descriptor  primary     false       2             descriptor   N/A        true     false
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
@@ -524,6 +526,9 @@ t  i2       true   2  rowid  ASC  false  true   comm'ent3
 t  i3       true   1  z      ASC  false  false  NULL
 t  i3       true   2  rowid  ASC  false  true   NULL
 t  primary  false  1  rowid  ASC  false  false  NULL
+t  primary  false  2  x      N/A  true   false  NULL
+t  primary  false  3  y      N/A  true   false  NULL
+t  primary  false  4  z      N/A  true   false  NULL
 
 query TTBITTBBT
 SHOW INDEXES FROM t2 WITH COMMENT
@@ -535,3 +540,6 @@ t2  i2       true   2  rowid  ASC  false  true   NULL
 t2  i3       true   1  z      ASC  false  false  NULL
 t2  i3       true   2  rowid  ASC  false  true   NULL
 t2  primary  false  1  rowid  ASC  false  false  NULL
+t2  primary  false  2  x      N/A  true   false  NULL
+t2  primary  false  3  y      N/A  true   false  NULL
+t2  primary  false  4  z      N/A  true   false  NULL

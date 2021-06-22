@@ -187,13 +187,13 @@ func maybeFillInDescriptor(
 ) (changes PostDeserializationTableDescriptorChanges, err error) {
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 
-	changes.UpgradedIndexFormatVersion = maybeUpgradeIndexFormatVersion(&desc.PrimaryIndex)
+	changes.UpgradedIndexFormatVersion = maybeUpgradePrimaryIndexFormatVersion(desc)
 	for i := range desc.Indexes {
-		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeIndexFormatVersion(&desc.Indexes[i])
+		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeSecondaryIndexFormatVersion(&desc.Indexes[i])
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {
-			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeIndexFormatVersion(idx)
+			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeSecondaryIndexFormatVersion(idx)
 		}
 	}
 
@@ -408,20 +408,24 @@ func maybeUpgradeForeignKeyRepOnIndex(
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
 // This method should be called through maybeFillInDescriptor, not directly.
-func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) bool {
-	if desc.FormatVersion >= descpb.InterleavedFormatVersion {
-		return false
+func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) (wasUpgraded bool) {
+	for _, pair := range []struct {
+		targetVersion descpb.FormatVersion
+		upgradeFn     func(*descpb.TableDescriptor)
+	}{
+		{descpb.FamilyFormatVersion, upgradeToFamilyFormatVersion},
+		{descpb.InterleavedFormatVersion, func(_ *descpb.TableDescriptor) {}},
+	} {
+		if desc.FormatVersion < pair.targetVersion {
+			pair.upgradeFn(desc)
+			desc.FormatVersion = pair.targetVersion
+			wasUpgraded = true
+		}
 	}
-	maybeUpgradeToFamilyFormatVersion(desc)
-	desc.FormatVersion = descpb.InterleavedFormatVersion
-	return true
+	return wasUpgraded
 }
 
-func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
-	if desc.FormatVersion >= descpb.FamilyFormatVersion {
-		return false
-	}
-
+func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 	var primaryIndexColumnIDs catalog.TableColSet
 	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
 		primaryIndexColumnIDs.Add(colID)
@@ -460,15 +464,61 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 			addFamilyForCol(c)
 		}
 	}
+}
 
-	desc.FormatVersion = descpb.FamilyFormatVersion
+// maybeUpgradePrimaryIndexFormatVersion tries to promote a primary index to
+// version descpb.PrimaryIndexWithStoredColumnsVersion whenever possible.
+func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasChanged bool) {
+	// Always set the correct encoding type for the primary index.
+	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
+	// Check if primary index needs updating.
+	switch desc.PrimaryIndex.Version {
+	case descpb.PrimaryIndexWithStoredColumnsVersion:
+		return false
+	default:
+		break
+	}
+	// Update primary index by populating StoreColumnIDs/Names slices.
+	nonVirtualCols := make([]*descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+	maybeAddCol := func(col *descpb.ColumnDescriptor) {
+		if col == nil || col.Virtual {
+			return
+		}
+		nonVirtualCols = append(nonVirtualCols, col)
+	}
+	for i := range desc.Columns {
+		maybeAddCol(&desc.Columns[i])
+	}
+	for _, m := range desc.Mutations {
+		maybeAddCol(m.GetColumn())
+	}
 
+	newStoreColumnIDs := make([]descpb.ColumnID, 0, len(nonVirtualCols))
+	newStoreColumnNames := make([]string, 0, len(nonVirtualCols))
+	keyColIDs := catalog.TableColSet{}
+	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
+		keyColIDs.Add(colID)
+	}
+	for _, col := range nonVirtualCols {
+		if keyColIDs.Contains(col.ID) {
+			continue
+		}
+		newStoreColumnIDs = append(newStoreColumnIDs, col.ID)
+		newStoreColumnNames = append(newStoreColumnNames, col.Name)
+	}
+	if len(newStoreColumnIDs) == 0 {
+		newStoreColumnIDs = nil
+		newStoreColumnNames = nil
+	}
+	desc.PrimaryIndex.StoreColumnIDs = newStoreColumnIDs
+	desc.PrimaryIndex.StoreColumnNames = newStoreColumnNames
+	desc.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 	return true
 }
 
-// maybeUpgradeIndexFormatVersion tries to promote an index to version
-// descpb.StrictIndexColumnIDGuaranteesVersion whenever possible.
-func maybeUpgradeIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
+// maybeUpgradeSecondaryIndexFormatVersion tries to promote a secondary index to
+// version descpb.StrictIndexColumnIDGuaranteesVersion whenever possible.
+func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
 		if idx.Type == descpb.IndexDescriptor_INVERTED {

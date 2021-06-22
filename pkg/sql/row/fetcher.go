@@ -1442,7 +1442,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 				continue
 			}
 
-			if skip, err := rh.skipColumnInPK(colID, rowVal.Datum); err != nil {
+			if skip, err := rh.skipColumnNotInPrimaryIndexValue(colID, rowVal.Datum); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "unable to determine skip")
 			} else if skip {
 				continue
