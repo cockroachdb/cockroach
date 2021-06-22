@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -44,13 +45,14 @@ const (
 )
 
 type tpccOptions struct {
-	Warehouses     int
-	ExtraRunArgs   string
-	ExtraSetupArgs string
-	Chaos          func() Chaos                // for late binding of stopper
-	During         func(context.Context) error // for running a function during the test
-	Duration       time.Duration               // if zero, TPCC is not invoked
-	SetupType      tpccSetupType
+	Warehouses       int
+	ExtraRunArgs     string
+	ExtraSetupArgs   string
+	Chaos            func() Chaos                // for late binding of stopper
+	During           func(context.Context) error // for running a function during the test
+	Duration         time.Duration               // if zero, TPCC is not invoked
+	SetupType        tpccSetupType
+	PrometheusConfig *prometheus.Config
 	// If specified, called to stage+start cockroach. If not
 	// specified, defaults to uploading the default binary to
 	// all nodes, and starting it on all but the last node.
@@ -134,6 +136,41 @@ func setupTPCC(
 }
 
 func runTPCC(ctx context.Context, t *test, c Cluster, opts tpccOptions) {
+	if cfg := opts.PrometheusConfig; cfg != nil {
+		if c.isLocal() {
+			t.Status("skipping test as prometheus is needed, but prometheus does not yet work locally")
+			return
+		}
+		p, err := prometheus.Init(
+			ctx,
+			*cfg,
+			c,
+			func(ctx context.Context, nodes option.NodeListOption, operation string, args ...string) error {
+				return repeatRunE(
+					ctx,
+					t,
+					c,
+					nodes,
+					operation,
+					args...,
+				)
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := p.Snapshot(
+				ctx,
+				c,
+				t.l,
+				filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
+			); err != nil {
+				shout(ctx, t.l, os.Stderr, "failed to get prometheus snapshot: %v", err)
+			}
+		}()
+	}
+
 	rampDuration := 5 * time.Minute
 	if c.isLocal() {
 		opts.Warehouses = 1
@@ -376,6 +413,8 @@ func registerTPCC(r *testRegistry) {
 					strings.Join(regions, ","),
 					len(regions),
 				)
+				workloadNode := c.Node(c.Spec().NodeCount)
+
 				// TODO(#multiregion): setup workload to run specifically for a given partition
 				// on each node of a cluster, instead of one node using a workload on all clusters.
 				runTPCC(ctx, t, c, tpccOptions{
@@ -395,6 +434,24 @@ func registerTPCC(r *testRegistry) {
 						}
 					},
 					SetupType: usingInit,
+					PrometheusConfig: &prometheus.Config{
+						PrometheusNode: workloadNode,
+						ScrapeConfigs: []prometheus.ScrapeConfig{
+							prometheus.MakeInsecureCockroachScrapeConfig(
+								"cockroach",
+								c.Range(1, c.Spec().NodeCount-1),
+							),
+							prometheus.MakeWorkloadScrapeConfig(
+								"workload",
+								[]prometheus.ScrapeNode{
+									{
+										Nodes: workloadNode,
+										Port:  2112,
+									},
+								},
+							),
+						},
+					},
 				})
 			},
 		})
