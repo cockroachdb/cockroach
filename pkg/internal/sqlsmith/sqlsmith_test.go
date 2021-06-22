@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -139,6 +140,7 @@ func TestRandTableInserts(t *testing.T) {
 // sometimes put them into bad states that the parser would never do.
 func TestGenerateParse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 66723, "flaky test")
 	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
