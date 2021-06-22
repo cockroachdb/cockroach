@@ -533,6 +533,9 @@ CREATE INDEX bad_idx ON regional_by_row_table(pk) INTERLEAVE IN PARENT parent_ta
 statement ok
 ALTER TABLE regional_by_row_table ADD COLUMN unique_col INT8 NOT NULL UNIQUE
 
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
 ----
@@ -552,6 +555,57 @@ CREATE TABLE public.regional_by_row_table (
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region, unique_col)
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10
+
+query TTT
+SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table]
+ORDER BY partition_name, index_name
+----
+num_voters = 5,
+voter_constraints = '{+region=ap-southeast-2: 2}',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@primary  ap-southeast-2
+num_voters = 5,
+voter_constraints = '{+region=ap-southeast-2: 2}',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_a_idx  ap-southeast-2
+num_voters = 5,
+voter_constraints = '{+region=ap-southeast-2: 2}',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_b_key  ap-southeast-2
+num_voters = 5,
+voter_constraints = '{+region=ap-southeast-2: 2}',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_j_idx  ap-southeast-2
+num_voters = 5,
+voter_constraints = '{+region=ap-southeast-2: 2}',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_unique_col_key  ap-southeast-2
+num_voters = 5,
+voter_constraints = '{+region=ca-central-1: 2}',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_table@primary  ca-central-1
+num_voters = 5,
+voter_constraints = '{+region=ca-central-1: 2}',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_table@regional_by_row_table_a_idx  ca-central-1
+num_voters = 5,
+voter_constraints = '{+region=ca-central-1: 2}',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_table@regional_by_row_table_b_key  ca-central-1
+num_voters = 5,
+voter_constraints = '{+region=ca-central-1: 2}',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_table@regional_by_row_table_j_idx  ca-central-1
+num_voters = 5,
+voter_constraints = '{+region=ca-central-1: 2}',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_table@regional_by_row_table_unique_col_key  ca-central-1
+num_voters = 5,
+voter_constraints = '{+region=us-east-1: 2}',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_table@primary  us-east-1
+gc.ttlseconds = 10,
+num_voters = 5,
+voter_constraints = '{+region=us-east-1: 2}',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_table@regional_by_row_table_a_idx  us-east-1
+num_voters = 5,
+voter_constraints = '{+region=us-east-1: 2}',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_table@regional_by_row_table_b_key  us-east-1
+num_voters = 5,
+voter_constraints = '{+region=us-east-1: 2}',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_table@regional_by_row_table_j_idx  us-east-1
+num_voters = 5,
+voter_constraints = '{+region=us-east-1: 2}',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_table@regional_by_row_table_unique_col_key  us-east-1
 
 statement ok
 ALTER TABLE regional_by_row_table DROP COLUMN unique_col
