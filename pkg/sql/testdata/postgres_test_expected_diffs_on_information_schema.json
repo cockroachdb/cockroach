@@ -1,36 +1,13 @@
 {
-  "pgVersion": "13.2",
+  "pgVersion": "13.3",
   "diffSummary": {
     "TotalTables": 60,
-    "TotalColumns": 294,
-    "MissingTables": 38,
+    "TotalColumns": 628,
+    "MissingTables": 0,
     "MissingColumns": 12,
     "DatatypeMismatches": 3
   },
   "pgMetadata": {
-    "attributes": {},
-    "check_constraint_routine_usage": {},
-    "column_column_usage": {},
-    "column_domain_usage": {},
-    "column_options": {},
-    "constraint_table_usage": {},
-    "data_type_privileges": {},
-    "domain_constraints": {},
-    "domain_udt_usage": {},
-    "domains": {},
-    "element_types": {},
-    "foreign_data_wrapper_options": {},
-    "foreign_data_wrappers": {},
-    "foreign_server_options": {},
-    "foreign_servers": {},
-    "foreign_table_options": {},
-    "foreign_tables": {},
-    "information_schema_catalog_name": {},
-    "role_column_grants": {},
-    "role_routine_grants": {},
-    "role_udt_grants": {},
-    "role_usage_grants": {},
-    "routine_privileges": {},
     "routines": {
       "interval_precision": {
         "oid": 25,
@@ -57,10 +34,6 @@
       "default_character_set_schema": null,
       "schema_owner": null
     },
-    "sql_features": {},
-    "sql_implementation_info": {},
-    "sql_parts": {},
-    "sql_sizing": {},
     "table_constraints": {
       "enforced": null
     },
@@ -72,18 +45,7 @@
       "user_defined_type_catalog": null,
       "user_defined_type_name": null,
       "user_defined_type_schema": null
-    },
-    "transforms": {},
-    "triggered_update_columns": {},
-    "triggers": {},
-    "udt_privileges": {},
-    "usage_privileges": {},
-    "user_defined_types": {},
-    "user_mapping_options": {},
-    "user_mappings": {},
-    "view_column_usage": {},
-    "view_routine_usage": {},
-    "view_table_usage": {}
+    }
   },
   "unimplementedTypes": null
 }

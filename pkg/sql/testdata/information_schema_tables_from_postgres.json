@@ -1,5 +1,5 @@
 {
-  "pgVersion": "13.2",
+  "pgVersion": "13.3",
   "diffSummary": {
     "TotalTables": 0,
     "TotalColumns": 0,
