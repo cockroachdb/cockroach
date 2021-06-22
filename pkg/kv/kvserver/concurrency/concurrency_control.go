@@ -394,6 +394,7 @@ type Request struct {
 type Guard struct {
 	Req Request
 	lg  latchGuard
+	lm  latchManager
 	ltg lockTableGuard
 	// The latest RequestEvalKind passed to SequenceReq.
 	EvalKind RequestEvalKind
@@ -411,12 +412,29 @@ type Error = roachpb.Error
 // Internal Structure Interfaces //
 ///////////////////////////////////
 
-// latchManager serializes access to keys and key ranges.
+// latchManager serializes access to keys and key ranges. The
+// {AcquireOptimistic,CheckOptimisticNoConflicts,WaitUntilAcquired} methods
+// are only for use in optimistic latching.
 //
 // See additional documentation in pkg/storage/spanlatch.
 type latchManager interface {
 	// Acquires latches, providing mutual exclusion for conflicting requests.
 	Acquire(context.Context, Request) (latchGuard, *Error)
+
+	// AcquireOptimistic is like Acquire in that it inserts latches, but it does
+	// not wait for conflicting latches on overlapping spans to be released
+	// before returning. This should be followed by CheckOptimisticNoConflicts
+	// to validate that not waiting did not violate correctness.
+	AcquireOptimistic(req Request) latchGuard
+
+	// CheckOptimisticNoConflicts returns true iff the spans in the provided
+	// spanset do not conflict with existing latches.
+	CheckOptimisticNoConflicts(lg latchGuard, spans *spanset.SpanSet) bool
+
+	// WaitUntilAcquired is meant to be called when CheckOptimisticNoConflicts
+	// returned false, or some other occurrence (like conflicting locks) is
+	// causing this request to switch to pessimistic latching.
+	WaitUntilAcquired(ctx context.Context, lg latchGuard) (latchGuard, *Error)
 
 	// Releases latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)

@@ -29,8 +29,8 @@ import (
 var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 	"kv.concurrency.optimistic_eval_limited_scans.enabled",
 	"when true, limited scans are optimistically evaluated in the sense of not checking for "+
-		"conflicting locks up front for the full key range of the scan, and instead subsequently "+
-		"checking for conflicts only over the key range that was read",
+		"conflicting latches or locks up front for the full key range of the scan, and instead "+
+		"subsequently checking for conflicts only over the key range that was read",
 	true,
 )
 
@@ -434,9 +434,12 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 				return nil, pErr
 			}
 		case *roachpb.OptimisticEvalConflictsError:
-			// We are deliberately not dropping latches. The next iteration will
-			// pessimistically check for locks while holding these latches, and will
-			// find them again and queue up, and then release latches.
+			// We are deliberately not dropping latches. Note that the latches are
+			// also optimistically acquired, in the sense of being inserted but not
+			// waited on. The next iteration will wait on these latches to ensure
+			// acquisition, and then pessimistically check for locks while holding
+			// these latches. If conflicting locks are found, the request will queue
+			// for those locks and release latches.
 			requestEvalKind = concurrency.PessimisticAfterFailedOptimisticEval
 		default:
 			log.Fatalf(ctx, "unexpected concurrency retry error %T", t)
@@ -779,7 +782,6 @@ func (r *Replica) collectSpans(
 	ba *roachpb.BatchRequest,
 ) (latchSpans, lockSpans *spanset.SpanSet, requestEvalKind concurrency.RequestEvalKind, _ error) {
 	latchSpans, lockSpans = new(spanset.SpanSet), new(spanset.SpanSet)
-	isReadOnly := ba.IsReadOnly()
 	r.mu.RLock()
 	desc := r.descRLocked()
 	liveCount := r.mu.state.Stats.LiveCount
@@ -808,7 +810,9 @@ func (r *Replica) collectSpans(
 		lockSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	}
 
-	considerOptEval := isReadOnly && ba.Header.MaxSpanRequestKeys > 0 &&
+	// Note that we are letting locking readers be considered for optimistic
+	// evaluation. This is correct, though not necessarily beneficial.
+	considerOptEval := ba.IsReadOnly() && ba.IsAllTransactional() && ba.Header.MaxSpanRequestKeys > 0 &&
 		optimisticEvalLimitedScans.Get(&r.ClusterSettings().SV)
 	// When considerOptEval, these are computed below and used to decide whether
 	// to actually do optimistic evaluation.
