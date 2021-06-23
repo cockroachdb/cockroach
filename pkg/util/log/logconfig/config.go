@@ -12,14 +12,16 @@ package logconfig
 
 import (
 	"fmt"
+	"net/http"
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
-	"gopkg.in/yaml.v2"
+	humanize "github.com/dustin/go-humanize"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // DefaultFileFormat is the entry format for file sinks when not
@@ -33,6 +35,10 @@ const DefaultStderrFormat = `crdb-v2-tty`
 // DefaultFluentFormat is the entry format for fluent sinks
 // when not specified in a configuration.
 const DefaultFluentFormat = `json-fluent-compact`
+
+// DefaultHTTPFormat is the entry format for HTTP sinks
+// when not specified in a configuration.
+const DefaultHTTPFormat = `json-compact`
 
 // DefaultConfig returns a suitable default configuration when logging
 // is meant to primarily go to files.
@@ -101,6 +107,11 @@ type Config struct {
 	// configuration value.
 	FluentDefaults FluentDefaults `yaml:"fluent-defaults,omitempty"`
 
+	// HTTPDefaults represents the default configuration for HTTP sinks,
+	// inherited when a specific HTTP sink config does not provide a
+	// configuration value.
+	HTTPDefaults HTTPDefaults `yaml:"http-defaults,omitempty"`
+
 	// Sinks represents the sink configurations.
 	Sinks SinkConfig `yaml:",omitempty"`
 
@@ -163,13 +174,10 @@ type SinkConfig struct {
 	FileGroups map[string]*FileSinkConfig `yaml:"file-groups,omitempty"`
 	// FluentServer represents the list of configured fluent sinks.
 	FluentServers map[string]*FluentSinkConfig `yaml:"fluent-servers,omitempty"`
+	// HTTPServers represents the list of configured http sinks.
+	HTTPServers map[string]*HTTPSinkConfig `yaml:"http-servers,omitempty"`
 	// Stderr represents the configuration for the stderr sink.
 	Stderr StderrSinkConfig `yaml:",omitempty"`
-
-	// sortedFileGroupNames and sortedServerNames are used internally to
-	// make the Export() function deterministic.
-	sortedFileGroupNames []string
-	sortedServerNames    []string
 }
 
 // StderrSinkConfig represents the configuration for the stderr sink.
@@ -233,7 +241,7 @@ type FluentDefaults struct {
 // User-facing documentation follows.
 // TITLE: Output to Fluentd-compatible log collectors
 //
-// This sink type causes logging data to be sent over the network, to
+// This sink type causes logging data to be sent over the network to
 // a log collector that can ingest log data in a
 // [Fluentd](https://www.fluentd.org)-compatible protocol.
 //
@@ -393,6 +401,83 @@ type FileSinkConfig struct {
 
 	// prefix is populated during validation.
 	prefix string
+}
+
+// HTTPDefaults refresents the configuration defaults for HTTP sinks.
+type HTTPDefaults struct {
+	// Address is the network address of the http server. The
+	// host/address and port parts are separated with a colon. IPv6
+	// numeric addresses should be included within square brackets,
+	// e.g.: [::1]:1234.
+	Address *string `yaml:",omitempty"`
+
+	// Method is the HTTP method to be used.  POST and GET are
+	// supported; defaults to POST.
+	Method *HTTPSinkMethod `yaml:",omitempty"`
+
+	// UnsafeTLS enables certificate authentication to be bypassed.
+	// Defaults to false.
+	UnsafeTLS *bool `yaml:"unsafe-tls,omitempty"`
+
+	// Timeout is the HTTP timeout.
+	// Defaults to 0 for no timeout.
+	Timeout *time.Duration `yaml:",omitempty"`
+
+	// DisableKeepAlives causes the logging sink to re-establish a new
+	// connection for every outgoing log message. This option is
+	// intended for testing only and can cause excessive network
+	// overhead in production systems.
+	DisableKeepAlives *bool `yaml:"disable-keep-alives,omitempty"`
+
+	CommonSinkConfig `yaml:",inline"`
+}
+
+// HTTPSinkConfig represents the configuration for one http sink.
+//
+// User-facing documentation follows.
+// TITLE: Output to HTTP servers.
+//
+// This sink type causes logging data to be sent over the network
+// as requests to an HTTP server.
+//
+// The configuration key under the `sinks` key in the YAML
+// configuration is `http-servers`. Example configuration:
+//
+//      sinks:
+//         http-servers:
+//            health:
+//               channels: HEALTH
+//               address: http://127.0.0.1
+//
+// Every new server sink configured automatically inherits the configuration set in the `http-defaults` section.
+//
+// For example:
+//
+//      http-defaults:
+//          redactable: false # default: disable redaction markers
+//      sinks:
+//        http-servers:
+//          health:
+//             channels: HEALTH
+//             # This sink has redactable set to false,
+//             # as the setting is inherited from fluent-defaults
+//             # unless overridden here.
+//
+// The default output format for HTTP sinks is
+// `json-compact`. [Other supported formats.](log-formats.html)
+//
+// {{site.data.alerts.callout_info}}
+// Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
+// {{site.data.alerts.end}}
+//
+type HTTPSinkConfig struct {
+	// Channels is the list of logging channels that use this sink.
+	Channels ChannelList `yaml:",omitempty,flow"`
+
+	HTTPDefaults `yaml:",inline"`
+
+	// sinkName is populated during validation.
+	sinkName string
 }
 
 // IterateDirectories calls the provided fn on every directory linked to
@@ -683,4 +768,62 @@ func (*Holder) Type() string { return "yaml" }
 // Set implements the pflag.Value interface.
 func (h *Holder) Set(value string) error {
 	return yaml.UnmarshalStrict([]byte(value), &h.Config)
+}
+
+// HTTPSinkMethod is a string restricted to "POST" and "GET"
+type HTTPSinkMethod string
+
+var _ constrainedString = (*HTTPSinkMethod)(nil)
+
+// Accept implements the constrainedString interface.
+func (hsm *HTTPSinkMethod) Accept(s string) {
+	*hsm = HTTPSinkMethod(s)
+}
+
+// Canonicalize implements the constrainedString interface.
+func (HTTPSinkMethod) Canonicalize(s string) string {
+	return strings.ToUpper(strings.TrimSpace(s))
+}
+
+// AllowedSet implements the constrainedString interface.
+func (HTTPSinkMethod) AllowedSet() []string {
+	return []string{
+		http.MethodGet,
+		http.MethodPost,
+	}
+}
+
+// MarshalYAML implements yaml.Marshaler interface.
+func (hsm HTTPSinkMethod) MarshalYAML() (interface{}, error) {
+	return string(hsm), nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (hsm *HTTPSinkMethod) UnmarshalYAML(fn func(interface{}) error) error {
+	return unmarshalYAMLConstrainedString(hsm, fn)
+}
+
+// constrainedString is an interface to make it easy to unmarshal
+// a string constrained to a small set of accepted values.
+type constrainedString interface {
+	Accept(string)
+	Canonicalize(string) string
+	AllowedSet() []string
+}
+
+// unmarshalYAMLConstrainedString is a utility function to unmarshal
+// a type satisfying the constrainedString interface.
+func unmarshalYAMLConstrainedString(cs constrainedString, fn func(interface{}) error) error {
+	var s string
+	if err := fn(&s); err != nil {
+		return err
+	}
+	s = cs.Canonicalize(s)
+	for _, candidate := range cs.AllowedSet() {
+		if s == candidate {
+			cs.Accept(s)
+			return nil
+		}
+	}
+	return errors.Newf("Unexpected value: %v", s)
 }
