@@ -192,7 +192,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	if args.Protected.LessEq(*r.mu.state.GCThreshold) {
 		gcReason := fmt.Sprintf("protected ts: %s is less than equal to the GCThreshold: %s for the"+
 			" range %s - %s", args.Protected.String(), r.mu.state.GCThreshold.String(),
-			r.Desc().StartKey.String(), r.Desc().EndKey.String())
+			desc.StartKey.String(), desc.EndKey.String())
 		return false, false, gcReason, nil
 	}
 	if args.RecordAliveAt.Less(ls.Lease.Start.ToTimestamp()) {
@@ -208,7 +208,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 		gcReason := fmt.Sprintf(
 			"protected ts: %s is less than the pending GCThreshold: %s for the range %s - %s",
 			args.Protected.String(), r.protectedTimestampMu.pendingGCThreshold.String(),
-			r.Desc().StartKey.String(), r.Desc().EndKey.String())
+			desc.StartKey.String(), desc.EndKey.String())
 		return false, false, gcReason, nil
 	}
 
