@@ -48,6 +48,10 @@ type DatumVec interface {
 	// index i.
 	UnmarshalTo(i int, b []byte) error
 	// Size returns the total memory footprint of the vector (including the
-	// internal memory used by tree.Datums) in bytes.
-	Size() uintptr
+	// internal memory used by tree.Datums) in bytes. It only accounts for the
+	// size of the individual datum objects starting from the given index. So,
+	// Size is relatively cheap when startIdx = length, and expensive when
+	// startIdx = 0. A nonzero startIdx should only be used when elements before
+	// startIdx are guaranteed not to have been modified.
+	Size(startIdx int) uintptr
 }

@@ -180,20 +180,20 @@ func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 const sizeOfDatum = unsafe.Sizeof(tree.Datum(nil))
 
 // Size implements coldata.DatumVec interface.
-func (dv *datumVec) Size() uintptr {
+func (dv *datumVec) Size(startIdx int) uintptr {
 	// Note that we don't account for the overhead of datumVec struct, and the
 	// calculations are such that they are in line with
 	// colmem.EstimateBatchSizeBytes.
 	count := uintptr(dv.Cap())
 	size := sizeOfDatum * count
 	if datumSize, variable := tree.DatumTypeSize(dv.t); variable {
-		for _, d := range dv.data {
-			if d != nil {
-				size += d.Size()
-			}
-		}
 		// The elements in dv.data[len:cap] range are accounted with the
 		// default datum size for the type.
+		for i := startIdx; i < len(dv.data); i++ {
+			if dv.data[i] != nil {
+				size += dv.data[i].Size()
+			}
+		}
 		size += (count - uintptr(dv.Len())) * datumSize
 	} else {
 		size += datumSize * count
