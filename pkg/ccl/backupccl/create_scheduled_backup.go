@@ -335,7 +335,7 @@ func doCreateBackupSchedules(
 		backupNode.AppendToLatest = true
 		inc, err := makeBackupSchedule(
 			env, p.User(), scheduleLabel,
-			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
+			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode, eval)
 
 		if err != nil {
 			return err
@@ -358,7 +358,7 @@ func doCreateBackupSchedules(
 	backupNode.AppendToLatest = false
 	full, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel,
-		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
+		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode, eval)
 	if err != nil {
 		return err
 	}
@@ -434,6 +434,7 @@ func makeBackupSchedule(
 	unpauseOnSuccess int64,
 	updateLastMetricOnSuccess bool,
 	backupNode *tree.Backup,
+	eval *scheduledBackupEval,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(label)
@@ -462,6 +463,7 @@ func makeBackupSchedule(
 	// TODO(bulkio): this serialization is erroneous, see issue
 	// https://github.com/cockroachdb/cockroach/issues/63216
 	args.BackupStatement = tree.AsStringWithFlags(backupNode, tree.FmtSimple|tree.FmtShowPasswords)
+	args.CreateScheduleStatement = tree.AsString(eval.ScheduledBackup)
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
 		return nil, err
