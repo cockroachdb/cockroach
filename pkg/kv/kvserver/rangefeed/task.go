@@ -203,12 +203,14 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 				Timestamp: txn.WriteTimestamp,
 			})
 
-			// Clean up the transaction's intents, which should eventually cause all
-			// unresolved intents for this transaction on the rangefeed's range to be
-			// resolved. We'll have to wait until the intents are resolved before the
-			// resolved timestamp can advance past the transaction's commit timestamp,
-			// so the best we can do is help speed up the resolution.
-			intentsToCleanup = append(intentsToCleanup, txn.LocksAsLockUpdates()...)
+			// Clean up the transaction's intents within the processor's range, which
+			// should eventually cause all unresolved intents for this transaction on
+			// the rangefeed's range to be resolved. We'll have to wait until the
+			// intents are resolved before the resolved timestamp can advance past the
+			// transaction's commit timestamp, so the best we can do is help speed up
+			// the resolution.
+			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		case roachpb.ABORTED:
 			// The transaction is aborted, so it doesn't need to be tracked
 			// anymore nor does it need to prevent the resolved timestamp from
@@ -223,12 +225,19 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 				TxnID: txn.ID,
 			})
 
-			// If the txn happens to have its LockSpans populated, then lets clean up
-			// the intents as an optimization helping others. If we aborted the txn,
-			// then it won't have this field populated. If, however, we ran into a
-			// transaction that its coordinator tried to rollback but didn't follow up
-			// with garbage collection, then LockSpans will be populated.
-			intentsToCleanup = append(intentsToCleanup, txn.LocksAsLockUpdates()...)
+			// We just informed the Processor about this txn being aborted, so from
+			// its perspective, there's nothing more to do — the txn's intents are no
+			// longer holding up the resolved timestamp.
+			//
+			// However, if the txn happens to have its LockSpans populated, then lets
+			// clean up the intents within the processor's range as an optimization to
+			// help others and to prevent any rangefeed reconnections from needing to
+			// push the same txn. If we aborted the txn, then it won't have its
+			// LockSpans populated. If, however, we ran into a transaction that its
+			// coordinator tried to rollback but didn't follow up with garbage
+			// collection, then LockSpans will be populated.
+			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		}
 	}
 
@@ -241,4 +250,33 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 
 func (a *txnPushAttempt) Cancel() {
 	close(a.doneC)
+}
+
+// intentsInBound returns LockUpdates for the provided transaction's LockSpans
+// that intersect with the rangefeed Processor's range boundaries. For ranged
+// LockSpans, a LockUpdate containing only the portion that overlaps with the
+// range boundary will be returned.
+//
+// We filter a transaction's LockSpans to ensure that each rangefeed processor
+// resolves only those intents that are within the bounds of its own range. This
+// avoids unnecessary work, because a rangefeed processor only needs the intents
+// in its own range to be resolved in order to advance its resolved timestamp.
+// Additionally, it also avoids quadratic behavior if many rangefeed processors
+// notice intents from the same transaction across many ranges. In its worst
+// form, without filtering, this could create a pileup of ranged intent
+// resolution across an entire table and starve out foreground traffic.
+//
+// NOTE: a rangefeed Processor is only configured to watch the global keyspace
+// for a range. It is also only informed about logical operations on global keys
+// (see OpLoggerBatch.logLogicalOp). So even if this transaction has LockSpans
+// in the range's global and local keyspace, we only need to resolve those in
+// the global keyspace.
+func intentsInBound(txn *roachpb.Transaction, bound roachpb.Span) []roachpb.LockUpdate {
+	var ret []roachpb.LockUpdate
+	for _, sp := range txn.LockSpans {
+		if in := sp.Intersect(bound); in.Valid() {
+			ret = append(ret, roachpb.MakeLockUpdate(txn, in))
+		}
+	}
+	return ret
 }
