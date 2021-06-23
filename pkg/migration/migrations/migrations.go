@@ -66,6 +66,11 @@ var migrations = []migration.Migration{
 		"delete the deprecated namespace table descriptor at ID=2",
 		toCV(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration),
 		deleteDeprecatedNamespaceTableDescriptorMigration),
+	migration.NewTenantMigration(
+		"add the system.span_configurations table",
+		toCV(clusterversion.SpanConfigurationsTable),
+		spanConfigurationsTokensTableMigration,
+	),
 }
 
 func init() {

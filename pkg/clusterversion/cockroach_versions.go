@@ -300,6 +300,9 @@ const (
 	ExpressionIndexes
 	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
 	DeleteDeprecatedNamespaceTableDescriptorMigration
+	// SpanConfigurationsTable adds the span configurations system table, to
+	// store all KV span configs.
+	SpanConfigurationsTable
 
 	// Step (1): Add new versions here.
 )
@@ -500,6 +503,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 12},
+	},
+	{
+		Key:     SpanConfigurationsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 14},
 	},
 
 	// Step (2): Add new versions here.
