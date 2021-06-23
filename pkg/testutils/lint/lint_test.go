@@ -1873,7 +1873,7 @@ func TestLint(t *testing.T) {
 			"-nE",
 			// We prohibit usage of Vec.Append outside of the
 			// colexecutils.AppendOnlyBufferedBatch.
-			`(Append)\(`,
+			`\.(Append)\(`,
 			"--",
 			"sql/col*",
 			":!sql/colexec/colexecutils/utils.go",
