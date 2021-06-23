@@ -140,21 +140,23 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		mf := logconfig.ByteSize(math.MaxInt64)
 		f := logconfig.DefaultFileFormat
 		fakeConfig := logconfig.FileSinkConfig{
-			CommonSinkConfig: logconfig.CommonSinkConfig{
-				Filter:      severity.INFO,
-				Criticality: &bt,
-				Format:      &f,
-				Redact:      &bf,
-				// Be careful about stripping the redaction markers from log
-				// entries. The captured fd2 writes are inherently unsafe, so
-				// we don't want the header entry to give a mistaken
-				// impression to the entry parser.
-				Redactable: &bf,
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{
+					Filter:      severity.INFO,
+					Criticality: &bt,
+					Format:      &f,
+					Redact:      &bf,
+					// Be careful about stripping the redaction markers from log
+					// entries. The captured fd2 writes are inherently unsafe, so
+					// we don't want the header entry to give a mistaken
+					// impression to the entry parser.
+					Redactable: &bf,
+				},
+				Dir:            config.CaptureFd2.Dir,
+				MaxGroupSize:   config.CaptureFd2.MaxGroupSize,
+				MaxFileSize:    &mf,
+				BufferedWrites: &bf,
 			},
-			Dir:            config.CaptureFd2.Dir,
-			MaxGroupSize:   config.CaptureFd2.MaxGroupSize,
-			MaxFileSize:    &mf,
-			BufferedWrites: &bf,
 		}
 		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig)
 		if err != nil {

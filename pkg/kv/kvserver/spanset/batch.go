@@ -409,7 +409,7 @@ func (s spanSetReader) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
 		maxSize, useTBI, dest)
