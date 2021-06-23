@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +70,11 @@ func TestAzimuth(t *testing.T) {
 			if tc.expected == nil {
 				require.Nil(t, r)
 			} else {
-				require.Equal(t, *tc.expected, *r)
+				if *tc.expected != 0 {
+					require.InEpsilon(t, *tc.expected, *r, geotest.Epsilon)
+				} else {
+					require.Equal(t, *tc.expected, *r)
+				}
 			}
 		})
 	}

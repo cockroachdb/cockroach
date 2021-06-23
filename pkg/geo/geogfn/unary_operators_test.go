@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/golang/geo/s1"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
@@ -270,13 +271,11 @@ func TestProject(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			projected, err := Project(tc.point, tc.distance, s1.Angle(tc.azimuth))
 			require.NoError(t, err)
-			require.Equalf(
+			geotest.RequireGeographyInEpsilon(
 				t,
 				tc.projected,
 				projected,
-				"expected %f, found %f",
-				&tc.projected,
-				projected,
+				geotest.Epsilon,
 			)
 		})
 	}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -551,6 +552,13 @@ func TestLineSubstring(t *testing.T) {
 			wantGeomT:  geom.NewPointFlat(geom.XY, []float64{0, 0}),
 		},
 		{
+			name:       "go up, then back down",
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{0, 0, 1, 1, 0, 0}),
+			start:      0.5,
+			end:        0.6,
+			wantGeomT:  geom.NewLineStringFlat(geom.XY, []float64{1, 1, 0.8, 0.8}),
+		},
+		{
 			name:          "the `start` and the `end` are neither 0 or 1",
 			lineString:    geom.NewLineStringFlat(geom.XY, []float64{25, 50, 100, 125, 150, 190}),
 			start:         1.2,
@@ -576,7 +584,7 @@ func TestLineSubstring(t *testing.T) {
 				require.Equal(t, tt.wantErrString, err.Error())
 				return
 			}
-			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeomT), got, 1e-4)
+			geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeomT), got, geotest.Epsilon)
 		})
 	}
 }
