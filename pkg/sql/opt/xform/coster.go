@@ -778,7 +778,7 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 func (c *coster) computeIndexJoinCost(
 	join *memo.IndexJoinExpr, required *physical.Required,
 ) memo.Cost {
-	return c.computeIndexLookupJoinCost(
+	cost, _ := c.computeIndexLookupJoinCost(
 		join,
 		required,
 		true, /* lookupColsAreTableKey */
@@ -789,6 +789,7 @@ func (c *coster) computeIndexJoinCost(
 		memo.JoinFlags(0),
 		false, /* localityOptimized */
 	)
+	return cost
 }
 
 func (c *coster) computeLookupJoinCost(
@@ -797,7 +798,8 @@ func (c *coster) computeLookupJoinCost(
 	if join.LookupJoinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return hugeCost
 	}
-	return c.computeIndexLookupJoinCost(
+
+	cost, lookupCount := c.computeIndexLookupJoinCost(
 		join,
 		required,
 		join.LookupColsAreTableKey,
@@ -808,6 +810,16 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
+
+	// If we have extra lookupExprs beyond whats in the on conditions add those
+	// as an extra cpu cost since the joinreader machinery isn't free.
+	extraLookupJoinConditions := join.LookupExpr.Difference(join.On)
+	if len(extraLookupJoinConditions) > 0 {
+		extraCost := memo.Cost(lookupCount) * cpuCostFactor * memo.Cost(extraLookupJoinConditions.ChildCount())
+		cost += extraCost
+	}
+
+	return cost
 }
 
 func (c *coster) computeIndexLookupJoinCost(
@@ -820,7 +832,7 @@ func (c *coster) computeIndexLookupJoinCost(
 	index cat.IndexOrdinal,
 	flags memo.JoinFlags,
 	localityOptimized bool,
-) memo.Cost {
+) (memo.Cost, float64) {
 	input := join.Child(0).(memo.RelExpr)
 	lookupCount := input.Relational().Stats.RowCount
 
@@ -898,7 +910,7 @@ func (c *coster) computeIndexLookupJoinCost(
 	if localityOptimized {
 		cost /= 2.5
 	}
-	return cost
+	return cost, lookupCount
 }
 
 func (c *coster) computeInvertedJoinCost(
