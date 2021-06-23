@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
@@ -382,11 +383,16 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	}
 	ballastSize := targetUsage - usedBytes
 
-	// Note: CreateLargeFile fails if the target file already
-	// exists. This is a feature; we have seen users mistakenly applying
-	// the `ballast` command directly to block devices, thereby trashing
-	// their filesystem.
-	if err := sysutil.CreateLargeFile(ballastFile, int64(ballastSize)); err != nil {
+	// Note: We intentionally fail if the target file already exists. This is
+	// a feature; we have seen users mistakenly applying the `ballast` command
+	// directly to block devices, thereby trashing their filesystem.
+	if _, err := os.Stat(ballastFile); err == nil {
+		return os.ErrExist
+	} else if !oserror.IsNotExist(err) {
+		return errors.Wrap(err, "stating ballast file")
+	}
+
+	if err := sysutil.ResizeLargeFile(ballastFile, int64(ballastSize)); err != nil {
 		return errors.Wrap(err, "error allocating ballast file")
 	}
 	return nil

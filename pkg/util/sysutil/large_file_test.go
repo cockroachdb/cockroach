@@ -14,14 +14,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 )
 
-func TestLargeFile(t *testing.T) {
+func TestResizeLargeFile(t *testing.T) {
 	d, err := ioutil.TempDir("", t.Name())
 	if err != nil {
 		t.Fatal(err)
@@ -32,20 +28,18 @@ func TestLargeFile(t *testing.T) {
 		}
 	}()
 	fname := filepath.Join(d, "ballast")
-	const n int64 = 1013
-	if err := CreateLargeFile(fname, n); err != nil {
-		t.Fatal(err)
-	}
-	s, err := os.Stat(fname)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s.Size() != n {
-		t.Fatal(errors.Errorf("expected size of file %d, got %d", n, s.Size()))
-	}
 
-	// Check that an existing file cannot be overwritten.
-	if err = CreateLargeFile(fname, n); !(oserror.IsExist(err) || strings.Contains(err.Error(), "exists")) {
-		t.Fatalf("expected 'already exists' error, got (%T) %+v", err, err)
+	lens := []int64{2000, 1000, 64<<20 + 10, 0, 1}
+	for _, n := range lens {
+		if err := ResizeLargeFile(fname, n); err != nil {
+			t.Fatal(err)
+		}
+		fi, err := os.Stat(fname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != fi.Size() {
+			t.Fatalf("expected size of file %d, got %d", n, fi.Size())
+		}
 	}
 }
