@@ -296,12 +296,16 @@ func TestTxnPushAttempt(t *testing.T) {
 	txn1, txn2, txn3, txn4 := uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()
 	ts1, ts2, ts3, ts4 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}, hlc.Timestamp{WallTime: 4}
 	txn2LockSpans := []roachpb.Span{
-		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
-		{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+		{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+		{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")},
+		{Key: roachpb.Key("y"), EndKey: roachpb.Key("z")}, // ignored
 	}
 	txn4LockSpans := []roachpb.Span{
-		{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")},
-		{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")},
+		{Key: roachpb.Key("f"), EndKey: roachpb.Key("g")},
+		{Key: roachpb.Key("h"), EndKey: roachpb.Key("i")},
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}, // truncated at beginning
+		{Key: roachpb.Key("j"), EndKey: roachpb.Key("q")}, // truncated at end
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}, // truncated at beginning and end
 	}
 	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts1, MinTimestamp: ts1}
 	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts2, MinTimestamp: ts2}
@@ -331,11 +335,27 @@ func TestTxnPushAttempt(t *testing.T) {
 		return []*roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto, txn4Proto}, nil
 	})
 	tp.mockResolveIntentsFn(func(ctx context.Context, intents []roachpb.LockUpdate) error {
-		require.Len(t, intents, 4)
+		require.Len(t, intents, 7)
 		require.Equal(t, txn2LockSpans[0], intents[0].Span)
 		require.Equal(t, txn2LockSpans[1], intents[1].Span)
 		require.Equal(t, txn4LockSpans[0], intents[2].Span)
 		require.Equal(t, txn4LockSpans[1], intents[3].Span)
+		require.Equal(t, func() roachpb.Span {
+			s := txn4LockSpans[2] // truncated at beginning
+			s.Key = roachpb.Key("b")
+			return s
+		}(), intents[4].Span)
+		require.Equal(t, func() roachpb.Span {
+			s := txn4LockSpans[3] // truncated at end
+			s.EndKey = roachpb.Key("m")
+			return s
+		}(), intents[5].Span)
+		require.Equal(t, func() roachpb.Span {
+			s := txn4LockSpans[4] // truncated at beginning and end
+			s.Key = roachpb.Key("b")
+			s.EndKey = roachpb.Key("m")
+			return s
+		}(), intents[6].Span)
 		txns := tp.intentsToTxns(intents)
 		require.Equal(t, 2, len(txns))
 		require.Equal(t, txn2Meta, txns[0])
@@ -345,8 +365,10 @@ func TestTxnPushAttempt(t *testing.T) {
 		return nil
 	})
 
-	// Mock processor. We just needs its eventC.
+	// Mock processor. We configure its key span to exclude one of txn2's lock
+	// spans and a portion of three of txn4's lock spans.
 	p := Processor{eventC: make(chan *event, 100)}
+	p.Span = roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("m")}
 	p.TxnPusher = &tp
 
 	txns := []enginepb.TxnMeta{txn1Meta, txn2Meta, txn3Meta, txn4Meta}
