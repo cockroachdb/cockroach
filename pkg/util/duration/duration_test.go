@@ -592,6 +592,29 @@ func TestNanos(t *testing.T) {
 	}
 }
 
+func TestISO8601String(t *testing.T) {
+	testData := []struct {
+		duration Duration
+		expected string
+	}{
+		{Duration{Months: 12, Days: 0, nanos: 0}, "P1Y"},
+		{Duration{Months: 14, Days: 3, nanos: 0}, "P1Y2M3D"},
+		{Duration{Months: 0, Days: 0, nanos: nanosInSecond}, "PT1S"},
+		{Duration{Months: 0, Days: 0, nanos: nanosInSecond + nanosInSecond/5}, "PT1.2S"},
+		{Duration{Months: 0, Days: 0, nanos: nanosInMicro}, "PT0.000001S"},
+		{Duration{Months: -13, Days: 0, nanos: nanosInSecond + nanosInSecond/5}, "P-1Y-1MT1.2S"},
+		{Duration{Months: 0, Days: 0, nanos: nanosInSecond * 60 * 61}, "PT1H1M"},
+		{Duration{Months: 0, Days: 0, nanos: 0}, "P0D"},
+		{Duration{Months: 0, Days: 0, nanos: nanosInMicro - 1}, "P0D"},
+	}
+	for _, test := range testData {
+		str := test.duration.ISO8601String()
+		if str != test.expected {
+			t.Errorf("ISO8601String output for %v incorrect, expected [%s], got [%s]", test.duration, test.expected, str)
+		}
+	}
+}
+
 func BenchmarkAdd(b *testing.B) {
 	b.Run("fast-path-by-no-months-in-duration", func(b *testing.B) {
 		s := time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
