@@ -191,7 +191,7 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	newProto.Files = make(map[string]*enginepb.FileEntry)
 	newProto.Files["test1"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}
 	newProto.Files["test2"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")}
-	require.NoError(t, registry.writeRegistry(newProto))
+	require.NoError(t, registry.rewriteOldRegistry(newProto))
 
 	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
 	registry2 := &PebbleFileRegistry{FS: mem}
