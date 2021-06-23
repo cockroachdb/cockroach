@@ -50,4 +50,10 @@ type DatumVec interface {
 	// Size returns the total memory footprint of the vector (including the
 	// internal memory used by tree.Datums) in bytes.
 	Size() uintptr
+	// CheapSize returns the portion of the vector's memory footprint that is
+	// cheap to calculate in bytes.
+	CheapSize() uintptr
+	// ExpensiveSize returns the portion of the vector's memory footprint that is
+	// expensive to calculate in bytes, starting from the given index.
+	ExpensiveSize(startIdx int) uintptr
 }

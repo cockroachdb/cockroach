@@ -181,22 +181,37 @@ const sizeOfDatum = unsafe.Sizeof(tree.Datum(nil))
 
 // Size implements coldata.DatumVec interface.
 func (dv *datumVec) Size() uintptr {
+	return dv.CheapSize() + dv.ExpensiveSize(0 /* startIdx */)
+}
+
+// CheapSize returns the portion of the vector's memory footprint that is
+// cheap to calculate in bytes.
+func (dv *datumVec) CheapSize() uintptr {
 	// Note that we don't account for the overhead of datumVec struct, and the
 	// calculations are such that they are in line with
 	// colmem.EstimateBatchSizeBytes.
 	count := uintptr(dv.Cap())
 	size := sizeOfDatum * count
 	if datumSize, variable := tree.DatumTypeSize(dv.t); variable {
-		for _, d := range dv.data {
-			if d != nil {
-				size += d.Size()
-			}
-		}
 		// The elements in dv.data[len:cap] range are accounted with the
 		// default datum size for the type.
 		size += (count - uintptr(dv.Len())) * datumSize
 	} else {
 		size += datumSize * count
+	}
+	return size
+}
+
+// ExpensiveSize returns the portion of the vector's memory footprint that is
+// expensive to calculate in bytes, starting from the given index.
+func (dv *datumVec) ExpensiveSize(startIdx int) uintptr {
+	var size uintptr
+	if _, variable := tree.DatumTypeSize(dv.t); variable {
+		for i := startIdx; i < len(dv.data); i++ {
+			if dv.data[i] != nil {
+				size += dv.data[i].Size()
+			}
+		}
 	}
 	return size
 }
