@@ -12,6 +12,7 @@ package scbuild
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -51,6 +52,11 @@ func (b *buildContext) dropSchemaDesc(
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"schema %q is not empty and CASCADE was not specified", sc.GetName()))
 	}
+	// Sort the dropped IDs to ensure a consistent order of
+	// operations.
+	sort.SliceStable(dropIDs, func(i, j int) bool {
+		return dropIDs[i] < dropIDs[j]
+	})
 	schemaNode := scpb.Schema{
 		SchemaID:         sc.GetID(),
 		DependentObjects: dropIDs,
