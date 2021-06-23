@@ -502,7 +502,7 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) {
 func ResolveEncryptedEnvOptions(
 	cfg *PebbleConfig,
 ) (*PebbleFileRegistry, EncryptionStatsHandler, error) {
-	fileRegistry := &PebbleFileRegistry{FS: cfg.Opts.FS, DBDir: cfg.Dir, ReadOnly: cfg.Opts.ReadOnly}
+	fileRegistry := &PebbleFileRegistry{FS: cfg.Opts.FS, DBDir: cfg.Dir, ReadOnly: cfg.Opts.ReadOnly, Version: cfg.Settings.Version}
 	if cfg.UseFileRegistry {
 		if err := fileRegistry.Load(); err != nil {
 			return nil, nil, err
@@ -680,6 +680,7 @@ func (p *Pebble) Close() {
 	}
 	p.closed = true
 	_ = p.db.Close()
+	_ = p.fileRegistry.Close()
 }
 
 // Closed implements the Engine interface.

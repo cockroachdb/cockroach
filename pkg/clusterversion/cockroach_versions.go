@@ -264,6 +264,9 @@ const (
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
+	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
+	// pebble file registry with the new incremental records-based one.
+	RecordsBasedRegistry
 
 	// Step (1): Add new versions here.
 )
@@ -420,6 +423,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DatabaseRoleSettings,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
+	},
+	{
+		Key:     RecordsBasedRegistry,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
 	},
 	// Step (2): Add new versions here.
 }
