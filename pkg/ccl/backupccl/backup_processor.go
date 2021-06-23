@@ -366,7 +366,7 @@ func runBackupProcessor(
 					}
 
 					files := make([]BackupManifest_File, 0)
-					for _, file := range res.Files {
+					for i, file := range res.Files {
 						f := BackupManifest_File{
 							Span:        file.Span,
 							Path:        file.Path,
@@ -381,7 +381,17 @@ func runBackupProcessor(
 						// ch for the writer goroutine to handle. Otherwise, go
 						// ahead and record the file for progress reporting.
 						if len(file.SST) > 0 {
-							returnedSSTs <- returnedSST{f: f, sst: file.SST, revStart: res.StartTime, completedSpans: completedSpans}
+							ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime}
+							// If multiple files were returned for this span, only one -- the
+							// last -- should count as completing the requested span.
+							if i == len(files)-1 {
+								ret.completedSpans = completedSpans
+							}
+							select {
+							case returnedSSTs <- ret:
+							case <-ctxDone:
+								return ctx.Err()
+							}
 						} else {
 							files = append(files, f)
 						}
