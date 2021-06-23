@@ -186,12 +186,18 @@ func (tm *TableMeta) copyScalars(copyScalar func(Expr) Expr) {
 	if tm.Constraints != nil {
 		tm.Constraints = copyScalar(tm.Constraints).(ScalarExpr)
 	}
+
+	computedCols := make(map[ColumnID]ScalarExpr, len(tm.ComputedCols))
 	for col, e := range tm.ComputedCols {
-		tm.ComputedCols[col] = copyScalar(e).(ScalarExpr)
+		computedCols[col] = copyScalar(e).(ScalarExpr)
 	}
+	tm.ComputedCols = computedCols
+
+	partialIndexPredicates := make(map[cat.IndexOrdinal]ScalarExpr, len(tm.partialIndexPredicates))
 	for idx, e := range tm.partialIndexPredicates {
-		tm.partialIndexPredicates[idx] = copyScalar(e).(ScalarExpr)
+		partialIndexPredicates[idx] = copyScalar(e).(ScalarExpr)
 	}
+	tm.partialIndexPredicates = partialIndexPredicates
 }
 
 // IndexColumns returns the set of table columns in the given index.
