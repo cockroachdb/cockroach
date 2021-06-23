@@ -54,15 +54,15 @@ func (p *planner) addColumnImpl(
 		)
 	}
 
-	newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
+	newDef, seqPrefix, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
 	if err != nil {
 		return err
 	}
 	if seqName != nil {
 		if err := doCreateSequence(
 			params,
-			seqDbDesc,
-			n.tableDesc.GetParentSchemaID(),
+			seqPrefix.Database,
+			seqPrefix.Schema,
 			seqName,
 			n.tableDesc.Persistence(),
 			seqOpts,

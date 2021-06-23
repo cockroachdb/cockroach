@@ -546,18 +546,13 @@ func (p *planner) canCreateOnSchema(
 }
 
 func (p *planner) canResolveDescUnderSchema(
-	ctx context.Context, schemaID descpb.ID, desc catalog.Descriptor,
+	ctx context.Context, scDesc catalog.SchemaDescriptor, desc catalog.Descriptor,
 ) error {
 	// We can't always resolve temporary schemas by ID (for example in the temporary
 	// object cleaner which accesses temporary schemas not in the current session).
 	// To avoid an internal error, we just don't check usage on temporary tables.
 	if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsTemporary() {
 		return nil
-	}
-	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
-	if err != nil {
-		return err
 	}
 
 	switch kind := scDesc.SchemaKind(); kind {

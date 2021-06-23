@@ -84,7 +84,7 @@ func (t *truncateNode) startExec(params runParams) error {
 
 	for i := range n.Tables {
 		tn := &n.Tables[i]
-		tableDesc, err := p.ResolveMutableTableDescriptor(
+		_, tableDesc, err := p.ResolveMutableTableDescriptor(
 			ctx, tn, true /*required*/, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return err

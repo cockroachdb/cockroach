@@ -43,7 +43,7 @@ type Accessor interface {
 	// GetSchemaByName returns true and a SchemaDescriptor object if the target schema
 	// exists under the target database.
 	GetSchemaByName(
-		ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string, flags tree.SchemaLookupFlags,
+		ctx context.Context, txn *kv.Txn, db DatabaseDescriptor, scName string, flags tree.SchemaLookupFlags,
 	) (SchemaDescriptor, error)
 
 	// GetObjectNamesAndIDs returns the list of all objects in the given
@@ -71,5 +71,5 @@ type Accessor interface {
 	// set the deadline.
 	GetObjectDesc(
 		ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
-	) (Descriptor, error)
+	) (ResolvedObjectPrefix, Descriptor, error)
 }

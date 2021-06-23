@@ -316,7 +316,7 @@ var (
 		ReferencingDescriptorIDs: []descpb.ID{tableUDTID},
 		EnumMembers:              enumMembers,
 	}).BuildExistingMutableType()
-	typ1Name        = tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaDesc.GetName(), typ1Desc.Name)
+	typ1Name        = tree.MakeQualifiedTypeName(dbDesc.Name, schemaDesc.GetName(), typ1Desc.Name)
 	typ1T           = mkTypeT(typ1Desc, &typ1Name)
 	typ1TSerialized = &types.T{InternalType: typ1T.InternalType}
 
@@ -331,7 +331,7 @@ var (
 		ReferencingDescriptorIDs: []descpb.ID{tableUDTID},
 		EnumMembers:              enumMembers,
 	}).BuildExistingMutableType()
-	typ2Name        = tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaDesc.GetName(), typ2Desc.Name)
+	typ2Name        = tree.MakeQualifiedTypeName(dbDesc.Name, schemaDesc.GetName(), typ2Desc.Name)
 	typ2T           = mkTypeT(typ2Desc, &typ2Name)
 	typ2TSerialized = &types.T{InternalType: typ2T.InternalType}
 	tableDescUDT    = tabledesc.NewBuilder(&descpb.TableDescriptor{
@@ -392,7 +392,7 @@ func (d *descGetterTypeDescriptorResolver) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	if d.unqualifiedName {
-		return tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName())),
+		return tree.MakeUnqualifiedTypeName(desc.GetName()),
 			desc.(catalog.TypeDescriptor), nil
 	}
 	dbDesc, err := d.dg.GetDesc(ctx, desc.GetParentID())
@@ -405,7 +405,7 @@ func (d *descGetterTypeDescriptorResolver) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scDesc.GetName(), desc.GetName())
+	name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scDesc.GetName(), desc.GetName())
 	return name, desc.(catalog.TypeDescriptor), nil
 }
 

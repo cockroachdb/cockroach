@@ -180,6 +180,9 @@ func (desc *immutable) ForEachSchemaInfo(
 // given name, 0 otherwise.
 func (desc *immutable) GetSchemaID(name string) descpb.ID {
 	info := desc.Schemas[name]
+	if info.Dropped {
+		return descpb.InvalidID
+	}
 	return info.ID
 }
 

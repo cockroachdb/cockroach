@@ -14,8 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,14 +45,15 @@ func CreateTestTableDescriptor(
 	evalCtx := tree.MakeTestingEvalContext(st)
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
+		db := dbdesc.NewInitial(parentID, "test", security.RootUserName())
 		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */
 			nil, /* vs */
 			st,
 			n,
-			parentID,
-			keys.PublicSchemaID,
+			db,
+			schemadesc.GetPublicSchema(),
 			id,
 			nil,             /* regionConfig */
 			hlc.Timestamp{}, /* creationTime */

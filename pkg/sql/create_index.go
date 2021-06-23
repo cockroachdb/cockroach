@@ -54,7 +54,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	); err != nil {
 		return nil, err
 	}
-	tableDesc, err := p.ResolveMutableTableDescriptor(
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(
 		ctx, &n.Table, true /*required*/, tree.ResolveRequireTableOrViewDesc,
 	)
 	if err != nil {

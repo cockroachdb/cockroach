@@ -123,13 +123,14 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	var replacingDesc *tabledesc.Mutable
-	schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.persistence, n.viewName,
+	schema, err := getSchemaForCreateTable(params, n.dbDesc, n.persistence, n.viewName,
 		tree.ResolveRequireViewDesc, n.ifNotExists)
-	nameKey := catalogkeys.NewNameKeyComponents(n.dbDesc.GetID(), schemaID, n.viewName.Table())
+	if err != nil && !sqlerrors.IsRelationAlreadyExistsError(err) {
+		return err
+	}
+	nameKey := catalogkeys.NewNameKeyComponents(n.dbDesc.GetID(), schema.GetID(), n.viewName.Table())
 	if err != nil {
 		switch {
-		case !sqlerrors.IsRelationAlreadyExistsError(err):
-			return err
 		case n.ifNotExists:
 			return nil
 		case n.replace:
@@ -197,7 +198,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			viewName,
 			n.viewQuery,
 			n.dbDesc.GetID(),
-			schemaID,
+			schema.GetID(),
 			id,
 			n.columns,
 			creationTime,

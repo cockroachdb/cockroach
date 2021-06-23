@@ -47,7 +47,7 @@ func (p *planner) AlterTableOwner(ctx context.Context, n *tree.AlterTableOwner) 
 	} else if n.IsSequence {
 		requiredTableKind = tree.ResolveRequireSequenceDesc
 	}
-	tableDesc, err := p.ResolveMutableTableDescriptor(
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(
 		ctx, &tn, !n.IfExists, requiredTableKind)
 	if err != nil {
 		return nil, err
