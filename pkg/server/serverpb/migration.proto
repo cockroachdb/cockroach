@@ -52,6 +52,16 @@ message SyncAllEnginesRequest{}
 // SyncAllEnginesResponse is the response to a SyncAllEnginesRequest.
 message SyncAllEnginesResponse{}
 
+// DeprecateBaseEncryptionRegistryRequest is used to instruct the target node
+// to stop using the Base version monolithic encryption-at-rest registry.
+message DeprecateBaseEncryptionRegistryRequest {
+  roachpb.Version version = 1;
+}
+
+// DeprecateBaseEncryptionRegistryResponse is the response to a
+// DeprecateBaseEncryptionRegistryRequest.
+message DeprecateBaseEncryptionRegistryResponse{}
+
 service Migration {
    // ValidateTargetClusterVersion is used to verify that the target node is
    // running a binary that's able to support the specified cluster version.
@@ -76,4 +86,8 @@ service Migration {
    // PurgeOutdatedReplicas is used to instruct the target node to purge all
    // replicas with a version less than the one provided.
    rpc PurgeOutdatedReplicas (PurgeOutdatedReplicasRequest) returns (PurgeOutdatedReplicasResponse) { }
+
+   // DeprecateBaseRegistry is used to instruct the target node to stop
+   // using the Base version monolithic encryption-at-rest registry.
+   rpc DeprecateBaseEncryptionRegistry (DeprecateBaseEncryptionRegistryRequest) returns (DeprecateBaseEncryptionRegistryResponse) { }
 }
