@@ -1311,8 +1311,8 @@ alter_type_stmt ::=
 	| 'ALTER' 'TYPE' type_name 'OWNER' 'TO' role_spec
 
 alter_default_privileges_stmt ::=
-	'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_role opt_in_schema abbreviated_grant_stmt
-	| 'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_role opt_in_schema abbreviated_revoke_stmt
+	'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schemas abbreviated_grant_stmt
+	| 'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schemas abbreviated_revoke_stmt
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -1785,12 +1785,12 @@ opt_add_val_placement ::=
 	| 'AFTER' 'SCONST'
 	| 
 
-opt_for_role ::=
-	'FOR' role_or_group_or_user role_spec
+opt_for_roles ::=
+	'FOR' role_or_group_or_user role_spec_list
 	| 
 
-opt_in_schema ::=
-	'IN' 'SCHEMA' qualifiable_schema_name
+opt_in_schemas ::=
+	'IN' 'SCHEMA' schema_name_list
 	| 
 
 abbreviated_grant_stmt ::=

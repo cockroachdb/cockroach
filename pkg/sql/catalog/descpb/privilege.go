@@ -386,6 +386,23 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 		}
 	}
 
+	valid, u, remaining := p.IsValidPrivilegesForObjectType(objectType)
+	if !valid {
+		return errors.AssertionFailedf("user %s must not have %s privileges on %s%s with ID=%d",
+			u.User(), privilege.ListFromBitField(remaining, privilege.Any), maybeSystem, objectType, id)
+	}
+
+	return nil
+}
+
+// IsValidPrivilegesForObjectType checks if the privileges on the descriptor
+// is valid for the given object type.
+// If the privileges are invalid, it returns false along with the first user
+// found to have invalid privileges and the bits representing the invalid
+// privileges.
+func (p PrivilegeDescriptor) IsValidPrivilegesForObjectType(
+	objectType privilege.ObjectType,
+) (bool, UserPrivileges, uint32) {
 	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
 
 	// Validate can be called during the fix_privileges_migration introduced in
@@ -415,12 +432,11 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 		}
 
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
-			return errors.AssertionFailedf("user %s must not have %s privileges on %s%s with ID=%d",
-				u.User(), privilege.ListFromBitField(remaining, privilege.Any), maybeSystem, objectType, id)
+			return false, u, remaining
 		}
 	}
 
-	return nil
+	return true, UserPrivileges{}, 0
 }
 
 func (p PrivilegeDescriptor) validateRequiredSuperuser(
