@@ -52,11 +52,15 @@ func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
 	opts.TableFormat = sstable.TableFormatRocksDBv2
 
-	// Disable bloom filters since we only ever iterate backups.
+	// Disable bloom filters and bump up the restart interval since we never do
+	// searches/seeks on backup SSTs.
 	opts.FilterPolicy = nil
-	// Bump up block size, since we almost never seek or do point lookups, so more
-	// block checksums and more index entries are just overhead and smaller blocks
-	// reduce compression ratio.
+	opts.BlockRestartInterval = 2048
+
+	// Bump up block size since smaller blocks reduce compression ratio and add
+	// index entry/checksum overhead. We don't bump it up to megabytes+ however as
+	// during RESTORE a merging iterator may need to open and merge ~100 SSTs at
+	// a time and we don't want to blow up its memory footprint.
 	opts.BlockSize = 128 << 10
 
 	opts.MergerName = "nullptr"
