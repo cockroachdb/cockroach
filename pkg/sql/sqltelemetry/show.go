@@ -40,6 +40,8 @@ const (
 	Locality
 	// Create represents the SHOW CREATE command.
 	Create
+	// CreateSchedule represents the SHOW CREATE SCHEDULE command.
+	CreateSchedule
 	// RangeForRow represents the SHOW RANGE FOR ROW command.
 	RangeForRow
 	// Queries represents the SHOW QUERIES command.
@@ -63,6 +65,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	Partitions:              "partitions",
 	Locality:                "locality",
 	Create:                  "create",
+	CreateSchedule:          "create_schedule",
 	RangeForRow:             "rangeforrow",
 	Regions:                 "regions",
 	RegionsFromCluster:      "regions_from_cluster",

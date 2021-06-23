@@ -262,6 +262,10 @@ func (n *recordScheduleExecutor) Metrics() metric.Struct {
 	return nil
 }
 
+func (n *recordScheduleExecutor) GetCreateScheduleStatement(_ *ScheduledJob) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
+}
+
 var _ ScheduledJobExecutor = &recordScheduleExecutor{}
 
 func fastDaemonKnobs(scanDelay func() time.Duration) *TestingKnobs {
@@ -476,6 +480,10 @@ func (e *returnErrorExecutor) Metrics() metric.Struct {
 	return nil
 }
 
+func (e *returnErrorExecutor) GetCreateScheduleStatement(_ *ScheduledJob) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
+}
+
 var _ ScheduledJobExecutor = &returnErrorExecutor{}
 
 func TestJobSchedulerToleratesBadSchedules(t *testing.T) {
@@ -647,6 +655,10 @@ func (e *txnConflictExecutor) NotifyJobTermination(
 
 func (e *txnConflictExecutor) Metrics() metric.Struct {
 	return nil
+}
+
+func (e *txnConflictExecutor) GetCreateScheduleStatement(_ *ScheduledJob) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
 var _ ScheduledJobExecutor = (*txnConflictExecutor)(nil)

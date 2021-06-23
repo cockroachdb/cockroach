@@ -14,6 +14,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -56,6 +59,10 @@ func (s *statusTrackingExecutor) NotifyJobTermination(
 
 func (s *statusTrackingExecutor) Metrics() metric.Struct {
 	return nil
+}
+
+func (s *statusTrackingExecutor) GetCreateScheduleStatement(_ *ScheduledJob) (string, error) {
+	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
 
 var _ ScheduledJobExecutor = &statusTrackingExecutor{}
@@ -101,4 +108,42 @@ func TestJobTerminationNotification(t *testing.T) {
 
 	// Verify counts.
 	require.Equal(t, map[Status]int{StatusSucceeded: 1, StatusFailed: 1, StatusCanceled: 1}, ex.counts)
+}
+
+func TestCreateScheduledJobStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	testCases := []struct {
+		name               string
+		executorName       string
+		args               *pbtypes.Any
+		expectedCreateStmt string
+		errMsg             string
+	}{
+		{
+			name:         "executor-with-unimplemented-method",
+			executorName: "test-executor",
+			errMsg:       "unimplemented method: 'GetCreateScheduleStatement' ",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ex := newStatusTrackingExecutor()
+			defer registerScopedScheduledJobExecutor(tc.executorName, ex)()
+
+			schedule := h.newScheduledJobForExecutor(tc.name, tc.executorName, tc.args)
+			ctx := context.Background()
+			require.NoError(t, schedule.Create(ctx, h.cfg.InternalExecutor, nil))
+
+			createStmt, err := ex.GetCreateScheduleStatement(schedule)
+			if err != nil {
+				require.Equal(t, tc.errMsg, err.Error())
+			}
+			require.Equal(t, tc.expectedCreateStmt, createStmt)
+		})
+	}
 }

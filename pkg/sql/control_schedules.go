@@ -67,10 +67,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 		params.ctx,
 		"load-schedule",
 		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf(
-			"SELECT schedule_id, schedule_expr FROM %s WHERE schedule_id = $1",
-			env.ScheduledJobsTableName(),
-		),
+		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = $1", env.ScheduledJobsTableName()),
 		scheduleID)
 	if err != nil {
 		return nil, err

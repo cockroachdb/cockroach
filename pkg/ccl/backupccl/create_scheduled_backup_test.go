@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -849,4 +851,73 @@ INSERT INTO t values (1), (10), (100);
 			return errors.Newf("expected 2 backup to succeed, got %d", delta)
 		})
 	})
+}
+
+func TestCreateStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{
+			name:  "full-backup",
+			query: `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'`,
+		},
+		{
+			name:  "incremental-backup",
+			query: `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP '@daily'`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer utilccl.TestingEnableEnterprise()()
+			defer th.clearSchedules(t)
+
+			ex, _, err := jobs.GetScheduledJobExecutor(tree.ScheduledBackupExecutor.InternalName())
+			require.NoError(t, err)
+
+			destination := "nodelocal://0/" + tc.name
+			schedules, err := th.createBackupSchedule(t, tc.query, destination)
+			require.NoError(t, err)
+
+			for _, sj := range schedules {
+				createStmt, err := ex.GetCreateScheduleStatement(sj)
+				require.NoError(t, err)
+
+				stmt, err := parser.ParseOne(createStmt)
+				require.NoError(t, err)
+
+				outputNode, ok := stmt.AST.(*tree.ScheduledBackup)
+				require.True(t, ok)
+
+				args := &ScheduledBackupExecutionArgs{}
+				err = pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args)
+				require.NoError(t, err)
+
+				require.Equal(t, fmt.Sprintf("'%s'", sj.ScheduleLabel()), outputNode.ScheduleLabel.String())
+				require.Equal(t, fmt.Sprintf("'%s'", sj.ScheduleExpr()), outputNode.Recurrence.String())
+				if !outputNode.FullBackup.AlwaysFull {
+					require.Equal(t, fmt.Sprintf("'%s'", args.DependentScheduleCrontab), outputNode.FullBackup.Recurrence.String())
+				} else {
+					require.True(t, outputNode.FullBackup.Recurrence == nil)
+				}
+				for _, opt := range outputNode.ScheduleOptions {
+					switch opt.Key {
+					case optFirstRun:
+						require.Equal(t, sj.ScheduledRunTime().String(), opt.Value.String())
+					case optOnExecFailure:
+						require.Equal(t, sj.ScheduleDetails().OnError.String(), opt.Value.String())
+					case optOnPreviousRunning:
+						require.Equal(t, sj.ScheduleDetails().Wait.String(), opt.Value.String())
+					}
+				}
+			}
+		})
+	}
 }

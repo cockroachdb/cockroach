@@ -952,6 +952,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_columns_stmt
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
+%type <tree.Statement> show_create_schedule_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_enums_stmt
@@ -4635,7 +4636,7 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
+// SHOW CREATE, SHOW CREATE SCHEDULE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
 // PARTITIONS, SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
@@ -4646,6 +4647,7 @@ show_stmt:
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
 | show_constraints_stmt     // EXTEND WITH HELP: SHOW CONSTRAINTS
 | show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
+| show_create_schedule_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULE
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt           // EXTEND WITH HELP: SHOW ENUMS
@@ -5382,6 +5384,19 @@ show_create_stmt:
     $$.val = &tree.ShowCreateAllTables{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
+
+// %Help: SHOW CREATE SCHEDULE - display the CREATE statement for a scheduled BACKUP
+// %Category: DDL
+// %Text:
+// SHOW CREATE SCHEDULE <schedule_id>
+// %SeeAlso: SHOW SCHEDULES
+show_create_schedule_stmt:
+  SHOW CREATE SCHEDULE a_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreateSchedules{ScheduleID: $4.expr()}
+  }
+| SHOW CREATE SCHEDULE error // SHOW HELP: SHOW CREATE SCHEDULE
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv
