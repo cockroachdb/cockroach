@@ -197,6 +197,9 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 	if op.ForUpdate {
 		methodName = `ScanForUpdate`
 	}
+	if op.Reverse {
+		methodName = `Reverse` + methodName
+	}
 	// NB: DB.Scan has a maxRows parameter that Batch.Scan does not have.
 	maxRowsArg := `, 0`
 	if fctx.receiver == `b` {
