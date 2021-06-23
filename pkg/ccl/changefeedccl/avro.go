@@ -437,6 +437,26 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond)
 			},
 		)
+	case types.IntervalFamily:
+		setNullable(
+			// This would ideally be the avro Duration logical type
+			// However, the spec is not implemented in most tooling
+			// and is problematic--it requires 32-bit integers
+			// representing months, days, and milliseconds, meaning
+			// it can't encode everything we can with our int64 years.
+			// String encoding is still fairly terse and arguably the
+			// only semantically exact representation.
+			// Using ISO 8601 format (https://en.wikipedia.org/wiki/ISO_8601#Durations)
+			// because it's the tersest of the input formats we support
+			// and isn't golang-specific.
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DInterval).ValueAsISO8601String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDInterval(x.(string))
+			},
+		)
 	case types.DecimalFamily:
 		if typ.Precision() == 0 {
 			return nil, errors.Errorf(
