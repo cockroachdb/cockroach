@@ -179,5 +179,9 @@ func indexForDisplay(
 		f.WriteString(pred)
 	}
 
+	if index.Hypothetical {
+		f.WriteString(" HYPOTHETICAL")
+	}
+
 	return f.CloseAndGetString(), nil
 }

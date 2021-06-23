@@ -256,7 +256,7 @@ message InterleaveDescriptor {
 // As as example, sample field values for the following table:
 //
 // CREATE TABLE abc (
-//   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10,  // column id: 1 
+//   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10,  // column id: 1
 //   b BYTES
 // );
 //
@@ -266,9 +266,9 @@ message InterleaveDescriptor {
 //   column_names:  ["a"]
 message ShardedDescriptor {
   option (gogoproto.equal) = true;
-  
+
   // IsSharded indicates whether the index in question is a sharded one.
-  optional bool is_sharded = 1 [(gogoproto.nullable) = false]; 
+  optional bool is_sharded = 1 [(gogoproto.nullable) = false];
   // Name is the name of the shard column.
   optional string name = 2 [(gogoproto.nullable) = false];
 
@@ -513,6 +513,11 @@ message IndexDescriptor {
   // TODO(mgartner): Update the comment to explain that columns are referenced
   // by their ID once #49766 is addressed.
   optional string predicate = 23 [(gogoproto.nullable) = false];
+
+  // Hypothetical is true if the index is a hypothetical index that cannot be
+  // written to or read from. A hypothetical index can be used to test if an
+  // index improves a query plan without having to actually create the index.
+  optional bool hypothetical = 24 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

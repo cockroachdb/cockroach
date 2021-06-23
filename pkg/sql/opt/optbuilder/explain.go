@@ -28,6 +28,12 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		))
 	}
 
+	// Allow the optimzer to generate plans involving hypothetical indexes
+	// if the HYPOTHETICAL option was included in the EXPLAIN statement.
+	if explain.ExplainOptions.Flags[tree.ExplainFlagHypothetical] {
+		b.factory.Memo().AllowHypotheticalIndexes()
+	}
+
 	stmtScope := b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */)
 
 	outScope = inScope.push()

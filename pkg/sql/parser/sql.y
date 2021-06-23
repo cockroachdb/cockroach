@@ -699,7 +699,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HIGH HISTOGRAM HOUR
+%token <str> HAVING HASH HIGH HISTOGRAM HOUR HYPOTHETICAL
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDE_DEPRECATED_INTERLEAVES INCLUDING INCREMENT INCREMENTAL
@@ -1137,7 +1137,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <types.IntervalTypeMetadata> opt_interval_qualifier interval_qualifier interval_second
 %type <tree.Expr> overlay_placing
 
-%type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
+%type <bool> opt_unique opt_concurrently opt_cluster opt_without_index opt_hypothetical
 %type <bool> opt_index_access_method
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
@@ -7315,7 +7315,7 @@ enum_val_list:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_hypothetical
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -7331,6 +7331,7 @@ create_index_stmt:
       Predicate:        $17.expr(),
       Inverted:         $8.bool(),
       Concurrently:     $4.bool(),
+      Hypothetical:     $18.bool(),
     }
   }
 | CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
@@ -7422,6 +7423,16 @@ opt_concurrently:
 
 opt_unique:
   UNIQUE
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+opt_hypothetical:
+  HYPOTHETICAL
   {
     $$.val = true
   }
@@ -12328,7 +12339,7 @@ db_name:               db_object_name
 
 standalone_index_name: db_object_name
 
-explain_option_name:   non_reserved_word
+explain_option_name:   non_reserved_word | HYPOTHETICAL
 
 cursor_name:           name
 
@@ -13040,6 +13051,7 @@ reserved_keyword:
 | GRANT
 | GROUP
 | HAVING
+| HYPOTHETICAL
 | IN
 | INITIALLY
 | INTERSECT

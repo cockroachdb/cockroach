@@ -111,17 +111,19 @@ const (
 	ExplainFlagJSON
 	ExplainFlagStages
 	ExplainFlagDeps
+	ExplainFlagHypothetical
 	numExplainFlags = iota
 )
 
 var explainFlagStrings = [...]string{
-	ExplainFlagVerbose: "VERBOSE",
-	ExplainFlagTypes:   "TYPES",
-	ExplainFlagEnv:     "ENV",
-	ExplainFlagCatalog: "CATALOG",
-	ExplainFlagJSON:    "JSON",
-	ExplainFlagStages:  "STAGES",
-	ExplainFlagDeps:    "DEPS",
+	ExplainFlagVerbose:      "VERBOSE",
+	ExplainFlagTypes:        "TYPES",
+	ExplainFlagEnv:          "ENV",
+	ExplainFlagCatalog:      "CATALOG",
+	ExplainFlagJSON:         "JSON",
+	ExplainFlagStages:       "STAGES",
+	ExplainFlagDeps:         "DEPS",
+	ExplainFlagHypothetical: "HYPOTHETICAL",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
@@ -252,6 +254,11 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		}
 		if analyze {
 			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag cannot be used with ANALYZE")
+		}
+	}
+	if opts.Flags[ExplainFlagHypothetical] {
+		if opts.Mode != ExplainPlan && opts.Mode != ExplainOpt {
+			return nil, pgerror.Newf(pgcode.Syntax, "the HYPOTHETICAL flag cannot be used with %s", opts.Mode)
 		}
 	}
 

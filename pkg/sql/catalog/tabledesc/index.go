@@ -94,6 +94,11 @@ func (w index) IsSharded() bool {
 	return w.desc.IsSharded()
 }
 
+// IsHypothetical returns true iff the index is a hypothetical index.
+func (w index) IsHypothetical() bool {
+	return w.desc.Hypothetical
+}
+
 // IsCreatedExplicitly returns true iff this index was created explicitly, i.e.
 // via 'CREATE INDEX' statement.
 func (w index) IsCreatedExplicitly() bool {

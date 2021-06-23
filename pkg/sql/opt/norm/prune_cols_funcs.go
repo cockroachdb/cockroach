@@ -163,6 +163,11 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
+			index := tabMeta.Table.Index(i)
+			if index.Hypothetical() {
+				continue
+			}
+
 			// If the columns being updated are not part of the index, then the
 			// update does not require changes to the index. Partial indexes may
 			// be updated (even when a column in the index is not changing) when

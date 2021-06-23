@@ -614,6 +614,15 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	res := execPlan{outputCols: outputCols}
+
+	// TODO(mgartner): Allow scans (and all other expressions) to use
+	// hypothetical indexes only in EXPLAIN, but not in any other statement
+	// context.
+	//idx := tab.Index(scan.Index)
+	// if idx.Hypothetical() {
+	// 	panic(errors.AssertionFailedf( "scans on hypothetical indexes are not allowed"))
+	// }
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),

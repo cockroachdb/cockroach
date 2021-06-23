@@ -1363,6 +1363,11 @@ func (oi *optIndex) Predicate() (string, bool) {
 	return oi.idx.GetPredicate(), oi.idx.GetPredicate() != ""
 }
 
+// Hypothetical is part of the cat.Index interface.
+func (oi *optIndex) Hypothetical() bool {
+	return oi.idx.IsHypothetical()
+}
+
 // Zone is part of the cat.Index interface.
 func (oi *optIndex) Zone() cat.Zone {
 	return oi.zone
@@ -2130,6 +2135,11 @@ func (oi *optVirtualIndex) VirtualInvertedColumn() cat.IndexColumn {
 // Predicate is part of the cat.Index interface.
 func (oi *optVirtualIndex) Predicate() (string, bool) {
 	return "", false
+}
+
+// Hypothetical is part of the cat.Index interface.
+func (oi *optVirtualIndex) Hypothetical() bool {
+	return false
 }
 
 // Zone is part of the cat.Index interface.

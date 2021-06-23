@@ -1,0 +1,28 @@
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  FAMILY (k, a)
+)
+
+# TODO(mgartner): Add a test to verify that a backfill is not performed for
+# hypothetical indexes.
+statement ok
+CREATE INDEX i ON t (a) HYPOTHETICAL
+
+query T kvtrace
+INSERT INTO t VALUES (1, 10)
+----
+CPut /Table/53/1/1/0 -> /TUPLE/2:2:Int/10
+
+query T kvtrace
+UPDATE t SET a = 100 WHERE k = 1
+----
+Scan /Table/53/1/1/0
+Put /Table/53/1/1/0 -> /TUPLE/2:2:Int/100
+
+query T kvtrace
+DELETE FROM t WHERE k = 1
+----
+Scan /Table/53/1/1/0
+Del /Table/53/1/1/0

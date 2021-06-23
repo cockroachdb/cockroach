@@ -214,6 +214,7 @@ type CreateIndex struct {
 	StorageParams    StorageParams
 	Predicate        Expr
 	Concurrently     bool
+	Hypothetical     bool
 }
 
 // Format implements the NodeFormatter interface.

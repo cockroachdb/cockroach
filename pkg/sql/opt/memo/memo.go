@@ -148,6 +148,11 @@ type Memo struct {
 
 	newGroupFn func(opt.Expr)
 
+	// allowHypotheticalIndexes is true if the optimzer is allowed to generate
+	// plans involving hypothetical indexes. It is set to true in EXPLAIN
+	// (HYPOTHETICAL) statements.
+	allowHypotheticalIndexes bool
+
 	// disableCheckExpr disables expression validation performed by CheckExpr,
 	// if the crdb_test build tag is set. If the crdb_test build tag is not set,
 	// CheckExpr is always a no-op, so disableCheckExpr has no effect. This is
@@ -422,4 +427,12 @@ func (m *Memo) Detach() {
 // CheckExpr is always a no-op, so DisableCheckExpr has no effect.
 func (m *Memo) DisableCheckExpr() {
 	m.disableCheckExpr = true
+}
+
+func (m *Memo) AllowHypotheticalIndexes() {
+	m.allowHypotheticalIndexes = true
+}
+
+func (m *Memo) IsHypotheticalIndexAllowed() bool {
+	return m.allowHypotheticalIndexes
 }
