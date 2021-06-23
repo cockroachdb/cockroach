@@ -266,6 +266,9 @@ const (
 	DatabaseRoleSettings
 	// TenantUsageTable adds the system table for tracking tenant usage.
 	TenantUsageTable
+	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
+	// encryption-at-rest file registry with the new incremental records-based registry.
+	RecordsBasedRegistry
 
 	// Step (1): Add new versions here.
 )
@@ -426,6 +429,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TenantUsageTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
+	},
+	{
+		Key:     RecordsBasedRegistry,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
 	},
 	// Step (2): Add new versions here.
 }
