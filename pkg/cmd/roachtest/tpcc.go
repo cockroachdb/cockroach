@@ -379,12 +379,12 @@ func registerTPCC(r *testRegistry) {
 		MinVersion: "v19.1.0",
 		Tags:       []string{`weekly`},
 		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
-		Timeout:    time.Duration(6*24)*time.Hour + time.Duration(10)*time.Minute,
+		Timeout:    time.Duration(4*24)*time.Hour + time.Duration(10)*time.Minute,
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
-				Duration:   6 * 24 * time.Hour,
+				Duration:   4 * 24 * time.Hour,
 				SetupType:  usingImport,
 			})
 		},
