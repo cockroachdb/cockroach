@@ -15,7 +15,6 @@ import (
 	"net"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgconn"
@@ -69,7 +68,6 @@ func TestFrontendAdmitWithClientSSLDisableAndCustomParam(t *testing.T) {
 
 func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 66752, "flaky test")
 
 	cli, srv := net.Pipe()
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
@@ -92,6 +90,7 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	require.NoError(t, err)
 	frontendCon, msg, err := frontendAdmit(srv, tlsConfig)
 	require.NoError(t, err)
+	defer func() { _ = frontendCon.Close() }()
 	require.NotEqual(t, srv, frontendCon) // The connection was replaced by SSL
 	require.NotNil(t, msg)
 }
