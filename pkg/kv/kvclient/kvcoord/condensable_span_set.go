@@ -81,7 +81,7 @@ func (s *condensableSpanSet) mergeAndSort() {
 func (s *condensableSpanSet) maybeCondense(
 	ctx context.Context, riGen rangeIteratorFactory, maxBytes int64,
 ) bool {
-	if s.bytes < maxBytes {
+	if s.bytes <= maxBytes {
 		return false
 	}
 
@@ -90,7 +90,7 @@ func (s *condensableSpanSet) maybeCondense(
 	// nice property that it sorts the spans by start key, which we rely on
 	// lower in this method.
 	s.mergeAndSort()
-	if s.bytes < maxBytes {
+	if s.bytes <= maxBytes {
 		return false
 	}
 

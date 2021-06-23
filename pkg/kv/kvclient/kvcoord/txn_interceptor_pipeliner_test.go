@@ -1430,7 +1430,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	a := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key(nil)}
 	b := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key(nil)}
 	c := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key(nil)}
-	d := roachpb.Span{Key: roachpb.Key("dddddd"), EndKey: roachpb.Key(nil)}
+	d := roachpb.Span{Key: roachpb.Key("ddddddd"), EndKey: roachpb.Key(nil)}
 	e := roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key(nil)}
 	aToBClosed := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()}
 	cToEClosed := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("e").Next()}
@@ -1446,14 +1446,14 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		{span: a, expLocks: []roachpb.Span{a}, expLocksSize: 1},
 		{span: b, expLocks: []roachpb.Span{a, b}, expLocksSize: 2},
 		{span: c, expLocks: []roachpb.Span{a, b, c}, expLocksSize: 3},
-		{span: d, expLocks: []roachpb.Span{a, b, c, d}, expLocksSize: 9},
+		{span: d, expLocks: []roachpb.Span{a, b, c, d}, expLocksSize: 10},
 		// Note that c-e condenses and then lists first.
 		{span: e, expLocks: []roachpb.Span{cToEClosed, a, b}, expLocksSize: 5},
 		{span: fTof0, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0}, expLocksSize: 8},
 		{span: g, expLocks: []roachpb.Span{cToEClosed, a, b, fTof0, g}, expLocksSize: 9},
 		{span: g0Tog1, expLocks: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed}, expLocksSize: 9},
 		// Add a key in the middle of a span, which will get merged on commit.
-		{span: c, expLocks: []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}, expLocksSize: 9},
+		{span: c, expLocks: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed, c}, expLocksSize: 10},
 	}
 	splits := []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
