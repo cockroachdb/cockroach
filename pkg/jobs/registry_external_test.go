@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -276,7 +277,7 @@ func TestRegistrySettingUpdate(t *testing.T) {
 			// trim leading and trailing spaces.
 			matchStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(test.matchStmt, " "))
 			var seen = int32(0)
-			stmtFilter := func(ctxt context.Context, stmt string, err error) {
+			stmtFilter := func(ctxt context.Context, _ *sessiondata.SessionData, stmt string, err error) {
 				if err != nil {
 					return
 				}
@@ -345,7 +346,7 @@ func TestGCDurationControl(t *testing.T) {
 	// trim leading and trailing spaces.
 	gcStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(jobs.GcQuery, " "))
 	var seen = int32(0)
-	stmtFilter := func(ctxt context.Context, stmt string, err error) {
+	stmtFilter := func(ctxt context.Context, _ *sessiondata.SessionData, stmt string, err error) {
 		if err != nil {
 			return
 		}

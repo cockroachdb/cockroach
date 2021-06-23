@@ -949,7 +949,7 @@ func (*ExecutorTestingKnobs) ModuleTestingKnobs() {}
 
 // StatementFilter is the type of callback that
 // ExecutorTestingKnobs.StatementFilter takes.
-type StatementFilter func(context.Context, string, error)
+type StatementFilter func(context.Context, *sessiondata.SessionData, string, error)
 
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
