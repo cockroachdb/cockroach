@@ -53,6 +53,11 @@ type tpccOptions struct {
 	Duration         time.Duration               // if zero, TPCC is not invoked
 	SetupType        tpccSetupType
 	PrometheusConfig *prometheus.Config
+	// WorkloadInstances contains a list of instances for
+	// workloads to run against.
+	// If unset, it will run one workload which talks to
+	// all cluster nodes.
+	WorkloadInstances []workloadInstance
 	// If specified, called to stage+start cockroach. If not
 	// specified, defaults to uploading the default binary to
 	// all nodes, and starting it on all but the last node.
@@ -62,6 +67,19 @@ type tpccOptions struct {
 	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, *test, Cluster)
 }
+
+type workloadInstance struct {
+	// nodes dictates the workload should run against.
+	nodes option.NodeListOption
+	// prometheusPort is the port on the workload which runs
+	// prometheus.
+	prometheusPort int
+	// extraRunArgs dictates unique arguments to use for the workload.
+	extraRunArgs string
+}
+
+const workloadPProfStartPort = 33333
+const workloadPrometheusPort = 2112
 
 // tpccImportCmd generates the command string to load tpcc data for the
 // specified warehouse count into a cluster.
@@ -136,6 +154,21 @@ func setupTPCC(
 }
 
 func runTPCC(ctx context.Context, t *test, c Cluster, opts tpccOptions) {
+	workloadInstances := opts.WorkloadInstances
+	if len(workloadInstances) == 0 {
+		workloadInstances = append(
+			workloadInstances,
+			workloadInstance{
+				nodes:          c.Range(1, c.Spec().NodeCount-1),
+				prometheusPort: workloadPrometheusPort,
+			},
+		)
+	}
+	var pgURLs []string
+	for _, workloadInstance := range workloadInstances {
+		pgURLs = append(pgURLs, fmt.Sprintf("{pgurl%s}", workloadInstance.nodes.String()))
+	}
+
 	if cfg := opts.PrometheusConfig; cfg != nil {
 		if c.isLocal() {
 			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
@@ -182,15 +215,25 @@ func runTPCC(ctx context.Context, t *test, c Cluster, opts tpccOptions) {
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
-	m.Go(func(ctx context.Context) error {
-		t.WorkerStatus("running tpcc")
-		cmd := fmt.Sprintf(
-			"./cockroach workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
-				opts.ExtraRunArgs+" --ramp=%s --duration=%s {pgurl:1-%d}",
-			opts.Warehouses, rampDuration, opts.Duration, c.Spec().NodeCount-1)
-		c.Run(ctx, workloadNode, cmd)
-		return nil
-	})
+	for i := range workloadInstances {
+		i := i
+		m.Go(func(ctx context.Context) error {
+			t.WorkerStatus("running tpcc")
+			cmd := fmt.Sprintf(
+				"./cockroach workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
+					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",
+				opts.Warehouses,
+				rampDuration,
+				opts.Duration,
+				workloadInstances[i].prometheusPort,
+				workloadPProfStartPort+i,
+				workloadInstances[i].extraRunArgs,
+				pgURLs[i],
+			)
+			c.Run(ctx, workloadNode, cmd)
+			return nil
+		})
+	}
 	if opts.Chaos != nil {
 		chaos := opts.Chaos()
 		m.Go(chaos.Runner(c, m))
@@ -390,7 +433,8 @@ func registerTPCC(r *testRegistry) {
 		},
 	})
 
-	for _, survivalGoal := range []string{"zone", "region"} {
+	// Setup multi-region tests.
+	{
 		zs := []string{
 			"us-east1-b", "us-west1-b", "europe-west2-b",
 		}
@@ -399,62 +443,185 @@ func registerTPCC(r *testRegistry) {
 			"us-west1",
 			"europe-west2",
 		}
-		r.Add(testSpec{
-			Name:       fmt.Sprintf("tpcc/multiregion/survive=%s/chaos=true", survivalGoal),
-			Owner:      OwnerMultiRegion,
-			MinVersion: "v21.1.0",
-			// 3 nodes per region + 1 node for workload.
-			Cluster: r.makeClusterSpec(10, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
-			Run: func(ctx context.Context, t *test, c Cluster) {
-				duration := 90 * time.Minute
-				partitionArgs := fmt.Sprintf(
-					`--survival-goal=%s --regions=%s --partitions=%d`,
-					survivalGoal,
-					strings.Join(regions, ","),
-					len(regions),
-				)
-				workloadNode := c.Node(c.Spec().NodeCount)
-
-				// TODO(#multiregion): setup workload to run specifically for a given partition
-				// on each node of a cluster, instead of one node using a workload on all clusters.
-				runTPCC(ctx, t, c, tpccOptions{
-					Warehouses:     len(regions) * 5,
-					Duration:       duration,
-					ExtraSetupArgs: partitionArgs,
-					ExtraRunArgs:   `--method=simple --wait=false --tolerate-errors ` + partitionArgs,
-					Chaos: func() Chaos {
-						return Chaos{
-							Timer: Periodic{
-								Period:   300 * time.Second,
-								DownTime: 300 * time.Second,
-							},
-							Target:       func() option.NodeListOption { return c.Node(1 + rand.Intn(c.Spec().NodeCount-1)) },
-							Stopper:      time.After(duration),
-							DrainAndQuit: false,
-						}
+		const nodesPerRegion = 3
+		multiRegionTests := []struct {
+			desc              string
+			name              string
+			survivalGoal      string
+			chaosTarget       func(iter int) option.NodeListOption
+			workloadInstances []workloadInstance
+		}{
+			{
+				desc:         "test zone survivability works when single nodes are down",
+				name:         "tpcc/multiregion/survive=zone/chaos=true",
+				survivalGoal: "zone",
+				chaosTarget: func(iter int) option.NodeListOption {
+					return option.NodeListOption{(iter % (len(regions) * nodesPerRegion)) + 1}
+				},
+				workloadInstances: []workloadInstance{
+					// Start a workload on each node, with affinities to their local region.
+					{
+						nodes:          option.NodeListOption{1},
+						prometheusPort: 2111,
+						extraRunArgs:   "--partition-affinity=0",
 					},
-					SetupType: usingInit,
-					PrometheusConfig: &prometheus.Config{
-						PrometheusNode: workloadNode,
-						ScrapeConfigs: []prometheus.ScrapeConfig{
-							prometheus.MakeInsecureCockroachScrapeConfig(
-								"cockroach",
-								c.Range(1, c.Spec().NodeCount-1),
-							),
-							prometheus.MakeWorkloadScrapeConfig(
-								"workload",
-								[]prometheus.ScrapeNode{
-									{
-										Nodes: workloadNode,
-										Port:  2112,
-									},
-								},
-							),
-						},
+					{
+						nodes:          option.NodeListOption{2},
+						prometheusPort: 2112,
+						extraRunArgs:   "--partition-affinity=0",
 					},
-				})
+					{
+						nodes:          option.NodeListOption{3},
+						prometheusPort: 2113,
+						extraRunArgs:   "--partition-affinity=0",
+					},
+					{
+						nodes:          option.NodeListOption{4},
+						prometheusPort: 2114,
+						extraRunArgs:   "--partition-affinity=1",
+					},
+					{
+						nodes:          option.NodeListOption{5},
+						prometheusPort: 2115,
+						extraRunArgs:   "--partition-affinity=1",
+					},
+					{
+						nodes:          option.NodeListOption{6},
+						prometheusPort: 2116,
+						extraRunArgs:   "--partition-affinity=1",
+					},
+					{
+						nodes:          option.NodeListOption{7},
+						prometheusPort: 2117,
+						extraRunArgs:   "--partition-affinity=2",
+					},
+					{
+						nodes:          option.NodeListOption{8},
+						prometheusPort: 2118,
+						extraRunArgs:   "--partition-affinity=2",
+					},
+					{
+						nodes:          option.NodeListOption{9},
+						prometheusPort: 2119,
+						extraRunArgs:   "--partition-affinity=2",
+					},
+				},
 			},
-		})
+			{
+				desc:         "test region survivability works when regions going down",
+				name:         "tpcc/multiregion/survive=region/chaos=true",
+				survivalGoal: "region",
+				chaosTarget: func(iter int) option.NodeListOption {
+					regionIdx := iter % len(regions)
+					return option.NewNodeListOptionRange(
+						(nodesPerRegion*regionIdx)+1,
+						(nodesPerRegion * (regionIdx + 1)),
+					)
+				},
+				workloadInstances: []workloadInstance{
+					// For 2110 to 2112, talk to a single region whose data
+					// is entirely partitioned in the same region.
+					{
+						nodes:          option.NewNodeListOptionRange(1, 3),
+						prometheusPort: 2110,
+						extraRunArgs:   "--partition-affinity=0",
+					},
+					{
+						nodes:          option.NewNodeListOptionRange(4, 6),
+						prometheusPort: 2111,
+						extraRunArgs:   "--partition-affinity=1",
+					},
+					{
+						nodes:          option.NewNodeListOptionRange(6, 9),
+						prometheusPort: 2112,
+						extraRunArgs:   "--partition-affinity=2",
+					},
+					// For 2120 to 2122, talk to a region of nodes whose data
+					// is partitioned on a separate region.
+					{
+						nodes:          option.NewNodeListOptionRange(1, 3),
+						prometheusPort: 2120,
+						extraRunArgs:   "--partition-affinity=1",
+					},
+					{
+						nodes:          option.NewNodeListOptionRange(4, 6),
+						prometheusPort: 2121,
+						extraRunArgs:   "--partition-affinity=2",
+					},
+					{
+						nodes:          option.NewNodeListOptionRange(6, 9),
+						prometheusPort: 2122,
+						extraRunArgs:   "--partition-affinity=0",
+					},
+				},
+			},
+		}
+
+		for i := range multiRegionTests {
+			tc := multiRegionTests[i]
+			r.Add(testSpec{
+				Name:       tc.name,
+				Owner:      OwnerMultiRegion,
+				MinVersion: "v21.1.0",
+				// 3 nodes per region + 1 node for workload.
+				Cluster: r.makeClusterSpec(10, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
+				Run: func(ctx context.Context, t *test, c Cluster) {
+					t.Status(tc.desc)
+					duration := 90 * time.Minute
+					partitionArgs := fmt.Sprintf(
+						`--survival-goal=%s --regions=%s --partitions=%d`,
+						tc.survivalGoal,
+						strings.Join(regions, ","),
+						len(regions),
+					)
+					workloadNode := c.Node(c.Spec().NodeCount)
+					workloadScrapeNodes := make([]prometheus.ScrapeNode, len(tc.workloadInstances))
+					for i, workloadInstance := range tc.workloadInstances {
+						workloadScrapeNodes[i] = prometheus.ScrapeNode{
+							Nodes: workloadNode,
+							Port:  workloadInstance.prometheusPort,
+						}
+					}
+
+					iter := 0
+					// TODO(#multiregion): setup workload to run specifically for a given partition
+					// on each node of a cluster, instead of one node using a workload on all clusters.
+					runTPCC(ctx, t, c, tpccOptions{
+						Warehouses:     len(regions) * 5,
+						Duration:       duration,
+						ExtraSetupArgs: partitionArgs,
+						ExtraRunArgs:   `--method=simple --wait=false --tolerate-errors ` + partitionArgs,
+						Chaos: func() Chaos {
+							return Chaos{
+								Timer: Periodic{
+									Period:   300 * time.Second,
+									DownTime: 300 * time.Second,
+								},
+								Target: func() option.NodeListOption {
+									ret := tc.chaosTarget(iter)
+									iter++
+									return ret
+								},
+								Stopper:      time.After(duration),
+								DrainAndQuit: false,
+							}
+						},
+						SetupType:         usingInit,
+						WorkloadInstances: tc.workloadInstances,
+						PrometheusConfig: &prometheus.Config{
+							PrometheusNode: workloadNode,
+							ScrapeConfigs: []prometheus.ScrapeConfig{
+								prometheus.MakeInsecureCockroachScrapeConfig(
+									"cockroach",
+									c.Range(1, c.Spec().NodeCount-1),
+								),
+								prometheus.MakeWorkloadScrapeConfig("workload", workloadScrapeNodes),
+							},
+						},
+					})
+				},
+			})
+		}
 	}
 
 	r.Add(testSpec{
