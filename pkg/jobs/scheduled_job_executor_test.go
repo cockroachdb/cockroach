@@ -58,6 +58,10 @@ func (s *statusTrackingExecutor) Metrics() metric.Struct {
 	return nil
 }
 
+func (s *statusTrackingExecutor) CreateString(_ *ScheduledJob) (string, error) {
+	return "", nil
+}
+
 var _ ScheduledJobExecutor = &statusTrackingExecutor{}
 
 func newStatusTrackingExecutor() *statusTrackingExecutor {

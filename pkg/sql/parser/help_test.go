@@ -318,6 +318,8 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW CREATE VIEW blah ??`, `SHOW CREATE`},
 		{`SHOW CREATE SEQUENCE blah ??`, `SHOW CREATE`},
 
+		{`SHOW CREATE SCHEDULE blah ??`, `SHOW CREATE SCHEDULE`},
+
 		{`SHOW DATABASES ??`, `SHOW DATABASES`},
 
 		{`SHOW ENUMS ??`, `SHOW ENUMS`},

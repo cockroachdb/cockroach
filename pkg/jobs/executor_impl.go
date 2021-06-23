@@ -92,6 +92,10 @@ func (e *inlineScheduledJobExecutor) Metrics() metric.Struct {
 	return nil
 }
 
+func (e *inlineScheduledJobExecutor) CreateString(_ *ScheduledJob) (string, error) {
+	return "", nil
+}
+
 func init() {
 	RegisterScheduledJobExecutorFactory(
 		InlineExecutorName,

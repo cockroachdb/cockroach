@@ -116,6 +116,10 @@ func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error)
 			return details, err
 		}
 	}
+
+	if _, ok := opts[optIgnoreExistingBackups]; ok {
+		details.IgnoreExistingBackups = true
+	}
 	return details, nil
 }
 
@@ -335,7 +339,8 @@ func doCreateBackupSchedules(
 		backupNode.AppendToLatest = true
 		inc, err := makeBackupSchedule(
 			env, p.User(), scheduleLabel,
-			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
+			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess,
+			backupNode, fullRecurrence)
 
 		if err != nil {
 			return err
@@ -358,7 +363,8 @@ func doCreateBackupSchedules(
 	backupNode.AppendToLatest = false
 	full, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel,
-		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
+		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess,
+		backupNode, fullRecurrence)
 	if err != nil {
 		return err
 	}
@@ -434,6 +440,7 @@ func makeBackupSchedule(
 	unpauseOnSuccess int64,
 	updateLastMetricOnSuccess bool,
 	backupNode *tree.Backup,
+	fullRecurrence *scheduleRecurrence,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(label)
@@ -443,6 +450,7 @@ func makeBackupSchedule(
 	args := &ScheduledBackupExecutionArgs{
 		UnpauseOnSuccess:        unpauseOnSuccess,
 		UpdatesLastBackupMetric: updateLastMetricOnSuccess,
+		DependentScheduleRecurrence: fullRecurrence.cron,
 	}
 	if backupNode.AppendToLatest {
 		args.BackupType = ScheduledBackupExecutionArgs_INCREMENTAL

@@ -45,6 +45,7 @@ message ScheduleDetails {
 
   // How to handle failed jobs.
   ErrorHandlingBehavior on_error = 2;
+  bool ignore_existing_backups = 3;
 }
 
 // ExecutionArguments describes data needed to execute scheduled jobs.
