@@ -12,6 +12,7 @@ go_library(
     srcs = [
         "aggregate_funcs.go",
         "alter_database.go",
+        "alter_default_privileges.go",
         "alter_index.go",
         "alter_schema.go",
         "alter_sequence.go",

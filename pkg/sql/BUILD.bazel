@@ -8,6 +8,7 @@ go_library(
         "add_column.go",
         "alter_column_type.go",
         "alter_database.go",
+        "alter_default_privileges.go",
         "alter_index.go",
         "alter_primary_key.go",
         "alter_role.go",

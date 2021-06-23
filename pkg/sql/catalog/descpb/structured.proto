@@ -1254,6 +1254,9 @@ message DatabaseDescriptor {
   }
   // RegionConfig is only set if multi-region controls are set on the database.
   optional RegionConfig region_config = 10;
+
+  // DefaultPrivileges contains the default privileges for the database.
+  optional DefaultPrivilegeDescriptor default_privileges = 11;
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured

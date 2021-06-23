@@ -2398,7 +2398,10 @@ func getRestoringPrivileges(
 			// SCHEMA}. But also like CREATE {TABLE,SCHEMA}, we set the owner to the
 			// user creating the table (the one running the restore).
 			// TODO(dt): Make this more configurable.
-			updatedPrivileges = sql.CreateInheritedPrivilegesFromDBDesc(parentDB, user)
+			updatedPrivileges = descpb.CreatePrivilegesFromDefaultPrivileges(
+				parentDB.GetID(), parentDB.GetDefaultPrivilegeDescriptor(), user, tree.Tables,
+				parentDB.GetPrivileges(),
+			)
 		}
 	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
 		if descCoverage == tree.RequestedDescriptors {

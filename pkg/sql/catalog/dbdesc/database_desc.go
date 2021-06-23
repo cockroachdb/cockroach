@@ -331,6 +331,17 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	return imm
 }
 
+// GetDefaultPrivilegeDescriptor gets or creates the DefaultPrivilegeDescriptor
+// for the database.
+func (desc *immutable) GetDefaultPrivilegeDescriptor() *descpb.DefaultPrivilegeDescriptor {
+	if desc.DefaultPrivileges == nil {
+		defaultPrivileges := descpb.DefaultPrivilegeDescriptor{}
+		desc.DefaultPrivileges = &defaultPrivileges
+	}
+
+	return desc.DefaultPrivileges
+}
+
 // IsNew implements the MutableDescriptor interface.
 func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion == nil
