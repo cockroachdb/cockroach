@@ -22,6 +22,22 @@ import (
 // commandColumn converts executor execution arguments into jsonb representation.
 const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args)->'args'`
 
+func (d *delegator) delegateShowCreateSchedule(
+	n *tree.ShowCreateSchedules,
+) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.CreateSchedule)
+
+	const showCreateQuery = `
+SELECT
+	schedule_id,
+	crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args)->>'createStatement' AS create_statement
+FROM system.scheduled_jobs
+WHERE schedule_id = %s
+;
+`
+	return parse(fmt.Sprintf(showCreateQuery, tree.AsString(n.ScheduleID)))
+}
+
 func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)
 
