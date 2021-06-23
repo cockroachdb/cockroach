@@ -15,8 +15,10 @@ option go_package = "enginepb";
 import "gogoproto/gogo.proto";
 
 enum RegistryVersion {
-  // The only version so far.
+  // The old protobuf-based version.
   Base = 0;
+  // The current records-based version.
+  Records = 1;
 }
 
 // EnvType determines which rocksdb::Env is used and for what purpose.
@@ -35,7 +37,7 @@ enum EnvType {
 // Registry describes how a files are handled. This includes the
 // rockdb::Env responsible for each file as well as opaque env details.
 message FileRegistry {
-  // version is currently always Base.
+  // The version of the file registry.
   RegistryVersion version = 1;
   // Map of filename -> FileEntry.
   // Filename is relative to the rocksdb dir if the file is inside it.
@@ -52,4 +54,12 @@ message FileEntry {
   // This is a serialized protobuf. We cannot use protobuf.Any since we use
   // MessageLite in C++.
   bytes encryption_settings = 2;
+}
+
+message NamedFileEntry {
+  // Name of the file.
+  string filename = 1;
+
+  // Corresponding file entry.
+  FileEntry entry = 2;
 }
