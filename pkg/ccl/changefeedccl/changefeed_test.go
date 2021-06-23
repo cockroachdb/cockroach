@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	// Imported to allow multi-tenant tests
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	// Imported to allow locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -163,6 +165,78 @@ func TestChangefeedDiff(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+}
+
+func TestChangefeedTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
+
+	kvServer, kvSQLdb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODirConfig: base.ExternalIODirConfig{
+			DisableOutbound: true,
+		},
+	})
+	defer kvServer.Stopper().Stop(ctx)
+
+	tenantArgs := base.TestTenantArgs{
+		// crdb_internal.create_tenant called by StartTenant
+		TenantID: serverutils.TestTenantID(),
+		// Non-enterprise changefeeds are currently only
+		// disabled by setting DisableOutbound true
+		// everywhere.
+		ExternalIODirConfig: base.ExternalIODirConfig{
+			DisableOutbound: true,
+		},
+	}
+
+	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	// TODO(ssd): Cleanup this shared setup code once the refactor
+	// in #64693 is setttled.
+	tenantSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	tenantSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	tenantSQL.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+
+	// Database `d` is hardcoded in a number of places. Create it
+	// and create a new connection to that database.
+	tenantSQL.Exec(t, `CREATE DATABASE d`)
+	tenantSQL = sqlutils.MakeSQLRunner(
+		serverutils.OpenDBConn(t,
+			tenantServer.SQLAddr(), `d`, false /* insecure */, kvServer.Stopper()))
+	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
+
+	t.Run("changefeed on non-tenant table fails", func(t *testing.T) {
+		kvSQL := sqlutils.MakeSQLRunner(kvSQLdb)
+		kvSQL.Exec(t, `CREATE DATABASE d`)
+		kvSQL.Exec(t, `CREATE TABLE d.foo (pk INT PRIMARY KEY)`)
+
+		tenantSQL.ExpectErr(t, `table "foo" does not exist`,
+			`CREATE CHANGEFEED FOR foo`,
+		)
+	})
+	t.Run("sinkful changefeed fails", func(t *testing.T) {
+		tenantSQL.ExpectErr(t, "Outbound IO is disabled by configuration, cannot create changefeed into kafka",
+			`CREATE CHANGEFEED FOR foo_in_tenant INTO 'kafka://does-not-matter'`,
+		)
+	})
+	t.Run("sinkless changefeed works", func(t *testing.T) {
+		sqlAddr := tenantServer.SQLAddr()
+		sink, cleanup := sqlutils.PGUrl(t, sqlAddr, t.Name(), url.User(security.RootUser))
+		defer cleanup()
+
+		// kvServer is used here because we require a
+		// TestServerInterface implementor. It is only used as
+		// the return value for f.Server()
+		f := cdctest.MakeSinklessFeedFactory(kvServer, sink)
+		tenantSQL.Exec(t, `INSERT INTO foo_in_tenant VALUES (1)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR foo_in_tenant`)
+		assertPayloads(t, feed, []string{
+			`foo_in_tenant: [1]->{"after": {"pk": 1}}`,
+		})
+	})
 }
 
 func TestChangefeedEnvelope(t *testing.T) {
@@ -497,6 +571,53 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedExternalIODisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	t.Run("sinkful changefeeds not allowed with disabled external io", func(t *testing.T) {
+		disallowedSinkProtos := []string{
+			changefeedbase.SinkSchemeExperimentalSQL,
+			changefeedbase.SinkSchemeKafka,
+			// Cloud sink schemes
+			"experimental-s3",
+			"experimental-gs",
+			"experimental-nodelocal",
+			"experimental-http",
+			"experimental-https",
+			"experimental-azure",
+		}
+		ctx := context.Background()
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			ExternalIODirConfig: base.ExternalIODirConfig{
+				DisableOutbound: true,
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
+		for _, proto := range disallowedSinkProtos {
+			sqlDB.ExpectErr(t, "Outbound IO is disabled by configuration, cannot create changefeed",
+				"CREATE CHANGEFEED FOR target_table INTO $1",
+				fmt.Sprintf("%s://does-not-matter", proto),
+			)
+		}
+	})
+
+	withDisabledOutbound := func(args *base.TestServerArgs) { args.ExternalIODirConfig.DisableOutbound = true }
+	t.Run("sinkless changfeeds are allowed with disabled external io",
+		sinklessTestWithServerArgs(withDisabledOutbound,
+			func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(db)
+				sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
+				sqlDB.Exec(t, "INSERT INTO target_table VALUES (1)")
+				feed := feed(t, f, "CREATE CHANGEFEED FOR target_table")
+				defer closeFeed(t, feed)
+				assertPayloads(t, feed, []string{
+					`target_table: [1]->{"after": {"pk": 1}}`,
+				})
+			}))
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
