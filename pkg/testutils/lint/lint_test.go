@@ -1145,6 +1145,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!*.pb.gw.go",
+			":!kv/kvclient/kvcoord/txn_interceptor_pipeliner.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
@@ -2102,6 +2103,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/roachpb/errors\.go:.*invalid direct cast on error object`),
 			// Cast in decode handler.
 			stream.GrepNot(`pkg/sql/pgwire/pgerror/constraint_name\.go:.*invalid direct cast on error object`),
+			// Cast in decode handler.
+			stream.GrepNot(`pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\.go:.*invalid direct cast on error object`),
 			// pgerror's pgcode logic uses its own custom cause recursion
 			// algorithm and thus cannot use errors.If() which mandates a
 			// different recursion order.
