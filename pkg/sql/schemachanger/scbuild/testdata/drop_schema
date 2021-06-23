@@ -71,14 +71,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   state: PUBLIC
   details:
     dependentObjects:
-    - 61
     - 54
     - 55
-    - 60
     - 56
     - 57
     - 58
     - 59
+    - 60
+    - 61
     - 62
     schemaId: 52
 - DROP Sequence:{DescID: 54}

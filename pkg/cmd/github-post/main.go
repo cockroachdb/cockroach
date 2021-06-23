@@ -56,7 +56,7 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 	if len(teams) > 0 {
 		projColID = teams[0].TriageColumnID
 		for _, team := range teams {
-			mentions = append(mentions, "@"+string(team.Aliases[0]))
+			mentions = append(mentions, "@"+string(team.Name()))
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{

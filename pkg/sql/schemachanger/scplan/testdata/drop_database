@@ -134,10 +134,6 @@ Stage 1
     DescID: 64
   *scop.CreateGcJobForDescriptor
     DescID: 56
-  *scop.CreateGcJobForDescriptor
-    DescID: 62
-  *scop.CreateGcJobForDescriptor
-    DescID: 63
   *scop.DrainDescriptorName
     TableID: 54
   *scop.DrainDescriptorName
@@ -165,10 +161,6 @@ Stage 1
   *scop.MarkDescriptorAsDropped
     TableID: 52
 Stage 2
-  *scop.CreateGcJobForDescriptor
-    DescID: 53
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
   *scop.DrainDescriptorName
     TableID: 53
   *scop.DrainDescriptorName
