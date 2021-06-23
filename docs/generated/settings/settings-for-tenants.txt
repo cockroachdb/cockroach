@@ -33,6 +33,7 @@ kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
 kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
 kv.transaction.max_intents_bytes	integer	262144	maximum number of bytes used to track locks in transactions
 kv.transaction.max_refresh_spans_bytes	integer	256000	maximum number of bytes used to track refresh spans in serializable transactions
+kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed
 security.ocsp.mode	enumeration	off	"use OCSP to check whether TLS certificates are revoked. If the OCSP
 server is unreachable, in strict mode all certificates will be rejected
 and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]"
