@@ -290,9 +290,6 @@ func TestAvroSchema(t *testing.T) {
 		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
 			return true
-		case types.IntervalFamily:
-			// Implement these as customer demand dictates.
-			return true
 		case types.ArrayFamily:
 			if !randgen.IsAllowedForArray(typ.ArrayContents()) {
 				return true
@@ -424,6 +421,7 @@ func TestAvroSchema(t *testing.T) {
 			`GEOMETRY`:          `["null","bytes"]`,
 			`INET`:              `["null","string"]`,
 			`INT8`:              `["null","long"]`,
+			`INTERVAL`:          `["null","string"]`,
 			`JSONB`:             `["null","string"]`,
 			`STRING`:            `["null","string"]`,
 			`STRING COLLATE fr`: `["null","string"]`,
@@ -440,7 +438,7 @@ func TestAvroSchema(t *testing.T) {
 
 		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`), types.MakeBit(3)) {
 			switch typ.Family() {
-			case types.IntervalFamily, types.OidFamily:
+			case types.OidFamily:
 				continue
 			case types.DecimalFamily:
 				typ = types.MakeDecimal(3, 2)
@@ -527,6 +525,14 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `TIMESTAMPTZ`,
 				sql:  `'2019-01-02 03:04:05'`,
 				avro: `{"long.timestamp-micros":1546398245000000}`},
+
+			{sqlType: `INTERVAL`, sql: `NULL`, avro: `null`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr 2 mons 3 d 4 hrs 5 mins 6 secs'`,
+				avro: `{"string":"P1Y2M3DT4H5M6S"}`},
+			{sqlType: `INTERVAL`,
+				sql:  `INTERVAL '1 yr -6 ms'`,
+				avro: `{"string":"P1YT-0.006S"}`},
 
 			{sqlType: `DECIMAL(4,1)`, sql: `NULL`, avro: `null`},
 			{sqlType: `DECIMAL(4,1)`,
@@ -930,6 +936,10 @@ func BenchmarkEncodeTimestamp(b *testing.B) {
 
 func BenchmarkEncodeTimestampTZ(b *testing.B) {
 	benchmarkEncodeType(b, types.TimestampTZ, randEncDatumRow(types.TimestampTZ))
+}
+
+func BenchmarkEncodeInterval(b *testing.B) {
+	benchmarkEncodeType(b, types.Interval, randEncDatumRow(types.Interval))
 }
 
 func BenchmarkEncodeDecimal(b *testing.B) {

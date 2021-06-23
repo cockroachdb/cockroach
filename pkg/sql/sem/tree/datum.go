@@ -2774,6 +2774,11 @@ func (d *DInterval) Min(_ *EvalContext) (Datum, bool) {
 	return dMinInterval, true
 }
 
+// ValueAsISO8601String returns the interval as an ISO 8601 Duration string (e.g. "P1Y2MT6S").
+func (d *DInterval) ValueAsISO8601String() string {
+	return d.Duration.ISO8601String()
+}
+
 // AmbiguousFormat implements the Datum interface.
 func (*DInterval) AmbiguousFormat() bool { return true }
 
