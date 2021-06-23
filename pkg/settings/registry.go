@@ -89,6 +89,12 @@ var retiredSettings = map[string]struct{}{
 	"kv.tenant_rate_limiter.read_bytes.burst_limit":     {},
 	"kv.tenant_rate_limiter.write_bytes.rate_limit":     {},
 	"kv.tenant_rate_limiter.write_bytes.burst_limit":    {},
+
+	// removed as of 21.1PLUS
+	"kv.tenant_rate_limiter.read_request_cost":       {},
+	"kv.tenant_rate_limiter.read_cost_per_megabyte":  {},
+	"kv.tenant_rate_limiter.write_request_cost":      {},
+	"kv.tenant_rate_limiter.write_cost_per_megabyte": {},
 }
 
 // register adds a setting to the registry.

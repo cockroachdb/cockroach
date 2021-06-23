@@ -12,9 +12,10 @@ package tenantrate
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -43,7 +44,7 @@ type refCountedLimiter struct {
 }
 
 // NewLimiterFactory constructs a new LimiterFactory.
-func NewLimiterFactory(st *cluster.Settings, knobs *TestingKnobs) *LimiterFactory {
+func NewLimiterFactory(sv *settings.Values, knobs *TestingKnobs) *LimiterFactory {
 	rl := &LimiterFactory{
 		metrics: makeMetrics(),
 	}
@@ -51,16 +52,18 @@ func NewLimiterFactory(st *cluster.Settings, knobs *TestingKnobs) *LimiterFactor
 		rl.knobs = *knobs
 	}
 	rl.mu.tenants = make(map[roachpb.TenantID]*refCountedLimiter)
-	rl.mu.config = ConfigFromSettings(st)
+	rl.mu.config = ConfigFromSettings(sv)
 	rl.systemLimiter = systemLimiter{
 		tenantMetrics: rl.metrics.tenantMetrics(roachpb.SystemTenantID),
 	}
-	for _, setting := range configSettings {
-		setting.SetOnChange(&st.SV, func() {
-			config := ConfigFromSettings(st)
-			rl.UpdateConfig(config)
-		})
+	updateFn := func() {
+		config := ConfigFromSettings(sv)
+		rl.UpdateConfig(config)
 	}
+	for _, setting := range configSettings {
+		setting.SetOnChange(sv, updateFn)
+	}
+	tenantcostmodel.SetOnChange(sv, updateFn)
 	return rl
 }
 
