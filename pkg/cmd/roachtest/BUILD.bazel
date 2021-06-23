@@ -136,6 +136,7 @@ go_library(
         "//pkg/cmd/internal/issues",
         "//pkg/cmd/roachtest/logger",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/prometheus",
         "//pkg/cmd/roachtest/spec",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
