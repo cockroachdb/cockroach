@@ -24,7 +24,7 @@ import (
 // SSTWriter writes SSTables.
 type SSTWriter struct {
 	fw *sstable.Writer
-	f  writeCloseSyncer
+	f  io.Writer
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
@@ -38,17 +38,23 @@ type writeCloseSyncer interface {
 	Sync() error
 }
 
-type noopSync struct {
-	io.WriteCloser
+// noopSyncCloser is used to wrap io.Writers for sstable.Writer so that callers
+// can decide when to close/sync.
+type noopSyncCloser struct {
+	io.Writer
 }
 
-func (noopSync) Sync() error {
+func (noopSyncCloser) Sync() error {
 	return nil
 }
 
-// MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs. These
-// SSTs have bloom filters disabled and format set to LevelDB.
-func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
+func (noopSyncCloser) Close() error {
+	return nil
+}
+
+// MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
+// are typically only ever iterated in their entirety.
+func MakeBackupSSTWriter(f io.Writer) SSTWriter {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
 	opts.TableFormat = sstable.TableFormatRocksDBv2
 
@@ -60,7 +66,7 @@ func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
 	opts.BlockSize = 128 << 10
 
 	opts.MergerName = "nullptr"
-	sst := sstable.NewWriter(f, opts)
+	sst := sstable.NewWriter(noopSyncCloser{f}, opts)
 	return SSTWriter{fw: sst, f: f}
 }
 
