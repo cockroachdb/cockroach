@@ -18,12 +18,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CreateLargeFile creates a large file at the given path with bytes size. On
-// Linux, it uses the fallocate syscall to efficiently create the file. On other
-// platforms, it naively writes the specified number of bytes, which can take a
-// long time when the number of bytes is large.
-func CreateLargeFile(path string, bytes int64) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+// ResizeLargeFile resizes the file at the given path to be the provided
+// length in bytes. If no file exists at path, ResizeLargeFile creates a file.
+// All disk blocks within the new file are allocated, and there are no sparse
+// regions.
+//
+// On Linux, it uses the fallocate syscall to efficiently allocate disk space.
+// On other platforms, it naively writes the specified number of bytes, which
+// can take a long time.
+func ResizeLargeFile(path string, bytes int64) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
