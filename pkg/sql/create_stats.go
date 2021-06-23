@@ -496,8 +496,8 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
 	if details.Name == stats.AutoStatsName {
-		// We want to make sure there is only one automatic CREATE STATISTICS job
-		// running at a time.
+		// We want to make sure that an automatic CREATE STATISTICS job only runs if
+		// there are no other CREATE STATISTICS jobs running, automatic or manual.
 		if err := checkRunningJobs(ctx, r.job, p); err != nil {
 			return err
 		}

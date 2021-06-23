@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -30,33 +31,40 @@ import (
 
 var leakTestRegexp = regexp.MustCompile(`defer leaktest.AfterTest\(t\)\(\)`)
 
-var flagIssueNum = flag.Int(
-	"issue_num",
-	0,
-	"issue to link the skip to. If unset, this will try search for existing issues.",
+var (
+	flags          = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	flagIssueNum   = flags.Int("issue_num", 0, "issue to link the skip to; if unset skip-test will\ntry to search for existing issues based on the test name")
+	flagReason     = flags.String("reason", "flaky test", "reason to put under skip")
+	flagUnderRace  = flags.Bool("under_race", false, "if true, only skip under race")
+	flagUnderBazel = flags.Bool("under_bazel", false, "if true, only skip under bazel")
 )
-var flagReason = flag.String(
-	"reason",
-	"flaky test",
-	"reason to put under skip.",
-)
-var flagUnderRace = flag.Bool(
-	"under_race",
-	false,
-	"if true, only skip under race",
-)
-var flagUnderBazel = flag.Bool(
-	"under_bazel",
-	false,
-	"if true, only skip under bazel",
-)
+
+const description = `The skip-test utility creates a pull request to skip a test.
+
+Example usage:
+
+    ./bin/skip-test -issue_num 1234 pkg/to/test:TestToSkip
+
+The following options are available:
+
+`
+
+func usage() {
+	fmt.Fprint(flags.Output(), description)
+	flags.PrintDefaults()
+	fmt.Println("")
+}
 
 func main() {
-	flag.Parse()
+	flags.Usage = usage
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		usage()
+		log.Fatal(err)
+	}
 
-	if len(flag.Args()) != 1 {
-		flag.Usage()
-		log.Fatalf("did not find `[pkg_name]:test_name`")
+	if len(flags.Args()) != 1 {
+		usage()
+		log.Fatalf("missing required argument: `TestName` or `pkg/to/test:TestToSkip`")
 	}
 
 	ctx := context.Background()
@@ -73,7 +81,7 @@ func main() {
 	}
 	ghClient := github.NewClient(ghAuthClient)
 
-	arg := flag.Args()[0]
+	arg := flags.Args()[0]
 	var pkgName, testName string
 	splitArg := strings.Split(arg, ":")
 	switch len(splitArg) {
@@ -83,7 +91,7 @@ func main() {
 		pkgName = splitArg[0]
 		testName = splitArg[1]
 	default:
-		log.Fatalf("expected test to be of format `TestName` or `pkg/to/test:TestName`, found %s", arg)
+		log.Fatalf("expected test to be of format `TestName` or `pkg/to/test:TestToSkip`, found %s", arg)
 	}
 
 	if *flagUnderBazel && *flagUnderRace {
@@ -136,9 +144,14 @@ func main() {
 	// Replace the file with the skip status.
 	replaceFile(fileName, testName, issueNum)
 
+	// Update the package's BUILD.bazel.
+	if err := spawn("make", "bazel-generate"); err != nil {
+		log.Fatal(errors.Wrap(err, "failed to run bazel"))
+	}
+
 	// Commit the file.
-	if err := spawn("git", "add", fileName); err != nil {
-		log.Fatal(errors.Wrapf(err, "failed to add %s to commit", fileName))
+	if err := spawn("git", "add", searchPath); err != nil {
+		log.Fatal(errors.Wrapf(err, "failed to add %s to commit", searchPath))
 	}
 	var modifierStr string
 	if *flagUnderRace {
@@ -169,6 +182,10 @@ Release note: None
 
 	// The shorthand for opening a web browser with Python, `python -m
 	// webbrowser URL`, does not set the status code appropriately.
+	// TODO(mgartner): A Github username should be used instead of remote in the
+	// URL. A remote might not be the same as the username, in which case an
+	// incorrect URL is opened. For example, the remote might be named "origin"
+	// but the username is "mgartner".
 	if err := spawn(
 		"python",
 		"-c",
