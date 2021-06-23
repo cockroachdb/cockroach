@@ -8,6 +8,7 @@ go_library(
         "fix_descriptor_migration.go",
         "join_tokens.go",
         "migrations.go",
+        "records_based_registry.go",
         "retry_jobs_with_exponential_backoff.go",
         "separated_intents.go",
         "sql_instances.go",

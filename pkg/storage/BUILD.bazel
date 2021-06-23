@@ -41,6 +41,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
@@ -70,6 +71,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//bloom",
+        "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_pebble//sstable",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
