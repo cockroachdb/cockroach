@@ -34,7 +34,7 @@ build/builder.sh env \
     TC_SERVER_URL="${TC_SERVER_URL-}" \
     TC_BUILD_BRANCH="${TC_BUILD_BRANCH-}" \
   stdbuf -oL -eL \
-  ./bin/roachtest run acceptance kv/splits cdc/bank \
+  ./bin/roachtest run cdc/webhook-sink \
   --local \
   --parallelism=1 \
   --cockroach "cockroach" \

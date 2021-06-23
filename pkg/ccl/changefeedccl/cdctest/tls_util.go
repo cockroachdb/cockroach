@@ -11,6 +11,7 @@ package cdctest
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -32,6 +33,42 @@ func EncodeBase64ToString(src []byte, dest *string) {
 		encoded := base64.StdEncoding.EncodeToString(src)
 		*dest = encoded
 	}
+}
+
+// NewCACertBase64Encoded generates a new CA cert and returns the
+// cert object as well as a base 64 encoded PEM version.
+func NewCACertBase64Encoded() (*tls.Certificate, string, error) {
+	keyLength := 2048
+
+	caKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA private key")
+	}
+
+	caCert, _, err := GenerateCACert(caKey)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA cert gen")
+	}
+
+	caKeyPEM, err := PemEncodePrivateKey(caKey)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "pem encode CA key")
+	}
+
+	caCertPEM, err := PemEncodeCert(caCert)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "pem encode CA cert")
+	}
+
+	cert, err := tls.X509KeyPair([]byte(caCertPEM), []byte(caKeyPEM))
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA cert parse from PEM")
+	}
+
+	var caCertBase64 string
+	EncodeBase64ToString([]byte(caCertPEM), &caCertBase64)
+
+	return &cert, caCertBase64, nil
 }
 
 // GenerateCACert generates a new self-signed CA cert using priv

@@ -131,6 +131,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/cli",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/internal/issues",
