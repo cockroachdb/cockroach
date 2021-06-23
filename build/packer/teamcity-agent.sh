@@ -42,9 +42,9 @@ apt-get install --yes \
   pass \
   unzip
 
-curl -fsSL https://dl.google.com/go/go1.15.11.linux-amd64.tar.gz > /tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.16.5.linux-amd64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-8825b72d74b14e82b54ba3697813772eb94add3abf70f021b6bdebe193ed01ec /tmp/go.tgz
+b12c23023b68de22f74c0524f10b753e7b08b1504cb7e417eccebdd3fae49061 /tmp/go.tgz
 EOF
 tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
