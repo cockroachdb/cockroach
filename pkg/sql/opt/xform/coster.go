@@ -894,6 +894,7 @@ func (c *coster) computeIndexLookupJoinCost(
 		// we need to fetch the table descriptors on each lookup.
 		perLookupCost += virtualScanTableDescriptorFetchCost
 	}
+	perLookupCost += lookupExprCost(join)
 	cost := memo.Cost(lookupCount) * perLookupCost
 
 	filterSetup, filterPerRow := c.computeFiltersCost(on, util.FastIntMap{})
@@ -1467,4 +1468,13 @@ func lookupJoinInputLimitHint(inputRowCount, outputRowCount, outputLimitHint flo
 	// Round up to the nearest multiple of a batch.
 	expectedLookupCount = math.Ceil(expectedLookupCount/joinReaderBatchSize) * joinReaderBatchSize
 	return math.Min(inputRowCount, expectedLookupCount)
+}
+
+// lookupExprCost accounts for the extra CPU cost of the lookupExpr.
+func lookupExprCost(join memo.RelExpr) memo.Cost {
+	lookupExpr, ok := join.(*memo.LookupJoinExpr)
+	if ok {
+		return cpuCostFactor * memo.Cost(len(lookupExpr.LookupExpr))
+	}
+	return 0
 }
