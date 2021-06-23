@@ -459,6 +459,8 @@ type Pebble struct {
 	logger pebble.Logger
 
 	wrappedIntentWriter intentDemuxWriter
+
+	storeIDPebbleLog *base.StoreIDContainer
 }
 
 var _ Engine = &Pebble{}
@@ -468,6 +470,25 @@ var _ Engine = &Pebble{}
 // NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
 // code does not depend on CCL code.
 var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, EncryptionStatsHandler, error)
+
+// StoreIDSetter is used to set the store id in the log.
+type StoreIDSetter interface {
+	// SetStoreID can be used to atomically set the store
+	// id as a tag in the pebble logs. Once set, the store id will be visible
+	// in pebble logs in cockroach.
+	SetStoreID(ctx context.Context, storeID int32)
+}
+
+// SetStoreID adds the store id to pebble logs.
+func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) {
+	if p == nil {
+		return
+	}
+	if p.storeIDPebbleLog == nil {
+		return
+	}
+	p.storeIDPebbleLog.Set(ctx, storeID)
+}
 
 // ResolveEncryptedEnvOptions fills in cfg.Opts.FS with an encrypted vfs if this
 // store has encryption-at-rest enabled. Also returns the associated file
@@ -537,6 +558,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// timeouts that has a copy of the log tags.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
+	// The store id, could not necessarily be determined when this function
+	// is called. Therefore, we use a container for the store id.
+	storeIDContainer := &base.StoreIDContainer{}
+	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
+
 	cfg.Opts.Logger = pebbleLogger{
 		ctx:   logCtx,
 		depth: 1,
@@ -546,15 +572,16 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		depth: 2, // skip over the EventListener stack frame
 	})
 	p := &Pebble{
-		path:         cfg.Dir,
-		auxDir:       auxDir,
-		maxSize:      cfg.MaxSize,
-		attrs:        cfg.Attrs,
-		settings:     cfg.Settings,
-		statsHandler: statsHandler,
-		fileRegistry: fileRegistry,
-		fs:           cfg.Opts.FS,
-		logger:       cfg.Opts.Logger,
+		path:             cfg.Dir,
+		auxDir:           auxDir,
+		maxSize:          cfg.MaxSize,
+		attrs:            cfg.Attrs,
+		settings:         cfg.Settings,
+		statsHandler:     statsHandler,
+		fileRegistry:     fileRegistry,
+		fs:               cfg.Opts.FS,
+		logger:           cfg.Opts.Logger,
+		storeIDPebbleLog: storeIDContainer,
 	}
 	p.connectEventMetrics(ctx, &cfg.Opts.EventListener)
 	p.eventListener = &cfg.Opts.EventListener
@@ -658,7 +685,7 @@ func (p *Pebble) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
@@ -1294,7 +1321,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
@@ -1559,7 +1586,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
@@ -1672,10 +1699,10 @@ func pebbleExportToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 	maxIntentCount int64,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
-	sstWriter := MakeBackupSSTWriter(noopSync{dest})
+	sstWriter := MakeBackupSSTWriter(dest)
 	defer sstWriter.Close()
 
 	var rows RowCounter
