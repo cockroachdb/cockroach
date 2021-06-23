@@ -176,12 +176,12 @@ func TestTenantRateLimiter(t *testing.T) {
 	// Ensure that the qps rate limit does not affect the system tenant even for
 	// the tenant range.
 	tenantCtx := roachpb.NewContextForTenant(ctx, tenantID)
-	cfg := tenantrate.ConfigFromSettings(s.ClusterSettings())
+	cfg := tenantrate.ConfigFromSettings(&s.ClusterSettings().SV)
 
 	// We don't know the exact size of the write, but we can set lower and upper
 	// bounds.
-	writeCostLower := cfg.WriteRequestUnits
-	writeCostUpper := cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
+	writeCostLower := float64(cfg.CostModel.KVWriteRequest)
+	writeCostUpper := writeCostLower + 32*float64(cfg.CostModel.KVWriteByte)
 	// burstWrites is a number of writes that don't exceed the burst limit.
 	burstWrites := int(cfg.Burst / writeCostUpper)
 	// tooManyWrites is a number of writes which definitely exceed the burst

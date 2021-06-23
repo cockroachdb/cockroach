@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -41,7 +42,7 @@ func TestCloser(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	start := timeutil.Now()
 	timeSource := timeutil.NewManualTime(start)
-	factory := tenantrate.NewLimiterFactory(st, &tenantrate.TestingKnobs{
+	factory := tenantrate.NewLimiterFactory(&st.SV, &tenantrate.TestingKnobs{
 		TimeSource: timeSource,
 	})
 	tenant := roachpb.MakeTenantID(2)
@@ -149,7 +150,7 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 
 	parseSettings(t, d, &ts.config)
 
-	ts.rl = tenantrate.NewLimiterFactory(ts.settings, &tenantrate.TestingKnobs{
+	ts.rl = tenantrate.NewLimiterFactory(&ts.settings.SV, &tenantrate.TestingKnobs{
 		TimeSource: ts.clock,
 	})
 	ts.rl.UpdateConfig(ts.config)
@@ -505,8 +506,8 @@ func (ts *testState) releaseTenants(t *testing.T, d *datadriven.TestData) string
 func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	var workload struct {
 		ReadPercentage int
-		ReadSize       int
-		WriteSize      int
+		ReadSize       int64
+		WriteSize      int64
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &workload); err != nil {
 		d.Fatalf(t, "failed to parse workload information: %v", err)
@@ -517,11 +518,11 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	config := tenantrate.DefaultConfig()
 
 	calculateIOPS := func(rate float64) float64 {
-		readCost := config.ReadRequestUnits + float64(workload.ReadSize)*config.ReadUnitsPerByte
-		writeCost := config.WriteRequestUnits + float64(workload.WriteSize)*config.WriteUnitsPerByte
-		readFraction := float64(workload.ReadPercentage) / 100.0
+		readCost := config.CostModel.KVReadCost(workload.ReadSize)
+		writeCost := config.CostModel.KVWriteCost(workload.WriteSize)
+		readFraction := tenantcostmodel.RU(workload.ReadPercentage) / 100.0
 		avgCost := readFraction*readCost + (1-readFraction)*writeCost
-		return rate / avgCost
+		return rate / float64(avgCost)
 	}
 
 	sustained := calculateIOPS(config.Rate)
@@ -606,17 +607,23 @@ func parseSettings(t *testing.T, d *datadriven.TestData, config *tenantrate.Conf
 		d.Fatalf(t, "failed to unmarshal limits: %v", err)
 	}
 
-	override := func(dest *float64, val float64) {
-		if val != 0 {
+	override := func(dest interface{}, val float64) {
+		if val == 0 {
+			return
+		}
+		switch dest := dest.(type) {
+		case *float64:
 			*dest = val
+		case *tenantcostmodel.RU:
+			*dest = tenantcostmodel.RU(val)
 		}
 	}
 	override(&config.Rate, vals.Rate)
 	override(&config.Burst, vals.Burst)
-	override(&config.ReadRequestUnits, vals.Read.Base)
-	override(&config.ReadUnitsPerByte, vals.Read.PerByte)
-	override(&config.WriteRequestUnits, vals.Write.Base)
-	override(&config.WriteUnitsPerByte, vals.Write.PerByte)
+	override(&config.CostModel.KVReadRequest, vals.Read.Base)
+	override(&config.CostModel.KVReadByte, vals.Read.PerByte)
+	override(&config.CostModel.KVWriteRequest, vals.Write.Base)
+	override(&config.CostModel.KVWriteByte, vals.Write.PerByte)
 }
 
 func parseStrings(t *testing.T, d *datadriven.TestData) []string {
