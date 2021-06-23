@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
 )
 
 const (
@@ -3713,9 +3713,8 @@ func ComputeStatsForRange(
 // computeCapacity returns capacity details for the engine's available storage,
 // by querying the underlying file system.
 func computeCapacity(
-	m *pebble.Metrics, path string, maxSizeBytes int64, auxDir string,
+	fs vfs.FS, m *pebble.Metrics, path string, maxSizeBytes int64, auxDir string,
 ) (roachpb.StoreCapacity, error) {
-	fileSystemUsage := gosigar.FileSystemUsage{}
 	dir := path
 	if dir == "" {
 		// This is an in-memory instance. Pretend we're empty since we
@@ -3732,20 +3731,21 @@ func computeCapacity(
 	if dir, err = filepath.EvalSymlinks(dir); err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
-	if err := fileSystemUsage.Get(dir); err != nil {
+	du, err := fs.GetDiskUsage(dir)
+	if err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
 
-	if fileSystemUsage.Total > math.MaxInt64 {
+	if du.TotalBytes > math.MaxInt64 {
 		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
+			humanize.IBytes(du.TotalBytes), humanizeutil.IBytes(math.MaxInt64))
 	}
-	if fileSystemUsage.Avail > math.MaxInt64 {
+	if du.AvailBytes > math.MaxInt64 {
 		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Avail), humanizeutil.IBytes(math.MaxInt64))
+			humanize.IBytes(du.AvailBytes), humanizeutil.IBytes(math.MaxInt64))
 	}
-	fsuTotal := int64(fileSystemUsage.Total)
-	fsuAvail := int64(fileSystemUsage.Avail)
+	fsuTotal := int64(du.TotalBytes)
+	fsuAvail := int64(du.AvailBytes)
 
 	// Pebble has detailed accounting of its own disk space usage, and it's
 	// incrementally updated which helps avoid O(# files) work here.
