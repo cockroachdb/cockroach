@@ -658,7 +658,7 @@ func (p *Pebble) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
@@ -1294,7 +1294,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
@@ -1559,7 +1559,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
@@ -1672,10 +1672,10 @@ func pebbleExportToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-	dest io.WriteCloser,
+	dest io.Writer,
 	maxIntentCount int64,
 ) (roachpb.BulkOpSummary, roachpb.Key, error) {
-	sstWriter := MakeBackupSSTWriter(noopSync{dest})
+	sstWriter := MakeBackupSSTWriter(dest)
 	defer sstWriter.Close()
 
 	var rows RowCounter
