@@ -395,6 +395,20 @@ func (ie *InternalExecutor) QueryBufferedEx(
 	return datums, err
 }
 
+// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the computed
+// ResultColumns of the input query.
+func (ie *InternalExecutor) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	datums, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 0 /* limit */, qargs...)
+	return datums, cols, err
+}
+
 func (ie *InternalExecutor) queryInternalBuffered(
 	ctx context.Context,
 	opName string,

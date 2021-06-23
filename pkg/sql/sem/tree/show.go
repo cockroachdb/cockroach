@@ -529,6 +529,21 @@ func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TABLES")
 }
 
+// ShowCreateSchedules represents a SHOW CREATE SCHEDULE statement.
+type ShowCreateSchedules struct {
+	ScheduleID Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateSchedules) Format(ctx *FmtCtx) {
+	if node.ScheduleID != nil {
+		ctx.WriteString("SHOW CREATE SCHEDULE ")
+		ctx.FormatNode(node.ScheduleID)
+		return
+	}
+	ctx.Printf("SHOW CREATE ALL SCHEDULES")
+}
+
 // ShowSyntax represents a SHOW SYNTAX statement.
 // This the most lightweight thing that can be done on a statement
 // server-side: just report the statement that was entered without
