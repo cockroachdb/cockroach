@@ -921,6 +921,7 @@ func (c *coster) computeIndexLookupJoinCost(
 	if localityOptimized {
 		cost /= 2.5
 	}
+	cost += lookupExprCost(join, lookupCount)
 	return cost
 }
 
@@ -1467,4 +1468,13 @@ func lookupJoinInputLimitHint(inputRowCount, outputRowCount, outputLimitHint flo
 	// Round up to the nearest multiple of a batch.
 	expectedLookupCount = math.Ceil(expectedLookupCount/joinReaderBatchSize) * joinReaderBatchSize
 	return math.Min(inputRowCount, expectedLookupCount)
+}
+
+// lookupExprCost accounts for the extra CPU cost of the lookupExpr.
+func lookupExprCost(join memo.RelExpr, lookupCount float64) memo.Cost {
+	lookupExpr, ok := join.(*memo.LookupJoinExpr)
+	if ok {
+		return memo.Cost(lookupCount) * cpuCostFactor * memo.Cost(len(lookupExpr.LookupExpr))
+	}
+	return 0
 }
