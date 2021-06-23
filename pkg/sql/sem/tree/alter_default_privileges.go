@@ -17,10 +17,10 @@ import (
 
 // AlterDefaultPrivileges represents an ALTER DEFAULT PRIVILEGES statement.
 type AlterDefaultPrivileges struct {
-	Role *security.SQLUsername
+	Roles []security.SQLUsername
 	// If Schema is not specified, ALTER DEFAULT PRIVILEGES is being
 	// run on the current database.
-	Schema *ObjectNamePrefix
+	Schemas ObjectNamePrefixList
 
 	// Only one of Grant or Revoke should be set. IsGrant is used to determine
 	// which one is set.
@@ -31,14 +31,19 @@ type AlterDefaultPrivileges struct {
 
 func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DEFAULT PRIVILEGES ")
-	if n.Role != nil {
+	if len(n.Roles) > 0 {
 		ctx.WriteString("FOR ROLE ")
-		ctx.FormatUsername(*n.Role)
+		for i, role := range n.Roles {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.FormatUsername(role)
+		}
 		ctx.WriteString(" ")
 	}
-	if n.Schema != nil {
+	if len(n.Schemas) > 0 {
 		ctx.WriteString("IN SCHEMA ")
-		ctx.FormatNode(n.Schema)
+		ctx.FormatNode(n.Schemas)
 		ctx.WriteString(" ")
 	}
 	if n.IsGrant {
@@ -50,18 +55,17 @@ func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
 
 // AlterDefaultPrivilegesTargetObject represents the type of object that is
 // having it's default privileges altered.
-type AlterDefaultPrivilegesTargetObject int
+type AlterDefaultPrivilegesTargetObject uint32
 
+// The numbers are explicitly assigned since the DefaultPrivilegesPerObject
+// map defined in the DefaultPrivilegesPerRole proto requires the key value
+// for the object type to remain unchanged.
 const (
 	Tables    AlterDefaultPrivilegesTargetObject = 1
 	Sequences AlterDefaultPrivilegesTargetObject = 2
 	Types     AlterDefaultPrivilegesTargetObject = 3
 	Schemas   AlterDefaultPrivilegesTargetObject = 4
 )
-
-func (a AlterDefaultPrivilegesTargetObject) ToUInt32() uint32 {
-	return uint32(a)
-}
 
 type AbbreviatedGrant struct {
 	Privileges      privilege.List
