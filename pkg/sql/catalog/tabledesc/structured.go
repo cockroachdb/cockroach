@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1045,7 +1046,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []strin
 							col.GetName(),
 							col.GetType().Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
 					)
 
 				}
@@ -1058,7 +1059,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []strin
 							col.GetName(),
 							col.GetType().Name(),
 						),
-						"see the documentation for more information about inverted indexes",
+						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
 					)
 				}
 			}

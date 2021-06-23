@@ -392,7 +392,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for table.
-		for _, column := range table.PublicColumns() {
+		for _, column := range table.AccessibleColumns() {
 			tableID := tableOid(table.GetID())
 			if err := addColumn(column, tableID, column.GetPGAttributeNum()); err != nil {
 				return err
@@ -561,8 +561,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence,  // relPersistence
 			tree.DBoolFalse, // relistemp
 			relKind,         // relkind
-			tree.NewDInt(tree.DInt(len(table.PublicColumns()))), // relnatts
-			tree.NewDInt(tree.DInt(len(table.GetChecks()))),     // relchecks
+			tree.NewDInt(tree.DInt(len(table.AccessibleColumns()))), // relnatts
+			tree.NewDInt(tree.DInt(len(table.GetChecks()))),         // relchecks
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules

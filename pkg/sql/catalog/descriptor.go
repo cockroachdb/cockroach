@@ -285,6 +285,7 @@ type TableDescriptor interface {
 	DeletableColumns() []Column
 	NonDropColumns() []Column
 	VisibleColumns() []Column
+	AccessibleColumns() []Column
 	ReadableColumns() []Column
 	UserDefinedTypeColumns() []Column
 	SystemColumns() []Column
