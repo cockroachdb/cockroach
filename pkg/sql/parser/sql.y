@@ -952,6 +952,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_columns_stmt
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
+%type <tree.Statement> show_create_schedules_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_enums_stmt
@@ -4635,7 +4636,7 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
+// SHOW CREATE, SHOW CREATE SCHEDULES, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
 // PARTITIONS, SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
@@ -4646,6 +4647,7 @@ show_stmt:
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
 | show_constraints_stmt     // EXTEND WITH HELP: SHOW CONSTRAINTS
 | show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
+| show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt           // EXTEND WITH HELP: SHOW ENUMS
@@ -5382,6 +5384,26 @@ show_create_stmt:
     $$.val = &tree.ShowCreateAllTables{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
+
+// %Help: SHOW CREATE SCHEDULES - list CREATE statements for scheduled jobs
+// %Category: DDL
+// %Text:
+// SHOW CREATE ALL SCHEDULES
+// SHOW CREATE SCHEDULE <schedule_id>
+// %SeeAlso: SHOW SCHEDULES, PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES
+show_create_schedules_stmt:
+	SHOW CREATE ALL SCHEDULES
+  {
+  	/* SKIP DOC */
+    $$.val = &tree.ShowCreateSchedules{}
+  }
+| SHOW CREATE ALL SCHEDULES error // SHOW HELP: SHOW CREATE SCHEDULES
+| SHOW CREATE SCHEDULE a_expr
+  {
+  	/* SKIP DOC */
+    $$.val = &tree.ShowCreateSchedules{ScheduleID: $4.expr()}
+  }
+| SHOW CREATE SCHEDULE error // SHOW HELP: SHOW CREATE SCHEDULES
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv

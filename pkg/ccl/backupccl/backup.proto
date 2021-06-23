@@ -157,6 +157,7 @@ message ScheduledBackupExecutionArgs {
   string backup_statement = 2;
   int64 unpause_on_success = 3;
   bool updates_last_backup_metric = 4;
+  string dependent_schedule_crontab = 5;
 }
 
 // RestoreProgress is the information that the RestoreData processor sends back
