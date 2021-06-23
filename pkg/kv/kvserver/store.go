@@ -902,7 +902,7 @@ func NewStore(
 			int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
 	})
 
-	s.tenantRateLimiters = tenantrate.NewLimiterFactory(cfg.Settings, &cfg.TestingKnobs.TenantRateKnobs)
+	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs)
 	s.metrics.registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
 
 	s.systemConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
