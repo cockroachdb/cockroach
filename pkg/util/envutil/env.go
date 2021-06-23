@@ -117,7 +117,7 @@ func GetEnvVarsUsed() []string {
 		}
 	}
 
-	for _, name := range []string{"GOGC", "GODEBUG", "GOMAXPROCS", "GOTRACEBACK"} {
+	for _, name := range []string{"GOGC", "GODEBUG", "GOMAXPROCS", "GOTRACEBACK", "HTTP_PROXY", "HTTPS_PROXY"} {
 		if val, ok := os.LookupEnv(name); ok {
 			vars = append(vars, name+"="+val)
 		}
