@@ -2160,6 +2160,32 @@ func (s Span) Overlaps(o Span) bool {
 	return bytes.Compare(s.EndKey, o.Key) > 0 && bytes.Compare(s.Key, o.EndKey) < 0
 }
 
+// Intersect returns the intersection of the key space covered by the two spans.
+// If there is no intersection between the twp spans, an invalid span (see Valid)
+// is returned.
+func (s Span) Intersect(o Span) Span {
+	if !s.Overlaps(o) {
+		return Span{}
+	}
+
+	if len(s.EndKey) == 0 {
+		return s
+	}
+	if len(o.EndKey) == 0 {
+		return o
+	}
+
+	key := s.Key
+	if key.Compare(o.Key) < 0 {
+		key = o.Key
+	}
+	endKey := s.EndKey
+	if endKey.Compare(o.EndKey) > 0 {
+		endKey = o.EndKey
+	}
+	return Span{key, endKey}
+}
+
 // Combine creates a new span containing the full union of the key
 // space covered by the two spans. This includes any key space not
 // covered by either span, but between them if the spans are disjoint.
