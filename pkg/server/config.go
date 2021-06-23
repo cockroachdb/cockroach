@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/elastic/gosigar"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 // Context defaults.
@@ -515,11 +515,11 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 		} else {
 			if spec.Size.Percent > 0 {
-				fileSystemUsage := gosigar.FileSystemUsage{}
-				if err := fileSystemUsage.Get(spec.Path); err != nil {
+				du, err := vfs.Default.GetDiskUsage(spec.Path)
+				if err != nil {
 					return Engines{}, err
 				}
-				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.Size.Percent / 100)
+				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
