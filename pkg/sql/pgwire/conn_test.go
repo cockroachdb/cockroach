@@ -1079,7 +1079,7 @@ func TestMaliciousInputs(t *testing.T) {
 
 			conn := newConn(
 				r,
-				// ConnResultsBufferBytes - really small so that it overflows
+				// ConnResultsBufferSize - really small so that it overflows
 				// when we produce a few results.
 				sql.SessionArgs{ConnResultsBufferSize: 10},
 				&metrics,
