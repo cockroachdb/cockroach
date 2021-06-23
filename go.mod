@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.15
+go 1.16
 
 require (
 	cloud.google.com/go/storage v1.10.0
@@ -110,7 +110,6 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.24.0
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/lufia/iostat v1.0.0
-	github.com/lusis/go-slackbot v0.0.0-20180109053408-401027ccfef5 // indirect
 	github.com/lusis/slack-test v0.0.0-20190426140909-c40012f20018 // indirect
 	github.com/maruel/panicparse v1.1.2-0.20180806203336-f20d4c4d746f
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
