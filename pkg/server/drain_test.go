@@ -14,15 +14,21 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"google.golang.org/grpc"
@@ -205,4 +211,157 @@ func getAdminClientForServer(
 	return client, func() {
 		_ = conn.Close() // nolint:grpcconnclose
 	}, nil
+}
+
+// TestRangeCacheUpdateWithNLEAfterDrain checks that in a 3-node cluster, an observer node that
+// does not witness the lease transfers during a drain, properly
+// experiences a "fast" NLE at the end of the drain.
+func TestRangeCacheUpdateWithNLEAfterDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0 /* n1 */ : {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "storage", Value: "true"}, {Key: "node", Value: "draining"}}}},
+			1 /* n2 */ : {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "storage", Value: "true"}, {Key: "node", Value: "target"}}}},
+			2 /* n3 */ : {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "storage", Value: "true"}, {Key: "node", Value: "spare"}}}},
+			3 /* n4 */ : {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "storage", Value: "false"}, {Key: "node", Value: "observer"}}}},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	t.Logf("setting up data...")
+	s0 := tc.Server(0).(*server.TestServer)
+	if err := s0.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		for _, stmt := range []string{
+			// Adjust the zone configs so that data spreads over the storage
+			// nodes, excluding the observer node.
+			`ALTER RANGE meta CONFIGURE ZONE USING constraints = '[+storage=true]'`,
+			`ALTER RANGE system CONFIGURE ZONE USING constraints = '[+storage=true]'`,
+			`ALTER DATABASE system CONFIGURE ZONE USING constraints = '[+storage=true]'`,
+			`ALTER RANGE liveness CONFIGURE ZONE USING constraints = '[+storage=true]'`,
+			`ALTER RANGE default CONFIGURE ZONE USING constraints = '[+storage=true]'`,
+			// Create a table and make its lease live on the draining node.
+			`CREATE TABLE defaultdb.public.t(x INT PRIMARY KEY)`,
+			`ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING num_replicas = 3, constraints = '[+storage=true]', lease_preferences = '[[+node=draining]]'`,
+			`INSERT INTO defaultdb.public.t(x) SELECT generate_series(1,10000)`,
+		} {
+			if _, err := ie.Exec(ctx, "set-zone", nil, stmt); err != nil {
+				return errors.Wrap(err, stmt)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("waiting for up-replication")
+	// Wait for the newly created table to spread over all nodes.
+	testutils.SucceedsSoon(t, func() error {
+		return s0.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+			_, err := ie.Exec(ctx, "wait-replication", nil, `
+SELECT -- wait for up-replication.
+       IF(array_length(replicas, 1) != 3,
+          crdb_internal.force_error('UU000', 'not ready: ' || array_length(replicas, 1)::string || ' replicas'),
+
+          -- once up-replication is reached, ensure that we got the replicas where we wanted.
+          IF(replicas != '{1,2,3}'::INT[] OR lease_holder != 1,
+             crdb_internal.force_Error('UU000', 'zone config not applied properly: ' || replicas::string || ' / lease at n' || lease_holder::int),
+             0))
+  FROM [SHOW RANGES FROM TABLE defaultdb.public.t]`)
+			if err != nil && !testutils.IsError(err, "not ready") {
+				t.Fatal(err)
+			}
+			return err
+		})
+	})
+
+	t.Logf("populating cache on observer node")
+	// Now query the newly created table from the observer node. This
+	// populates the range cache on that node.
+	sObserver := tc.Server(3).(*server.TestServer)
+	if err := sObserver.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "populate-cache", nil, `TABLE defaultdb.public.t`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("unlocking range")
+	// Now remove the lease preference from the first node, so the lease freely can move to the target node.
+	if err := s0.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "move-range", nil,
+			`ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING constraints = '[+storage=true]', lease_preferences = '[]'`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now drain the first node asynchronously.
+	var nodeStopped syncutil.AtomicBool
+	tc.Stopper().RunAsyncTask(ctx, "drain-first-node", func(ctx context.Context) {
+		t.Logf("starting async drain on first node")
+		for {
+			remaining, _, err := s0.Drain(ctx)
+			if err != nil {
+				t.Logf("graceful drain failed: %v", err)
+				break
+			}
+			if remaining == 0 {
+				break
+			}
+		}
+		t.Logf("async drain complete; node stopping")
+		tc.StopServer(0)
+		nodeStopped.Set(true)
+	})
+
+	t.Logf("waiting for transfer to complete")
+	// Wait for the lease transfer phase during the drain to complete,
+	// but before the final wait on the node.
+	testutils.SucceedsSoon(t, func() error {
+		if !s0.TestingLeaseTransferDoneAfterDrain.Get() {
+			return errors.New("leases not transferred yet")
+		}
+		return nil
+	})
+
+	t.Logf("asserting that the lease has arrived in the right place")
+	// As a sanity check, assert that the lease has landed on the target node.
+	// In particular we don't want it on the observer node, because it
+	// would give us a false negative on the test result.
+	sTarget := tc.Server(1).(*server.TestServer)
+	if err := sTarget.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "wait-lease", nil, `
+SELECT IF(lease_holder = 1,
+          crdb_internal.force_error('UU000', 'not moved to target node'),
+          0)
+  FROM [SHOW RANGES FROM TABLE defaultdb.public.t]`)
+		if err != nil && !testutils.IsError(err, "not moved to target node") {
+			t.Fatal(err)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// If the node has already stopped at this point, it's too late for
+	// the test. The query below is bound to get bogus results.
+	if nodeStopped.Get() {
+		t.Error("TEST DESIGN ERROR: node already stopped; too late for checking")
+	}
+
+	t.Logf("checking query speed on observer node")
+	qStart := timeutil.Now()
+	if err := sObserver.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "reread-table", nil, `TABLE defaultdb.public.t`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	qEnd := timeutil.Now()
+	if qDur := qEnd.Sub(qStart); qDur > 20*time.Millisecond {
+		t.Error("query took too long, maybe NLE redirect did not refresh the cache")
+	}
 }

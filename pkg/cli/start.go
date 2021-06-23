@@ -821,6 +821,7 @@ If problems persist, please see %s.`
 				time.Sleep(200 * time.Millisecond)
 			}
 
+			log.Infof(drainCtx, "stopping all tasks")
 			stopper.Stop(drainCtx)
 		}()
 

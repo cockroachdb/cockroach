@@ -348,6 +348,23 @@ func (nl *NodeLiveness) SetDraining(
 	return errors.New("failed to drain self")
 }
 
+// TimeUntilLivenessExpiry returns a duration equal to the difference
+// between the current time and the current expiration deadline on
+// this node's liveness record.
+func (nl *NodeLiveness) TimeUntilLivenessExpiry(ctx context.Context) (time.Duration, error) {
+	myID := nl.gossip.NodeID.Get()
+	liveness, ok := nl.GetLiveness(myID)
+	if !ok {
+		// Our liveness record does not exist yet? This is surprising,
+		// but it does mean we have nothing to do here.
+		return 0, nil
+	}
+
+	// Wait until the record has expired.
+	expiryTime := timeutil.Unix(0, liveness.Expiration.WallTime)
+	return expiryTime.Sub(nl.clock.PhysicalTime()), nil
+}
+
 // SetMembershipStatus changes the liveness record to reflect the target
 // membership status. It does so idempotently, and may retry internally until it
 // observes its target state durably persisted. It returns whether it was able
@@ -1479,4 +1496,19 @@ func (nl *NodeLiveness) TestingSetDecommissioningInternal(
 	ctx context.Context, oldLivenessRec Record, targetStatus livenesspb.MembershipStatus,
 ) (changeCommitted bool, err error) {
 	return nl.setMembershipStatusInternal(ctx, oldLivenessRec, targetStatus)
+}
+
+// GetLiveNodeCount returns a count of the number of live,
+// possibly decommission{ing,ed} nodes as known to liveness.
+func (nl *NodeLiveness) GetLiveNodeCount() int {
+	now := nl.clock.Now().GoTime()
+	nl.mu.RLock()
+	defer nl.mu.RUnlock()
+	var count int
+	for _, l := range nl.mu.nodes {
+		if l.IsLive(now) {
+			count++
+		}
+	}
+	return count
 }

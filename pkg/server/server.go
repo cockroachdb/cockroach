@@ -92,6 +92,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -180,6 +181,10 @@ type Server struct {
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
+
+	// TestingLeaseTransferDoneAfterDrain is set to true afte there are no more leases to be
+	// transferred away during a drain, but before the final wait that precedes server shutdown.
+	TestingLeaseTransferDoneAfterDrain syncutil.AtomicBool
 }
 
 // externalStorageBuilder is a wrapper around the ExternalStorage factory
