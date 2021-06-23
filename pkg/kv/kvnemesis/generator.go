@@ -91,6 +91,12 @@ type ClientOperationConfig struct {
 	// ScanForUpdate is an operation that Scans a key range that may contain
 	// values using a per-key locking scan.
 	ScanForUpdate int
+	// ReverseScan is an operation that Scans a key range that may contain
+	// values in reverse key order.
+	ReverseScan int
+	// ReverseScanForUpdate is an operation that Scans a key range that may
+	// contain values using a per-key locking scan in reverse key order.
+	ReverseScanForUpdate int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -165,6 +171,8 @@ func newAllOperationsConfig() GeneratorConfig {
 		PutExisting:          1,
 		Scan:                 1,
 		ScanForUpdate:        1,
+		ReverseScan:          1,
+		ReverseScanForUpdate: 1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -403,6 +411,8 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	}
 	addOpGen(allowed, randScan, c.Scan)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
+	addOpGen(allowed, randReverseScan, c.ReverseScan)
+	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -456,6 +466,18 @@ func randScan(g *generator, rng *rand.Rand) Operation {
 
 func randScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	op := randScan(g, rng)
+	op.Scan.ForUpdate = true
+	return op
+}
+
+func randReverseScan(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.Reverse = true
+	return op
+}
+
+func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScan(g, rng)
 	op.Scan.ForUpdate = true
 	return op
 }
@@ -654,6 +676,14 @@ func scan(key, endKey string) Operation {
 
 func scanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true}}
+}
+
+func reverseScan(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true}}
+}
+
+func reverseScanForUpdate(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
 }
 
 func split(key string) Operation {

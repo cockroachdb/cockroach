@@ -49,6 +49,7 @@ message ScanOperation {
   bytes end_key = 2;
   bool for_update = 3;
   Result result = 4 [(gogoproto.nullable) = false];
+  bool reverse = 5;
 }
 
 message PutOperation {
