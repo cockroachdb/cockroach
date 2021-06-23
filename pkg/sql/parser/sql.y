@@ -664,9 +664,6 @@ func (u *sqlSymUnion) abbreviatedGrant() tree.AbbreviatedGrant {
 func (u *sqlSymUnion) abbreviatedRevoke() tree.AbbreviatedRevoke {
   return u.val.(tree.AbbreviatedRevoke)
 }
-func (u *sqlSymUnion) objectNamePrefixPtr() *tree.ObjectNamePrefix {
-  return u.val.(*tree.ObjectNamePrefix)
-}
 func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPrivilegesTargetObject {
   return u.val.(tree.AlterDefaultPrivilegesTargetObject)
 }
@@ -1323,8 +1320,8 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %type <tree.AbbreviatedGrant> abbreviated_grant_stmt
 %type <tree.AbbreviatedRevoke> abbreviated_revoke_stmt
 %type <bool> opt_with_grant_option
-%type <*security.SQLUsername> opt_for_role
-%type <*tree.ObjectNamePrefix>  opt_in_schema
+%type <[]security.SQLUsername> opt_for_roles
+%type <tree.ObjectNamePrefixList>  opt_in_schemas
 %type <tree.AlterDefaultPrivilegesTargetObject> alter_default_privileges_target_object
 
 
@@ -7848,21 +7845,27 @@ alter_rename_index_stmt:
     $$.val = &tree.RenameIndex{Index: $5.newTableIndexName(), NewName: tree.UnrestrictedName($8), IfExists: true}
   }
 
+// %Help: ALTER DEFAULT PRIVILEGES - alter default privileges on an object
+// %Category: DDL
+// %Text:
+//
+// Commands:
+//   ALTER DEFAULT PRIVILEGES [ FOR { ROLE | USER } target_roles... ] [ IN SCHEMA schema_name...] abbreviated_grant_or_revoke
 alter_default_privileges_stmt:
- ALTER DEFAULT PRIVILEGES opt_for_role opt_in_schema abbreviated_grant_stmt
+ ALTER DEFAULT PRIVILEGES opt_for_roles opt_in_schemas abbreviated_grant_stmt
  {
    $$.val = &tree.AlterDefaultPrivileges{
-     Role: $4.userPtr(),
-     Schema: $5.objectNamePrefixPtr(),
+     Roles: $4.users(),
+     Schemas: $5.objectNamePrefixList(),
      Grant: $6.abbreviatedGrant(),
      IsGrant: true,
    }
  }
-| ALTER DEFAULT PRIVILEGES opt_for_role opt_in_schema abbreviated_revoke_stmt
+| ALTER DEFAULT PRIVILEGES opt_for_roles opt_in_schemas abbreviated_revoke_stmt
  {
    $$.val = &tree.AlterDefaultPrivileges{
-     Role: $4.userPtr(),
-     Schema: $5.objectNamePrefixPtr(),
+     Roles: $4.users(),
+     Schemas: $5.objectNamePrefixList(),
      Revoke: $6.abbreviatedRevoke(),
      IsGrant: false,
    }
@@ -7936,25 +7939,23 @@ alter_default_privileges_target_object:
     return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON FUNCTIONS ...")
   }
 
-opt_for_role:
- FOR role_or_group_or_user role_spec
+opt_for_roles:
+ FOR role_or_group_or_user role_spec_list
  {
-   tmp := $3.user()
-   $$.val = &tmp
+   $$.val = $3.users()
  }
 | /* EMPTY */ {
-   $$.val = (*security.SQLUsername)(nil)
+   $$.val = []security.SQLUsername{}
 }
 
-opt_in_schema:
- IN SCHEMA qualifiable_schema_name
+opt_in_schemas:
+ IN SCHEMA schema_name_list
  {
-   tmp := $3.objectNamePrefix()
-   $$.val = &tmp
+   $$.val = $3.objectNamePrefixList()
  }
 | /* EMPTY */
  {
-   $$.val = (*tree.ObjectNamePrefix)(nil)
+   $$.val = tree.ObjectNamePrefixList{}
  }
 
 opt_column:
