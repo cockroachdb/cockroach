@@ -113,6 +113,9 @@ func ValidateColumnDefType(t *types.T) error {
 
 // ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func ColumnTypeIsIndexable(t *types.T) bool {
+	if t.IsAmbiguous() || t.Family() == types.TupleFamily {
+		return false
+	}
 	// Some inverted index types also have a key encoding, but we don't
 	// want to support those yet. See #50659.
 	return !MustBeValueEncoded(t) && !ColumnTypeIsInvertedIndexable(t)
@@ -121,6 +124,9 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 // ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
+	if t.IsAmbiguous() || t.Family() == types.TupleFamily {
+		return false
+	}
 	family := t.Family()
 	return family == types.JsonFamily || family == types.ArrayFamily ||
 		family == types.GeographyFamily || family == types.GeometryFamily

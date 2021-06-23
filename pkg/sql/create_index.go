@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -326,66 +327,103 @@ func replaceExpressionElemsWithVirtualCols(
 		return err
 	}
 
+	lastColumnIdx := len(n.Columns) - 1
 	for i := range n.Columns {
 		elem := &n.Columns[i]
 		if elem.Expr != nil {
-			if !params.SessionData().EnableExpressionBasedIndexes {
+			if !params.SessionData().EnableExpressionIndexes {
 				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
 			}
 
-			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionBasedIndexes) {
+			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionIndexes) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"version %v must be finalized to use expression-based indexes",
-					clusterversion.ExpressionBasedIndexes)
+					"version %v must be finalized to use expression indexes",
+					clusterversion.ExpressionIndexes)
 			}
 
-			expr, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
+			// Create a dummy ColumnTableDef to use for validating the
+			// expression. The type is Any because it is unknown until
+			// validation is performed.
+			colDef := &tree.ColumnTableDef{
+				Type: types.Any,
+			}
+			colDef.Computed.Computed = true
+			colDef.Computed.Expr = elem.Expr
+			colDef.Computed.Virtual = true
+
+			// Validate the expression and resolve its type.
+			expr, typ, err := schemaexpr.ValidateComputedColumnExpression(
 				params.ctx,
 				desc,
-				elem.Expr,
-				types.Any,
-				"index expression",
-				params.p.SemaCtx(),
-				tree.VolatilityImmutable,
+				colDef,
 				tn,
+				"index element",
+				params.p.SemaCtx(),
 			)
 			if err != nil {
 				return err
 			}
 
-			// If a virtual column with the same expression already exists, use
-			// it instead of creating a new virtual column.
-			if col, ok := desc.FindVirtualColumnWithExpr(expr); ok {
-				elem.Column = col.ColName()
-				elem.Expr = nil
-				continue
+			// The expression type cannot be ambiguous.
+			if typ.IsAmbiguous() {
+				return errors.WithHint(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						"type of index element %s is ambiguous",
+						elem.Expr.String(),
+					),
+					"consider adding a type cast to the expression",
+				)
 			}
 
-			// Otherwise, create a new virtual column and add it to the table
-			// descriptor.
-			colName := tabledesc.GenerateUniqueName("crdb_idx_expr", func(name string) bool {
+			if !n.Inverted && !colinfo.ColumnTypeIsIndexable(typ) {
+				return pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"index element %s of type %s is not indexable",
+					elem.Expr.String(),
+					typ.Name(),
+				)
+			}
+
+			if n.Inverted {
+				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"index element %s of type %s is not allowed as a prefix column in an inverted index",
+							elem.Expr.String(),
+							typ.Name(),
+						),
+						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+					)
+				}
+				if i == lastColumnIdx && !colinfo.ColumnTypeIsInvertedIndexable(typ) {
+					return errors.WithHint(
+						pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"index element %s of type %s is not allowed as the last column in an inverted index",
+							elem.Expr.String(),
+							typ.Name(),
+						),
+						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+					)
+				}
+			}
+
+			// Create a new virtual column and add it to the table descriptor.
+			colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) bool {
 				_, err := desc.FindColumnWithName(tree.Name(name))
 				return err == nil
 			})
-			addCol := &tree.AlterTableAddColumn{
-				ColumnDef: makeExpressionBasedIndexVirtualColumn(colName, typ, elem.Expr),
+			col := &descpb.ColumnDescriptor{
+				Name:         colName,
+				Inaccessible: true,
+				Type:         typ,
+				ComputeExpr:  &expr,
+				Virtual:      true,
+				Nullable:     true,
 			}
-
-			// Add the virtual column to desc as a mutation column.
-			if err := params.p.addColumnImpl(
-				params,
-				&alterTableNode{
-					tableDesc: desc,
-					n: &tree.AlterTable{
-						Cmds: []tree.AlterTableCmd{addCol},
-					},
-				},
-				tn,
-				desc,
-				addCol,
-			); err != nil {
-				return err
-			}
+			desc.AddColumn(col)
 
 			// Set the column name and unset the expression.
 			elem.Column = tree.Name(colName)

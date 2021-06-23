@@ -155,8 +155,8 @@ func (p *planner) addColumnImpl(
 	}
 
 	if d.IsComputed() {
-		serializedExpr, err := schemaexpr.ValidateComputedColumnExpression(
-			params.ctx, n.tableDesc, d, tn, params.p.SemaCtx(),
+		serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
+			params.ctx, n.tableDesc, d, tn, "computed column", params.p.SemaCtx(),
 		)
 		if err != nil {
 			return err

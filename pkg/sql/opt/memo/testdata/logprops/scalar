@@ -392,5 +392,5 @@ values
  ├── fd: ()-->(1)
  ├── prune: (1)
  └── tuple [type=tuple{string}]
-      └── cast:  [type=tuple{string}]
+      └── cast: RECORD [type=tuple{string}]
            └── null [type=unknown]
