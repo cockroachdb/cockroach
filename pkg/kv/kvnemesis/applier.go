@@ -148,6 +148,8 @@ type clientI interface {
 	Put(context.Context, interface{}, interface{}) error
 	Scan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	Run(context.Context, *kv.Batch) error
 }
 
@@ -172,7 +174,11 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 		o.Result = resultError(ctx, err)
 	case *ScanOperation:
 		fn := db.Scan
-		if o.ForUpdate {
+		if o.Reverse && o.ForUpdate {
+			fn = db.ReverseScanForUpdate
+		} else if o.Reverse {
+			fn = db.ReverseScan
+		} else if o.ForUpdate {
 			fn = db.ScanForUpdate
 		}
 		kvs, err := fn(ctx, o.Key, o.EndKey, 0 /* maxRows */)
@@ -210,7 +216,11 @@ func applyBatchOp(
 		case *PutOperation:
 			b.Put(subO.Key, subO.Value)
 		case *ScanOperation:
-			if subO.ForUpdate {
+			if subO.Reverse && subO.ForUpdate {
+				b.ReverseScanForUpdate(subO.Key, subO.EndKey)
+			} else if subO.Reverse {
+				b.ReverseScan(subO.Key, subO.EndKey)
+			} else if subO.ForUpdate {
 				b.ScanForUpdate(subO.Key, subO.EndKey)
 			} else {
 				b.Scan(subO.Key, subO.EndKey)
