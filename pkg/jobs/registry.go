@@ -1071,14 +1071,14 @@ func (r *Registry) stepThroughStateMachine(
 	case StatusSucceeded:
 		if jobErr != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: successful bu unexpected error provided", job.ID())
+				"job %d: successful but unexpected error provided", job.ID())
 		}
 		err := job.succeeded(ctx, nil /* txn */, nil /* fn */)
 		switch {
 		case err == nil:
 			telemetry.Inc(TelemetryMetrics[jobType].Successful)
 		default:
-			// If we can't transactionally mark the job as reverting then it will be
+			// If we can't transactionally mark the job as succeeded then it will be
 			// restarted during the next adopt loop and it will be retried.
 			err = errors.Wrapf(err, "job %d: could not mark as succeeded", job.ID())
 		}
