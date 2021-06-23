@@ -221,6 +221,15 @@ func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
 	return false
 }
 
+// IsSingleCommitRequest returns true iff the batch contains a single request,
+// and that request is an EndTxnRequest(commit=true).
+func (ba *BatchRequest) IsSingleCommitRequest() bool {
+	if ba.isSingleRequestWithMethod(EndTxn) {
+		return ba.Requests[0].GetInner().(*EndTxnRequest).Commit
+	}
+	return false
+}
+
 // IsSingleRefreshRequest returns true iff the batch contains a single request,
 // and that request is a RefreshRequest.
 func (ba *BatchRequest) IsSingleRefreshRequest() bool {
