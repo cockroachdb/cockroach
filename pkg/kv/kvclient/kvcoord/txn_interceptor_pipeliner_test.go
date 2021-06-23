@@ -23,11 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1594,7 +1597,7 @@ func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 			lockSpans: []span{{"a1", "a2"}, {"a3", "a4"}, {"b1", "b2"}, {"b3", "b4"}},
 			ifWrites:  []string{c30},
 			maxBytes:  20,
-			req:       putBatch(roachpb.Key("b"), nil, false /* asyncConsensus */),
+			req:       putBatchNoAsyncConsensus(roachpb.Key("b"), nil),
 			// We expect the locks to be condensed as aggressively as possible, which
 			// means that they're completely condensed at the level of each range.
 			// Note that the "b" key from the request is included.
@@ -1609,7 +1612,7 @@ func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 			name:         "new large inflight-writes",
 			lockSpans:    []span{{"a1", "a2"}, {"a3", "a4"}, {"b1", "b2"}, {"b3", "b4"}},
 			maxBytes:     20,
-			req:          putBatch(roachpb.Key(c30), nil, true /* asyncConsensus */),
+			req:          putBatch(roachpb.Key(c30), nil),
 			expLockSpans: []span{{"a1", "a4"}, {"b1", "b4"}, {c30, ""}},
 			expIfWrites:  nil, // The request was not allowed to perform async consensus.
 		},
@@ -1678,9 +1681,7 @@ func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 	}
 }
 
-// putArgs returns a PutRequest addressed to the default replica for the
-// specified key / value.
-func putBatch(key roachpb.Key, value []byte, asyncConsensus bool) roachpb.BatchRequest {
+func putBatch(key roachpb.Key, value []byte) roachpb.BatchRequest {
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -1688,14 +1689,25 @@ func putBatch(key roachpb.Key, value []byte, asyncConsensus bool) roachpb.BatchR
 		},
 		Value: roachpb.MakeValueFromBytes(value),
 	})
-	// If we don't want async consensus, we pile on a read that inhibits it.
-	if !asyncConsensus {
-		ba.Add(&roachpb.GetRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: key,
-			},
-		})
-	}
+	return ba
+}
+
+// putBatchNoAsyncConsesnsus returns a PutRequest addressed to the default
+// replica for the specified key / value. The batch also contains a Get, which
+// inhibits the asyncConsensus flag.
+func putBatchNoAsyncConsensus(key roachpb.Key, value []byte) roachpb.BatchRequest {
+	ba := roachpb.BatchRequest{}
+	ba.Add(&roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes(value),
+	})
+	ba.Add(&roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+	})
 	return ba
 }
 
@@ -1727,6 +1739,147 @@ func (s *descriptorDBRangeIterator) Seek(ctx context.Context, key roachpb.RKey, 
 
 func (s descriptorDBRangeIterator) Error() error {
 	return nil
+}
+
+// Test that the pipeliner rejects requests when the lock span budget is
+// exceeded, if configured to do so.
+func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	largeAs := make([]byte, 11)
+	for i := 0; i < len(largeAs); i++ {
+		largeAs[i] = 'a'
+	}
+	largeWrite := putBatch(largeAs, nil)
+	mediumWrite := putBatch(largeAs[:5], nil)
+
+	delRange := roachpb.BatchRequest{}
+	delRange.Header.MaxSpanRequestKeys = 1
+	delRange.Add(&roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("b"),
+		},
+	})
+	delRangeResp := delRange.CreateReply()
+	delRangeResp.Responses[0].GetInner().(*roachpb.DeleteRangeResponse).ResumeSpan = &roachpb.Span{
+		Key:    largeAs,
+		EndKey: roachpb.Key("b"),
+	}
+
+	testCases := []struct {
+		name string
+		// The requests to be sent one by one.
+		reqs []roachpb.BatchRequest
+		// The responses for reqs. If an entry is nil, a response is automatically
+		// generated for it. Requests past the end of the resp array are also
+		// generated automatically.
+		resp []*roachpb.BatchResponse
+		// The 0-based index of the request that's expected to be rejected. -1 if no
+		// request is expected to be rejected.
+		expRejectIdx int
+	}{
+		{name: "large request",
+			reqs:         []roachpb.BatchRequest{largeWrite},
+			expRejectIdx: 0,
+		},
+		{name: "requests that add up",
+			reqs: []roachpb.BatchRequest{
+				putBatchNoAsyncConsensus(roachpb.Key("aaaa"), nil),
+				putBatchNoAsyncConsensus(roachpb.Key("bbbb"), nil),
+				putBatchNoAsyncConsensus(roachpb.Key("cccc"), nil)},
+			expRejectIdx: 2,
+		},
+		{name: "async requests that add up",
+			// Like the previous test, but this time the requests run with async
+			// consensus. Being tracked as in-flight writes, this test shows that
+			// in-flight writes count towards the budget.
+			reqs: []roachpb.BatchRequest{
+				putBatch(roachpb.Key("aaaa"), nil),
+				putBatch(roachpb.Key("bbbb"), nil),
+				putBatch(roachpb.Key("cccc"), nil)},
+			expRejectIdx: 2,
+		},
+		{
+			name: "response goes over budget",
+			// A request returns a response with a large resume span, which takes up
+			// the budget. Then the next request will be rejected.
+			reqs:         []roachpb.BatchRequest{delRange, putBatch(roachpb.Key("a"), nil)},
+			resp:         []*roachpb.BatchResponse{delRangeResp},
+			expRejectIdx: 1,
+		},
+		{
+			// Request keys overlap, so they don't count twice.
+			name:         "overlapping requests",
+			reqs:         []roachpb.BatchRequest{mediumWrite, mediumWrite, mediumWrite},
+			expRejectIdx: -1,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.expRejectIdx >= len(tc.reqs) {
+				t.Fatalf("invalid test")
+			}
+
+			tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+			trackedWritesMaxSize.Override(ctx, &tp.st.SV, 10) /* reject when exceeding 10 bytes */
+			rejectTxnOverTrackedWritesBudget.Override(ctx, &tp.st.SV, true)
+
+			txn := makeTxnProto()
+
+			var respIdx int
+			mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				// Handle rollbacks separately.
+				if ba.IsSingleAbortTxnRequest() {
+					br := ba.CreateReply()
+					br.Txn = ba.Txn
+					return br, nil
+				}
+
+				var resp *roachpb.BatchResponse
+				if respIdx < len(tc.resp) {
+					resp = tc.resp[respIdx]
+				}
+				respIdx++
+
+				if resp != nil {
+					resp.Txn = ba.Txn
+					return resp, nil
+				}
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+
+			for i, ba := range tc.reqs {
+				ba.Header = roachpb.Header{Txn: &txn}
+				_, pErr := tp.SendLocked(ctx, ba)
+				if i == tc.expRejectIdx {
+					if pErr == nil {
+						t.Fatalf("expected rejection, but request succeeded")
+					}
+
+					budgetErr := (lockSpansOverBudgetError{})
+					if !errors.As(pErr.GoError(), &budgetErr) {
+						t.Fatalf("expected lockSpansOverBudgetError, got %+v", pErr.GoError())
+					}
+					require.Equal(t, pgcode.ConfigurationLimitExceeded, pgerror.GetPGCode(pErr.GoError()))
+					require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
+
+					// Make sure rolling back the txn works.
+					rollback := roachpb.BatchRequest{}
+					rollback.Add(&roachpb.EndTxnRequest{Commit: false})
+					rollback.Txn = &txn
+					_, pErr = tp.SendLocked(ctx, rollback)
+					require.Nil(t, pErr)
+				} else {
+					require.Nil(t, pErr)
+				}
+			}
+		})
+	}
 }
 
 func (s descriptorDBRangeIterator) Desc() *roachpb.RangeDescriptor {
