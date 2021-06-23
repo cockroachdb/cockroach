@@ -85,12 +85,13 @@ func TestAddNumericStats(t *testing.T) {
 }
 
 func TestAddExecStats(t *testing.T) {
-	numericStatA := NumericStat{Mean: 1, SquaredDiffs: 1}
-	numericStatB := NumericStat{Mean: 1, SquaredDiffs: 1}
-	a := ExecStats{Count: 1, NetworkBytes: numericStatA}
+	numericStatA := NumericStat{Mean: 354.123, SquaredDiffs: 34.34123}
+	numericStatB := NumericStat{Mean: 9.34354, SquaredDiffs: 75.321}
+	a := ExecStats{Count: 3, NetworkBytes: numericStatA}
 	b := ExecStats{Count: 1, NetworkBytes: numericStatB}
 	expectedNumericStat := AddNumericStats(a.NetworkBytes, b.NetworkBytes, a.Count, b.Count)
 	a.Add(b)
-	require.Equal(t, int64(2), a.Count)
-	require.Equal(t, expectedNumericStat, a.NetworkBytes)
+	require.Equal(t, int64(4), a.Count)
+	epsilon := 0.00000001
+	require.True(t, expectedNumericStat.AlmostEqual(a.NetworkBytes, epsilon), "expected %+v, but found %+v", expectedNumericStat, a.NetworkMessages)
 }
