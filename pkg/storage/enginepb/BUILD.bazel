@@ -37,6 +37,7 @@ go_library(
     srcs = [
         "decode.go",
         "engine.go",
+        "file_registry.go",
         "mvcc.go",
         "mvcc3.go",
     ],

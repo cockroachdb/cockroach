@@ -23,6 +23,7 @@ ALL_TESTS = [
     "//pkg/ccl/kvccl/kvfollowerreadsccl:kvfollowerreadsccl_test",
     "//pkg/ccl/kvccl/kvtenantccl:kvtenantccl_test",
     "//pkg/ccl/logictestccl:logictestccl_test",
+    "//pkg/ccl/migrationccl/migrationsccl:migrationsccl_test",
     "//pkg/ccl/multiregionccl:multiregionccl_test",
     "//pkg/ccl/multitenantccl/tenantcostclient:tenantcostclient_test",
     "//pkg/ccl/multitenantccl/tenantcostserver:tenantcostserver_test",

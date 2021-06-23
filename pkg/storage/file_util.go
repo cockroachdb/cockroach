@@ -17,11 +17,13 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
+const tempFileExtension = ".crdbtmp"
+
 // SafeWriteToFile writes the byte slice to the filename, contained in dir,
 // using the given fs.  It returns after both the file and the containing
 // directory are synced.
 func SafeWriteToFile(fs vfs.FS, dir string, filename string, b []byte) error {
-	tempName := filename + ".crdbtmp"
+	tempName := filename + tempFileExtension
 	f, err := fs.Create(tempName)
 	if err != nil {
 		return err
