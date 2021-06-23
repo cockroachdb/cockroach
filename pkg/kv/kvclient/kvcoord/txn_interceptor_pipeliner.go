@@ -14,13 +14,20 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 )
 
@@ -71,6 +78,15 @@ var trackedWritesMaxSize = settings.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
 	1<<18, /* 256 KB */
+).WithPublic()
+
+// rejectTxnOverTrackedWritesBudget dictates what happens when a txn exceeds
+// kv.transaction.max_intents_bytes.
+var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
+	"kv.transaction.reject_over_max_intents_budget.enabled",
+	"if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) "+
+		"are rejected instead of having their lock spans imprecisely compressed",
+	false,
 ).WithPublic()
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
@@ -203,7 +219,8 @@ type txnPipeliner struct {
 	// upper-bound on the influence that the transaction has had. The set
 	// contains all keys spans that the transaction will need to eventually
 	// clean up upon its completion.
-	lockFootprint condensableSpanSet
+	lockFootprint          condensableSpanSet
+	lockSpanBudgetExceeded bool
 }
 
 // condensableSpanSetRangeIterator describes the interface of RangeIterator
@@ -248,6 +265,36 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, pErr
 	}
 
+	maxBytes := trackedWritesMaxSize.Get(&tp.st.SV)
+	rejectOverBudget := rejectTxnOverTrackedWritesBudget.Get(&tp.st.SV)
+	// If we're configured to reject txns over budget, we pre-emptively check
+	// whether this current batch is likely to push us over the edge and, if it
+	// does, we reject it. We can only estimate what what spans this request would
+	// end up locking (because of ResumeSpans, for example), so this is a
+	// best-effort check. There's another check on the response path.
+	//
+	// Rollbacks are always permitted, even if we're already over budget.
+	if rejectOverBudget && !ba.IsSingleAbortTxnRequest() {
+		// NOTE: We could be more discriminate here: if the request contains an
+		// EndTxn among other writes (for example, if it's a 1PC batch) then we
+		// could allow the request through and hope that it succeeds. If if
+		// succeeds, then its locks are never technically counted against the
+		// transaction's budget because the client doesn't need to track them after
+		// the transaction commits. If it fails, then we'd add the lock spans to our
+		// tracking and exceed the budget. It's easier for this code and more
+		// predictable for the user if we just reject this batch, though.
+		var spans []roachpb.Span
+		ba.LockSpanIterate(nil /* br */, func(sp roachpb.Span, _ lock.Durability) {
+			spans = append(spans, sp)
+		})
+		if wouldCondense, bytes := tp.lockFootprint.wouldCondense(spans, maxBytes); wouldCondense {
+			tp.markTxnOverflow()
+			bErr := newLockSpansOverBudgetError(bytes, maxBytes, ba)
+			bErr.setDetectionDetails("Detected preemptively.")
+			return nil, roachpb.NewError(pgerror.WithCandidateCode(bErr, pgcode.ConfigurationLimitExceeded))
+		}
+	}
+
 	// Adjust the batch so that it doesn't miss any in-flight writes.
 	ba = tp.chainToInFlightWrites(ba)
 
@@ -256,7 +303,19 @@ func (tp *txnPipeliner) SendLocked(
 
 	// Update the in-flight write set and the lock footprint with the results of
 	// the request.
-	tp.updateLockTracking(ctx, ba, br)
+
+	if budgetErr := tp.updateLockTracking(ctx, ba, br, maxBytes, rejectOverBudget); budgetErr != nil {
+		// This error takes precedence over pErr (if any), since we don't want this
+		// transaction in our system at all (for example, we don't want to return a
+		// retryable error).
+		bErr := budgetErr.(lockSpansOverBudgetError)
+		if pErr == nil {
+			bErr.setDetectionDetails("Detected on successful response.")
+		} else {
+			bErr.setDetectionDetails("Detected on response error: " + pErr.String())
+		}
+		return nil, roachpb.NewError(pgerror.WithCandidateCode(bErr, pgcode.ConfigurationLimitExceeded))
+	}
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
@@ -479,32 +538,76 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 //  3. it moves all in-flight writes that the request proved to exist from
 //     the in-flight writes set to the lock footprint.
 //
-// After updating the write sets, the lock footprint is condensed to ensure that
-// it remains under its memory limit.
+// The transaction's lock set is only allowed to go up to maxBytes. If it goes
+// over, the behavior depends on the rejectOverBudget option. If not rejecting,
+// the lock spans are condensed - thus trading fidelity for memory. If rejectOverBudget is set, the
 //
 // If no response is provided (indicating an error), all writes from the batch
 // are added directly to the lock footprint to avoid leaking any locks when the
 // transaction cleans up.
 func (tp *txnPipeliner) updateLockTracking(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
-) {
+	ctx context.Context,
+	ba roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	maxBytes int64,
+	rejectOverBudget bool,
+) error {
+	tp.updateLockTrackingInner(ctx, ba, br)
+
+	// Deal with compacting the lock spans.
+
+	if rejectOverBudget {
+		if tp.lockFootprint.bytes < maxBytes || ba.IsSingleAbortTxnRequest() {
+			return nil
+		}
+		// If we've exceeded the budget, try to merge the spans and see if that
+		// reduces the size.
+		tp.lockFootprint.mergeAndSort()
+		if tp.lockFootprint.bytes < maxBytes {
+			// The merging did it.
+			return nil
+		}
+		// We're over-budget, and we're not allowed to condense the locks (as
+		// per rejectOverBudget). It's not usual to get into this situation,
+		// since we try to prevent batches that would push the lock spans over
+		// this budget from being sent out in the first place. We might have
+		// gotten here, though, because the exact set of locks that a batch will
+		// take are not known exactly at send time (think keys in response
+		// ResumeSpans). We don't want to allow this transaction to continue, so
+		// we're going to return an error to the client. We keep the locks
+		// uncompacted, so that the rollback can be efficient.
+		// NOTE: We could be more discriminate here: if the transaction has not
+		// already encountered an error, we could allow the client to commit it.
+		// Since the memory has already been allocated, we arguably could allow
+		// the client to also continue doing reads, and even writes, that don't
+		// further increase the lock spans. This complexity doesn't seem worth
+		// though, and it would also make the policy harder to explain and the
+		// enforcement would appear to come at unpredictable times.
+		tp.markTxnOverflow()
+		return newLockSpansOverBudgetError(tp.lockFootprint.bytes, maxBytes, ba)
+	}
+
 	// After adding new writes to the lock footprint, check whether we need to
 	// condense the set to stay below memory limits.
-	defer func() {
-		alreadyCondensed := tp.lockFootprint.condensed
-		condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
-		if condensed && !alreadyCondensed {
-			if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-				log.Warningf(ctx,
-					"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
-						"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
-					ba.Txn, ba.Summary())
-			}
-			tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
-			tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
-		}
-	}()
+	alreadyCondensed := tp.lockFootprint.condensed
 
+	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
+	if condensed && !alreadyCondensed {
+		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
+			log.Warningf(ctx,
+				"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
+					"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
+				ba.Txn, ba.Summary())
+		}
+		tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
+		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
+	}
+	return nil
+}
+
+func (tp *txnPipeliner) updateLockTrackingInner(
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+) {
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
 	// concurrent requests for extended periods of time. See #3346.
@@ -709,6 +812,14 @@ func (tp *txnPipeliner) hasAcquiredLocks() bool {
 	return tp.ifWrites.len() > 0 || !tp.lockFootprint.empty()
 }
 
+func (tp *txnPipeliner) markTxnOverflow() {
+	if tp.lockSpanBudgetExceeded {
+		return
+	}
+	tp.lockSpanBudgetExceeded = true
+	tp.txnMetrics.TxnsRejectedByLockSpanBudget.Inc(1)
+}
+
 // inFlightWrites represent a commitment to proving (via QueryIntent) that
 // a point write succeeded in replicating an intent with a specific sequence
 // number.
@@ -908,4 +1019,86 @@ func (a *inFlightWriteAlloc) clear() {
 		(*a)[i] = inFlightWrite{} // for GC
 	}
 	*a = (*a)[:0]
+}
+
+type lockSpansOverBudgetError struct {
+	lockSpansBytes int64
+	limitBytes     int64
+	baSummary      string
+	txnDetails     string
+	detectedMsg    string
+}
+
+func newLockSpansOverBudgetError(
+	lockSpansBytes, limitBytes int64, ba roachpb.BatchRequest,
+) lockSpansOverBudgetError {
+	return lockSpansOverBudgetError{
+		lockSpansBytes: lockSpansBytes,
+		limitBytes:     limitBytes,
+		baSummary:      ba.Summary(),
+		txnDetails:     ba.Txn.String(),
+	}
+}
+
+func (l lockSpansOverBudgetError) Error() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("the transaction is locking too many rows and exceeded its lock-tracking memory budget; "+
+		"lock spans: %d bytes > budget: %d bytes. Request pushing transaction over the edge: %s. "+
+		"Transaction details: %s.", l.lockSpansBytes, l.limitBytes, l.baSummary, l.txnDetails))
+	if l.detectedMsg != "" {
+		s.WriteString(" " + l.detectedMsg)
+	}
+	return s.String()
+}
+
+func (l *lockSpansOverBudgetError) setDetectionDetails(msg string) {
+	l.detectedMsg = msg
+}
+
+func encodeLockSpansOverBudgetError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	t := err.(lockSpansOverBudgetError)
+	details = &errorspb.StringsPayload{
+		Details: []string{
+			strconv.Itoa(int(t.lockSpansBytes)), strconv.Itoa(int(t.limitBytes)),
+			t.baSummary, t.txnDetails, t.detectedMsg,
+		},
+	}
+	msgPrefix = fmt.Sprintf("the transaction is locking too many rows")
+	return msgPrefix, nil, details
+}
+
+func decodeLockSpansOverBudgetError(
+	_ context.Context, msgPrefix string, safeDetails []string, payload proto.Message,
+) error {
+	m, ok := payload.(*errorspb.StringsPayload)
+	if !ok || len(m.Details) < 5 {
+		// If this ever happens, this means some version of the library
+		// (presumably future) changed the payload type, and we're
+		// receiving this here. In this case, give up and let
+		// DecodeError use the opaque type.
+		return nil
+	}
+	lockBytes, decodeErr := strconv.Atoi(m.Details[0])
+	if decodeErr != nil {
+		return nil //nolint:returnerrcheck
+	}
+	limitBytes, decodeErr := strconv.Atoi(m.Details[1])
+	if decodeErr != nil {
+		return nil //nolint:returnerrcheck
+	}
+	return lockSpansOverBudgetError{
+		lockSpansBytes: int64(lockBytes),
+		limitBytes:     int64(limitBytes),
+		baSummary:      m.Details[2],
+		txnDetails:     m.Details[3],
+		detectedMsg:    m.Details[4],
+	}
+}
+
+func init() {
+	pKey := errors.GetTypeKey(lockSpansOverBudgetError{})
+	errors.RegisterLeafEncoder(pKey, encodeLockSpansOverBudgetError)
+	errors.RegisterLeafDecoder(pKey, decodeLockSpansOverBudgetError)
 }

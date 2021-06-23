@@ -17,16 +17,20 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,9 +80,11 @@ func (m *mockLockedSender) ChainMockSend(
 
 func makeMockTxnPipeliner() (txnPipeliner, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
+	metrics := MakeTxnMetrics(time.Second)
 	return txnPipeliner{
-		st:      cluster.MakeTestingClusterSettings(),
-		wrapped: mockSender,
+		st:         cluster.MakeTestingClusterSettings(),
+		wrapped:    mockSender,
+		txnMetrics: &metrics,
 	}, mockSender
 }
 
@@ -1528,4 +1534,141 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.Zero(t, metrics.TxnsWithCondensedIntentsGauge.Value())
+}
+
+// Test that the pipeliner rejects requests when the lock span budget is
+// exceeded, if configured to do so.
+func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	largeAs := make([]byte, 11)
+	for i := 0; i < len(largeAs); i++ {
+		largeAs[i] = 'a'
+	}
+	largeWrite := putBatch(largeAs, nil)
+	mediumWrite := putBatch(largeAs[:5], nil)
+
+	delRange := roachpb.BatchRequest{}
+	delRange.Header.MaxSpanRequestKeys = 1
+	delRange.Add(&roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("b"),
+		},
+	})
+	delRangeResp := delRange.CreateReply()
+	delRangeResp.Responses[0].GetInner().(*roachpb.DeleteRangeResponse).ResumeSpan = &roachpb.Span{
+		Key:    largeAs,
+		EndKey: roachpb.Key("b"),
+	}
+
+	testCases := []struct {
+		name         string
+		reqs         []roachpb.BatchRequest
+		resp         *roachpb.BatchResponse
+		expRejectIdx int
+		expDetected  string
+	}{
+		{name: "large request",
+			reqs:         []roachpb.BatchRequest{largeWrite},
+			expRejectIdx: 0,
+		},
+		{name: "requests that add up",
+			reqs: []roachpb.BatchRequest{
+				putBatch(roachpb.Key("aaaa"), nil),
+				putBatch(roachpb.Key("bbbb"), nil),
+				putBatch(roachpb.Key("cccc"), nil)},
+			expRejectIdx: 2,
+		},
+		{
+			name:         "request rejected on response",
+			reqs:         []roachpb.BatchRequest{delRange},
+			resp:         delRangeResp,
+			expRejectIdx: 0,
+			expDetected:  "Detected on successful response.",
+		},
+		{
+			// Request keys overlap, so they don't count twice.
+			name:         "overlapping requests",
+			reqs:         []roachpb.BatchRequest{mediumWrite, mediumWrite, mediumWrite},
+			expRejectIdx: -1,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.expRejectIdx >= len(tc.reqs) {
+				t.Fatalf("invalid test")
+			}
+
+			tp, mockSender := makeMockTxnPipeliner()
+			// Disable pipelining, so that writes are added to the lock spans
+			// immediately.
+			tp.disabled = true
+			trackedWritesMaxSize.Override(ctx, &tp.st.SV, 10) /* reject when exceeding 10 bytes */
+			rejectTxnOverTrackedWritesBudget.Override(ctx, &tp.st.SV, true)
+
+			txn := makeTxnProto()
+
+			mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				// Handle rollbacks separately.
+				if ba.IsSingleAbortTxnRequest() {
+					br := ba.CreateReply()
+					br.Txn = ba.Txn
+					return br, nil
+				}
+
+				if tc.resp != nil {
+					tc.resp.Txn = ba.Txn
+					return tc.resp, nil
+				}
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+
+			for i, ba := range tc.reqs {
+				ba.Header = roachpb.Header{Txn: &txn}
+				_, pErr := tp.SendLocked(ctx, ba)
+				if i == tc.expRejectIdx {
+					if pErr == nil {
+						t.Fatalf("expected rejection, but request succeeded")
+					}
+
+					budgetErr := (lockSpansOverBudgetError{})
+					if !errors.As(pErr.GoError(), &budgetErr) {
+						t.Fatalf("expected lockSpansOverBudgetError, got %+v", pErr.GoError())
+					}
+					if tc.expDetected != "" {
+						require.Equal(t, tc.expDetected, budgetErr.detectedMsg)
+					}
+					require.Equal(t, pgcode.ConfigurationLimitExceeded, pgerror.GetPGCode(pErr.GoError()))
+					require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
+
+					// Make sure rolling back the txn works.
+					rollback := roachpb.BatchRequest{}
+					rollback.Add(&roachpb.EndTxnRequest{Commit: false})
+					rollback.Txn = &txn
+					_, pErr = tp.SendLocked(ctx, rollback)
+					require.Nil(t, pErr)
+				} else {
+					require.Nil(t, pErr)
+				}
+			}
+		})
+	}
+}
+
+// putArgs returns a PutRequest addressed to the default replica for the
+// specified key / value.
+func putBatch(key roachpb.Key, value []byte) roachpb.BatchRequest {
+	ba := roachpb.BatchRequest{}
+	ba.Add(&roachpb.PutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes(value),
+	})
+	return ba
 }

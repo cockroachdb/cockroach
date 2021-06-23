@@ -173,6 +173,34 @@ func (s *condensableSpanSet) clear() {
 	*s = condensableSpanSet{}
 }
 
+// wouldCondense returns true if the spanSet would have to condense if `spans`
+// were to be added to the set. The second return value is the size that the
+// spanSet would get to if the spans would be added to it.
+func (s *condensableSpanSet) wouldCondense(spans []roachpb.Span, maxBytes int64) (bool, int64) {
+	var bytes int64
+	for _, sp := range spans {
+		bytes += spanSize(sp)
+	}
+	estimate := s.bytes + bytes
+	if s.bytes+bytes <= maxBytes {
+		return false, estimate
+	}
+
+	// It looks like we'll likely exceed maxBytes. But before we know for sure, we need to de-dup.
+	oldLen := len(s.s) + len(spans)
+	spans = append(spans, s.s...)
+	if oldLen == len(spans) {
+		// Nothing changed -i.e. we failed to merge any spans.
+		return true, estimate
+	}
+	// Recompute the size.
+	bytes = 0
+	for _, sp := range s.s {
+		bytes += spanSize(sp)
+	}
+	return bytes > maxBytes, bytes
+}
+
 func spanSize(sp roachpb.Span) int64 {
 	return int64(len(sp.Key) + len(sp.EndKey))
 }

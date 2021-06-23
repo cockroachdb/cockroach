@@ -518,12 +518,13 @@ message ErrorDetail {
     ReplicaTooOldError replica_too_old = 18;
     AmbiguousResultError ambiguous_result = 26;
     StoreNotFoundError store_not_found = 27;
-    // The following three are ErrorDetails (and proto messages) because they
+    // The following four are ErrorDetails (and proto messages) because they
     // needs to be communicated from the TxnCoordSender and Txn to the upper
     // layers through the Sender interface.
     TransactionRetryWithProtoRefreshError transaction_retry_with_proto_refresh = 28;
     IntegerOverflowError integer_overflow = 31;
     UnsupportedRequestError unsupported_request = 32;
+
     BatchTimestampBeforeGCError timestamp_before = 34;
     TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
     IntentMissingError intent_missing = 36;
