@@ -305,6 +305,36 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	a.AdjustMemoryUsage(after - before)
 }
 
+// PerformAppend is used to account for memory usage during calls to
+// AppendBufferedBatch.AppendTuples. It is more efficient than PerformOperation
+// for appending to Decimal column types since the expensive portion of the cost
+// calculation only needs to be performed for the newly appended elements.
+func (a *Allocator) PerformAppend(destVecs []coldata.Vec, prevLength int, operation func()) {
+	var before int64
+	for _, dest := range destVecs {
+		switch dest.CanonicalTypeFamily() {
+		case types.DecimalFamily:
+			// Don't add the expensive cost to 'before' - we will only calculate the
+			// new expensive cost from prevLength on.
+			before += int64(sizeOfDecimalsCheap(dest.Decimal()))
+		default:
+			before += getVecMemoryFootprint(dest)
+		}
+	}
+	operation()
+	var after int64
+	for _, dest := range destVecs {
+		switch dest.CanonicalTypeFamily() {
+		case types.DecimalFamily:
+			after += int64(sizeOfDecimalsExpensive(dest.Decimal(), prevLength))
+			after += int64(sizeOfDecimalsCheap(dest.Decimal()))
+		default:
+			after += getVecMemoryFootprint(dest)
+		}
+	}
+	a.AdjustMemoryUsage(after - before)
+}
+
 // Used returns the number of bytes currently allocated through this allocator.
 func (a *Allocator) Used() int64 {
 	return a.acc.Used()
@@ -348,11 +378,18 @@ const (
 )
 
 func sizeOfDecimals(decimals coldata.Decimals) uintptr {
+	return sizeOfDecimalsCheap(decimals) + sizeOfDecimalsExpensive(decimals, 0 /* startIdx */)
+}
+
+func sizeOfDecimalsCheap(decimals coldata.Decimals) uintptr {
+	return uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
+}
+
+func sizeOfDecimalsExpensive(decimals coldata.Decimals, startIdx int) uintptr {
 	var size uintptr
-	for i := range decimals {
+	for i := startIdx; i < decimals.Len(); i++ {
 		size += tree.SizeOfDecimal(&decimals[i])
 	}
-	size += uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
 	return size
 }
 
