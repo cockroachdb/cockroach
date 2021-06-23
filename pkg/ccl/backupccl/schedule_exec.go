@@ -171,6 +171,58 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 	return nil
 }
 
+func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
+	sj *jobs.ScheduledJob,
+) (string, error) {
+	backupNode, err := extractBackupStatement(sj)
+	if err != nil {
+		return "", err
+	}
+
+	args := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return "", errors.Wrap(err, "un-marshaling args")
+	}
+
+	fullBackup := &tree.FullBackupClause{AlwaysFull: true}
+	if backupNode.AppendToLatest {
+		fullBackup.AlwaysFull = false
+		fullBackup.Recurrence = tree.NewDString(args.DependentScheduleCrontab)
+	}
+
+	firstRun, err := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
+	if err != nil {
+		return "", err
+	}
+
+	scheduleOptions := tree.KVOptions{
+		tree.KVOption{
+			Key:   optFirstRun,
+			Value: firstRun,
+		},
+		tree.KVOption{
+			Key:   optOnExecFailure,
+			Value: tree.NewDString(sj.ScheduleDetails().OnError.String()),
+		},
+		tree.KVOption{
+			Key:   optOnPreviousRunning,
+			Value: tree.NewDString(sj.ScheduleDetails().Wait.String()),
+		},
+	}
+
+	node := &tree.ScheduledBackup{
+		ScheduleLabel:   tree.NewDString(sj.ScheduleLabel()),
+		Recurrence:      tree.NewDString(sj.ScheduleExpr()),
+		FullBackup:      fullBackup,
+		Targets:         backupNode.Targets,
+		To:              backupNode.To,
+		BackupOptions:   backupNode.Options,
+		ScheduleOptions: scheduleOptions,
+	}
+
+	return tree.AsString(node), nil
+}
+
 func (e *scheduledBackupExecutor) backupSucceeded(
 	ctx context.Context,
 	schedule *jobs.ScheduledJob,
