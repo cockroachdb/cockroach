@@ -122,8 +122,8 @@ func (fs *absoluteFS) PathDir(path string) string {
 	return fs.fs.PathDir(path)
 }
 
-func (fs *absoluteFS) GetFreeSpace(path string) (uint64, error) {
-	return fs.fs.GetFreeSpace(path)
+func (fs *absoluteFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+	return fs.fs.GetDiskUsage(path)
 }
 
 func wrapWithAbsolute(fn func(string, string) error, oldname, newname string) error {
