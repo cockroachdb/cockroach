@@ -48,7 +48,7 @@ func ToTableDescriptor(
 	}
 	const parentID descpb.ID = keys.MaxReservedDescID
 	testSettings := cluster.MakeTestingClusterSettings()
-	tableDesc, err := importccl.MakeSimpleTableDescriptor(
+	tableDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, testSettings, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, ts.UnixNano())
 	if err != nil {
 		return nil, err

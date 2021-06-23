@@ -69,7 +69,7 @@ func (n *createSequenceNode) ReadingOwnWrites() {}
 func (n *createSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
 
-	schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Name,
+	schemaDesc, err := getSchemaForCreateTable(params, n.dbDesc, n.n.Persistence, &n.n.Name,
 		tree.ResolveRequireSequenceDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
@@ -79,7 +79,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	}
 
 	return doCreateSequence(
-		params, n.dbDesc, schemaID, &n.n.Name, n.n.Persistence, n.n.Options,
+		params, n.dbDesc, schemaDesc, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }
@@ -89,7 +89,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 func doCreateSequence(
 	params runParams,
 	dbDesc catalog.DatabaseDescriptor,
-	schemaID descpb.ID,
+	scDesc catalog.SchemaDescriptor,
 	name *tree.TableName,
 	persistence tree.Persistence,
 	opts tree.SequenceOptions,
@@ -117,7 +117,7 @@ func doCreateSequence(
 		name.Object(),
 		opts,
 		dbDesc.GetID(),
-		schemaID,
+		scDesc.GetID(),
 		id,
 		creationTime,
 		privs,
@@ -132,7 +132,7 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateSelf() needed here.
 
-	key := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schemaID, name.Object())
+	key := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), scDesc.GetID(), name.Object())
 	if err = params.p.createDescriptorWithID(
 		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
 	); err != nil {

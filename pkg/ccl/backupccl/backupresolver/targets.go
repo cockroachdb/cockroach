@@ -100,23 +100,41 @@ func (r *DescriptorResolver) LookupSchema(
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *DescriptorResolver) LookupObject(
-	_ context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
-) (bool, catalog.Descriptor, error) {
+	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
 	if flags.RequireMutable {
 		panic("did not expect request for mutable descriptor")
 	}
 	dbID, ok := r.DbsByName[dbName]
 	if !ok {
-		return false, nil, nil
+		return false, catalog.ResolvedObjectPrefix{}, nil, nil
+	}
+	scID, ok := r.SchemasByName[dbID][scName]
+	if !ok {
+		return false, catalog.ResolvedObjectPrefix{}, nil, nil
 	}
 	if scMap, ok := r.ObjsByName[dbID]; ok {
 		if objMap, ok := scMap[scName]; ok {
 			if objID, ok := objMap[obName]; ok {
-				return true, r.DescByID[objID], nil
+				var sc catalog.SchemaDescriptor
+				if scID == keys.PublicSchemaID {
+					sc = schemadesc.GetPublicSchema()
+				} else {
+					sc, ok = r.DescByID[scID].(catalog.SchemaDescriptor)
+					if !ok {
+						return false, catalog.ResolvedObjectPrefix{}, nil, errors.AssertionFailedf(
+							"expected schema for ID %d, got %T", scID, r.DescByID[scID])
+					}
+				}
+
+				return true, catalog.ResolvedObjectPrefix{
+					Database: r.DescByID[dbID].(catalog.DatabaseDescriptor),
+					Schema:   sc,
+				}, r.DescByID[objID], nil
 			}
 		}
 	}
-	return false, nil, nil
+	return false, catalog.ResolvedObjectPrefix{}, nil, nil
 }
 
 // NewDescriptorResolver prepares a DescriptorResolver for the given
@@ -358,14 +376,16 @@ func DescriptorsMatchingTargets(
 
 		switch p := pattern.(type) {
 		case *tree.TableName:
-			// TODO: As part of work for #34240, this should not be a TableName.
-			//  Instead, it should be an UnresolvedObjectName.
 			un := p.ToUnresolvedObjectName()
 			found, prefix, descI, err := resolver.ResolveExisting(ctx, un, r, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}
-			p.ObjectNamePrefix = prefix
+			// If the prefix is more informative than the input, take it.
+			if (prefix.ExplicitDatabase && !p.ExplicitCatalog) ||
+				(prefix.ExplicitSchema && !p.ExplicitSchema) {
+				p.ObjectNamePrefix = prefix.NamePrefix()
+			}
 			doesNotExistErr := errors.Errorf(`table %q does not exist`, tree.ErrString(p))
 			if !found {
 				if asOf.IsEmpty() {

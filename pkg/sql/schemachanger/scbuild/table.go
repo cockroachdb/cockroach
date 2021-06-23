@@ -801,7 +801,7 @@ func (b *buildContext) dropTableDesc(
 func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 	// Find the table first.
 	for _, name := range n.Names {
-		table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
+		_, table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
 			tree.ObjectLookupFlagsWithRequired())
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {

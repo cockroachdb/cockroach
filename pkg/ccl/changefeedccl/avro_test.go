@@ -68,7 +68,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
 	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
 	semaCtx := makeTestSemaCtx()
-	mutDesc, err := importccl.MakeSimpleTableDescriptor(
+	mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
 		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err

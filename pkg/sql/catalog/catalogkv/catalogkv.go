@@ -224,7 +224,7 @@ func requiredError(expectedObjectType catalog.DescriptorType, id descpb.ID) erro
 		err = sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 		wrapper = catalog.WrapSchemaDescRefErr
 	case catalog.Type:
-		err = sqlerrors.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
+		err = sqlerrors.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(fmt.Sprintf("[%d]", id)))
 		wrapper = catalog.WrapTypeDescRefErr
 	default:
 		err = errors.Errorf("failed to find descriptor [%d]", id)

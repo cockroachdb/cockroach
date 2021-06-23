@@ -85,7 +85,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 
 	for _, schema := range schemas {
 		res, err := p.Descriptors().GetSchemaByName(
-			ctx, p.txn, dbDesc.ID, schema, tree.SchemaLookupFlags{
+			ctx, p.txn, dbDesc, schema, tree.SchemaLookupFlags{
 				Required:       true,
 				RequireMutable: true,
 			},

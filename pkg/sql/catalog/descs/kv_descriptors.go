@@ -171,6 +171,30 @@ func (kd *kvDescriptors) getByID(
 	return ud.immutable, nil
 }
 
+func (kd *kvDescriptors) lookupName(
+	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
+) (found bool, _ descpb.ID, _ error) {
+	// Bypass the namespace lookup from the store for system tables.
+	if id := bootstrap.LookupSystemTableDescriptorID(
+		kd.codec, parentID, name,
+	); id != descpb.InvalidID {
+		return true, id, nil
+	}
+	if isSchemaPrefix(parentID, parentSchemaID) {
+		if ud := kd.getUncommittedByID(parentID); ud != nil {
+			id := ud.immutable.(catalog.DatabaseDescriptor).GetSchemaID(name)
+			return id != descpb.InvalidID, id, nil
+		}
+	}
+	found, id, err := catalogkv.LookupObjectID(
+		ctx, txn, kd.codec, parentID, parentSchemaID, name,
+	)
+	if err != nil || !found {
+		return found, descpb.InvalidID, err
+	}
+	return true, id, nil
+}
+
 func (kd *kvDescriptors) getByName(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -179,22 +203,15 @@ func (kd *kvDescriptors) getByName(
 	name string,
 	mutable bool,
 ) (found bool, desc catalog.Descriptor, err error) {
-	// Bypass the namespace lookup from the store for system tables.
-	descID := bootstrap.LookupSystemTableDescriptorID(kd.codec, parentID, name)
-	isSystemDescriptor := descID != descpb.InvalidID
-	if !isSystemDescriptor {
-		var found bool
-		var err error
-		found, descID, err = catalogkv.LookupObjectID(ctx, txn, kd.codec, parentID, parentSchemaID, name)
-		if err != nil || !found {
-			return found, nil, err
-		}
+	found, descID, err := kd.lookupName(ctx, txn, parentID, parentSchemaID, name)
+	if !found || err != nil {
+		return found, nil, err
 	}
 	// Always pick up a mutable copy so it can be cached.
 	desc, err = catalogkv.GetMutableDescriptorByID(ctx, txn, kd.codec, descID)
 	if err != nil {
 		return false, nil, err
-	} else if desc == nil && isSystemDescriptor {
+	} else if desc == nil && descID <= keys.MaxReservedDescID {
 		// This can happen during startup because we're not actually looking up the
 		// system descriptor IDs in KV.
 		return false, nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "descriptor %d not found", descID)

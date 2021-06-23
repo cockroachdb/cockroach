@@ -63,7 +63,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.GetName(), desc.Name)
+			name := tree.MakeQualifiedTypeName(dbDesc.GetName(), sc.GetName(), desc.Name)
 			return name, desc, nil
 		}
 
@@ -93,7 +93,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.GetName(), desc.GetName())
+			name := tree.MakeQualifiedTypeName(dbDesc.GetName(), sc.GetName(), desc.GetName())
 			return name, desc, nil
 		})
 
@@ -173,7 +173,7 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 			default:
 				scName = schemaDescs[typDesc.GetParentSchemaID()].GetName()
 			}
-			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
+			name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
 			return name, typDesc, nil
 		}
 		// Now hydrate all table descriptors.

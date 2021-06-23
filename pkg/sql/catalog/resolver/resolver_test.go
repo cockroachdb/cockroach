@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -46,6 +47,15 @@ type knownCatalog struct {
 	schemas []knownSchema
 }
 
+func makeResolvedObjectPrefix(dbName, scName string) catalog.ResolvedObjectPrefix {
+	return catalog.ResolvedObjectPrefix{
+		Database: dbdesc.NewBuilder(&descpb.DatabaseDescriptor{Name: dbName}).
+			BuildImmutableDatabase(),
+		Schema: schemadesc.NewBuilder(&descpb.SchemaDescriptor{Name: scName}).
+			BuildImmutableSchema(),
+	}
+}
+
 // LookupSchema implements the TableNameResolver interface.
 func (f *fakeMetadata) LookupSchema(
 	ctx context.Context, dbName, scName string,
@@ -54,13 +64,8 @@ func (f *fakeMetadata) LookupSchema(
 		f.t.Logf("LookupSchema(%s, %s) -> found %v meta %v err %v",
 			dbName, scName, found, scMeta, err)
 	}()
-	makeResolvedObjectPrefix := func() catalog.ResolvedObjectPrefix {
-		return catalog.ResolvedObjectPrefix{
-			Database: dbdesc.NewBuilder(&descpb.DatabaseDescriptor{Name: dbName}).
-				BuildImmutableDatabase(),
-			Schema: schemadesc.NewBuilder(&descpb.SchemaDescriptor{Name: scName}).
-				BuildImmutableSchema(),
-		}
+	if scName == catconstants.PgTempSchemaName {
+		scName = "pg_temp_123"
 	}
 	for i := range f.knownVSchemas {
 		v := &f.knownVSchemas[i]
@@ -68,12 +73,12 @@ func (f *fakeMetadata) LookupSchema(
 			// Virtual schema found, check that the db exists.
 			// The empty database is valid.
 			if dbName == "" {
-				return true, makeResolvedObjectPrefix(), nil
+				return true, makeResolvedObjectPrefix(dbName, scName), nil
 			}
 			for j := range f.knownCatalogs {
 				c := &f.knownCatalogs[j]
 				if dbName == string(c.ctName) {
-					return true, makeResolvedObjectPrefix(), nil
+					return true, makeResolvedObjectPrefix(dbName, scName), nil
 				}
 			}
 			// No valid database, schema is invalid.
@@ -86,7 +91,7 @@ func (f *fakeMetadata) LookupSchema(
 			for j := range c.schemas {
 				s := &c.schemas[j]
 				if scName == string(s.scName) {
-					return true, makeResolvedObjectPrefix(), nil
+					return true, makeResolvedObjectPrefix(dbName, scName), nil
 				}
 			}
 			break
@@ -97,12 +102,15 @@ func (f *fakeMetadata) LookupSchema(
 
 // LookupObject implements the TableNameResolver interface.
 func (f *fakeMetadata) LookupObject(
-	_ context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
-) (found bool, obMeta catalog.Descriptor, err error) {
+	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
 	defer func() {
-		f.t.Logf("LookupObject(%s, %s, %s) -> found %v meta %v err %v",
-			dbName, scName, tbName, found, obMeta, err)
+		f.t.Logf("LookupObject(%s, %s, %s) -> found %v prefix %v meta %v err %v",
+			dbName, scName, obName, found, prefix, objMeta, err)
 	}()
+	if scName == catconstants.PgTempSchemaName {
+		scName = "pg_temp_123"
+	}
 	foundV := false
 	for i := range f.knownVSchemas {
 		v := &f.knownVSchemas[i]
@@ -119,13 +127,13 @@ func (f *fakeMetadata) LookupObject(
 					}
 				}
 				if !hasDb {
-					return false, nil, nil
+					return false, prefix, nil, nil
 				}
 			}
 			// Db valid, check the table name.
 			for tbIdx, tb := range v.tables {
-				if tbName == string(tb) {
-					return true, makeFakeDescriptor(tbIdx), nil
+				if obName == string(tb) {
+					return true, makeResolvedObjectPrefix(dbName, scName), makeFakeDescriptor(tbIdx), nil
 				}
 			}
 			foundV = true
@@ -134,7 +142,7 @@ func (f *fakeMetadata) LookupObject(
 	}
 	if foundV {
 		// Virtual schema matched, but there was no table. Fail.
-		return false, nil, nil
+		return false, prefix, nil, nil
 	}
 
 	for i := range f.knownCatalogs {
@@ -144,8 +152,8 @@ func (f *fakeMetadata) LookupObject(
 				s := &c.schemas[j]
 				if scName == string(s.scName) {
 					for tbIdx, tb := range s.tables {
-						if tbName == string(tb) {
-							return true, makeFakeDescriptor(tbIdx), nil
+						if obName == string(tb) {
+							return true, makeResolvedObjectPrefix(dbName, scName), makeFakeDescriptor(tbIdx), nil
 						}
 					}
 					break
@@ -154,7 +162,7 @@ func (f *fakeMetadata) LookupObject(
 			break
 		}
 	}
-	return false, nil, nil
+	return false, prefix, nil, nil
 }
 
 // makeFakeDescriptor makes an empty table descriptor with the given ID.
@@ -385,10 +393,6 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
 		{`public.baz`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
 
-		// Cases where a session tries to access a temporary table of another session.
-		{`pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `cannot access temporary tables of other sessions`},
-		{`pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), false, ``, ``, ``, `cannot access temporary tables of other sessions`},
-
 		// Case where the temporary table being created has the same name as an
 		// existing persistent table.
 		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `pg_temp_123.bar`, `db3.pg_temp_123.bar`, `db3.pg_temp_123`, ``},
@@ -396,9 +400,6 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		// Case where the persistent table being created has the same name as an
 		// existing temporary table.
 		{`public.baz`, `db3`, tpath("pg_temp_123", "public"), false, `public.baz`, `db3.public.baz`, `db3.public`, ``},
-
-		// Cases where the temporary schema has not been created yet
-		{`pg_temp.foo`, `db3`, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
 
 		// Names of length 3
 
@@ -410,10 +411,6 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
 		{`db3.public.baz`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
 
-		// Cases where a session tries to access a temporary table of another session.
-		{`db3.pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `cannot access temporary tables of other sessions`},
-		{`db3.pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), false, ``, ``, ``, `cannot access temporary tables of other sessions`},
-
 		// Case where the temporary table being created has the same name as an
 		// existing persistent table.
 		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `db3.pg_temp_123.bar`, `db3.pg_temp_123.bar`, `db3.pg_temp_123`, ``},
@@ -421,9 +418,6 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		// Case where the persistent table being created has the same name as an
 		// existing temporary table.
 		{`db3.public.baz`, `db3`, tpath("pg_temp_123", "public"), false, `db3.public.baz`, `db3.public.baz`, `db3.public`, ``},
-
-		// Cases where the temporary schema has not been created yet
-		{`db3.pg_temp.foo`, `db3`, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
 	}
 
 	fakeResolver := newFakeMetadata()
@@ -451,20 +445,19 @@ func TestResolveTablePatternOrName(t *testing.T) {
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
-					var prefix tree.ObjectNamePrefix
 					if tc.expected {
 						flags := tree.ObjectLookupFlags{}
 						// TODO: As part of work for #34240, we should be operating on
 						//  UnresolvedObjectNames here, rather than TableNames.
 						un := tpv.ToUnresolvedObjectName()
-						found, prefix, obMeta, err = resolver.ResolveExisting(ctx, un, fakeResolver, flags, tc.curDb, tc.searchPath)
+						found, scMeta, obMeta, err = resolver.ResolveExisting(ctx, un, fakeResolver, flags, tc.curDb, tc.searchPath)
 					} else {
 						// TODO: As part of work for #34240, we should be operating on
 						//  UnresolvedObjectNames here, rather than TableNames.
 						un := tpv.ToUnresolvedObjectName()
-						found, prefix, scMeta, err = resolver.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
+						found, _, scMeta, err = resolver.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
 					}
-					tpv.ObjectNamePrefix = prefix
+					tpv.ObjectNamePrefix = scMeta.NamePrefix()
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()
 				default:
@@ -476,7 +469,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 
 				var scRes string
 				if scMeta != (catalog.ResolvedObjectPrefix{}) {
-					scRes = fmt.Sprintf("%s.%s", scMeta.Database.GetName(), scMeta.Schema.GetName())
+					scRes = fmt.Sprintf("%s.%s", ctPrefix, scPrefix)
 				}
 				if obMeta != nil {
 					obIdx := obMeta.GetID()

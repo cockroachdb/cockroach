@@ -101,7 +101,7 @@ func (b *buildContext) maybeDropViewAndDependents(
 func (b *buildContext) dropView(ctx context.Context, n *tree.DropView) {
 	// Find the view first.
 	for _, name := range n.Names {
-		view, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
+		_, view, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
 			tree.ObjectLookupFlagsWithRequired())
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
