@@ -271,6 +271,9 @@ const (
 	SQLInstancesTable
 	// Can return new retryable rangefeed errors without crashing the client
 	NewRetryableRangefeedErrors
+	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
+	// encryption-at-rest file registry with the new incremental records-based registry.
+	RecordsBasedRegistry
 
 	// Step (1): Add new versions here.
 )
@@ -439,6 +442,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     NewRetryableRangefeedErrors,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 124},
+	},
+	{
+		Key:     RecordsBasedRegistry,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 126},
 	},
 
 	// Step (2): Add new versions here.

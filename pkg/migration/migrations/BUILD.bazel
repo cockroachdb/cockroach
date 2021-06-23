@@ -8,6 +8,7 @@ go_library(
         "fix_descriptor_migration.go",
         "join_tokens.go",
         "migrations.go",
+        "records_based_registry.go",
         "sql_instances.go",
         "sql_stats.go",
         "tenant_usage.go",

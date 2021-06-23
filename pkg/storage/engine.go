@@ -778,6 +778,10 @@ type Engine interface {
 	// that know that this enabled setting is not changing and need the value to
 	// adjust their expectations.
 	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
+
+	// DeprecateBaseEncryptionRegistry is used to signal to the engine that it
+	// should stop using the Base version monolithic encryption-at-rest registry.
+	DeprecateBaseEncryptionRegistry(version *roachpb.Version) error
 }
 
 // Batch is the interface for batch specific operations.

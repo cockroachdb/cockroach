@@ -191,7 +191,7 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	newProto.Files = make(map[string]*enginepb.FileEntry)
 	newProto.Files["test1"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}
 	newProto.Files["test2"] = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")}
-	require.NoError(t, registry.writeRegistry(newProto))
+	require.NoError(t, registry.rewriteOldRegistry(newProto))
 
 	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
 	registry2 := &PebbleFileRegistry{FS: mem}
@@ -200,4 +200,46 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	entry := registry2.mu.currProto.Files["test2"]
 	require.NotNil(t, entry)
 	require.Equal(t, entry.EncryptionSettings, []byte("foo"))
+}
+
+func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	files := map[string]*enginepb.FileEntry{
+		"test1": {EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("foo")},
+		"test2": {EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("bar")},
+	}
+
+	mem := vfs.NewMem()
+
+	// Create a file registry and add entries for a few files.
+	registry1 := &PebbleFileRegistry{FS: mem}
+	require.NoError(t, registry1.CheckNoRegistryFile())
+	require.NoError(t, registry1.Load())
+	for filename, entry := range files {
+		require.NoError(t, registry1.SetFileEntry(filename, entry))
+	}
+	require.NoError(t, registry1.Close())
+
+	// Create another file registry and load in the registry file.
+	// It should use the monolithic one.
+	registry2 := &PebbleFileRegistry{FS: mem}
+	require.NoError(t, registry2.Load())
+	for filename, entry := range files {
+		require.Equal(t, entry, registry2.GetFileEntry(filename))
+	}
+	require.NoError(t, registry2.Close())
+
+	// Signal that we no longer need the monolithic one.
+	require.NoError(t, registry2.StopUsingOldRegistry())
+	require.NoError(t, registry2.checkNoBaseRegistry())
+	require.NoError(t, registry2.Close())
+
+	registry3 := &PebbleFileRegistry{FS: mem}
+	require.NoError(t, registry3.Load())
+	for filename, entry := range files {
+		require.Equal(t, entry, registry3.GetFileEntry(filename))
+	}
+	require.NoError(t, registry3.Close())
 }
