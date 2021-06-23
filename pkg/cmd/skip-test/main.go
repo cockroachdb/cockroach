@@ -144,9 +144,14 @@ func main() {
 	// Replace the file with the skip status.
 	replaceFile(fileName, testName, issueNum)
 
+	// Update the package's BUILD.bazel.
+	if err := spawn("make", "bazel-generate"); err != nil {
+		log.Fatal(errors.Wrap(err, "failed to run bazel"))
+	}
+
 	// Commit the file.
-	if err := spawn("git", "add", fileName); err != nil {
-		log.Fatal(errors.Wrapf(err, "failed to add %s to commit", fileName))
+	if err := spawn("git", "add", searchPath); err != nil {
+		log.Fatal(errors.Wrapf(err, "failed to add %s to commit", searchPath))
 	}
 	var modifierStr string
 	if *flagUnderRace {
