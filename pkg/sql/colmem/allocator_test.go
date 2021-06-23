@@ -18,14 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -164,4 +167,75 @@ func TestResetMaybeReallocate(t *testing.T) {
 			require.Equal(t, 2*minCapacity, b.Capacity())
 		}
 	})
+}
+
+func TestPerformAppend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Include decimal and geometry columns because PerformAppend differs from
+	// PerformOperation for decimal and datum types.
+	var typs = []*types.T{types.Int, types.Decimal, types.Geometry}
+	const intIdx, decimalIdx, datumIdx = 0, 1, 2
+	const maxBatchSize = 100
+	const numRows = 1000
+	const nullOk = false
+
+	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer testMemMonitor.Stop(ctx)
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	evalCtx := tree.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+	batch1 := colexecutils.NewAppendOnlyBufferedBatch(testAllocator, typs, nil /* colsToStore */)
+	batch2 := colexecutils.NewAppendOnlyBufferedBatch(testAllocator, typs, nil /* colsToStore */)
+
+	var b coldata.Batch
+	getRandomInputBatch := func(count int) coldata.Batch {
+		b, _ = testAllocator.ResetMaybeReallocate(typs, b, count, math.MaxInt64)
+		for i := 0; i < count; i++ {
+			datum := randgen.RandDatum(rng, typs[intIdx], nullOk)
+			b.ColVec(intIdx).Int64()[i] = int64(*(datum.(*tree.DInt)))
+			datum = randgen.RandDatum(rng, typs[decimalIdx], nullOk)
+			b.ColVec(decimalIdx).Decimal()[i] = datum.(*tree.DDecimal).Decimal
+			datum = randgen.RandDatum(rng, typs[datumIdx], nullOk)
+			b.ColVec(datumIdx).Datum().Set(i, datum)
+		}
+		b.SetLength(count)
+		return b
+	}
+
+	rowsLeft := numRows
+	for {
+		if rowsLeft <= 0 {
+			break
+		}
+		batchSize := rng.Intn(maxBatchSize-1) + 1 // Ensure a nonzero batch size.
+		if batchSize > rowsLeft {
+			batchSize = rowsLeft
+		}
+		rowsLeft -= batchSize
+		inputBatch := getRandomInputBatch(batchSize)
+
+		beforePerformOperation := testAllocator.Used()
+		testAllocator.PerformOperation(batch1.ColVecs(), func() {
+			batch1.AppendTuples(inputBatch, 0 /* startIdx */, inputBatch.Length())
+		})
+		afterPerformOperation := testAllocator.Used()
+
+		beforePerformAppend := afterPerformOperation
+		testAllocator.PerformAppend(batch2.ColVecs(), func() {
+			batch2.AppendTuples(inputBatch, 0 /* startIdx */, inputBatch.Length())
+		})
+		afterPerformAppend := testAllocator.Used()
+
+		performOperationMem := afterPerformOperation - beforePerformOperation
+		performAppendMem := afterPerformAppend - beforePerformAppend
+		require.Equal(t, performOperationMem, performAppendMem)
+	}
 }
