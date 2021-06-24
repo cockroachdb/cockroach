@@ -522,9 +522,21 @@ type sstSink struct {
 	flushedFiles    []BackupManifest_File
 	flushedRevStart hlc.Timestamp
 	completedSpans  int32
+
+	stats struct {
+		files       int
+		flushes     int
+		oooFlushes  int
+		sizeFlushes int
+		spanGrows   int
+	}
 }
 
 func (s *sstSink) Close() error {
+	if log.V(1) && s.ctx != nil {
+		log.Infof(s.ctx, "backup sst sink recv'd %d files, wrote %d (%d due to size, %d due to re-ordering), %d recv files extended prior span",
+			s.stats.files, s.stats.flushes, s.stats.sizeFlushes, s.stats.oooFlushes, s.stats.spanGrows)
+	}
 	if s.cancel != nil {
 		s.cancel()
 	}
@@ -538,6 +550,8 @@ func (s *sstSink) flush(ctx context.Context) error {
 	if s.out == nil {
 		return nil
 	}
+	s.stats.flushes++
+
 	if err := s.sst.Finish(); err != nil {
 		return err
 	}
@@ -593,6 +607,8 @@ func (s *sstSink) open(ctx context.Context) error {
 }
 
 func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
+	s.stats.files++
+
 	span := resp.f.Span
 
 	// If this span starts before the last buffered span ended, we need to flush
@@ -600,6 +616,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 	// TODO(dt): consider buffering resp until _next_ `write` to allow minimal
 	// reordering of writes to avoid extra flushes.
 	if len(s.flushedFiles) > 0 && span.Key.Compare(s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey) < 0 {
+		s.stats.oooFlushes++
 		if err := s.flush(ctx); err != nil {
 			return err
 		}
@@ -648,6 +665,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 		s.flushedFiles[l].StartTime.EqOrdering(resp.f.StartTime) {
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.add(resp.f.EntryCounts)
+		s.stats.spanGrows++
 	} else {
 		f := resp.f
 		f.Path = s.outName
@@ -659,6 +677,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 	// If our accumulated SST is now big enough, flush it.
 	// TODO(dt): use the compressed size instead.
 	if s.sst.DataSize > s.conf.targetFileSize {
+		s.stats.sizeFlushes++
 		if err := s.flush(ctx); err != nil {
 			return err
 		}
