@@ -317,13 +317,6 @@ func (t *test) fatalfInner(format string, args ...interface{}) {
 	panic(errTestFatal)
 }
 
-// FatalIfErr calls t.Fatal() if err != nil.
-func FatalIfErr(t *test, err error) {
-	if err != nil {
-		t.fatalfInner("" /* format */, err)
-	}
-}
-
 func (t *test) printAndFail(skip int, args ...interface{}) {
 	var msg string
 	if len(args) == 1 {
