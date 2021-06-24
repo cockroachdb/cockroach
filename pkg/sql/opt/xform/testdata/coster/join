@@ -17,14 +17,14 @@ project
  ├── columns: k:1!null x:7!null
  ├── immutable
  ├── stats: [rows=99]
- ├── cost: 2153.725
+ ├── cost: 2153.715
  ├── fd: (1)==(7), (7)==(1)
  └── inner-join (hash)
       ├── columns: k:1!null d:4!null x:7!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── immutable
       ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(7)=10, null(7)=0]
-      ├── cost: 2152.725
+      ├── cost: 2152.715
       ├── fd: ()-->(4), (1)==(7), (7)==(1)
       ├── scan b
       │    ├── columns: x:7
@@ -58,7 +58,7 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +7
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
- ├── cost: 2378.15569
+ ├── cost: 2378.30194
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null
@@ -69,7 +69,7 @@ inner-join (merge)
  ├── sort
  │    ├── columns: x:7
  │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
- │    ├── cost: 1283.73569
+ │    ├── cost: 1283.88194
  │    ├── ordering: +7
  │    └── scan b
  │         ├── columns: x:7

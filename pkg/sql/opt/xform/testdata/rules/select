@@ -7607,7 +7607,7 @@ memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G17: (index-join G26 t58390,cols=(7-10))
  │    ├── [ordering: +7]
  │    │    ├── best: (index-join G26="[ordering: +7]" t58390,cols=(7-10))
- │    │    └── cost: 4895.77
+ │    │    └── cost: 4895.84
  │    └── []
  │         ├── best: (index-join G26 t58390,cols=(7-10))
  │         └── cost: 4744.02
@@ -7622,7 +7622,7 @@ memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G20: (index-join G28 t58390,cols=(13-16))
  │    ├── [ordering: +13]
  │    │    ├── best: (index-join G28="[ordering: +13]" t58390,cols=(13-16))
- │    │    └── cost: 4895.77
+ │    │    └── cost: 4895.84
  │    └── []
  │         ├── best: (index-join G28 t58390,cols=(13-16))
  │         └── cost: 4744.02
@@ -7634,7 +7634,7 @@ memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G26: (scan t58390@secondary,partial,cols=(7,10))
  │    ├── [ordering: +7]
  │    │    ├── best: (sort G26)
- │    │    └── cost: 849.10
+ │    │    └── cost: 849.16
  │    └── []
  │         ├── best: (scan t58390@secondary,partial,cols=(7,10))
  │         └── cost: 697.34
@@ -7642,7 +7642,7 @@ memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G28: (scan t58390@secondary,partial,cols=(13,16))
  │    ├── [ordering: +13]
  │    │    ├── best: (sort G28)
- │    │    └── cost: 849.10
+ │    │    └── cost: 849.16
  │    └── []
  │         ├── best: (scan t58390@secondary,partial,cols=(13,16))
  │         └── cost: 697.34
@@ -7688,7 +7688,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G4: (scan t61795 [as=t1],cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1323.94
+ │    │    └── cost: 1324.08
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(1-3))
  │         └── cost: 1074.61
@@ -7769,7 +7769,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  │    │    └── cost: 1074.61
  │    ├── [ordering: +17]
  │    │    ├── best: (sort G28)
- │    │    └── cost: 1323.94
+ │    │    └── cost: 1324.08
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(16-18))
  │         └── cost: 1074.61
@@ -7777,7 +7777,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G30: (index-join G40 t61795,cols=(16-18))
  │    ├── [ordering: +16]
  │    │    ├── best: (index-join G40="[ordering: +16]" t61795,cols=(16-18))
- │    │    └── cost: 3108.47
+ │    │    └── cost: 3108.48
  │    ├── [ordering: +17]
  │    │    ├── best: (index-join G40="[ordering: +17]" t61795,cols=(16-18))
  │    │    └── cost: 3040.04
@@ -7799,7 +7799,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G40: (select G50 G51)
  │    ├── [ordering: +16]
  │    │    ├── best: (sort G40)
- │    │    └── cost: 1111.96
+ │    │    └── cost: 1111.97
  │    ├── [ordering: +17]
  │    │    ├── best: (select G50="[ordering: +17]" G51)
  │    │    └── cost: 1043.53
@@ -7821,7 +7821,7 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G50: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
  │    ├── [ordering: +16]
  │    │    ├── best: (sort G50)
- │    │    └── cost: 1270.26
+ │    │    └── cost: 1270.40
  │    ├── [ordering: +17]
  │    │    ├── best: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
  │    │    └── cost: 1033.61

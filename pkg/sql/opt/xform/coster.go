@@ -142,6 +142,24 @@ const (
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
 	preferLookupJoinFactor = 1e-6
+
+	// noSpillRowCount represents the maximum number of rows that should have no
+	// buffering cost because we expect they will never need to be spilled to
+	// disk. Since 64MB is the default work mem limit, 64 rows will not cause a
+	// disk spill unless the rows are at least 1 MB on average.
+	noSpillRowCount = 64
+
+	// spillRowCount represents the minimum number of rows that we expect will
+	// always need to be spilled to disk. Since 64MB is the default work mem
+	// limit, 6400000 rows with an average of at least 10 bytes per row will cause
+	// a disk spill.
+	spillRowCount = 6400000
+
+	// spillCostFactor is the cost of spilling to disk. We use seqIOCostFactor to
+	// model the cost of spilling to disk, because although there will be some
+	// random I/O required to insert rows into a sorted structure, the inherent
+	// batching in the LSM tree should amortize the cost.
+	spillCostFactor = seqIOCostFactor
 )
 
 // fnCost maps some functions to an execution cost. Currently this list
@@ -534,10 +552,6 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 	// In a segmented sort, rows are split into segments according to
 	// InputOrdering.Columns; each segment is sorted according to the remaining
 	// columns from required.Ordering.Columns.
-	//
-	// TODO(rytaft): This is the cost of a local, in-memory sort. When a
-	// certain amount of memory is used, distsql switches to a disk-based sort
-	// with a temp RocksDB store.
 	numKeyCols := len(required.Ordering.Columns)
 	numPreorderedCols := len(sort.InputOrdering.Columns)
 
@@ -563,6 +577,10 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 	numCmpOpsPerRow := float64(1)
 	if segmentSize := stats.RowCount / numSegments; segmentSize > 1 {
 		numCmpOpsPerRow += math.Log2(segmentSize)
+
+		// Add a cost for buffering rows that takes into account increased memory
+		// pressure and the possibility of spilling to disk.
+		cost += memo.Cost(numSegments) * c.rowBufferCost(segmentSize)
 	}
 	cost += c.rowCmpCost(numKeyCols-numPreorderedCols) * memo.Cost(numCmpOpsPerRow*stats.RowCount)
 	return cost
@@ -694,11 +712,11 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	// right side is the one stored in the hashtable, so we use a larger factor
 	// for that side. This ensures that a join with the smaller right side is
 	// preferred to the symmetric join.
-	//
-	// TODO(rytaft): This is the cost of an in-memory hash join. When a certain
-	// amount of memory is used, distsql switches to a disk-based hash join with
-	// a temp RocksDB store.
 	cost := memo.Cost(1.25*leftRowCount+1.75*rightRowCount) * cpuCostFactor
+
+	// Add a cost for buffering rows that takes into account increased memory
+	// pressure and the possibility of spilling to disk.
+	cost += c.rowBufferCost(rightRowCount)
 
 	// Compute filter cost. Fetch the equality columns so they can be
 	// ignored later.
@@ -718,7 +736,7 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 		eqMap.Set(left, right)
 		eqMap.Set(right, left)
 	}
-	filterSetup, filterPerRow := c.computeFiltersCost(*on, util.FastIntMap{})
+	filterSetup, filterPerRow := c.computeFiltersCost(*on, eqMap)
 	cost += filterSetup
 
 	// Add the CPU cost of emitting the rows.
@@ -1016,7 +1034,8 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 
 func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
-	cost := memo.Cost(set.Relational().Stats.RowCount) * cpuCostFactor
+	outputRowCount := set.Relational().Stats.RowCount
+	cost := memo.Cost(outputRowCount) * cpuCostFactor
 
 	// A set operation must process every row from both tables once. UnionAll and
 	// LocalityOptimizedSearch can avoid any extra computation, but all other set
@@ -1030,6 +1049,28 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 		leftRowCount := set.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 		rightRowCount := set.Child(1).(memo.RelExpr).Relational().Stats.RowCount
 		cost += memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
+
+		// Add a cost for buffering rows that takes into account increased memory
+		// pressure and the possibility of spilling to disk.
+		switch set.Op() {
+		case opt.UnionOp:
+			// Hash Union is implemented as UnionAll followed by Hash Distinct.
+			cost += c.rowBufferCost(outputRowCount)
+
+		case opt.IntersectOp, opt.ExceptOp:
+			// Hash Intersect and Except are implemented as Hash Distinct on each
+			// input followed by a Hash Join that builds the hash table from the right
+			// input.
+			cost += c.rowBufferCost(leftRowCount) + 2*c.rowBufferCost(rightRowCount)
+
+		case opt.IntersectAllOp, opt.ExceptAllOp:
+			// Hash IntersectAll and ExceptAll are implemented as a Hash Join that
+			// builds the hash table from the right input.
+			cost += c.rowBufferCost(rightRowCount)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled operator %s", set.Op()))
+		}
 	}
 
 	return cost
@@ -1042,7 +1083,8 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	cost := memo.Cost(cpuCostFactor)
 
 	// Add the CPU cost of emitting the rows.
-	cost += memo.Cost(grouping.Relational().Stats.RowCount) * cpuCostFactor
+	outputRowCount := grouping.Relational().Stats.RowCount
+	cost += memo.Cost(outputRowCount) * cpuCostFactor
 
 	// GroupBy must process each input row once. Cost per row depends on the
 	// number of grouping columns and the number of aggregates.
@@ -1054,17 +1096,19 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 
 	if groupingColCount > 0 {
 		// Add a cost that reflects the use of a hash table - unless we are doing a
-		// streaming aggregation where all the grouping columns are ordered; we
-		// interpolate linearly if only part of the grouping columns are ordered.
+		// streaming aggregation where all the grouping columns are ordered.
 		//
 		// The cost is chosen so that it's always less than the cost to sort the
 		// input.
-		hashCost := memo.Cost(inputRowCount) * cpuCostFactor
 		n := len(ordering.StreamingGroupingColOrdering(private, &required.Ordering))
-		// n = 0:                factor = 1
-		// n = groupingColCount: factor = 0
-		hashCost *= 1 - memo.Cost(n)/memo.Cost(groupingColCount)
-		cost += hashCost
+		if groupingColCount > n {
+			// Add the cost to build the hash table.
+			cost += memo.Cost(inputRowCount) * cpuCostFactor
+
+			// Add a cost for buffering rows that takes into account increased memory
+			// pressure and the possibility of spilling to disk.
+			cost += c.rowBufferCost(outputRowCount)
+		}
 	}
 
 	return cost
@@ -1172,6 +1216,40 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	// because that is the amount of data that we could potentially transfer over
 	// the network.
 	return memo.Cost(numCols+numScannedCols) * costFactor
+}
+
+// rowBufferCost adds a cost for buffering rows according to a ramp function:
+//
+//                  cost
+//                 factor
+//
+//                    |               spillRowCount
+//   spillCostFactor _|                  ___________ _ _ _
+//                    |                 /
+//                    |                /
+//                    |               /
+//                0  _| _ _ _________/______________________    row
+//                    |                                        count
+//                         noSpillRowCount
+//
+// This function models the fact that operators that buffer rows become more
+// expensive the more rows they need to buffer, since eventually they will need
+// to spill to disk. The exact number of rows that cause spilling to disk varies
+// depending on a number of factors that we don't model here. Therefore, we use
+// a ramp function rather than a step function to account for the uncertainty
+// and avoid sudden surprising plan changes due to a small change in stats.
+func (c *coster) rowBufferCost(rowCount float64) memo.Cost {
+	if rowCount <= noSpillRowCount {
+		return 0
+	}
+	var fraction memo.Cost
+	if rowCount >= spillRowCount {
+		fraction = 1
+	} else {
+		fraction = memo.Cost(rowCount-noSpillRowCount) / (spillRowCount - noSpillRowCount)
+	}
+
+	return memo.Cost(rowCount) * spillCostFactor * fraction
 }
 
 // localityMatchScore returns a number from 0.0 to 1.0 that describes how well

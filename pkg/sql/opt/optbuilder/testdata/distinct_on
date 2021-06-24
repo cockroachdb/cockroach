@@ -73,13 +73,12 @@ distinct-on
 build
 SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
-distinct-on
+sort
  ├── columns: b:2!null  [hidden: a:1!null c:3!null]
- ├── grouping columns: a:1!null b:2!null c:3!null
  ├── ordering: +2
- └── sort
+ └── distinct-on
       ├── columns: a:1!null b:2!null c:3!null
-      ├── ordering: +2
+      ├── grouping columns: a:1!null b:2!null c:3!null
       └── project
            ├── columns: a:1!null b:2!null c:3!null
            └── scan abc
@@ -184,20 +183,19 @@ sort
 build
 SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
-distinct-on
+sort
  ├── columns: y:2 z:3 x:1
- ├── grouping columns: x:1 z:3
  ├── ordering: +3
- ├── sort
- │    ├── columns: x:1 y:2 z:3
- │    ├── ordering: +3
- │    └── project
- │         ├── columns: x:1 y:2 z:3
- │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
- └── aggregations
-      └── first-agg [as=y:2]
-           └── y:2
+ └── distinct-on
+      ├── columns: x:1 y:2 z:3
+      ├── grouping columns: x:1 z:3
+      ├── project
+      │    ├── columns: x:1 y:2 z:3
+      │    └── scan xyz
+      │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── aggregations
+           └── first-agg [as=y:2]
+                └── y:2
 
 build
 SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
@@ -423,57 +421,54 @@ distinct-on
 build
 SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
 ----
-distinct-on
+sort
  ├── columns: x:1 y:2 z:3  [hidden: pk1:4!null pk2:5!null]
- ├── grouping columns: x:1 y:2 pk1:4!null pk2:5!null
  ├── ordering: +1,+2
- ├── sort
- │    ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null
- │    ├── ordering: +1,+2
- │    └── project
- │         ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null
- │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
- └── aggregations
-      └── first-agg [as=z:3]
-           └── z:3
+ └── distinct-on
+      ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null
+      ├── grouping columns: x:1 y:2 pk1:4!null pk2:5!null
+      ├── project
+      │    ├── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null
+      │    └── scan xyz
+      │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── aggregations
+           └── first-agg [as=z:3]
+                └── z:3
 
 build
 SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
-distinct-on
+sort
  ├── columns: pk1:4!null  [hidden: x:1 y:2 z:3]
- ├── grouping columns: x:1 y:2 z:3
  ├── ordering: +1
- ├── sort
- │    ├── columns: x:1 y:2 z:3 pk1:4!null
- │    ├── ordering: +1
- │    └── project
- │         ├── columns: x:1 y:2 z:3 pk1:4!null
- │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
- └── aggregations
-      └── first-agg [as=pk1:4]
-           └── pk1:4
+ └── distinct-on
+      ├── columns: x:1 y:2 z:3 pk1:4!null
+      ├── grouping columns: x:1 y:2 z:3
+      ├── project
+      │    ├── columns: x:1 y:2 z:3 pk1:4!null
+      │    └── scan xyz
+      │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── aggregations
+           └── first-agg [as=pk1:4]
+                └── pk1:4
 
 # Verify we accept either ordering direction for the ON columns.
 build
 SELECT DISTINCT ON (x, y) x, y, z FROM xyz ORDER BY x DESC
 ----
-distinct-on
+sort
  ├── columns: x:1 y:2 z:3
- ├── grouping columns: x:1 y:2
  ├── ordering: -1
- ├── sort
- │    ├── columns: x:1 y:2 z:3
- │    ├── ordering: -1
- │    └── project
- │         ├── columns: x:1 y:2 z:3
- │         └── scan xyz
- │              └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
- └── aggregations
-      └── first-agg [as=z:3]
-           └── z:3
+ └── distinct-on
+      ├── columns: x:1 y:2 z:3
+      ├── grouping columns: x:1 y:2
+      ├── project
+      │    ├── columns: x:1 y:2 z:3
+      │    └── scan xyz
+      │         └── columns: x:1 y:2 z:3 pk1:4!null pk2:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── aggregations
+           └── first-agg [as=z:3]
+                └── z:3
 
 build
 SELECT DISTINCT ON (x, y) x, y, z FROM xyz ORDER BY x ASC, y DESC, z

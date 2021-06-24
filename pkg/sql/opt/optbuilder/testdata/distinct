@@ -48,13 +48,12 @@ project
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
-distinct-on
+sort
  ├── columns: y:2 z:3
- ├── grouping columns: y:2 z:3
  ├── ordering: +3
- └── sort
+ └── distinct-on
       ├── columns: y:2 z:3
-      ├── ordering: +3
+      ├── grouping columns: y:2 z:3
       └── project
            ├── columns: y:2 z:3
            └── scan xyz
@@ -63,13 +62,12 @@ distinct-on
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
-distinct-on
+sort
  ├── columns: y:2 z:3
- ├── grouping columns: y:2 z:3
  ├── ordering: +2
- └── sort
+ └── distinct-on
       ├── columns: y:2 z:3
-      ├── ordering: +2
+      ├── grouping columns: y:2 z:3
       └── project
            ├── columns: y:2 z:3
            └── scan xyz
@@ -307,13 +305,12 @@ CREATE TABLE abcd (
 build
 SELECT DISTINCT 1 AS x, d, b FROM abcd ORDER BY d, b
 ----
-distinct-on
+sort
  ├── columns: x:7!null d:4!null b:2!null
- ├── grouping columns: b:2!null d:4!null x:7!null
  ├── ordering: +4,+2
- └── sort
+ └── distinct-on
       ├── columns: b:2!null d:4!null x:7!null
-      ├── ordering: +4,+2 opt(7)
+      ├── grouping columns: b:2!null d:4!null x:7!null
       └── project
            ├── columns: x:7!null b:2!null d:4!null
            ├── scan abcd

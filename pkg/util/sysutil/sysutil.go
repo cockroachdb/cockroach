@@ -35,14 +35,6 @@ const (
 	ECONNREFUSED = syscall.ECONNREFUSED
 )
 
-// FSInfo describes a filesystem. It is returned by StatFS.
-type FSInfo struct {
-	FreeBlocks  int64
-	AvailBlocks int64
-	TotalBlocks int64
-	BlockSize   int64
-}
-
 // ExitStatus returns the exit status contained within an exec.ExitError.
 func ExitStatus(err *exec.ExitError) int {
 	// err.Sys() is of type syscall.WaitStatus on all supported platforms.
