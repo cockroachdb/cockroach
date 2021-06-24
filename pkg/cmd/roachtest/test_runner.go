@@ -927,6 +927,11 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, t *test
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
 	t.l.PrintfCtx(ctx, "collecting cluster logs")
+	// Do this before collecting logs to make sure the file gets
+	// downloaded below.
+	if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
+		t.l.Printf("failed to fetch disk uage summary: %s", err)
+	}
 	if err := c.FetchLogs(ctx, t); err != nil {
 		t.l.Printf("failed to download logs: %s", err)
 	}
@@ -941,9 +946,6 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, t *test
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
 		t.l.Printf("failed to copy roachprod state: %s", err)
-	}
-	if err := c.FetchDiskUsage(ctx, t); err != nil {
-		t.l.Printf("failed to fetch disk uage summary: %s", err)
 	}
 	if err := c.FetchTimeseriesData(ctx, t); err != nil {
 		t.l.Printf("failed to fetch timeseries data: %s", err)

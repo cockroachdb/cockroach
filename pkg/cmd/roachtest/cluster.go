@@ -1189,35 +1189,20 @@ func (c *cluster) FetchLogs(ctx context.Context, t *test) error {
 	})
 }
 
-// FetchDiskUsage collects a summary of the disk usage on nodes.
-func (c *cluster) FetchDiskUsage(ctx context.Context, t *test) error {
+// saveDiskUsageToLogsDir collects a summary of the disk usage to logs/diskusage.txt on each node.
+func saveDiskUsageToLogsDir(ctx context.Context, c Cluster) error {
 	// TODO(jackson): This is temporary for debugging out-of-disk-space
 	// failures like #44845.
-	if c.spec.NodeCount == 0 || c.isLocal() {
+	if c.Spec().NodeCount == 0 || c.isLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab disk usage on local runs.
 		return nil
 	}
 
-	t.l.Printf("fetching disk usage\n")
-	c.status("fetching disk usage")
-
 	// Don't hang forever.
 	return contextutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
-		const name = "diskusage.txt"
-		path := filepath.Join(c.t.ArtifactsDir(), name)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return err
-		}
-		if err := execCmd(
-			ctx, c.l, roachprod, "ssh", c.name, "--",
-			"/bin/bash", "-c", "'du -c /mnt/data1 --exclude lost+found > "+name+"'",
-		); err != nil {
-			// Don't error out because it might've worked on some nodes. Fetching will
-			// error out below but will get everything it can first.
-			t.l.Printf("during disk usage fetching: %s", err)
-		}
-		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+		return c.RunE(ctx, c.All(),
+			"du -c /mnt/data1 --exclude lost+found >> logs/diskusage.txt")
 	})
 }
 
