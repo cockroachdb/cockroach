@@ -176,14 +176,14 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// pgServer stops waiting for connections to respond to cancellation.
 		realCancels := pgServer.OverwriteCancelMap()
 
-		// Set draining with no drainWait or cancelWait timeout. The expected
+		// Set draining with no queryWait or cancelWait timeout. The expected
 		// behavior is that the ongoing session is immediately canceled but
 		// since we overwrote the context.CancelFunc, this cancellation will
 		// not have any effect. The pgServer will not bother to wait for the
 		// connection to close properly and should notify the caller that a
 		// session did not respond to cancellation.
 		if err := pgServer.DrainImpl(
-			0 /* drainWait */, 0, /* cancelWait */
+			0 /* queryWait */, 0, /* cancelWait */
 		); !testutils.IsError(err, "some sessions did not respond to cancellation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -218,11 +218,11 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Set draining with no drainWait timeout and a 2s cancelWait timeout.
+		// Set draining with no queryWait timeout and a 2s cancelWait timeout.
 		// The expected behavior is for the pgServer to immediately cancel any
 		// ongoing sessions and wait for 2s for the cancellation to take effect.
 		if err := pgServer.DrainImpl(
-			0 /* drainWait */, 2*time.Second, /* cancelWait */
+			0 /* queryWait */, 2*time.Second, /* cancelWait */
 		); err != nil {
 			t.Fatal(err)
 		}
