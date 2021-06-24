@@ -98,7 +98,7 @@ func registerVersion(r *testRegistry) {
 					//
 					// https://github.com/cockroachdb/cockroach/issues/37737#issuecomment-496026918
 					if !strings.HasPrefix(binaryVersion, "2.") {
-						if err := c.CheckReplicaDivergenceOnDB(ctx, t, db); err != nil {
+						if err := c.CheckReplicaDivergenceOnDB(ctx, t.l, db); err != nil {
 							return errors.Wrapf(err, "node %d", i)
 						}
 					}

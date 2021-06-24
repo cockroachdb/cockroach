@@ -119,7 +119,7 @@ type Cluster interface {
 	// These should be removed over time.
 
 	makeNodes(opts ...option.Option) string
-	CheckReplicaDivergenceOnDB(context.Context, *test, *gosql.DB) error
+	CheckReplicaDivergenceOnDB(context.Context, *logger.Logger, *gosql.DB) error
 	GitClone(
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error

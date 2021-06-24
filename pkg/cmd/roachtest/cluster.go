@@ -1321,7 +1321,9 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 // error. Note that this will swallow errors returned directly from the consistency
 // check since we know that such spurious errors are possibly without any relation
 // to the check having failed.
-func (c *cluster) CheckReplicaDivergenceOnDB(ctx context.Context, t *test, db *gosql.DB) error {
+func (c *cluster) CheckReplicaDivergenceOnDB(
+	ctx context.Context, l *logger.Logger, db *gosql.DB,
+) error {
 	// NB: we set a statement_timeout since context cancellation won't work here,
 	// see:
 	// https://github.com/cockroachdb/cockroach/pull/34520
@@ -1337,7 +1339,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 		// TODO(tbg): the checks can fail for silly reasons like missing gossiped
 		// descriptors, etc. -- not worth failing the test for. Ideally this would
 		// be rock solid.
-		t.l.Printf("consistency check failed with %v; ignoring", err)
+		l.Printf("consistency check failed with %v; ignoring", err)
 		return nil
 	}
 	var finalErr error
@@ -1394,7 +1396,7 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", time.Minute,
 		func(ctx context.Context) error {
-			return c.CheckReplicaDivergenceOnDB(ctx, t, db)
+			return c.CheckReplicaDivergenceOnDB(ctx, t.l, db)
 		},
 	); err != nil {
 		// NB: we don't call t.Fatal() here because this method is
