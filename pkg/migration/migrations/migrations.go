@@ -82,6 +82,10 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.SQLInstancesTable),
 		sqlInstancesTableMigration,
 	),
+	migration.NewTenantMigration(
+		"add last_run and num_runs columns to system.jobs",
+		toCV(clusterversion.RetryJobsWithExponentialBackoff),
+		retryJobsWithExponentialBackoff),
 }
 
 func init() {

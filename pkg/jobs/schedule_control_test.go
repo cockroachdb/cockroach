@@ -254,7 +254,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 	argsFn := func(args *base.TestServerArgs) {
 		// Prevent registry from changing job state while running this test.
 		interval := 24 * time.Hour
-		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithIntervals(interval, interval)
+		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithIntervals(interval, interval, interval, interval)
 	}
 	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables, argsFn)
 	defer cleanup()
