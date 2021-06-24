@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -24,7 +25,7 @@ import (
 )
 
 func registerEngineSwitch(r *testRegistry) {
-	runEngineSwitch := func(ctx context.Context, t *test, c Cluster, additionalArgs ...string) {
+	runEngineSwitch := func(ctx context.Context, t *test, c cluster2.Cluster, additionalArgs ...string) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		c.Put(ctx, workload, "./workload", loadNode)
@@ -144,7 +145,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(n + 1),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runEngineSwitch(ctx, t, c)
 		},
 	})
@@ -154,7 +155,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(n + 1),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runEngineSwitch(ctx, t, c, "--encrypt=true")
 		},
 	})

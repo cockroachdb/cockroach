@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
@@ -29,7 +30,7 @@ func registerDrop(r *testRegistry) {
 	// by a truncation for the `stock` table (which contains warehouses*100k
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
-	runDrop := func(ctx context.Context, t *test, c Cluster, warehouses, nodes int) {
+	runDrop := func(ctx context.Context, t *test, c cluster2.Cluster, warehouses, nodes int) {
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
@@ -159,7 +160,7 @@ func registerDrop(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: `v2.1.0`,
 		Cluster:    r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.
 			if local {

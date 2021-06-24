@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"regexp"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ func registerRubyPG(r *testRegistry) {
 	runRubyPGTest := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster2.Cluster,
 	) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -202,7 +203,7 @@ func registerRubyPG(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runRubyPGTest(ctx, t, c)
 		},
 	})

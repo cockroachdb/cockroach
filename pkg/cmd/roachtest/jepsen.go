@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
@@ -42,7 +43,7 @@ var jepsenNemeses = []struct {
 	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
 
-func initJepsen(ctx context.Context, t *test, c Cluster) {
+func initJepsen(ctx context.Context, t *test, c cluster2.Cluster) {
 	// NB: comment this out to see the commands jepsen would run locally.
 	if c.IsLocal() {
 		t.Fatal("local execution not supported")
@@ -142,7 +143,7 @@ func initJepsen(ctx context.Context, t *test, c Cluster) {
 	c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 }
 
-func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string) {
+func runJepsen(ctx context.Context, t *test, c cluster2.Cluster, testName, nemesis string) {
 	initJepsen(ctx, t, c)
 
 	controller := c.Node(c.Spec().NodeCount)
@@ -158,7 +159,7 @@ func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	run := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
+	run := func(c cluster2.Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
 		if !c.IsLocal() {
 			c.Run(ctx, node, args...)
 			return
@@ -166,7 +167,7 @@ func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string
 		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
 		t.l.Printf("> %s\n", strings.Join(args, " "))
 	}
-	runE := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
+	runE := func(c cluster2.Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
 		if !c.IsLocal() {
 			return c.RunE(ctx, node, args...)
 		}
@@ -354,7 +355,7 @@ func registerJepsen(r *testRegistry) {
 				// if they detect that the machines have already been properly
 				// initialized.
 				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
-				Run: func(ctx context.Context, t *test, c Cluster) {
+				Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}

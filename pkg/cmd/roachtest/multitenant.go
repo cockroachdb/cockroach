@@ -14,11 +14,12 @@ import (
 	"context"
 	"path/filepath"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func runAcceptanceMultitenant(ctx context.Context, t *test, c Cluster) {
+func runAcceptanceMultitenant(ctx context.Context, t *test, c cluster2.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	c.Start(ctx, c.All())

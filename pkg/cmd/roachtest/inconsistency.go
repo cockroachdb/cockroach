@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	_ "github.com/lib/pq"
 )
 
@@ -27,7 +28,7 @@ func registerInconsistency(r *testRegistry) {
 	})
 }
 
-func runInconsistency(ctx context.Context, t *test, c Cluster) {
+func runInconsistency(ctx context.Context, t *test, c cluster2.Cluster) {
 	// With encryption on, our attempt below to manually introduce an inconsistency
 	// will fail.
 	c.EncryptDefault(false)

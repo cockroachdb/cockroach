@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -57,7 +58,7 @@ func registerSQLSmith(r *testRegistry) {
 		"no-ddl":       sqlsmith.Settings["no-ddl"],
 	}
 
-	runSQLSmith := func(ctx context.Context, t *test, c Cluster, setupName, settingName string) {
+	runSQLSmith := func(ctx context.Context, t *test, c cluster2.Cluster, setupName, settingName string) {
 		// Set up a statement logger for easy reproduction. We only
 		// want to log successful statements and statements that
 		// produced a final error or panic.
@@ -246,7 +247,7 @@ func registerSQLSmith(r *testRegistry) {
 			Cluster:    r.makeClusterSpec(4),
 			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
 		})
