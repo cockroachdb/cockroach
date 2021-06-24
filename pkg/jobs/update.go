@@ -15,7 +15,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -36,12 +38,19 @@ import (
 // changes will be ignored unless JobUpdater is used).
 type UpdateFn func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error
 
+// RunStats consists of job-run statistics: num of runs and last-run timestamp.
+type RunStats struct {
+	LastRun time.Time
+	NumRuns int
+}
+
 // JobMetadata groups the job metadata values passed to UpdateFn.
 type JobMetadata struct {
 	ID       jobspb.JobID
 	Status   Status
 	Payload  *jobspb.Payload
 	Progress *jobspb.Progress
+	RunStats *RunStats
 }
 
 // CheckRunningOrReverting returns an InvalidStatusError if md.Status is not
@@ -78,6 +87,13 @@ func (ju *JobUpdater) UpdateProgress(progress *jobspb.Progress) {
 
 func (ju *JobUpdater) hasUpdates() bool {
 	return ju.md != JobMetadata{}
+}
+
+func (ju *JobUpdater) UpdateRunStats(numRuns int, lastRun time.Time) {
+	ju.md.RunStats = &RunStats{
+		NumRuns: numRuns,
+		LastRun: lastRun,
+	}
 }
 
 // UpdateHighwaterProgressed updates job updater progress with the new high water mark.
@@ -119,10 +135,16 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		stmt := "SELECT status, payload, progress FROM system.jobs WHERE id = $1 FOR UPDATE"
+		stmt := "SELECT status, payload, progress%s FROM system.jobs WHERE id = $1 FOR UPDATE"
 		if j.sessionID != "" {
-			stmt = "SELECT status, payload, progress, claim_session_id FROM system." +
+			stmt = "SELECT status, payload, progress, claim_session_id%s FROM system." +
 				"jobs WHERE id = $1 FOR UPDATE"
+		}
+		// Retrieve run stats if the jobs table version supports it.
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			stmt = fmt.Sprintf(stmt, ", COALESCE(last_run, created), COALESCE(num_runs, 0)")
+		} else {
+			stmt = fmt.Sprintf(stmt, "")
 		}
 		var err error
 		var row tree.Datums
@@ -170,6 +192,21 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 			Payload:  payload,
 			Progress: progress,
 		}
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			lastRun, ok := row[4].(*tree.DTimestamp)
+			if !ok {
+				return errors.AssertionFailedf("job %d: expected timestamp last_run, but got %T", j.ID(), lastRun)
+			}
+			numRuns, ok := row[5].(*tree.DInt)
+			if !ok {
+				return errors.AssertionFailedf("job %d: expected int num_runs, but got %T", j.ID(), numRuns)
+			}
+			md.RunStats = &RunStats{
+				NumRuns: int(*numRuns),
+				LastRun: lastRun.Time,
+			}
+		}
+
 		var ju JobUpdater
 		if err := updateFn(txn, md, &ju); err != nil {
 			return err
@@ -179,6 +216,7 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 				return err
 			}
 		}
+
 		if !ju.hasUpdates() {
 			return nil
 		}
@@ -222,6 +260,11 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 				return err
 			}
 			addSetter("progress", progressBytes)
+		}
+
+		if ju.md.RunStats != nil {
+			addSetter("last_run", ju.md.RunStats.LastRun)
+			addSetter("num_runs", ju.md.RunStats.NumRuns)
 		}
 
 		updateStmt := fmt.Sprintf(

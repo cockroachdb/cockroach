@@ -20,32 +20,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-const intervalBaseSettingKey = "jobs.registry.interval.base"
-const adoptIntervalSettingKey = "jobs.registry.interval.adopt"
-const cancelIntervalSettingKey = "jobs.registry.interval.cancel"
-const gcIntervalSettingKey = "jobs.registry.interval.gc"
-const retentionTimeSettingKey = "jobs.retention_time"
-const cancelUpdateLimitKey = "jobs.cancel_update_limit"
+const (
+	intervalBaseSettingKey   = "jobs.registry.interval.base"
+	adoptIntervalSettingKey  = "jobs.registry.interval.adopt"
+	cancelIntervalSettingKey = "jobs.registry.interval.cancel"
+	gcIntervalSettingKey     = "jobs.registry.interval.gc"
+	retentionTimeSettingKey  = "jobs.retention_time"
+	cancelUpdateLimitKey     = "jobs.cancel_update_limit"
+	retryBaseSettingKey      = "jobs.registry.retry.backoff_base"
+	retryMaxDelaySettingKey  = "jobs.registry.retry.backoff_max"
+)
 
-// defaultAdoptInterval is the default adopt interval.
-var defaultAdoptInterval = 30 * time.Second
+var (
+	// defaultAdoptInterval is the default adopt interval.
+	defaultAdoptInterval = 30 * time.Second
 
-// defaultCancelInterval is the default cancel interval.
-var defaultCancelInterval = 10 * time.Second
+	// defaultCancelInterval is the default cancel interval.
+	defaultCancelInterval = 10 * time.Second
 
-// defaultGcInterval is the default GC Interval.
-var defaultGcInterval = 1 * time.Hour
+	// defaultGcInterval is the default GC Interval.
+	defaultGcInterval = 1 * time.Hour
 
-// defaultIntervalBase is the default interval base.
-var defaultIntervalBase = 1.0
+	// defaultIntervalBase is the default interval base.
+	defaultIntervalBase = 1.0
 
-// defaultRetentionTime is the default duration for which terminal jobs are
-// kept in the records.
-var defaultRetentionTime = 14 * 24 * time.Hour
+	// defaultRetentionTime is the default duration for which terminal jobs are
+	// kept in the records.
+	defaultRetentionTime = 14 * 24 * time.Hour
 
-// defaultCancellationsUpdateLimit is the default number of jobs that can be
-// updated when canceling jobs concurrently from dead sessions.
-var defaultCancellationsUpdateLimit int64 = 1000
+	// defaultCancellationsUpdateLimit is the default number of jobs that can be
+	// updated when canceling jobs concurrently from dead sessions.
+	defaultCancellationsUpdateLimit int64 = 1000
+
+	// defaultRetryBase is the base multiplier in the calculation of retry interval
+	// of a failed job using exponential backoff.
+	defaultRetryBase = 30 * time.Second
+
+	// defaultRetryMaxDelay is the maximum backoff delay to retry a failed job.
+	defaultRetryMaxDelay = 24 * time.Hour
+)
 
 var (
 	intervalBaseSetting = settings.RegisterFloatSetting(
@@ -92,6 +105,21 @@ var (
 		"the number of jobs that can be updated when canceling jobs concurrently from dead sessions",
 		defaultCancellationsUpdateLimit,
 		settings.NonNegativeInt,
+	)
+
+	retryBaseSetting = settings.RegisterDurationSetting(
+		retryBaseSettingKey,
+		"the base multiplier to calculate the exponential-backoff delay "+
+			" in the next retry of a failed job",
+		defaultRetryBase,
+		settings.NonNegativeDuration,
+	)
+
+	retryMaxDelaySetting = settings.RegisterDurationSetting(
+		retryMaxDelaySettingKey,
+		"the maximum delay to retry a failed job",
+		defaultRetryMaxDelay,
+		settings.PositiveDuration,
 	)
 )
 

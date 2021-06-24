@@ -181,12 +181,15 @@ CREATE TABLE system.jobs (
 	created_by_id     INT,
 	claim_session_id  BYTES,
 	claim_instance_id INT8,
+	num_runs          INT8,
+	last_run          TIMESTAMP,
 	INDEX (status, created),
 	INDEX (created_by_type, created_by_id) STORING (status),
+	INDEX (claim_session_id, status, created) STORING (num_runs, last_run, claim_instance_id),
 
 	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
 	FAMILY progress (progress),
-	FAMILY claim (claim_session_id, claim_instance_id)
+	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
 
 	// web_sessions are used to track authenticated user actions over stateless
@@ -883,8 +886,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	nowString   = "now():::TIMESTAMP"
-	nowTZString = "now():::TIMESTAMPTZ"
+	nowString = "now():::TIMESTAMP"
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = makeTable(descpb.TableDescriptor{
@@ -903,8 +905,10 @@ var (
 			{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
 			{Name: "claim_session_id", ID: 8, Type: types.Bytes, Nullable: true},
 			{Name: "claim_instance_id", ID: 9, Type: types.Int, Nullable: true},
+			{Name: "num_runs", ID: 10, Type: types.Int, Nullable: true},
+			{Name: "last_run", ID: 11, Type: types.Timestamp, Nullable: true},
 		},
-		NextColumnID: 10,
+		NextColumnID: 12,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
 				// NB: We are using family name that existed prior to adding created_by_type and
@@ -925,8 +929,8 @@ var (
 			{
 				Name:        "claim",
 				ID:          2,
-				ColumnNames: []string{"claim_session_id", "claim_instance_id"},
-				ColumnIDs:   []descpb.ColumnID{8, 9},
+				ColumnNames: []string{"claim_session_id", "claim_instance_id", "num_runs", "last_run"},
+				ColumnIDs:   []descpb.ColumnID{8, 9, 10, 11},
 			},
 		},
 		NextFamilyID: 3,
@@ -954,8 +958,21 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
+			// TODO(sajjad): To discuss: Why are we creating another index instead of storing num_runs and last_runs in jobs_status_created_idx?
+			{
+				Name:                "jobs_run_stats_idx",
+				ID:                  4,
+				Unique:              false,
+				KeyColumnNames:      []string{"claim_session_id", "status", "created"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{8, 2, 3},
+				StoreColumnNames:    []string{"claim_instance_id", "num_runs", "last_run"},
+				StoreColumnIDs:      []descpb.ColumnID{9, 10, 11},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
 		},
-		NextIndexID: 4,
+		NextIndexID: 5,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
@@ -1649,6 +1666,8 @@ var (
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
+
+	nowTZString = "now():::TIMESTAMPTZ"
 
 	// ScheduledJobsTable is the descriptor for the scheduled jobs table.
 	ScheduledJobsTable = makeTable(descpb.TableDescriptor{
