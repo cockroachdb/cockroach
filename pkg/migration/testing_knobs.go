@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package migrationmanager
+package migration
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 )
 
 // TestingKnobs are knobs to inject behavior into the migration manager which
@@ -26,7 +26,17 @@ type TestingKnobs struct {
 	ListBetweenOverride func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion
 
 	// RegistryOverride is used to inject migrations for specific cluster versions.
-	RegistryOverride func(cv clusterversion.ClusterVersion) (migration.Migration, bool)
+	RegistryOverride func(cv clusterversion.ClusterVersion) (Migration, bool)
+
+	// BeforeWaitingForMutation is called before waiting for a mutation job
+	// to complete in retryJobsWithExponentialBackoff migration.
+	// TODO(sajjad): Remove this knob when the related migration code is removed.
+	BeforeWaitingForMutation func(jobspb.JobID)
+
+	// SkippedMutation is called if a mutation job is skipped as part of the
+	// retryJobsWithExponentialBackoff migration.
+	// TODO(sajjad): Remove this knob when the related migration code is removed.
+	SkippedMutation func()
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.
