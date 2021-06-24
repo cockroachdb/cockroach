@@ -67,10 +67,13 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 // NB: this is called "max_intents_bytes" instead of "max_lock_bytes" because
 // it was created before the concept of intents were generalized to locks.
 // Switching it would require a migration which doesn't seem worth it.
+//
+// Note: Default value was arbitrarily set to 256KB but practice showed that
+// it could be raised higher. See #54029 for more details.
 var trackedWritesMaxSize = settings.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
-	1<<18, /* 256 KB */
+	1<<20, /* 1 MB */
 ).WithPublic()
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
