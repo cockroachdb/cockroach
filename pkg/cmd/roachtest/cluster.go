@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"github.com/armon/circbuf"
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -1191,7 +1191,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, t *test) error {
 }
 
 // saveDiskUsageToLogsDir collects a summary of the disk usage to logs/diskusage.txt on each node.
-func saveDiskUsageToLogsDir(ctx context.Context, c cluster2.Cluster) error {
+func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
 	// TODO(jackson): This is temporary for debugging out-of-disk-space
 	// failures like #44845.
 	if c.Spec().NodeCount == 0 || c.IsLocal() {
@@ -2356,7 +2356,7 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 
 // getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
 func getDiskUsageInBytes(
-	ctx context.Context, c cluster2.Cluster, logger *logger.Logger, nodeIdx int,
+	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
 ) (int, error) {
 	var out []byte
 	for {
@@ -2413,7 +2413,7 @@ type monitor struct {
 	expDeaths int32 // atomically
 }
 
-func newMonitor(ctx context.Context, ci cluster2.Cluster, opts ...option.Option) *monitor {
+func newMonitor(ctx context.Context, ci cluster.Cluster, opts ...option.Option) *monitor {
 	c := ci.(*clusterImpl) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `MakeNodes`
 	m := &monitor{
 		t:     c.t,
@@ -2678,7 +2678,7 @@ func (lg loadGroupList) loadNodes() option.NodeListOption {
 // makeLoadGroups create a loadGroupList that has an equal number of cockroach
 // nodes per zone. It assumes that numLoadNodes <= numZones and that numZones is
 // divisible by numLoadNodes.
-func makeLoadGroups(c cluster2.Cluster, numZones, numRoachNodes, numLoadNodes int) loadGroupList {
+func makeLoadGroups(c cluster.Cluster, numZones, numRoachNodes, numLoadNodes int) loadGroupList {
 	if numLoadNodes > numZones {
 		panic("cannot have more than one load node per zone")
 	} else if numZones%numLoadNodes != 0 {

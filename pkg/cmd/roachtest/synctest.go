@@ -16,7 +16,7 @@ import (
 	"os"
 	"path/filepath"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -37,7 +37,7 @@ fi
 		MinVersion: "v19.1.0",
 		// This test sets up a custom file system; we don't want the cluster reused.
 		Cluster: r.makeClusterSpec(1, spec.ReuseNone()),
-		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")
 			if err != nil {

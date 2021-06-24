@@ -15,7 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
@@ -30,7 +30,7 @@ import (
 func loadTPCHDataset(
 	ctx context.Context,
 	t *test,
-	c cluster2.Cluster,
+	c cluster.Cluster,
 	sf int,
 	m *monitor,
 	roachNodes option.NodeListOption,

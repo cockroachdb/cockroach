@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"regexp"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -27,7 +27,7 @@ func registerPgx(r *testRegistry) {
 	runPgx := func(
 		ctx context.Context,
 		t *test,
-		c cluster2.Cluster,
+		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -131,7 +131,7 @@ func registerPgx(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runPgx(ctx, t, c)
 		},
 	})

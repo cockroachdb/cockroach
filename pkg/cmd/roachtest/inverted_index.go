@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -24,7 +24,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 		Name:    "schemachange/invertedindex",
 		Owner:   OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
 	})
@@ -32,7 +32,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 
 // runInvertedIndex tests the correctness and performance of building an
 // inverted index on randomly generated JSON data (from the JSON workload).
-func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster2.Cluster) {
+func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster.Cluster) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 

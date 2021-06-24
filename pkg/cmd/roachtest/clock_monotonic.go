@@ -15,13 +15,13 @@ import (
 	"fmt"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	_ "github.com/lib/pq"
 )
 
 func runClockMonotonicity(
-	ctx context.Context, t *test, c cluster2.Cluster, tc clockMonotonicityTestCase,
+	ctx context.Context, t *test, c cluster.Cluster, tc clockMonotonicityTestCase,
 ) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when introducing offset
@@ -138,7 +138,7 @@ func registerClockMonotonicTests(r *testRegistry) {
 			// These tests muck with NTP, therefor we don't want the cluster reused by
 			// others.
 			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
-			Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},
 		}

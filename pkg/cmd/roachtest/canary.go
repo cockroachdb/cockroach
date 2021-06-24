@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -87,7 +87,7 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 
 func fetchCockroachVersion(
 	ctx context.Context,
-	c cluster2.Cluster,
+	c cluster.Cluster,
 	nodeIndex int,
 	dbConnectionParams *SecureDBConnectionParams,
 ) (string, error) {
@@ -145,7 +145,7 @@ var canaryRetryOptions = retry.Options{
 func repeatRunE(
 	ctx context.Context,
 	t *test,
-	c cluster2.Cluster,
+	c cluster.Cluster,
 	node option.NodeListOption,
 	operation string,
 	args ...string,
@@ -174,7 +174,7 @@ func repeatRunE(
 // automatic retry loop.
 func repeatRunWithBuffer(
 	ctx context.Context,
-	c cluster2.Cluster,
+	c cluster.Cluster,
 	t *test,
 	node option.NodeListOption,
 	operation string,
@@ -208,7 +208,7 @@ func repeatRunWithBuffer(
 func repeatGitCloneE(
 	ctx context.Context,
 	t *test,
-	c cluster2.Cluster,
+	c cluster.Cluster,
 	src, dest, branch string,
 	node option.NodeListOption,
 ) error {

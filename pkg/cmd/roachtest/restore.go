@@ -22,7 +22,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -41,13 +41,13 @@ import (
 // future.
 type HealthChecker struct {
 	t      *test
-	c      cluster2.Cluster
+	c      cluster.Cluster
 	nodes  option.NodeListOption
 	doneCh chan struct{}
 }
 
 // NewHealthChecker returns a populated HealthChecker.
-func NewHealthChecker(t *test, c cluster2.Cluster, nodes option.NodeListOption) *HealthChecker {
+func NewHealthChecker(t *test, c cluster.Cluster, nodes option.NodeListOption) *HealthChecker {
 	return &HealthChecker{
 		t:      t,
 		c:      c,
@@ -148,12 +148,12 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 // DiskUsageLogger regularly logs the disk spaced used by the nodes in the cluster.
 type DiskUsageLogger struct {
 	t      *test
-	c      cluster2.Cluster
+	c      cluster.Cluster
 	doneCh chan struct{}
 }
 
 // NewDiskUsageLogger populates a DiskUsageLogger.
-func NewDiskUsageLogger(t *test, c cluster2.Cluster) *DiskUsageLogger {
+func NewDiskUsageLogger(t *test, c cluster.Cluster) *DiskUsageLogger {
 	return &DiskUsageLogger{
 		t:      t,
 		c:      c,
@@ -219,8 +219,8 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 	}
 }
 func registerRestoreNodeShutdown(r *testRegistry) {
-	makeRestoreStarter := func(ctx context.Context, t *test, c cluster2.Cluster, gatewayNode int) jobStarter {
-		return func(c cluster2.Cluster) (string, error) {
+	makeRestoreStarter := func(ctx context.Context, t *test, c cluster.Cluster, gatewayNode int) jobStarter {
+		return func(c cluster.Cluster) (string, error) {
 			t.l.Printf("connecting to gateway")
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
@@ -288,7 +288,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, cockroach, "./cockroach")
@@ -303,7 +303,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, cockroach, "./cockroach")
@@ -319,7 +319,7 @@ type testDataSet interface {
 	// runRestore does any setup that's required and restores the dataset into
 	// the given cluster. Any setup shouldn't take a long amount of time since
 	// perf artifacts are based on how long this takes.
-	runRestore(ctx context.Context, c cluster2.Cluster)
+	runRestore(ctx context.Context, c cluster.Cluster)
 }
 
 type dataBank2TB struct{}
@@ -328,7 +328,7 @@ func (dataBank2TB) name() string {
 	return "2TB"
 }
 
-func (dataBank2TB) runRestore(ctx context.Context, c cluster2.Cluster) {
+func (dataBank2TB) runRestore(ctx context.Context, c cluster.Cluster) {
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
@@ -342,7 +342,7 @@ func (tpccIncData) name() string {
 	return "TPCCInc"
 }
 
-func (tpccIncData) runRestore(ctx context.Context, c cluster2.Cluster) {
+func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
 	// This data set restores a 1.80TB (replicated) backup consisting of 50
 	// incremental backup layers taken every 15 minutes. 8000 warehouses
 	// were imported and then a workload of 1000 warehouses was run against
@@ -386,7 +386,7 @@ func registerRestore(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
@@ -452,7 +452,7 @@ func registerRestore(r *testRegistry) {
 // specified in m. This is particularly useful for verifying that a counter
 // metric does not exceed some threshold during a test. For example, the
 // restore and import tests verify that the range merge queue is inactive.
-func verifyMetrics(ctx context.Context, c cluster2.Cluster, m map[string]float64) error {
+func verifyMetrics(ctx context.Context, c cluster.Cluster, m map[string]float64) error {
 	const sample = 10 * time.Second
 	// Query needed information over the timespan of the query.
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))

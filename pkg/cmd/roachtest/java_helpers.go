@@ -17,7 +17,7 @@ import (
 	"regexp"
 	"strings"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 )
 
@@ -177,7 +177,7 @@ func (r *ormTestsResults) parseJUnitXML(
 func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
 	t *test,
-	c cluster2.Cluster,
+	c cluster.Cluster,
 	node option.NodeListOption,
 	ormName string,
 	testOutput []byte,
