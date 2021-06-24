@@ -21,6 +21,7 @@ package parser
 
 import (
 	"fmt"
+	"go/constant"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -29,6 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+func init() {
+	NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
+	NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
+}
 
 // Statement is the result of parsing a single statement. It contains the AST
 // node along with other information.
