@@ -282,6 +282,10 @@ const (
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
+	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
+	// used internally for the 2021 serverless offering.
+	Start21_1PLUS
+
 	// v21.2 versions.
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
@@ -321,7 +325,7 @@ const (
 // Such clusters would need to be wiped. As a result, do not bump the major or
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
-var versionsSingleton = keyedVersions([]keyedVersion{
+var versionsSingleton = keyedVersions{
 
 	// v20.2 versions.
 	{
@@ -476,34 +480,46 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 21, Minor: 1},
 	},
 
+	// v21.1PLUS version. This is a special v21.1.x release with extra changes,
+	// used internally for the 2021 Serverless offering.
+	//
+	// Any v21.1PLUS change that needs a migration will have a v21.2 version on
+	// master but a v21.1PLUS version on the v21.1PLUS branch.
+	{
+		Key: Start21_1PLUS,
+		// The Internal version starts out at 14 for historic reasons: at the time
+		// this was added, v21.2 versions were already defined up to 12.
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 14},
+	},
+
 	// v21.2 versions.
 	{
 		Key:     Start21_2,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 2},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 102},
 	},
 	{
 		Key:     JoinTokensTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 4},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 104},
 	},
 	{
 		Key:     AcquisitionTypeInLeaseHistory,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 6},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 106},
 	},
 	{
 		Key:     SerializeViewUDTs,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 8},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 108},
 	},
 	{
 		Key:     ExpressionIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 10},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 110},
 	},
 	{
 		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 12},
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 112},
 	},
 
 	// Step (2): Add new versions here.
-})
+}
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
 // feels out of place. A "cluster version" and a "binary version" are two
