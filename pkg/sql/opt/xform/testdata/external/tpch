@@ -1951,21 +1951,20 @@ limit
  │         ├── fd: (1)-->(2), (11)-->(1,2,14,15,59)
  │         ├── inner-join (hash)
  │         │    ├── columns: c_custkey:1!null c_name:2!null o_orderkey:11!null o_custkey:12!null o_totalprice:14!null o_orderdate:15!null l_orderkey:22!null l_quantity:26!null
- │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │         │    ├── fd: (1)-->(2), (11)-->(12,14,15), (11)==(22), (22)==(11), (1)==(12), (12)==(1)
- │         │    ├── scan lineitem
- │         │    │    └── columns: l_orderkey:22!null l_quantity:26!null
- │         │    ├── inner-join (hash)
- │         │    │    ├── columns: c_custkey:1!null c_name:2!null o_orderkey:11!null o_custkey:12!null o_totalprice:14!null o_orderdate:15!null
- │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │         │    │    ├── key: (11)
- │         │    │    ├── fd: (1)-->(2), (11)-->(12,14,15), (1)==(12), (12)==(1)
+ │         │    ├── inner-join (merge)
+ │         │    │    ├── columns: o_orderkey:11!null o_custkey:12!null o_totalprice:14!null o_orderdate:15!null l_orderkey:22!null l_quantity:26!null
+ │         │    │    ├── left ordering: +11
+ │         │    │    ├── right ordering: +22
+ │         │    │    ├── fd: (11)-->(12,14,15), (11)==(22), (22)==(11)
  │         │    │    ├── semi-join (merge)
  │         │    │    │    ├── columns: o_orderkey:11!null o_custkey:12!null o_totalprice:14!null o_orderdate:15!null
  │         │    │    │    ├── left ordering: +11
  │         │    │    │    ├── right ordering: +40
  │         │    │    │    ├── key: (11)
  │         │    │    │    ├── fd: (11)-->(12,14,15)
+ │         │    │    │    ├── ordering: +11
  │         │    │    │    ├── scan orders
  │         │    │    │    │    ├── columns: o_orderkey:11!null o_custkey:12!null o_totalprice:14!null o_orderdate:15!null
  │         │    │    │    │    ├── key: (11)
@@ -1991,14 +1990,16 @@ limit
  │         │    │    │    │    └── filters
  │         │    │    │    │         └── sum:58 > 300.0 [outer=(58), constraints=(/58: [/300.00000000000006 - ]; tight)]
  │         │    │    │    └── filters (true)
- │         │    │    ├── scan customer
- │         │    │    │    ├── columns: c_custkey:1!null c_name:2!null
- │         │    │    │    ├── key: (1)
- │         │    │    │    └── fd: (1)-->(2)
- │         │    │    └── filters
- │         │    │         └── c_custkey:1 = o_custkey:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+ │         │    │    ├── scan lineitem
+ │         │    │    │    ├── columns: l_orderkey:22!null l_quantity:26!null
+ │         │    │    │    └── ordering: +22
+ │         │    │    └── filters (true)
+ │         │    ├── scan customer
+ │         │    │    ├── columns: c_custkey:1!null c_name:2!null
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2)
  │         │    └── filters
- │         │         └── o_orderkey:11 = l_orderkey:22 [outer=(11,22), constraints=(/11: (/NULL - ]; /22: (/NULL - ]), fd=(11)==(22), (22)==(11)]
+ │         │         └── c_custkey:1 = o_custkey:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
  │         └── aggregations
  │              ├── sum [as=sum:59, outer=(26)]
  │              │    └── l_quantity:26

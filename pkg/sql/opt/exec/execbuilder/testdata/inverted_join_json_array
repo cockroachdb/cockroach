@@ -91,7 +91,7 @@ vectorized: true
 
 # This query performs a cross join followed by a filter.
 query T
-EXPLAIN SELECT * FROM json_tab@primary AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
+EXPLAIN SELECT * FROM json_tab@primary AS j1 CROSS HASH JOIN json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
 ----
 distribution: local
 vectorized: true
@@ -449,7 +449,7 @@ vectorized: true
 
 # This query performs a cross join followed by a filter.
 query T
-EXPLAIN SELECT * FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
+EXPLAIN SELECT * FROM array_tab@primary AS a1 CROSS HASH JOIN array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
 ----
 distribution: local
 vectorized: true

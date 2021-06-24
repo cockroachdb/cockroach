@@ -14,7 +14,7 @@ union
  ├── left columns: a.k:1 a.i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=2000, distinct(12,13)=2000, null(12,13)=0]
- ├── cost: 2179.13
+ ├── cost: 2179.73501
  ├── key: (12,13)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
@@ -55,7 +55,7 @@ intersect-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2169.13
+ ├── cost: 2169.27625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
@@ -77,7 +77,7 @@ intersect-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2169.13
+ ├── cost: 2169.27625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
@@ -99,7 +99,7 @@ except-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2169.13
+ ├── cost: 2169.27625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
@@ -121,7 +121,7 @@ except-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2169.13
+ ├── cost: 2169.27625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
