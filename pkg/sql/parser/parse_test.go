@@ -361,6 +361,9 @@ func TestParsePrecedence(t *testing.T) {
 
 		// Unary ~ should have highest precedence.
 		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
+
+		// OPERATOR(pg_catalog.~) should not be error (#66861).
+		{`'a' || 'b' OPERATOR(pg_catalog.~) 'c'`, regmatch(concat(a, b), c)},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

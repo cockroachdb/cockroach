@@ -82,6 +82,8 @@ func processBinaryQualOp(
       return &tree.BinaryExpr{Operator: op, Left: lhs, Right: rhs}, 0
     case tree.ComparisonOperator:
       return &tree.ComparisonExpr{Operator: op, Left: lhs, Right: rhs}, 0
+    case tree.UnaryOperator:
+      return &tree.ComparisonExpr{Operator: tree.RegMatch, Left: lhs, Right: rhs}, 0
     default:
       sqllex.Error(fmt.Sprintf("unknown binary operator %s", op))
       return nil, 1
