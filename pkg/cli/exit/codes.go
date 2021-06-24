@@ -58,6 +58,10 @@ func TimeoutAfterFatalError() Code { return Code{8} }
 // during a logging operation to a network collector.
 func LoggingNetCollectorUnavailable() Code { return Code{9} }
 
+// DiskFull (10) indicates an emergency shutdown in response to a
+// store's full disk.
+func DiskFull() Code { return Code{10} }
+
 // Codes that are specific to client commands follow. It's possible
 // for codes to be reused across separate client or server commands.
 // Command-specific exit codes should be allocated down from 125.

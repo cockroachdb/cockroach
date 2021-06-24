@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "array_32bit.go",
         "array_64bit.go",
+        "ballast.go",
         "batch.go",
         "disk_map.go",
         "doc.go",
@@ -73,6 +74,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -94,6 +96,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
@@ -113,6 +116,7 @@ go_test(
     name = "storage_test",
     size = "medium",
     srcs = [
+        "ballast_test.go",
         "batch_test.go",
         "bench_pebble_test.go",
         "bench_test.go",
@@ -164,6 +168,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/shuffle",
         "//pkg/util/stop",
+        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
