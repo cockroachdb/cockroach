@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TestingKnobs are base.ModuleTestingKnobs for testing jobs related infra.
@@ -54,7 +55,13 @@ type TestingKnobs struct {
 
 	// IntervalOverrides consists of override knobs for job intervals.
 	IntervalOverrides TestingIntervalOverrides
+
+	// TimeSource replaces registry's clock.
+	TimeSource *hlc.Clock
 }
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // TestingIntervalOverrides contains variables to override the intervals and
 // settings of periodic tasks.
@@ -74,9 +81,6 @@ type TestingIntervalOverrides struct {
 	// RetentionTime overrides the retentionTimeSetting cluster setting.
 	RetentionTime *time.Duration
 }
-
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // NewTestingKnobsWithShortIntervals return a TestingKnobs structure with
 // overrides for short adopt and cancel intervals.
