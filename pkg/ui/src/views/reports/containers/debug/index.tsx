@@ -255,8 +255,8 @@ export default function Debug() {
             url="/debug/pprof/ui/heap/?seconds=5&amp;si=alloc_objects"
           />
           <DebugTableLink
-            name="Profile"
-            url="/debug/pprof/ui/profile/?seconds=5&amp;labels=true"
+            name="CPU Profile"
+            url="/debug/pprof/ui/cpu/?seconds=5&amp"
           />
           <DebugTableLink name="Block" url="/debug/pprof/ui/block/" />
           <DebugTableLink name="Mutex" url="/debug/pprof/ui/mutex/" />

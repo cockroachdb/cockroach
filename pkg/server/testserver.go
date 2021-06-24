@@ -1270,6 +1270,12 @@ func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
 	return ts.node.recorder
 }
 
+// StatusServer returns the status server initialized on the test
+// server.
+func (ts *TestServer) StatusServer() serverpb.StatusServer {
+	return ts.status
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory
