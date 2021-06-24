@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,6 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./cockroachLabsLockupIcon";
-export * from "./backIcon";
-export * from "./icon";
+@import "src/core/index.module";
+
+.databases-table {
+  &__col {
+    &-name {
+      font-family: $font-family--semi-bold;
+    }
+
+    &-size {
+      width: 10em;
+    }
+
+    &-table-count, &-range-count {
+      width: 7em;
+    }
+  }
+
+  &__no-result {
+    @include text--body-strong;
+  }
+}
