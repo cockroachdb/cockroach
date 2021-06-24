@@ -191,6 +191,9 @@ func MakeRegistry(
 	}
 	if knobs != nil {
 		r.knobs = *knobs
+		if knobs.TimeSource != nil {
+			r.clock = knobs.TimeSource
+		}
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.metrics.init(histogramWindowInterval)
@@ -400,7 +403,9 @@ VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBy
 	); err != nil {
 		return nil, err
 	}
-
+	// Since we begin in the running state and the job is already claimed (setting
+	// job's claim_session_id), we should increment the number of jobs claimed.
+	r.metrics.ClaimedJobs.Inc(1)
 	return j, nil
 }
 
@@ -718,6 +723,7 @@ SELECT claim_session_id
 			case <-stopper.ShouldQuiesce():
 				return
 			case shouldClaim := <-r.adoptionCh:
+				r.metrics.AdoptIterations.Inc(1)
 				// Try to adopt the most recently created job.
 				if shouldClaim {
 					claimJobs(ctx)
@@ -725,6 +731,7 @@ SELECT claim_session_id
 				processClaimedJobs(ctx)
 			case <-lc.timer.C:
 				lc.timer.Read = true
+				r.metrics.AdoptIterations.Inc(1)
 				claimJobs(ctx)
 				processClaimedJobs(ctx)
 				lc.onExecute()
@@ -1006,6 +1013,7 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
+
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1013,15 +1021,18 @@ func (r *Registry) stepThroughStateMachine(
 				"job %d: resuming with non-nil error", job.ID())
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
-		if payload.StartedMicros == 0 {
-			if err := job.started(ctx, nil /* txn */); err != nil {
-				return err
-			}
+
+		if err := job.started(ctx, nil /* txn */); err != nil {
+			return err
 		}
+
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)
 			defer jm.CurrentlyRunning.Dec(1)
+			if err != nil {
+				return
+			}
 			err = resumer.Resume(resumeCtx, execCtx)
 		}()
 		if err == nil {
