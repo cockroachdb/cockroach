@@ -23,7 +23,7 @@ var gormSupportedTag = "v1.21.8"
 
 func registerGORM(r *testRegistry) {
 	runGORM := func(ctx context.Context, t *test, c Cluster) {
-		if c.isLocal() {
+		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
 		node := c.Node(1)

@@ -1193,7 +1193,7 @@ func (c *cluster) FetchLogs(ctx context.Context, t *test) error {
 func saveDiskUsageToLogsDir(ctx context.Context, c Cluster) error {
 	// TODO(jackson): This is temporary for debugging out-of-disk-space
 	// failures like #44845.
-	if c.Spec().NodeCount == 0 || c.isLocal() {
+	if c.Spec().NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab disk usage on local runs.
 		return nil
@@ -1409,7 +1409,7 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
 func (c *cluster) FetchDmesg(ctx context.Context, t *test) error {
-	if c.spec.NodeCount == 0 || c.isLocal() {
+	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
 		return nil
@@ -1440,7 +1440,7 @@ func (c *cluster) FetchDmesg(ctx context.Context, t *test) error {
 // FetchJournalctl grabs the journalctl logs if possible. This requires being
 // able to run `sudo journalctl` on the remote nodes.
 func (c *cluster) FetchJournalctl(ctx context.Context, t *test) error {
-	if c.spec.NodeCount == 0 || c.isLocal() {
+	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab journalctl on local runs.
 		return nil
@@ -1470,7 +1470,7 @@ func (c *cluster) FetchJournalctl(ctx context.Context, t *test) error {
 
 // FetchCores fetches any core files on the cluster.
 func (c *cluster) FetchCores(ctx context.Context, t *test) error {
-	if c.spec.NodeCount == 0 || c.isLocal() {
+	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
 		return nil
@@ -1618,7 +1618,7 @@ func (c *cluster) PutE(
 	c.status("uploading file")
 	defer c.status("")
 
-	err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest)
+	err := execCmd(ctx, c.l, roachprod, "put", c.MakeNodes(opts...), src, dest)
 	if err != nil {
 		return errors.Wrap(err, "cluster.Put")
 	}
@@ -1666,7 +1666,7 @@ func (c *cluster) Stage(
 	c.status("staging binary")
 	defer c.status("")
 
-	args := []string{roachprod, "stage", c.makeNodes(opts...), application, versionOrSHA}
+	args := []string{roachprod, "stage", c.MakeNodes(opts...), application, versionOrSHA}
 	if dir != "" {
 		args = append(args, fmt.Sprintf("--dir='%s'", dir))
 	}
@@ -1687,7 +1687,7 @@ func (c *cluster) Get(
 	c.status(fmt.Sprintf("getting %v", src))
 	defer c.status("")
 	return errors.Wrap(
-		execCmd(ctx, l, roachprod, "get", c.makeNodes(opts...), src, dest),
+		execCmd(ctx, l, roachprod, "get", c.MakeNodes(opts...), src, dest),
 		"cluster.Get error")
 
 }
@@ -1718,7 +1718,7 @@ func (c *cluster) PutString(
 	// NB: we intentionally don't remove the temp files. This is because roachprod
 	// will symlink them when running locally.
 
-	if err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
+	if err := execCmd(ctx, c.l, roachprod, "put", c.MakeNodes(opts...), src, dest); err != nil {
 		return errors.Wrap(err, "PutString")
 	}
 	return nil
@@ -1836,7 +1836,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option.Option) error {
 		"start",
 	}
 	args = append(args, roachprodArgs(opts)...)
-	args = append(args, c.makeNodes(opts...))
+	args = append(args, c.MakeNodes(opts...))
 	if !argExists(args, "--encrypt") {
 		if c.encryptDefault {
 			args = append(args, "--encrypt")
@@ -1879,7 +1879,7 @@ func (c *cluster) StopE(ctx context.Context, opts ...option.Option) error {
 		"stop",
 	}
 	args = append(args, roachprodArgs(opts)...)
-	args = append(args, c.makeNodes(opts...))
+	args = append(args, c.MakeNodes(opts...))
 	c.setStatusForClusterOpt("stopping", opts...)
 	defer c.clearStatusForClusterOpt(opts...)
 	return execCmd(ctx, c.l, args...)
@@ -1926,7 +1926,7 @@ func (c *cluster) WipeE(ctx context.Context, l *logger.Logger, opts ...option.Op
 	}
 	c.setStatusForClusterOpt("wiping", opts...)
 	defer c.clearStatusForClusterOpt(opts...)
-	return execCmd(ctx, l, roachprod, "wipe", c.makeNodes(opts...))
+	return execCmd(ctx, l, roachprod, "wipe", c.MakeNodes(opts...))
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
@@ -1951,7 +1951,7 @@ func (c *cluster) Run(ctx context.Context, node option.NodeListOption, args ...s
 // Reformat the disk on the specified node.
 func (c *cluster) Reformat(ctx context.Context, node option.NodeListOption, args ...string) {
 	err := execCmd(ctx, c.l,
-		append([]string{roachprod, "reformat", c.makeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, "reformat", c.MakeNodes(node), "--"}, args...)...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -1965,7 +1965,7 @@ func (c *cluster) Install(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 ) error {
 	return execCmd(ctx, l,
-		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, "install", c.MakeNodes(node), "--"}, args...)...)
 }
 
 var reOnlyAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9]+`)
@@ -2032,7 +2032,7 @@ func (c *cluster) RunL(
 		return err
 	}
 	return execCmd(ctx, l,
-		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)...)
 }
 
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
@@ -2044,7 +2044,7 @@ func (c *cluster) RunWithBuffer(
 		return nil, err
 	}
 	return execCmdWithBuffer(ctx, l,
-		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)...)
 }
 
 // pgURLErr returns the Postgres endpoint for the specified node. It accepts a
@@ -2059,7 +2059,7 @@ func (c *cluster) pgURLErr(
 	if external {
 		args = append(args, `--external`)
 	}
-	nodes := c.makeNodes(node)
+	nodes := c.MakeNodes(node)
 	args = append(args, nodes)
 	cmd := execCmdEx(ctx, c.l, args...)
 	if cmd.err != nil {
@@ -2308,7 +2308,7 @@ func (c *cluster) ConnSecure(
 	return db, nil
 }
 
-func (c *cluster) makeNodes(opts ...option.Option) string {
+func (c *cluster) MakeNodes(opts ...option.Option) string {
 	var r option.NodeListOption
 	for _, o := range opts {
 		if s, ok := o.(nodeSelector); ok {
@@ -2318,7 +2318,7 @@ func (c *cluster) makeNodes(opts ...option.Option) string {
 	return c.name + r.String()
 }
 
-func (c *cluster) isLocal() bool {
+func (c *cluster) IsLocal() bool {
 	return c.name == "local"
 }
 
@@ -2401,11 +2401,11 @@ type monitor struct {
 }
 
 func newMonitor(ctx context.Context, ci Cluster, opts ...option.Option) *monitor {
-	c := ci.(*cluster) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `makeNodes`
+	c := ci.(*cluster) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `MakeNodes`
 	m := &monitor{
 		t:     c.t,
 		l:     c.l,
-		nodes: c.makeNodes(opts...),
+		nodes: c.MakeNodes(opts...),
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.g, m.ctx = errgroup.WithContext(m.ctx)

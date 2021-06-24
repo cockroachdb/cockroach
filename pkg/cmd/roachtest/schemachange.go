@@ -59,7 +59,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 						t.Fatal(err)
 					}
 					defer l.Close()
-					_ = execCmd(ctx, t.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
+					_ = execCmd(ctx, t.l, roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
 				}()
 			}
 
@@ -341,7 +341,7 @@ func makeSchemaChangeBulkIngestTest(
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
 			// The payload column will be randomized and thus uncorrelated with the primary key (a, b, c).
 			aNum := numRows
-			if c.isLocal() {
+			if c.IsLocal() {
 				aNum = 100000
 			}
 			bNum := 1
@@ -369,7 +369,7 @@ func makeSchemaChangeBulkIngestTest(
 			m := newMonitor(ctx, c, crdbNodes)
 
 			indexDuration := length
-			if c.isLocal() {
+			if c.IsLocal() {
 				indexDuration = time.Second * 30
 			}
 			cmdWriteAndRead := fmt.Sprintf(
@@ -385,7 +385,7 @@ func makeSchemaChangeBulkIngestTest(
 				db := c.Conn(ctx, 1)
 				defer db.Close()
 
-				if !c.isLocal() {
+				if !c.IsLocal() {
 					// Wait for the load generator to run for a few minutes before creating the index.
 					sleepInterval := time.Minute * 5
 					maxSleep := length / 2

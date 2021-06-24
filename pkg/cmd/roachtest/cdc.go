@@ -251,7 +251,7 @@ func runCDCBank(ctx context.Context, t *test, c Cluster) {
 		nodes: kafkaNode,
 	}
 	kafka.install(ctx)
-	if !c.isLocal() {
+	if !c.IsLocal() {
 		// TODO(dan): This test currently connects to kafka from the test
 		// runner, so kafka needs to advertise the external address. Better
 		// would be a binary we could run on one of the roachprod machines.
@@ -1091,7 +1091,7 @@ type kafkaManager struct {
 }
 
 func (k kafkaManager) basePath() string {
-	if k.c.isLocal() {
+	if k.c.IsLocal() {
 		return `/tmp/confluent`
 	}
 	return `/mnt/data1/confluent`
@@ -1129,7 +1129,7 @@ func (k kafkaManager) install(ctx context.Context) {
 		k.t.Fatal(err)
 	}
 	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
-	if !k.c.isLocal() {
+	if !k.c.IsLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
 		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
 		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install openssl default-jre 2>&1 > logs/apt-get-install.log`)

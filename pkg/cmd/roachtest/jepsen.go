@@ -44,11 +44,11 @@ var jepsenNemeses = []struct {
 
 func initJepsen(ctx context.Context, t *test, c Cluster) {
 	// NB: comment this out to see the commands jepsen would run locally.
-	if c.isLocal() {
+	if c.IsLocal() {
 		t.Fatal("local execution not supported")
 	}
 
-	if c.isLocal() {
+	if c.IsLocal() {
 		// We can't perform any of the remaining setup locally and while we can't
 		// run jepsen locally we let the test run to indicate which commands it
 		// would have run remotely.
@@ -121,7 +121,7 @@ func initJepsen(ctx context.Context, t *test, c Cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
+	cmd := loggedCommand(ctx, t.l, roachprod, "get", c.MakeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -159,18 +159,18 @@ func runJepsen(ctx context.Context, t *test, c Cluster, testName, nemesis string
 	nodesStr := strings.Join(nodeFlags, " ")
 
 	run := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
-		if !c.isLocal() {
+		if !c.IsLocal() {
 			c.Run(ctx, node, args...)
 			return
 		}
-		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
+		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
 		t.l.Printf("> %s\n", strings.Join(args, " "))
 	}
 	runE := func(c Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
-		if !c.isLocal() {
+		if !c.IsLocal() {
 			return c.RunE(ctx, node, args...)
 		}
-		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
+		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
 		t.l.Printf("> %s\n", strings.Join(args, " "))
 		return nil
 	}
@@ -280,7 +280,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			ignoreErr = true
 		}
 
-		cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(controller),
+		cmd := exec.CommandContext(ctx, roachprod, "run", c.MakeNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
 			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log")
@@ -301,7 +301,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		anyFailed := false
 		for _, file := range collectFiles {
-			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller),
+			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.MakeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
 				filepath.Join(outputDir, file))
 			cmd.Stdout = t.l.Stdout
@@ -312,7 +312,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		if anyFailed {
 			// Try to figure out why this is so common.
-			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.makeNodes(controller),
+			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.MakeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
 				filepath.Join(outputDir, "invoke.log"))
 			cmd.Stdout = t.l.Stdout
