@@ -79,7 +79,7 @@ type floatInterval struct {
 // NewSizeSpec parses the string passed into a --size flag and returns a
 // SizeSpec if it is correctly parsed.
 func NewSizeSpec(
-	value string, bytesRange *intInterval, percentRange *floatInterval,
+	field, value string, bytesRange *intInterval, percentRange *floatInterval,
 ) (SizeSpec, error) {
 	var size SizeSpec
 	if fractionRegex.MatchString(value) {
@@ -93,13 +93,14 @@ func NewSizeSpec(
 		size.Percent, err = strconv.ParseFloat(factorValue, 64)
 		size.Percent *= percentFactor
 		if err != nil {
-			return SizeSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
+			return SizeSpec{}, fmt.Errorf("could not parse %s size (%s) %s", field, value, err)
 		}
 		if percentRange != nil {
 			if (percentRange.min != nil && size.Percent < *percentRange.min) ||
 				(percentRange.max != nil && size.Percent > *percentRange.max) {
 				return SizeSpec{}, fmt.Errorf(
-					"store size (%s) must be between %f%% and %f%%",
+					"%s size (%s) must be between %f%% and %f%%",
+					field,
 					value,
 					*percentRange.min,
 					*percentRange.max,
@@ -110,16 +111,16 @@ func NewSizeSpec(
 		var err error
 		size.InBytes, err = humanizeutil.ParseBytes(value)
 		if err != nil {
-			return SizeSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
+			return SizeSpec{}, fmt.Errorf("could not parse %s size (%s) %s", field, value, err)
 		}
 		if bytesRange != nil {
 			if bytesRange.min != nil && size.InBytes < *bytesRange.min {
-				return SizeSpec{}, fmt.Errorf("store size (%s) must be larger than %s", value,
-					humanizeutil.IBytes(*bytesRange.min))
+				return SizeSpec{}, fmt.Errorf("%s size (%s) must be larger than %s",
+					field, value, humanizeutil.IBytes(*bytesRange.min))
 			}
 			if bytesRange.max != nil && size.InBytes > *bytesRange.max {
-				return SizeSpec{}, fmt.Errorf("store size (%s) must be smaller than %s", value,
-					humanizeutil.IBytes(*bytesRange.max))
+				return SizeSpec{}, fmt.Errorf("%s size (%s) must be smaller than %s",
+					field, value, humanizeutil.IBytes(*bytesRange.max))
 			}
 		}
 	}
@@ -150,7 +151,7 @@ var _ pflag.Value = &SizeSpec{}
 // Set adds a new value to the StoreSpecValue. It is the important part of
 // pflag's value interface.
 func (ss *SizeSpec) Set(value string) error {
-	spec, err := NewSizeSpec(value, nil, nil)
+	spec, err := NewSizeSpec("", value, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -162,10 +163,11 @@ func (ss *SizeSpec) Set(value string) error {
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
-	Path       string
-	Size       SizeSpec
-	InMemory   bool
-	Attributes roachpb.Attributes
+	Path        string
+	Size        SizeSpec
+	BallastSize *SizeSpec
+	InMemory    bool
+	Attributes  roachpb.Attributes
 	// StickyInMemoryEngineID is a unique identifier associated with a given
 	// store which will remain in memory even after the default Engine close
 	// until it has been explicitly cleaned up by CleanupStickyInMemEngine[s]
@@ -202,6 +204,14 @@ func (ss StoreSpec) String() string {
 	}
 	if ss.Size.Percent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
+	}
+	if ss.BallastSize != nil {
+		if ss.BallastSize.InBytes > 0 {
+			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.InBytes))
+		}
+		if ss.BallastSize.Percent > 0 {
+			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
+		}
 	}
 	if len(ss.Attributes.Attrs) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
@@ -308,6 +318,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minPercent float64 = 1
 			var maxPercent float64 = 100
 			ss.Size, err = NewSizeSpec(
+				"store",
 				value,
 				&intInterval{min: &minBytesAllowed},
 				&floatInterval{min: &minPercent, max: &maxPercent},
@@ -315,6 +326,20 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			if err != nil {
 				return StoreSpec{}, err
 			}
+		case "ballast-size":
+			var minBytesAllowed int64
+			var minPercent float64 = 0
+			var maxPercent float64 = 50
+			ballastSize, err := NewSizeSpec(
+				"ballast",
+				value,
+				&intInterval{min: &minBytesAllowed},
+				&floatInterval{min: &minPercent, max: &maxPercent},
+			)
+			if err != nil {
+				return StoreSpec{}, err
+			}
+			ss.BallastSize = &ballastSize
 		case "attrs":
 			// Check to make sure there are no duplicate attributes.
 			attrMap := make(map[string]struct{})
@@ -384,6 +409,9 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		if ss.Size.Percent == 0 && ss.Size.InBytes == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
 		}
+		if ss.BallastSize != nil {
+			return StoreSpec{}, fmt.Errorf("ballast-size specified for in memory store")
+		}
 	} else if ss.Path == "" {
 		return StoreSpec{}, fmt.Errorf("no path specified")
 	}
@@ -416,6 +444,14 @@ func (ssl StoreSpecList) String() string {
 // AuxiliaryDir is the path of the auxiliary dir relative to an engine.Engine's
 // root directory. It must not be changed without a proper migration.
 const AuxiliaryDir = "auxiliary"
+
+// EmergencyBallastFile returns the path (relative to a data directory) used
+// for an emergency ballast file. The returned path must be stable across
+// releases (eg, we cannot change these constants), otherwise we may duplicate
+// ballasts.
+func EmergencyBallastFile(pathJoin func(...string) string, dataDir string) string {
+	return pathJoin(dataDir, AuxiliaryDir, "EMERGENCY_BALLAST")
+}
 
 // PreventedStartupFile is the filename (relative to 'dir') used for files that
 // can block server startup.
