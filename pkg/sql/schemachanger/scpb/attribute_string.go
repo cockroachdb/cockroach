@@ -10,7 +10,7 @@ func _() {
 	var x [1]struct{}
 	_ = x[AttributeType-0]
 	_ = x[AttributeDescID-1]
-	_ = x[AttributeDepID-2]
+	_ = x[AttributeReferencedDescID-2]
 	_ = x[AttributeColumnID-3]
 	_ = x[AttributeElementName-4]
 	_ = x[AttributeIndexID-5]

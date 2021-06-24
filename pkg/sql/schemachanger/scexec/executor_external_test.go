@@ -385,7 +385,7 @@ func TestSchemaChanger(t *testing.T) {
 			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 			require.NoError(t, err)
 			require.Len(t, parsed, 1)
-			outputNodes, err := scbuild.Build(ctx, parsed[0].AST.(*tree.AlterTable), buildDeps, nil)
+			outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
 			require.NoError(t, err)
 
 			for _, phase := range []scplan.Phase{
