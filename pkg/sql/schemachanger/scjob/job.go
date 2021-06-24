@@ -166,16 +166,16 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	return nil
 }
 
-func makeStates(next []*scpb.Node) []scpb.State {
-	states := make([]scpb.State, len(next))
+func makeStates(next []*scpb.Node) []scpb.Status {
+	states := make([]scpb.Status, len(next))
 	for i := range next {
-		states[i] = next[i].State
+		states[i] = next[i].Status
 	}
 	return states
 }
 
 func makeTargetStates(
-	ctx context.Context, sv *cluster.Settings, protos []*scpb.Target, states []scpb.State,
+	ctx context.Context, sv *cluster.Settings, protos []*scpb.Target, states []scpb.Status,
 ) []*scpb.Node {
 	if len(protos) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
@@ -185,7 +185,7 @@ func makeTargetStates(
 	for i := range protos {
 		ts[i] = &scpb.Node{
 			Target: protos[i],
-			State:  states[i],
+			Status: states[i],
 		}
 	}
 	return ts

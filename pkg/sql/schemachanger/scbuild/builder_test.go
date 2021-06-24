@@ -152,7 +152,7 @@ func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
 		entry.WriteString(" ")
 		scpb.FormatAttributes(node.Element(), &entry)
 		entry.WriteString("\n")
-		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.State.String()), "  "))
+		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
 		entry.WriteString(indentText("details:\n", "  "))
 		out, err := yaml.Marshal(target)
 		require.NoError(t, err)
