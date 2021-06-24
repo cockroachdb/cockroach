@@ -15,6 +15,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// State represents a current or potential future state of the
+// schema change system.
+type State []*Node
+
 // NumStatus is the number of values which Status may take on.
 var NumStatus = len(Status_name)
 

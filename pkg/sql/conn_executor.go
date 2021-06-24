@@ -2699,7 +2699,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
-	if len(scs.nodes) == 0 {
+	if len(scs.state) == 0 {
 		return nil
 	}
 	executor := scexec.NewExecutor(
@@ -2710,16 +2710,16 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	after, err := runNewSchemaChanger(
 		ctx,
 		scplan.PreCommitPhase,
-		ex.extraTxnState.schemaChangerState.nodes,
+		ex.extraTxnState.schemaChangerState.state,
 		executor,
 		scs.stmts,
 	)
 	if err != nil {
 		return err
 	}
-	scs.nodes = after
-	targetSlice := make([]*scpb.Target, len(scs.nodes))
-	states := make([]scpb.Status, len(scs.nodes))
+	scs.state = after
+	targetSlice := make([]*scpb.Target, len(scs.state))
+	states := make([]scpb.Status, len(scs.state))
 	// TODO(ajwerner): It may be better in the future to have the builder be
 	// responsible for determining this set of descriptors. As of the time of
 	// writing, the descriptors to be "locked," descriptors that need schema
@@ -2727,12 +2727,12 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	// there are future schema changes to be implemented in the new schema changer
 	// (e.g., RENAME TABLE) for which this may no longer be true.
 	descIDSet := catalog.MakeDescriptorIDSet()
-	for i := range scs.nodes {
-		targetSlice[i] = scs.nodes[i].Target
-		states[i] = scs.nodes[i].Status
+	for i := range scs.state {
+		targetSlice[i] = scs.state[i].Target
+		states[i] = scs.state[i].Status
 		// Depending on the element type either a single descriptor ID
 		// will exist or multiple (i.e. foreign keys).
-		if id := scpb.GetDescID(scs.nodes[i].Element()); id != descpb.InvalidID {
+		if id := scpb.GetDescID(scs.state[i].Element()); id != descpb.InvalidID {
 			descIDSet.Add(id)
 		}
 	}
@@ -2765,18 +2765,18 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 func runNewSchemaChanger(
 	ctx context.Context,
 	phase scplan.Phase,
-	nodes []*scpb.Node,
+	state scpb.State,
 	executor *scexec.Executor,
 	stmts []string,
-) (after []*scpb.Node, _ error) {
-	sc, err := scplan.MakePlan(nodes, scplan.Params{
+) (after scpb.State, _ error) {
+	sc, err := scplan.MakePlan(state, scplan.Params{
 		ExecutionPhase: phase,
 		// TODO(ajwerner): Populate the set of new descriptors
 	})
 	if err != nil {
 		return nil, err
 	}
-	after = nodes
+	after = state
 	for _, s := range sc.Stages {
 		if err := executor.ExecuteOps(ctx, s.Ops,
 			scexec.TestingKnobMetadata{
