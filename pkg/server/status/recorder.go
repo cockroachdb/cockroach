@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 )
@@ -446,7 +447,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		StoreStatuses:     make([]statuspb.StoreStatus, 0, lastSummaryCount),
 		Metrics:           make(map[string]float64, lastNodeMetricCount),
 		Args:              os.Args,
-		Env:               envutil.GetEnvVarsUsed(),
+		Env:               flattenStrings(envutil.GetEnvVarsUsed()),
 		Activity:          activity,
 		NumCpus:           int32(system.NumCPU()),
 		TotalSystemMemory: systemMemory,
@@ -486,6 +487,14 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	}
 
 	return nodeStat
+}
+
+func flattenStrings(s []redact.RedactableString) []string {
+	res := make([]string, len(s))
+	for i, v := range s {
+		res[i] = v.StripMarkers()
+	}
+	return res
 }
 
 // WriteNodeStatus writes the supplied summary to the given client. If mustExist
