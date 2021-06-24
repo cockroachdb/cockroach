@@ -93,12 +93,12 @@ DROP DATABASE db1 CASCADE
     tableId: 57
     usesSequenceIDs:
     - 54
-- DROP RelationDependedOnBy:{DescID: 54, DepID: 57}
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}
   state: PUBLIC
   details:
     dependedOn: 57
     tableId: 54
-- DROP RelationDependedOnBy:{DescID: 55, DepID: 56}
+- DROP RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}
   state: PUBLIC
   details:
     dependedOn: 56
@@ -141,12 +141,12 @@ DROP DATABASE db1 CASCADE
   state: PUBLIC
   details:
     typeId: 63
-- DROP TypeReference:{DescID: 64, DepID: 62}
+- DROP TypeReference:{DescID: 64, ReferencedDescID: 62}
   state: PUBLIC
   details:
     descriptorId: 64
     typeId: 62
-- DROP TypeReference:{DescID: 64, DepID: 63}
+- DROP TypeReference:{DescID: 64, ReferencedDescID: 63}
   state: PUBLIC
   details:
     descriptorId: 64

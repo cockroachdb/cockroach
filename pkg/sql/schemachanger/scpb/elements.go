@@ -107,7 +107,7 @@ func (e *SequenceDependency) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.SequenceID)
-	case AttributeDepID:
+	case AttributeReferencedDescID:
 		return (*descID)(&e.TableID)
 	case AttributeColumnID:
 		return (*columnID)(&e.ColumnID)
@@ -183,7 +183,7 @@ func (e *TypeReference) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.DescID)
-	case AttributeDepID:
+	case AttributeReferencedDescID:
 		return (*descID)(&e.TypeID)
 	default:
 		return nil
@@ -207,7 +207,7 @@ func (e *InboundForeignKey) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.OriginID)
-	case AttributeDepID:
+	case AttributeReferencedDescID:
 		return (*descID)(&e.ReferenceID)
 	case AttributeElementName:
 		return (*elementName)(&e.Name)
@@ -222,7 +222,7 @@ func (e *OutboundForeignKey) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.OriginID)
-	case AttributeDepID:
+	case AttributeReferencedDescID:
 		return (*descID)(&e.ReferenceID)
 	case AttributeElementName:
 		return (*elementName)(&e.Name)
@@ -237,7 +237,7 @@ func (e *RelationDependedOnBy) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.TableID)
-	case AttributeDepID:
+	case AttributeReferencedDescID:
 		return (*descID)(&e.DependedOnBy)
 	default:
 		return nil
@@ -250,7 +250,7 @@ func (e *SequenceOwnedBy) getAttribute(attr Attribute) attributeValue {
 		return getElementTypeID(e)
 	case AttributeDescID:
 		return (*descID)(&e.SequenceID)
-	case AttributeDepID:
+	case AttributeReferencedDescID:
 		return (*descID)(&e.OwnerTableID)
 	default:
 		return nil

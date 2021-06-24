@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -110,25 +111,30 @@ func (e *ConcurrentSchemaChangeError) DescriptorID() descpb.ID {
 	return e.descID
 }
 
-// Build builds targets and transforms the provided schema change nodes
-// accordingly, given a statement.
+// Build constructs a new set of nodes from an initial set and a statement.
 func Build(
-	ctx context.Context, n tree.Statement, dependencies Dependencies, initialNodes []*scpb.Node,
+	ctx context.Context, dependencies Dependencies, initialState []*scpb.Node, n tree.Statement,
 ) (outputNodes []*scpb.Node, err error) {
 	buildContext := &buildContext{
 		Dependencies: dependencies,
-		outputNodes:  initialNodes,
+		outputNodes:  cloneNodes(initialState),
 	}
 	return buildContext.build(ctx, n)
 }
 
+func cloneNodes(state []*scpb.Node) []*scpb.Node {
+	clone := make([]*scpb.Node, len(state))
+	for i, n := range state {
+		clone[i] = &scpb.Node{
+			Target: protoutil.Clone(n.Target).(*scpb.Target),
+			State:  n.State,
+		}
+	}
+	return clone
+}
+
 // build builds targets and transforms the provided schema change nodes
 // accordingly, given a statement.
-//
-// TODO(ajwerner): Clarify whether the nodes will be mutated. Potentially just
-// clone them defensively here. Similarly, close the statement as some schema
-// changes mutate the AST. It's best if this method had a clear contract that
-// it did not mutate its arguments.
 func (b *buildContext) build(
 	ctx context.Context, n tree.Statement,
 ) (outputNodes []*scpb.Node, err error) {

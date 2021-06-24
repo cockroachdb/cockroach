@@ -96,7 +96,7 @@ func TestPlanAlterTable(t *testing.T) {
 				require.NoError(t, err)
 				var outputNodes []*scpb.Node
 				for i := range stmts {
-					outputNodes, err = scbuild.Build(ctx, stmts[i].AST, *deps, outputNodes)
+					outputNodes, err = scbuild.Build(ctx, *deps, outputNodes, stmts[i].AST)
 					require.NoError(t, err)
 				}
 
@@ -121,7 +121,7 @@ func TestPlanAlterTable(t *testing.T) {
 				stmt := stmts[0]
 				alter, ok := stmt.AST.(*tree.AlterTable)
 				require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-				_, err = scbuild.Build(ctx, alter, *deps, nil)
+				_, err = scbuild.Build(ctx, *deps, nil, alter)
 				require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				return ""
 
