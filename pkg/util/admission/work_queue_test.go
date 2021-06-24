@@ -248,3 +248,5 @@ func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 // - Test metrics
 // - Test race between grant and cancellation
 // - Test WorkQueue for tokens
+// - Add microbenchmark with high concurrency and procs for full admission
+//   system
