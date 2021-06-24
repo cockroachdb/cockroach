@@ -48,7 +48,7 @@ message Target {
   Direction direction = 2;
 }
 
-enum State {
+enum Status {
   UNKNOWN = 0;
   ABSENT = 1;
   DELETE_ONLY = 2;
@@ -78,7 +78,7 @@ message SecondaryIndex {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
   uint32 primary_index = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
-  }
+}
 
 message SequenceDependency {
   option (gogoproto.equal) = true;

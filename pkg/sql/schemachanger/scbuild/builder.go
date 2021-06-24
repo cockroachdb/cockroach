@@ -127,7 +127,7 @@ func cloneNodes(state []*scpb.Node) []*scpb.Node {
 	for i, n := range state {
 		clone[i] = &scpb.Node{
 			Target: protoutil.Clone(n.Target).(*scpb.Target),
-			State:  n.State,
+			Status: n.Status,
 		}
 	}
 	return clone
@@ -184,12 +184,12 @@ func (b *buildContext) checkIfNodeExists(
 }
 
 func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
-	var s scpb.State
+	var s scpb.Status
 	switch dir {
 	case scpb.Target_ADD:
-		s = scpb.State_ABSENT
+		s = scpb.Status_ABSENT
 	case scpb.Target_DROP:
-		s = scpb.State_PUBLIC
+		s = scpb.Status_PUBLIC
 	default:
 		panic(errors.Errorf("unknown direction %s", dir))
 	}
@@ -199,7 +199,7 @@ func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 	}
 	b.outputNodes = append(b.outputNodes, &scpb.Node{
 		Target: scpb.NewTarget(dir, elem),
-		State:  s,
+		Status: s,
 	})
 }
 
