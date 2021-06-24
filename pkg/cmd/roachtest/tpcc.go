@@ -89,7 +89,7 @@ func setupTPCC(
 	c.EncryptAtRandom(true)
 	crdbNodes = c.Range(1, c.Spec().NodeCount-1)
 	workloadNode = c.Node(c.Spec().NodeCount)
-	if c.isLocal() {
+	if c.IsLocal() {
 		opts.Warehouses = 1
 	}
 
@@ -137,7 +137,7 @@ func setupTPCC(
 
 func runTPCC(ctx context.Context, t *test, c Cluster, opts tpccOptions) {
 	if cfg := opts.PrometheusConfig; cfg != nil {
-		if c.isLocal() {
+		if c.IsLocal() {
 			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
 			return
 		}
@@ -172,7 +172,7 @@ func runTPCC(ctx context.Context, t *test, c Cluster, opts tpccOptions) {
 	}
 
 	rampDuration := 5 * time.Minute
-	if c.isLocal() {
+	if c.IsLocal() {
 		opts.Warehouses = 1
 		if opts.Duration > time.Minute {
 			opts.Duration = time.Minute

@@ -95,7 +95,7 @@ type Cluster interface {
 
 	Spec() spec.ClusterSpec
 	Name() string
-	isLocal() bool
+	IsLocal() bool
 
 	// Deleting CockroachDB data and logs on nodes.
 
@@ -118,7 +118,7 @@ type Cluster interface {
 	// Methods whose inclusion on this interface is purely historical.
 	// These should be removed over time.
 
-	makeNodes(opts ...option.Option) string
+	MakeNodes(opts ...option.Option) string
 	CheckReplicaDivergenceOnDB(context.Context, *logger.Logger, *gosql.DB) error
 	GitClone(
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,

@@ -59,7 +59,7 @@ func makeScrubTPCCTest(
 				Warehouses:   warehouses,
 				ExtraRunArgs: "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
-					if !c.isLocal() {
+					if !c.IsLocal() {
 						// Wait until tpcc has been running for a few minutes to start SCRUB checks
 						sleepInterval := time.Minute * 10
 						maxSleep := length / 2

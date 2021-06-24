@@ -61,7 +61,7 @@ func runDiskStalledDetection(
 
 	t.Status("setting up charybdefs")
 
-	if err := execCmd(ctx, t.l, roachprod, "install", c.makeNodes(n), "charybdefs"); err != nil {
+	if err := execCmd(ctx, t.l, roachprod, "install", c.MakeNodes(n), "charybdefs"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real")

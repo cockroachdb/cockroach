@@ -30,7 +30,7 @@ func registerDjango(r *testRegistry) {
 		t *test,
 		c Cluster,
 	) {
-		if c.isLocal() {
+		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
 		node := c.Node(1)
