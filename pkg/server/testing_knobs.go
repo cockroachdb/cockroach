@@ -12,6 +12,7 @@ package server
 
 import (
 	"net"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -76,6 +77,10 @@ type TestingKnobs struct {
 	// Clock Source used to an inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
 	ClockSource func() int64
+
+	// DrainSleepFn used in testing to override the usual sleep function with
+	// a custom function that counts the number of times the sleep function is called.
+	DrainSleepFn func(time.Duration)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
