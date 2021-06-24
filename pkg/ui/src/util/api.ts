@@ -290,9 +290,11 @@ export function getDatabaseDetails(
   req: DatabaseDetailsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<DatabaseDetailsResponseMessage> {
+  const queryString = req.include_stats ? "?include_stats=true" : "";
+
   return timeoutFetch(
     serverpb.DatabaseDetailsResponse,
-    `${API_PREFIX}/databases/${req.database}`,
+    `${API_PREFIX}/databases/${req.database}${queryString}`,
     null,
     timeout,
   );

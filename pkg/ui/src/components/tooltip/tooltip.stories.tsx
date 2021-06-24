@@ -15,7 +15,6 @@ import * as ClusterTooltips from "src/views/cluster/containers/clusterOverview/t
 import * as NodeOverviewTooltips from "src/views/cluster/containers/nodeOverview/tooltips";
 import * as CapacityArkTooltips from "src/views/clusterviz/components/nodeOrLocality/tooltips";
 import * as GraphTooltips from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
-import * as DataBaseTableTooltips from "src/views/databases/containers/databases/tooltips";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import {
   plainNodeTooltips,
@@ -113,6 +112,3 @@ storiesOf("Tooltips/Cluster Overview Page", module)
 storiesOf("Tooltips/Metrics Page", module)
   .addDecorator(styledWrapper(wrapperStyle))
   .add("Graph tooltips", () => graphTooltipsStack(GraphTooltips));
-storiesOf("Tooltips/Databases Page", module)
-  .addDecorator(styledWrapper(wrapperStyle))
-  .add("Database table tooltips", () => tooltipsStack(DataBaseTableTooltips));
