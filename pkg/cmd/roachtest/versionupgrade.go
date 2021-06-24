@@ -365,7 +365,7 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		u.c.Start(ctx, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
 }
 
@@ -406,7 +406,7 @@ func upgradeNodes(
 		t.l.Printf("restarting node %d into version %s", node, newVersionMsg)
 		c.Stop(ctx, c.Node(node))
 		args := startArgs("--binary=" + uploadVersion(ctx, t, c, c.Node(node), newVersion))
-		c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
+		c.Start(ctx, c.Node(node), args, startArgsDontEncrypt)
 	}
 }
 
@@ -546,7 +546,7 @@ func makeVersionFixtureAndFatal(
 ) {
 	var useLocalBinary bool
 	if makeFixtureVersion == "" {
-		c.Start(ctx, t, c.Node(1))
+		c.Start(ctx, c.Node(1))
 		require.NoError(t, c.Conn(ctx, 1).QueryRowContext(
 			ctx,
 			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,

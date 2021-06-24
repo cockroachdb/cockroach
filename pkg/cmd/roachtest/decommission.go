@@ -104,7 +104,7 @@ func runDecommission(ctx context.Context, t *test, c Cluster, nodes int, duratio
 	c.Put(ctx, workload, "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
-		c.Start(ctx, t, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
 
@@ -301,7 +301,7 @@ func runDecommission(ctx context.Context, t *test, c Cluster, nodes int, duratio
 func runDecommissionRandomized(ctx context.Context, t *test, c Cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t, args)
+	c.Start(ctx, args)
 
 	h := newDecommTestHelper(t, c)
 
@@ -636,7 +636,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c Cluster) {
 			t.l.Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
 				targetNodeA, targetNodeB, runNode)
 			c.Stop(ctx, c.Nodes(targetNodeA, targetNodeB))
-			c.Start(ctx, t, c.Nodes(targetNodeA, targetNodeB), args)
+			c.Start(ctx, c.Nodes(targetNodeA, targetNodeB), args)
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
 				t.Fatalf("expected recommission to fail")
@@ -698,7 +698,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c Cluster) {
 
 			// Bring targetNode it back up to verify that its replicas still get
 			// removed.
-			c.Start(ctx, t, c.Node(targetNode), args)
+			c.Start(ctx, c.Node(targetNode), args)
 		}
 
 		// Run decommission a second time to wait until the replicas have
@@ -774,7 +774,7 @@ func runDecommissionRandomized(ctx context.Context, t *test, c Cluster) {
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			c.Start(ctx, t, c.Node(targetNode), startArgs(
+			c.Start(ctx, c.Node(targetNode), startArgs(
 				fmt.Sprintf("-a=--join %s", joinAddr),
 			))
 		}

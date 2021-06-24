@@ -45,7 +45,7 @@ func runClearRange(ctx context.Context, t *test, c Cluster, aggressiveChecks boo
 	c.Put(ctx, cockroach, "./cockroach")
 
 	t.Status("restoring fixture")
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
@@ -65,7 +65,7 @@ func runClearRange(ctx context.Context, t *test, c Cluster, aggressiveChecks boo
 			"--env", "COCKROACH_CONSISTENCY_AGGRESSIVE=true COCKROACH_ENFORCE_CONSISTENT_STATS=true",
 		))
 	}
-	c.Start(ctx, t, opts...)
+	c.Start(ctx, opts...)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that

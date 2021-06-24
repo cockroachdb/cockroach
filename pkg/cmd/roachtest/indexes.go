@@ -42,7 +42,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 
 			c.Put(ctx, cockroach, "./cockroach", roachNodes)
 			c.Put(ctx, workload, "./workload", loadNode)
-			c.Start(ctx, t, roachNodes)
+			c.Start(ctx, roachNodes)
 			conn := c.Conn(ctx, 1)
 
 			t.Status("running workload")

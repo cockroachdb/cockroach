@@ -53,7 +53,7 @@ func registerInterleaved(r *testRegistry) {
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, t, cockroachNodes)
+		c.Start(ctx, cockroachNodes)
 
 		zones := fmt.Sprintf("--east-zone-name %s --west-zone-name %s --central-zone-name %s",
 			config.eastName, config.westName, config.centralName)

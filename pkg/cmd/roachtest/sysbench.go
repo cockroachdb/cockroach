@@ -92,7 +92,7 @@ func runSysbench(ctx context.Context, t *test, c Cluster, opts sysbenchOptions) 
 
 	t.Status("installing cockroach")
 	c.Put(ctx, cockroach, "./cockroach", allNodes)
-	c.Start(ctx, t, roachNodes)
+	c.Start(ctx, roachNodes)
 	waitForFullReplication(t, c.Conn(ctx, allNodes[0]))
 
 	t.Status("installing haproxy")

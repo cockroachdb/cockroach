@@ -32,7 +32,7 @@ func runNetworkSanity(ctx context.Context, t *test, origC Cluster, nodes int) {
 		t.Fatal(err)
 	}
 
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	db := c.Conn(ctx, 1) // unaffected by toxiproxy
 	defer db.Close()
@@ -107,7 +107,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC Cluster, nodes int) {
 	}
 
 	const warehouses = 1
-	c.Start(ctx, t, serverNodes)
+	c.Start(ctx, serverNodes)
 	c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
 
 	db := c.Conn(ctx, 1)

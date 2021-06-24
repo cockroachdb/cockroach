@@ -63,7 +63,7 @@ func runTPCHBench(ctx context.Context, t *test, c Cluster, b tpchBenchSpec) {
 	}
 
 	t.Status("starting nodes")
-	c.Start(ctx, t, roachNodes)
+	c.Start(ctx, roachNodes)
 
 	m := newMonitor(ctx, c, roachNodes)
 	m.Go(func(ctx context.Context) error {

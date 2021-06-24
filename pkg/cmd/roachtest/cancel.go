@@ -39,7 +39,7 @@ import (
 func registerCancel(r *testRegistry) {
 	runCancel := func(ctx context.Context, t *test, c Cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {

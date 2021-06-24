@@ -77,7 +77,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		if opt.dbSetupFunc != nil {
 			opt.dbSetupFunc(ctx, t, c)

@@ -36,7 +36,7 @@ func runClockJump(ctx context.Context, t *test, c Cluster, tc clockJumpTestCase)
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	db := c.Conn(ctx, c.Spec().NodeCount)
 	defer db.Close()
@@ -67,7 +67,7 @@ func runClockJump(ctx context.Context, t *test, c Cluster, tc clockJumpTestCase)
 		// restarting it if not.
 		time.Sleep(3 * time.Second)
 		if !isAlive(db, t.l) {
-			c.Start(ctx, t, c.Node(1))
+			c.Start(ctx, c.Node(1))
 		}
 	}()
 	defer offsetInjector.recover(ctx, c.Spec().NodeCount)

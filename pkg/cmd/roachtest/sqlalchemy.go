@@ -130,7 +130,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c Cluster) {
 
 	t.Status("setting up cockroach")
 	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 	if err != nil {

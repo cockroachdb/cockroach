@@ -40,7 +40,7 @@ func registerActiveRecord(r *testRegistry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {

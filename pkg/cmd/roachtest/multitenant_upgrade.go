@@ -164,7 +164,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Ve
 
 	kvNodes := c.Node(1)
 
-	c.Start(ctx, t, kvNodes, startArgs("--binary="+predecessorBinary))
+	c.Start(ctx, kvNodes, startArgs("--binary="+predecessorBinary))
 
 	kvAddrs, err := c.ExternalAddr(ctx, kvNodes)
 	require.NoError(t, err)
@@ -228,7 +228,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Ve
 
 	t.Status("upgrading host server")
 	c.Stop(ctx, kvNodes)
-	c.Start(ctx, t, kvNodes, startArgs("--binary="+currentBinary))
+	c.Start(ctx, kvNodes, startArgs("--binary="+currentBinary))
 	time.Sleep(time.Second)
 
 	t.Status("checking the pre-upgrade sql server still works after the KV binary upgrade")

@@ -32,7 +32,7 @@ func runResetQuorum(ctx context.Context, t *test, c Cluster) {
 	// n1-n5 will be in locality A, n6-n8 in B. We'll pin a single table to B and
 	// let the the nodes in B fail permanently.
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t, c.Range(1, 5), args("A"))
+	c.Start(ctx, c.Range(1, 5), args("A"))
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
@@ -46,7 +46,7 @@ func runResetQuorum(ctx context.Context, t *test, c Cluster) {
 	}
 	require.NoError(t, rows.Err())
 
-	c.Start(ctx, t, c.Range(6, 8), args("B"))
+	c.Start(ctx, c.Range(6, 8), args("B"))
 	_, err = db.Exec(`CREATE TABLE lostrange (id INT PRIMARY KEY, v STRING)`)
 	require.NoError(t, err)
 
