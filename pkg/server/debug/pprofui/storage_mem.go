@@ -40,6 +40,16 @@ type MemStorage struct {
 	keepNumber   int           // zero for disabled
 }
 
+func (s *MemStorage) GetRecords() []record {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	records2 := make([]record, len(s.mu.records))
+	for i, r := range s.mu.records {
+		records2[i] = r
+	}
+	return records2
+}
+
 var _ Storage = &MemStorage{}
 
 // NewMemStorage creates a MemStorage that retains the most recent n records

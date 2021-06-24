@@ -12,18 +12,24 @@ package pprofui
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/pprof"
 	"net/url"
 	"path"
+	"regexp"
 	runtimepprof "runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/driver"
@@ -41,6 +47,8 @@ type Server struct {
 	profileSem   syncutil.Mutex
 	profileTypes map[string]http.HandlerFunc
 	hook         func(profile string, labels bool, do func())
+	gossip       *gossip.Gossip
+	rpcCtx       *rpc.Context
 }
 
 // NewServer creates a new Server backed by the supplied Storage and optionally
@@ -56,13 +64,20 @@ type Server struct {
 // 		do()
 // 	}
 // }
-func NewServer(storage Storage, hook func(profile string, labels bool, do func())) *Server {
+func NewServer(
+	storage Storage,
+	gossip *gossip.Gossip,
+	rpcCtx *rpc.Context,
+	hook func(profile string, labels bool, do func()),
+) *Server {
 	if hook == nil {
 		hook = func(_ string, _ bool, do func()) { do() }
 	}
 	s := &Server{
 		storage: storage,
 		hook:    hook,
+		gossip:  gossip,
+		rpcCtx:  rpcCtx,
 	}
 
 	// Register the endpoints for heap, block, threadcreate, etc.
@@ -215,14 +230,54 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		req.Form = r.Form
 
-		rw := &responseBridge{target: w}
+		if r.Form.Get("node") != "" {
+			// Copied from status server's `dialNode` function
+			nodeID, _, err := s.parseNodeID(r.Form.Get("node"))
+			if err != nil {
+				return err
+			}
+			addr, err := s.gossip.GetNodeIDAddress(nodeID)
+			if err != nil {
+				return err
+			}
+			ctx := context.TODO()
+			conn, err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
+			if err != nil {
+				return err
+			}
+			client := serverpb.NewStatusClient(conn)
+			profileType, ok := serverpb.ProfileRequest_Type_value[profileName]
+			if !ok {
+				return errors.Newf("unknown profile name: %s", profileName)
+			}
+			resp, err := client.Profile(ctx, &serverpb.ProfileRequest{
+				NodeId: "local",
+				Type:   serverpb.ProfileRequest_Type(profileType),
+			})
+			if err != nil {
+				return err
+			}
+			_, err = w.Write(resp.Data)
+			if err != nil {
+				return err
+			}
 
-		s.hook(profileName, r.Form.Get("labels") != "", func() { fetchHandler(rw, req) })
+			// TODO(davidh): do we *need* to call hook here if we just did the whole request ourselves?
+			// I don't think so because `hook` is there to enable local profile collection
+			// and if we just offloaded that responsibility via the dialing then we don't need to
+			// worry about it
 
-		if rw.statusCode != http.StatusOK && rw.statusCode != 0 {
-			return errors.Errorf("unexpected status: %d", rw.statusCode)
+			return nil
+		} else {
+			rw := &responseBridge{target: w}
+
+			s.hook(profileName, r.Form.Get("labels") != "", func() { fetchHandler(rw, req) })
+
+			if rw.statusCode != http.StatusOK && rw.statusCode != 0 {
+				return errors.Errorf("unexpected status: %d", rw.statusCode)
+			}
+			return nil
 		}
-		return nil
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -252,6 +307,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return err
 		})
 	}
+}
+
+// Copied from pkg/server/status.go
+
+var localRE = regexp.MustCompile(`(?i)local`)
+
+func (s *Server) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
+	// No parameter provided or set to local.
+	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
+		return s.gossip.NodeID.Get(), true, nil
+	}
+
+	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
+	if err != nil {
+		return 0, false, errors.Wrap(err, "node ID could not be parsed")
+	}
+	nodeID := roachpb.NodeID(id)
+	return nodeID, nodeID == s.gossip.NodeID.Get(), nil
 }
 
 type fetcherFn func(_ string, _, _ time.Duration) (*profile.Profile, string, error)

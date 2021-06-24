@@ -437,6 +437,11 @@ message ProfileRequest {
   enum Type {
       HEAP = 0;
       CPU = 1; // with labels on
+      GOROUTINE = 2;
+      THREADCREATE = 3;
+      ALLOCS = 4;
+      BLOCK = 5;
+      MUTEX = 6;
   }
   // The type of profile to retrieve.
   Type type = 5;

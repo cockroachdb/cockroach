@@ -22,8 +22,10 @@ import (
 	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -66,7 +68,9 @@ type Server struct {
 }
 
 // NewServer sets up a debug server.
-func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
+func NewServer(
+	st *cluster.Settings, gossip *gossip.Gossip, rpcCtx *rpc.Context, hbaConfDebugFn http.HandlerFunc,
+) *Server {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
@@ -116,7 +120,7 @@ func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, labels bool, do func()) {
+	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), gossip, rpcCtx, func(profile string, labels bool, do func()) {
 		ctx := context.Background()
 		tBegin := timeutil.Now()
 

@@ -136,7 +136,7 @@ func StartTenant(
 
 	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
+		debugServer := debug.NewServer(args.Settings, nil, nil, s.pgServer.HBADebugFn())
 		mux.Handle("/", debugServer)
 		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 			// Return Bad Request if called with arguments.
