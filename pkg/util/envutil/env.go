@@ -16,12 +16,14 @@ import (
 	"os"
 	"os/user"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 type envVarInfo struct {
@@ -106,23 +108,131 @@ func GetEnvReport() string {
 
 // GetEnvVarsUsed returns the names of all environment variables that
 // may have been used.
-func GetEnvVarsUsed() []string {
+func GetEnvVarsUsed() (result []redact.RedactableString) {
+	allVarsRaw := os.Environ()
+	sort.Strings(allVarsRaw)
+	allVarsValues := make(map[redact.SafeString]string, len(allVarsRaw))
+	allVarNames := make([]redact.SafeString, 0, len(allVarsRaw))
+	for _, v := range allVarsRaw {
+		i := strings.IndexByte(v, '=')
+		if i < 0 {
+			continue
+		}
+		varName := redact.SafeString(v[:i])
+		allVarNames = append(allVarNames, varName)
+		var value string
+		if i+1 < len(v) {
+			value = v[i+1:]
+		}
+		allVarsValues[varName] = value
+	}
+
 	envVarRegistry.mu.Lock()
 	defer envVarRegistry.mu.Unlock()
 
-	var vars []string
-	for k, v := range envVarRegistry.cache {
-		if v.present {
-			vars = append(vars, k+"="+os.Getenv(k))
+	for _, varName := range allVarNames {
+		_, crdbVar := envVarRegistry.cache[string(varName)]
+		_, safeVar := safeVarRegistry[varName]
+		if crdbVar || safeVar {
+			result = append(result, redact.Sprintf("%s=%s", varName, redact.Safe(allVarsValues[varName])))
+		} else if _, reportable := valueReportableUnsafeVarRegistry[varName]; reportable {
+			result = append(result, redact.Sprintf("%s=%s", varName, allVarsValues[varName]))
+		} else if _, reportable := nameReportableUnsafeVarRegistry[varName]; reportable {
+			result = append(result, redact.Sprintf("%s=...", varName))
 		}
+		// For any env var just the name could contain too many sensitive details and we
+		// don't really want them to show up in logs.
 	}
 
-	for _, name := range []string{"GOGC", "GODEBUG", "GOMAXPROCS", "GOTRACEBACK"} {
-		if val, ok := os.LookupEnv(name); ok {
-			vars = append(vars, name+"="+val)
-		}
-	}
-	return vars
+	return result
+}
+
+// safeVarRegistry is the list of variables where we can both report
+// the name and the value safely: the value is known to never contain
+// sensitive information.
+var safeVarRegistry = map[redact.SafeString]struct{}{
+	"GOGC":        {},
+	"GODEBUG":     {},
+	"GOMAXPROCS":  {},
+	"GOTRACEBACK": {},
+}
+
+// valueReportableUnsafeVarRegistry is the list of variables where we can
+// report the name safely, and the value as a redactable payload.
+// The value may contain sensitive information, but not so sensitive
+// that users would be unhappy to see them enclosed within redaction
+// markers in log files.
+var valueReportableUnsafeVarRegistry = map[redact.SafeString]struct{}{
+	"DEBUG_HTTP2_GOROUTINES":      {},
+	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
+	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
+	"LANG":                        {},
+	"LC_ALL":                      {},
+	"LC_COLLATE":                  {},
+	"LC_CTYPE":                    {},
+	"LC_TIME":                     {},
+	"LC_NUMERIC":                  {},
+	"LC_MESSAGES":                 {},
+	"LS_METRICS_ENABLED":          {},
+	"TERM":                        {},
+	"TZ":                          {},
+	"ZONEINFO":                    {},
+	// From the Go runtime.
+	"LOCALDOMAIN":    {},
+	"RES_OPTIONS":    {},
+	"HOSTALIASES":    {},
+	"HTTP_PROXY":     {},
+	"HTTPS_PROXY":    {},
+	"NO_PROXY":       {},
+	"REQUEST_METHOD": {},
+}
+
+// nameReportableUnsafeVarRegistry is the list of variables where we can
+// report the name safely, but not the value in any form because it is
+// too likely to contain an unsafe payload that users would be horrified
+// to see in a log file, redaction markers or not.
+var nameReportableUnsafeVarRegistry = map[redact.SafeString]struct{}{
+	// GCP.
+	"GOOGLE_API_USE_MTLS":  {},
+	"GOOGLE_CLOUD_PROJECT": {},
+	// AWS.
+	"AWS_ACCESS_KEY":              {},
+	"AWS_ACCESS_KEY_ID":           {},
+	"AWS_PROFILE":                 {},
+	"AWS_REGION":                  {},
+	"AWS_SDK_LOAD_CONFIG":         {},
+	"AWS_SECRET_ACCESS_KEY":       {},
+	"AWS_SECRET_KEY":              {},
+	"AWS_SESSION_TOKEN":           {},
+	"AWS_SHARED_CREDENTIALS_FILE": {},
+	// Azure.
+	"AZURE_ACCESS_TOKEN_FILE": {},
+	"AZURE_AUTH_LOCATION":     {},
+	"AZURE_CONFIG_DIR":        {},
+	"AZURE_GO_SDK_LOG_FILE":   {},
+	"AZURE_GO_SDK_LOG_LEVEL":  {},
+	// Google auth.
+	"GAE_APPLICATION":     {},
+	"GAE_DEPLOYMENT_ID":   {},
+	"GAE_ENV":             {},
+	"GAE_INSTANCE":        {},
+	"GAE_LONG_APP_ID":     {},
+	"GAE_MINOR_VERSION":   {},
+	"GAE_MODULE_INSTANCE": {},
+	"GAE_MODULE_NAME":     {},
+	"GAE_PARTITION":       {},
+	"GAE_SERVICE":         {},
+	// gRPC.
+	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
+	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
+	// Kerberos.
+	"KRB5CCNAME": {},
+	// Pprof.
+	"PPROF_BINARY_PATH": {},
+	"PPROF_TMPDIR":      {},
+	"PPROF_TOOLS":       {},
+	// Sentry-go.
+	"SENTRY_RELEASE": {},
 }
 
 // GetShellCommand returns a complete command to run with a prefix of the command line.
