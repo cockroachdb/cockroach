@@ -790,12 +790,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			c = migrationcluster.NewTenantCluster(cfg.db)
 		}
 
-		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migrationmanager.TestingKnobs)
+		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migration.TestingKnobs)
 		migrationMgr := migrationmanager.NewManager(
 			c, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,
 		)
 		execCfg.MigrationJobDeps = migrationMgr
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
+		execCfg.MigrationTestingKnobs = knobs
 	}
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(

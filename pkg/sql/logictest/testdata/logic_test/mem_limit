@@ -44,4 +44,3 @@ vectorized: true
 
 query error scan with start key .* memory budget exceeded
 SELECT * FROM foo@foo_attribute_idx WHERE attribute=10 AND blob LIKE 'blah%'
-

@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -273,17 +274,21 @@ func (j *Job) taskName() string {
 	return fmt.Sprintf(`job-%d`, j.ID())
 }
 
-// Started marks the tracked job as started.
+// Started marks the tracked job as started by updating status to running in
+// jobs table.
 func (j *Job) started(ctx context.Context, txn *kv.Txn) error {
 	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusPending && md.Status != StatusRunning {
 			return errors.Errorf("job with status %s cannot be marked started", md.Status)
 		}
-		// TODO(spaskob): Remove this status change after we stop supporting
-		// pending job states.
-		ju.UpdateStatus(StatusRunning)
-		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
-		ju.UpdatePayload(md.Payload)
+		if md.Payload.StartedMicros == 0 {
+			ju.UpdateStatus(StatusRunning)
+			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+			ju.UpdatePayload(md.Payload)
+		}
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			ju.UpdateRunStats(md.RunStats.NumRuns+1, j.registry.clock.Now().GoTime())
+		}
 		return nil
 	})
 }
@@ -464,7 +469,8 @@ func (j *Job) cancelRequested(
 		}
 		if md.Status == StatusPaused && md.Payload.FinalResumeError != nil {
 			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
-			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError %s hence cannot be canceled and should be reverted", j.ID(), decodedErr.Error())
+			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError "+
+				"%s hence cannot be canceled and should be reverted", j.ID(), decodedErr.Error())
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
@@ -529,29 +535,43 @@ func (j *Job) reverted(
 	ctx context.Context, txn *kv.Txn, err error, fn func(context.Context, *kv.Txn) error,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusReverting {
-			return nil
-		}
-		if md.Status != StatusCancelRequested && md.Status != StatusRunning && md.Status != StatusPending {
+		if md.Status != StatusReverting &&
+			md.Status != StatusCancelRequested &&
+			md.Status != StatusRunning &&
+			md.Status != StatusPending {
 			return fmt.Errorf("job with status %s cannot be reverted", md.Status)
 		}
-		if fn != nil {
-			if err := fn(ctx, txn); err != nil {
-				return err
+		if md.Status != StatusReverting {
+			if fn != nil {
+				if err := fn(ctx, txn); err != nil {
+					return err
+				}
 			}
-		}
-		if err != nil {
-			md.Payload.Error = err.Error()
-			encodedErr := errors.EncodeError(ctx, err)
-			md.Payload.FinalResumeError = &encodedErr
-			ju.UpdatePayload(md.Payload)
-		} else {
-			if md.Payload.FinalResumeError == nil {
-				return errors.AssertionFailedf(
-					"tried to mark job as reverting, but no error was provided or recorded")
+			if err != nil {
+				md.Payload.Error = err.Error()
+				encodedErr := errors.EncodeError(ctx, err)
+				md.Payload.FinalResumeError = &encodedErr
+				ju.UpdatePayload(md.Payload)
+			} else {
+				if md.Payload.FinalResumeError == nil {
+					return errors.AssertionFailedf(
+						"tried to mark job as reverting, but no error was provided or recorded")
+				}
 			}
+			ju.UpdateStatus(StatusReverting)
 		}
-		ju.UpdateStatus(StatusReverting)
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			// We can reach here due to a failure or due to the job being canceled.
+			// We should reset the exponential backoff parameters if the job was not
+			// canceled. Note that md.Status will be StatusReverting if the job
+			// was canceled.
+			numRuns := md.RunStats.NumRuns + 1
+			if md.Status != StatusReverting {
+				// Reset the number of runs to speed up reverting.
+				numRuns = 1
+			}
+			ju.UpdateRunStats(numRuns, j.registry.clock.Now().GoTime())
+		}
 		return nil
 	})
 }
@@ -594,6 +614,9 @@ func (j *Job) failed(
 				return err
 			}
 		}
+		// TODO (sajjad): We don't have any checks for state transitions here. Consequently,
+		// a pause-requested job can transition to failed, which may or may not be
+		// acceptable depending on the job.
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
