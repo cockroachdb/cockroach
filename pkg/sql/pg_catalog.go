@@ -2512,8 +2512,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, err
 				}
 
-				// No errors and matches.
-				return false, nil
+				return true, nil
 			},
 		},
 	},
