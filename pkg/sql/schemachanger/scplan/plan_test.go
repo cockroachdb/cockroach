@@ -154,9 +154,9 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
 			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
-				scpb.AttributesString(de.From().Element()), de.From().State)
+				scpb.AttributesString(de.From().Element()), de.From().Status)
 			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
-				scpb.AttributesString(de.To().Element()), de.To().State)
+				scpb.AttributesString(de.To().Element()), de.To().Status)
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})

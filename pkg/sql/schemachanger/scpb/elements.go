@@ -15,13 +15,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// NumStates is the number of values which State may take on.
-var NumStates = len(State_name)
+// NumStatus is the number of values which Status may take on.
+var NumStatus = len(Status_name)
 
-// Node represents a Target in a given state.
+// Node represents a Target with a given status.
 type Node struct {
 	Target *Target
-	State  State
+	Status Status
 }
 
 // Element returns the target's element.

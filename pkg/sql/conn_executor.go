@@ -2719,7 +2719,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	}
 	scs.nodes = after
 	targetSlice := make([]*scpb.Target, len(scs.nodes))
-	states := make([]scpb.State, len(scs.nodes))
+	states := make([]scpb.Status, len(scs.nodes))
 	// TODO(ajwerner): It may be better in the future to have the builder be
 	// responsible for determining this set of descriptors. As of the time of
 	// writing, the descriptors to be "locked," descriptors that need schema
@@ -2729,7 +2729,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	descIDSet := catalog.MakeDescriptorIDSet()
 	for i := range scs.nodes {
 		targetSlice[i] = scs.nodes[i].Target
-		states[i] = scs.nodes[i].State
+		states[i] = scs.nodes[i].Status
 		// Depending on the element type either a single descriptor ID
 		// will exist or multiple (i.e. foreign keys).
 		if id := scpb.GetDescID(scs.nodes[i].Element()); id != descpb.InvalidID {
