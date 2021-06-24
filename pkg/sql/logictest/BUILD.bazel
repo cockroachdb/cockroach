@@ -1,11 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
-filegroup(
-    name = "testdata",
-    srcs = glob(["testdata/**"]),
-    visibility = ["//pkg/ccl/logictestccl:__subpackages__"],
-)
-
 go_library(
     name = "logictest",
     srcs = ["logic.go"],
@@ -16,7 +10,7 @@ go_library(
         "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/kv/kvserver",
-        "//pkg/migration/migrationmanager",
+        "//pkg/migration",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server",
@@ -52,16 +46,12 @@ go_library(
 
 go_test(
     name = "logictest_test",
-    size = "enormous",
     srcs = [
         "logic_test.go",
         "main_test.go",
         "parallel_test.go",
     ],
-    data = [
-        ":testdata",
-        "@cockroach//c-deps:libgeos",
-    ],
+    data = glob(["testdata/**"]),
     embed = [":logictest"],
     deps = [
         "//pkg/base",

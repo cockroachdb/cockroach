@@ -2441,7 +2441,6 @@ var charts = []sectionDescription{
 			{
 				Title: "Round",
 				Metrics: []string{
-
 					"schedules.round.schedules-ready-to-run",
 					"schedules.round.reschedule-skip",
 					"schedules.round.reschedule-wait",
@@ -2637,6 +2636,20 @@ var charts = []sectionDescription{
 					"jobs.migration.resume_failed",
 					"jobs.migration.resume_retry_error",
 				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{Jobs, "Registry"}},
+		Charts: []chartDescription{
+			{
+				Title: "Jobs Registry Stats",
+				Metrics: []string{
+					"jobs.adopt_iterations",
+					"jobs.claimed_jobs",
+					"jobs.resumed_claimed_jobs",
+				},
+				AxisLabel: "Count",
 			},
 		},
 	},
