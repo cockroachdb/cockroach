@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -978,7 +978,7 @@ func TestLintClusterSettingNames(t *testing.T) {
 					return errors.Errorf("%s: part %q has invalid structure", varName, segment)
 				}
 				if tokens[0].TokenID != parser.IDENT {
-					cat, ok := lex.KeywordsCategories[tokens[0].Str]
+					cat, ok := lexbase.KeywordsCategories[tokens[0].Str]
 					if !ok {
 						return errors.Errorf("%s: part %q has invalid structure", varName, segment)
 					}

@@ -32,7 +32,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/geo/geopb"
     "github.com/cockroachdb/cockroach/pkg/roachpb"
     "github.com/cockroachdb/cockroach/pkg/security"
-    "github.com/cockroachdb/cockroach/pkg/sql/lex"
+    "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

@@ -24,7 +24,6 @@ go_library(
         "//pkg/geo/geopb",  # keep
         "//pkg/roachpb",  # keep
         "//pkg/security",  # keep
-        "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -52,7 +51,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":parser"],
     deps = [
-        "//pkg/sql/lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
