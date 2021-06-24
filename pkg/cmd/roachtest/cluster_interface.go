@@ -120,7 +120,6 @@ type Cluster interface {
 
 	makeNodes(opts ...option.Option) string
 	CheckReplicaDivergenceOnDB(context.Context, *test, *gosql.DB) error
-	FetchDiskUsage(ctx context.Context, t *test) error
 	GitClone(
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error
