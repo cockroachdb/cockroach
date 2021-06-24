@@ -62,9 +62,9 @@ type Dependencies struct {
 type buildContext struct {
 	Dependencies
 
-	// outputNodes contains the internal state when building targets for an individual
+	// output contains the internal state when building targets for an individual
 	// statement.
-	outputNodes scpb.State
+	output scpb.State
 }
 
 type notImplementedError struct {
@@ -111,13 +111,13 @@ func (e *ConcurrentSchemaChangeError) DescriptorID() descpb.ID {
 	return e.descID
 }
 
-// Build constructs a new set of nodes from an initial set and a statement.
+// Build constructs a new set state from an initial state and a statement.
 func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
-) (outputNodes scpb.State, err error) {
+) (built scpb.State, err error) {
 	buildContext := &buildContext{
 		Dependencies: dependencies,
-		outputNodes:  cloneState(initial),
+		output:       cloneState(initial),
 	}
 	return buildContext.build(ctx, n)
 }
@@ -135,9 +135,7 @@ func cloneState(state scpb.State) scpb.State {
 
 // build builds targets and transforms the provided schema change nodes
 // accordingly, given a statement.
-func (b *buildContext) build(
-	ctx context.Context, n tree.Statement,
-) (outputNodes scpb.State, err error) {
+func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb.State, err error) {
 	defer func() {
 		if recErr := recover(); recErr != nil {
 			if errObj, ok := recErr.(error); ok {
@@ -165,7 +163,7 @@ func (b *buildContext) build(
 	default:
 		return nil, &notImplementedError{n: n}
 	}
-	return b.outputNodes, nil
+	return b.output, nil
 }
 
 // checkIfNodeExists checks if an existing node is already there,
@@ -175,7 +173,7 @@ func (b *buildContext) checkIfNodeExists(
 ) (exists bool, index int) {
 	// Check if any existing node matches the new node we are
 	// trying to add.
-	for idx, node := range b.outputNodes {
+	for idx, node := range b.output {
 		if scpb.EqualElements(node.Element(), elem) {
 			return true, idx
 		}
@@ -197,7 +195,7 @@ func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 	if exists, _ := b.checkIfNodeExists(dir, elem); exists {
 		panic(errors.Errorf("attempted to add duplicate element %s", elem))
 	}
-	b.outputNodes = append(b.outputNodes, &scpb.Node{
+	b.output = append(b.output, &scpb.Node{
 		Target: scpb.NewTarget(dir, elem),
 		Status: s,
 	})
