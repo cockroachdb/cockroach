@@ -3463,8 +3463,9 @@ def go_deps():
         name = "com_google_cloud_go",
         build_file_proto_mode = "disable_global",
         importpath = "cloud.google.com/go",
-        sum = "h1:lRi0CHyU+ytlvylOlFKKq0af6JncuyoRh1J+QJBqQx0=",
-        version = "v0.45.1",
+        replace = "github.com/cockroachdb/google-cloud-go",
+        sum = "h1:sqZ399Se6JijVd0RQTseFWC1y6z0t/PkCn8F+x0G6N4=",
+        version = "v0.45.2-0.20210623224357-4fefe580b8d5",
     )
     go_repository(
         name = "com_google_cloud_go_bigquery",
@@ -3818,13 +3819,6 @@ def go_deps():
         importpath = "go.opencensus.io",
         sum = "h1:C9hSCOW830chIVkdja34wa6Ky+IzWllkUinR+BtRZd4=",
         version = "v0.22.0",
-    )
-    go_repository(
-        name = "io_rsc_binaryregexp",
-        build_file_proto_mode = "disable_global",
-        importpath = "rsc.io/binaryregexp",
-        sum = "h1:HfqmD5MEmC0zvwBuF187nq9mdnXjXsSivRiXN7SmRkE=",
-        version = "v0.2.0",
     )
 
     go_repository(
