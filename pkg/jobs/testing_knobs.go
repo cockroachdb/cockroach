@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TestingKnobs are base.ModuleTestingKnobs for testing jobs related infra.
@@ -54,6 +55,9 @@ type TestingKnobs struct {
 
 	// IntervalOverrides consists of override knobs for job intervals.
 	IntervalOverrides TestingIntervalOverrides
+
+	// TimeSource replaces registry's clock.
+	TimeSource *hlc.Clock
 }
 
 // TestingIntervalOverrides contains variables to override the intervals and
