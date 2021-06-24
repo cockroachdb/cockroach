@@ -1520,3 +1520,11 @@ CREATE TABLE tab (k typ2 PRIMARY KEY)
 
 statement ok
 CREATE INDEX foo ON tab(k) WHERE k = ANY (ARRAY['a', 'a']:::typ2[])
+
+let $oid
+SELECT oid FROM pg_type WHERE typname = 'typ2'
+
+query OT
+SELECT oid, typname FROM pg_type WHERE oid = $oid
+----
+100201  typ2
