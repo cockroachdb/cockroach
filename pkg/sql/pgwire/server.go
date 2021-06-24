@@ -457,6 +457,8 @@ func (s *Server) drainImpl(
 	// Wait for all connections to finish up to drainWait.
 	select {
 	case <-time.After(drainWait):
+		// log
+		log.Ops.Warningf(context.TODO(), "canceling all sessions after waiting %s", drainWait)
 	case <-allConnsDone:
 	}
 
@@ -601,6 +603,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// If the server is shutting down, terminate the connection early.
 	if draining {
+		log.Ops.Info(ctx, "rejecting new connection while server is draining")
 		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 

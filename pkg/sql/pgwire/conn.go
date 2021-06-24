@@ -499,6 +499,7 @@ func (c *conn) serveImpl(
 		// sent another error for the last query (like a context canceled) is a bad
 		// idead; see #22630. I think we should find a way to return the
 		// AdminShutdown error as the only result of the query.
+		log.Ops.Warning(ctx, "closing existing connection while server is draining")
 		_ /* err */ = writeErr(ctx, &sqlServer.GetExecutorConfig().Settings.SV,
 			newAdminShutdownErr(ErrDrainingExistingConn), &c.msgBuilder, &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
