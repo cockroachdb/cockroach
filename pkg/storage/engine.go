@@ -363,9 +363,10 @@ const (
 // different iterators created by NewMVCCIterator, NewEngineIterator:
 // - pebbleSnapshot, because it uses an engine snapshot.
 // - pebbleReadOnly, pebbleBatch: when the IterOptions do not specify a
-//   timestamp hint. Note that currently the engine state visible here is
-//   not as of the time of the Reader creation. It is the time when the
-//   first iterator is created.
+//   timestamp hint (see IterOptions). Note that currently the engine state
+//   visible here is not as of the time of the Reader creation. It is the time
+//   when the first iterator is created, or earlier if
+//   PinEngineStateForIterators is called.
 // The ConsistentIterators method returns true when this consistency is
 // guaranteed by the Reader.
 // TODO(sumeer): this partial consistency can be a source of bugs if future
@@ -443,9 +444,25 @@ type Reader interface {
 	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
 	// ConsistentIterators returns true if the Reader implementation guarantees
-	// that the different iterators constructed by this Reader will see the
-	// same underlying Engine state.
+	// that the different iterators constructed by this Reader will see the same
+	// underlying Engine state. NB: this only applies to iterators without
+	// timestamp hints (see IterOptions), i.e., even if this returns true, those
+	// iterators can be "inconsistent" in terms of seeing a different engine
+	// state. The only exception to this is a Reader created using NewSnapshot.
 	ConsistentIterators() bool
+
+	// PinEngineStateForIterators ensures that the state seen by iterators
+	// without timestamp hints (see IterOptions) is pinned and will not see
+	// future mutations. It can be called multiple times on a Reader in which
+	// case the state seen will be either:
+	// - As of the first call.
+	// - For a Reader returned by Engine.NewSnapshot, the pinned state is as of
+	//   the time the snapshot was taken.
+	// So the semantics that are true for all Readers is that the pinned state
+	// is somewhere in the time interval between the creation of the Reader and
+	// the first call to PinEngineStateForIterators.
+	// REQUIRES: ConsistentIterators returns true.
+	PinEngineStateForIterators() error
 }
 
 // PrecedingIntentState is information needed when writing or clearing an
