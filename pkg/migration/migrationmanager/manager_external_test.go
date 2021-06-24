@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -70,7 +69,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: 1,
 				},
-				MigrationManager: &migrationmanager.TestingKnobs{
+				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 						return []clusterversion.ClusterVersion{to}
 					},
@@ -204,7 +203,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: 1,
 				},
-				MigrationManager: &migrationmanager.TestingKnobs{
+				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 						return []clusterversion.ClusterVersion{from, to}
 					},
@@ -322,7 +321,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					BinaryVersionOverride:          versions[0].Version,
 					DisableAutomaticVersionUpgrade: 1,
 				},
-				MigrationManager: &migrationmanager.TestingKnobs{
+				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 						return versions
 					},
@@ -404,7 +403,7 @@ func TestPauseMigration(t *testing.T) {
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: 1,
 				},
-				MigrationManager: &migrationmanager.TestingKnobs{
+				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 						return []clusterversion.ClusterVersion{to}
 					},
@@ -517,7 +516,7 @@ func TestPrecondition(t *testing.T) {
 		},
 		// Inject a migration which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this migration.
-		MigrationManager: &migrationmanager.TestingKnobs{
+		MigrationManager: &migration.TestingKnobs{
 			ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 				start := sort.Search(len(versions), func(i int) bool { return from.Less(versions[i].Version) })
 				end := sort.Search(len(versions), func(i int) bool { return to.Less(versions[i].Version) })

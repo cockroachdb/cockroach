@@ -2561,7 +2561,7 @@ func (*Progress) XXX_OneofWrappers() []interface{} {
 
 type Job struct {
 	Id JobID `protobuf:"varint,1,opt,name=id,proto3,customtype=JobID" json:"id"`
-	// Keep progress first as it may bre more relevant to see when looking at a
+	// Keep progress first as it may be more relevant to see when looking at a
 	// running job.
 	Progress *Progress `protobuf:"bytes,2,opt,name=progress,proto3" json:"progress,omitempty"`
 	Payload  *Payload  `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`

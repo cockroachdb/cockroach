@@ -801,13 +801,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			}
 		}
 
-		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migrationmanager.TestingKnobs)
+		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migration.TestingKnobs)
 		migrationMgr := migrationmanager.NewManager(
 			systemDeps, leaseMgr, cfg.circularInternalExecutor, jobRegistry, codec,
 			cfg.Settings, knobs,
 		)
 		execCfg.MigrationJobDeps = migrationMgr
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
+		execCfg.MigrationTestingKnobs = knobs
 	}
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(

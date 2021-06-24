@@ -56,7 +56,6 @@ type resumer struct {
 var _ jobs.Resumer = (*resumer)(nil)
 
 func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
-
 	execCtx := execCtxI.(sql.JobExecContext)
 	pl := r.j.Payload()
 	cv := *pl.GetMigration().ClusterVersion
@@ -88,6 +87,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			CollectionFactory: execCtx.ExecCfg().CollectionFactory,
 			LeaseManager:      execCtx.ExecCfg().LeaseManager,
 			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
+			TestingKnobs:      execCtx.ExecCfg().MigrationTestingKnobs,
 		})
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)

@@ -280,6 +280,8 @@ const (
 	// PostSeparatedIntentsMigration runs a cleanup migration after the main
 	// SeparatedIntentsMigration.
 	PostSeparatedIntentsMigration
+	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
+	RetryJobsWithExponentialBackoff
 
 	// Step (1): Add new versions here.
 )
@@ -460,6 +462,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostSeparatedIntentsMigration,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 130},
+	},
+	{
+		Key:     RetryJobsWithExponentialBackoff,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 132},
 	},
 
 	// Step (2): Add new versions here.

@@ -46,7 +46,7 @@ type Manager struct {
 	jr       *jobs.Registry
 	codec    keys.SQLCodec
 	settings *cluster.Settings
-	knobs    TestingKnobs
+	knobs    migration.TestingKnobs
 }
 
 // GetMigration returns the migration associated with this key.
@@ -74,9 +74,9 @@ func NewManager(
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	testingKnobs *TestingKnobs,
+	testingKnobs *migration.TestingKnobs,
 ) *Manager {
-	var knobs TestingKnobs
+	var knobs migration.TestingKnobs
 	if testingKnobs != nil {
 		knobs = *testingKnobs
 	}

@@ -16,7 +16,7 @@ go_library(
         "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/kv/kvserver",
-        "//pkg/migration/migrationmanager",
+        "//pkg/migration",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server",

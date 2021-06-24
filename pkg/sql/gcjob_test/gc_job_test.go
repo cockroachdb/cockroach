@@ -427,6 +427,7 @@ func TestGCJobRetry(t *testing.T) {
 	var failed atomic.Value
 	failed.Store(false)
 	params := base.TestServerArgs{}
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 			_, ok := request.GetArg(roachpb.ClearRange)
