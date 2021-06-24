@@ -172,7 +172,13 @@ func (d *Directory) LookupTenantAddrs(
 		return nil, status.Errorf(
 			codes.NotFound, "tenant %d not in directory cache", tenantID.ToUint64())
 	}
-	return entry.getPodAddrs(), nil
+
+	tenantPods := entry.getPods()
+	addrs := make([]string, len(tenantPods))
+	for i, pod := range tenantPods {
+		addrs[i] = pod.Addr
+	}
+	return addrs, nil
 }
 
 // ReportFailure should be called when attempts to connect to a particular SQL
@@ -333,6 +339,7 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 				continue
 			}
 
+			podLoad := resp.Load
 			podAddr := resp.Addr
 			if podAddr == "" {
 				// Nothing needs to be done if there is no IP address specified.
@@ -355,8 +362,8 @@ func (d *Directory) watchPods(ctx context.Context, stopper *stop.Stopper) error 
 				// For now, all we care about is the IP addresses of the tenant pod.
 				switch resp.Typ {
 				case ADDED, MODIFIED:
-					if entry.AddPodAddr(podAddr) {
-						log.Infof(ctx, "added IP address %s for tenant %d", podAddr, resp.TenantID)
+					if entry.AddPodAddr(podAddr, podLoad) {
+						log.Infof(ctx, "added IP address %s for tenant %d with load %f", podAddr, resp.TenantID, podLoad)
 					}
 
 				case DELETED:

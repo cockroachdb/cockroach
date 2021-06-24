@@ -33,9 +33,10 @@ var _ tenant.DirectoryServer = (*TestDirectoryServer)(nil)
 
 // Process stores information about a running tenant process.
 type Process struct {
-	Stopper *stop.Stopper
-	Cmd     *exec.Cmd
-	SQL     net.Addr
+	Stopper  *stop.Stopper
+	Cmd      *exec.Cmd
+	SQL      net.Addr
+	FakeLoad float32
 }
 
 // NewSubStopper creates a new stopper that will be stopped when either the
@@ -116,6 +117,59 @@ func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Pro
 		}
 	}
 	return
+}
+
+// StartTenant will forcefully start a new tenant pod
+// instance. This may be useful to test the behavior when more
+// than one tenant is running.
+func (s *TestDirectoryServer) StartTenant(ctx context.Context, id roachpb.TenantID) error {
+	select {
+	case <-s.stopper.ShouldQuiesce():
+		return context.Canceled
+	default:
+	}
+
+	ctx = logtags.AddTag(ctx, "tenant", id)
+
+	s.proc.Lock()
+	defer s.proc.Unlock()
+
+	process, err := s.TenantStarterFunc(ctx, id.ToUint64())
+	if err != nil {
+		return err
+	}
+
+	s.registerInstanceLocked(id.ToUint64(), process)
+	process.Stopper.AddCloser(stop.CloserFn(func() {
+		s.deregisterInstance(id.ToUint64(), process.SQL)
+	}))
+
+	return nil
+}
+
+// SetFakeLoad artificially sets the load reported by a
+// specific tenant pod.
+func (s *TestDirectoryServer) SetFakeLoad(id roachpb.TenantID, addr net.Addr, fakeLoad float32) {
+	s.proc.RLock()
+	defer s.proc.RUnlock()
+	processes, ok := s.proc.processByAddrByTenantID[id.ToUint64()]
+	if !ok {
+		return
+	}
+	process, ok := processes[addr]
+	if !ok {
+		return
+	}
+	process.FakeLoad = fakeLoad
+
+	s.listen.RLock()
+	defer s.listen.RUnlock()
+	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
+		Typ:      tenant.MODIFIED,
+		Addr:     process.SQL.String(),
+		TenantID: id.ToUint64(),
+		Load:     process.FakeLoad,
+	})
 }
 
 // GetTenant returns tenant metadata for a given ID. Hard coded to return every
@@ -267,6 +321,7 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 		Typ:      tenant.ADDED,
 		Addr:     process.SQL.String(),
 		TenantID: tenantID,
+		Load:     process.FakeLoad,
 	})
 }
 
@@ -305,7 +360,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 	if err != nil {
 		return nil, err
 	}
-	process := &Process{SQL: sql.Addr()}
+	process := &Process{SQL: sql.Addr(), FakeLoad: 0.01}
 	args := []string{
 		"mt", "start-sql", "--kv-addrs=127.0.0.1:26257", "--idle-exit-after=30s",
 		fmt.Sprintf("--sql-addr=%s", sql.Addr().String()),
