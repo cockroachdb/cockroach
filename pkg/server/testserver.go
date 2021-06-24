@@ -1261,6 +1261,12 @@ func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
 	return ts.node.recorder
 }
 
+// StatusServer returns the status server initialized on the test
+// server.
+func (ts *TestServer) StatusServer() serverpb.StatusServer {
+	return ts.status
+}
+
 // CollectionFactory is part of the TestServerInterface.
 func (ts *TestServer) CollectionFactory() interface{} {
 	return ts.sqlServer.execCfg.CollectionFactory
