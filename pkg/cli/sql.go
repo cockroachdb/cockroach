@@ -607,6 +607,8 @@ func (c *cliState) handleDemoNodeCommands(
 		)
 	}
 
+	// TODO(irfansharif): Would be nice to have a demo command to let you
+	// reconnect to another node ID.
 	switch cmd[0] {
 	case "shutdown":
 		if err := demoCtx.transientCluster.DrainAndShutdown(roachpb.NodeID(nodeID)); err != nil {

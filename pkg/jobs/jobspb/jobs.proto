@@ -341,14 +341,14 @@ message NewSchemaChangeProgress {
   repeated cockroach.sql.schemachanger.scpb.State states = 1;
 }
 
-// ZcfgReconciliationDetails is the job detail information for the zcfg
-// reconciliation job.
-message ZcfgReconciliationDetails {
+// AutoZoneConfigReconciliationDetails is the job detail information for the
+// automatic zone config reconciliation job.
+message AutoZoneConfigReconciliationDetails {
 }
 
-// ZcfgReconciliationProgress is the persisted progress for the zcfg
-// reconciliation job.
-message ZcfgReconciliationProgress {
+// AutoZoneConfigReconciliationProgress is the persisted progress for the zone
+// config reconciliation job.
+message AutoZoneConfigReconciliationProgress {
 }
 
 message ResumeSpanList {
@@ -701,7 +701,7 @@ message Payload {
     StreamIngestionDetails streamIngestion = 23;
     NewSchemaChangeDetails newSchemaChange = 24;
     MigrationDetails migration = 25;
-    ZcfgReconciliationDetails zcfgReconciliation = 27;
+    AutoZoneConfigReconciliationDetails autoZoneConfigReconciliation = 27;
   }
   reserved 26;
 
@@ -728,7 +728,7 @@ message Progress {
     StreamIngestionProgress streamIngest = 18;
     NewSchemaChangeProgress newSchemaChange = 19;
     MigrationProgress migration = 20;
-    ZcfgReconciliationProgress zcfgReconciliationProgress = 22;
+    AutoZoneConfigReconciliationProgress AutoZoneConfigReconciliation = 22;
   }
 
   uint64 trace_id = 21 [(gogoproto.customname) = "TraceID"];
@@ -753,7 +753,7 @@ enum Type {
   STREAM_INGESTION = 10 [(gogoproto.enumvalue_customname) = "TypeStreamIngestion"];
   NEW_SCHEMA_CHANGE = 11 [(gogoproto.enumvalue_customname) = "TypeNewSchemaChange"];
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
-  ZCFG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeZcfgReconciliation"];
+  AUTO_ZONE_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoZoneConfigReconciliation"];
 }
 
 message Job {

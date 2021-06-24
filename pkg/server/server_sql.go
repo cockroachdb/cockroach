@@ -109,13 +109,12 @@ type SQLServer struct {
 	tenantConnect    kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
-	sessionRegistry           *sql.SessionRegistry
-	jobRegistry               *jobs.Registry
-	sqlmigrationsMgr          *sqlmigrations.Manager
-	statsRefresher            *stats.Refresher
-	temporaryObjectCleaner    *sql.TemporaryObjectCleaner
-	zcfgReconciliationManager *zcfgreconciler.ZcfgReconciliationManager
-	internalMemMetrics        sql.MemoryMetrics
+	sessionRegistry        *sql.SessionRegistry
+	jobRegistry            *jobs.Registry
+	sqlmigrationsMgr       *sqlmigrations.Manager
+	statsRefresher         *stats.Refresher
+	temporaryObjectCleaner *sql.TemporaryObjectCleaner
+	internalMemMetrics     sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
@@ -708,10 +707,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		leaseMgr,
 	)
 
-	zcfgReconciliationManager := zcfgreconciler.NewZcfgReconciliationManager(
-		cfg.db, jobRegistry, cfg.circularInternalExecutor,
-	)
-
 	reporter := &diagnostics.Reporter{
 		StartTime:     timeutil.Now(),
 		AmbientCtx:    &cfg.AmbientCtx,
@@ -738,28 +733,27 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	return &SQLServer{
-		stopper:                   cfg.stopper,
-		sqlIDContainer:            cfg.nodeIDContainer,
-		pgServer:                  pgServer,
-		distSQLServer:             distSQLServer,
-		execCfg:                   execCfg,
-		internalExecutor:          cfg.circularInternalExecutor,
-		leaseMgr:                  leaseMgr,
-		blobService:               blobService,
-		tracingService:            tracingService,
-		tenantConnect:             cfg.tenantConnect,
-		sessionRegistry:           cfg.sessionRegistry,
-		jobRegistry:               jobRegistry,
-		statsRefresher:            statsRefresher,
-		temporaryObjectCleaner:    temporaryObjectCleaner,
-		zcfgReconciliationManager: zcfgReconciliationManager,
-		internalMemMetrics:        internalMemMetrics,
-		sqlMemMetrics:             sqlMemMetrics,
-		stmtDiagnosticsRegistry:   stmtDiagnosticsRegistry,
-		sqlLivenessProvider:       cfg.sqlLivenessProvider,
-		metricsRegistry:           cfg.registry,
-		diagnosticsReporter:       reporter,
-		settingsWatcher:           settingsWatcher,
+		stopper:                 cfg.stopper,
+		sqlIDContainer:          cfg.nodeIDContainer,
+		pgServer:                pgServer,
+		distSQLServer:           distSQLServer,
+		execCfg:                 execCfg,
+		internalExecutor:        cfg.circularInternalExecutor,
+		leaseMgr:                leaseMgr,
+		blobService:             blobService,
+		tracingService:          tracingService,
+		tenantConnect:           cfg.tenantConnect,
+		sessionRegistry:         cfg.sessionRegistry,
+		jobRegistry:             jobRegistry,
+		statsRefresher:          statsRefresher,
+		temporaryObjectCleaner:  temporaryObjectCleaner,
+		internalMemMetrics:      internalMemMetrics,
+		sqlMemMetrics:           sqlMemMetrics,
+		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
+		sqlLivenessProvider:     cfg.sqlLivenessProvider,
+		metricsRegistry:         cfg.registry,
+		diagnosticsReporter:     reporter,
+		settingsWatcher:         settingsWatcher,
 	}, nil
 }
 
@@ -820,7 +814,12 @@ func (s *SQLServer) preStart(
 		return err
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
-	s.zcfgReconciliationManager.Start(ctx, stopper)
+
+	// Create and start the zone config reconciliation job if none exist.
+	zcfgreconcilerMgr := zcfgreconciler.NewManager(
+		s.execCfg.DB, s.jobRegistry, s.internalExecutor,
+	)
+	zcfgreconcilerMgr.CreateAndStartJobIfNoneExist(ctx, stopper)
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.

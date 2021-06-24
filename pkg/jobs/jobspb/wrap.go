@@ -40,7 +40,7 @@ var _ Details = SchemaChangeGCDetails{}
 var _ Details = StreamIngestionDetails{}
 var _ Details = NewSchemaChangeDetails{}
 var _ Details = MigrationDetails{}
-var _ Details = ZcfgReconciliationDetails{}
+var _ Details = AutoZoneConfigReconciliationDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -54,7 +54,7 @@ var _ ProgressDetails = SchemaChangeGCProgress{}
 var _ ProgressDetails = StreamIngestionProgress{}
 var _ ProgressDetails = NewSchemaChangeProgress{}
 var _ ProgressDetails = MigrationProgress{}
-var _ ProgressDetails = ZcfgReconciliationProgress{}
+var _ ProgressDetails = AutoZoneConfigReconciliationProgress{}
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -90,8 +90,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeNewSchemaChange
 	case *Payload_Migration:
 		return TypeMigration
-	case *Payload_ZcfgReconciliation:
-		return TypeZcfgReconciliation
+	case *Payload_AutoZoneConfigReconciliation:
+		return TypeAutoZoneConfigReconciliation
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -128,8 +128,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_NewSchemaChange{NewSchemaChange: &d}
 	case MigrationProgress:
 		return &Progress_Migration{Migration: &d}
-	case ZcfgReconciliationProgress:
-		return &Progress_ZcfgReconciliationProgress{ZcfgReconciliationProgress: &d}
+	case AutoZoneConfigReconciliationProgress:
+		return &Progress_AutoZoneConfigReconciliation{AutoZoneConfigReconciliation: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -236,8 +236,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_NewSchemaChange{NewSchemaChange: &d}
 	case MigrationDetails:
 		return &Payload_Migration{Migration: &d}
-	case ZcfgReconciliationDetails:
-		return &Payload_ZcfgReconciliation{ZcfgReconciliation: &d}
+	case AutoZoneConfigReconciliationDetails:
+		return &Payload_AutoZoneConfigReconciliation{AutoZoneConfigReconciliation: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}

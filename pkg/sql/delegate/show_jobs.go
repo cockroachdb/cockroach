@@ -40,10 +40,12 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 	if n.Jobs == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
 		if n.Automatic {
-			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+			typePredicate = fmt.Sprintf("job_type = '%s' OR job_type = '%s'",
+				jobspb.TypeAutoCreateStats, jobspb.TypeAutoZoneConfigReconciliation)
 		} else {
 			typePredicate = fmt.Sprintf(
-				"(job_type IS NULL OR job_type != '%s')", jobspb.TypeAutoCreateStats,
+				"(job_type IS NULL OR (job_type != '%s' AND job_type != '%s'))",
+				jobspb.TypeAutoCreateStats, jobspb.TypeAutoZoneConfigReconciliation,
 			)
 		}
 		// The query intends to present:
