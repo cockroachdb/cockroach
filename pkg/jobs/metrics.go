@@ -26,6 +26,17 @@ type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
 
 	Changefeed metric.Struct
+
+	// AdoptIterations counts the number of adopt loops executed by Registry.
+	AdoptIterations *metric.Counter
+
+	// ClaimedJobs counts the number of jobs claimed in adopt loops.
+	ClaimedJobs *metric.Counter
+
+	// ResumedJobs counts the number of jobs resumed by Registry. It doesn't
+	// correlate with the ClaimedJobs counter because a job can be resumed
+	// without an adopt loop, e.g., through a StartableJob.
+	ResumedJobs *metric.Counter
 }
 
 // JobTypeMetrics is a metric.Struct containing metrics for each type of job.
@@ -122,6 +133,32 @@ func makeMetaFailOrCancelFailed(typeStr string) metric.Metadata {
 	}
 }
 
+var (
+	metaAdoptIterations = metric.Metadata{
+		Name:        "jobs.adopt_iterations",
+		Help:        "number of job-adopt iterations performed by the registry",
+		Measurement: "iterations",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+
+	metaClaimedJobs = metric.Metadata{
+		Name:        "jobs.claimed_jobs",
+		Help:        "number of jobs claimed in job-adopt iterations",
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+
+	metaResumedClaimedJobs = metric.Metadata{
+		Name:        "jobs.resumed_claimed_jobs",
+		Help:        "number of claimed-jobs resumed in job-adopt iterations",
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+)
+
 // MetricStruct implements the metric.Struct interface.
 func (Metrics) MetricStruct() {}
 
@@ -130,6 +167,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	if MakeChangefeedMetricsHook != nil {
 		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
 	}
+	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
+	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
+	m.ResumedJobs = metric.NewCounter(metaResumedClaimedJobs)
 	for i := 0; i < jobspb.NumJobTypes; i++ {
 		jt := jobspb.Type(i)
 		if jt == jobspb.TypeUnspecified { // do not track TypeUnspecified

@@ -266,6 +266,8 @@ const (
 	DatabaseRoleSettings
 	// TenantUsageTable adds the system table for tracking tenant usage.
 	TenantUsageTable
+	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
+	RetryJobsWithExponentialBackoff
 
 	// Step (1): Add new versions here.
 )
@@ -427,6 +429,11 @@ var versionsSingleton = keyedVersions{
 		Key:     TenantUsageTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
 	},
+	{
+		Key:     RetryJobsWithExponentialBackoff,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 122},
+	},
+
 	// Step (2): Add new versions here.
 }
 
