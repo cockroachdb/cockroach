@@ -963,7 +963,7 @@ func clientFlagsRPC() string {
 func reportConfiguration(ctx context.Context) {
 	serverCfg.Report(ctx)
 	if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
-		log.Ops.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
+		log.Ops.Infof(ctx, "using local environment variables:\n%s", redact.Join("\n", envVarsUsed))
 	}
 	// If a user ever reports "bad things have happened", any
 	// troubleshooting steps will want to rule out that the user was
