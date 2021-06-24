@@ -304,6 +304,8 @@ const (
 	ExpressionIndexes
 	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
 	DeleteDeprecatedNamespaceTableDescriptorMigration
+	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
+	RetryJobsWithExponentialBackoff
 
 	// Step (1): Add new versions here.
 )
@@ -516,6 +518,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 112},
+	},
+	{
+		Key:     RetryJobsWithExponentialBackoff,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 114},
 	},
 
 	// Step (2): Add new versions here.
