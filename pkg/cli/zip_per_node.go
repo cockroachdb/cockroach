@@ -129,6 +129,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 					NodeId:  fmt.Sprintf("%d", nodeList[i].Desc.NodeID),
 					Type:    serverpb.ProfileRequest_CPU,
 					Seconds: secs,
+					Labels:  true,
 				})
 				if err != nil {
 					return err
