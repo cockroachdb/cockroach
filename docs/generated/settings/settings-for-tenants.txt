@@ -32,7 +32,7 @@ kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges bas
 kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
 kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
-kv.transaction.max_intents_bytes	integer	262144	maximum number of bytes used to track locks in transactions
+kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions
 kv.transaction.max_refresh_spans_bytes	integer	256000	maximum number of bytes used to track refresh spans in serializable transactions
 security.ocsp.mode	enumeration	off	"use OCSP to check whether TLS certificates are revoked. If the OCSP
 server is unreachable, in strict mode all certificates will be rejected
