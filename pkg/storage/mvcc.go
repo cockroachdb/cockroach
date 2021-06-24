@@ -2513,9 +2513,9 @@ type MVCCScanOptions struct {
 	MaxKeys int64
 	// TargetBytes is a byte threshold to limit the amount of data pulled into
 	// memory during a Scan operation. Once the target is satisfied (i.e. met or
-	// exceeded) by the emitted emitted KV pairs, iteration stops (with a
-	// ResumeSpan as appropriate). In particular, at least one kv pair is
-	// returned (when one exists).
+	// exceeded) by the emitted KV pairs, iteration stops (with a ResumeSpan as
+	// appropriate). In particular, at least one kv pair is returned (when one
+	// exists).
 	//
 	// The number of bytes a particular kv pair accrues depends on internal data
 	// structures, but it is guaranteed to exceed that of the bytes stored in
@@ -2639,11 +2639,12 @@ func MVCCScanAsTxn(
 
 // MVCCIterate iterates over the key range [start,end). At each step of the
 // iteration, f() is invoked with the current key/value pair. If f returns
-// true (done) or an error, the iteration stops and the error is propagated.
-// If the reverse is flag set the iterator will be moved in reverse order.
-// If the scan options specify an inconsistent scan, all "ignored" intents
-// will be returned. In consistent mode, intents are only ever returned as
-// part of a WriteIntentError.
+// iterutil.StopIteration, the iteration stops with no error propagated. If f
+// returns any other error, the iteration stops and the error is propagated. If
+// the reverse flag is set, the iterator will be moved in reverse order. If the
+// scan options specify an inconsistent scan, all "ignored" intents will be
+// returned. In consistent mode, intents are only ever returned as part of a
+// WriteIntentError.
 func MVCCIterate(
 	ctx context.Context,
 	reader Reader,
