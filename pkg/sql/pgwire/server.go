@@ -83,7 +83,7 @@ const (
 
 	// ErrDrainingNewConn is returned when a client attempts to connect to a server
 	// which is not accepting client connections.
-	ErrDrainingNewConn = "server is not accepting clients"
+	ErrDrainingNewConn = "server is not accepting clients, try another node"
 	// ErrDrainingExistingConn is returned when a connection is shut down because
 	// the server is draining.
 	ErrDrainingExistingConn = "server is shutting down"
@@ -364,8 +364,10 @@ func (s *Server) Metrics() (res []interface{}) {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (s *Server) Drain(drainWait time.Duration, reporter func(int, redact.SafeString)) error {
-	return s.drainImpl(drainWait, cancelMaxWait, reporter)
+func (s *Server) Drain(
+	ctx context.Context, drainWait time.Duration, reporter func(int, redact.SafeString),
+) error {
+	return s.drainImpl(ctx, drainWait, cancelMaxWait, reporter)
 }
 
 // Undrain switches the server back to the normal mode of operation in which
@@ -388,9 +390,9 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 
 // drainImpl drains the SQL clients.
 //
-// The drainWait duration is used to wait on clients to
+// The queryWait duration is used to wait on clients to
 // self-disconnect after their session has been canceled. The
-// cancelWait is used to wait after the drainWait timer has expired
+// cancelWait is used to wait after the queryWait timer has expired
 // and there are still clients connected, and their context.Context is
 // canceled.
 //
@@ -399,7 +401,10 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
 func (s *Server) drainImpl(
-	drainWait time.Duration, cancelWait time.Duration, reporter func(int, redact.SafeString),
+	ctx context.Context,
+	queryWait time.Duration,
+	cancelWait time.Duration,
+	reporter func(int, redact.SafeString),
 ) error {
 	// This anonymous function returns a copy of s.mu.connCancelMap if there are
 	// any active connections to cancel. We will only attempt to cancel
@@ -451,7 +456,8 @@ func (s *Server) drainImpl(
 
 	// Wait for all connections to finish up to drainWait.
 	select {
-	case <-time.After(drainWait):
+	case <-time.After(queryWait):
+		log.Warningf(ctx, "canceling all sessions after waiting %s", queryWait)
 	case <-allConnsDone:
 	}
 
@@ -571,6 +577,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// If the server is shutting down, terminate the connection early.
 	if draining {
+		log.Info(ctx, "rejecting new connection while server is draining")
 		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 

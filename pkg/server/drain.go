@@ -215,12 +215,12 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 	}
 
 	// Disable incoming SQL clients up to the queryWait timeout.
-	drainMaxWait := queryWait.Get(&s.st.SV)
-	if err := s.sqlServer.pgServer.Drain(drainMaxWait, reporter); err != nil {
+	queryMaxWait := queryWait.Get(&s.st.SV)
+	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
 		return err
 	}
 	// Stop ongoing SQL execution up to the queryWait timeout.
-	s.sqlServer.distSQLServer.Drain(ctx, drainMaxWait, reporter)
+	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
 	// Drain the SQL leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
