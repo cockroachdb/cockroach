@@ -288,8 +288,8 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- else -}}
 {{- template "val" $v -}}
 {{- end -}}
-{{- end -}}
 </tr>
+{{- end -}}
 {{- end -}}
 </table>
 {{- end -}}
