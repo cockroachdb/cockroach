@@ -26,6 +26,12 @@ type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
 
 	Changefeed metric.Struct
+
+	AdoptIterations *metric.Counter
+
+	ClaimedJobs *metric.Counter
+
+	ResumedClaimedJobs *metric.Counter
 }
 
 // JobTypeMetrics is a metric.Struct containing metrics for each type of job.
@@ -122,6 +128,32 @@ func makeMetaFailOrCancelFailed(typeStr string) metric.Metadata {
 	}
 }
 
+var (
+	metaAdoptIterations = metric.Metadata{
+		Name:        "jobs.adopt_iterations",
+		Help:        "number of job-adopt iterations performed by the registry",
+		Measurement: "iterations",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+
+	metaClaimedJobs = metric.Metadata{
+		Name:        "jobs.claimed_jobs",
+		Help:        "number of jobs claimed in job-adopt iterations",
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+
+	metaResumedClaimedJobs = metric.Metadata{
+		Name:        "jobs.resumed_claimed_jobs",
+		Help:        "number of claimed-jobs resumed in job-adopt iterations",
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+)
+
 // MetricStruct implements the metric.Struct interface.
 func (Metrics) MetricStruct() {}
 
@@ -130,6 +162,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	if MakeChangefeedMetricsHook != nil {
 		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
 	}
+	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
+	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
+	m.ResumedClaimedJobs = metric.NewCounter(metaResumedClaimedJobs)
 	for i := 0; i < jobspb.NumJobTypes; i++ {
 		jt := jobspb.Type(i)
 		if jt == jobspb.TypeUnspecified { // do not track TypeUnspecified
