@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -329,6 +330,23 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 				log.DumpStacks(context.Background())
 			}
 		}()
+	}
+
+	// Check for stores with full disks and exit with an informative exit
+	// code.
+	var err error
+	for _, spec := range serverCfg.Stores.Specs {
+		if isDiskFull, err2 := storage.IsDiskFull(vfs.Default, spec); err2 != nil {
+			return err2
+		} else if isDiskFull {
+			err = errors.CombineErrors(err, &cliError{
+				exitCode: exit.DiskFull(),
+				cause:    errors.Errorf("store %s: out of disk space", spec.Path),
+			})
+		}
+	}
+	if err != nil {
+		return err
 	}
 
 	// Set up a cancellable context for the entire start command.
