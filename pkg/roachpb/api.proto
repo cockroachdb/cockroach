@@ -1406,6 +1406,12 @@ message ExportRequest {
   // size of all versions of a single key. If TargetFileSize is non-positive
   // then there is no limit.
   int64 target_file_size = 10;
+
+  // ReturnSSTBelowSize is the threshold which (if non-zero) causes files which
+  // are below that size threshold to be returned, as if ReturnSST were set,
+  // instead of being written to the assigned storage location.
+  // Note: returned SSTs are never encrypted.
+  int64 return_sst_below_size = 11;
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the
