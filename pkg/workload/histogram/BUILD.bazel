@@ -19,6 +19,7 @@ go_test(
     srcs = ["histogram_test.go"],
     embed = [":histogram"],
     deps = [
+        "//pkg/util/ctxgroup",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
