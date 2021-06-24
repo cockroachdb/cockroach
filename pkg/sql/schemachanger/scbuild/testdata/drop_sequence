@@ -54,7 +54,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   state: PUBLIC
   details:
     sequenceId: 52
-- DROP TypeReference:{DescID: 57, DepID: 55}
+- DROP TypeReference:{DescID: 57, ReferencedDescID: 55}
   state: PUBLIC
   details:
     descriptorId: 57

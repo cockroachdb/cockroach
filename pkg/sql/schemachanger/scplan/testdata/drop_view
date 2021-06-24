@@ -97,6 +97,6 @@ DROP VIEW defaultdb.v1 CASCADE
 - from: [View:{DescID: 56}, ABSENT]
   to:   [View:{DescID: 59}, ABSENT]
 - from: [View:{DescID: 59}, ABSENT]
-  to:   [TypeReference:{DescID: 59, DepID: 57}, ABSENT]
+  to:   [TypeReference:{DescID: 59, ReferencedDescID: 57}, ABSENT]
 - from: [View:{DescID: 59}, ABSENT]
-  to:   [TypeReference:{DescID: 59, DepID: 58}, ABSENT]
+  to:   [TypeReference:{DescID: 59, ReferencedDescID: 58}, ABSENT]
