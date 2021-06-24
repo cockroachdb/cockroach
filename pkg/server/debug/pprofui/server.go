@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/pprof"
 	"net/url"
 	"path"
 	runtimepprof "runtime/pprof"
@@ -24,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/driver"
@@ -39,10 +39,10 @@ import (
 type Server struct {
 	storage      Storage
 	profileSem   syncutil.Mutex
-	profileTypes map[string]http.HandlerFunc
-	hook         func(profile string, labels bool, do func())
+	statusServer serverpb.StatusServer
 }
 
+// TODO(davidh): fix the below docstring to remove hook reference
 // NewServer creates a new Server backed by the supplied Storage and optionally
 // a hook which is called when a new profile is created. The closure passed to
 // the hook will carry out the work involved in creating the profile and must
@@ -56,38 +56,10 @@ type Server struct {
 // 		do()
 // 	}
 // }
-func NewServer(storage Storage, hook func(profile string, labels bool, do func())) *Server {
-	if hook == nil {
-		hook = func(_ string, _ bool, do func()) { do() }
-	}
+func NewServer(storage Storage, statusServer serverpb.StatusServer) *Server {
 	s := &Server{
-		storage: storage,
-		hook:    hook,
-	}
-
-	// Register the endpoints for heap, block, threadcreate, etc.
-	s.profileTypes = map[string]http.HandlerFunc{}
-	for _, p := range runtimepprof.Profiles() {
-		name := p.Name()
-		s.profileTypes[name] = func(w http.ResponseWriter, r *http.Request) {
-			pprof.Handler(name).ServeHTTP(w, r)
-		}
-	}
-	// The CPU profile endpoint is special cased because a) it's not in the map
-	// yet and b) it always needs to block. We want to default to 5s if profiling
-	// if nothing is specified, we use a convenience mutex to serialize concurrent
-	// attempts to get a profile (the endpoint otherwise returns an error).
-	s.profileTypes["profile"] = func(w http.ResponseWriter, r *http.Request) {
-		const defaultProfileDurationSeconds = 5
-		if r.Form == nil {
-			r.Form = url.Values{}
-		}
-		if r.Form.Get("seconds") == "" {
-			r.Form.Set("seconds", strconv.Itoa(defaultProfileDurationSeconds))
-		}
-		s.profileSem.Lock()
-		defer s.profileSem.Unlock()
-		pprof.Profile(w, r)
+		storage:      storage,
+		statusServer: statusServer,
 	}
 
 	return s
@@ -117,8 +89,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if profileName == "" {
 		// TODO(tschottdorf): serve an overview page.
 		var names []string
-		for name := range s.profileTypes {
-			names = append(names, name)
+		for _, p := range runtimepprof.Profiles() {
+			names = append(names, p.Name())
 		}
 		sort.Strings(names)
 		msg := fmt.Sprintf("Try %s for one of %s", path.Join(r.RequestURI, "<profileName>"), strings.Join(names, ", "))
@@ -198,16 +170,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	id = s.storage.ID()
 
-	fetchHandler, ok := s.profileTypes[profileName]
-	if !ok {
-		_, _ = w.Write([]byte(fmt.Sprintf("unknown profile type %s", profileName)))
-		return
-	}
-
 	if err := s.storage.Store(id, func(w io.Writer) error {
 		req, err := http.NewRequest("GET", "/unused", bytes.NewReader(nil))
 		if err != nil {
 			return err
+		}
+
+		// TODO(davidh): Discrepancy between "CPU" and "profile" in the two implementations
+		profileType, ok := serverpb.ProfileRequest_Type_value[strings.ToUpper(profileName)]
+		if !ok && profileName != "profile" {
+			return errors.Newf("unknown profile name: %s", profileName)
+		}
+		if profileName == "profile" {
+			profileType = int32(serverpb.ProfileRequest_CPU)
+		}
+		var resp *serverpb.JSONResponse
+		profileReq := &serverpb.ProfileRequest{
+			NodeId: "local",
+			Type:   serverpb.ProfileRequest_Type(profileType),
 		}
 
 		// Pass through any parameters. Most notably, allow ?seconds=10 for
@@ -215,12 +195,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		req.Form = r.Form
 
-		rw := &responseBridge{target: w}
+		// TODO(davidh): do we need to support `&si=alloc_objects` for heap?
 
-		s.hook(profileName, r.Form.Get("labels") != "", func() { fetchHandler(rw, req) })
-
-		if rw.statusCode != http.StatusOK && rw.statusCode != 0 {
-			return errors.Errorf("unexpected status: %d", rw.statusCode)
+		if r.Form.Get("seconds") != "" {
+			sec, err := strconv.ParseInt(r.Form.Get("seconds"), 10, 32)
+			if err != nil {
+				return err
+			}
+			profileReq.Seconds = int32(sec)
+		}
+		if r.Form.Get("node") != "" {
+			profileReq.NodeId = r.Form.Get("node")
+		}
+		if r.Form.Get("labels") != "" {
+			return errors.Newf("unsupported parameter 'labels': %s", r.Form.Get("labels"))
+		}
+		resp, err = s.statusServer.Profile(r.Context(), profileReq)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(resp.Data)
+		if err != nil {
+			return err
 		}
 		return nil
 	}); err != nil {
