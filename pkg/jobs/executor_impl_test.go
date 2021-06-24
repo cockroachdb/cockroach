@@ -28,7 +28,9 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	argsFn := func(args *base.TestServerArgs) {
-		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithIntervals(time.Millisecond, time.Millisecond)
+		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithIntervals(
+			time.Millisecond, time.Millisecond, time.Millisecond, time.Millisecond,
+		)
 	}
 
 	h, cleanup := newTestHelperWithServerArgs(t, argsFn)
