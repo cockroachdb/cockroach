@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/net"
@@ -452,8 +453,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	cgroupCPU, _ := cgroups.GetCgroupCPU()
 	cpuShare := cgroupCPU.CPUShares()
 
-	fds := gosigar.ProcFDUsage{}
-	if err := fds.Get(pid); err != nil {
+	fds := sysutil.ProcFDUsage{}
+	if err := fds.Get(); err != nil {
 		if gosigar.IsNotImplemented(err) {
 			if !rsr.fdUsageNotImplemented {
 				rsr.fdUsageNotImplemented = true

@@ -3,6 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sysutil",
     srcs = [
+        "fd_usage.go",
+        "fd_usage_darwin.go",
+        "fd_usage_gosigar.go",
         "large_file_linux.go",
         "large_file_naive.go",
         "sysutil.go",
@@ -13,6 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_elastic_gosigar//:gosigar",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",
@@ -61,6 +65,7 @@ go_test(
     name = "sysutil_test",
     size = "small",
     srcs = [
+        "fd_usage_test.go",
         "large_file_test.go",
         "sysutil_test.go",
         "sysutil_unix_test.go",
@@ -69,6 +74,8 @@ go_test(
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",
