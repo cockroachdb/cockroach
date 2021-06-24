@@ -237,23 +237,23 @@ func initBinariesAndLibraries() {
 type clusterRegistry struct {
 	mu struct {
 		syncutil.Mutex
-		clusters map[string]*cluster
+		clusters map[string]*clusterImpl
 		tagCount map[string]int
 		// savedClusters keeps track of clusters that have been saved for further
 		// debugging. Each cluster comes with a message about the test failure
 		// causing it to be saved for debugging.
-		savedClusters map[*cluster]string
+		savedClusters map[*clusterImpl]string
 	}
 }
 
 func newClusterRegistry() *clusterRegistry {
 	cr := &clusterRegistry{}
-	cr.mu.clusters = make(map[string]*cluster)
-	cr.mu.savedClusters = make(map[*cluster]string)
+	cr.mu.clusters = make(map[string]*clusterImpl)
+	cr.mu.savedClusters = make(map[*clusterImpl]string)
 	return cr
 }
 
-func (r *clusterRegistry) registerCluster(c *cluster) error {
+func (r *clusterRegistry) registerCluster(c *clusterImpl) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.clusters[c.name] != nil {
@@ -263,7 +263,7 @@ func (r *clusterRegistry) registerCluster(c *cluster) error {
 	return nil
 }
 
-func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
+func (r *clusterRegistry) unregisterCluster(c *clusterImpl) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.mu.clusters[c.name]; !ok {
@@ -291,14 +291,14 @@ func (r *clusterRegistry) countForTag(tag string) int {
 // destroyAllClusters.
 // msg is a message recording the reason why the cluster is being saved (i.e.
 // generally a test failure error).
-func (r *clusterRegistry) markClusterAsSaved(c *cluster, msg string) {
+func (r *clusterRegistry) markClusterAsSaved(c *clusterImpl, msg string) {
 	r.mu.Lock()
 	r.mu.savedClusters[c] = msg
 	r.mu.Unlock()
 }
 
 type clusterWithMsg struct {
-	*cluster
+	*clusterImpl
 	savedMsg string
 }
 
@@ -311,8 +311,8 @@ func (r *clusterRegistry) savedClusters() []clusterWithMsg {
 	i := 0
 	for c, msg := range r.mu.savedClusters {
 		res[i] = clusterWithMsg{
-			cluster:  c,
-			savedMsg: msg,
+			clusterImpl: c,
+			savedMsg:    msg,
 		}
 		i++
 	}
@@ -332,8 +332,8 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger.Logg
 	go func() {
 		defer close(done)
 
-		var clusters []*cluster
-		savedClusters := make(map[*cluster]struct{})
+		var clusters []*clusterImpl
+		savedClusters := make(map[*clusterImpl]struct{})
 		r.mu.Lock()
 		for _, c := range r.mu.clusters {
 			clusters = append(clusters, c)
@@ -346,7 +346,7 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger.Logg
 		var wg sync.WaitGroup
 		wg.Add(len(clusters))
 		for _, c := range clusters {
-			go func(c *cluster) {
+			go func(c *clusterImpl) {
 				defer wg.Done()
 				if _, ok := savedClusters[c]; !ok {
 					// We don't close the logger here since the cluster may be still in use
@@ -684,12 +684,10 @@ func withWorkerAction() option.Option {
 	return workerAction{}
 }
 
-// cluster provides an interface for interacting with a set of machines,
-// starting and stopping a cockroach cluster on a subset of those machines, and
-// running load generators and other operations on the machines.
-//
-// A cluster is safe for concurrent use by multiple goroutines.
-type cluster struct {
+// clusterImpl implements cluster.Cluster.
+
+// It is safe for concurrent use by multiple goroutines.
+type clusterImpl struct {
 	name string
 	tag  string
 	spec spec.ClusterSpec
@@ -717,43 +715,43 @@ type cluster struct {
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
-func (c *cluster) Name() string {
+func (c *clusterImpl) Name() string {
 	return c.name
 }
 
 // EncryptAtRandom sets whether the cluster will start new nodes with
 // encryption enabled.
-func (c *cluster) EncryptAtRandom(b bool) {
+func (c *clusterImpl) EncryptAtRandom(b bool) {
 	c.encryptAtRandom = b
 }
 
 // EncryptDefault sets the default for encryption-at-rest. This can be overridden
 // by options passed to `c.Start`.
-func (c *cluster) EncryptDefault(b bool) {
+func (c *clusterImpl) EncryptDefault(b bool) {
 	c.encryptDefault = b
 }
 
 // Spec returns the spec underlying the cluster.
-func (c *cluster) Spec() spec.ClusterSpec {
+func (c *clusterImpl) Spec() spec.ClusterSpec {
 	return c.spec
 }
 
 // status is used to communicate the test's status. It's a no-op until the
 // cluster is passed to a test, at which point it's hooked up to test.Status().
-func (c *cluster) status(args ...interface{}) {
+func (c *clusterImpl) status(args ...interface{}) {
 	if c.t == nil {
 		return
 	}
 	c.t.Status(args...)
 }
 
-func (c *cluster) workerStatus(args ...interface{}) {
+func (c *clusterImpl) workerStatus(args ...interface{}) {
 	if impl, ok := c.t.(*test); ok {
 		impl.WorkerStatus(args...)
 	}
 }
 
-func (c *cluster) String() string {
+func (c *clusterImpl) String() string {
 	return fmt.Sprintf("%s [tag:%s] (%d nodes)", c.name, c.tag, c.Spec().NodeCount)
 }
 
@@ -786,7 +784,7 @@ type destroyState struct {
 }
 
 // closeLogger closes c.l. It can be called multiple times.
-func (c *cluster) closeLogger() {
+func (c *clusterImpl) closeLogger() {
 	c.destroyState.mu.Lock()
 	defer c.destroyState.mu.Unlock()
 	if c.destroyState.mu.loggerClosed {
@@ -858,7 +856,7 @@ func (f *clusterFactory) releaseSem() {
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
 	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType,
-) (*cluster, error) {
+) (*clusterImpl, error) {
 	if ctx.Err() != nil {
 		return nil, errors.Wrap(ctx.Err(), "newCluster")
 	}
@@ -874,7 +872,7 @@ func (f *clusterFactory) newCluster(
 
 	if cfg.spec.NodeCount == 0 {
 		// For tests. Return the minimum that makes them happy.
-		c := &cluster{
+		c := &clusterImpl{
 			name:       name,
 			expiration: timeutil.Now().Add(24 * time.Hour),
 			r:          f.r,
@@ -890,7 +888,7 @@ func (f *clusterFactory) newCluster(
 		// Local clusters never expire.
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
-	c := &cluster{
+	c := &clusterImpl{
 		name:           name,
 		spec:           cfg.spec,
 		expiration:     exp,
@@ -977,12 +975,12 @@ func attachToExistingCluster(
 	spec spec.ClusterSpec,
 	opt attachOpt,
 	r *clusterRegistry,
-) (*cluster, error) {
+) (*clusterImpl, error) {
 	exp := spec.Expiration()
 	if name == "local" {
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
-	c := &cluster{
+	c := &clusterImpl{
 		name:           name,
 		spec:           spec,
 		l:              l,
@@ -1028,14 +1026,14 @@ func attachToExistingCluster(
 // setTest prepares c for being used on behalf of t.
 //
 // TODO(andrei): Get rid of c.t, c.l and of this method.
-func (c *cluster) setTest(t testI) {
+func (c *clusterImpl) setTest(t testI) {
 	c.t = t
 	c.l = t.logger()
 }
 
 // StopCockroachGracefullyOnNode stops a running cockroach instance on the requested
 // node before a version upgrade.
-func (c *cluster) StopCockroachGracefullyOnNode(ctx context.Context, node int) error {
+func (c *clusterImpl) StopCockroachGracefullyOnNode(ctx context.Context, node int) error {
 	port := fmt.Sprintf("{pgport:%d}", node)
 	// Note that the following command line needs to run against both v2.1
 	// and the current branch. Do not change it in a manner that is
@@ -1057,7 +1055,7 @@ func (c *cluster) StopCockroachGracefullyOnNode(ctx context.Context, node int) e
 }
 
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
-func (c *cluster) Save(ctx context.Context, msg string, l *logger.Logger) {
+func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)
 	// TODO(andrei): should we extend the cluster here? For how long?
 	if c.destroyState.owned { // we won't have an alloc for an unowned cluster
@@ -1074,7 +1072,9 @@ func (c *cluster) Save(ctx context.Context, msg string, l *logger.Logger) {
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
-func (c *cluster) validate(ctx context.Context, nodes spec.ClusterSpec, l *logger.Logger) error {
+func (c *clusterImpl) validate(
+	ctx context.Context, nodes spec.ClusterSpec, l *logger.Logger,
+) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
@@ -1118,12 +1118,12 @@ func (c *cluster) validate(ctx context.Context, nodes spec.ClusterSpec, l *logge
 }
 
 // All returns a node list containing all of the nodes in the cluster.
-func (c *cluster) All() option.NodeListOption {
+func (c *clusterImpl) All() option.NodeListOption {
 	return c.Range(1, c.spec.NodeCount)
 }
 
 // All returns a node list containing the nodes [begin,end].
-func (c *cluster) Range(begin, end int) option.NodeListOption {
+func (c *clusterImpl) Range(begin, end int) option.NodeListOption {
 	if begin < 1 || end > c.spec.NodeCount {
 		c.t.Fatalf("invalid node range: %d-%d (1-%d)", begin, end, c.spec.NodeCount)
 	}
@@ -1135,7 +1135,7 @@ func (c *cluster) Range(begin, end int) option.NodeListOption {
 }
 
 // All returns a node list containing only the node i.
-func (c *cluster) Nodes(ns ...int) option.NodeListOption {
+func (c *clusterImpl) Nodes(ns ...int) option.NodeListOption {
 	r := make(option.NodeListOption, 0, len(ns))
 	for _, n := range ns {
 		if n < 1 || n > c.spec.NodeCount {
@@ -1148,13 +1148,13 @@ func (c *cluster) Nodes(ns ...int) option.NodeListOption {
 }
 
 // All returns a node list containing only the node with id i. IDs are 1-based.
-func (c *cluster) Node(i int) option.NodeListOption {
+func (c *clusterImpl) Node(i int) option.NodeListOption {
 	return c.Range(i, i)
 }
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
 // The logs will be placed in the test's artifacts dir.
-func (c *cluster) FetchLogs(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchLogs(ctx context.Context, t *test) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1209,7 +1209,7 @@ func saveDiskUsageToLogsDir(ctx context.Context, c cluster2.Cluster) error {
 
 // CopyRoachprodState copies the roachprod state directory in to the test
 // artifacts.
-func (c *cluster) CopyRoachprodState(ctx context.Context) error {
+func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1232,7 +1232,7 @@ func (c *cluster) CopyRoachprodState(ctx context.Context) error {
 // the first available node. They can be visualized via:
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
-func (c *cluster) FetchTimeseriesData(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *test) error {
 	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		var err error
 		for i := 1; i <= c.spec.NodeCount; i++ {
@@ -1251,7 +1251,7 @@ func (c *cluster) FetchTimeseriesData(ctx context.Context, t *test) error {
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed in the test's artifacts dir.
-func (c *cluster) FetchDebugZip(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1293,7 +1293,7 @@ func (c *cluster) FetchDebugZip(ctx context.Context, t *test) error {
 
 // FailOnDeadNodes fails the test if nodes that have a populated data dir are
 // found to be not running. It prints both to t.l and the test output.
-func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
+func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *test) {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return
@@ -1322,7 +1322,7 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 // error. Note that this will swallow errors returned directly from the consistency
 // check since we know that such spurious errors are possibly without any relation
 // to the check having failed.
-func (c *cluster) CheckReplicaDivergenceOnDB(
+func (c *clusterImpl) CheckReplicaDivergenceOnDB(
 	ctx context.Context, l *logger.Logger, db *gosql.DB,
 ) error {
 	// NB: we set a statement_timeout since context cancellation won't work here,
@@ -1364,7 +1364,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 // crdb_internal.check_consistency(true, '', '') indicates that any ranges'
 // replicas are inconsistent with each other. It uses the first node that
 // is up to run the query.
-func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
+func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
 	if c.spec.NodeCount < 1 {
 		return // unit tests
 	}
@@ -1409,7 +1409,7 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
-func (c *cluster) FetchDmesg(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
@@ -1440,7 +1440,7 @@ func (c *cluster) FetchDmesg(ctx context.Context, t *test) error {
 
 // FetchJournalctl grabs the journalctl logs if possible. This requires being
 // able to run `sudo journalctl` on the remote nodes.
-func (c *cluster) FetchJournalctl(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *test) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab journalctl on local runs.
@@ -1470,7 +1470,7 @@ func (c *cluster) FetchJournalctl(ctx context.Context, t *test) error {
 }
 
 // FetchCores fetches any core files on the cluster.
-func (c *cluster) FetchCores(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchCores(ctx context.Context, t *test) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
@@ -1519,7 +1519,7 @@ const (
 // l is the logger that will log this destroy operation.
 //
 // This method generally does not react to ctx cancelation.
-func (c *cluster) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger.Logger) {
+func (c *clusterImpl) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger.Logger) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -1539,7 +1539,7 @@ func (c *cluster) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger.Logg
 	}
 }
 
-func (c *cluster) doDestroy(ctx context.Context, l *logger.Logger) <-chan struct{} {
+func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan struct{} {
 	var inFlight <-chan struct{}
 	c.destroyState.mu.Lock()
 	if c.destroyState.mu.saved {
@@ -1602,14 +1602,14 @@ func loggedCommand(ctx context.Context, l *logger.Logger, arg0 string, args ...s
 
 // Put a local file to all of the machines in a cluster.
 // Put is DEPRECATED. Use PutE instead.
-func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option.Option) {
+func (c *clusterImpl) Put(ctx context.Context, src, dest string, opts ...option.Option) {
 	if err := c.PutE(ctx, c.l, src, dest, opts...); err != nil {
 		c.t.Fatal(err)
 	}
 }
 
 // PutE puts a local file to all of the machines in a cluster.
-func (c *cluster) PutE(
+func (c *clusterImpl) PutE(
 	ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
@@ -1628,7 +1628,7 @@ func (c *cluster) PutE(
 
 // PutLibraries inserts all available library files into all nodes on the cluster
 // at the specified location.
-func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
+func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
@@ -1654,7 +1654,7 @@ func (c *cluster) PutLibraries(ctx context.Context, libraryDir string) error {
 }
 
 // Stage stages a binary to the cluster.
-func (c *cluster) Stage(
+func (c *clusterImpl) Stage(
 	ctx context.Context,
 	l *logger.Logger,
 	application, versionOrSHA, dir string,
@@ -1679,7 +1679,7 @@ func (c *cluster) Stage(
 }
 
 // Get gets files from remote hosts.
-func (c *cluster) Get(
+func (c *clusterImpl) Get(
 	ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
@@ -1694,7 +1694,7 @@ func (c *cluster) Get(
 }
 
 // Put a string into the specified file on the remote(s).
-func (c *cluster) PutString(
+func (c *clusterImpl) PutString(
 	ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 ) error {
 	if ctx.Err() != nil {
@@ -1728,7 +1728,7 @@ func (c *cluster) PutString(
 // GitClone clones a git repo from src into dest and checks out origin's
 // version of the given branch. The src, dest, and branch arguments must not
 // contain shell special characters.
-func (c *cluster) GitClone(
+func (c *clusterImpl) GitClone(
 	ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 ) error {
 	return c.RunL(ctx, l, node, "bash", "-e", "-c", fmt.Sprintf(`'
@@ -1782,7 +1782,7 @@ func roachprodArgs(opts []option.Option) []string {
 	return args
 }
 
-func (c *cluster) setStatusForClusterOpt(operation string, opts ...option.Option) {
+func (c *clusterImpl) setStatusForClusterOpt(operation string, opts ...option.Option) {
 	var nodes option.NodeListOption
 	worker := false
 	for _, o := range opts {
@@ -1805,7 +1805,7 @@ func (c *cluster) setStatusForClusterOpt(operation string, opts ...option.Option
 	}
 }
 
-func (c *cluster) clearStatusForClusterOpt(opts ...option.Option) {
+func (c *clusterImpl) clearStatusForClusterOpt(opts ...option.Option) {
 	worker := false
 	for _, o := range opts {
 		if _, ok := o.(workerAction); ok {
@@ -1822,7 +1822,7 @@ func (c *cluster) clearStatusForClusterOpt(opts ...option.Option) {
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
-func (c *cluster) StartE(ctx context.Context, opts ...option.Option) error {
+func (c *clusterImpl) StartE(ctx context.Context, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StartE")
 	}
@@ -1854,7 +1854,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option.Option) error {
 }
 
 // Start is like StartE() except that it will fatal the test on error.
-func (c *cluster) Start(ctx context.Context, opts ...option.Option) {
+func (c *clusterImpl) Start(ctx context.Context, opts ...option.Option) {
 	if err := c.StartE(ctx, opts...); err != nil {
 		c.t.Fatal(err)
 	}
@@ -1871,7 +1871,7 @@ func argExists(args []string, target string) bool {
 
 // StopE cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
-func (c *cluster) StopE(ctx context.Context, opts ...option.Option) error {
+func (c *clusterImpl) StopE(ctx context.Context, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StopE")
 	}
@@ -1888,7 +1888,7 @@ func (c *cluster) StopE(ctx context.Context, opts ...option.Option) error {
 
 // Stop is like StopE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *cluster) Stop(ctx context.Context, opts ...option.Option) {
+func (c *clusterImpl) Stop(ctx context.Context, opts ...option.Option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -1898,7 +1898,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option.Option) {
 	}
 }
 
-func (c *cluster) Reset(ctx context.Context) error {
+func (c *clusterImpl) Reset(ctx context.Context) error {
 	if c.t.Failed() {
 		return errors.New("already failed")
 	}
@@ -1917,7 +1917,7 @@ func (c *cluster) Reset(ctx context.Context) error {
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *cluster) WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error {
+func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -1932,7 +1932,7 @@ func (c *cluster) WipeE(ctx context.Context, l *logger.Logger, opts ...option.Op
 
 // Wipe is like WipeE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *cluster) Wipe(ctx context.Context, opts ...option.Option) {
+func (c *clusterImpl) Wipe(ctx context.Context, opts ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -1942,7 +1942,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option.Option) {
 }
 
 // Run a command on the specified node.
-func (c *cluster) Run(ctx context.Context, node option.NodeListOption, args ...string) {
+func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args ...string) {
 	err := c.RunE(ctx, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
@@ -1950,7 +1950,7 @@ func (c *cluster) Run(ctx context.Context, node option.NodeListOption, args ...s
 }
 
 // Reformat the disk on the specified node.
-func (c *cluster) Reformat(ctx context.Context, node option.NodeListOption, args ...string) {
+func (c *clusterImpl) Reformat(ctx context.Context, node option.NodeListOption, args ...string) {
 	err := execCmd(ctx, c.l,
 		append([]string{roachprod, "reformat", c.MakeNodes(node), "--"}, args...)...)
 	if err != nil {
@@ -1959,10 +1959,10 @@ func (c *cluster) Reformat(ctx context.Context, node option.NodeListOption, args
 }
 
 // Silence unused warning.
-var _ = (&cluster{}).Reformat
+var _ = (&clusterImpl{}).Reformat
 
 // Install a package in a node
-func (c *cluster) Install(
+func (c *clusterImpl) Install(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 ) error {
 	return execCmd(ctx, l,
@@ -2000,7 +2000,7 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 // will be redirected to a file which is logged via the cluster-wide logger in
 // case of an error. Logs will sort chronologically. Failing invocations will
 // have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *cluster) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
+func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
 	logFile := cmdLogFileName(timeutil.Now(), node, args...)
 
 	// NB: we set no prefix because it's only going to a file anyway.
@@ -2026,7 +2026,7 @@ func (c *cluster) RunE(ctx context.Context, node option.NodeListOption, args ...
 }
 
 // RunL runs a command on the specified node, returning an error.
-func (c *cluster) RunL(
+func (c *clusterImpl) RunL(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 ) error {
 	if err := errors.Wrap(ctx.Err(), "cluster.RunL"); err != nil {
@@ -2038,7 +2038,7 @@ func (c *cluster) RunL(
 
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
 // and stdout or an error.
-func (c *cluster) RunWithBuffer(
+func (c *clusterImpl) RunWithBuffer(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
 ) ([]byte, error) {
 	if err := errors.Wrap(ctx.Err(), "cluster.RunWithBuffer"); err != nil {
@@ -2053,7 +2053,7 @@ func (c *cluster) RunWithBuffer(
 // external IP address. In general, inter-cluster communication and should use
 // internal IPs and communication from a test driver to nodes in a cluster
 // should use external IPs.
-func (c *cluster) pgURLErr(
+func (c *clusterImpl) pgURLErr(
 	ctx context.Context, node option.NodeListOption, external bool,
 ) ([]string, error) {
 	args := []string{roachprod, "pgurl"}
@@ -2085,21 +2085,25 @@ func (c *cluster) pgURLErr(
 }
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
-func (c *cluster) InternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error) {
+func (c *clusterImpl) InternalPGUrl(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	return c.pgURLErr(ctx, node, false /* external */)
 }
 
 // Silence unused warning.
-var _ = (&cluster{}).InternalPGUrl
+var _ = (&clusterImpl{}).InternalPGUrl
 
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
-func (c *cluster) ExternalPGUrl(ctx context.Context, node option.NodeListOption) ([]string, error) {
+func (c *clusterImpl) ExternalPGUrl(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	return c.pgURLErr(ctx, node, true /* external */)
 }
 
 // ExternalPGUrlSecure returns the external Postgres endpoint for the specified
 // nodes.
-func (c *cluster) ExternalPGUrlSecure(
+func (c *clusterImpl) ExternalPGUrlSecure(
 	ctx context.Context, node option.NodeListOption, user string, certsDir string, port int,
 ) ([]string, error) {
 	urlTemplate := "postgres://%s@%s:%d?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
@@ -2114,7 +2118,7 @@ func (c *cluster) ExternalPGUrlSecure(
 	return urls, nil
 }
 
-func addrToAdminUIAddr(c *cluster, addr string) (string, error) {
+func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return "", err
@@ -2157,7 +2161,7 @@ func addrToHostPort(addr string) (string, int, error) {
 
 // InternalAdminUIAddr returns the internal Admin UI address in the form host:port
 // for the specified node.
-func (c *cluster) InternalAdminUIAddr(
+func (c *clusterImpl) InternalAdminUIAddr(
 	ctx context.Context, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
@@ -2177,7 +2181,7 @@ func (c *cluster) InternalAdminUIAddr(
 
 // ExternalAdminUIAddr returns the internal Admin UI address in the form host:port
 // for the specified node.
-func (c *cluster) ExternalAdminUIAddr(
+func (c *clusterImpl) ExternalAdminUIAddr(
 	ctx context.Context, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
@@ -2197,7 +2201,9 @@ func (c *cluster) ExternalAdminUIAddr(
 
 // InternalAddr returns the internal address in the form host:port for the
 // specified nodes.
-func (c *cluster) InternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error) {
+func (c *clusterImpl) InternalAddr(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	var addrs []string
 	urls, err := c.pgURLErr(ctx, node, false /* external */)
 	if err != nil {
@@ -2214,7 +2220,9 @@ func (c *cluster) InternalAddr(ctx context.Context, node option.NodeListOption) 
 }
 
 // InternalIP returns the internal IP addresses for the specified nodes.
-func (c *cluster) InternalIP(ctx context.Context, node option.NodeListOption) ([]string, error) {
+func (c *clusterImpl) InternalIP(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	var ips []string
 	addrs, err := c.InternalAddr(ctx, node)
 	if err != nil {
@@ -2232,7 +2240,9 @@ func (c *cluster) InternalIP(ctx context.Context, node option.NodeListOption) ([
 
 // ExternalAddr returns the external address in the form host:port for the
 // specified node.
-func (c *cluster) ExternalAddr(ctx context.Context, node option.NodeListOption) ([]string, error) {
+func (c *clusterImpl) ExternalAddr(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	var addrs []string
 	urls, err := c.pgURLErr(ctx, node, true /* external */)
 	if err != nil {
@@ -2249,7 +2259,9 @@ func (c *cluster) ExternalAddr(ctx context.Context, node option.NodeListOption) 
 }
 
 // ExternalIP returns the external IP addresses for the specified node.
-func (c *cluster) ExternalIP(ctx context.Context, node option.NodeListOption) ([]string, error) {
+func (c *clusterImpl) ExternalIP(
+	ctx context.Context, node option.NodeListOption,
+) ([]string, error) {
 	var ips []string
 	addrs, err := c.ExternalAddr(ctx, node)
 	if err != nil {
@@ -2266,10 +2278,10 @@ func (c *cluster) ExternalIP(ctx context.Context, node option.NodeListOption) ([
 }
 
 // Silence unused warning.
-var _ = (&cluster{}).ExternalIP
+var _ = (&clusterImpl{}).ExternalIP
 
 // Conn returns a SQL connection to the specified node.
-func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
+func (c *clusterImpl) Conn(ctx context.Context, node int) *gosql.DB {
 	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
 	if err != nil {
 		c.t.Fatal(err)
@@ -2282,7 +2294,7 @@ func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
 }
 
 // ConnE returns a SQL connection to the specified node.
-func (c *cluster) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
+func (c *clusterImpl) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrl(ctx, c.Node(node))
 	if err != nil {
 		return nil, err
@@ -2295,7 +2307,7 @@ func (c *cluster) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 }
 
 // ConnSecure returns a secure SQL connection to the specified node.
-func (c *cluster) ConnSecure(
+func (c *clusterImpl) ConnSecure(
 	ctx context.Context, node int, user string, certsDir string, port int,
 ) (*gosql.DB, error) {
 	urls, err := c.ExternalPGUrlSecure(ctx, c.Node(node), user, certsDir, port)
@@ -2309,7 +2321,7 @@ func (c *cluster) ConnSecure(
 	return db, nil
 }
 
-func (c *cluster) MakeNodes(opts ...option.Option) string {
+func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 	var r option.NodeListOption
 	for _, o := range opts {
 		if s, ok := o.(nodeSelector); ok {
@@ -2319,13 +2331,13 @@ func (c *cluster) MakeNodes(opts ...option.Option) string {
 	return c.name + r.String()
 }
 
-func (c *cluster) IsLocal() bool {
+func (c *clusterImpl) IsLocal() bool {
 	return c.name == "local"
 }
 
 // Extend extends the cluster's expiration by d, after truncating d to minute
 // granularity.
-func (c *cluster) Extend(ctx context.Context, d time.Duration, l *logger.Logger) error {
+func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Logger) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Extend")
 	}
@@ -2402,7 +2414,7 @@ type monitor struct {
 }
 
 func newMonitor(ctx context.Context, ci cluster2.Cluster, opts ...option.Option) *monitor {
-	c := ci.(*cluster) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `MakeNodes`
+	c := ci.(*clusterImpl) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `MakeNodes`
 	m := &monitor{
 		t:     c.t,
 		l:     c.l,

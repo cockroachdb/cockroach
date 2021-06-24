@@ -527,7 +527,7 @@ type workerStatus struct {
 
 		ttr testToRunRes
 		t   *test
-		c   *cluster
+		c   *clusterImpl
 	}
 }
 
@@ -543,13 +543,13 @@ func (w *workerStatus) SetStatus(status string) {
 	w.mu.Unlock()
 }
 
-func (w *workerStatus) Cluster() *cluster {
+func (w *workerStatus) Cluster() *clusterImpl {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.mu.c
 }
 
-func (w *workerStatus) SetCluster(c *cluster) {
+func (w *workerStatus) SetCluster(c *clusterImpl) {
 	w.mu.Lock()
 	w.mu.c = c
 	w.mu.Unlock()
