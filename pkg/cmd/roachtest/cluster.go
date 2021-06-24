@@ -1852,9 +1852,11 @@ func (c *cluster) StartE(ctx context.Context, opts ...option.Option) error {
 	return execCmd(ctx, c.l, args...)
 }
 
-// Start is like StartE() except it takes a test and, on error, calls t.Fatal().
-func (c *cluster) Start(ctx context.Context, t *test, opts ...option.Option) {
-	FatalIfErr(t, c.StartE(ctx, opts...))
+// Start is like StartE() except that it will fatal the test on error.
+func (c *cluster) Start(ctx context.Context, _ignored interface{}, opts ...option.Option) {
+	if err := c.StartE(ctx, opts...); err != nil {
+		c.t.Fatal(err)
+	}
 }
 
 func argExists(args []string, target string) bool {

@@ -49,7 +49,7 @@ type Cluster interface {
 	// Starting and stopping CockroachDB.
 
 	StartE(ctx context.Context, opts ...option.Option) error
-	Start(ctx context.Context, t *test, opts ...option.Option)
+	Start(ctx context.Context, _ignored interface{}, opts ...option.Option)
 	StopE(ctx context.Context, opts ...option.Option) error
 	Stop(ctx context.Context, opts ...option.Option)
 	StopCockroachGracefullyOnNode(ctx context.Context, node int) error
