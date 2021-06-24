@@ -312,6 +312,8 @@ const (
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
+	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
+	RetryJobsWithExponentialBackoff
 
 	// Step (1): Add new versions here.
 )
@@ -537,6 +539,11 @@ var versionsSingleton = keyedVersions{
 		Key:     DatabaseRoleSettings,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
 	},
+	{
+		Key:     RetryJobsWithExponentialBackoff,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 120},
+	},
+
 	// Step (2): Add new versions here.
 }
 

@@ -191,6 +191,9 @@ func MakeRegistry(
 	}
 	if knobs != nil {
 		r.knobs = *knobs
+		if knobs.TimeSource != nil {
+			r.clock = knobs.TimeSource
+		}
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.metrics.init(histogramWindowInterval)
@@ -400,7 +403,6 @@ VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBy
 	); err != nil {
 		return nil, err
 	}
-
 	return j, nil
 }
 
@@ -631,6 +633,7 @@ SELECT claim_session_id
 	// claimJobs iterates the set of jobs which are not currently claimed and
 	// claims jobs up to maxAdoptionsPerLoop.
 	claimJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
 		}
@@ -759,6 +762,8 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 	}
 }
 
+// TODO (sajjad): Why are we returning column 'created' in this query? It's not
+// being used.
 const expiredJobsQuery = "SELECT id, payload, status, created FROM system.jobs " +
 	"WHERE (created < $1) AND (id > $2) " +
 	"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
@@ -1006,6 +1011,7 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
+
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1013,11 +1019,11 @@ func (r *Registry) stepThroughStateMachine(
 				"job %d: resuming with non-nil error", job.ID())
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
-		if payload.StartedMicros == 0 {
-			if err := job.started(ctx, nil /* txn */); err != nil {
-				return err
-			}
+
+		if err := job.started(ctx, nil /* txn */); err != nil {
+			return err
 		}
+
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)

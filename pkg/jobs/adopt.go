@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,16 +43,16 @@ const (
 	// NonTerminalStatusTupleString is a sql tuple corresponding to statuses of
 	// non-terminal jobs.
 	NonTerminalStatusTupleString = `(` + nonTerminalStatusList + `)`
-)
 
-const claimQuery = `
+	claimQuery = `
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
-    WHERE (claim_session_id IS NULL)
-      AND (status IN ` + claimableStatusTupleString + `)
+    WHERE ((claim_session_id IS NULL)
+      AND (status IN ` + claimableStatusTupleString + `))
  ORDER BY created DESC
     LIMIT $3
 RETURNING id;`
+)
 
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
@@ -64,11 +65,11 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 		}
 		numRows, err := r.ex.Exec(
 			ctx, "claim-jobs", txn, claimQuery,
-			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
-		)
+			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
+		r.metrics.ClaimedJobs.Inc(int64(numRows))
 		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
 			log.Infof(ctx, "claimed %d jobs", numRows)
 		}
@@ -76,14 +77,68 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	})
 }
 
+const (
+	processQuery = `
+SELECT id FROM system.jobs
+WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)
+`
+)
+
+// Select only those jobs that have their next retry time before the current time.
+// 2^62 is the max positive number we can get.
+// $5 is registry's current timestamp.
+// $6 is the initial delay in exponential backoff calculation, which doubles in each run.
+// $7 is the max retry delay.
+//
+// setterIdx is the beginning index in the place holders.
+func canRunClause(setterIdx int) string {
+	// The placeholder numbers in the following statement should be equivalent to:
+	// $1 ...
+	//            $2 ...,
+	//            $2 ...,
+	//            $3
+	//          ),
+	//          $3
+	//        ) ...
+	stmt := `
+$%d  >= COALESCE(last_run, created) + least(
+          IF(
+            $%d * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
+            $%d * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
+            $%d
+          ),
+          $%d
+        )::INTERVAL`
+	return fmt.Sprintf(stmt, setterIdx, setterIdx+1, setterIdx+1, setterIdx+2, setterIdx+2)
+}
+
+// getProcessQuery returns the query that selects the jobs that are claimed
+// by this node.
+func getProcessQuery(
+	ctx context.Context, s sqlliveness.Session, r *Registry,
+) (string, []interface{}) {
+	// Select the running or reverting jobs that this node has claimed.
+	query := processQuery
+	args := []interface{}{StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID()}
+	// Gating the version that introduced job retries with exponential backoff.
+	if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+		// Select only those jobs that can be executed right now.
+		query += " AND " + canRunClause(5)
+		initDelay := retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
+		maxDelay := retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+		args = append(args, r.clock.Now().GoTime(), initDelay, maxDelay)
+	}
+	return query, args
+}
+
 // processClaimedJobs processes all jobs currently claimed by the registry.
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
+	query, args := getProcessQuery(ctx, s, r)
+	// TODO(sajjad): To discuss: Shouldn't we close the iterator before returning
+	// from this function?
 	it, err := r.ex.QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
-SELECT id FROM system.jobs
-WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
-		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, query, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
@@ -102,7 +157,6 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
 	}
-
 	r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, claimedToResume)
 	r.resumeClaimedJobs(ctx, s, claimedToResume)
 	return nil
@@ -158,12 +212,20 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 // resumeJob resumes a claimed job.
 func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
+	cols := "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
+	fromTable := " FROM system.jobs WHERE id = $1 AND claim_session_id = $2 "
+	args := []interface{}{jobID, s.ID().UnsafeBytes()}
+	backoffIsActive := r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
+	if backoffIsActive {
+		cols += ", " + canRunClause(3) + " as can_run"
+		initDelay := retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
+		maxDelay := retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+		args = append(args, r.clock.Now().GoTime(), initDelay, maxDelay)
+	}
+	stmt := "SELECT " + cols + fromTable
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
-SELECT status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)
-FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
-		jobID, s.ID().UnsafeBytes(),
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, stmt, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -184,6 +246,13 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 
 	if isAlive := *row[3].(*tree.DBool); !isAlive {
 		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
+	}
+
+	if backoffIsActive {
+		// It's too soon to run the job.
+		if !(*row[4].(*tree.DBool)) {
+			return nil
+		}
 	}
 
 	payload, err := UnmarshalPayload(row[1])
@@ -216,6 +285,7 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 
 	aj := &adoptedJob{sid: s.ID(), cancel: cancel}
 	r.addAdoptedJob(jobID, aj)
+	r.metrics.ResumedJobs.Inc(1)
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
 		// was one it's been set in the job status already.
@@ -297,16 +367,38 @@ func (r *Registry) runJob(
 	return err
 }
 
-const cancelQuery = `
+const (
+	cancelQueryUpdate = `
 UPDATE system.jobs
 SET status =
     CASE
       WHEN status = $1 THEN $2
       WHEN status = $3 THEN $4
       ELSE status
-    END
-WHERE (status IN ($1, $3)) AND ((claim_session_id = $5) AND (claim_instance_id = $6))
+    END`
+	cancelQueryWhere = `
+    WHERE (status IN ($1, $3)) 
+      AND ((claim_session_id = $5) AND (claim_instance_id = $6))
 RETURNING id, status`
+)
+
+func getCancelQuery(
+	ctx context.Context, s sqlliveness.Session, r *Registry,
+) (string, []interface{}) {
+	var query string
+	args := []interface{}{
+		StatusPauseRequested, StatusPaused,
+		StatusCancelRequested, StatusReverting,
+		s.ID().UnsafeBytes(), r.ID(),
+	}
+	if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+		query = cancelQueryUpdate + ", num_runs = 0, last_run = $7" + cancelQueryWhere
+		args = append(args, r.clock.Now().GoTime())
+	} else {
+		query = cancelQueryUpdate + cancelQueryWhere
+	}
+	return query, args
+}
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -315,16 +407,14 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
+		stmt, args := getCancelQuery(ctx, s, r)
 		// Note that we have to buffer all rows first - before processing each
 		// job - because we have to make sure that the query executes without an
 		// error (otherwise, the system.jobs table might diverge from the jobs
 		// registry).
 		rows, err := r.ex.QueryBufferedEx(
 			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-			cancelQuery,
-			StatusPauseRequested, StatusPaused,
-			StatusCancelRequested, StatusReverting,
-			s.ID().UnsafeBytes(), r.ID(),
+			stmt, args...,
 		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")

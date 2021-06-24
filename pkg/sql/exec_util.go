@@ -905,6 +905,7 @@ type ExecutorConfig struct {
 	FeatureFlagMetrics   *featureflag.DenialMetrics
 
 	TestingKnobs                  ExecutorTestingKnobs
+	MigrationTestingKnobs         *migration.TestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
 	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
 	NewSchemaChangerTestingKnobs  *scexec.NewSchemaChangerTestingKnobs
