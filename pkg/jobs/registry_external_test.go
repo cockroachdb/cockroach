@@ -281,7 +281,7 @@ func TestRegistrySettingUpdate(t *testing.T) {
 				if err != nil {
 					return
 				}
-				if stmt == matchStmt {
+				if strings.HasPrefix(stmt, matchStmt) {
 					atomic.AddInt32(&seen, 1)
 				}
 			}
