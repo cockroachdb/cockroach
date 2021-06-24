@@ -435,7 +435,7 @@ func TestAvroSchema(t *testing.T) {
 			`VARBIT`:            `["null",{"type":"array","items":"long"}]`,
 
 			`BIT(3)`:       `["null",{"type":"array","items":"long"}]`,
-			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2},"string"]`,
 		}
 
 		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`), types.MakeBit(3)) {
@@ -532,6 +532,15 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `DECIMAL(4,1)`,
 				sql:  `1.2`,
 				avro: `{"bytes.decimal":"\f"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL 'Infinity'`,
+				avro: `{"string":"Infinity"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL '-Infinity'`,
+				avro: `{"string":"-Infinity"}`},
+			{sqlType: `DECIMAL(4,1)`,
+				sql:  `DECIMAL 'NaN'`,
+				avro: `{"string":"NaN"}`},
 
 			{sqlType: `UUID`, sql: `NULL`, avro: `null`},
 			{sqlType: `UUID`,
