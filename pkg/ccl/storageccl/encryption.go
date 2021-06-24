@@ -80,16 +80,26 @@ func AppearsEncrypted(text []byte) bool {
 type encWriter struct {
 	gcm        cipher.AEAD
 	iv         []byte
-	ciphertext io.Writer
+	ciphertext io.WriteCloser
 	buf        []byte
 	bufPos     int
+}
+
+// NopCloser wraps an io.Writer to add a no-op Close().
+type NopCloser struct {
+	io.Writer
+}
+
+// Close is a no-op.
+func (NopCloser) Close() error {
+	return nil
 }
 
 // EncryptFile encrypts a file with the supplied key and a randomly chosen IV
 // which is prepended in a header on the returned ciphertext.
 func EncryptFile(plaintext, key []byte) ([]byte, error) {
 	b := &bytes.Buffer{}
-	w, err := EncryptingWriter(b, key)
+	w, err := EncryptingWriter(NopCloser{b}, key)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +115,7 @@ func EncryptFile(plaintext, key []byte) ([]byte, error) {
 
 // EncryptingWriter returns a writer that wraps an underlying sink writer but
 // which encrypts bytes written to it before flushing them to the wrapped sink.
-func EncryptingWriter(ciphertext io.Writer, key []byte) (io.WriteCloser, error) {
+func EncryptingWriter(ciphertext io.WriteCloser, key []byte) (io.WriteCloser, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
 		return nil, err
@@ -154,7 +164,8 @@ func (e *encWriter) Close() error {
 	// chunk maintains the invariant that a chunked file always ends in a sealed
 	// chunk of less than chunk size, thus making tuncation, even along a chunk
 	// boundary, detectable.
-	return e.flush()
+	err := e.flush()
+	return errors.CombineErrors(err, e.ciphertext.Close())
 }
 
 func (e *encWriter) flush() error {
