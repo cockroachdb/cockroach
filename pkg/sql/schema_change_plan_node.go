@@ -46,7 +46,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		Descs:        p.Descriptors(),
 		AuthAccessor: p,
 	}
-	outputNodes, err := scbuild.Build(ctx, stmt, buildDeps, p.extendedEvalCtx.SchemaChangerState.nodes)
+	outputNodes, err := scbuild.Build(ctx, buildDeps, p.extendedEvalCtx.SchemaChangerState.nodes, stmt)
 	if scbuild.HasNotImplemented(err) && mode == sessiondata.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}

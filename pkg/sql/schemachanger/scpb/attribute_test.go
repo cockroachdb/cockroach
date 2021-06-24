@@ -44,7 +44,7 @@ func TestGetAttribute(t *testing.T) {
 	require.False(t, EqualElements(typeBackRef, seqElem))
 
 	// Sanity: Validate attribute fetching for both types.
-	require.Equal(t, "3", typeBackRef.getAttribute(AttributeDepID).String())
+	require.Equal(t, "3", typeBackRef.getAttribute(AttributeReferencedDescID).String())
 	require.Equal(t, "1", typeBackRef.getAttribute(AttributeDescID).String())
 	require.Equal(t, "TypeReference", typeBackRef.getAttribute(AttributeType).String())
 	require.Equal(t, "4", seqElemDiff.getAttribute(AttributeColumnID).String())
