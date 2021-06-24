@@ -186,11 +186,21 @@ func (tm *TableMeta) copyScalars(copyScalar func(Expr) Expr) {
 	if tm.Constraints != nil {
 		tm.Constraints = copyScalar(tm.Constraints).(ScalarExpr)
 	}
-	for col, e := range tm.ComputedCols {
-		tm.ComputedCols[col] = copyScalar(e).(ScalarExpr)
+
+	if tm.ComputedCols != nil {
+		computedCols := make(map[ColumnID]ScalarExpr, len(tm.ComputedCols))
+		for col, e := range tm.ComputedCols {
+			computedCols[col] = copyScalar(e).(ScalarExpr)
+		}
+		tm.ComputedCols = computedCols
 	}
-	for idx, e := range tm.partialIndexPredicates {
-		tm.partialIndexPredicates[idx] = copyScalar(e).(ScalarExpr)
+
+	if tm.partialIndexPredicates != nil {
+		partialIndexPredicates := make(map[cat.IndexOrdinal]ScalarExpr, len(tm.partialIndexPredicates))
+		for idx, e := range tm.partialIndexPredicates {
+			partialIndexPredicates[idx] = copyScalar(e).(ScalarExpr)
+		}
+		tm.partialIndexPredicates = partialIndexPredicates
 	}
 }
 
