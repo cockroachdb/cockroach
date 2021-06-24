@@ -19,7 +19,6 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -565,14 +564,14 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		kw = lval.str[8:]
 		isExperimental = true
 	}
-	lval.id = lex.GetKeywordID(kw)
-	if lval.id != lex.IDENT {
+	lval.id = lexbase.GetKeywordID(kw)
+	if lval.id != lexbase.IDENT {
 		if isExperimental {
-			if _, ok := lex.AllowedExperimental[kw]; !ok {
+			if _, ok := lexbase.AllowedExperimental[kw]; !ok {
 				// If the parsed token is not on the allowlisted set of keywords,
 				// then it might have been intended to be parsed as something else.
 				// In that case, re-tokenize the original string.
-				lval.id = lex.GetKeywordID(lval.str)
+				lval.id = lexbase.GetKeywordID(lval.str)
 			} else {
 				// It is a allowlisted keyword, so remember the shortened
 				// keyword for further processing.
@@ -583,7 +582,7 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 		// If the word after experimental_ or testing_ is an identifier,
 		// then we might have classified it incorrectly after removing the
 		// experimental_/testing_ prefix.
-		lval.id = lex.GetKeywordID(lval.str)
+		lval.id = lexbase.GetKeywordID(lval.str)
 	}
 }
 

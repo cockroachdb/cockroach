@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package lex
+package lexbase
 
 // AllowedExperimental contains keywords for which the EXPERIMENTAL_
 // or TESTING_ prefixes are allowed to be parsed along with the
