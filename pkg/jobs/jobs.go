@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -237,7 +238,14 @@ func (j *Job) started(ctx context.Context, txn *kv.Txn) error {
 		// TODO(spaskob): Remove this status change after we stop supporting
 		// pending job states.
 		ju.UpdateStatus(StatusRunning)
-		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		if md.Payload.StartedMicros == 0 {
+			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		}
+
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			ju.UpdateRunStats(md.RunStats.NumRuns+1, j.registry.clock.Now().GoTime())
+		}
+
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -513,6 +521,8 @@ func (j *Job) pauseRequested(ctx context.Context, txn *kv.Txn, fn onPauseRequest
 		return nil
 	})
 }
+
+// TODO(sajjad):  Update runInfo in reverted
 
 // reverted sets the status of the tracked job to reverted.
 func (j *Job) reverted(
@@ -937,4 +947,29 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+}
+
+// updateRetryParams updates number of job runs and last execution timestamp
+// of the current job.
+func (j *Job) updateRetryParams(
+	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+) error {
+	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusSucceeded {
+			return nil
+		}
+		if md.Status != StatusRunning && md.Status != StatusPending {
+			return errors.Errorf("retry params of the job with status %s cannot be updated", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+
+		ju.UpdateStatus(StatusSucceeded)
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		ju.UpdatePayload(md.Payload)
+		return nil
+	})
 }

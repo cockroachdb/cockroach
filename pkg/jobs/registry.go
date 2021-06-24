@@ -191,6 +191,9 @@ func MakeRegistry(
 	}
 	if knobs != nil {
 		r.knobs = *knobs
+		if knobs.TimeSource != nil {
+			r.clock = knobs.TimeSource
+		}
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.metrics.init(histogramWindowInterval)
@@ -1006,6 +1009,7 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
+
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1022,6 +1026,9 @@ func (r *Registry) stepThroughStateMachine(
 		func() {
 			jm.CurrentlyRunning.Inc(1)
 			defer jm.CurrentlyRunning.Dec(1)
+			if err != nil {
+				return
+			}
 			err = resumer.Resume(resumeCtx, execCtx)
 		}()
 		if err == nil {
