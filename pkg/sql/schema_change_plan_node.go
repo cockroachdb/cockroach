@@ -46,7 +46,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		Descs:        p.Descriptors(),
 		AuthAccessor: p,
 	}
-	outputNodes, err := scbuild.Build(ctx, buildDeps, p.extendedEvalCtx.SchemaChangerState.nodes, stmt)
+	outputNodes, err := scbuild.Build(ctx, buildDeps, p.extendedEvalCtx.SchemaChangerState.state, stmt)
 	if scbuild.HasNotImplemented(err) && mode == sessiondata.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
@@ -114,9 +114,7 @@ type schemaChangePlanNode struct {
 	// plannedState contains the set of states produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement.
-	//
-	// TODO(ajwerner): Give this a better name.
-	plannedState []*scpb.Node
+	plannedState scpb.State
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
@@ -131,7 +129,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	scs.nodes = after
+	scs.state = after
 	return nil
 }
 

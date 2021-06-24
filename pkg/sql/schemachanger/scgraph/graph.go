@@ -49,16 +49,16 @@ type Graph struct {
 
 // New constructs a new Graph. All initial nodes ought to correspond to distinct
 // targets. If they do not, an error will be returned.
-func New(initialNodes []*scpb.Node) (*Graph, error) {
+func New(initial scpb.State) (*Graph, error) {
 	g := Graph{
 		targetIdxMap: map[*scpb.Target]int{},
 		nodeOpEdges:  map[*scpb.Node]*OpEdge{},
 		nodeDepEdges: map[*scpb.Node][]*DepEdge{},
 		opToNode:     map[scop.Op]*scpb.Node{},
 	}
-	for _, n := range initialNodes {
+	for _, n := range initial {
 		if existing, ok := g.targetIdxMap[n.Target]; ok {
-			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initialNodes[existing])
+			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial[existing])
 		}
 		idx := len(g.targets)
 		g.targetIdxMap[n.Target] = idx
@@ -122,7 +122,7 @@ func (g *Graph) GetDepEdgesFrom(n *scpb.Node) ([]*DepEdge, bool) {
 	return de, ok
 }
 
-// AddOpEdges adds an op edges connecting the nodes for two states of a target.
+// AddOpEdges adds an op edges connecting the nodes for two statuses of a target.
 func (g *Graph) AddOpEdges(t *scpb.Target, from, to scpb.Status, revertible bool, ops ...scop.Op) {
 	oe := &OpEdge{
 		from:       g.getOrCreateNode(t, from),

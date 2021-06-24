@@ -219,7 +219,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts []*scpb.Node
+		var ts scpb.State
 		var targetSlice []*scpb.Target
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -277,7 +277,7 @@ func TestSchemaChanger(t *testing.T) {
 				}),
 			}
 
-			nodes := []*scpb.Node{
+			nodes := scpb.State{
 				{
 					Target: targetSlice[0],
 					Status: scpb.Status_ABSENT,
@@ -318,7 +318,7 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		var after []*scpb.Node
+		var after scpb.State
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
@@ -333,7 +333,7 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		require.Equal(t, []*scpb.Node{
+		require.Equal(t, scpb.State{
 			{
 				Target: targetSlice[0],
 				Status: scpb.Status_PUBLIC,
@@ -355,7 +355,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts []*scpb.Node
+		var ts scpb.State
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
