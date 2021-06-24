@@ -11,7 +11,9 @@
 package pprofui
 
 import (
+	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,7 +21,17 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/stretchr/testify/require"
 )
+
+type ProfilerFunc func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error)
+
+func (p ProfilerFunc) Profile(
+	ctx context.Context, req *serverpb.ProfileRequest,
+) (*serverpb.JSONResponse, error) {
+	return p(ctx, req)
+}
 
 func init() {
 	if bazel.BuiltWithBazel() {
@@ -36,11 +48,20 @@ func init() {
 }
 
 func TestServer(t *testing.T) {
+	expectedNodeID := "local"
+
+	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
+		require.Equal(t, expectedNodeID, req.NodeId)
+		b, err := ioutil.ReadFile("testdata/heap.profile")
+		require.NoError(t, err)
+		return &serverpb.JSONResponse{Data: b}, nil
+	}
+
 	storage := NewMemStorage(1, 0)
-	s := NewServer(storage, nil)
+	s := NewServer(storage, ProfilerFunc(mockProfile))
 
 	for i := 0; i < 3; i++ {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("request local profile %d", i), func(t *testing.T) {
 			r := httptest.NewRequest("GET", "/heap/", nil)
 			w := httptest.NewRecorder()
 			s.ServeHTTP(w, r)
@@ -68,8 +89,26 @@ func TestServer(t *testing.T) {
 				t.Fatalf("body does not contain %q: %v", e, a)
 			}
 		})
-		if a, e := len(storage.mu.records), 1; a != e {
+		if a, e := len(storage.getRecords()), 1; a != e {
 			t.Fatalf("storage did not expunge records; have %d instead of %d", a, e)
 		}
 	}
+
+	t.Run("request profile from another node", func(t *testing.T) {
+		expectedNodeID = "3"
+
+		r := httptest.NewRequest("GET", "/heap/?node=3", nil)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+
+		if a, e := w.Code, http.StatusTemporaryRedirect; a != e {
+			t.Fatalf("expected status code %d, got %d", e, a)
+		}
+
+		loc := w.Result().Header.Get("Location")
+
+		if a, e := loc, "/heap/4/flamegraph?node=3"; a != e {
+			t.Fatalf("expected location header %s, but got %s", e, a)
+		}
+	})
 }

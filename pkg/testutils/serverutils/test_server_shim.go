@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -240,6 +241,10 @@ type TestServerInterface interface {
 	// TestingKnobs returns the TestingKnobs in use by the test
 	// server.
 	TestingKnobs() *base.TestingKnobs
+
+	// StatusServer returns the StatusServer initialized by the test
+	// server.
+	StatusServer() serverpb.StatusServer
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
