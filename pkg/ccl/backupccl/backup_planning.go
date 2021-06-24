@@ -177,6 +177,7 @@ func (s sortedIndexIDs) Len() int {
 // provided the dropped index represented by the span
 // {/Table/51/2 - /Table/51/3} has been gc'ed.
 func getLogicallyMergedTableSpans(
+	ctx context.Context,
 	table catalog.TableDescriptor,
 	added map[tableAndIndex]bool,
 	codec keys.SQLCodec,
@@ -266,13 +267,19 @@ func getLogicallyMergedTableSpans(
 				// cannot merge the lhs and rhs spans.
 				foundDroppedKV, err = checkForKVInBounds(lhsSpan.EndKey, rhsSpan.Key, endTime)
 				if err != nil {
-					return nil, err
+					// If we're unable to check for KVs in bounds, assume that we've found
+					// one. It's always safe to assume that since we won't merge over this
+					// span. One possible error is a GC threshold error if this schema
+					// revision is older than the configured GC window on the span we're
+					// checking.
+					log.Warningf(ctx, "error while scanning [%s, %s) @ %v: %v",
+						lhsSpan.EndKey, rhsSpan.Key, endTime, err)
+					foundDroppedKV = true
 				}
-				// If we find an index that is being added, don't merge the
-				// spans. We don't want to backup data that is being backfilled
-				// until the backfill is complete. Even if the backfill has not
-				// started yet and there is not data we should not include this
-				// span in the spans to back up since we want these spans to
+				// If we find an index that is being added, don't merge the spans. We
+				// don't want to backup data that is being backfilled until the backfill
+				// is complete. Even if the backfill has not started yet and there is no
+				// data we should not back up this span since we want these spans to
 				// appear as introduced when the index becomes PUBLIC.
 				// The indexes will appear in introduced spans because indexes
 				// will never go from PUBLIC to ADDING.
@@ -333,7 +340,7 @@ func spansForAllTableIndexes(
 	}
 
 	for _, table := range tables {
-		mergedIndexSpans, err = getLogicallyMergedTableSpans(table, added, execCfg.Codec, endTime,
+		mergedIndexSpans, err = getLogicallyMergedTableSpans(ctx, table, added, execCfg.Codec, endTime,
 			checkForKVInBounds)
 		if err != nil {
 			return nil, err
@@ -356,7 +363,7 @@ func spansForAllTableIndexes(
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.State == descpb.DescriptorState_PUBLIC {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
-			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
+			revSpans, err := getLogicallyMergedTableSpans(ctx, tbl, added, execCfg.Codec, rev.Time,
 				checkForKVInBounds)
 			if err != nil {
 				return nil, err
