@@ -42,7 +42,9 @@ type pebbleBatch struct {
 	// Iterator.Clone to use the same underlying engine state. This relies on
 	// the fact that all pebbleIterators created here are marked as reusable,
 	// which causes pebbleIterator.Close to not close iter. iter will be closed
-	// when pebbleBatch.Close is called.
+	// when pebbleBatch.Close is called. The caller can change the above lazy
+	// creation of the *pebble.Iterator that will be cloned by calling
+	// PinEngineStateForIterators.
 	prefixIter       pebbleIterator
 	normalIter       pebbleIterator
 	prefixEngineIter pebbleIterator
@@ -297,6 +299,17 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 // ConsistentIterators implements the Batch interface.
 func (p *pebbleBatch) ConsistentIterators() bool {
 	return true
+}
+
+func (p *pebbleBatch) PinEngineStateForIterators() error {
+	if p.iter == nil {
+		if p.batch.Indexed() {
+			p.iter = p.batch.NewIter(nil)
+		} else {
+			p.iter = p.db.NewIter(nil)
+		}
+	}
+	return nil
 }
 
 // NewMVCCIterator implements the Batch interface.

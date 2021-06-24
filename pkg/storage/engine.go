@@ -444,8 +444,20 @@ type Reader interface {
 	NewEngineIterator(opts IterOptions) EngineIterator
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the
-	// same underlying Engine state.
+	// same underlying Engine state. NB: this only applies to iterators without
+	// timestamp hints.
 	ConsistentIterators() bool
+	// PinEngineStateForIterators ensures that the state seen by iterators
+	// without timestamp hints is pinned and will not see future mutations. It
+	// can be called multiple times on a Reader in which case the state seen
+	// will be as of the first call. The exception is the implementation that
+	// uses a Reader returned by Engine.NewSnapshot -- the pinned state is as of
+	// the time the snapshot was taken. So the semantics that are true for all
+	// Readers is that the pinned state is somewhere in the time interval
+	// between the creation of the Reader and the first call to
+	// PinEngineStateForIterators.
+	// REQUIRES: ConsistentIterators returns true.
+	PinEngineStateForIterators() error
 }
 
 // PrecedingIntentState is information needed when writing or clearing an

@@ -779,6 +779,11 @@ func (p *Pebble) ConsistentIterators() bool {
 	return false
 }
 
+func (p *Pebble) PinEngineStateForIterators() error {
+	return errors.AssertionFailedf(
+		"PinEngineStateForIterators must not be called when ConsistentIterators returns false")
+}
+
 // ApplyBatchRepr implements the Engine interface.
 func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 	// batch.SetRepr takes ownership of the underlying slice, so make a copy.
@@ -1242,17 +1247,9 @@ type pebbleReadOnly struct {
 	// Iterator.Clone to use the same underlying engine state. This relies on
 	// the fact that all pebbleIterators created here are marked as reusable,
 	// which causes pebbleIterator.Close to not close iter. iter will be closed
-	// when pebbleReadOnly.Close is called.
-	//
-	// TODO(sumeer): The lazy iterator creation is insufficient to address
-	// issues like https://github.com/cockroachdb/cockroach/issues/55461.
-	// We could create the pebble.Iterator eagerly, since a caller using
-	// pebbleReadOnly is eventually going to create one anyway. But we
-	// already have different behaviors in different Reader implementations
-	// (see Reader.ConsistentIterators) that callers don't pay attention
-	// to, and adding another such difference could be a source of bugs.
-	// See https://github.com/cockroachdb/cockroach/pull/58515#pullrequestreview-563993424
-	// for more discussion.
+	// when pebbleReadOnly.Close is called. The caller can change the above
+	// lazy creation of the *pebble.Iterator that will be cloned by calling
+	// PinEngineStateForIterators.
 	prefixIter       pebbleIterator
 	normalIter       pebbleIterator
 	prefixEngineIter pebbleIterator
@@ -1474,6 +1471,13 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 	return true
 }
 
+func (p *pebbleReadOnly) PinEngineStateForIterators() error {
+	if p.iter == nil {
+		p.iter = p.parent.db.NewIter(nil)
+	}
+	return nil
+}
+
 // Writer methods are not implemented for pebbleReadOnly. Ideally, the code
 // could be refactored so that a Reader could be supplied to evaluateBatch
 
@@ -1671,6 +1675,11 @@ func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
 // ConsistentIterators implements the Reader interface.
 func (p pebbleSnapshot) ConsistentIterators() bool {
 	return true
+}
+
+func (p *pebbleSnapshot) PinEngineStateForIterators() error {
+	// Snapshot already pins state, so nothing to do.
+	return nil
 }
 
 // pebbleGetProto uses Reader.MVCCGet, so it not as efficient as a function

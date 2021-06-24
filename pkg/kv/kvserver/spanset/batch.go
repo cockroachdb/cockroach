@@ -483,6 +483,10 @@ func (s spanSetReader) ConsistentIterators() bool {
 	return s.r.ConsistentIterators()
 }
 
+func (s spanSetReader) PinEngineStateForIterators() error {
+	return s.r.PinEngineStateForIterators()
+}
+
 // GetDBEngine recursively searches for the underlying rocksDB engine.
 func GetDBEngine(reader storage.Reader, span roachpb.Span) storage.Reader {
 	switch v := reader.(type) {
