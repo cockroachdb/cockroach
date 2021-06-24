@@ -17,9 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
-func runCLINodeStatus(ctx context.Context, t *test, c Cluster) {
+func runCLINodeStatus(ctx context.Context, t *test, c cluster2.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, c.Range(1, 3))
 

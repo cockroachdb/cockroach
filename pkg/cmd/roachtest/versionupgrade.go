@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -78,7 +79,9 @@ DROP TABLE test.t;
 	`),
 }
 
-func runVersionUpgrade(ctx context.Context, t *test, c Cluster, buildVersion version.Version) {
+func runVersionUpgrade(
+	ctx context.Context, t *test, c cluster2.Cluster, buildVersion version.Version,
+) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +219,7 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 
 type versionUpgradeTest struct {
 	goOS  string
-	c     Cluster
+	c     cluster2.Cluster
 	steps []versionStep
 
 	// Cache conns because opening one takes hundreds of ms, and we do it quite
@@ -224,7 +227,7 @@ type versionUpgradeTest struct {
 	conns []*gosql.DB
 }
 
-func newVersionUpgradeTest(c Cluster, steps ...versionStep) *versionUpgradeTest {
+func newVersionUpgradeTest(c cluster2.Cluster, steps ...versionStep) *versionUpgradeTest {
 	return &versionUpgradeTest{
 		goOS:  ifLocal(runtime.GOOS, "linux"),
 		c:     c,
@@ -253,7 +256,7 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 // path of the uploaded binaries on the nodes, suitable to be used with
 // `roachdprod start --binary=<path>`.
 func uploadVersion(
-	ctx context.Context, t *test, c Cluster, nodes option.NodeListOption, newVersion string,
+	ctx context.Context, t *test, c cluster2.Cluster, nodes option.NodeListOption, newVersion string,
 ) (binaryName string) {
 	binaryName = "./cockroach"
 	if newVersion == "" {
@@ -382,7 +385,7 @@ func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionSt
 }
 
 func upgradeNodes(
-	ctx context.Context, nodes option.NodeListOption, newVersion string, t *test, c Cluster,
+	ctx context.Context, nodes option.NodeListOption, newVersion string, t *test, c cluster2.Cluster,
 ) {
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
@@ -542,7 +545,7 @@ func stmtFeatureTest(
 // test will then fail on purpose when it's done with instructions on where to
 // move the files.
 func makeVersionFixtureAndFatal(
-	ctx context.Context, t *test, c Cluster, makeFixtureVersion string,
+	ctx context.Context, t *test, c cluster2.Cluster, makeFixtureVersion string,
 ) {
 	var useLocalBinary bool
 	if makeFixtureVersion == "" {

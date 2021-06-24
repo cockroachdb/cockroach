@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"regexp"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +23,7 @@ var popReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<po
 var popSupportedTag = "v5.3.3"
 
 func registerPop(r *testRegistry) {
-	runPop := func(ctx context.Context, t *test, c Cluster) {
+	runPop := func(ctx context.Context, t *test, c cluster2.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}

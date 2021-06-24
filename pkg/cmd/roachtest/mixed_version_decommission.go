@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -25,7 +26,7 @@ import (
 // runDecommissionMixedVersions runs through randomized
 // decommission/recommission processes in mixed-version clusters.
 func runDecommissionMixedVersions(
-	ctx context.Context, t *test, c Cluster, buildVersion version.Version,
+	ctx context.Context, t *test, c cluster2.Cluster, buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -92,7 +93,7 @@ func getMetrics(
 
 func verifyTxnPerSecond(
 	ctx context.Context,
-	c Cluster,
+	c cluster2.Cluster,
 	t *test,
 	adminNode option.NodeListOption,
 	start, end time.Time,
@@ -143,7 +144,7 @@ func verifyTxnPerSecond(
 
 func verifyLookupsPerSec(
 	ctx context.Context,
-	c Cluster,
+	c cluster2.Cluster,
 	t *test,
 	adminNode option.NodeListOption,
 	start, end time.Time,

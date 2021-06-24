@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 	runNodeJSPostgres := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster2.Cluster,
 	) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -184,7 +185,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.1.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runNodeJSPostgres(ctx, t, c)
 		},
 	})

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"regexp"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -28,7 +29,7 @@ func registerDjango(r *testRegistry) {
 	runDjango := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster2.Cluster,
 	) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -218,7 +219,7 @@ func registerDjango(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1, spec.CPU(16)),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runDjango(ctx, t, c)
 		},
 	})

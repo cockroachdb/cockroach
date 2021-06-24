@@ -15,11 +15,12 @@ import (
 	"fmt"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	_ "github.com/lib/pq"
 )
 
-func runClockJump(ctx context.Context, t *test, c Cluster, tc clockJumpTestCase) {
+func runClockJump(ctx context.Context, t *test, c cluster2.Cluster, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
 	if c.Spec().NodeCount != 1 {
@@ -135,7 +136,7 @@ func registerClockJumpTests(r *testRegistry) {
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
 			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
 		}

@@ -13,11 +13,13 @@ package main
 import (
 	"context"
 	"fmt"
+
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 // runManySplits attempts to create 2000 tiny ranges on a 4-node cluster using
 // left-to-right splits and check the cluster is still live afterwards.
-func runManySplits(ctx context.Context, t *test, c Cluster) {
+func runManySplits(ctx context.Context, t *test, c cluster2.Cluster) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")

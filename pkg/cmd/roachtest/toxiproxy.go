@@ -21,6 +21,7 @@ import (
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/errors"
 )
@@ -74,7 +75,7 @@ until nc -z localhost $1; do sleep 0.1; echo "waiting for toxiproxy-server..."; 
 // See Toxify() for details.
 type ToxiCluster struct {
 	t *test
-	Cluster
+	cluster2.Cluster
 	toxClients map[int]*toxiproxy.Client
 	toxProxies map[int]*toxiproxy.Proxy
 }
@@ -86,7 +87,7 @@ type ToxiCluster struct {
 // toxiproxy. The upstream (i.e. non-intercepted) addresses are accessible via
 // getters prefixed with "External".
 func Toxify(
-	ctx context.Context, t *test, c Cluster, node option.NodeListOption,
+	ctx context.Context, t *test, c cluster2.Cluster, node option.NodeListOption,
 ) (*ToxiCluster, error) {
 	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
 	if local && runtime.GOOS == "darwin" {

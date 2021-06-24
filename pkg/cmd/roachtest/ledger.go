@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -26,7 +27,7 @@ func registerLedger(r *testRegistry) {
 		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(azs)),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)

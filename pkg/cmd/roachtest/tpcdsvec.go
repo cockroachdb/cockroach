@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	"github.com/cockroachdb/errors"
@@ -51,7 +52,7 @@ func registerTPCDSVec(r *testRegistry) {
 		`web_sales`, `web_site`,
 	}
 
-	runTPCDSVec := func(ctx context.Context, t *test, c Cluster) {
+	runTPCDSVec := func(ctx context.Context, t *test, c cluster2.Cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx)
 
@@ -174,7 +175,7 @@ func registerTPCDSVec(r *testRegistry) {
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(3),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runTPCDSVec(ctx, t, c)
 		},
 	})

@@ -13,6 +13,8 @@ package main
 import (
 	"context"
 	"fmt"
+
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 func registerSequenceUpgrade(r *testRegistry) {
@@ -21,7 +23,7 @@ func registerSequenceUpgrade(r *testRegistry) {
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v21.1.0",
 		Cluster:    r.makeClusterSpec(1),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runSequenceUpgradeMigration(ctx, t, c)
 		},
 	})
@@ -78,7 +80,7 @@ func verifySequences(node int) versionStep {
 	}
 }
 
-func runSequenceUpgradeMigration(ctx context.Context, t *test, c Cluster) {
+func runSequenceUpgradeMigration(ctx context.Context, t *test, c cluster2.Cluster) {
 	const (
 		v20_2 = "20.2.4"
 		// An empty string means that the cockroach binary specified by flag

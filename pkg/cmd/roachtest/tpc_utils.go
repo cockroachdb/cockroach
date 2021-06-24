@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
@@ -27,7 +28,12 @@ import (
 // scale factor at least as large as the provided scale factor), performing an
 // expensive dataset restore only if it doesn't.
 func loadTPCHDataset(
-	ctx context.Context, t *test, c Cluster, sf int, m *monitor, roachNodes option.NodeListOption,
+	ctx context.Context,
+	t *test,
+	c cluster2.Cluster,
+	sf int,
+	m *monitor,
+	roachNodes option.NodeListOption,
 ) error {
 	db := c.Conn(ctx, roachNodes[0])
 	defer db.Close()

@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +24,7 @@ var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 var libPQSupportedTag = "v1.10.0"
 
 func registerLibPQ(r *testRegistry) {
-	runLibPQ := func(ctx context.Context, t *test, c Cluster) {
+	runLibPQ := func(ctx context.Context, t *test, c cluster2.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}

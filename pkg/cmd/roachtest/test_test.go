@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -91,13 +92,13 @@ func TestRunnerRun(t *testing.T) {
 	r.Add(testSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
-		Run:     func(ctx context.Context, t *test, c Cluster) {},
+		Run:     func(ctx context.Context, t *test, c cluster2.Cluster) {},
 		Cluster: r.makeClusterSpec(0),
 	})
 	r.Add(testSpec{
 		Name:  "fail",
 		Owner: OwnerUnitTest,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			t.Fatal("failed")
 		},
 		Cluster: r.makeClusterSpec(0),
@@ -185,7 +186,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
 		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			<-ctx.Done()
 		},
 	}
@@ -203,7 +204,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {
-	dummyRun := func(context.Context, *test, Cluster) {}
+	dummyRun := func(context.Context, *test, cluster2.Cluster) {}
 
 	var listTests = func(t *testSpec) []string {
 		return []string{t.Name}
@@ -300,7 +301,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
 				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
-				Run: func(ctx context.Context, t *test, c Cluster) {
+				Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 					runA = true
 				},
 			})
@@ -309,7 +310,7 @@ func TestRegistryMinVersion(t *testing.T) {
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Cluster:    spec.MakeClusterSpec(spec.GCE, "", 0),
-				Run: func(ctx context.Context, t *test, c Cluster) {
+				Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 					runB = true
 				},
 			})
@@ -358,7 +359,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
 		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)
 			}

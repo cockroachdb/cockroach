@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+
+	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -25,7 +27,7 @@ func registerPgjdbc(r *testRegistry) {
 	runPgjdbc := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster2.Cluster,
 	) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -192,7 +194,7 @@ func registerPgjdbc(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
 			runPgjdbc(ctx, t, c)
 		},
 	})
