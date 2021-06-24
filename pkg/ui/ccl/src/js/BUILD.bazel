@@ -1,7 +1,10 @@
 load("//pkg/ui/src/js:defs.bzl", "protobufjs_library")
+load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+
+package(default_visibility = ["//visibility:public"])
 
 protobufjs_library(
-    name = "db-console_ccl_js_proto",
+    name = "db_console_ccl_js_proto",
     out_name = "protos",
     protos = [
         "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_proto",

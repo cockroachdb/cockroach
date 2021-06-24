@@ -4,7 +4,6 @@ workspace(
     name = "cockroach",
     managed_directories = {
        "@npm": ["pkg/ui/node_modules"],
-       "@npm_proto_js": ["pkg/ui/src/js/node_modules"],
        "@npm_cluster_ui": ["pkg/ui/cluster-ui/node_modules"],
     },
 )
@@ -125,27 +124,12 @@ yarn_install(
     frozen_lockfile = False,
 )
 
-# install external dependencies for pkg/ui/src/js package (used to generate protobuf js client)
-yarn_install(
-    name = "npm_proto_js",
-    package_json = "//pkg/ui/src/js:package.json",
-    yarn_lock = "//pkg/ui/src/js:yarn.lock",
-    args = ["--modules-folder", "./node_modules"],
-    frozen_lockfile = False,
-)
-
 # install external dependencies for pkg/ui/cluster-ui
 yarn_install(
     name = "npm_cluster_ui",
     package_json = "//pkg/ui/cluster-ui:package.json",
     yarn_lock = "//pkg/ui/cluster-ui:yarn.lock",
-    package_path = "pkg/ui/cluster-ui",
-    links = {
-        "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/src/js:ui_protos_lib",
-    },
     strict_visibility = False,
-    generate_local_modules_build_files = True,
-    # symlink_node_modules = True,
     frozen_lockfile = False,
 )
 

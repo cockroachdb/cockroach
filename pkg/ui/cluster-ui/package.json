@@ -6,7 +6,7 @@
     "type": "git",
     "url": "https://github.com/cockroachdb/ui/"
   },
-  "main": "dist/main.js",
+  "main": "dist/js/main.js",
   "types": "dist/types/index.d.ts",
   "scripts": {
     "build": "npm-run-all build:typescript build:bundle",
