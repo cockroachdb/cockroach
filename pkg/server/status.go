@@ -1237,7 +1237,8 @@ func (s *statusServer) Stacks(
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
 // this one allows querying by NodeID.
 //
-// Profile returns a heap profile.
+// Profile returns a heap profile. This endpoint is used by the
+// `pprofui` package to satisfy local and remote pprof requests.
 func (s *statusServer) Profile(
 	ctx context.Context, req *serverpb.ProfileRequest,
 ) (*serverpb.JSONResponse, error) {
@@ -1261,20 +1262,20 @@ func (s *statusServer) Profile(
 		return status.Profile(ctx, req)
 	}
 
+	return profileLocal(ctx, req, s.st)
+}
+
+func profileLocal(
+	ctx context.Context, req *serverpb.ProfileRequest, st *cluster.Settings,
+) (*serverpb.JSONResponse, error) {
 	switch req.Type {
-	case serverpb.ProfileRequest_HEAP:
-		p := pprof.Lookup("heap")
-		if p == nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: heap")
-		}
-		var buf bytes.Buffer
-		if err := p.WriteTo(&buf, 0); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	case serverpb.ProfileRequest_CPU:
 		var buf bytes.Buffer
-		if err := debug.CPUProfileDo(s.st, cluster.CPUProfileWithLabels, func() error {
+		profileType := cluster.CPUProfileDefault
+		if req.Labels {
+			profileType = cluster.CPUProfileWithLabels
+		}
+		if err := debug.CPUProfileDo(st, profileType, func() error {
 			duration := 30 * time.Second
 			if req.Seconds != 0 {
 				duration = time.Duration(req.Seconds) * time.Second
@@ -1294,7 +1295,20 @@ func (s *statusServer) Profile(
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
+		name, ok := serverpb.ProfileRequest_Type_name[int32(req.Type)]
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %d", req.Type)
+		}
+		name = strings.ToLower(name)
+		p := pprof.Lookup(name)
+		if p == nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: %s", name)
+		}
+		var buf bytes.Buffer
+		if err := p.WriteTo(&buf, 0); err != nil {
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	}
 }
 
