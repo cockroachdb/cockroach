@@ -84,6 +84,10 @@ type TestingKnobs struct {
 	// Clock Source used to an inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
 	ClockSource func() int64
+
+	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
+	// back to the KV layer upon server start.
+	ImportTimeseriesFile string
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
