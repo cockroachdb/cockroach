@@ -94,7 +94,7 @@ func TestBuilderAlterTable(t *testing.T) {
 
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
-				var outputNodes []*scpb.Node
+				var outputNodes scpb.State
 				for i := range stmts {
 					outputNodes, err = scbuild.Build(ctx, *deps, outputNodes, stmts[i].AST)
 					require.NoError(t, err)
@@ -138,8 +138,8 @@ func indentText(input string, tab string) string {
 	return result.String()
 }
 
-// marshalNodes marshals a []*scpb.Node to YAML.
-func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
+// marshalNodes marshals a scpb.State to YAML.
+func marshalNodes(t *testing.T, nodes scpb.State) string {
 	var sortedEntries []string
 	for _, node := range nodes {
 		var buf bytes.Buffer

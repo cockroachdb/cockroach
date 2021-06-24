@@ -95,7 +95,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	lm := execCtx.LeaseMgr()
 	db := lm.DB()
 	ie := execCtx.ExtendedEvalContext().InternalExecutor.(sqlutil.InternalExecutor)
-	sc, err := scplan.MakePlan(makeTargetStates(ctx, settings, n.targets, states), scplan.Params{
+	sc, err := scplan.MakePlan(makeState(ctx, settings, n.targets, states), scplan.Params{
 		ExecutionPhase: scplan.PostCommitPhase,
 	})
 	if err != nil {
@@ -132,7 +132,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			}
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				pg := md.Progress.GetNewSchemaChange()
-				pg.States = makeStates(s.After)
+				pg.States = makeStatuses(s.After)
 				ju.UpdateProgress(md.Progress)
 				return nil
 			})
@@ -166,7 +166,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	return nil
 }
 
-func makeStates(next []*scpb.Node) []scpb.Status {
+func makeStatuses(next scpb.State) []scpb.Status {
 	states := make([]scpb.Status, len(next))
 	for i := range next {
 		states[i] = next[i].Status
@@ -174,14 +174,14 @@ func makeStates(next []*scpb.Node) []scpb.Status {
 	return states
 }
 
-func makeTargetStates(
+func makeState(
 	ctx context.Context, sv *cluster.Settings, protos []*scpb.Target, states []scpb.Status,
-) []*scpb.Node {
+) scpb.State {
 	if len(protos) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
 			len(protos), len(states))
 	}
-	ts := make([]*scpb.Node, len(protos))
+	ts := make(scpb.State, len(protos))
 	for i := range protos {
 		ts[i] = &scpb.Node{
 			Target: protos[i],

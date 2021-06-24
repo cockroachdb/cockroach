@@ -51,8 +51,8 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 	dg := dot.NewGraph()
 	stagesSubgraph := dg.Subgraph("stages", dot.ClusterOption{})
 	targetsSubgraph := stagesSubgraph.Subgraph("targets", dot.ClusterOption{})
-	targetNodes := make(map[*scpb.Target]dot.Node, len(p.InitialNodes))
-	for idx, n := range p.InitialNodes {
+	targetNodes := make(map[*scpb.Target]dot.Node, len(p.Initial))
+	for idx, n := range p.Initial {
 		t := n.Target
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
 		tn.Attr("label", htmlLabel(t.Element()))
@@ -63,9 +63,9 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 
 	// Want to draw an edge to the initial target statuses with some dots
 	// or something.
-	curNodes := make([]dot.Node, len(p.InitialNodes))
-	cur := p.InitialNodes
-	for i, n := range p.InitialNodes {
+	curNodes := make([]dot.Node, len(p.Initial))
+	cur := p.Initial
+	for i, n := range p.Initial {
 		label := targetStatusID(i, n.Status)
 		tsn := stagesSubgraph.Node(fmt.Sprintf("initial %d", i))
 		tsn.Attr("label", label)
@@ -107,9 +107,9 @@ func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
 
 	depsSubgraph := dg.Subgraph("deps", dot.ClusterOption{})
 	targetsSubgraph := depsSubgraph.Subgraph("targets", dot.ClusterOption{})
-	targetNodes := make(map[*scpb.Target]dot.Node, len(p.InitialNodes))
+	targetNodes := make(map[*scpb.Target]dot.Node, len(p.Initial))
 	targetIdxMap := make(map[*scpb.Target]int)
-	for idx, n := range p.InitialNodes {
+	for idx, n := range p.Initial {
 		t := n.Target
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
 		tn.Attr("label", htmlLabel(t.Element()))
@@ -125,7 +125,7 @@ func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
 		return nil
 	})
 
-	for _, n := range p.InitialNodes {
+	for _, n := range p.Initial {
 		nn := nodeNodes[n]
 		tn := targetNodes[n.Target]
 		e := tn.Edge(nn)

@@ -64,7 +64,7 @@ type buildContext struct {
 
 	// outputNodes contains the internal state when building targets for an individual
 	// statement.
-	outputNodes []*scpb.Node
+	outputNodes scpb.State
 }
 
 type notImplementedError struct {
@@ -113,17 +113,17 @@ func (e *ConcurrentSchemaChangeError) DescriptorID() descpb.ID {
 
 // Build constructs a new set of nodes from an initial set and a statement.
 func Build(
-	ctx context.Context, dependencies Dependencies, initialState []*scpb.Node, n tree.Statement,
-) (outputNodes []*scpb.Node, err error) {
+	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
+) (outputNodes scpb.State, err error) {
 	buildContext := &buildContext{
 		Dependencies: dependencies,
-		outputNodes:  cloneNodes(initialState),
+		outputNodes:  cloneState(initial),
 	}
 	return buildContext.build(ctx, n)
 }
 
-func cloneNodes(state []*scpb.Node) []*scpb.Node {
-	clone := make([]*scpb.Node, len(state))
+func cloneState(state scpb.State) scpb.State {
+	clone := make(scpb.State, len(state))
 	for i, n := range state {
 		clone[i] = &scpb.Node{
 			Target: protoutil.Clone(n.Target).(*scpb.Target),
@@ -137,7 +137,7 @@ func cloneNodes(state []*scpb.Node) []*scpb.Node {
 // accordingly, given a statement.
 func (b *buildContext) build(
 	ctx context.Context, n tree.Statement,
-) (outputNodes []*scpb.Node, err error) {
+) (outputNodes scpb.State, err error) {
 	defer func() {
 		if recErr := recover(); recErr != nil {
 			if errObj, ok := recErr.(error); ok {
