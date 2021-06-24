@@ -55,6 +55,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -345,6 +347,16 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 				log.DumpStacks(context.Background())
 			}
 		}()
+	}
+
+	// Check for stores with full disks and exit with an informative exit
+	// code. This needs to happen early during start, before we perform any
+	// writes to the filesystem including log rotation. We need to guarantee
+	// that the process continues to exit with the Disk Full exit code. A
+	// flapping exit code can affect alerting, including the alerting
+	// performed within CockroachCloud.
+	if err := exitIfDiskFull(serverCfg.Stores.Specs); err != nil {
+		return err
 	}
 
 	// Set up a cancellable context for the entire start command.
@@ -1013,6 +1025,46 @@ func maybeWarnMemorySizes(ctx context.Context) {
 				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem))
 		}
 	}
+}
+
+func exitIfDiskFull(specs []base.StoreSpec) error {
+	var cause error
+	var ballastPaths []string
+	var ballastMissing bool
+	for _, spec := range specs {
+		isDiskFull, err := storage.IsDiskFull(vfs.Default, spec)
+		if err != nil {
+			return err
+		}
+		if !isDiskFull {
+			continue
+		}
+		path := base.EmergencyBallastFile(vfs.Default.PathJoin, spec.Path)
+		ballastPaths = append(ballastPaths, path)
+		if _, err := vfs.Default.Stat(path); oserror.IsNotExist(err) {
+			ballastMissing = true
+		}
+		cause = errors.CombineErrors(cause, errors.Newf(`store %s: out of disk space`, spec.Path))
+	}
+	if cause == nil {
+		return nil
+	}
+
+	// TODO(jackson): Link to documentation surrounding the ballast.
+
+	err := clierror.NewError(cause, exit.DiskFull())
+	if ballastMissing {
+		return errors.WithHint(err, `At least one ballast file is missing.
+You may need to replace this node because there is
+insufficient disk space to start.`)
+	}
+
+	ballastPathsStr := strings.Join(ballastPaths, "\n")
+	err = errors.WithHintf(err, `Deleting or truncating the ballast file(s) at
+%s
+may reclaim enough space to start. Proceed with caution. Complete
+disk space exhaustion may result in node loss.`, ballastPathsStr)
+	return err
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.

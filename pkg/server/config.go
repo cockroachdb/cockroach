@@ -529,11 +529,14 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				engines = append(engines, e)
 			}
 		} else {
+			if err := vfs.Default.MkdirAll(spec.Path, 0755); err != nil {
+				return Engines{}, errors.Wrap(err, "creating store directory")
+			}
+			du, err := vfs.Default.GetDiskUsage(spec.Path)
+			if err != nil {
+				return Engines{}, errors.Wrap(err, "retrieving disk usage")
+			}
 			if spec.Size.Percent > 0 {
-				du, err := vfs.Default.GetDiskUsage(spec.Path)
-				if err != nil {
-					return Engines{}, err
-				}
 				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
@@ -548,6 +551,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				Attrs:                   spec.Attributes,
 				Dir:                     spec.Path,
 				MaxSize:                 sizeInBytes,
+				BallastSize:             storage.BallastSizeBytes(spec, du),
 				Settings:                cfg.Settings,
 				UseFileRegistry:         spec.UseFileRegistry,
 				DisableSeparatedIntents: disableSeparatedIntents,
