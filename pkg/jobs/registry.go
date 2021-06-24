@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1006,6 +1007,27 @@ func (r *Registry) stepThroughStateMachine(
 	jobType := payload.Type()
 	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
+
+	// Update last_run and num_runs in system.jobs, which are used to calculate
+	// exponential backoff delay to retry a job to run.
+	updateBackoffParams := func() error {
+		if !r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			return nil
+		}
+		query := "UPDATE system.jobs SET last_run = now(),  num_runs = num_runs + 1 WHERE id = $1;"
+		//TODO(sajjad): To discuss: I am not sure if we need to override sessionData
+		if nRows, err := r.ex.ExecEx(ctx, "retry-cols-update", nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			query, job.ID()); err != nil {
+			return err
+		} else if nRows != 1 {
+			return fmt.Errorf(
+				"updated %d rows in system.jobs while updating last_run and "+
+					"num_runs for job %d, expected 1", nRows, job.ID())
+		}
+		return nil
+	}
+
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
@@ -1022,6 +1044,10 @@ func (r *Registry) stepThroughStateMachine(
 		func() {
 			jm.CurrentlyRunning.Inc(1)
 			defer jm.CurrentlyRunning.Dec(1)
+			err = updateBackoffParams()
+			if err != nil {
+				return
+			}
 			err = resumer.Resume(resumeCtx, execCtx)
 		}()
 		if err == nil {

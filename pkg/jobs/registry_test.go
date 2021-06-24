@@ -13,7 +13,9 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,18 +23,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -275,4 +280,226 @@ func TestRegistryGCPagination(t *testing.T) {
 	var count int
 	db.QueryRow(t, `SELECT count(1) FROM system.jobs`).Scan(&count)
 	require.Zero(t, count)
+}
+
+// TestRetriesWithExponentialBackoff tests job retries with exponentially growing
+// intervals. Moreover, it tests the effectiveness of the upper bound on the
+// retry delay.
+func TestRetriesWithExponentialBackoff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Interval to process claimed jobs.
+	// Keep it a longer interval to avoid being flaky.
+	adoptInterval := 10 * time.Millisecond
+	// Error margin to cater for unexpected timings.
+	errorMargin := 3 * adoptInterval
+
+	clusterSettings := func(
+		ctx context.Context, retryBase time.Duration, retryMax time.Duration,
+	) *cluster.Settings {
+		s := cluster.MakeTestingClusterSettings()
+		// Set a small adopt interval to reduce test time.
+		adoptIntervalSetting.Override(ctx, &s.SV, adoptInterval)
+		// Set exponential backoff base and max retry interval based on the tests.
+		retryBaseSetting.Override(ctx, &s.SV, retryBase)
+		retryMaxDelaySetting.Override(ctx, &s.SV, retryMax)
+		return s
+	}
+
+	for _, test := range [...]struct {
+		name       string // Test case ID.
+		maxRetries int
+		retryBase  time.Duration
+		retryMax   time.Duration
+	}{
+		{
+			name:      "exponential backoff",
+			retryBase: 100 * time.Millisecond,
+			retryMax:  100 * time.Millisecond,
+			// Number of retries should be large enough such that the delay becomes
+			// larger than the error margin. Moreover, it should be large enough
+			// to exceed the backoff time from retryMax.
+			maxRetries: 7,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			var tdb *sqlutils.SQLRunner
+			const (
+				running = iota
+				passed
+				failed
+			)
+			status := int32(running)
+			retries := -1 // -1 because the counter has to start from zero.
+			var lastRetry time.Time
+			// Intercept intercepts the update call to mark the job as succeeded. It
+			// prevents the job from being marked as succeeded until a fixed number of
+			// runs. In each run, it evaluates the execution time of this update, and it
+			// checks whether the execution time is within an expected time range.
+			// The expected execution time follows exponential backoff delays, which
+			// we want to test.
+			intercept := func(orig, updated JobMetadata) error {
+				// If this updated is not to mark as succeeded or the test has already failed.
+				if updated.Status != StatusSucceeded || atomic.LoadInt32(&status) == failed {
+					return nil
+				}
+
+				retries++
+				now := time.Now()
+				if retries == 0 { // If the job is run the first time.
+					lastRetry = now
+				}
+				// Expected next retry time.
+				backoff := test.retryBase * ((1 << int(math.Min(float64(retries), 62))) - 1)
+				offset := time.Duration(math.Min(float64(backoff), float64(test.retryMax)))
+				expected := lastRetry.Add(offset)
+
+				// The test fails if the job is executed before or after the expected
+				// time +/- error margin.
+				if now.Before(expected.Add(-errorMargin)) || now.After(expected.Add(errorMargin)) {
+					atomic.StoreInt32(&status, failed)
+					return errors.Errorf("job executed at an unexpected time:"+
+						"now = %v, expected = %v", now, expected)
+				}
+				// The test passes if the job keeps running as expected for a sufficient
+				// number of retries.
+				if retries >= test.maxRetries {
+					atomic.StoreInt32(&status, passed)
+					return nil
+				}
+				// Update the last execution time from the table to avoid accumulating
+				// timing errors.
+				tdb.QueryRow(t, "SELECT last_run from system.jobs").Scan(&lastRetry)
+				return errors.Errorf(
+					"Preventing the job from succeeding in try %d, offset is %d ms", retries, offset/1e6)
+			}
+			// Setup the test cluster.
+			cs := clusterSettings(ctx, test.retryBase, test.retryMax)
+			args := base.TestServerArgs{
+				Settings: cs,
+				Knobs:    base.TestingKnobs{JobsTestingKnobs: &TestingKnobs{BeforeUpdate: intercept}},
+			}
+			s, sdb, kvDB := serverutils.StartServer(t, args)
+			defer s.Stopper().Stop(ctx)
+			tdb = sqlutils.MakeSQLRunner(sdb)
+			// Create and run a dummy job.
+			RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+				return FakeResumer{}
+			})
+			registry := s.JobRegistry().(*Registry)
+			id := registry.MakeJobID()
+			require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				_, err := registry.CreateJobWithTxn(ctx, Record{
+					// Job does not accept an empty Details field, so arbitrarily provide
+					// ImportDetails.
+					Details:  jobspb.ImportDetails{},
+					Progress: jobspb.ImportProgress{},
+				}, id, txn)
+				return err
+			}))
+
+			// Wait for the job to be succeed.
+			testutils.SucceedsSoon(t, func() error {
+				if atomic.LoadInt32(&status) != running {
+					return nil
+				}
+				return errors.Errorf("waiting for the job to complete")
+			})
+
+			require.Equal(t, int32(passed), atomic.LoadInt32(&status))
+		})
+	}
+}
+
+func TestExponentialBackoffSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, test := range [...]struct {
+		name string // Test case ID.
+		// The setting to test.
+		settingKey string
+		// The value of the setting to set.
+		value time.Duration
+	}{
+		{
+			name:       "backoff base setting",
+			settingKey: retryBaseSettingKey,
+			value:      2 * time.Millisecond,
+		},
+		{
+			name:       "backoff max setting",
+			settingKey: retryMaxDelaySettingKey,
+			value:      2 * time.Millisecond,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			var tdb *sqlutils.SQLRunner
+			var finished atomic.Value
+			finished.Store(false)
+			var intercepted atomic.Value
+			intercepted.Store(false)
+			intercept := func(orig, updated JobMetadata) error {
+				// If this updated is not to mark as succeeded or the test has already failed.
+				if updated.Status != StatusSucceeded {
+					return nil
+				}
+
+				// If marking the first time, prevent the marking and update the cluster
+				// setting based on test params. The setting value should be reduced
+				// from a large value to a small value.
+				if !intercepted.Load().(bool) {
+					tdb.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '%v'", test.settingKey, test.value))
+					intercepted.Store(true)
+					return errors.Errorf("preventing the job from succeeding")
+				}
+				// Let the job to succeed. As we began with a long interval and prevented
+				// the job than succeeding in the first attempt, its re-execution
+				// indicates that the setting is updated successfully and is in effect.
+				finished.Store(true)
+				return nil
+			}
+
+			// Setup the test cluster.
+			cs := cluster.MakeTestingClusterSettings()
+			// Set a small adopt interval to reduce test time.
+			adoptIntervalSetting.Override(ctx, &cs.SV, 2*time.Millisecond)
+			// Begin with a very long delay.
+			retryBaseSetting.Override(ctx, &cs.SV, time.Hour)
+			retryMaxDelaySetting.Override(ctx, &cs.SV, time.Hour)
+			args := base.TestServerArgs{
+				Settings: cs,
+				Knobs:    base.TestingKnobs{JobsTestingKnobs: &TestingKnobs{BeforeUpdate: intercept}},
+			}
+			s, sdb, kvDB := serverutils.StartServer(t, args)
+			defer s.Stopper().Stop(ctx)
+			tdb = sqlutils.MakeSQLRunner(sdb)
+			// Create and run a dummy job.
+			RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+				return FakeResumer{}
+			})
+			registry := s.JobRegistry().(*Registry)
+			id := registry.MakeJobID()
+			require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				_, err := registry.CreateJobWithTxn(ctx, Record{
+					// Job does not accept an empty Details field, so arbitrarily provide
+					// ImportDetails.
+					Details:  jobspb.ImportDetails{},
+					Progress: jobspb.ImportProgress{},
+				}, id, txn)
+				return err
+			}))
+
+			// Wait for the job to be succeed.
+			testutils.SucceedsSoon(t, func() error {
+				if finished.Load().(bool) {
+					return nil
+				}
+				return errors.Errorf("waiting for the job to complete")
+			})
+		})
+	}
 }

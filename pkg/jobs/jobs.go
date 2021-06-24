@@ -938,3 +938,28 @@ func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
 }
+
+// updateRetryParams updates number of job runs and last execution timestamp
+// of the current job.
+func (j *Job) updateRetryParams(
+	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+) error {
+	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusSucceeded {
+			return nil
+		}
+		if md.Status != StatusRunning && md.Status != StatusPending {
+			return errors.Errorf("retry params of the job with status %s cannot be updated", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+
+		ju.UpdateStatus(StatusSucceeded)
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		ju.UpdatePayload(md.Payload)
+		return nil
+	})
+}
