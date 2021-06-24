@@ -151,7 +151,7 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
       singleValue: (provided: any) => ({
         ...provided,
         color: "hsl(0, 0%, 50%)",
-      })
+      }),
     };
     const customStylesSmall = { ...customStyles };
     customStylesSmall.container = (provided: any) => ({
