@@ -1362,7 +1362,7 @@ func (s *statusServer) Nodes(
 		return nil, err
 	}
 
-	resp, _, err := s.nodesHelper(ctx, 0, 0)
+	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
 	return resp, err
 }
 
@@ -1371,7 +1371,7 @@ func (s *statusServer) Nodes(
 func (s *statusServer) ListNodesInternal(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
-	resp, _, err := s.nodesHelper(ctx, 0, 0)
+	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
 	return resp, err
 }
 
