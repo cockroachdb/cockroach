@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,16 +43,16 @@ const (
 	// NonTerminalStatusTupleString is a sql tuple corresponding to statuses of
 	// non-terminal jobs.
 	NonTerminalStatusTupleString = `(` + nonTerminalStatusList + `)`
-)
 
-const claimQuery = `
+	claimQuery = `
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
-    WHERE (claim_session_id IS NULL)
-      AND (status IN ` + claimableStatusTupleString + `)
+    WHERE ((claim_session_id IS NULL)
+      AND (status IN ` + claimableStatusTupleString + `))
  ORDER BY created DESC
     LIMIT $3
 RETURNING id;`
+)
 
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
@@ -64,11 +65,11 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 		}
 		numRows, err := r.ex.Exec(
 			ctx, "claim-jobs", txn, claimQuery,
-			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop,
-		)
+			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
+		r.metrics.ClaimedJobs.Inc(int64(numRows))
 		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
 			log.Infof(ctx, "claimed %d jobs", numRows)
 		}
@@ -76,14 +77,56 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	})
 }
 
+const (
+	processQuery = `
+SELECT id FROM system.jobs
+WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)
+`
+
+	// Select only those jobs that have their next retry time before the current time.
+	// 2^62 is the max positive number we can get.
+	// $5 is registry's current timestamp.
+	// $6 is the initial delay in exponential backoff calculation, which doubles in each run.
+	// $7 is the max retry delay.
+	nextRunClause = `
+AND
+$5  >= COALESCE(last_run, created) + least(
+          IF(
+            $6::INTERVAL * ((1 << least(62, COALESCE(num_runs, 0))) - 1) >= 0::INTERVAL,
+            $6::INTERVAL * ((1 << least(62, COALESCE(num_runs, 0))) - 1),
+            $7::INTERVAL
+          ),
+          $7::INTERVAL
+        ):::INTERVAL`
+)
+
+// getProcessQuery returns the query that selects the jobs that are claimed
+// by this node.
+func getProcessQuery(
+	ctx context.Context, s sqlliveness.Session, r *Registry,
+) (string, []interface{}) {
+	// Select the running or reverting jobs that this node has claimed.
+	query := processQuery
+	args := []interface{}{StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID()}
+	// Gating the version that introduced job retries with exponential backoff.
+	if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+		// Select only those jobs that can be executed right now.
+		query += nextRunClause
+		initDelay := retryInitialDelaySetting.Get(&r.settings.SV).Seconds()
+		maxDelay := retryMaxDelaySetting.Get(&r.settings.SV).Seconds()
+		args = append(args, []interface{}{r.clock.Now().GoTime(), initDelay, maxDelay}...)
+	}
+	return query, args
+}
+
 // processClaimedJobs processes all jobs currently claimed by the registry.
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
+	query, args := getProcessQuery(ctx, s, r)
+	// TODO(sajjad): To discuss: Shouldn't we close the iterator before returning
+	// from this function?
 	it, err := r.ex.QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
-SELECT id FROM system.jobs
-WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
-		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, query, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
@@ -104,6 +147,11 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 	}
 
 	r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, claimedToResume)
+	if len(claimedToResume) > 1 {
+		// FIXME: For debugging only.
+		log.Infof(ctx, "Resuming %v at %v", len(claimedToResume), r.clock.Now().GoTime())
+	}
+	r.metrics.ResumedClaimedJobs.Inc(int64(len(claimedToResume)))
 	r.resumeClaimedJobs(ctx, s, claimedToResume)
 	return nil
 }
@@ -219,6 +267,11 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
 		// was one it's been set in the job status already.
+		//
+		// TODO(sajjad): To discuss: In some cases, the error may not be set. For
+		// example, errors in update() called in runJob() will result in
+		// silently dropping the error. What will happen if the stmt execution in
+		// the update function, using QueryRowEx, returns an error?
 		_ = r.runJob(resumeCtx, resumer, job, status, job.taskName())
 	}); err != nil {
 		r.removeAdoptedJob(jobID)

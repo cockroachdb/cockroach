@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -237,7 +238,13 @@ func (j *Job) started(ctx context.Context, txn *kv.Txn) error {
 		// TODO(spaskob): Remove this status change after we stop supporting
 		// pending job states.
 		ju.UpdateStatus(StatusRunning)
-		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		if md.Payload.StartedMicros == 0 {
+			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		}
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			ju.UpdateRunStats(md.RunStats.NumRuns+1, j.registry.clock.Now().GoTime())
+		}
+
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -519,10 +526,12 @@ func (j *Job) reverted(
 	ctx context.Context, txn *kv.Txn, err error, fn func(context.Context, *kv.Txn) error,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status == StatusReverting {
-			return nil
-		}
-		if md.Status != StatusCancelRequested && md.Status != StatusRunning && md.Status != StatusPending {
+		// TODO(sajjad): To discuss: Is this a bug? If we keep this condition, we will not mark the
+		// job as reverting in the jobs table.
+		//if md.Status == StatusReverting {
+		//	return nil
+		//}
+		if md.Status != StatusReverting && md.Status != StatusCancelRequested && md.Status != StatusRunning && md.Status != StatusPending {
 			return fmt.Errorf("job with status %s cannot be reverted", md.Status)
 		}
 		if fn != nil {
@@ -540,6 +549,12 @@ func (j *Job) reverted(
 				return errors.AssertionFailedf(
 					"tried to mark job as reverting, but no error was provided or recorded")
 			}
+		}
+		//TODO(sajjad): Should we reset num_runs to 1 when we move to reverting state from
+		// running state. Otherwise, the exponential backoff delays will carry forward
+		// to the reverting state, which seems to be not intended in the case of canceled jobs.
+		if j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
+			ju.UpdateRunStats(md.RunStats.NumRuns+1, j.registry.clock.Now().GoTime())
 		}
 		ju.UpdateStatus(StatusReverting)
 		return nil
