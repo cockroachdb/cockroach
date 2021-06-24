@@ -12,10 +12,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
-	"path/filepath"
 	"sort"
 	"testing"
 	"time"
@@ -84,13 +82,6 @@ func TestExportCmd(t *testing.T) {
 			}
 			defer sst.Close()
 
-			fileContents, err := ioutil.ReadFile(filepath.Join(dir, "foo", file.Path))
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			if !bytes.Equal(fileContents, file.SST) {
-				t.Fatal("Returned SST and exported SST don't match!")
-			}
 			sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 			for {
 				if valid, err := sst.Valid(); !valid || err != nil {
