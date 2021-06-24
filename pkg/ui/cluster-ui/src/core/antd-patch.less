@@ -1,0 +1,18 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+// this file is replaced with `pkg/ui/cluster-ui/node_modules/antd/lib/style/index.less` file
+// during build time (see webpack.config.js > webpack.NormalModuleReplacementPlugin usage).
+// It allows to avoid importing of `~antd/lib/style/core/base.less` file which includes lots
+// of global styles that can affect components outside of `cluster-ui`.
+@import '~antd/lib/style/themes/index';
+@import '~antd/lib/style/mixins/index';
+@import '~antd/lib/style/core/iconfont';
+@import '~antd/lib/style/core/motion';
