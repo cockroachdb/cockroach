@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 
 import { getDataFromServer } from "src/util/dataFromServer";
@@ -22,23 +22,40 @@ import {
   PanelPair,
   Panel,
 } from "src/views/shared/components/panelSection";
-
 import "./debug.styl";
+import { connect } from "react-redux";
+import { AdminUIState } from "src/redux/state";
+import { nodeIDsSelector } from "src/redux/nodes";
+import { refreshNodes } from "src/redux/apiReducers";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
 const NODE_ID = getDataFromServer().NodeID;
 
-function DebugTableLink(props: { name: string; url: string; note?: string }) {
+export function DebugTableLink(props: {
+  name: string;
+  url: string;
+  note?: string;
+  params?: {
+    node?: string;
+    seconds?: string;
+    si?: string;
+    labels?: string;
+  };
+}) {
+  const params = new URLSearchParams(props.params);
+  const urlWithParams = props.params
+    ? `${props.url}?${params.toString()}`
+    : props.url;
   return (
     <tr className="debug-inner-table__row">
       <td className="debug-inner-table__cell">
-        <a className="debug-link" href={props.url}>
+        <a className="debug-link" href={urlWithParams}>
           {props.name}
         </a>
       </td>
       <td className="debug-inner-table__cell--notes">
-        {_.isNil(props.note) ? props.url : props.note}
+        {_.isNil(props.note) ? urlWithParams : props.note}
       </td>
     </tr>
   );
@@ -59,7 +76,10 @@ function DebugTableRow(props: { title: string; children?: React.ReactNode }) {
   );
 }
 
-function DebugTable(props: { heading: string; children?: React.ReactNode }) {
+function DebugTable(props: {
+  heading: string | React.ReactNode;
+  children?: React.ReactNode;
+}) {
   return (
     <div>
       <h2 className="base-heading">{props.heading}</h2>
@@ -86,7 +106,55 @@ function DebugPanelLink(props: { name: string; url: string; note: string }) {
   );
 }
 
+// NodeIDSelector is a standalone component that displays a list of nodeIDs and allows for
+// their selection using a standard `<select>` component. If this component is used outside
+// of the Advanced Debug page, it should be styled appropriately. In order to make use of
+// this component and its "connected" version below (which retrieves and manages the nodeIDs
+// in the cluster automatically via redux) you will need to pass it the selected nodeID and
+// a function for mutating the nodeID (typical outputs of the `setState` hook) as props.
+function NodeIDSelector(props: {
+  nodeID: string;
+  setNodeID: (nodeID: string) => void;
+  nodeIDs: string[];
+  refreshNodes: typeof refreshNodes;
+}) {
+  const { nodeID, setNodeID, nodeIDs, refreshNodes } = props;
+  const nodeIDsWithLocal = ["local", ...nodeIDs];
+
+  useEffect(() => {
+    refreshNodes();
+  }, [props, refreshNodes]);
+
+  return (
+    <select
+      onChange={e => {
+        setNodeID(e.target.value);
+      }}
+    >
+      {nodeIDsWithLocal.map(n => {
+        return (
+          <option value={n} selected={n === nodeID}>
+            {n}
+          </option>
+        );
+      })}
+    </select>
+  );
+}
+
+const NodeIDSelectorConnected = connect(
+  (state: AdminUIState) => {
+    return {
+      nodeIDs: nodeIDsSelector(state),
+    };
+  },
+  {
+    refreshNodes,
+  },
+)(NodeIDSelector);
+
 export default function Debug() {
+  const [nodeID, setNodeID] = useState<string>("local");
   return (
     <div className="section">
       <Helmet title="Debug" />
@@ -213,6 +281,53 @@ export default function Debug() {
           />
         </DebugTableRow>
       </DebugTable>
+      <DebugTable
+        heading={
+          <>
+            {"Profiling UI (Target node: "}
+            <NodeIDSelectorConnected nodeID={nodeID} setNodeID={setNodeID} />
+            {")"}
+          </>
+        }
+      >
+        <DebugTableRow title="Profiling UI/pprof">
+          <DebugTableLink
+            name="Heap"
+            url="/debug/pprof/ui/heap/"
+            params={{ node: nodeID }}
+          />
+          <DebugTableLink
+            name="Heap (recent allocs)"
+            url="/debug/pprof/ui/heap/"
+            params={{ node: nodeID, seconds: "5", si: "alloc_objects" }}
+          />
+          <DebugTableLink
+            name="CPU Profile"
+            url="/debug/pprof/ui/cpu/"
+            params={{ node: nodeID, seconds: "5", labels: "true" }}
+          />
+          <DebugTableLink
+            name="Block"
+            url="/debug/pprof/ui/block/"
+            params={{ node: nodeID }}
+          />
+          <DebugTableLink
+            name="Mutex"
+            url="/debug/pprof/ui/mutex/"
+            params={{ node: nodeID }}
+          />
+          <DebugTableLink
+            name="Thread Create"
+            url="/debug/pprof/ui/threadcreate/"
+            params={{ node: nodeID }}
+          />
+          <DebugTableLink
+            name="Goroutines"
+            url="/debug/pprof/ui/goroutine/"
+            params={{ node: nodeID }}
+          />
+        </DebugTableRow>
+      </DebugTable>
       <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
         <DebugTableRow title="Tracing">
           <DebugTableLink name="Requests" url="/debug/requests" />
@@ -247,24 +362,6 @@ export default function Debug() {
         </DebugTableRow>
         <DebugTableRow title="Stopper">
           <DebugTableLink name="Active Tasks" url="/debug/stopper" />
-        </DebugTableRow>
-        <DebugTableRow title="Profiling UI/pprof">
-          <DebugTableLink name="Heap" url="/debug/pprof/ui/heap/" />
-          <DebugTableLink
-            name="Heap (recent allocs)"
-            url="/debug/pprof/ui/heap/?seconds=5&amp;si=alloc_objects"
-          />
-          <DebugTableLink
-            name="Profile"
-            url="/debug/pprof/ui/profile/?seconds=5&amp;labels=true"
-          />
-          <DebugTableLink name="Block" url="/debug/pprof/ui/block/" />
-          <DebugTableLink name="Mutex" url="/debug/pprof/ui/mutex/" />
-          <DebugTableLink
-            name="Thread Create"
-            url="/debug/pprof/ui/threadcreate/"
-          />
-          <DebugTableLink name="Goroutines" url="/debug/pprof/ui/goroutine/" />
         </DebugTableRow>
         <DebugTableRow title="Goroutines">
           <DebugTableLink name="UI" url="/debug/pprof/goroutineui" />

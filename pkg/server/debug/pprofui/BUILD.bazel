@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/debug/pprofui",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/server/serverpb",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -28,8 +29,11 @@ go_test(
     name = "pprofui_test",
     size = "small",
     srcs = ["server_test.go"],
+    data = glob(["testdata/**"]),
     embed = [":pprofui"],
     deps = [
         "//pkg/build/bazel",
+        "//pkg/server/serverpb",
+        "@com_github_stretchr_testify//require",
     ],
 )
