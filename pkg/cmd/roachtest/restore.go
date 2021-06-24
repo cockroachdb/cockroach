@@ -291,7 +291,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx, t)
+			c.Start(ctx)
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -306,7 +306,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx, t)
+			c.Start(ctx)
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -389,7 +389,7 @@ func registerRestore(r *testRegistry) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
-				c.Start(ctx, t)
+				c.Start(ctx)
 				m := newMonitor(ctx, c)
 
 				// Run the disk usage logger in the monitor to guarantee its

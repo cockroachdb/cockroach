@@ -67,7 +67,7 @@ func runTLP(ctx context.Context, t *test, c Cluster) {
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
 		t.Fatalf("could not initialize libraries: %v", err)
 	}
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	setup := sqlsmith.Setups["rand-tables"](rnd)
 

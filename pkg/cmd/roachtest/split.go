@@ -130,7 +130,7 @@ func registerLoadSplits(r *testRegistry) {
 func runLoadSplits(ctx context.Context, t *test, c Cluster, params splitParams) {
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.Node(1))
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	m := newMonitor(ctx, c, c.All())
 	m.Go(func(ctx context.Context) error {
@@ -246,7 +246,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c Cluster, size int) {
 
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.All())
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	m := newMonitor(ctx, c, c.All())
 	m.Go(func(ctx context.Context) error {

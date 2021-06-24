@@ -31,7 +31,7 @@ func registerEngineSwitch(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		pebbleArgs := startArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
 		rocksdbArgs := startArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
-		c.Start(ctx, t, roachNodes, rocksdbArgs)
+		c.Start(ctx, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
 		if local {
 			t.l.Printf("local mode: speeding up test\n")
@@ -126,7 +126,7 @@ func registerEngineSwitch(r *testRegistry) {
 				if err := stop(i + 1); err != nil {
 					return err
 				}
-				c.Start(ctx, t, c.Node(i+1), args)
+				c.Start(ctx, c.Node(i+1), args)
 			}
 			return sleepAndCheck()
 		})

@@ -53,7 +53,7 @@ func registerTPCDSVec(r *testRegistry) {
 
 	runTPCDSVec := func(ctx context.Context, t *test, c Cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, t)
+		c.Start(ctx)
 
 		clusterConn := c.Conn(ctx, 1)
 		disableAutoStats(t, clusterConn)

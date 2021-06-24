@@ -60,7 +60,7 @@ func loadTPCHDataset(
 		// cluster and restore.
 		m.ExpectDeaths(int32(c.Spec().NodeCount))
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, t, roachNodes)
+		c.Start(ctx, roachNodes)
 		m.ResetDeaths()
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
 		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {

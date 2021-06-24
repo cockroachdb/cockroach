@@ -1853,7 +1853,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option.Option) error {
 }
 
 // Start is like StartE() except that it will fatal the test on error.
-func (c *cluster) Start(ctx context.Context, _ignored interface{}, opts ...option.Option) {
+func (c *cluster) Start(ctx context.Context, opts ...option.Option) {
 	if err := c.StartE(ctx, opts...); err != nil {
 		c.t.Fatal(err)
 	}

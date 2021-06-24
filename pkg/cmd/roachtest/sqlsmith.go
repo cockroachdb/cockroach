@@ -85,7 +85,7 @@ func registerSQLSmith(r *testRegistry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatalf("could not initialize libraries: %v", err)
 		}
-		c.Start(ctx, t)
+		c.Start(ctx)
 
 		setupFunc, ok := setups[setupName]
 		if !ok {

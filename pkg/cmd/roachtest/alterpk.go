@@ -30,7 +30,7 @@ func registerAlterPK(r *testRegistry) {
 		c.Put(ctx, workload, "./workload", loadNode)
 
 		t.Status("starting cockroach nodes")
-		c.Start(ctx, t, roachNodes)
+		c.Start(ctx, roachNodes)
 		return roachNodes, loadNode
 	}
 

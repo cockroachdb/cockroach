@@ -36,7 +36,7 @@ func registerAutoUpgrade(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		c.Start(ctx, t, c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes))
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -120,7 +120,7 @@ func registerAutoUpgrade(r *testRegistry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-			c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+			c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -142,7 +142,7 @@ func registerAutoUpgrade(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-		c.Start(ctx, t, c.Node(nodes), startArgsDontEncrypt)
+		c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -185,7 +185,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, t, c.Node(nodes-1), startArgsDontEncrypt)
+		c.Start(ctx, c.Node(nodes-1), startArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -238,7 +238,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		}
 
 		// Start n3 again to satisfy the dead node detector.
-		c.Start(ctx, t, c.Node(nodeDecommissioned))
+		c.Start(ctx, c.Node(nodeDecommissioned))
 	}
 
 	r.Add(testSpec{

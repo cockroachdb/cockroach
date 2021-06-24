@@ -55,7 +55,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		args := startArgs(
 			"--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
-		c.Start(ctx, t, roachNodes, args)
+		c.Start(ctx, roachNodes, args)
 
 		c.Put(ctx, workload, "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))

@@ -33,7 +33,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
 
-			c.Start(ctx, t, c.All())
+			c.Start(ctx, c.All())
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
@@ -354,7 +354,7 @@ func makeSchemaChangeBulkIngestTest(
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
-			c.Start(ctx, t, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
+			c.Start(ctx, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
 
 			// Don't add another index when importing.
 			cmdWrite := fmt.Sprintf(

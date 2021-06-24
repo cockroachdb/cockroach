@@ -21,7 +21,7 @@ import (
 func runAcceptanceMultitenant(ctx context.Context, t *test, c Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	const tenantID = 123
 	{

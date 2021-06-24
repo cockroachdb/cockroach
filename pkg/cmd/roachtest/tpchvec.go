@@ -531,7 +531,7 @@ func runTPCHVec(
 	firstNode := c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", firstNode)
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)

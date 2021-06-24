@@ -35,7 +35,7 @@ func registerGossip(r *testRegistry) {
 	runGossipChaos := func(ctx context.Context, t *test, c Cluster) {
 		args := startArgs("--args=--vmodule=*=1")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, t, c.All(), args)
+		c.Start(ctx, c.All(), args)
 		waitForFullReplication(t, c.Conn(ctx, 1))
 
 		// TODO(irfansharif): We could also look at gossip_liveness to determine
@@ -145,7 +145,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 			deadNode := nodes.RandNode()[0]
 			c.Stop(ctx, c.Node(deadNode))
 			waitForGossip(deadNode)
-			c.Start(ctx, t, c.Node(deadNode), args)
+			c.Start(ctx, c.Node(deadNode), args)
 		}
 	}
 
@@ -283,7 +283,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c
 
 func runGossipPeerings(ctx context.Context, t *test, c Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	// Repeatedly restart a random node and verify that all of the nodes are
 	// seeing the gossiped values.
@@ -307,7 +307,7 @@ func runGossipPeerings(ctx context.Context, t *test, c Cluster) {
 		node := c.All().RandNode()
 		t.l.Printf("%d: restarting node %d\n", i, node[0])
 		c.Stop(ctx, node)
-		c.Start(ctx, t, node)
+		c.Start(ctx, node)
 		// Sleep a bit to avoid hitting:
 		// https://github.com/cockroachdb/cockroach/issues/48005
 		time.Sleep(3 * time.Second)
@@ -318,7 +318,7 @@ func runGossipRestart(ctx context.Context, t *test, c Cluster) {
 	t.Skip("skipping flaky acceptance/gossip/restart", "https://github.com/cockroachdb/cockroach/issues/48423")
 
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	// Repeatedly stop and restart a cluster and verify that we can perform basic
 	// operations. This is stressing the gossiping of the first range descriptor
@@ -336,7 +336,7 @@ func runGossipRestart(ctx context.Context, t *test, c Cluster) {
 		c.Stop(ctx)
 
 		t.l.Printf("%d: restarting all nodes\n", i)
-		c.Start(ctx, t)
+		c.Start(ctx)
 	}
 }
 
@@ -344,7 +344,7 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c Cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", "--encrypt=false")
 	c.Put(ctx, cockroach, "./cockroach")
 	// Reduce the scan max idle time to speed up evacuation of node 1.
-	c.Start(ctx, t, racks(c.Spec().NodeCount), args)
+	c.Start(ctx, racks(c.Spec().NodeCount), args)
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -448,7 +448,7 @@ SELECT count(replicas)
 	// Restart the other nodes. These nodes won't be able to talk to node 1 until
 	// node 1 talks to it (they have out of date address info). Node 1 needs
 	// incoming gossip info in order to determine where range 1 is.
-	c.Start(ctx, t, c.Range(2, c.Spec().NodeCount), args)
+	c.Start(ctx, c.Range(2, c.Spec().NodeCount), args)
 
 	// We need to override DB connection creation to use the correct port for
 	// node 1. This is more complicated than it should be and a limitation of the
@@ -488,7 +488,7 @@ SELECT count(replicas)
 	// Stop our special snowflake process which won't be recognized by the test
 	// harness, and start it again on the regular.
 	c.Stop(ctx, c.Node(1))
-	c.Start(ctx, t, c.Node(1))
+	c.Start(ctx, c.Node(1))
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t *test, c Cluster) {
@@ -505,7 +505,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t *test, c Cluster) {
 		}
 		extAddr := externalIP[i-1]
 
-		c.Start(ctx, t, c.Node(i), startArgs("--racks=1",
+		c.Start(ctx, c.Node(i), startArgs("--racks=1",
 			fmt.Sprintf("--args=--locality-advertise-addr=rack=0@%s", extAddr)))
 	}
 

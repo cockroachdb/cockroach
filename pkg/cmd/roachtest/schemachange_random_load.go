@@ -132,7 +132,7 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c Cluster, maxOps, 
 	c.Put(ctx, workload, "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")
-	c.Start(ctx, t, roachNodes)
+	c.Start(ctx, roachNodes)
 	c.Run(ctx, loadNode, "./workload init schemachange")
 
 	storeDirectory, err := c.RunWithBuffer(ctx, t.l, c.Node(1), "echo", "-n", "{store-dir}")

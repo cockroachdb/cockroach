@@ -25,7 +25,7 @@ func runRestart(ctx context.Context, t *test, c Cluster, downDuration time.Durat
 
 	t.Status("installing cockroach")
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
-	c.Start(ctx, t, crdbNodes, startArgs(`--args=--vmodule=raft_log_queue=3`))
+	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=raft_log_queue=3`))
 
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.
@@ -60,7 +60,7 @@ func runRestart(ctx context.Context, t *test, c Cluster, downDuration time.Durat
 
 	// Bring it back up and make sure it can serve a query within a reasonable
 	// time limit. For now, less time than it was down for.
-	c.Start(ctx, t, c.Node(restartNode))
+	c.Start(ctx, c.Node(restartNode))
 
 	// Dialing the formerly down node may still be prevented by the circuit breaker
 	// for a short moment (seconds) after n3 restarts. If it happens, the COUNT(*)

@@ -21,7 +21,7 @@ import (
 
 func runCLINodeStatus(ctx context.Context, t *test, c Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t, c.Range(1, 3))
+	c.Start(ctx, c.Range(1, 3))
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -106,7 +106,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c Cluster) {
 	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
 	// show up in the node status output.
 	c.Stop(ctx, c.Range(1, 3))
-	c.Start(ctx, t, c.Range(1, 2))
+	c.Start(ctx, c.Range(1, 2))
 
 	// Wait for the cluster to come back up.
 	waitForFullReplication(t, db)
@@ -119,5 +119,5 @@ func runCLINodeStatus(ctx context.Context, t *test, c Cluster) {
 	})
 
 	// Start node again to satisfy roachtest.
-	c.Start(ctx, t, c.Node(3))
+	c.Start(ctx, c.Node(3))
 }

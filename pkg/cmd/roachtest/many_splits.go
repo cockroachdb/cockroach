@@ -22,7 +22,7 @@ func runManySplits(ctx context.Context, t *test, c Cluster) {
 	c.EncryptAtRandom(true)
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t, args)
+	c.Start(ctx, args)
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()

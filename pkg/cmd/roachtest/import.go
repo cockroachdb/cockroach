@@ -62,7 +62,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx, t)
+			c.Start(ctx)
 			gatewayNode := 2
 			nodeToShutdown := 3
 			startImport := getImportRunner(ctx, gatewayNode)
@@ -77,7 +77,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx, t)
+			c.Start(ctx)
 			gatewayNode := 2
 			nodeToShutdown := 2
 			startImport := getImportRunner(ctx, gatewayNode)
@@ -95,7 +95,7 @@ func registerImportTPCC(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx, t)
+		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
@@ -185,7 +185,7 @@ func registerImportTPCH(r *testRegistry) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
-				c.Start(ctx, t)
+				c.Start(ctx)
 				conn := c.Conn(ctx, 1)
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
 					t.Fatal(err)
@@ -331,7 +331,7 @@ func registerImportDecommissioned(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx, t)
+		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		// Decommission a node.

@@ -66,7 +66,7 @@ func registerKV(r *testRegistry) {
 		nodes := c.Spec().NodeCount - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, t, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
+		c.Start(ctx, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
 		if opts.splits < 0 {
 			// In addition to telling the workload to not split, disable load-based
@@ -252,7 +252,7 @@ func registerKVContention(r *testRegistry) {
 			// then it will take 10m for them to get unstuck, at which point the
 			// QPS threshold check in the test is guaranteed to fail.
 			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
-			c.Start(ctx, t, args, c.Range(1, nodes))
+			c.Start(ctx, args, c.Range(1, nodes))
 
 			conn := c.Conn(ctx, 1)
 			// Enable request tracing, which is a good tool for understanding
@@ -316,7 +316,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, t, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes))
 
 			run := func(cmd string, lastDown bool) {
 				n := nodes
@@ -375,7 +375,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				// other earlier kv invocation's footsteps.
 				run(kv+" --seed 2 {pgurl:1}", true)
 			})
-			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector, even if test fails below
+			c.Start(ctx, c.Node(nodes)) // satisfy dead node detector, even if test fails below
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
 				t.Fatalf(
@@ -403,7 +403,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
 			args := startArgs(`--args=--vmodule=store=2,store_rebalancer=2`)
-			c.Start(ctx, t, args, c.Range(1, nodes))
+			c.Start(ctx, args, c.Range(1, nodes))
 
 			db := c.Conn(ctx, 1)
 			defer db.Close()
@@ -544,7 +544,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 						return nil
 					case <-time.After(1 * time.Minute):
 					}
-					c.Start(ctx, t, c.Node(nodes))
+					c.Start(ctx, c.Node(nodes))
 					m.ResetDeaths()
 				}
 
@@ -614,13 +614,12 @@ func registerKVSplits(r *testRegistry) {
 				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-				c.Start(ctx, t, c.Range(1, nodes),
-					startArgs(
-						// NB: this works. Don't change it or only one of the two vars may actually
-						// make it to the server.
-						"--env", "COCKROACH_MEMPROF_INTERVAL=1m COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
-						"--args=--cache=256MiB",
-					))
+				c.Start(ctx, c.Range(1, nodes), startArgs(
+					// NB: this works. Don't change it or only one of the two vars may actually
+					// make it to the server.
+					"--env", "COCKROACH_MEMPROF_INTERVAL=1m COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
+					"--args=--cache=256MiB",
+				))
 
 				t.Status("running workload")
 				m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -651,7 +650,7 @@ func registerKVScalability(r *testRegistry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			c.Wipe(ctx, c.Range(1, nodes))
-			c.Start(ctx, t, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -701,7 +700,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		doneWorkload := make(chan struct{})
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, t, c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
 

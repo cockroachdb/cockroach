@@ -63,7 +63,7 @@ func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c Clust
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
-	c.Start(ctx, t)
+	c.Start(ctx)
 	c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 	time.Sleep(time.Second) // wait for csv server to open listener
 
@@ -344,7 +344,7 @@ func registerBackup(r *testRegistry) {
 			c.EncryptAtRandom(true)
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
-			c.Start(ctx, t)
+			c.Start(ctx)
 			conn := c.Conn(ctx, 1)
 
 			duration := 5 * time.Minute

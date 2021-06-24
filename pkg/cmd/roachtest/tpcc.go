@@ -101,7 +101,7 @@ func setupTPCC(
 			// We still use bare workload, though we could likely replace
 			// those with ./cockroach workload as well.
 			c.Put(ctx, workload, "./workload", workloadNode)
-			c.Start(ctx, t, crdbNodes)
+			c.Start(ctx, crdbNodes)
 		}
 	}
 
@@ -757,7 +757,7 @@ func loadTPCCBench(
 		// If the dataset exists but is not large enough, wipe the cluster
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+		c.Start(ctx, append(b.startOpts(), roachNodes)...)
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
 		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
 		return err
@@ -851,7 +851,7 @@ func runTPCCBench(ctx context.Context, t *test, c Cluster, b tpccBenchSpec) {
 	// Don't encrypt in tpccbench tests.
 	c.EncryptDefault(false)
 	c.EncryptAtRandom(false)
-	c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+	c.Start(ctx, append(b.startOpts(), roachNodes)...)
 
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
@@ -940,7 +940,7 @@ func runTPCCBench(ctx context.Context, t *test, c Cluster, b tpccBenchSpec) {
 			t.Fatalf("VM is hosed; giving up")
 		}
 
-		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+		c.Start(ctx, append(b.startOpts(), roachNodes)...)
 	}
 
 	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)

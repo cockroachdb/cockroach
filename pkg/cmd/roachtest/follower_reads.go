@@ -47,7 +47,7 @@ func registerFollowerReads(r *testRegistry) {
 			Run: func(ctx context.Context, t *test, c Cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Wipe(ctx)
-				c.Start(ctx, t)
+				c.Start(ctx)
 				topology := topologySpec{multiRegion: true, locality: locality, survival: survival}
 				data := initFollowerReadsDB(ctx, t, c, topology)
 				runFollowerReadsTest(ctx, t, c, topology, data)
@@ -752,7 +752,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 
 	// Start the cluster at the old version.
 	args := startArgs("--binary=" + uploadVersion(ctx, t, c, c.All(), predecessorVersion))
-	c.Start(ctx, t, c.All(), args)
+	c.Start(ctx, c.All(), args)
 	topology := topologySpec{multiRegion: false}
 	data := initFollowerReadsDB(ctx, t, c, topology)
 

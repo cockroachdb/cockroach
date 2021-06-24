@@ -35,7 +35,7 @@ func registerVersion(r *testRegistry) {
 
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
-		c.Start(ctx, t, c.Range(1, nodes), startArgsDontEncrypt)
+		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -136,7 +136,7 @@ func registerVersion(r *testRegistry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -160,7 +160,7 @@ func registerVersion(r *testRegistry) {
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
 			c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-			c.Start(ctx, t, c.Node(nodes), startArgsDontEncrypt)
+			c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 			if err := sleepAndCheck(); err != nil {
 				return err
 			}
@@ -175,7 +175,7 @@ func registerVersion(r *testRegistry) {
 				if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -189,7 +189,7 @@ func registerVersion(r *testRegistry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}

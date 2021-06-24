@@ -33,7 +33,7 @@ func registerPgjdbc(r *testRegistry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {

@@ -55,7 +55,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c Cluster, withResta
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, workload, "./workload", c.Node(1))
-	c.Start(ctx, t, args, c.Range(1, 3))
+	c.Start(ctx, args, c.Range(1, 3))
 
 	h := &replicagcTestHelper{c: c, t: t}
 
@@ -71,7 +71,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c Cluster, withResta
 	c.Stop(ctx, c.Node(3))
 
 	// Start three new nodes that will take over all data.
-	c.Start(ctx, t, args, c.Range(4, 6))
+	c.Start(ctx, args, c.Range(4, 6))
 
 	// Recommission n1-3, with n3 in absentia, moving the replicas to n4-6.
 	if err := h.decommission(ctx, c.Range(1, 3), 2, "--wait=none"); err != nil {
@@ -111,7 +111,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c Cluster, withResta
 		// do that within the store dead interval (5m, i.e. too long for this
 		// test).
 		c.Stop(ctx, c.Range(4, 6))
-		c.Start(ctx, t, args, c.Range(4, 6))
+		c.Start(ctx, args, c.Range(4, 6))
 	}
 
 	// Restart n3. We have to manually tell it where to find a new node or it
@@ -122,7 +122,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c Cluster, withResta
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Start(ctx, t, c.Node(3), startArgs(
+	c.Start(ctx, c.Node(3), startArgs(
 		"--args=--join="+internalAddrs[0],
 		"--args=--attrs="+deadNodeAttr,
 		"--args=--vmodule=raft=5,replicate_queue=5,allocator=5",
@@ -134,7 +134,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c Cluster, withResta
 	h.waitForZeroReplicas(ctx, 3)
 
 	// Restart the remaining nodes to satisfy the dead node detector.
-	c.Start(ctx, t, c.Range(1, 2))
+	c.Start(ctx, c.Range(1, 2))
 }
 
 type replicagcTestHelper struct {
