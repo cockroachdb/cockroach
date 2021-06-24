@@ -132,11 +132,7 @@ func entries(
 	// sideloaded proposal, but the caller didn't give us a sideloaded storage.
 	canCache := true
 
-	var ent raftpb.Entry
-	scanFunc := func(kv roachpb.KeyValue) error {
-		if err := kv.Value.GetProto(&ent); err != nil {
-			return err
-		}
+	scanFunc := func(ent raftpb.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
 		if ent.Index != expectedIndex {
 			return iterutil.StopIteration()
@@ -227,22 +223,49 @@ func entries(
 	return nil, raft.ErrUnavailable
 }
 
+// iterateEntries iterates over each of the Raft log entries in the range
+// [lo,hi). At each step of the iteration, f() is invoked with the current log
+// entry.
+//
+// The function does not accept a maximum number of entries or bytes. Instead,
+// callers should enforce any limits by returning iterutil.StopIteration from
+// the iteration function to terminate iteration early, if necessary.
 func iterateEntries(
 	ctx context.Context,
 	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	lo, hi uint64,
-	scanFunc func(roachpb.KeyValue) error,
+	f func(raftpb.Entry) error,
 ) error {
-	_, err := storage.MVCCIterate(
-		ctx, reader,
-		keys.RaftLogKey(rangeID, lo),
-		keys.RaftLogKey(rangeID, hi),
-		hlc.Timestamp{},
-		storage.MVCCScanOptions{},
-		scanFunc,
-	)
-	return err
+	key := keys.RaftLogKey(rangeID, lo)
+	endKey := keys.RaftLogKey(rangeID, hi)
+	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		UpperBound: endKey,
+	})
+	defer iter.Close()
+
+	var meta enginepb.MVCCMetadata
+	var ent raftpb.Entry
+
+	iter.SeekGE(storage.MakeMVCCMetadataKey(key))
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil || !ok {
+			return err
+		}
+
+		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			return errors.Wrap(err, "unable to decode MVCCMetadata")
+		}
+		if err := storage.MakeValue(meta).GetProto(&ent); err != nil {
+			return errors.Wrap(err, "unable to unmarshal raft Entry")
+		}
+		if err := f(ent); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
 }
 
 // invalidLastTerm is an out-of-band value for r.mu.lastTerm that
