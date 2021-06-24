@@ -35,13 +35,28 @@ export const defaultRedactions = [
   // When viewing a specific database, the database name and table are part of
   // the URL path.
   {
-    match: new RegExp("/databases/database/.*/table/.*"),
+    match: new RegExp("/databases/database/.+/table/.+"),
     replace: "/databases/database/[db]/table/[tbl]",
   },
-  // The new URL for a database page.
   {
-    match: new RegExp("/database/.*/table/.*"),
+    match: new RegExp("/database/.+/table/.+"),
     replace: "/database/[db]/table/[tbl]",
+  },
+  {
+    match: new RegExp("/database/.+/tables"),
+    replace: "/database/[db]/tables",
+  },
+  {
+    match: new RegExp("/database/.+/table"),
+    replace: "/database/[db]/table",
+  },
+  {
+    match: new RegExp("/database/.+/grants"),
+    replace: "/database/[db]/grants",
+  },
+  {
+    match: new RegExp("/database/.+"),
+    replace: "/database/[db]",
   },
   // The clusterviz map page, which puts localities in the URL.
   {
