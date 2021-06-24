@@ -34,6 +34,9 @@ message WatchPodsResponse {
   string addr = 2;
   // TenantID is the tenant that owns the pod.
   uint64 tenant_id = 3[(gogoproto.customname) = "TenantID"];
+  // Load is a number in the range [0, 1] indicating the current amount of load
+  // experienced by this tenant pod.
+  float Load = 4;
 }
 
 // ListPodsRequest is used to query the server for the list of current
@@ -62,6 +65,9 @@ message EnsurePodResponse {
 message Pod {
   // Addr is the ip and port combo identifying the tenant pod.
   string Addr = 1;
+  // Load is a number in the range [0, 1) indicating the current amount of load
+  // experienced by this tenant pod.
+  float Load = 2;
 }
 
 // ListPodsResponse is sent back as a result of requesting the list of

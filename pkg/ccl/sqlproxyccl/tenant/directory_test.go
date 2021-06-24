@@ -117,7 +117,61 @@ func TestPodWatcher(t *testing.T) {
 		require.Equal(t, addr, dirAddr.String())
 	}
 
+	// Verify that load distribution works as expected.
+
+	// Forcible start a second instance of tenantID.
+	require.NoError(t, tds.StartTenant(ctx, tenantID))
+
+	// Ensure that instance 2 has started.
+	processes = tds.Get(tenantID)
+	require.NotNil(t, processes)
+	require.Len(t, processes, 2)
+
+	// Wait for the background watcher to populate both pods.
+	require.Eventually(t, func() bool {
+		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+		return len(addrs) == 2
+	}, 10*time.Second, 100*time.Millisecond)
+
+	var processAddrs []net.Addr
+	for k := range processes {
+		processAddrs = append(processAddrs, k)
+	}
+
+	// Both tenants will have the same initial (and fake) load reporting.
+	// Observe that EnsureTenantAddr evenly distributes load across them.
+	responses := map[string]int{}
+	for i := 0; i < 100; i++ {
+		addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
+		require.NoError(t, err)
+		responses[addr] += 1
+	}
+
+	require.InDelta(t, responses[processAddrs[0].String()], 50, 15)
+	require.InDelta(t, responses[processAddrs[1].String()], 50, 15)
+
+	// Adjust load such that the distribution will be a 25/75 split.
+	tds.SetFakeLoad(tenantID, processes[processAddrs[0]].SQL, 0.25)
+	tds.SetFakeLoad(tenantID, processes[processAddrs[1]].SQL, 0.75)
+
+	// There's no way to syncronize on the directory updating it's internal
+	// state. It requires 2 loop iterations, so 250ms should be more than
+	// enough.
+	time.Sleep(250 * time.Millisecond)
+
+	responses = map[string]int{}
+	for i := 0; i < 100; i++ {
+		addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
+		require.NoError(t, err)
+		responses[addr] += 1
+	}
+
+	// Observer that the distribution is now a 3/1 split.
+	require.InDelta(t, responses[processAddrs[0].String()], 75, 15)
+	require.InDelta(t, responses[processAddrs[1].String()], 25, 15)
+
 	// Stop the tenant and ensure its IP address is removed from the directory.
+	processes = tds.Get(tenantID)
 	for _, process := range processes {
 		process.Stopper.Stop(ctx)
 	}
