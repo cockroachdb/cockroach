@@ -38,6 +38,7 @@ apt-get install --yes \
   gnome-keyring \
   gnupg2 \
   git \
+  jq \
   openjdk-11-jre-headless \
   pass \
   unzip

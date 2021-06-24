@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx"
@@ -549,7 +550,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, nil)
+	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
 	return pgwireConn, nil
 }
 
@@ -1077,9 +1078,12 @@ func TestMaliciousInputs(t *testing.T) {
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
 			conn := newConn(
-				// ConnResultsBufferBytes - really small so that it overflows
+				r,
+				// ConnResultsBufferSize - really small so that it overflows
 				// when we produce a few results.
-				r, sql.SessionArgs{ConnResultsBufferSize: 10}, &metrics,
+				sql.SessionArgs{ConnResultsBufferSize: 10},
+				&metrics,
+				timeutil.Now(),
 				nil,
 			)
 			// Ignore the error from serveImpl. There might be one when the client
