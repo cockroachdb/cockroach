@@ -2497,9 +2497,9 @@ type MVCCScanOptions struct {
 	MaxKeys int64
 	// TargetBytes is a byte threshold to limit the amount of data pulled into
 	// memory during a Scan operation. Once the target is satisfied (i.e. met or
-	// exceeded) by the emitted emitted KV pairs, iteration stops (with a
-	// ResumeSpan as appropriate). In particular, at least one kv pair is
-	// returned (when one exists).
+	// exceeded) by the emitted KV pairs, iteration stops (with a ResumeSpan as
+	// appropriate). In particular, at least one kv pair is returned (when one
+	// exists).
 	//
 	// The number of bytes a particular kv pair accrues depends on internal data
 	// structures, but it is guaranteed to exceed that of the bytes stored in
