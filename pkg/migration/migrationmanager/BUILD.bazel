@@ -2,14 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "migrationmanager",
-    srcs = [
-        "manager.go",
-        "testing_knobs.go",
-    ],
+    srcs = ["manager.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationmanager",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -40,7 +36,6 @@ go_test(
         "manager_external_test.go",
     ],
     deps = [
-        ":migrationmanager",
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/jobs",
