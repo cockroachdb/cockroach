@@ -276,22 +276,34 @@ func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
 			"first parameter has to be of type LineString")
 	}
 
-	// Flat line should be return point empty immediately,
-	if lineString.Length() == 0 {
-		return geo.MakeGeometryFromGeomT(geom.NewPointEmpty(geom.XY).SetSRID(lineString.SRID()))
+	lsLength := lineString.Length()
+	// A LineString which entirely consistents of the same point has length 0
+	// and should return the single point that represents it.
+	if lsLength == 0 {
+		return geo.MakeGeometryFromGeomT(
+			geom.NewPointFlat(geom.XY, lineString.FlatCoords()[0:2]).SetSRID(lineString.SRID()),
+		)
 	}
 
 	var newFlatCoords []float64
-	startDistance, endDistance := start*lineString.Length(), end*lineString.Length()
+	// The algorithm roughly as follows.
+	// * For each line segment, first find whether we have exceeded the start distance.
+	//   If we have, interpolate the point on that LineString that represents the start point.
+	// * Keep adding points until we have we reach the segment where the entire LineString
+	//   exceeds the max distance.
+	//   We then interpolate the end point on the last segment of the LineString.
+	startDistance, endDistance := start*lsLength, end*lsLength
 	for i := range lineString.Coords() {
 		currentLineString, err := geom.NewLineString(geom.XY).SetCoords(lineString.Coords()[0 : i+1])
 		if err != nil {
 			return geo.Geometry{}, err
 		}
-		// If the current distance exceeds the end distance, find the last point and terminate the loop early.
-		// If the current distance exceeds the end distance but the `newFlatCoords` is still empty,
-		// Interpolate the start point and add to `newFlatCoords`
+		// If the current distance exceeds the end distance, find the last point and
+		// terminate the loop early.
 		if currentLineString.Length() >= endDistance {
+			// If we have not added coordinates to the LineString, it means the
+			// current segment starts and ends on the current line segment.
+			// Interpolate the start position.
 			if len(newFlatCoords) == 0 {
 				coords, err := interpolateFlatCoordsFromDistance(g, startDistance)
 				if err != nil {
@@ -307,24 +319,22 @@ func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
 			newFlatCoords = append(newFlatCoords, coords...)
 			break
 		}
-		// If we are past the beginning, check if we already have points in the line string.
-		// If this is our first point, interpolate the first point.
-		// If we have already added a point, simply add the current coordinate in.
+		// If we are past the start distance, check if we already have points
+		// in the LineString.
 		if currentLineString.Length() >= startDistance {
 			if len(newFlatCoords) == 0 {
+				// If this is our first point, interpolate the first point.
 				coords, err := interpolateFlatCoordsFromDistance(g, startDistance)
 				if err != nil {
 					return geo.Geometry{}, err
 				}
 				newFlatCoords = append(newFlatCoords, coords...)
+			}
 
-				// If it starts from 0, we don't need to add the first coords
-				// because has already added by the previous point.
-				if startDistance != 0 {
-					newFlatCoords = append(newFlatCoords, currentLineString.Coord(i)...)
-				}
-			} else {
-				newFlatCoords = append(newFlatCoords, lineString.Coord(i)...)
+			// Add the current point if it is not the same as the previous point.
+			prevCoords := geom.Coord(newFlatCoords[len(newFlatCoords)-2:])
+			if !currentLineString.Coord(i).Equal(geom.XY, prevCoords) {
+				newFlatCoords = append(newFlatCoords, currentLineString.Coord(i)...)
 			}
 		}
 	}
