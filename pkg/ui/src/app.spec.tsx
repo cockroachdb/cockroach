@@ -26,11 +26,9 @@ import { NodeOverview } from "src/views/cluster/containers/nodeOverview";
 import { Logs } from "src/views/cluster/containers/nodeLogs";
 import { EventPageUnconnected } from "src/views/cluster/containers/events";
 import { JobsTable } from "src/views/jobs";
-import {
-  DatabaseGrantsList,
-  DatabaseTablesList,
-} from "src/views/databases/containers/databases";
-import { TableMain } from "src/views/databases/containers/tableDetails";
+import { DatabasesPage } from "src/views/databases/databasesPage";
+import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
+import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
 import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
 import { StatementsPage, StatementDetails } from "@cockroachlabs/cluster-ui";
 import Debug from "src/views/reports/containers/debug";
@@ -236,29 +234,25 @@ describe("Routing to", () => {
     /* databases */
   }
   describe("'/databases' path", () => {
-    it("routes to <DatabaseTablesList> component", () => {
+    it("routes to <DatabasesPage> component", () => {
       navigateToPath("/databases");
-      assert.lengthOf(appWrapper.find(DatabaseTablesList), 1);
-    });
-
-    it("redirected to '/databases/tables'", () => {
-      navigateToPath("/databases");
-      const location = history.location;
-      assert.equal(location.pathname, "/databases/tables");
+      assert.lengthOf(appWrapper.find(DatabasesPage), 1);
     });
   });
 
   describe("'/databases/tables' path", () => {
-    it("routes to <DatabaseTablesList> component", () => {
+    it("redirected to '/databases'", () => {
       navigateToPath("/databases/tables");
-      assert.lengthOf(appWrapper.find(DatabaseTablesList), 1);
+      const location = history.location;
+      assert.equal(location.pathname, "/databases");
     });
   });
 
   describe("'/databases/grants' path", () => {
-    it("routes to <DatabaseGrantsList> component", () => {
+    it("redirected to '/databases'", () => {
       navigateToPath("/databases/grants");
-      assert.lengthOf(appWrapper.find(DatabaseGrantsList), 1);
+      const location = history.location;
+      assert.equal(location.pathname, "/databases");
     });
   });
 
@@ -275,32 +269,31 @@ describe("Routing to", () => {
 
   describe("'/database' path", () => {
     it("redirected to '/databases'", () => {
-      navigateToPath("/databases/tables");
+      navigateToPath("/database");
       const location = history.location;
-      assert.equal(location.pathname, "/databases/tables");
+      assert.equal(location.pathname, "/databases");
     });
   });
 
   describe("'/database/:${databaseNameAttr}' path", () => {
-    it("redirected to '/databases'", () => {
+    it("routes to <DatabaseDetailsPage> component", () => {
       navigateToPath("/database/some-db-name");
-      const location = history.location;
-      assert.equal(location.pathname, "/databases/tables");
+      assert.lengthOf(appWrapper.find(DatabaseDetailsPage), 1);
     });
   });
 
   describe("'/database/:${databaseNameAttr}/table' path", () => {
-    it("redirected to '/databases/tables'", () => {
+    it("redirected to '/databases/:${databaseNameAttr}'", () => {
       navigateToPath("/database/some-db-name/table");
       const location = history.location;
-      assert.equal(location.pathname, "/databases/tables");
+      assert.equal(location.pathname, "/database/some-db-name");
     });
   });
 
   describe("'/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
-    it("routes to <TableMain> component", () => {
+    it("routes to <DatabaseTablePage> component", () => {
       navigateToPath("/database/some-db-name/table/some-table-name");
-      assert.lengthOf(appWrapper.find(TableMain), 1);
+      assert.lengthOf(appWrapper.find(DatabaseTablePage), 1);
     });
   });
 
