@@ -350,6 +350,105 @@ func TestRefreshThrottling(t *testing.T) {
 	require.Equal(t, []string{addr}, addrs)
 }
 
+func TestLoadBalancing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	// Make pod watcher channel.
+	podWatcher := make(chan *tenant.Pod, 1)
+
+	// Create the directory.
+	ctx := context.Background()
+	tc, dir, tds := newTestDirectory(t, tenant.PodWatcher(podWatcher))
+	defer tc.Stopper().Stop(ctx)
+
+	tenantID := roachpb.MakeTenantID(30)
+	require.NoError(t, createTenant(tc, tenantID))
+
+	// Forcibly start two instances of tenantID.
+	require.NoError(t, tds.StartTenant(ctx, tenantID))
+	<-podWatcher
+
+	require.NoError(t, tds.StartTenant(ctx, tenantID))
+	<-podWatcher
+
+	// Ensure that instance 2 has started.
+	processes := tds.Get(tenantID)
+	require.NotNil(t, processes)
+	require.Len(t, processes, 2)
+
+	// Wait for the background watcher to populate both pods.
+	require.Eventually(t, func() bool {
+		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+		return len(addrs) == 2
+	}, 10*time.Second, 100*time.Millisecond)
+
+	var processAddrs []net.Addr
+	for k := range processes {
+		processAddrs = append(processAddrs, k)
+	}
+
+	// Both tenants will have the same initial (and fake) load reporting.
+	// Observe that EnsureTenantAddr evenly distributes load across them.
+	responses := map[string]int{}
+	for i := 0; i < 100; i++ {
+		addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
+		require.NoError(t, err)
+		responses[addr] += 1
+	}
+
+	// Assert that the distribution is roughly 50/50.
+	require.InDelta(t, responses[processAddrs[0].String()], 50, 25)
+	require.InDelta(t, responses[processAddrs[1].String()], 50, 25)
+
+	// Adjust load such that the distribution will be a 1/9 split.
+	tds.SetFakeLoad(tenantID, processes[processAddrs[0]].SQL, 0.1)
+	pod := <-podWatcher
+	require.Equal(t, float32(0.1), pod.Load)
+	require.Equal(t, processes[processAddrs[0]].SQL.String(), pod.Addr)
+
+	tds.SetFakeLoad(tenantID, processes[processAddrs[1]].SQL, 0.9)
+	pod = <-podWatcher
+	require.Equal(t, float32(0.9), pod.Load)
+	require.Equal(t, processes[processAddrs[1]].SQL.String(), pod.Addr)
+
+	// There's no way to syncronize on the directory updating it's internal
+	// state. It requires 2 loop iterations, so 250ms should be more than
+	// enough.
+	time.Sleep(250 * time.Millisecond)
+
+	responses = map[string]int{}
+	for i := 0; i < 100; i++ {
+		addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
+		require.NoError(t, err)
+		responses[addr] += 1
+	}
+
+	// Observe that the distribution is skewed towards processAddrs[0]
+	require.InDelta(t, responses[processAddrs[0].String()], 90, 25)
+	require.InDelta(t, responses[processAddrs[1].String()], 10, 25)
+
+	// Stop our the running tenants.
+	for _, process := range processes {
+		process.Stopper.Stop(ctx)
+		<-podWatcher
+	}
+
+	// Wait for the tenantdir to reflect that no tenants are running any more.
+	require.Eventually(t, func() bool {
+		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+		return len(addrs) == 0
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Set the load on a deleted tenant.
+	tds.SetFakeLoad(tenantID, processes[processAddrs[0]].SQL, 0.8)
+	<-podWatcher
+
+	// And ensure that the deleted entry does not get resurrected.
+	addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+	require.Len(t, addrs, 0)
+}
+
 func createTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) error {
 	srv := tc.Server(0)
 	conn := srv.InternalExecutor().(*sql.InternalExecutor)

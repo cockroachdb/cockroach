@@ -35,6 +35,11 @@ enum PodState {
   // DELETING indicates that the pod is being terminated. This state is only
   // used by WatchPods.
   DELETING = 2;
+  // UNKNOWN indicates that the pod values being reported are from a
+  // potentially out of date source. UNKNOWN may be used to notify updates to
+  // pod values when the pod's state may be out of date by the time the update
+  // is processed.
+  UNKNOWN = 3;
 }
 
 // Pod contains information about a tenant pod, such as its tenant owner,
@@ -47,6 +52,9 @@ message Pod {
   string Addr = 1;
   // PodState gives the current status of the tenant pod.
   PodState State = 3;
+  // Load is a number in the range [0, 1] indicating the current amount of load
+  // experienced by this tenant pod.
+  float Load = 4;
 }
 
 // WatchPodsResponse represents the notifications that the server sends to
