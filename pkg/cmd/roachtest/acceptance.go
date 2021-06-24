@@ -14,13 +14,13 @@ import (
 	"context"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 func registerAcceptance(r *testRegistry) {
 	testCases := map[Owner][]struct {
 		name       string
-		fn         func(ctx context.Context, t *test, c cluster2.Cluster)
+		fn         func(ctx context.Context, t *test, c cluster.Cluster)
 		skip       string
 		minVersion string
 		numNodes   int
@@ -45,7 +45,7 @@ func registerAcceptance(r *testRegistry) {
 			},
 			{
 				name: "version-upgrade",
-				fn: func(ctx context.Context, t *test, c cluster2.Cluster) {
+				fn: func(ctx context.Context, t *test, c cluster.Cluster) {
 					runVersionUpgrade(ctx, t, c, r.buildVersion)
 				},
 				// This test doesn't like running on old versions because it upgrades to
@@ -99,7 +99,7 @@ func registerAcceptance(r *testRegistry) {
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}
-			spec.Run = func(ctx context.Context, t *test, c cluster2.Cluster) {
+			spec.Run = func(ctx context.Context, t *test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)
 			}
 			r.Add(spec)

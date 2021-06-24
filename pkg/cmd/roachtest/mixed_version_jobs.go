@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -226,7 +226,7 @@ FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
 }
 
 func runJobsMixedVersions(
-	ctx context.Context, t *test, c cluster2.Cluster, warehouses int, predecessorVersion string,
+	ctx context.Context, t *test, c cluster.Cluster, warehouses int, predecessorVersion string,
 ) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
@@ -335,7 +335,7 @@ func registerJobsMixedVersions(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Skip:       "https://github.com/cockroachdb/cockroach/issues/57230",
 		Cluster:    r.makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)

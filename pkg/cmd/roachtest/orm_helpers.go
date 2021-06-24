@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 // alterZoneConfigAndClusterSettings changes the zone configurations so that GC
@@ -28,7 +28,7 @@ import (
 func alterZoneConfigAndClusterSettings(
 	ctx context.Context,
 	version string,
-	c cluster2.Cluster,
+	c cluster.Cluster,
 	nodeIdx int,
 	dbConnectionParams *SecureDBConnectionParams,
 ) error {

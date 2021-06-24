@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -84,7 +84,7 @@ type testSpec struct {
 	RequiresLicense bool
 
 	// Run is the test function.
-	Run func(ctx context.Context, t *test, c cluster2.Cluster)
+	Run func(ctx context.Context, t *test, c cluster.Cluster)
 }
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts

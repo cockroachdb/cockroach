@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -86,7 +86,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 	)
 }
 
-func runSysbench(ctx context.Context, t *test, c cluster2.Cluster, opts sysbenchOptions) {
+func runSysbench(ctx context.Context, t *test, c cluster.Cluster, opts sysbenchOptions) {
 	allNodes := c.Range(1, c.Spec().NodeCount)
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	loadNode := c.Node(c.Spec().NodeCount)
@@ -144,7 +144,7 @@ func registerSysbench(r *testRegistry) {
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(n+1, spec.CPU(cpus)),
-			Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},
 		})

@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"regexp"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +23,7 @@ var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<p
 var gormSupportedTag = "v1.21.8"
 
 func registerGORM(r *testRegistry) {
-	runGORM := func(ctx context.Context, t *test, c cluster2.Cluster) {
+	runGORM := func(ctx context.Context, t *test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}

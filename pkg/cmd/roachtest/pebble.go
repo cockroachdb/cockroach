@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -27,7 +27,7 @@ func registerPebble(r *testRegistry) {
 		pebble = "./pebble.linux"
 	}
 
-	run := func(ctx context.Context, t *test, c cluster2.Cluster, size int) {
+	run := func(ctx context.Context, t *test, c cluster.Cluster, size int) {
 		c.Put(ctx, pebble, "./pebble")
 
 		const initialKeys = 10_000_000
@@ -110,7 +110,7 @@ func registerPebble(r *testRegistry) {
 			MinVersion: "v20.1.0",
 			Cluster:    r.makeClusterSpec(5, spec.CPU(16)),
 			Tags:       []string{"pebble"},
-			Run: func(ctx context.Context, t *test, c cluster2.Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				run(ctx, t, c, size)
 			},
 		})

@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	cluster2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -54,7 +54,7 @@ type Chaos struct {
 // Runner returns a closure that runs chaos against the given cluster without
 // setting off the monitor. The process returns without an error after the chaos
 // duration.
-func (ch *Chaos) Runner(c cluster2.Cluster, m *monitor) func(context.Context) error {
+func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) error {
 	return func(ctx context.Context) (err error) {
 		l, err := m.l.ChildLogger("CHAOS")
 		if err != nil {
