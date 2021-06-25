@@ -3244,10 +3244,11 @@ func (r *Replica) adminVerifyProtectedTimestamp(
 	// construct a more informative error to show to the user.
 	if doesNotApplyReason != "" {
 		if !resp.Verified {
+			desc := r.Desc()
 			failedRange := roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{
-				RangeID:  int64(r.Desc().GetRangeID()),
-				StartKey: r.Desc().GetStartKey(),
-				EndKey:   r.Desc().EndKey,
+				RangeID:  int64(desc.GetRangeID()),
+				StartKey: desc.GetStartKey(),
+				EndKey:   desc.EndKey,
 				Reason:   doesNotApplyReason,
 			}
 			resp.VerificationFailedRanges = append(resp.VerificationFailedRanges, failedRange)
