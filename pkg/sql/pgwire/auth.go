@@ -89,7 +89,10 @@ func (c *conn) handleAuthentication(
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, canLogin, pwRetrievalFn, validUntilFn, err := sql.GetUserHashedPassword(
-		ctx, authOpt.ie, c.sessionArgs.User,
+		ctx,
+		execCfg,
+		authOpt.ie,
+		c.sessionArgs.User,
 	)
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", c.sessionArgs.User, err)
