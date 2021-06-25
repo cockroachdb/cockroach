@@ -1311,30 +1311,33 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	// We use tree.FormatNode merely as a traversal method; its output buffer is
 	// discarded immediately after the traversal because it is not needed
 	// further.
-	f := tree.NewFmtCtx(tree.FmtSerializable)
-	f.SetReformatTableNames(
-		func(_ *tree.FmtCtx, tn *tree.TableName) {
-			// Persist the database prefix expansion.
-			if tn.SchemaName != "" {
-				// All CTE or table aliases have no schema
-				// information. Those do not turn into explicit.
-				tn.ExplicitSchema = true
-				tn.ExplicitCatalog = true
-			}
-		},
+	f := tree.NewFmtCtx(
+		tree.FmtSerializable,
+		tree.FmtReformatTableNames(
+			func(_ *tree.FmtCtx, tn *tree.TableName) {
+				// Persist the database prefix expansion.
+				if tn.SchemaName != "" {
+					// All CTE or table aliases have no schema
+					// information. Those do not turn into explicit.
+					tn.ExplicitSchema = true
+					tn.ExplicitCatalog = true
+				}
+			}),
 	)
 	f.FormatNode(source)
 	f.Close()
 
 	// Substitute placeholders with their values.
-	ctx := tree.NewFmtCtx(tree.FmtSerializable)
-	ctx.SetPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-		d, err := placeholder.Eval(evalCtx)
-		if err != nil {
-			panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
-		}
-		d.Format(ctx)
-	})
+	ctx := tree.NewFmtCtx(
+		tree.FmtSerializable,
+		tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+			d, err := placeholder.Eval(evalCtx)
+			if err != nil {
+				panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
+			}
+			d.Format(ctx)
+		}),
+	)
 	ctx.FormatNode(source)
 
 	return ctx.CloseAndGetString()
