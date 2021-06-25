@@ -1,13 +1,13 @@
-# Ensure there's a single auto zone config reconciliation job in the system,
+# Ensure there's a single auto span config reconciliation job in the system,
 # and that it's running.
 query ITT colnames
-SELECT count(*), job_type, status FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO ZONE CONFIG RECONCILIATION' GROUP BY (job_type, status)
+SELECT count(*), job_type, status FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' GROUP BY (job_type, status)
 ----
 count  job_type                         status
-1      AUTO ZONE CONFIG RECONCILIATION  running
+1      AUTO SPAN CONFIG RECONCILIATION  running
 
 let $job_id
-SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO ZONE CONFIG RECONCILIATION'
+SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION'
 
 # Ensure that the reconciliation job does not appear in SHOW JOBS.
 query I colnames
