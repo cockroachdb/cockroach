@@ -823,6 +823,8 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 
 type singleRangeIterator struct{}
 
+var _ condensableSpanSetRangeIterator = singleRangeIterator{}
+
 func (s singleRangeIterator) Valid() bool {
 	return true
 }

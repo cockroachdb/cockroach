@@ -99,6 +99,7 @@ var retiredSettings = map[string]struct{}{
 	"kv.tenant_rate_limiter.read_cost_per_megabyte":              {},
 	"kv.tenant_rate_limiter.write_request_cost":                  {},
 	"kv.tenant_rate_limiter.write_cost_per_megabyte":             {},
+	"kv.transaction.write_pipelining_max_outstanding_size":       {},
 }
 
 // register adds a setting to the registry.
