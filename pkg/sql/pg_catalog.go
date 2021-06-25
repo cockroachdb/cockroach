@@ -546,8 +546,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tableOid(table.GetID()),        // oid
 			tree.NewDName(table.GetName()), // relname
 			namespaceOid,                   // relnamespace
-			oidZero,                        // reltype (PG creates a composite type in pg_type for each table)
-			oidZero,                        // reloftype (PG creates a composite type in pg_type for each table)
+			tableIDToTypeOID(table),        // reltype (PG creates a composite type in pg_type for each table)
+			oidZero,                        // reloftype (used for type tables, which is unsupported)
 			getOwnerOID(table),             // relowner
 			relAm,                          // relam
 			oidZero,                        // relfilenode
@@ -2317,7 +2317,6 @@ var (
 	typTypeRange     = tree.NewDString("r")
 
 	// Avoid unused warning for constants.
-	_ = typTypeComposite
 	_ = typTypeDomain
 	_ = typTypePseudo
 	_ = typTypeRange
@@ -2340,7 +2339,6 @@ var (
 	typCategoryUnknown     = tree.NewDString("X")
 
 	// Avoid unused warning for constants.
-	_ = typCategoryComposite
 	_ = typCategoryEnum
 	_ = typCategoryGeometric
 	_ = typCategoryRange
@@ -2348,6 +2346,65 @@ var (
 
 	typDelim = tree.NewDString(",")
 )
+
+func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
+	// We re-use the type ID to OID logic, as type IDs and table IDs share the
+	// same ID space.
+	if !table.IsVirtualTable() {
+		return tree.NewDOid(tree.DInt(typedesc.TypeIDToOID(table.GetID())))
+	}
+	// Virtual table OIDs start at max UInt32, so doing OID math would overflow.
+	// As such, just use the virtual table ID.
+	return tree.NewDOid(tree.DInt(table.GetID()))
+}
+
+func addPGTypeRowForTable(
+	h oidHasher,
+	db catalog.DatabaseDescriptor,
+	scName string,
+	table catalog.TableDescriptor,
+	addRow func(...tree.Datum) error,
+) error {
+	nspOid := h.NamespaceOid(db.GetID(), scName)
+	return addRow(
+		tableIDToTypeOID(table),        // oid
+		tree.NewDName(table.GetName()), // typname
+		nspOid,                         // typnamespace
+		getOwnerOID(table),             // typowner
+		negOneVal,                      // typlen
+		tree.DBoolFalse,                // typbyval (is it fixedlen or not)
+		typTypeComposite,               // typtype
+		typCategoryComposite,           // typcategory
+		tree.DBoolFalse,                // typispreferred
+		tree.DBoolTrue,                 // typisdefined
+		typDelim,                       // typdelim
+		tableOid(table.GetID()),        // typrelid
+		oidZero,                        // typelem
+		// NOTE: we do not add the array type or OID here.
+		// We unfortunately do not reserve a descriptor ID for an array of the given class,
+		// and there is no safe "range" to reserve for arrays left.
+		oidZero, // typarray
+
+		h.RegProc("record_in"),   // typinput
+		h.RegProc("record_out"),  // typoutput
+		h.RegProc("record_recv"), // typreceive
+		h.RegProc("record_send"), // typsend
+		oidZero,                  // typmodin
+		oidZero,                  // typmodout
+		oidZero,                  // typanalyze
+
+		tree.DNull,      // typalign
+		tree.DNull,      // typstorage
+		tree.DBoolFalse, // typnotnull
+		oidZero,         // typbasetype
+		negOneVal,       // typtypmod
+		zeroVal,         // typndims
+		oidZero,         // typcollation
+		tree.DNull,      // typdefaultbin
+		tree.DNull,      // typdefault
+		tree.DNull,      // typacl
+	)
+}
 
 func addPGTypeRow(
 	h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
@@ -2443,16 +2500,35 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					}
 				}
 
+				// Each table has a corresponding pg_type row.
+				if err := forEachTableDescWithTableLookup(
+					ctx,
+					p,
+					dbContext,
+					virtualCurrentDB,
+					func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor, lookup tableLookupFn) error {
+						return addPGTypeRowForTable(h, db, scName, table, addRow)
+					},
+				); err != nil {
+					return err
+				}
+
 				// Now generate rows for user defined types in this database.
-				return forEachTypeDesc(ctx, p, db, func(_ catalog.DatabaseDescriptor, scName string, typDesc catalog.TypeDescriptor) error {
-					nspOid := h.NamespaceOid(db.GetID(), scName)
-					typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.GetName(), scName, typDesc.GetName()), p)
-					if err != nil {
-						return err
-					}
-					return addPGTypeRow(h, nspOid, getOwnerOID(typDesc), typ, addRow)
-				})
-			})
+				return forEachTypeDesc(
+					ctx,
+					p,
+					db,
+					func(_ catalog.DatabaseDescriptor, scName string, typDesc catalog.TypeDescriptor) error {
+						nspOid := h.NamespaceOid(db.GetID(), scName)
+						typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.GetName(), scName, typDesc.GetName()), p)
+						if err != nil {
+							return err
+						}
+						return addPGTypeRow(h, nspOid, getOwnerOID(typDesc), typ, addRow)
+					},
+				)
+			},
+		)
 	},
 	indexes: []virtualIndex{
 		{
@@ -2490,16 +2566,49 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				}
 				typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
-					if errors.Is(err, catalog.ErrDescriptorNotFound) {
-						return false, nil
+					// If the type was not found, it may be a table.
+					if !(errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject) {
+						return false, err
 					}
-					if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
-						return false, nil
-					}
-					return false, err
+					typDesc = nil
 				}
+
+				// If it is not a type, it has to be a table.
+				if typDesc == nil {
+					table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+					if err != nil {
+						if errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+							return false, nil
+						}
+						return false, err
+					}
+					sc, err := p.Descriptors().GetImmutableSchemaByID(
+						ctx,
+						p.txn,
+						table.GetParentSchemaID(),
+						tree.SchemaLookupFlags{},
+					)
+					if err != nil {
+						return false, err
+					}
+					if err := addPGTypeRowForTable(
+						h,
+						db,
+						sc.GetName(),
+						table,
+						addRow,
+					); err != nil {
+						return false, err
+					}
+					return true, nil
+				}
+
 				sc, err := p.Descriptors().GetImmutableSchemaByID(
-					ctx, p.txn, typDesc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+					ctx,
+					p.txn,
+					typDesc.GetParentSchemaID(),
+					tree.SchemaLookupFlags{},
+				)
 				if err != nil {
 					return false, err
 				}
