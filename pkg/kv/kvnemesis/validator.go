@@ -184,9 +184,10 @@ type observedRead struct {
 func (*observedRead) observedMarker() {}
 
 type observedScan struct {
-	Span  roachpb.Span
-	KVs   []roachpb.KeyValue
-	Valid multiKeyTimeSpan
+	Span    roachpb.Span
+	Reverse bool
+	KVs     []roachpb.KeyValue
+	Valid   multiKeyTimeSpan
 }
 
 func (*observedScan) observedMarker() {}
@@ -271,14 +272,19 @@ func (v *validator) processOp(txnID *string, op Operation) {
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
 		if txnID == nil {
-			v.checkAtomic(`scan`, t.Result, op)
+			atomicScanType := `scan`
+			if t.Reverse {
+				atomicScanType = `reverse scan`
+			}
+			v.checkAtomic(atomicScanType, t.Result, op)
 		} else {
 			scan := &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
 					EndKey: t.EndKey,
 				},
-				KVs: make([]roachpb.KeyValue, len(t.Result.Values)),
+				KVs:     make([]roachpb.KeyValue, len(t.Result.Values)),
+				Reverse: t.Reverse,
 			}
 			for i, kv := range t.Result.Values {
 				scan.KVs[i] = roachpb.KeyValue{
@@ -523,7 +529,11 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 				}
 			}
 			// All kvs should be in order.
-			if !sort.IsSorted(roachpb.KeyValueByKey(o.KVs)) {
+			orderedKVs := sort.Interface(roachpb.KeyValueByKey(o.KVs))
+			if o.Reverse {
+				orderedKVs = sort.Reverse(orderedKVs)
+			}
+			if !sort.IsSorted(orderedKVs) {
 				failure = `scan result not ordered correctly`
 			}
 			o.Valid = validScanTime(batch, o.Span, o.KVs)
@@ -777,6 +787,10 @@ func printObserved(observedOps ...observedOp) string {
 			fmt.Fprintf(&buf, "[r]%s:%s->%s",
 				o.Key, o.Valid, mustGetStringValue(o.Value.RawBytes))
 		case *observedScan:
+			opCode := "s"
+			if o.Reverse {
+				opCode = "rs"
+			}
 			var kvs strings.Builder
 			for i, kv := range o.KVs {
 				if i > 0 {
@@ -786,8 +800,8 @@ func printObserved(observedOps ...observedOp) string {
 				kvs.WriteByte(':')
 				kvs.WriteString(mustGetStringValue(kv.Value.RawBytes))
 			}
-			fmt.Fprintf(&buf, "[s]%s:%s->[%s]",
-				o.Span, o.Valid, kvs.String())
+			fmt.Fprintf(&buf, "[%s]%s:%s->[%s]",
+				opCode, o.Span, o.Valid, kvs.String())
 		default:
 			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observed, observed))
 		}

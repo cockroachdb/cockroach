@@ -119,7 +119,11 @@ func TestRandStep(t *testing.T) {
 					client.PutMissing++
 				}
 			case *ScanOperation:
-				if o.ForUpdate {
+				if o.Reverse && o.ForUpdate {
+					client.ReverseScanForUpdate++
+				} else if o.Reverse {
+					client.ReverseScan++
+				} else if o.ForUpdate {
 					client.ScanForUpdate++
 				} else {
 					client.Scan++
