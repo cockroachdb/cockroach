@@ -3404,7 +3404,7 @@ def go_deps():
     go_repository(
         name = "com_github_prometheus_client_model",
         build_directives = [
-            "gazelle:proto_import_prefix prometheus/client_model/",
+            "gazelle:proto_import_prefix client_model/",
         ],
         build_file_proto_mode = "package",
         importpath = "github.com/prometheus/client_model",
