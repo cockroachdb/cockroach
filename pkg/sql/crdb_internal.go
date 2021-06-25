@@ -1222,11 +1222,11 @@ var crdbInternalClusterInflightTracesTable = virtualSchemaTable{
 	comment: `traces for in-flight spans across all nodes in the cluster (cluster RPC; expensive!)`,
 	schema: `
 CREATE TABLE crdb_internal.cluster_inflight_traces (
-  trace_id    INT NOT NULL,   -- The trace's ID.
-  node_id     INT NOT NULL,   -- The node's ID.
-  trace_json  STRING NULL,    -- JSON representation of the traced remote operation.
-  trace_str   STRING NULL,    -- human readable representation of the traced remote operation.
-  jaeger_json STRING NULL,    -- Jaeger JSON representation of the traced remote operation.
+  trace_id     INT NOT NULL,    -- The trace's ID.
+  node_id      INT NOT NULL,    -- The node's ID.
+  root_op_name STRING NOT NULL, -- The operation name of the root span in the current trace.
+  trace_str    STRING NULL,     -- human readable representation of the traced remote operation.
+  jaeger_json  STRING NULL,     -- Jaeger JSON representation of the traced remote operation.
   INDEX(trace_id)
 )`,
 	indexes: []virtualIndex{{populate: func(ctx context.Context, constraint tree.Datum, p *planner,
@@ -1247,17 +1247,15 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 		traceCollector := p.ExecCfg().TraceCollector
 		for iter := traceCollector.StartIter(ctx, traceID); iter.Valid(); iter.Next() {
 			nodeID, recording := iter.Value()
-			traceJSON, err := tracing.TraceToJSON(recording)
-			if err != nil {
-				return false, err
-			}
 			traceString := recording.String()
 			traceJaegerJSON, err := recording.ToJaegerJSON("", "", fmt.Sprintf("node %d", nodeID))
 			if err != nil {
 				return false, err
 			}
-			if err := addRow(tree.NewDInt(tree.DInt(traceID)), tree.NewDInt(tree.DInt(nodeID)),
-				tree.NewDString(traceJSON), tree.NewDString(traceString),
+			if err := addRow(tree.NewDInt(tree.DInt(traceID)),
+				tree.NewDInt(tree.DInt(nodeID)),
+				tree.NewDString(recording[0].Operation),
+				tree.NewDString(traceString),
 				tree.NewDString(traceJaegerJSON)); err != nil {
 				return false, err
 			}
