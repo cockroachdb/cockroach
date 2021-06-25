@@ -1434,6 +1434,15 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
+		// Creating this client causes a user to be created, which causes jobs
+		// to be created, so we do it up-front rather than inside the test.
+		_, err := s.GetAuthenticatedHTTPClient(isAdmin)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	// Get list of existing jobs (migrations). Assumed to all have succeeded.
 	existingIDs := getSystemJobIDs(t, sqlDB)
 

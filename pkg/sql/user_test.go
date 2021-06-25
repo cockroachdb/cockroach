@@ -17,7 +17,6 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
 )
@@ -141,23 +139,47 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 	unavailableCh.Store(ch)
 	defer close(ch)
 
-	fmt.Fprintln(os.Stderr, "-- expect timeout --")
+	fmt.Fprintln(os.Stderr, "-- expect no timeout because of cache --")
 
 	func() {
-		// Now attempt to connect again. We're expecting a timeout within 5 seconds.
-		start := timeutil.Now()
+		// Now attempt to connect again. Since a previous authentication attempt
+		// for this user occurred, the auth-related info should be cached, so
+		// authentication should work.
 		dbSQL, err := pgxConn(t, userURL)
-		if err == nil {
-			defer func() { _ = dbSQL.Close() }()
+		if err != nil {
+			t.Fatal(err)
 		}
-		if !testutils.IsError(err, "internal error while retrieving user account") {
-			t.Fatalf("expected error during connection, got %v", err)
-		}
-		timeoutDur := timeutil.Now().Sub(start)
-		if timeoutDur > 5*time.Second {
-			t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
+		defer func() { _ = dbSQL.Close() }()
+		// A simple query must work even without a system range available.
+		if _, err := dbSQL.Exec("SELECT 1"); err != nil {
+			t.Fatal(err)
 		}
 	}()
+
+	/*
+		// Commented until the later commit that adds the setting.
+		if _, err := db.Exec(`SET CLUSTER SETTING server.authentication_cache.enabled = false`); err != nil {
+			t.Fatal(err)
+		}
+
+		fmt.Fprintln(os.Stderr, "-- expect timeout --")
+
+		func() {
+			// Now attempt to connect yet again. We're expecting a timeout within 5 seconds.
+			start := timeutil.Now()
+			dbSQL, err := pgxConn(t, userURL)
+			if err == nil {
+				defer func() { _ = dbSQL.Close() }()
+			}
+			if !testutils.IsError(err, "internal error while retrieving user account") {
+				t.Fatalf("expected error during connection, got %v", err)
+			}
+			timeoutDur := timeutil.Now().Sub(start)
+			if timeoutDur > 5*time.Second {
+				t.Fatalf("timeout lasted for more than 5 second (%s)", timeoutDur)
+			}
+		}()
+	*/
 
 	fmt.Fprintln(os.Stderr, "-- no timeout for root --")
 

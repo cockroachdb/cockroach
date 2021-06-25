@@ -332,9 +332,15 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
+	// Bump role-related table versions to force a refresh of membership/password
+	// caches.
+	if err := params.p.BumpUsersTableVersion(params.ctx); err != nil {
+		return err
+	}
+	if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
+		return err
+	}
 	if numRoleMembershipsDeleted > 0 {
-		// Some role memberships have been deleted, bump role_members table version to
-		// force a refresh of role membership.
 		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
 			return err
 		}
