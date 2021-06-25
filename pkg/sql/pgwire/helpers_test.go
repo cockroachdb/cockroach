@@ -15,8 +15,10 @@ import (
 	"time"
 )
 
-func (s *Server) DrainImpl(drainWait time.Duration, cancelWait time.Duration) error {
-	return s.drainImpl(drainWait, cancelWait, nil /* reporter */)
+func (s *Server) DrainImpl(
+	ctx context.Context, queryWait time.Duration, cancelWait time.Duration,
+) error {
+	return s.drainImpl(ctx, queryWait, cancelWait, nil /* reporter */)
 }
 
 // OverwriteCancelMap overwrites all active connections' context.CancelFuncs so
