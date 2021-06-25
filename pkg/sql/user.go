@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -55,8 +57,13 @@ import (
 //   after a timeout instead of blocking. The timeout is configurable
 //   via the cluster setting.
 //
+// - there is a cache for the the information from system.users and
+//   system.role_options. As long as the lookup succeeded before and there
+//   haven't any CREATE/ALTER/DROP ROLE commands since, then the cache is used
+//   without a KV lookup.
+//
 func GetUserHashedPassword(
-	ctx context.Context, ie *InternalExecutor, username security.SQLUsername,
+	ctx context.Context, execCfg *ExecutorConfig, ie *InternalExecutor, username security.SQLUsername,
 ) (
 	exists bool,
 	canLogin bool,
@@ -71,7 +78,7 @@ func GetUserHashedPassword(
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
 		rootFn := func(ctx context.Context) ([]byte, error) {
-			passwordInfo, err := retrieveUserAndPassword(ctx, ie, isRoot, username)
+			passwordInfo, err := retrieveUserAndPasswordWithCache(ctx, execCfg, ie, isRoot, username)
 			return passwordInfo.hashedPassword, err
 		}
 
@@ -84,13 +91,22 @@ func GetUserHashedPassword(
 
 	// Other users must reach for system.users no matter what, because
 	// only that contains the truth about whether the user exists.
-	passwordInfo, err := retrieveUserAndPassword(
-		ctx, ie, isRoot, username,
+	passwordInfo, err := retrieveUserAndPasswordWithCache(
+		ctx, execCfg, ie, isRoot, username,
 	)
 	return passwordInfo.userExists, passwordInfo.canLogin,
 		func(ctx context.Context) ([]byte, error) { return passwordInfo.hashedPassword, nil },
 		func(ctx context.Context) (*tree.DTimestamp, error) { return passwordInfo.validUntil, nil },
 		err
+}
+
+// PasswordCache is a shared cache for hashed passwords and related information.
+type PasswordCache struct {
+	syncutil.Mutex
+	usersTableVersion       descpb.DescriptorVersion
+	roleOptionsTableVersion descpb.DescriptorVersion
+	// cache is a mapping from username to passwordInfo.
+	cache map[security.SQLUsername]passwordInfo
 }
 
 type passwordInfo struct {
@@ -100,8 +116,106 @@ type passwordInfo struct {
 	validUntil     *tree.DTimestamp
 }
 
+func retrieveUserAndPasswordWithCache(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	ie *InternalExecutor,
+	isRoot bool,
+	normalizedUsername security.SQLUsername,
+) (pInfo passwordInfo, err error) {
+	err = descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, ie, execCfg.DB,
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
+			_, usersTableDesc, err := descriptors.GetImmutableTableByName(
+				ctx,
+				txn,
+				userTableName,
+				tree.ObjectLookupFlagsWithRequired(),
+			)
+			if err != nil {
+				return err
+			}
+			_, roleOptionsTableDesc, err := descriptors.GetImmutableTableByName(
+				ctx,
+				txn,
+				RoleOptionsTableName,
+				tree.ObjectLookupFlagsWithRequired(),
+			)
+			if err != nil {
+				return err
+			}
+			if usersTableDesc.IsUncommittedVersion() || roleOptionsTableDesc.IsUncommittedVersion() {
+				pInfo, err = retrieveUserAndPassword(ctx, txn, ie, isRoot, normalizedUsername)
+				if err != nil {
+					return err
+				}
+			}
+
+			passwordCache := execCfg.PasswordCache
+			usersTableVersion := usersTableDesc.GetVersion()
+			roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
+			// We loop in case the table version changes while looking up
+			// password or role options.
+			for {
+				// Check version and maybe clear cache while holding the mutex.
+				// We release the lock here instead of using defer as we need to keep
+				// going and re-lock if adding the looked-up entry.
+				passwordCache.Lock()
+				if passwordCache.usersTableVersion != usersTableVersion {
+					// Update users table version and drop the map.
+					passwordCache.usersTableVersion = usersTableVersion
+					passwordCache.cache = make(map[security.SQLUsername]passwordInfo)
+				}
+				if passwordCache.roleOptionsTableVersion != roleOptionsTableVersion {
+					// Update role_optiosn table version and drop the map.
+					passwordCache.roleOptionsTableVersion = roleOptionsTableVersion
+					passwordCache.cache = make(map[security.SQLUsername]passwordInfo)
+				}
+
+				var ok bool
+				pInfo, ok = passwordCache.cache[normalizedUsername]
+				passwordCache.Unlock()
+
+				if ok {
+					// Found: return.
+					return nil
+				}
+
+				// Lookup memberships outside the lock.
+				pInfo, err = retrieveUserAndPassword(ctx, txn, ie, isRoot, normalizedUsername)
+				if err != nil {
+					return err
+				}
+
+				// Update membership.
+				passwordCache.Lock()
+				if passwordCache.usersTableVersion != usersTableVersion {
+					// Table version has changed while we were looking, unlock and start over.
+					usersTableVersion = passwordCache.usersTableVersion
+					passwordCache.Unlock()
+					continue
+				}
+				if passwordCache.roleOptionsTableVersion != roleOptionsTableVersion {
+					// Table version has changed while we were looking, unlock and start over.
+					roleOptionsTableVersion = passwordCache.roleOptionsTableVersion
+					passwordCache.Unlock()
+					continue
+				}
+
+				// Table version remains the same: update map, unlock, return.
+				passwordCache.cache[normalizedUsername] = pInfo
+				passwordCache.Unlock()
+				return nil
+			}
+		})
+	return pInfo, err
+}
+
 func retrieveUserAndPassword(
-	ctx context.Context, ie *InternalExecutor, isRoot bool, normalizedUsername security.SQLUsername,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie *InternalExecutor,
+	isRoot bool,
+	normalizedUsername security.SQLUsername,
 ) (pInfo passwordInfo, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
@@ -125,7 +239,7 @@ func retrieveUserAndPassword(
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 			`WHERE username=$1`
 		values, err := ie.QueryRowEx(
-			ctx, "get-hashed-pwd", nil, /* txn */
+			ctx, "get-hashed-pwd", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			getHashedPassword, normalizedUsername)
 		if err != nil {
@@ -147,7 +261,7 @@ func retrieveUserAndPassword(
 			`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL')`
 
 		it, err := ie.QueryIteratorEx(
-			ctx, "get-login-dependencies", nil, /* txn */
+			ctx, "get-login-dependencies", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			getLoginDependencies,
 			normalizedUsername,
@@ -258,5 +372,31 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 
 	return p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role membership table",
+	)
+}
+
+// BumpUsersTableVersion increases the table version for the
+// users table.
+func (p *planner) BumpUsersTableVersion(ctx context.Context) error {
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, userTableName, true, tree.ResolveAnyTableKind)
+	if err != nil {
+		return err
+	}
+
+	return p.writeSchemaChange(
+		ctx, tableDesc, descpb.InvalidMutationID, "updating version for users table",
+	)
+}
+
+// BumpRoleOptionsTableVersion increases the table version for the
+// role_options table.
+func (p *planner) BumpRoleOptionsTableVersion(ctx context.Context) error {
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, RoleOptionsTableName, true, tree.ResolveAnyTableKind)
+	if err != nil {
+		return err
+	}
+
+	return p.writeSchemaChange(
+		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role options table",
 	)
 }

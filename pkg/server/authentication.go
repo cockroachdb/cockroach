@@ -255,7 +255,10 @@ func (s *authenticationServer) UserLoginFromSSO(
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
 	exists, canLogin, _, _, err := sql.GetUserHashedPassword(
-		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+		ctx,
+		s.server.sqlServer.execCfg,
+		s.server.sqlServer.execCfg.InternalExecutor,
+		username,
 	)
 
 	if err != nil {
@@ -414,7 +417,10 @@ func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
 	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
-		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+		ctx,
+		s.server.sqlServer.execCfg,
+		s.server.sqlServer.execCfg.InternalExecutor,
+		username,
 	)
 	if err != nil {
 		return false, false, err
