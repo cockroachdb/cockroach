@@ -604,8 +604,8 @@ func (r *testRunner) runTest(
 	stdout io.Writer,
 	l *logger.Logger,
 ) (bool, error) {
-	if t.spec.Skip != "" {
-		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.spec.Skip)
+	if t.Spec().Skip != "" {
+		return false, fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().Skip)
 	}
 
 	if teamCity {
@@ -697,10 +697,10 @@ func (r *testRunner) runTest(
 		r.status.Lock()
 		delete(r.status.running, t)
 		// Only include tests with a Run function in the summary output.
-		if t.spec.Run != nil {
+		if t.Spec().Run != nil {
 			if t.Failed() {
 				r.status.fail[t] = struct{}{}
-			} else if t.spec.Skip == "" {
+			} else if t.Spec().Skip == "" {
 				r.status.pass[t] = struct{}{}
 			} else {
 				r.status.skip[t] = struct{}{}
@@ -712,8 +712,8 @@ func (r *testRunner) runTest(
 	t.start = timeutil.Now()
 
 	timeout := 10 * time.Hour
-	if t.spec.Timeout != 0 {
-		timeout = t.spec.Timeout
+	if d := t.Spec().Timeout; d != 0 {
+		timeout = d
 	}
 	// Make sure the cluster has enough life left for the test plus enough headroom
 	// after the test finishes so that the next test can be selected. If it
@@ -754,7 +754,7 @@ func (r *testRunner) runTest(
 			}
 		}()
 
-		t.spec.Run(runCtx, t, c)
+		t.Spec().Run(runCtx, t, c)
 	}()
 
 	teardownL, err := c.l.ChildLogger("teardown", logger.QuietStderr, logger.QuietStdout)
@@ -862,7 +862,7 @@ func (r *testRunner) runTest(
 func (r *testRunner) shouldPostGithubIssue(t *test) bool {
 	// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 	opts := issues.DefaultOptionsFromEnv()
-	return opts.CanPost() && opts.IsReleaseBranch() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0
+	return opts.CanPost() && opts.IsReleaseBranch() && t.Spec().Run != nil && t.Spec().Cluster.NodeCount > 0
 }
 
 func (r *testRunner) maybePostGithubIssue(
@@ -876,7 +876,7 @@ func (r *testRunner) maybePostGithubIssue(
 	if err != nil {
 		t.Fatalf("could not load teams: %v", err)
 	}
-	team := teams[ownerToAlias(t.spec.Owner)]
+	team := teams[ownerToAlias(t.Spec().Owner)]
 
 	branch := "<unknown branch>"
 	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
@@ -890,7 +890,7 @@ func (r *testRunner) maybePostGithubIssue(
 	// they are also release blockers (this label may be removed
 	// by a human upon closer investigation).
 	labels := []string{"O-roachtest"}
-	if !t.spec.NonReleaseBlocker {
+	if !t.Spec().NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
 	}
 

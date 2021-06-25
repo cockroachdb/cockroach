@@ -99,7 +99,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	defer smither.Close()
 
 	t.Status("running TLP")
-	until := time.After(t.spec.Timeout / 2)
+	until := time.After(t.Spec().Timeout / 2)
 	done := ctx.Done()
 	for i := 1; ; i++ {
 		select {
