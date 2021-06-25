@@ -252,7 +252,7 @@ func maxSupportedTPCCWarehouses(
 
 func registerTPCC(r *testRegistry) {
 	headroomSpec := r.makeClusterSpec(4, spec.CPU(16))
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
@@ -274,7 +274,7 @@ func registerTPCC(r *testRegistry) {
 	})
 	mixedHeadroomSpec := r.makeClusterSpec(5, spec.CPU(16))
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional
 		// node and on a mixed version cluster which runs its long-running
 		// migrations while TPCC runs. It simulates a real production
@@ -360,7 +360,7 @@ func registerTPCC(r *testRegistry) {
 			).run(ctx, t)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpcc-nowait/nodes=3/w=1",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
@@ -374,7 +374,7 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "weekly/tpcc/headroom",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
@@ -400,7 +400,7 @@ func registerTPCC(r *testRegistry) {
 			"us-west1",
 			"europe-west2",
 		}
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:       fmt.Sprintf("tpcc/multiregion/survive=%s/chaos=true", survivalGoal),
 			Owner:      OwnerMultiRegion,
 			MinVersion: "v21.1.0",
@@ -458,7 +458,7 @@ func registerTPCC(r *testRegistry) {
 		})
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
@@ -486,7 +486,7 @@ func registerTPCC(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
 		Owner:      OwnerSQLQueries,
 		MinVersion: "v20.1.0",
@@ -714,7 +714,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 		minVersion = "v19.1.0" // needed for import
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       name,
 		Owner:      OwnerKV,
 		Cluster:    nodes,

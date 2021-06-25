@@ -197,7 +197,7 @@ func registerRubyPG(r *testRegistry) {
 		results.summarizeAll(t, "ruby-pg", blocklistName, expectedFailures, version, rubyPGVersion)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		MinVersion: "v20.1.0",
 		Name:       "ruby-pg",
 		Owner:      OwnerSQLExperience,

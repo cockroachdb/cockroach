@@ -108,7 +108,7 @@ func registerTPCE(r *testRegistry) {
 		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: []string{"weekly"}, timeout: 36 * time.Hour},
 	} {
 		opts := opts
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", opts.customers, opts.nodes),
 			Owner:   OwnerKV,
 			Tags:    opts.tags,

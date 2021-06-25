@@ -233,7 +233,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       opt.testName,
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",

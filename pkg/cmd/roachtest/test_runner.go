@@ -161,7 +161,7 @@ type testOpts struct {
 // lopt: Options for logging.
 func (r *testRunner) Run(
 	ctx context.Context,
-	tests []testSpec,
+	tests []TestSpec,
 	count int,
 	parallelism int,
 	clustersOpt clustersOpt,
@@ -227,7 +227,7 @@ func (r *testRunner) Run(
 	// to an existing one).
 	allocateCluster := func(
 		ctx context.Context,
-		t testSpec,
+		t TestSpec,
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
@@ -341,7 +341,7 @@ func (r *testRunner) Run(
 
 type clusterAllocatorFn func(
 	ctx context.Context,
-	t testSpec,
+	t TestSpec,
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,

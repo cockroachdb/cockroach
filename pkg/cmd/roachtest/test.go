@@ -31,7 +31,8 @@ import (
 	"github.com/petermattis/goid"
 )
 
-type testSpec struct {
+// TestSpec is a spec for a roachtest.
+type TestSpec struct {
 	Skip string // if non-empty, test will be skipped
 	// When Skip is set, this can contain more text to be printed in the logs
 	// after the "--- SKIP" line.
@@ -95,7 +96,7 @@ const perfArtifactsDir = "perf"
 // matchOrSkip returns true if the filter matches the test. If the filter does
 // not match the test because the tag filter does not match, the test is
 // matched, but marked as skipped.
-func (t *testSpec) matchOrSkip(filter *testFilter) bool {
+func (t *TestSpec) matchOrSkip(filter *testFilter) bool {
 	if !filter.name.MatchString(t.Name) {
 		return false
 	}
@@ -121,7 +122,7 @@ type testStatus struct {
 }
 
 type test struct {
-	spec *testSpec
+	spec *TestSpec
 
 	// buildVersion is the version of the Cockroach binary that the test will run
 	// against.
@@ -209,7 +210,7 @@ func (t *test) status(ctx context.Context, id int64, args ...interface{}) {
 }
 
 // Status sets the main status message for the test. When called from the main
-// test goroutine (i.e. the goroutine on which testSpec.Run is invoked), this
+// test goroutine (i.e. the goroutine on which TestSpec.Run is invoked), this
 // is equivalent to calling WorkerStatus. If no arguments are specified, the
 // status message is erased.
 func (t *test) Status(args ...interface{}) {
@@ -248,7 +249,7 @@ func (t *test) progress(id int64, frac float64) {
 
 // Progress sets the progress (a fraction in the range [0,1]) associated with
 // the main test status messasge. When called from the main test goroutine
-// (i.e. the goroutine on which testSpec.Run is invoked), this is equivalent to
+// (i.e. the goroutine on which TestSpec.Run is invoked), this is equivalent to
 // calling WorkerProgress.
 func (t *test) Progress(frac float64) {
 	t.progress(t.runnerID, frac)
@@ -489,7 +490,7 @@ func teamCityNameEscape(name string) string {
 }
 
 type testWithCount struct {
-	spec testSpec
+	spec TestSpec
 	// count maintains the number of runs remaining for a test.
 	count int
 }

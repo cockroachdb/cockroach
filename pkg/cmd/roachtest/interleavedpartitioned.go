@@ -121,7 +121,7 @@ func registerInterleaved(r *testRegistry) {
 		m.Wait()
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "interleavedpartitioned",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(12, spec.Geo(), spec.Zones("us-east1-b,us-west1-b,europe-west2-b")),

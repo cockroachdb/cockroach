@@ -31,7 +31,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 	// 2. Ability to use ALTER DATABASE ... CONVERT TO SCHEMA WITH PARENT on
 	//    databases created in 20.1.
 	// TODO (lucy): Remove this test in 21.1.
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "schemachange/database-version-upgrade",
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v20.2.0",

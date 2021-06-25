@@ -139,7 +139,7 @@ func registerEngineSwitch(r *testRegistry) {
 	}
 
 	n := 3
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("engine/switch/nodes=%d", n),
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",
@@ -149,7 +149,7 @@ func registerEngineSwitch(r *testRegistry) {
 			runEngineSwitch(ctx, t, c)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("engine/switch/encrypted/nodes=%d", n),
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",

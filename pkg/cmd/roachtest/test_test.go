@@ -64,7 +64,7 @@ func TestMatchOrSkip(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			f := newFilter(c.filter)
-			spec := &testSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
+			spec := &TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
 			if value := spec.matchOrSkip(f); c.expected != value {
 				t.Fatalf("expected %t, but found %t", c.expected, value)
 			} else if value && c.expectedSkip != spec.Skip {
@@ -89,13 +89,13 @@ func nilLogger() *logger.Logger {
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
 	r := mkReg(t)
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
 		Run:     func(ctx context.Context, t *test, c cluster.Cluster) {},
 		Cluster: r.makeClusterSpec(0),
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "fail",
 		Owner: OwnerUnitTest,
 		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
@@ -181,7 +181,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		cpuQuota:                  1000,
 		keepClustersOnTestFailure: false,
 	}
-	test := testSpec{
+	test := TestSpec{
 		Name:    `timeout`,
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
@@ -190,7 +190,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 			<-ctx.Done()
 		},
 	}
-	err := runner.Run(ctx, []testSpec{test}, 1, /* count */
+	err := runner.Run(ctx, []TestSpec{test}, 1, /* count */
 		defaultParallelism, copt, testOpts{}, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
@@ -206,17 +206,17 @@ func TestRunnerTestTimeout(t *testing.T) {
 func TestRegistryPrepareSpec(t *testing.T) {
 	dummyRun := func(context.Context, *test, cluster.Cluster) {}
 
-	var listTests = func(t *testSpec) []string {
+	var listTests = func(t *TestSpec) []string {
 		return []string{t.Name}
 	}
 
 	testCases := []struct {
-		spec          testSpec
+		spec          TestSpec
 		expectedErr   string
 		expectedTests []string
 	}{
 		{
-			testSpec{
+			TestSpec{
 				Name:    "a",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
@@ -226,7 +226,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			[]string{"a"},
 		},
 		{
-			testSpec{
+			TestSpec{
 				Name:       "a",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
@@ -237,7 +237,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			[]string{"a"},
 		},
 		{
-			testSpec{
+			TestSpec{
 				Name:       "a",
 				Owner:      OwnerUnitTest,
 				MinVersion: "foo",
@@ -248,7 +248,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			nil,
 		},
 		{
-			testSpec{
+			TestSpec{
 				Name:       "illegal *[]",
 				Owner:      OwnerUnitTest,
 				MinVersion: "foo",
@@ -296,7 +296,7 @@ func TestRegistryMinVersion(t *testing.T) {
 		t.Run(c.buildVersion, func(t *testing.T) {
 			var runA, runB bool
 			r := mkReg(t)
-			r.Add(testSpec{
+			r.Add(TestSpec{
 				Name:       "a",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
@@ -305,7 +305,7 @@ func TestRegistryMinVersion(t *testing.T) {
 					runA = true
 				},
 			})
-			r.Add(testSpec{
+			r.Add(TestSpec{
 				Name:       "b",
 				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
@@ -355,7 +355,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, version.Version{})
 	r := mkReg(t)
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
 		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),

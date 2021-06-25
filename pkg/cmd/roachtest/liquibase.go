@@ -104,7 +104,7 @@ func registerLiquibase(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		MinVersion: "v20.2.0",
 		Name:       "liquibase",
 		Owner:      OwnerSQLExperience,

@@ -237,7 +237,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 func registerNetwork(r *testRegistry) {
 	const numNodes = 4
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    fmt.Sprintf("network/sanity/nodes=%d", numNodes),
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(numNodes),
@@ -245,7 +245,7 @@ func registerNetwork(r *testRegistry) {
 			runNetworkSanity(ctx, t, c, numNodes)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(numNodes),

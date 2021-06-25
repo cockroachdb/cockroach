@@ -94,7 +94,7 @@ func registerPop(r *testRegistry) {
 		require.NoError(t, err, "error while running pop tests")
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "pop",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",

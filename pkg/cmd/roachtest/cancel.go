@@ -128,7 +128,7 @@ func registerCancel(r *testRegistry) {
 		queries += fmt.Sprintf("%d", q)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%s,nodes=%d", queries, numNodes),
 		Owner:   OwnerSQLQueries,
 		Cluster: r.makeClusterSpec(numNodes),
@@ -137,7 +137,7 @@ func registerCancel(r *testRegistry) {
 		},
 	})
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    fmt.Sprintf("cancel/tpch/local/queries=%s,nodes=%d", queries, numNodes),
 		Owner:   OwnerSQLQueries,
 		Cluster: r.makeClusterSpec(numNodes),

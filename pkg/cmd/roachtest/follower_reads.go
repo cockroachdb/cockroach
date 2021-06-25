@@ -41,7 +41,7 @@ import (
 
 func registerFollowerReads(r *testRegistry) {
 	register := func(survival survivalGoal, locality localitySetting) {
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
@@ -61,7 +61,7 @@ func registerFollowerReads(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "follower-reads/mixed-version/single-region",
 		Owner: OwnerKV,
 		Cluster: r.makeClusterSpec(

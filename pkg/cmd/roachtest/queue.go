@@ -23,7 +23,7 @@ import (
 func registerQueue(r *testRegistry) {
 	// One node runs the workload generator, all other nodes host CockroachDB.
 	const numNodes = 2
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/17229",
 		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
 		Owner:   OwnerKV,

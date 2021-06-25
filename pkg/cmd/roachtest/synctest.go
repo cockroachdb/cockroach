@@ -30,7 +30,7 @@ else
 fi
 `
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Skip:       "#48603: broken on Pebble",
 		Name:       "synctest",
 		Owner:      OwnerStorage,

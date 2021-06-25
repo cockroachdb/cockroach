@@ -36,7 +36,7 @@ type workPool struct {
 	}
 }
 
-func newWorkPool(tests []testSpec, count int) *workPool {
+func newWorkPool(tests []TestSpec, count int) *workPool {
 	p := &workPool{count: count}
 	for _, spec := range tests {
 		p.mu.tests = append(p.mu.tests, testWithCount{spec: spec, count: count})
@@ -51,7 +51,7 @@ type testToRunRes struct {
 	// other fields are set.
 	noWork bool
 	// spec is the selected test.
-	spec testSpec
+	spec TestSpec
 	// runNum is run number. 1 if --count was not used.
 	runNum int
 

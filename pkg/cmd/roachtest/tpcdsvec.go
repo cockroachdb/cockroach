@@ -170,7 +170,7 @@ func registerTPCDSVec(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpcdsvec",
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(3),

@@ -18,7 +18,7 @@ import (
 )
 
 func registerSequenceUpgrade(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "version/sequence-upgrade",
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v21.1.0",

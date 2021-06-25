@@ -98,7 +98,7 @@ func registerFlowable(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "flowable",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),

@@ -56,7 +56,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		return startImport
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "import/nodeShutdown/worker",
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
@@ -71,7 +71,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "import/nodeShutdown/coordinator",
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
@@ -133,7 +133,7 @@ func registerImportTPCC(r *testRegistry) {
 	for _, numNodes := range []int{4, 32} {
 		testName := fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes)
 		timeout := 5 * time.Hour
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    testName,
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(numNodes),
@@ -145,7 +145,7 @@ func registerImportTPCC(r *testRegistry) {
 	}
 	const geoWarehouses = 4000
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Skip:    "#37349 - OOMing",
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 		Owner:   OwnerBulkIO,
@@ -175,7 +175,7 @@ func registerImportTPCH(r *testRegistry) {
 		{8, 8 * time.Hour},
 	} {
 		item := item
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(item.nodes),
@@ -302,7 +302,7 @@ func runImportMixedVersion(
 }
 
 func registerImportMixedVersion(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "import/mixed-versions",
 		Owner: OwnerBulkIO,
 		// Mixed-version support was added in 21.1.
@@ -347,7 +347,7 @@ func registerImportDecommissioned(r *testRegistry) {
 		c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "import/decommissioned",
 		Owner:      OwnerBulkIO,
 		MinVersion: "v21.1.0",

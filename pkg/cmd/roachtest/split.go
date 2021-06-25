@@ -40,7 +40,7 @@ type splitParams struct {
 func registerLoadSplits(r *testRegistry) {
 	const numNodes = 3
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
@@ -84,7 +84,7 @@ func registerLoadSplits(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
@@ -105,7 +105,7 @@ func registerLoadSplits(r *testRegistry) {
 			})
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
@@ -212,7 +212,7 @@ func runLoadSplits(ctx context.Context, t *test, c cluster.Cluster, params split
 func registerLargeRange(r *testRegistry) {
 	const size = 32 << 30 // 32 GB
 	const numNodes = 6
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(numNodes),

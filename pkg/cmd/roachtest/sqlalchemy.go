@@ -30,7 +30,7 @@ var supportedSQLAlchemyTag = "rel_1_4_17"
 // node.
 
 func registerSQLAlchemy(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "sqlalchemy",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),

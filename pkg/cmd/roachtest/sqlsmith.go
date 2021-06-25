@@ -240,7 +240,7 @@ func registerSQLSmith(r *testRegistry) {
 	}
 
 	register := func(setup, setting string) {
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:      OwnerSQLQueries,

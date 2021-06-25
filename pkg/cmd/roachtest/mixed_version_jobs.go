@@ -323,7 +323,7 @@ func runJobsMixedVersions(
 }
 
 func registerJobsMixedVersions(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "jobs/mixed-versions",
 		Owner: OwnerBulkIO,
 		// Jobs infrastructure was unstable prior to 20.1 in terms of the behavior

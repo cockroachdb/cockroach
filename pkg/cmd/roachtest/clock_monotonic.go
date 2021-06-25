@@ -132,7 +132,7 @@ func registerClockMonotonicTests(r *testRegistry) {
 
 	for i := range testCases {
 		tc := testCases[i]
-		s := testSpec{
+		s := TestSpec{
 			Name:  "clock/monotonic/" + tc.name,
 			Owner: OwnerKV,
 			// These tests muck with NTP, therefor we don't want the cluster reused by

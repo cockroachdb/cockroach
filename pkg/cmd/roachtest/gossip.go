@@ -150,7 +150,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(9),

@@ -103,7 +103,7 @@ func registerPebble(r *testRegistry) {
 
 	for _, size := range []int{64, 1024} {
 		size := size
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:       fmt.Sprintf("pebble/ycsb/size=%d", size),
 			Owner:      OwnerStorage,
 			Timeout:    2 * time.Hour,

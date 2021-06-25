@@ -171,7 +171,7 @@ func registerTypeORM(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "typeorm",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
