@@ -33,7 +33,7 @@ var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
 	"admission.kv_slot_adjuster.overload_threshold",
 	"when the number of runnable goroutines per CPU is greater than this threshold, the "+
 		"slot adjuster considers the cpu to be overloaded",
-	8, settings.PositiveInt)
+	32, settings.PositiveInt)
 
 // grantChainID is the ID for a grant chain. See continueGrantChain for
 // details.
@@ -566,6 +566,8 @@ type GrantCoordinator struct {
 	// Index into granters, which represents the current WorkKind at which the
 	// grant chain is operating. Only relevant when grantChainActive is true.
 	grantChainIndex WorkKind
+	// See the comment at delayForGrantChainTermination for motivation.
+	grantChainStartTime time.Time
 }
 
 var _ CPULoadListener = &GrantCoordinator{}
@@ -855,9 +857,8 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int) {
 	coord.cpuLoadListener.CPULoad(runnable, procs)
 	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens()
 	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens()
-	if coord.grantChainActive {
-		coord.grantChainID++
-		coord.grantChainActive = false
+	if coord.grantChainActive && !coord.tryTerminateGrantChain() {
+		return
 	}
 	coord.tryGrant()
 }
@@ -882,7 +883,7 @@ func (coord *GrantCoordinator) tryGet(workKind WorkKind) bool {
 		// grant chain. We don't want it to continue granting to lower priority
 		// WorkKinds, while a higher priority one is waiting, so we terminate it.
 		if coord.grantChainActive && coord.grantChainIndex >= workKind {
-			coord.terminateGrantChain()
+			coord.tryTerminateGrantChain()
 		}
 		return false
 	case grantFailLocal:
@@ -898,10 +899,13 @@ func (coord *GrantCoordinator) returnGrant(workKind WorkKind) {
 	defer coord.mu.Unlock()
 	coord.granters[workKind].returnGrantLocked()
 	if coord.grantChainActive {
-		if coord.grantChainIndex > workKind && coord.granters[workKind].getPairedRequester().hasWaitingRequests() {
+		if coord.grantChainIndex > workKind &&
+			coord.granters[workKind].getPairedRequester().hasWaitingRequests() {
 			// There are waiting requests that will not be served by the grant chain.
 			// Better to terminate it and start afresh.
-			coord.terminateGrantChain()
+			if !coord.tryTerminateGrantChain() {
+				return
+			}
 		} else {
 			// Else either the grant chain will get to this workKind, or there are no waiting requests.
 			return
@@ -933,14 +937,39 @@ func (coord *GrantCoordinator) continueGrantChain(workKind WorkKind, grantChainI
 	coord.tryGrant()
 }
 
-// terminateGrantChain terminates the current grant chain. A new one can
-// be immediately started.
+// delayForGrantChainTermination causes a delay in terminating a grant chain.
+// Terminating a grant chain immediately typically causes a new one to start
+// immediately that can burst up to its maximum initial grant burst. Which
+// means frequent terminations followed by new starts impose little control
+// over the rate at which tokens are granted (slots are better controlled
+// since we know when the work finishes). This causes huge spikes in the
+// runnable goroutine count, observed at 1ms granularity. This spike causes
+// the kvSlotAdjuster to ratchet down the totalSlots for KV work all the way
+// down to 1, which later causes the runnable gorouting count to crash down
+// to a value close to 0, leading to under-utilization.
+//
+// TODO(sumeer): design admission behavior metrics that can be used to
+// understand the behavior in detail and to quantify improvements when changing
+// heuristics. One metric would be mean and variance of the runnable count,
+// computed using the 1ms samples, and exported/logged every 60s.
+var delayForGrantChainTermination = 100 * time.Millisecond
+
+// tryTerminateGrantChain attempts to terminate the current grant chain, and
+// returns true iff it is terminated, in which case a new one can be
+// immediately started.
 // REQUIRES: coord.grantChainActive==true
-func (coord *GrantCoordinator) terminateGrantChain() {
+func (coord *GrantCoordinator) tryTerminateGrantChain() bool {
+	now := timeutil.Now()
+	if delayForGrantChainTermination > 0 &&
+		now.Sub(coord.grantChainStartTime) < delayForGrantChainTermination {
+		return false
+	}
 	// Incrementing the ID will cause the existing grant chain to die out when
 	// the grantee calls continueGrantChain.
 	coord.grantChainID++
 	coord.grantChainActive = false
+	coord.grantChainStartTime = time.Time{}
+	return true
 }
 
 // tryGrant tries to either continue an existing grant chain, or tries to
@@ -959,10 +988,16 @@ func (coord *GrantCoordinator) tryGrant() {
 	// Grant in a burst proportional to numProcs, to generate a runnable for
 	// each.
 	grantBurstLimit := coord.numProcs
-	multiplier := int(KVSlotAdjusterOverloadThreshold.Get(&coord.settings.SV))
-	// Additionally, increase the burst size proportional to the overload
-	// threshold. We experimentally observed that this resulted in better CPU
-	// utilization.
+	// Additionally, increase the burst size proportional to a fourth of the
+	// overload threshold. We experimentally observed that this resulted in
+	// better CPU utilization. We don't use the full overload threshold since we
+	// don't want to over grant for non-KV work since that causes the KV slots
+	// to (unfairly) start decreasing, since we lose control over how many
+	// goroutines are runnable.
+	multiplier := int(KVSlotAdjusterOverloadThreshold.Get(&coord.settings.SV) / 4)
+	if multiplier == 0 {
+		multiplier = 1
+	}
 	grantBurstLimit *= multiplier
 	// Only the case of a grant chain being active returns from within the
 	// OuterLoop.
@@ -985,6 +1020,9 @@ OuterLoop:
 					grantBurstCount++
 					if grantBurstCount == grantBurstLimit {
 						coord.grantChainActive = true
+						if startingChain {
+							coord.grantChainStartTime = timeutil.Now()
+						}
 						return
 					}
 				}
