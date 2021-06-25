@@ -1324,6 +1324,25 @@ var installCmd = &cobra.Command{
 	}),
 }
 
+var downloadCmd = &cobra.Command{
+	Use:   "download <cluster> <url> <sha256> [DESTINATION]",
+	Short: "download 3rd party tools",
+	Long:  "Downloads 3rd party tools, using a GCS cache if possible.",
+	Args:  cobra.RangeArgs(3, 4),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		c, err := newCluster(args[0])
+		if err != nil {
+			return err
+		}
+		src, sha := args[1], args[2]
+		var dest string
+		if len(args) == 4 {
+			dest = args[3]
+		}
+		return install.Download(c, src, sha, dest)
+	}),
+}
+
 var stageCmd = &cobra.Command{
 	Use:   "stage <cluster> <application> [<sha/version>]",
 	Short: "stage cockroach binaries",
@@ -1793,6 +1812,7 @@ func main() {
 		putCmd,
 		getCmd,
 		stageCmd,
+		downloadCmd,
 		sqlCmd,
 		ipCmd,
 		pgurlCmd,
