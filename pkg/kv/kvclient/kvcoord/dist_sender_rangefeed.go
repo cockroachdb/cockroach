@@ -164,7 +164,7 @@ func (ds *DistSender) partialRangeFeed(
 				// These errors are likely to be unique to the replica that
 				// reported them, so no action is required before the next
 				// retry.
-			case errors.HasType(err, (*sendError)(nil)), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
+			case IsSendError(err), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
 				rangeInfo.token.Evict(ctx)
 				rangeInfo.token = rangecache.EvictionToken{}
