@@ -18,11 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runEventLog(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 	type nodeEventInfo struct {
 		NodeID roachpb.NodeID
 	}

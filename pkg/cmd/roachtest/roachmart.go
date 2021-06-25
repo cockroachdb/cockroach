@@ -16,10 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 func registerRoachmart(r *testRegistry) {
-	runRoachmart := func(ctx context.Context, t *testImpl, c cluster.Cluster, partition bool) {
+	runRoachmart := func(ctx context.Context, t test.Test, c cluster.Cluster, partition bool) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		c.Start(ctx)
@@ -70,7 +71,7 @@ func registerRoachmart(r *testRegistry) {
 			Name:    fmt.Sprintf("roachmart/partition=%v", v),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),
-			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},
 		})

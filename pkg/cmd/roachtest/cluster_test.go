@@ -24,6 +24,7 @@ import (
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,6 +61,34 @@ func TestClusterNodes(t *testing.T) {
 
 type testWrapper struct {
 	*testing.T
+}
+
+func (t testWrapper) BuildVersion() *version.Version {
+	panic("implement me")
+}
+
+func (t testWrapper) IsBuildVersion(s string) bool {
+	panic("implement me")
+}
+
+func (t testWrapper) Spec() interface{} {
+	panic("implement me")
+}
+
+func (t testWrapper) VersionsBinaryOverride() map[string]string {
+	panic("implement me")
+}
+
+func (t testWrapper) Progress(f float64) {
+	panic("implement me")
+}
+
+func (t testWrapper) WorkerStatus(args ...interface{}) {
+	panic("implement me")
+}
+
+func (t testWrapper) WorkerProgress(f float64) {
+	panic("implement me")
 }
 
 var _ test2.Test = testWrapper{}

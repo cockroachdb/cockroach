@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -44,7 +45,7 @@ type tpccOLAPSpec struct {
 	Concurrency int
 }
 
-func (s tpccOLAPSpec) run(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, workloadNode := setupTPCC(
 		ctx, t, c, tpccOptions{
 			Warehouses: s.Warehouses, SetupType: usingImport,
@@ -77,7 +78,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t *testImpl, c cluster.Cluster) {
 // Check that node liveness did not fail more than maxFailures times across
 // all of the nodes.
 func verifyNodeLiveness(
-	ctx context.Context, c cluster.Cluster, t *testImpl, runDuration time.Duration,
+	ctx context.Context, c cluster.Cluster, t test.Test, runDuration time.Duration,
 ) {
 	const maxFailures = 10
 	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))

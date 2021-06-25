@@ -176,7 +176,7 @@ func registerTPCDSVec(r *testRegistry) {
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(3),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCDSVec(ctx, t, c)
 		},
 	})

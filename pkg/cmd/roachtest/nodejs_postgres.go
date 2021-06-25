@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ var supportedBranch = "allowing_passing_certs_through_pg_env"
 func registerNodeJSPostgres(r *testRegistry) {
 	runNodeJSPostgres := func(
 		ctx context.Context,
-		t *testImpl,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -185,7 +186,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.1.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNodeJSPostgres(ctx, t, c)
 		},
 	})

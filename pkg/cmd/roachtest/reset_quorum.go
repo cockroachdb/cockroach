@@ -18,11 +18,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
-func runResetQuorum(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	skip.WithIssue(t, 58165)
 	args := func(attr string) option.Option {
 		return startArgs(

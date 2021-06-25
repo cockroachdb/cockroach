@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
@@ -27,7 +28,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 		// order to prevent bugs during upgrades.
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(4),
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 100
 			concurrency := 5
 			if local {
@@ -40,7 +41,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 }
 
 func uploadAndInitSchemaChangeWorkload() versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Stage workload on all nodes as the load node to run workload is chosen
 		// randomly.
 		u.c.Put(ctx, workload, "./workload", u.c.All())
@@ -50,7 +51,7 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 
 func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep {
 	var numFeatureRuns int
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		numFeatureRuns++
 		t.L().Printf("Workload step run: %d", numFeatureRuns)
 		runCmd := []string{
@@ -71,7 +72,7 @@ func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep 
 
 func runSchemaChangeMixedVersions(
 	ctx context.Context,
-	t *testImpl,
+	t test.Test,
 	c cluster.Cluster,
 	maxOps int,
 	concurrency int,

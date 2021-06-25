@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -45,7 +46,7 @@ func registerFollowerReads(r *testRegistry) {
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
-			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Wipe(ctx)
 				c.Start(ctx)
@@ -68,7 +69,7 @@ func registerFollowerReads(r *testRegistry) {
 			3, /* nodeCount */
 			spec.CPU(2),
 		),
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -119,7 +120,7 @@ type topologySpec struct {
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
 func runFollowerReadsTest(
-	ctx context.Context, t *testImpl, c cluster.Cluster, topology topologySpec, data map[int]int64,
+	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec, data map[int]int64,
 ) {
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
@@ -311,7 +312,7 @@ func runFollowerReadsTest(
 // initFollowerReadsDB initializes a database for the follower reads test.
 // Returns the data inserted into the test table.
 func initFollowerReadsDB(
-	ctx context.Context, t *testImpl, c cluster.Cluster, topology topologySpec,
+	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
 	db := c.Conn(ctx, 1)
 	// Disable load based splitting and range merging because splits and merges
@@ -490,7 +491,7 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 func verifySQLLatency(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *testImpl,
+	t test.Test,
 	adminNode option.NodeListOption,
 	start, end time.Time,
 	targetLatency time.Duration,
@@ -543,7 +544,7 @@ func verifySQLLatency(
 func verifyHighFollowerReadRatios(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *testImpl,
+	t test.Test,
 	node option.NodeListOption,
 	start, end time.Time,
 	toleratedNodes int,
@@ -743,7 +744,7 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 // sufficient for this purpose; we're not testing non-voting replicas here
 // (which are used in multi-region tests).
 func runFollowerReadsMixedVersionSingleRegionTest(
-	ctx context.Context, t *testImpl, c cluster.Cluster, buildVersion version.Version,
+	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	require.NoError(t, err)

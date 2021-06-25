@@ -18,13 +18,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-func runRapidRestart(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Use a single-node cluster which speeds the stop/start cycle.
 	nodes := c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", nodes)

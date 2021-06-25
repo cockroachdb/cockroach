@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -28,7 +29,7 @@ func registerReplicaGC(r *testRegistry) {
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(6),
-			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
 		})
@@ -49,7 +50,7 @@ var deadNodeAttr = "deadnode"
 // node. It expects the downed node to discover the new replica placement and gc
 // its replicas.
 func runReplicaGCChangedPeers(
-	ctx context.Context, t *testImpl, c cluster.Cluster, withRestart bool,
+	ctx context.Context, t test.Test, c cluster.Cluster, withRestart bool,
 ) {
 	if c.Spec().NodeCount != 6 {
 		t.Fatal("test needs to be run with 6 nodes")
@@ -141,7 +142,7 @@ func runReplicaGCChangedPeers(
 }
 
 type replicagcTestHelper struct {
-	t *testImpl
+	t test.Test
 	c cluster.Cluster
 }
 

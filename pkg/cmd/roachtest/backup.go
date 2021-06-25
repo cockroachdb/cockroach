@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,7 +52,7 @@ const (
 )
 
 func importBankDataSplit(
-	ctx context.Context, rows, ranges int, t *testImpl, c cluster.Cluster,
+	ctx context.Context, rows, ranges int, _ test.Test, c cluster.Cluster,
 ) string {
 	dest := c.Name()
 	// Randomize starting with encryption-at-rest enabled.
@@ -80,7 +81,7 @@ func importBankDataSplit(
 	return dest
 }
 
-func importBankData(ctx context.Context, rows int, t *testImpl, c cluster.Cluster) string {
+func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
 	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
 }
 
@@ -88,7 +89,7 @@ func registerBackupNodeShutdown(r *testRegistry) {
 	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
 	// the backup.
 	backupNodeRestartSpec := r.makeClusterSpec(4)
-	loadBackupData := func(ctx context.Context, t *testImpl, c cluster.Cluster) string {
+	loadBackupData := func(ctx context.Context, t test.Test, c cluster.Cluster) string {
 		// This aught to be enough since this isn't a performance test.
 		rows := rows15GiB
 		if local {
@@ -104,7 +105,7 @@ func registerBackupNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    backupNodeRestartSpec,
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			dest := loadBackupData(ctx, t, c)
@@ -125,7 +126,7 @@ func registerBackupNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    backupNodeRestartSpec,
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			dest := loadBackupData(ctx, t, c)
@@ -187,7 +188,7 @@ func registerBackup(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    backup2TBSpec,
 		MinVersion: "v2.1.0",
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if local {
 				rows = 100
@@ -223,7 +224,7 @@ func registerBackup(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    KMSSpec,
 		MinVersion: "v20.2.0",
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if cloud == spec.GCE {
 				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
 			}
@@ -342,7 +343,7 @@ func registerBackup(r *testRegistry) {
 		Owner:   OwnerBulkIO,
 		Cluster: r.makeClusterSpec(3),
 		Timeout: 1 * time.Hour,
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Randomize starting with encryption-at-rest enabled.
 			c.EncryptAtRandom(true)
 			c.Put(ctx, cockroach, "./cockroach")

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 // isAlive returns whether the node queried by db is alive.
@@ -46,7 +47,7 @@ func dbUnixEpoch(db *gosql.DB) (float64, error) {
 
 // offsetInjector is used to inject clock offsets in roachtests.
 type offsetInjector struct {
-	t        *testImpl
+	t        test.Test
 	c        cluster.Cluster
 	deployed bool
 }
@@ -123,6 +124,6 @@ func (oi *offsetInjector) recover(ctx context.Context, nodeID int) {
 
 // newOffsetInjector creates a offsetInjector which can be used to inject
 // and recover from clock offsets.
-func newOffsetInjector(t *testImpl, c cluster.Cluster) *offsetInjector {
+func newOffsetInjector(t test.Test, c cluster.Cluster) *offsetInjector {
 	return &offsetInjector{t: t, c: c}
 }
