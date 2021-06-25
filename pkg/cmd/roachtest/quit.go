@@ -27,7 +27,7 @@ import (
 )
 
 type quitTest struct {
-	t    *test
+	t    *testImpl
 	c    cluster.Cluster
 	args option.Option
 }
@@ -38,10 +38,10 @@ type quitTest struct {
 // terminating.
 func runQuitTransfersLeases(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	c cluster.Cluster,
 	methodName string,
-	method func(ctx context.Context, t *test, c cluster.Cluster, nodeID int),
+	method func(ctx context.Context, t *testImpl, c cluster.Cluster, nodeID int),
 ) {
 	q := quitTest{t: t, c: c}
 	q.init(ctx)
@@ -66,7 +66,7 @@ func (q *quitTest) Fatalf(format string, args ...interface{}) {
 }
 
 func (q *quitTest) runTest(
-	ctx context.Context, method func(ctx context.Context, t *test, c cluster.Cluster, nodeID int),
+	ctx context.Context, method func(ctx context.Context, t *testImpl, c cluster.Cluster, nodeID int),
 ) {
 	q.waitForUpReplication(ctx)
 	q.createRanges(ctx)
@@ -336,13 +336,13 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 }
 
 func registerQuitTransfersLeases(r *testRegistry) {
-	registerTest := func(name, minver string, method func(context.Context, *test, cluster.Cluster, int)) {
+	registerTest := func(name, minver string, method func(context.Context, *testImpl, cluster.Cluster, int)) {
 		r.Add(TestSpec{
 			Name:       fmt.Sprintf("transfer-leases/%s", name),
 			Owner:      OwnerKV,
 			Cluster:    r.makeClusterSpec(3),
 			MinVersion: minver,
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
 			},
 		})
@@ -350,7 +350,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 
 	// Uses 'roachprod stop --sig 15 --wait', ie send SIGTERM and wait
 	// until the process exits.
-	registerTest("signal", "v19.2.0", func(ctx context.Context, t *test, c cluster.Cluster, nodeID int) {
+	registerTest("signal", "v19.2.0", func(ctx context.Context, t *testImpl, c cluster.Cluster, nodeID int) {
 		c.Stop(ctx, c.Node(nodeID),
 			roachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
 		)
@@ -358,14 +358,14 @@ func registerQuitTransfersLeases(r *testRegistry) {
 
 	// Uses 'cockroach quit' which should drain and then request a
 	// shutdown. It then waits for the process to self-exit.
-	registerTest("quit", "v19.2.0", func(ctx context.Context, t *test, c cluster.Cluster, nodeID int) {
+	registerTest("quit", "v19.2.0", func(ctx context.Context, t *testImpl, c cluster.Cluster, nodeID int) {
 		_ = runQuit(ctx, t, c, nodeID)
 	})
 
 	// Uses 'cockroach drain', followed by a non-graceful process
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
-	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c cluster.Cluster, nodeID int) {
+	registerTest("drain", "v20.1.0", func(ctx context.Context, t *testImpl, c cluster.Cluster, nodeID int) {
 		buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(nodeID),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
@@ -398,7 +398,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 }
 
 func runQuit(
-	ctx context.Context, t *test, c cluster.Cluster, nodeID int, extraArgs ...string,
+	ctx context.Context, t *testImpl, c cluster.Cluster, nodeID int, extraArgs ...string,
 ) []byte {
 	args := append([]string{
 		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
@@ -424,7 +424,7 @@ func registerQuitAllNodes(r *testRegistry) {
 		Owner:      OwnerServer,
 		Cluster:    r.makeClusterSpec(5),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			q := quitTest{t: t, c: c}
 
 			// Start the cluster.
@@ -464,7 +464,7 @@ func registerQuitAllNodes(r *testRegistry) {
 }
 
 // expectHardShutdown expects a "drain did not complete successfully" message.
-func expectHardShutdown(ctx context.Context, t *test, cmdOut []byte) {
+func expectHardShutdown(ctx context.Context, t *testImpl, cmdOut []byte) {
 	if !strings.Contains(string(cmdOut), "drain did not complete successfully") {
 		t.Fatalf("expected 'drain did not complete successfully' in quit output, got:\n%s", cmdOut)
 	}

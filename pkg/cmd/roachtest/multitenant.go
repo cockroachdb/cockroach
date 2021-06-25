@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func runAcceptanceMultitenant(ctx context.Context, t *test, c cluster.Cluster) {
+func runAcceptanceMultitenant(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	c.Start(ctx, c.All())

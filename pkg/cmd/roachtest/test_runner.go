@@ -65,10 +65,10 @@ type testRunner struct {
 
 	status struct {
 		syncutil.Mutex
-		running map[*test]struct{}
-		pass    map[*test]struct{}
-		fail    map[*test]struct{}
-		skip    map[*test]struct{}
+		running map[*testImpl]struct{}
+		pass    map[*testImpl]struct{}
+		fail    map[*testImpl]struct{}
+		skip    map[*testImpl]struct{}
 	}
 
 	// cr keeps track of all live clusters.
@@ -273,10 +273,10 @@ func (r *testRunner) Run(
 		parallelism = n * count
 	}
 
-	r.status.running = make(map[*test]struct{})
-	r.status.pass = make(map[*test]struct{})
-	r.status.fail = make(map[*test]struct{})
-	r.status.skip = make(map[*test]struct{})
+	r.status.running = make(map[*testImpl]struct{})
+	r.status.pass = make(map[*testImpl]struct{})
+	r.status.fail = make(map[*testImpl]struct{})
+	r.status.skip = make(map[*testImpl]struct{})
 
 	r.work = newWorkPool(tests, count)
 	stopper := stop.NewStopper()
@@ -474,7 +474,7 @@ func (r *testRunner) runWorker(
 		if err != nil {
 			return err
 		}
-		t := &test{
+		t := &testImpl{
 			spec:                   &testToRun.spec,
 			buildVersion:           r.buildVersion,
 			artifactsDir:           artifactsDir,
@@ -542,7 +542,7 @@ func (r *testRunner) runWorker(
 // getPerfArtifacts retrieves the perf artifacts for the test.
 // If there's an error, oh well, don't do anything rash like fail a test
 // which already passed.
-func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *clusterImpl, t *test) {
+func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *clusterImpl, t *testImpl) {
 	g := ctxgroup.WithContext(ctx)
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
@@ -597,7 +597,7 @@ func allStacks() []byte {
 //  	TeamCity.
 func (r *testRunner) runTest(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	runNum int,
 	c *clusterImpl,
 	testRunnerLogPath string,
@@ -861,14 +861,14 @@ func (r *testRunner) runTest(
 	return true, nil
 }
 
-func (r *testRunner) shouldPostGithubIssue(t *test) bool {
+func (r *testRunner) shouldPostGithubIssue(t *testImpl) bool {
 	// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 	opts := issues.DefaultOptionsFromEnv()
 	return opts.CanPost() && opts.IsReleaseBranch() && t.Spec().Run != nil && t.Spec().Cluster.NodeCount > 0
 }
 
 func (r *testRunner) maybePostGithubIssue(
-	ctx context.Context, l *logger.Logger, t *test, stdout io.Writer, output string,
+	ctx context.Context, l *logger.Logger, t *testImpl, stdout io.Writer, output string,
 ) {
 	if !r.shouldPostGithubIssue(t) {
 		return
@@ -919,7 +919,7 @@ caffeinate ./roachstress.sh %s
 	}
 }
 
-func (r *testRunner) collectClusterLogs(ctx context.Context, c *clusterImpl, t *test) {
+func (r *testRunner) collectClusterLogs(ctx context.Context, c *clusterImpl, t *testImpl) {
 	// NB: fetch the logs even when we have a debug zip because
 	// debug zip can't ever get the logs for down nodes.
 	// We only save artifacts for failed tests in CI, so this

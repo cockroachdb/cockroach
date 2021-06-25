@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func runRestart(ctx context.Context, t *test, c cluster.Cluster, downDuration time.Duration) {
+func runRestart(ctx context.Context, t *testImpl, c cluster.Cluster, downDuration time.Duration) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount)
 	workloadNode := c.Node(1)
 	const restartNode = 3
@@ -90,7 +90,7 @@ func registerRestart(r *testRegistry) {
 		Cluster: r.makeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runRestart(ctx, t, c, 2*time.Minute)
 		},
 	})

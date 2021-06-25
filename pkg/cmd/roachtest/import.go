@@ -61,7 +61,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx)
 			gatewayNode := 2
@@ -76,7 +76,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx)
 			gatewayNode := 2
@@ -89,7 +89,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 }
 
 func registerImportTPCC(r *testRegistry) {
-	runImportTPCC := func(ctx context.Context, t *test, c cluster.Cluster, testName string,
+	runImportTPCC := func(ctx context.Context, t *testImpl, c cluster.Cluster, testName string,
 		timeout time.Duration, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
 		c.EncryptAtRandom(true)
@@ -138,7 +138,7 @@ func registerImportTPCC(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(numNodes),
 			Timeout: timeout,
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
 			},
 		})
@@ -151,7 +151,7 @@ func registerImportTPCC(r *testRegistry) {
 		Owner:   OwnerBulkIO,
 		Cluster: r.makeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
 		Timeout: 5 * time.Hour,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 				5*time.Hour, geoWarehouses)
 		},
@@ -180,7 +180,7 @@ func registerImportTPCH(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
 
 				// Randomize starting with encryption-at-rest enabled.
@@ -272,13 +272,13 @@ func registerImportTPCH(r *testRegistry) {
 }
 
 func successfulImportStep(warehouses, nodeID int) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		u.c.Run(ctx, u.c.Node(nodeID), tpccImportCmd(warehouses))
 	}
 }
 
 func runImportMixedVersion(
-	ctx context.Context, t *test, c cluster.Cluster, warehouses int, predecessorVersion string,
+	ctx context.Context, t *testImpl, c cluster.Cluster, warehouses int, predecessorVersion string,
 ) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
@@ -308,7 +308,7 @@ func registerImportMixedVersion(r *testRegistry) {
 		// Mixed-version support was added in 21.1.
 		MinVersion: "v21.1.0",
 		Cluster:    r.makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
@@ -323,7 +323,7 @@ func registerImportMixedVersion(r *testRegistry) {
 }
 
 func registerImportDecommissioned(r *testRegistry) {
-	runImportDecommissioned := func(ctx context.Context, t *test, c cluster.Cluster) {
+	runImportDecommissioned := func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 		warehouses := 100
 		if local {
 			warehouses = 10

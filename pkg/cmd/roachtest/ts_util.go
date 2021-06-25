@@ -43,7 +43,7 @@ type tsQuery struct {
 }
 
 func mustGetMetrics(
-	t *test, adminURL string, start, end time.Time, tsQueries []tsQuery,
+	t *testImpl, adminURL string, start, end time.Time, tsQueries []tsQuery,
 ) tspb.TimeSeriesQueryResponse {
 	response, err := getMetrics(adminURL, start, end, tsQueries)
 	if err != nil {
@@ -94,7 +94,7 @@ func getMetrics(
 func verifyTxnPerSecond(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t *testImpl,
 	adminNode option.NodeListOption,
 	start, end time.Time,
 	txnTarget, maxPercentTimeUnderTarget float64,
@@ -145,7 +145,7 @@ func verifyTxnPerSecond(
 func verifyLookupsPerSec(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t *testImpl,
 	adminNode option.NodeListOption,
 	start, end time.Time,
 	rangeLookupsTarget float64,

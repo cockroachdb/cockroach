@@ -735,7 +735,7 @@ func (c *clusterImpl) status(args ...interface{}) {
 }
 
 func (c *clusterImpl) workerStatus(args ...interface{}) {
-	if impl, ok := c.t.(*test); ok {
+	if impl, ok := c.t.(*testImpl); ok {
 		impl.WorkerStatus(args...)
 	}
 }
@@ -1143,7 +1143,7 @@ func (c *clusterImpl) Node(i int) option.NodeListOption {
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
 // The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchLogs(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchLogs(ctx context.Context, t *testImpl) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1221,7 +1221,7 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 // the first available node. They can be visualized via:
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
-func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *testImpl) error {
 	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		var err error
 		for i := 1; i <= c.spec.NodeCount; i++ {
@@ -1240,7 +1240,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *test) error {
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *testImpl) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1282,7 +1282,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
 
 // FailOnDeadNodes fails the test if nodes that have a populated data dir are
 // found to be not running. It prints both to t.L() and the test output.
-func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *test) {
+func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *testImpl) {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return
@@ -1353,7 +1353,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 // crdb_internal.check_consistency(true, '', '') indicates that any ranges'
 // replicas are inconsistent with each other. It uses the first node that
 // is up to run the query.
-func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
+func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) {
 	if c.spec.NodeCount < 1 {
 		return // unit tests
 	}
@@ -1398,7 +1398,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
-func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchDmesg(ctx context.Context, t *testImpl) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
@@ -1429,7 +1429,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
 
 // FetchJournalctl grabs the journalctl logs if possible. This requires being
 // able to run `sudo journalctl` on the remote nodes.
-func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *testImpl) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab journalctl on local runs.
@@ -1459,7 +1459,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *test) error {
 }
 
 // FetchCores fetches any core files on the cluster.
-func (c *clusterImpl) FetchCores(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchCores(ctx context.Context, t *testImpl) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
@@ -2446,7 +2446,7 @@ func (m *monitor) Go(fn func(context.Context) error) {
 				err = errTestFatal
 			}
 		}()
-		if impl, ok := m.t.(*test); ok {
+		if impl, ok := m.t.(*testImpl); ok {
 			// Automatically clear the worker status message when the goroutine exits.
 			defer impl.WorkerStatus()
 		}
@@ -2602,7 +2602,7 @@ func waitForFullReplication(t test2.Test, db *gosql.DB) {
 	}
 }
 
-func waitForUpdatedReplicationReport(ctx context.Context, t *test, db *gosql.DB) {
+func waitForUpdatedReplicationReport(ctx context.Context, t *testImpl, db *gosql.DB) {
 	t.L().Printf("waiting for updated replication report...")
 
 	// Temporarily drop the replication report interval down.

@@ -26,7 +26,7 @@ var supportedPGJDBCTag = "REL42.2.19"
 func registerPgjdbc(r *testRegistry) {
 	runPgjdbc := func(
 		ctx context.Context,
-		t *test,
+		t *testImpl,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -194,7 +194,7 @@ func registerPgjdbc(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runPgjdbc(ctx, t, c)
 		},
 	})

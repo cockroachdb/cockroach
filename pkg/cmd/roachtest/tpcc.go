@@ -61,7 +61,7 @@ type tpccOptions struct {
 	// TODO(tbg): for better coverage at scale of the migration process, we should
 	// also be doing a rolling-restart into the new binary while the cluster
 	// is running, but that feels like jamming too much into the tpcc setup.
-	Start func(context.Context, *test, cluster.Cluster)
+	Start func(context.Context, *testImpl, cluster.Cluster)
 }
 
 // tpccImportCmd generates the command string to load tpcc data for the
@@ -84,7 +84,7 @@ func tpccImportCmdWithCockroachBinary(
 }
 
 func setupTPCC(
-	ctx context.Context, t *test, c cluster.Cluster, opts tpccOptions,
+	ctx context.Context, t *testImpl, c cluster.Cluster, opts tpccOptions,
 ) (crdbNodes, workloadNode option.NodeListOption) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
@@ -95,7 +95,7 @@ func setupTPCC(
 	}
 
 	if opts.Start == nil {
-		opts.Start = func(ctx context.Context, t *test, c cluster.Cluster) {
+		opts.Start = func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			// NB: workloadNode also needs ./cockroach because
 			// of `./cockroach workload` for usingImport.
 			c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -136,7 +136,7 @@ func setupTPCC(
 	return crdbNodes, workloadNode
 }
 
-func runTPCC(ctx context.Context, t *test, c cluster.Cluster, opts tpccOptions) {
+func runTPCC(ctx context.Context, t *testImpl, c cluster.Cluster, opts tpccOptions) {
 	if cfg := opts.PrometheusConfig; cfg != nil {
 		if c.IsLocal() {
 			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
@@ -261,7 +261,7 @@ func registerTPCC(r *testRegistry) {
 		MinVersion: "v19.1.0",
 		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    headroomSpec,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.Spec().Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
@@ -285,7 +285,7 @@ func registerTPCC(r *testRegistry) {
 		// buggy.
 		Tags:    []string{`default`},
 		Cluster: mixedHeadroomSpec,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			crdbNodes := c.Range(1, 4)
 			workloadNode := c.Node(5)
 
@@ -305,7 +305,7 @@ func registerTPCC(r *testRegistry) {
 						Warehouses: headroomWarehouses,
 						Duration:   duration,
 						SetupType:  usingExistingData,
-						Start: func(ctx context.Context, t *test, c cluster.Cluster) {
+						Start: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 							// Noop - we don't let tpcc upload or start binaries in this test.
 						},
 					})
@@ -365,7 +365,7 @@ func registerTPCC(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
 				Duration:     10 * time.Minute,
@@ -381,7 +381,7 @@ func registerTPCC(r *testRegistry) {
 		Tags:       []string{`weekly`},
 		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Timeout:    time.Duration(4*24)*time.Hour + time.Duration(10)*time.Minute,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
@@ -406,7 +406,7 @@ func registerTPCC(r *testRegistry) {
 			MinVersion: "v21.1.0",
 			// 3 nodes per region + 1 node for workload.
 			Cluster: r.makeClusterSpec(10, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				duration := 90 * time.Minute
 				partitionArgs := fmt.Sprintf(
 					`--survival-goal=%s --regions=%s --partitions=%d`,
@@ -463,7 +463,7 @@ func registerTPCC(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: 100,
@@ -492,7 +492,7 @@ func registerTPCC(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
 		Timeout:    6 * time.Hour,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			skip.WithIssue(t, 53886)
 			runTPCC(ctx, t, c, tpccOptions{
 				// Currently, we do not support import on interleaved tables which
@@ -720,7 +720,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 		Cluster:    nodes,
 		MinVersion: minVersion,
 		Tags:       b.Tags,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
 	})
@@ -731,7 +731,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 // performing an expensive dataset restore only if it doesn't.
 func loadTPCCBench(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	c cluster.Cluster,
 	b tpccBenchSpec,
 	roachNodes, loadNode option.NodeListOption,
@@ -836,7 +836,7 @@ func loadTPCCBench(
 // the tool to allow roachtest to create the correct set of VMs required by the
 // test. The `--wipe` flag will prevent this cluster from being destroyed, so it
 // can then be used during future runs.
-func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSpec) {
+func runTPCCBench(ctx context.Context, t *testImpl, c cluster.Cluster, b tpccBenchSpec) {
 	// Determine the nodes in each load group. A load group consists of a set of
 	// Cockroach nodes and a single load generator.
 	numLoadGroups := b.LoadConfig.numLoadNodes(b.Distribution)

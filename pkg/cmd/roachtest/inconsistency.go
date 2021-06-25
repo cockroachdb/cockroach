@@ -28,7 +28,7 @@ func registerInconsistency(r *testRegistry) {
 	})
 }
 
-func runInconsistency(ctx context.Context, t *test, c cluster.Cluster) {
+func runInconsistency(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	// With encryption on, our attempt below to manually introduce an inconsistency
 	// will fail.
 	c.EncryptDefault(false)

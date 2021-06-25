@@ -40,14 +40,14 @@ import (
 // proposals, liveness problems, or whatever else might get added in the
 // future.
 type HealthChecker struct {
-	t      *test
+	t      *testImpl
 	c      cluster.Cluster
 	nodes  option.NodeListOption
 	doneCh chan struct{}
 }
 
 // NewHealthChecker returns a populated HealthChecker.
-func NewHealthChecker(t *test, c cluster.Cluster, nodes option.NodeListOption) *HealthChecker {
+func NewHealthChecker(t *testImpl, c cluster.Cluster, nodes option.NodeListOption) *HealthChecker {
 	return &HealthChecker{
 		t:      t,
 		c:      c,
@@ -147,13 +147,13 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 
 // DiskUsageLogger regularly logs the disk spaced used by the nodes in the cluster.
 type DiskUsageLogger struct {
-	t      *test
+	t      *testImpl
 	c      cluster.Cluster
 	doneCh chan struct{}
 }
 
 // NewDiskUsageLogger populates a DiskUsageLogger.
-func NewDiskUsageLogger(t *test, c cluster.Cluster) *DiskUsageLogger {
+func NewDiskUsageLogger(t *testImpl, c cluster.Cluster) *DiskUsageLogger {
 	return &DiskUsageLogger{
 		t:      t,
 		c:      c,
@@ -219,7 +219,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 	}
 }
 func registerRestoreNodeShutdown(r *testRegistry) {
-	makeRestoreStarter := func(ctx context.Context, t *test, c cluster.Cluster, gatewayNode int) jobStarter {
+	makeRestoreStarter := func(ctx context.Context, t *testImpl, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster) (string, error) {
 			t.L().Printf("connecting to gateway")
 			gatewayDB := c.Conn(ctx, gatewayNode)
@@ -288,7 +288,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, cockroach, "./cockroach")
@@ -303,7 +303,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, cockroach, "./cockroach")
@@ -386,7 +386,7 @@ func registerRestore(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")

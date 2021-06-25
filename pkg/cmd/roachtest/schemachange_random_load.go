@@ -45,7 +45,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
 			if local {
@@ -88,14 +88,14 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
 		},
 	})
 }
 
 func runSchemaChangeRandomLoad(
-	ctx context.Context, t *test, c cluster.Cluster, maxOps, concurrency int,
+	ctx context.Context, t *testImpl, c cluster.Cluster, maxOps, concurrency int,
 ) {
 	validate := func(db *gosql.DB) {
 		var (
@@ -182,7 +182,7 @@ func runSchemaChangeRandomLoad(
 }
 
 // saveArtifacts saves important test artifacts in the artifacts directory.
-func saveArtifacts(ctx context.Context, t *test, c cluster.Cluster, storeDirectory string) {
+func saveArtifacts(ctx context.Context, t *testImpl, c cluster.Cluster, storeDirectory string) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 

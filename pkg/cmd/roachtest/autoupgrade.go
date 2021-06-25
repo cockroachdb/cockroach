@@ -30,7 +30,7 @@ import (
 // You want to look at versionupgrade.go, which has a test harness you
 // can use.
 func registerAutoUpgrade(r *testRegistry) {
-	runAutoUpgrade := func(ctx context.Context, t *test, c cluster.Cluster, oldVersion string) {
+	runAutoUpgrade := func(ctx context.Context, t *testImpl, c cluster.Cluster, oldVersion string) {
 		nodes := c.Spec().NodeCount
 
 		if err := c.Stage(ctx, t.L(), "release", "v"+oldVersion, "", c.Range(1, nodes)); err != nil {
@@ -247,7 +247,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			pred, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)

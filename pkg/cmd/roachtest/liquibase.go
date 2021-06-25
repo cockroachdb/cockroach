@@ -22,7 +22,7 @@ var supportedLiquibaseHarnessTag = "liquibase-test-harness-1.0.1"
 func registerLiquibase(r *testRegistry) {
 	runLiquibase := func(
 		ctx context.Context,
-		t *test,
+		t *testImpl,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -110,7 +110,7 @@ func registerLiquibase(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `tool`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runLiquibase(ctx, t, c)
 		},
 	})

@@ -28,7 +28,7 @@ func registerCopy(r *testRegistry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
-	runCopy := func(ctx context.Context, t *test, c cluster.Cluster, rows int, inTxn bool) {
+	runCopy := func(ctx context.Context, t *testImpl, c cluster.Cluster, rows int, inTxn bool) {
 		// payload is the size of the payload column for each row in the Bank
 		// table. If this is adjusted, a new fixture may need to be generated.
 		const payload = 100
@@ -175,7 +175,7 @@ func registerCopy(r *testRegistry) {
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(tc.nodes),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},
 		})

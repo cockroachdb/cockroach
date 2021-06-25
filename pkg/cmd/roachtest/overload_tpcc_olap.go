@@ -44,7 +44,7 @@ type tpccOLAPSpec struct {
 	Concurrency int
 }
 
-func (s tpccOLAPSpec) run(ctx context.Context, t *test, c cluster.Cluster) {
+func (s tpccOLAPSpec) run(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	crdbNodes, workloadNode := setupTPCC(
 		ctx, t, c, tpccOptions{
 			Warehouses: s.Warehouses, SetupType: usingImport,
@@ -77,7 +77,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t *test, c cluster.Cluster) {
 // Check that node liveness did not fail more than maxFailures times across
 // all of the nodes.
 func verifyNodeLiveness(
-	ctx context.Context, c cluster.Cluster, t *test, runDuration time.Duration,
+	ctx context.Context, c cluster.Cluster, t *testImpl, runDuration time.Duration,
 ) {
 	const maxFailures = 10
 	adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
