@@ -70,6 +70,12 @@ func NewStorage(db *kv.DB, codec keys.SQLCodec, slReader sqlliveness.Reader) *St
 func (s *Storage) CreateInstance(
 	ctx context.Context, sessionID sqlliveness.SessionID, addr string,
 ) (base.SQLInstanceID, error) {
+	if len(addr) == 0 {
+		return base.SQLInstanceID(0), errors.New("no address information for instance")
+	}
+	if len(sessionID) == 0 {
+		return base.SQLInstanceID(0), errors.New("no session information for instance")
+	}
 	instanceID := base.SQLInstanceID(1) // Starter value
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		rows, err := s.getAllInstanceRows(ctx, txn)
