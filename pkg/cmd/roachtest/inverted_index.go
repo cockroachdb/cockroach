@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -23,7 +24,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 		Name:    "schemachange/invertedindex",
 		Owner:   OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
 	})
@@ -31,13 +32,13 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 
 // runInvertedIndex tests the correctness and performance of building an
 // inverted index on randomly generated JSON data (from the JSON workload).
-func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c Cluster) {
+func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster.Cluster) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, t, crdbNodes)
+	c.Start(ctx, crdbNodes)
 
 	cmdInit := "./workload init json {pgurl:1}"
 	c.Run(ctx, workloadNode, cmdInit)
@@ -45,7 +46,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c Cluster) {
 	// On a 4-node GCE cluster with the standard configuration, this generates ~10 million rows
 	initialDataDuration := time.Minute * 20
 	indexDuration := time.Hour
-	if c.isLocal() {
+	if c.IsLocal() {
 		initialDataDuration = time.Minute
 		indexDuration = time.Minute
 	}

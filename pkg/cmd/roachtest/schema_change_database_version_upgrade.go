@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -35,7 +36,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v20.2.0",
 		Cluster:    r.makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -57,12 +58,12 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		u.c.Start(ctx, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
 }
 
 func runSchemaChangeDatabaseVersionUpgrade(
-	ctx context.Context, t *test, c Cluster, buildVersion version.Version,
+	ctx context.Context, t *test, c cluster.Cluster, buildVersion version.Version,
 ) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.

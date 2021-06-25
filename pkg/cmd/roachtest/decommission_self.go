@@ -10,12 +10,16 @@
 
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+)
 
 // runDecommissionSelf decommissions n2 through n2. This is an acceptance test.
 //
 // See https://github.com/cockroachdb/cockroach/issues/56718
-func runDecommissionSelf(ctx context.Context, t *test, c Cluster) {
+func runDecommissionSelf(ctx context.Context, t *test, c cluster.Cluster) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
 	const mainVersion = ""

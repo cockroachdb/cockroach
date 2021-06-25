@@ -86,7 +86,7 @@ func (p *workPool) workRemaining() []testWithCount {
 // have noWork set.
 func (p *workPool) getTestToRun(
 	ctx context.Context,
-	c *cluster,
+	c *clusterImpl,
 	qp *quotapool.IntPool,
 	cr *clusterRegistry,
 	onDestroy func(),

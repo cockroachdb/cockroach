@@ -231,7 +231,7 @@ func (r *testRunner) Run(
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
-	) (*cluster, error) {
+	) (*clusterImpl, error) {
 		wStatus.SetStatus("creating cluster")
 		defer wStatus.SetStatus("")
 
@@ -345,7 +345,7 @@ type clusterAllocatorFn func(
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
-) (*cluster, error)
+) (*clusterImpl, error)
 
 // runWorker runs tests in a loop until work is exhausted.
 //
@@ -389,7 +389,7 @@ func (r *testRunner) runWorker(
 		r.removeWorker(ctx, name)
 	}()
 
-	var c *cluster // The cluster currently being used.
+	var c *clusterImpl // The cluster currently being used.
 	var err error
 	// When this method returns we'll destroy the cluster we had at the time.
 	// Note that, if debug was set, c has been set to nil.
@@ -439,7 +439,7 @@ func (r *testRunner) runWorker(
 		testToRun, c, err = r.getWork(
 			ctx, work, qp, c, interrupt, l,
 			getWorkCallbacks{
-				createCluster: func(ctx context.Context, ttr testToRunRes) (*cluster, error) {
+				createCluster: func(ctx context.Context, ttr testToRunRes) (*clusterImpl, error) {
 					wStatus.SetTest(nil /* test */, ttr)
 					return allocateCluster(ctx, ttr.spec, ttr.alloc, artifactsRootDir, wStatus)
 				},
@@ -542,7 +542,7 @@ func (r *testRunner) runWorker(
 // getPerfArtifacts retrieves the perf artifacts for the test.
 // If there's an error, oh well, don't do anything rash like fail a test
 // which already passed.
-func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *cluster, t *test) {
+func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *clusterImpl, t *test) {
 	g := ctxgroup.WithContext(ctx)
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
@@ -599,7 +599,7 @@ func (r *testRunner) runTest(
 	ctx context.Context,
 	t *test,
 	runNum int,
-	c *cluster,
+	c *clusterImpl,
 	testRunnerLogPath string,
 	stdout io.Writer,
 	l *logger.Logger,
@@ -917,7 +917,7 @@ caffeinate ./roachstress.sh %s
 	}
 }
 
-func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, t *test) {
+func (r *testRunner) collectClusterLogs(ctx context.Context, c *clusterImpl, t *test) {
 	// NB: fetch the logs even when we have a debug zip because
 	// debug zip can't ever get the logs for down nodes.
 	// We only save artifacts for failed tests in CI, so this
@@ -927,6 +927,11 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, t *test
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
 	t.l.PrintfCtx(ctx, "collecting cluster logs")
+	// Do this before collecting logs to make sure the file gets
+	// downloaded below.
+	if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
+		t.l.Printf("failed to fetch disk uage summary: %s", err)
+	}
 	if err := c.FetchLogs(ctx, t); err != nil {
 		t.l.Printf("failed to download logs: %s", err)
 	}
@@ -941,9 +946,6 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, t *test
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
 		t.l.Printf("failed to copy roachprod state: %s", err)
-	}
-	if err := c.FetchDiskUsage(ctx, t); err != nil {
-		t.l.Printf("failed to fetch disk uage summary: %s", err)
 	}
 	if err := c.FetchTimeseriesData(ctx, t); err != nil {
 		t.l.Printf("failed to fetch timeseries data: %s", err)
@@ -983,7 +985,7 @@ func (r *testRunner) generateReport() string {
 }
 
 type getWorkCallbacks struct {
-	createCluster func(context.Context, testToRunRes) (*cluster, error)
+	createCluster func(context.Context, testToRunRes) (*clusterImpl, error)
 	onDestroy     func()
 }
 
@@ -999,11 +1001,11 @@ func (r *testRunner) getWork(
 	ctx context.Context,
 	work *workPool,
 	qp *quotapool.IntPool,
-	c *cluster,
+	c *clusterImpl,
 	interrupt <-chan struct{},
 	l *logger.Logger,
 	callbacks getWorkCallbacks,
-) (testToRunRes, *cluster, error) {
+) (testToRunRes, *clusterImpl, error) {
 
 	select {
 	case <-interrupt:

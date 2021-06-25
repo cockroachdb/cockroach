@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -37,7 +38,7 @@ func registerTLP(r *testRegistry) {
 	})
 }
 
-func runTLP(ctx context.Context, t *test, c Cluster) {
+func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.
@@ -67,7 +68,7 @@ func runTLP(ctx context.Context, t *test, c Cluster) {
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
 		t.Fatalf("could not initialize libraries: %v", err)
 	}
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	setup := sqlsmith.Setups["rand-tables"](rnd)
 

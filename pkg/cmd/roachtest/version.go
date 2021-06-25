@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
@@ -24,7 +25,7 @@ import (
 // TODO(tbg): remove this test. Use the harness in versionupgrade.go
 // to make a much better one, much more easily.
 func registerVersion(r *testRegistry) {
-	runVersion := func(ctx context.Context, t *test, c Cluster, binaryVersion string) {
+	runVersion := func(ctx context.Context, t *test, c cluster.Cluster, binaryVersion string) {
 		nodes := c.Spec().NodeCount - 1
 
 		if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Range(1, nodes)); err != nil {
@@ -35,7 +36,7 @@ func registerVersion(r *testRegistry) {
 
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
-		c.Start(ctx, t, c.Range(1, nodes), startArgsDontEncrypt)
+		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -98,7 +99,7 @@ func registerVersion(r *testRegistry) {
 					//
 					// https://github.com/cockroachdb/cockroach/issues/37737#issuecomment-496026918
 					if !strings.HasPrefix(binaryVersion, "2.") {
-						if err := c.CheckReplicaDivergenceOnDB(ctx, t, db); err != nil {
+						if err := c.CheckReplicaDivergenceOnDB(ctx, t.l, db); err != nil {
 							return errors.Wrapf(err, "node %d", i)
 						}
 					}
@@ -136,7 +137,7 @@ func registerVersion(r *testRegistry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -160,7 +161,7 @@ func registerVersion(r *testRegistry) {
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
 			c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-			c.Start(ctx, t, c.Node(nodes), startArgsDontEncrypt)
+			c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 			if err := sleepAndCheck(); err != nil {
 				return err
 			}
@@ -175,7 +176,7 @@ func registerVersion(r *testRegistry) {
 				if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -189,7 +190,7 @@ func registerVersion(r *testRegistry) {
 					return err
 				}
 				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-				c.Start(ctx, t, c.Node(i), startArgsDontEncrypt)
+				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
@@ -214,7 +215,7 @@ func registerVersion(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v2.1.0",
 			Cluster:    r.makeClusterSpec(n + 1),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				pred, err := PredecessorVersion(r.buildVersion)
 				if err != nil {
 					t.Fatal(err)

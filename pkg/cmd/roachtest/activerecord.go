@@ -16,6 +16,8 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
@@ -29,9 +31,9 @@ func registerActiveRecord(r *testRegistry) {
 	runActiveRecord := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster.Cluster,
 	) {
-		if c.isLocal() {
+		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
 		node := c.Node(1)
@@ -40,7 +42,7 @@ func registerActiveRecord(r *testRegistry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {

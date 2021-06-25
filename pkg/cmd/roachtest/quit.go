@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -27,7 +28,7 @@ import (
 
 type quitTest struct {
 	t    *test
-	c    Cluster
+	c    cluster.Cluster
 	args option.Option
 }
 
@@ -38,9 +39,9 @@ type quitTest struct {
 func runQuitTransfersLeases(
 	ctx context.Context,
 	t *test,
-	c Cluster,
+	c cluster.Cluster,
 	methodName string,
-	method func(ctx context.Context, t *test, c Cluster, nodeID int),
+	method func(ctx context.Context, t *test, c cluster.Cluster, nodeID int),
 ) {
 	q := quitTest{t: t, c: c}
 	q.init(ctx)
@@ -53,7 +54,7 @@ func (q *quitTest) init(ctx context.Context) {
 		"-a", "--vmodule=store=1,replica=1,replica_proposal=1", // verbosity to troubleshoot drains
 	)
 	q.c.Put(ctx, cockroach, "./cockroach")
-	q.c.Start(ctx, q.t, q.args)
+	q.c.Start(ctx, q.args)
 }
 
 func (q *quitTest) Fatal(args ...interface{}) {
@@ -65,7 +66,7 @@ func (q *quitTest) Fatalf(format string, args ...interface{}) {
 }
 
 func (q *quitTest) runTest(
-	ctx context.Context, method func(ctx context.Context, t *test, c Cluster, nodeID int),
+	ctx context.Context, method func(ctx context.Context, t *test, c cluster.Cluster, nodeID int),
 ) {
 	q.waitForUpReplication(ctx)
 	q.createRanges(ctx)
@@ -94,7 +95,7 @@ func (q *quitTest) runTest(
 // restartNode restarts one node and waits until it's up and ready to
 // accept clients.
 func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
-	q.c.Start(ctx, q.t, q.args, q.c.Node(nodeID))
+	q.c.Start(ctx, q.args, q.c.Node(nodeID))
 
 	q.t.l.Printf("waiting for readiness of node %d\n", nodeID)
 	// Now perform a SQL query. This achieves two goals:
@@ -335,13 +336,13 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 }
 
 func registerQuitTransfersLeases(r *testRegistry) {
-	registerTest := func(name, minver string, method func(context.Context, *test, Cluster, int)) {
+	registerTest := func(name, minver string, method func(context.Context, *test, cluster.Cluster, int)) {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("transfer-leases/%s", name),
 			Owner:      OwnerKV,
 			Cluster:    r.makeClusterSpec(3),
 			MinVersion: minver,
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
 			},
 		})
@@ -349,7 +350,7 @@ func registerQuitTransfersLeases(r *testRegistry) {
 
 	// Uses 'roachprod stop --sig 15 --wait', ie send SIGTERM and wait
 	// until the process exits.
-	registerTest("signal", "v19.2.0", func(ctx context.Context, t *test, c Cluster, nodeID int) {
+	registerTest("signal", "v19.2.0", func(ctx context.Context, t *test, c cluster.Cluster, nodeID int) {
 		c.Stop(ctx, c.Node(nodeID),
 			roachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
 		)
@@ -357,14 +358,14 @@ func registerQuitTransfersLeases(r *testRegistry) {
 
 	// Uses 'cockroach quit' which should drain and then request a
 	// shutdown. It then waits for the process to self-exit.
-	registerTest("quit", "v19.2.0", func(ctx context.Context, t *test, c Cluster, nodeID int) {
+	registerTest("quit", "v19.2.0", func(ctx context.Context, t *test, c cluster.Cluster, nodeID int) {
 		_ = runQuit(ctx, t, c, nodeID)
 	})
 
 	// Uses 'cockroach drain', followed by a non-graceful process
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
-	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c Cluster, nodeID int) {
+	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c cluster.Cluster, nodeID int) {
 		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
@@ -396,7 +397,9 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	})
 }
 
-func runQuit(ctx context.Context, t *test, c Cluster, nodeID int, extraArgs ...string) []byte {
+func runQuit(
+	ctx context.Context, t *test, c cluster.Cluster, nodeID int, extraArgs ...string,
+) []byte {
 	args := append([]string{
 		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
 		fmt.Sprintf("--port={pgport:%d}", nodeID)},
@@ -421,7 +424,7 @@ func registerQuitAllNodes(r *testRegistry) {
 		Owner:      OwnerServer,
 		Cluster:    r.makeClusterSpec(5),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			q := quitTest{t: t, c: c}
 
 			// Start the cluster.
@@ -455,7 +458,7 @@ func registerQuitAllNodes(r *testRegistry) {
 			// At the end, restart all nodes. We do this to check that
 			// the cluster can indeed restart, and also to please
 			// the dead node detection check at the end of each test.
-			q.c.Start(ctx, q.t, q.args)
+			q.c.Start(ctx, q.args)
 		},
 	})
 }

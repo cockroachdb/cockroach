@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,10 +45,10 @@ func registerFollowerReads(r *testRegistry) {
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Wipe(ctx)
-				c.Start(ctx, t)
+				c.Start(ctx)
 				topology := topologySpec{multiRegion: true, locality: locality, survival: survival}
 				data := initFollowerReadsDB(ctx, t, c, topology)
 				runFollowerReadsTest(ctx, t, c, topology, data)
@@ -67,7 +68,7 @@ func registerFollowerReads(r *testRegistry) {
 			3, /* nodeCount */
 			spec.CPU(2),
 		),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -118,7 +119,7 @@ type topologySpec struct {
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
 func runFollowerReadsTest(
-	ctx context.Context, t *test, c Cluster, topology topologySpec, data map[int]int64,
+	ctx context.Context, t *test, c cluster.Cluster, topology topologySpec, data map[int]int64,
 ) {
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
@@ -310,7 +311,7 @@ func runFollowerReadsTest(
 // initFollowerReadsDB initializes a database for the follower reads test.
 // Returns the data inserted into the test table.
 func initFollowerReadsDB(
-	ctx context.Context, t *test, c Cluster, topology topologySpec,
+	ctx context.Context, t *test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
 	db := c.Conn(ctx, 1)
 	// Disable load based splitting and range merging because splits and merges
@@ -488,7 +489,7 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 // ignoring the first 20s.
 func verifySQLLatency(
 	ctx context.Context,
-	c Cluster,
+	c cluster.Cluster,
 	t *test,
 	adminNode option.NodeListOption,
 	start, end time.Time,
@@ -541,7 +542,7 @@ func verifySQLLatency(
 // to zero (the new leaseholder), and another one's rises (the old leaseholder).
 func verifyHighFollowerReadRatios(
 	ctx context.Context,
-	c Cluster,
+	c cluster.Cluster,
 	t *test,
 	node option.NodeListOption,
 	start, end time.Time,
@@ -668,7 +669,7 @@ const followerReadsMetric = "follower_reads_success_count"
 
 // getFollowerReadCounts returns a slice from node to follower read count
 // according to the metric.
-func getFollowerReadCounts(ctx context.Context, c Cluster) ([]int, error) {
+func getFollowerReadCounts(ctx context.Context, c cluster.Cluster) ([]int, error) {
 	followerReadCounts := make([]int, c.Spec().NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
@@ -742,7 +743,7 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 // sufficient for this purpose; we're not testing non-voting replicas here
 // (which are used in multi-region tests).
 func runFollowerReadsMixedVersionSingleRegionTest(
-	ctx context.Context, t *test, c Cluster, buildVersion version.Version,
+	ctx context.Context, t *test, c cluster.Cluster, buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	require.NoError(t, err)
@@ -752,7 +753,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 
 	// Start the cluster at the old version.
 	args := startArgs("--binary=" + uploadVersion(ctx, t, c, c.All(), predecessorVersion))
-	c.Start(ctx, t, c.All(), args)
+	c.Start(ctx, c.All(), args)
 	topology := topologySpec{multiRegion: false}
 	data := initFollowerReadsDB(ctx, t, c, topology)
 

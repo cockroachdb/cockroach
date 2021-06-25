@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -25,7 +26,7 @@ import (
 // runDecommissionMixedVersions runs through randomized
 // decommission/recommission processes in mixed-version clusters.
 func runDecommissionMixedVersions(
-	ctx context.Context, t *test, c Cluster, buildVersion version.Version,
+	ctx context.Context, t *test, c cluster.Cluster, buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
@@ -261,6 +262,6 @@ func uploadVersionStep(nodes option.NodeListOption, version string) versionStep 
 func startVersion(nodes option.NodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		args := startArgs("--binary=" + cockroachBinaryPath(version))
-		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt)
+		u.c.Start(ctx, nodes, args, startArgsDontEncrypt)
 	}
 }

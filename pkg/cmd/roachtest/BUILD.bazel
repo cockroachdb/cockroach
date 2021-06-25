@@ -22,7 +22,6 @@ go_library(
         "clock_util.go",
         "cluster.go",
         "cluster_init.go",
-        "cluster_interface.go",
         "connection_latency.go",
         "copy.go",
         "decommission.go",
@@ -134,6 +133,7 @@ go_library(
         "//pkg/cli",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/internal/issues",
+        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/logger",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/prometheus",
@@ -218,6 +218,7 @@ go_test(
     embed = [":roachtest_lib"],
     tags = ["broken_in_bazel"],
     deps = [
+        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/logger",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/spec",

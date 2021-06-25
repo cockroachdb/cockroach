@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -83,7 +84,7 @@ type testSpec struct {
 	RequiresLicense bool
 
 	// Run is the test function.
-	Run func(ctx context.Context, t *test, c Cluster)
+	Run func(ctx context.Context, t *test, c cluster.Cluster)
 }
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
@@ -317,13 +318,6 @@ func (t *test) fatalfInner(format string, args ...interface{}) {
 	panic(errTestFatal)
 }
 
-// FatalIfErr calls t.Fatal() if err != nil.
-func FatalIfErr(t *test, err error) {
-	if err != nil {
-		t.fatalfInner("" /* format */, err)
-	}
-}
-
 func (t *test) printAndFail(skip int, args ...interface{}) {
 	var msg string
 	if len(args) == 1 {
@@ -533,7 +527,7 @@ type workerStatus struct {
 
 		ttr testToRunRes
 		t   *test
-		c   *cluster
+		c   *clusterImpl
 	}
 }
 
@@ -549,13 +543,13 @@ func (w *workerStatus) SetStatus(status string) {
 	w.mu.Unlock()
 }
 
-func (w *workerStatus) Cluster() *cluster {
+func (w *workerStatus) Cluster() *clusterImpl {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.mu.c
 }
 
-func (w *workerStatus) SetCluster(c *cluster) {
+func (w *workerStatus) SetCluster(c *clusterImpl) {
 	w.mu.Lock()
 	w.mu.c = c
 	w.mu.Unlock()

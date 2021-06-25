@@ -15,11 +15,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	_ "github.com/lib/pq"
 )
 
-func runClockMonotonicity(ctx context.Context, t *test, c Cluster, tc clockMonotonicityTestCase) {
+func runClockMonotonicity(
+	ctx context.Context, t *test, c cluster.Cluster, tc clockMonotonicityTestCase,
+) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when introducing offset
 	if c.Spec().NodeCount != 1 {
@@ -36,7 +39,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c Cluster, tc clockMonot
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	db := c.Conn(ctx, c.Spec().NodeCount)
 	defer db.Close()
@@ -70,7 +73,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c Cluster, tc clockMonot
 
 		offsetInjector.recover(ctx, c.Spec().NodeCount)
 
-		c.Start(ctx, t, c.Node(c.Spec().NodeCount))
+		c.Start(ctx, c.Node(c.Spec().NodeCount))
 		if !isAlive(db, t.l) {
 			t.Fatal("Node unexpectedly crashed")
 		}
@@ -82,7 +85,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c Cluster, tc clockMonot
 	t.Status("injecting offset")
 	offsetInjector.offset(ctx, c.Spec().NodeCount, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, t, c.Node(c.Spec().NodeCount))
+	c.Start(ctx, c.Node(c.Spec().NodeCount))
 
 	if !isAlive(db, t.l) {
 		t.Fatal("Node unexpectedly crashed")
@@ -135,7 +138,7 @@ func registerClockMonotonicTests(r *testRegistry) {
 			// These tests muck with NTP, therefor we don't want the cluster reused by
 			// others.
 			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},
 		}

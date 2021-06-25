@@ -14,14 +14,15 @@ import (
 	"context"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func runAcceptanceMultitenant(ctx context.Context, t *test, c Cluster) {
+func runAcceptanceMultitenant(ctx context.Context, t *test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	const tenantID = 123
 	{
