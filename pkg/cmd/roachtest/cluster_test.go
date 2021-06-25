@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -61,7 +62,7 @@ type testWrapper struct {
 	*testing.T
 }
 
-var _ testI = testWrapper{}
+var _ test2.Test = testWrapper{}
 
 // ArtifactsDir is part of the testI interface.
 func (t testWrapper) ArtifactsDir() string {
