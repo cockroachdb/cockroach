@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -84,7 +84,7 @@ func loadTPCHDataset(
 // scatterTables runs "ALTER TABLE ... SCATTER" statement for every table in
 // tableNames. It assumes that conn is already using the target database. If an
 // error is encountered, the test is failed.
-func scatterTables(t test2.Test, conn *gosql.DB, tableNames []string) {
+func scatterTables(t test.Test, conn *gosql.DB, tableNames []string) {
 	t.Status("scattering the data")
 	for _, table := range tableNames {
 		scatter := fmt.Sprintf("ALTER TABLE %s SCATTER;", table)
@@ -95,7 +95,7 @@ func scatterTables(t test2.Test, conn *gosql.DB, tableNames []string) {
 }
 
 // disableAutoStats disables automatic collection of statistics on the cluster.
-func disableAutoStats(t test2.Test, conn *gosql.DB) {
+func disableAutoStats(t test.Test, conn *gosql.DB) {
 	t.Status("disabling automatic collection of stats")
 	if _, err := conn.Exec(
 		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;`,
@@ -107,7 +107,7 @@ func disableAutoStats(t test2.Test, conn *gosql.DB) {
 // createStatsFromTables runs "CREATE STATISTICS" statement for every table in
 // tableNames. It assumes that conn is already using the target database. If an
 // error is encountered, the test is failed.
-func createStatsFromTables(t test2.Test, conn *gosql.DB, tableNames []string) {
+func createStatsFromTables(t test.Test, conn *gosql.DB, tableNames []string) {
 	t.Status("collecting stats")
 	for _, tableName := range tableNames {
 		t.Status(fmt.Sprintf("creating statistics from table %q", tableName))
