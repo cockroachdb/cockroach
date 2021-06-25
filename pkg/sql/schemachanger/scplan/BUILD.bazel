@@ -17,7 +17,6 @@ go_library(
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/util/iterutil",
-        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

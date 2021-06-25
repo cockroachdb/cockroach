@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tenantcostmodel",
+    srcs = [
+        "model.go",
+        "settings.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tenantcostmodel",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/settings"],
+)

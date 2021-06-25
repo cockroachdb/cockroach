@@ -535,11 +535,11 @@ func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyR
 	}
 	newFks := make([]descpb.ForeignKeyConstraint, 0, len(fks)-1)
 	for _, fk := range fks {
-		if op.Outbound && fk.OriginTableID != op.TableID ||
-			op.Name != fk.Name {
+		if op.Outbound && (fk.OriginTableID != op.TableID ||
+			op.Name != fk.Name) {
 			newFks = append(newFks, fk)
-		} else if fk.ReferencedTableID != op.TableID ||
-			op.Name != fk.Name {
+		} else if !op.Outbound && (fk.ReferencedTableID != op.TableID ||
+			op.Name != fk.Name) {
 			newFks = append(newFks, fk)
 		}
 	}
