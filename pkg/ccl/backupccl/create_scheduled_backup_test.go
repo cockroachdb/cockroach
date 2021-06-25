@@ -535,6 +535,13 @@ INSERT INTO t1 values (-1), (10), (-100);
 				dbTables{"other_db", []string{"t1"}},
 			),
 		},
+		{
+			name:     "table-backup-with-unqualified-name",
+			schedule: "CREATE SCHEDULE FOR BACKUP t1 INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS",
+			verifyTables: expectBackupTables(
+				dbTables{"other_db", []string{"t1"}},
+			),
+		},
 	}
 
 	for _, tc := range testCases {

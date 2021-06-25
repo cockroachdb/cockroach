@@ -88,6 +88,13 @@ func MakeTableNameWithSchema(db, schema, tbl Name) TableName {
 	}}
 }
 
+// NewTableNameFromPrefix creates a new table name from an unqualified name
+// and a resolved prefix.
+func NewTableNameFromPrefix(prefix ObjectNamePrefix, object Name) *TableName {
+	tn := MakeTableNameFromPrefix(prefix, object)
+	return &tn
+}
+
 // MakeTableNameFromPrefix creates a table name from an unqualified name
 // and a resolved prefix.
 func MakeTableNameFromPrefix(prefix ObjectNamePrefix, object Name) TableName {

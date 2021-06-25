@@ -666,6 +666,22 @@ func createBackupScheduleHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+
+	// Replace any unqualified table names with partially qualified table names by adding the database
+	// name as a prefix
+	// E.g.: table name "mytbl" in database "mydb" -> "mydb.mytbl"
+	if schedule.Targets != nil {
+		for i, table := range schedule.Targets.Tables {
+			if len(strings.Split(table.String(), ".")) == 1 {
+				prefix := tree.ObjectNamePrefix{
+					SchemaName:     tree.Name(p.CurrentDatabase()),
+					ExplicitSchema: true,
+				}
+				schedule.Targets.Tables[i] = tree.NewTableNameFromPrefix(prefix, tree.Name(table.String()))
+			}
+		}
+	}
+
 	eval, err := makeScheduledBackupEval(ctx, p, schedule)
 	if err != nil {
 		return nil, nil, nil, false, err
