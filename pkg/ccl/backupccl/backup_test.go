@@ -1283,7 +1283,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
 		Username: security.RootUserName(),
 		Description: fmt.Sprintf(
-			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
+			`BACKUP TABLE data.public.bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir+"redacted", sanitizedFullDir+"redacted",
 		),
 		DescriptorIDs: descpb.IDs{
