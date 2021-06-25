@@ -338,3 +338,44 @@ WHERE
   fk.contype = 'f';
 ----
 public  a  id  public  b  a_id
+
+# Regression test for #66576
+
+statement ok
+CREATE TABLE regression_66576 ()
+
+query TOTTBTITIT
+SELECT
+  typname,
+  typnamespace,
+  typtype,
+  typcategory,
+  typnotnull,
+  typelem,
+  typlen,
+  typbasetype,
+  typtypmod,
+  typdefaultbin
+FROM pg_type WHERE typname = 'regression_66576'
+----
+regression_66576  3426283741  c  C  false  0  -1  0  -1  NULL
+
+query T
+SELECT reltype FROM pg_class WHERE relname = 'regression_65576'
+----
+
+let $oid
+SELECT reltype FROM pg_class WHERE relname = 'regression_66576'
+
+query T
+SELECT typname FROM pg_type WHERE oid = $oid
+----
+regression_66576
+
+let $oid
+SELECT typrelid FROM pg_type WHERE typname = 'regression_66576'
+
+query T
+SELECT relname FROM pg_class WHERE oid = $oid
+----
+regression_66576
