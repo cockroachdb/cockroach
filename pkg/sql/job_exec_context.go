@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 )
 
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
@@ -57,6 +58,9 @@ func (e *plannerJobExecContext) User() security.SQLUsername      { return e.p.Us
 func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
 	return e.p.MigrationJobDeps()
 }
+func (e *plannerJobExecContext) ReconciliationMgr() *zcfgreconciler.Manager {
+	return e.p.ReconciliationMgr()
+}
 
 // JobExecContext provides the execution environment for a job. It is what is
 // passed to the Resume/OnFailOrCancel/OnPauseRequested methods of a jobs's
@@ -76,4 +80,5 @@ type JobExecContext interface {
 	LeaseMgr() *lease.Manager
 	User() security.SQLUsername
 	MigrationJobDeps() migration.JobDeps
+	ReconciliationMgr() *zcfgreconciler.Manager
 }

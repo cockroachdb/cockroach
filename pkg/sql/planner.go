@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -518,6 +519,10 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 // MigrationJobDeps returns the migration.JobDeps.
 func (p *planner) MigrationJobDeps() migration.JobDeps {
 	return p.execCfg.MigrationJobDeps
+}
+
+func (p *planner) ReconciliationMgr() *zcfgreconciler.Manager {
+	return p.execCfg.ReconciliationMgr
 }
 
 // GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.

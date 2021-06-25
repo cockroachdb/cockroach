@@ -152,7 +152,8 @@ type sqlServerOptionalKVArgs struct {
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
 	// diagnostics registry, and the lease manager.
-	gossip gossip.OptionalGossip
+	gossip     gossip.OptionalGossip
+	spanConfig config.SpanConfigAccessor // XXX: Make this optional, non-nil only when systemtenant
 	// To register blob and DistSQL servers.
 	grpcServer *grpc.Server
 	// For the temporaryObjectCleaner.
@@ -503,6 +504,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}
 
+	var spanConfigAccessor config.SpanConfigAccessor
+	if !codec.ForSystemTenant() {
+		spanConfigAccessor = cfg.tenantConnect
+	} else {
+		spanConfigAccessor = cfg.spanConfig
+	}
+	reconciliationMgr := zcfgreconciler.NewManager(
+		cfg.db, jobRegistry, cfg.circularInternalExecutor, spanConfigAccessor,
+	)
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -518,6 +528,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DistSender:              cfg.distSender,
 		RPCContext:              cfg.rpcContext,
 		LeaseManager:            leaseMgr,
+		ReconciliationMgr:       reconciliationMgr,
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
 		NodesStatusServer:       cfg.nodesStatusServer,
@@ -816,10 +827,7 @@ func (s *SQLServer) preStart(
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
 
 	// Create and start the zone config reconciliation job if none exist.
-	zcfgreconcilerMgr := zcfgreconciler.NewManager(
-		s.execCfg.DB, s.jobRegistry, s.internalExecutor,
-	)
-	zcfgreconcilerMgr.CreateAndStartJobIfNoneExist(ctx, stopper)
+	s.execCfg.ReconciliationMgr.CreateAndStartJobIfNoneExist(ctx, stopper)
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.

@@ -13,11 +13,11 @@ package zcfgreconciler
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -28,17 +28,17 @@ import (
 type Manager struct {
 	db *kv.DB
 	jr *jobs.Registry
-	ie *sql.InternalExecutor
+	ie tree.InternalExecutor
+	SC config.SpanConfigAccessor
 }
 
 // NewManager constructs a new reconciliation manager.
-func NewManager(
-	db *kv.DB, jr *jobs.Registry, ie *sql.InternalExecutor,
-) *Manager {
+func NewManager(db *kv.DB, jr *jobs.Registry, ie tree.InternalExecutor, sc config.SpanConfigAccessor) *Manager {
 	return &Manager{
 		db: db,
 		jr: jr,
 		ie: ie,
+		SC: sc,
 	}
 }
 

@@ -75,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -918,6 +919,9 @@ type ExecutorConfig struct {
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
 	// perform compaction over a key span.
 	CompactEngineSpanFunc tree.CompactEngineSpanFunc
+
+	// XXX:
+	ReconciliationMgr *zcfgreconciler.Manager
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.

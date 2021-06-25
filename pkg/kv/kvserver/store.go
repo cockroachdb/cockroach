@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -653,6 +654,9 @@ type StoreConfig struct {
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor
+
+	// XXX:
+	SpanConfigListener spanconfig.Listener
 
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
@@ -1576,6 +1580,24 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		s.startLeaseRenewer(ctx)
 	}
+
+	// XXX: Register a channel to listen in on span config updates. Similar to
+	// syscfgspan above. Below is something else -- it's wiring up closedts up
+	// into rangefeeds, not establishing rangefeeds.
+	spanConfigUpdateC, err := s.cfg.SpanConfigListener.RegisterSpanConfigChannel(ctx, s.stopper)
+	if err != nil {
+		return err
+	}
+	_ = s.stopper.RunAsyncTask(ctx, "syscfg-listener", func(context.Context) {
+		for {
+			select {
+			case <-spanConfigUpdateC:
+				log.Infof(ctx, "xxx: recieved span config update!")
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
 
 	// Connect rangefeeds to closed timestamp updates.
 	s.startClosedTimestampRangefeedSubscriber(ctx)

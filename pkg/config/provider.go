@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
 // SystemConfigProvider is capable of providing the SystemConfig, as well as
@@ -54,7 +55,16 @@ type SpanConfigAccessor interface {
 	// span.
 	GetSpanConfigsFor(ctx context.Context, span roachpb.Span) ([]roachpb.SpanConfigEntry, error)
 
-	// UpdateSpanConfigEntries updates
-	// TODO
+	// XXX: UpdateSpanConfigEntries updates
 	UpdateSpanConfigEntries(ctx context.Context, upsert, delete []roachpb.SpanConfigEntry) error
+}
+
+type OptionalSpanConfigAccessor struct {
+	w errorutil.TenantSQLDeprecatedWrapper
+}
+
+func MakeOptionalSpanConfigAccessor(a SpanConfigAccessor) OptionalSpanConfigAccessor {
+	return OptionalSpanConfigAccessor{
+		w: errorutil.MakeTenantSQLDeprecatedWrapper(a, a != nil /* exposed */),
+	}
 }

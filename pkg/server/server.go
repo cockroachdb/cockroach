@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -74,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler/job"  // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -551,6 +553,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
+	// XXX: Initialize the listener here, and pass it down into the store.
+	spanConfigLister := spanconfig.Listener{DB: db}
+
 	// Break a circular dependency: we need a Node to make a StoreConfig (for
 	// ClosedTimestamp), but the Node needs a StoreConfig to be made.
 	var lateBoundNode *Node
@@ -573,6 +578,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		StorePool:               storePool,
 		SQLExecutor:             internalExecutor,
+		SpanConfigListener:      spanConfigLister,
 		LogRangeEvents:          cfg.EventLogEnabled,
 		RangeDescriptorCache:    distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:     tsDB,
@@ -703,6 +709,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
+	onl := optionalnodeliveness.MakeContainer(nodeLiveness)
+	onl.Optional()
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
