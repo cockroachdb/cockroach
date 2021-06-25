@@ -66,6 +66,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -121,6 +123,7 @@ type SQLServer struct {
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	sqlLivenessProvider     sqlliveness.Provider
+	sqlInstanceProvider     sqlinstance.Provider
 	metricsRegistry         *metric.Registry
 	diagnosticsReporter     *diagnostics.Reporter
 
@@ -239,6 +242,9 @@ type sqlServerArgs struct {
 	// Stores and deletes expired liveness sessions.
 	sqlLivenessProvider sqlliveness.Provider
 
+	// Stores and manages sql instance information.
+	sqlInstanceProvider sqlinstance.Provider
+
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
@@ -259,7 +265,7 @@ type sqlServerArgs struct {
 	regionsServer serverpb.RegionsServer
 }
 
-func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
+func newSQLServer(ctx context.Context, cfg sqlServerArgs, addr string) (*SQLServer, error) {
 	// NB: ValidateAddrs also fills in defaults.
 	if err := cfg.Config.ValidateAddrs(ctx); err != nil {
 		return nil, err
@@ -282,12 +288,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Create trace service for inter-node sharing of inflight trace spans.
 	tracingService := service.New(cfg.Settings.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
+	cfg.sqlLivenessProvider = slprovider.New(
+		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
+	)
+	cfg.sqlInstanceProvider = instanceprovider.New(
+		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, addr,
+	)
 
 	jobRegistry := cfg.circularJobRegistry
 	{
-		cfg.sqlLivenessProvider = slprovider.New(
-			cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
-		)
 		cfg.registry.AddMetricStruct(cfg.sqlLivenessProvider.Metrics())
 
 		var jobsKnobs *jobs.TestingKnobs
@@ -529,7 +538,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if hasNodeLiveness {
 		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Settings.Tracer)
 	}
-
+	instanceID := base.SQLInstanceID(0)
+	if cfg.nodeIDContainer != nil {
+		instanceID = cfg.nodeIDContainer.SQLInstanceID()
+	}
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -568,7 +580,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			ctx,
 			execinfra.Version,
 			cfg.Settings,
-			roachpb.NodeID(cfg.nodeIDContainer.SQLInstanceID()),
+			roachpb.NodeID(instanceID),
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
@@ -738,18 +750,23 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 
 	reporter := &diagnostics.Reporter{
-		StartTime:     timeutil.Now(),
-		AmbientCtx:    &cfg.AmbientCtx,
-		Config:        cfg.BaseConfig.Config,
-		Settings:      cfg.Settings,
-		ClusterID:     cfg.rpcContext.ClusterID.Get,
-		TenantID:      cfg.rpcContext.TenantID,
-		SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
-		SQLServer:     pgServer.SQLServer,
-		InternalExec:  cfg.circularInternalExecutor,
-		DB:            cfg.db,
-		Recorder:      cfg.recorder,
-		Locality:      cfg.Locality,
+		StartTime:    timeutil.Now(),
+		AmbientCtx:   &cfg.AmbientCtx,
+		Config:       cfg.BaseConfig.Config,
+		Settings:     cfg.Settings,
+		ClusterID:    cfg.rpcContext.ClusterID.Get,
+		TenantID:     cfg.rpcContext.TenantID,
+		SQLServer:    pgServer.SQLServer,
+		InternalExec: cfg.circularInternalExecutor,
+		DB:           cfg.db,
+		Recorder:     cfg.recorder,
+		Locality:     cfg.Locality,
+	}
+	if cfg.nodeIDContainer != nil {
+		// Initialize the SQLInstanceID field of the diagnostics reporter only when
+		// nodeIDContainer is not nil. nodeIDContainer can be nil in the multi-tenant
+		// environment where it is initialized during preStart.
+		reporter.SQLInstanceID = cfg.nodeIDContainer.SQLInstanceID
 	}
 	if cfg.TestingKnobs.Server != nil {
 		reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
@@ -781,6 +798,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlMemMetrics:           sqlMemMetrics,
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
+		sqlInstanceProvider:     cfg.sqlInstanceProvider,
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
 		settingsWatcher:         settingsWatcher,
@@ -809,15 +827,7 @@ func maybeCheckTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB)
 	return nil
 }
 
-func (s *SQLServer) preStart(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	knobs base.TestingKnobs,
-	connManager netutil.Server,
-	pgL net.Listener,
-	socketFile string,
-	orphanedLeasesTimeThresholdNanos int64,
-) error {
+func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) error {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
 	// until a connection is established to the cluster and its ID has been
@@ -827,6 +837,43 @@ func (s *SQLServer) preStart(
 			return err
 		}
 	}
+	s.sqlLivenessProvider.Start(ctx)
+	return nil
+}
+
+func (s *SQLServer) initInstanceID(ctx context.Context) error {
+	if s.sqlIDContainer != nil {
+		// sqlIDContainer has already been initialized, nothing to do.
+		return nil
+	}
+	instanceID, err := s.sqlInstanceProvider.Instance(ctx)
+	if err != nil {
+		return err
+	}
+	s.sqlIDContainer = base.NewSQLIDContainer(instanceID, nil)
+	s.jobRegistry.SetNodeID(s.sqlIDContainer)
+	s.distSQLServer.ServerConfig.NodeID = s.sqlIDContainer
+	s.leaseMgr.SetNodeIDContainer(s.sqlIDContainer)
+	s.execCfg.NodeID = s.sqlIDContainer
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(instanceID)})
+	s.diagnosticsReporter.SQLInstanceID = s.sqlIDContainer.SQLInstanceID
+	return nil
+}
+
+func (s *SQLServer) preStart(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	knobs base.TestingKnobs,
+	connManager netutil.Server,
+	pgL net.Listener,
+	socketFile string,
+	orphanedLeasesTimeThresholdNanos int64,
+) error {
+	// The sqlliveness and sqlinstance subsystem should be started first to ensure instance ID is
+	// initialized prior to any other systems that need it.
+	if err := s.startSQLLivenessAndInstanceProviders(ctx); err != nil {
+		return err
+	}
 	// Confirm tenant exists prior to initialization. This is a sanity
 	// check for the dev environment to ensure that a tenant has been
 	// successfully created before attempting to initialize a SQL
@@ -834,6 +881,7 @@ func (s *SQLServer) preStart(
 	if err := maybeCheckTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
 		return err
 	}
+	s.initInstanceID(ctx)
 	s.connManager = connManager
 	s.pgL = pgL
 	s.execCfg.GCJobNotifier.Start(ctx)
@@ -856,8 +904,6 @@ func (s *SQLServer) preStart(
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
-
-	s.sqlLivenessProvider.Start(ctx)
 
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)

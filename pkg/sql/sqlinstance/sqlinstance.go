@@ -32,11 +32,20 @@ type InstanceInfo struct {
 
 // AddressResolver exposes API for retrieving the instance address and all live instances for a tenant.
 type AddressResolver interface {
-	GetInstanceAddr(ctx context.Context, id base.SQLInstanceID) (string, error)
-	GetAllInstances(ctx context.Context) ([]InstanceInfo, error)
+	GetInstanceAddr(context.Context, base.SQLInstanceID) (string, error)
+	GetAllInstances(context.Context) ([]InstanceInfo, error)
 }
 
-// NewSQLInstanceInfo creates a new InstanceInfo struct.
+// Provider is a wrapper around sqlinstance subsystem for external consumption.
+type Provider interface {
+	AddressResolver
+	Instance(context.Context) (base.SQLInstanceID, error)
+}
+
+// SessionExpiry executes SQL pod shutdown on sqlliveness.Session expiration.
+type SessionExpiry func(ctx context.Context)
+
+// NewSQLInstanceInfo constructs a new InstanceInfo struct.
 func NewSQLInstanceInfo(
 	instanceID base.SQLInstanceID, addr string, sessionID sqlliveness.SessionID,
 ) *InstanceInfo {
