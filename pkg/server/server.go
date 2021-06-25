@@ -738,7 +738,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
 		regionsServer:            sStatus,
-	})
+	}, "" /* addr */)
+
 	if err != nil {
 		return nil, err
 	}

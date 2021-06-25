@@ -3,9 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "instancestorage",
     srcs = [
+        "instance.go",
         "instancereader.go",
         "instancestorage.go",
         "row_codec.go",
+        "test_helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage",
     visibility = ["//visibility:public"],
@@ -26,6 +28,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_pkg_errors//:errors",
     ],
