@@ -1631,7 +1631,7 @@ update decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:10
-      │    │    │    │    │              └── a:7::DECIMAL + c:9::DECIMAL
+      │    │    │    │    │              └── (a:7::DECIMAL + c:9::DECIMAL)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15] [as=b_new:14]

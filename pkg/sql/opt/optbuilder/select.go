@@ -702,6 +702,8 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 		}
 
 		if texpr := tableScope.resolveAndRequireType(expr, tabCol.DatumType()); texpr != nil {
+			// TBD: should resolveAndRequireType do this?
+			texpr = tree.ReType(texpr, tabCol.DatumType())
 			colID := tabMeta.MetaID.ColumnID(i)
 			var scalar opt.ScalarExpr
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
