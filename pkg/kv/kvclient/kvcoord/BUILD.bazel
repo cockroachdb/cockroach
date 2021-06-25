@@ -102,6 +102,7 @@ go_test(
         "dist_sender_rangefeed_test.go",
         "dist_sender_server_test.go",
         "dist_sender_test.go",
+        "helpers_test.go",
         "integration_test.go",
         "main_test.go",
         "range_iter_test.go",
