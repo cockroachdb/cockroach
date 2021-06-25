@@ -229,6 +229,14 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		}
 	}
 
+	// Bump role-related table versions to force a refresh of password cache.
+	if err := params.p.BumpUsersTableVersion(params.ctx); err != nil {
+		return err
+	}
+	if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
+		return err
+	}
+
 	return params.p.logEvent(params.ctx,
 		0, /* no target */
 		&eventpb.CreateRole{RoleName: normalizedUsername.Normalized()})

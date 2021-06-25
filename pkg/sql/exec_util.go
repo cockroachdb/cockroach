@@ -878,6 +878,9 @@ type ExecutorConfig struct {
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
 
+	// Password cache (also includes `VALID UNTIL` option for the password).
+	AuthenticationInfoCache *AuthenticationInfoCache
+
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
 
