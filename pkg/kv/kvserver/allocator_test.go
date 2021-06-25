@@ -401,6 +401,7 @@ func mockStorePool(
 	deadStoreIDs []roachpb.StoreID,
 	decommissioningStoreIDs []roachpb.StoreID,
 	decommissionedStoreIDs []roachpb.StoreID,
+	suspectedStoreIDs []roachpb.StoreID,
 ) {
 	storePool.detailsMu.Lock()
 	defer storePool.detailsMu.Unlock()
@@ -442,6 +443,17 @@ func mockStorePool(
 	for _, storeID := range decommissionedStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONED
 		detail := storePool.getStoreDetailLocked(storeID)
+		detail.desc = &roachpb.StoreDescriptor{
+			StoreID: storeID,
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
+		}
+	}
+
+	for _, storeID := range suspectedStoreIDs {
+		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
+		detail := storePool.getStoreDetailLocked(storeID)
+		detail.lastAvailable = storePool.clock.Now().GoTime()
+		detail.lastUnavailable = storePool.clock.Now().GoTime()
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
@@ -1045,6 +1057,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
 		nil,
 		[]roachpb.StoreID{7, 8},
+		nil,
 		nil,
 		nil,
 	)
@@ -1834,6 +1847,56 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAllocatorShouldTransferSuspected(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	stopper, g, clock, storePool, nl := createTestStorePool(
+		TestTimeUntilStoreDeadOff, true, /* deterministic */
+		func() int { return 10 }, /* nodeCount */
+		livenesspb.NodeLivenessStatus_LIVE)
+	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
+		return 0, true
+	})
+	defer stopper.Stop(context.Background())
+
+	var stores []*roachpb.StoreDescriptor
+	// Structure the capacity so we only get the desire to move when store 1 is around.
+	capacity := []int32{0, 20, 20}
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: capacity[i-1]},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	assertShouldTransferLease := func(expected bool) {
+		t.Helper()
+		result := a.ShouldTransferLease(
+			context.Background(),
+			zonepb.EmptyCompleteZoneConfig(),
+			replicas(1, 2, 3),
+			2,
+			nil, /* replicaStats */
+		)
+		require.Equal(t, expected, result)
+	}
+	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&storePool.st.SV)
+	// Based on capacity node 1 is desirable.
+	assertShouldTransferLease(true)
+	// Flip node 1 to unavailable, there should be no lease transfer now.
+	nl.setNodeStatus(1, livenesspb.NodeLivenessStatus_UNAVAILABLE)
+	assertShouldTransferLease(false)
+	// Set node back to live, but it's still suspected so not lease transfer expected.
+	nl.setNodeStatus(1, livenesspb.NodeLivenessStatus_LIVE)
+	assertShouldTransferLease(false)
+	// Wait out the suspected store timeout, verify that lease transfers are back.
+	clock.Increment(timeAfterStoreSuspect.Nanoseconds() + time.Millisecond.Nanoseconds())
+	assertShouldTransferLease(true)
 }
 
 func TestAllocatorLeasePreferences(t *testing.T) {
@@ -2663,10 +2726,9 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 		removalConstraintsChecker := voterConstraintsCheckerForRemoval(analyzed, constraint.EmptyAnalyzedConstraints)
 		rebalanceConstraintsChecker := voterConstraintsCheckerForRebalance(analyzed, constraint.EmptyAnalyzedConstraints)
 
-		a.storePool.isNodeReadyForRoutineReplicaTransfer = func(_ context.Context, n roachpb.NodeID) bool {
+		a.storePool.isStoreReadyForRoutineReplicaTransfer = func(_ context.Context, storeID roachpb.StoreID) bool {
 			for _, s := range tc.excluded {
-				// NodeID match StoreIDs here, so this comparison is valid.
-				if roachpb.NodeID(s) == n {
+				if s == storeID {
 					return false
 				}
 			}
@@ -2680,7 +2742,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				allocationConstraintsChecker,
 				existingRepls,
 				a.storePool.getLocalitiesByStore(existingRepls),
-				a.storePool.isNodeReadyForRoutineReplicaTransfer,
+				a.storePool.isStoreReadyForRoutineReplicaTransfer,
 				false, /* allowMultipleReplsPerNode */
 				a.scorerOptions(),
 			)
@@ -2700,7 +2762,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				existingRepls,
 				nil,
 				a.storePool.getLocalitiesByStore(existingRepls),
-				a.storePool.isNodeReadyForRoutineReplicaTransfer,
+				a.storePool.isStoreReadyForRoutineReplicaTransfer,
 				a.scorerOptions(),
 				voterTarget,
 			)
@@ -3025,7 +3087,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			checkFn,
 			existingRepls,
 			a.storePool.getLocalitiesByStore(existingRepls),
-			func(context.Context, roachpb.NodeID) bool { return true },
+			func(context.Context, roachpb.StoreID) bool { return true },
 			false, /* allowMultipleReplsPerNode */
 			a.scorerOptions(),
 		)
@@ -4267,7 +4329,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			existingRepls,
 			nil,
 			a.storePool.getLocalitiesByStore(existingRepls),
-			func(context.Context, roachpb.NodeID) bool { return true },
+			func(context.Context, roachpb.StoreID) bool { return true },
 			a.scorerOptions(),
 			voterTarget,
 		)
@@ -5388,6 +5450,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		[]roachpb.StoreID{6, 7},
 		nil,
 		nil,
+		nil,
 	)
 
 	lastPriority := float64(999999999)
@@ -5490,7 +5553,80 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, nil, tcase.dead, nil, nil)
+		mockStorePool(sp, tcase.live, nil, tcase.dead, nil, nil, nil)
+		action, _ := a.ComputeAction(ctx, &zone, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+		}
+	}
+}
+
+func TestAllocatorComputeActionSuspect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	zone := zonepb.ZoneConfig{
+		NumReplicas: proto.Int32(3),
+	}
+	threeReplDesc := roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				StoreID:   1,
+				NodeID:    1,
+				ReplicaID: 1,
+			},
+			{
+				StoreID:   2,
+				NodeID:    2,
+				ReplicaID: 2,
+			},
+			{
+				StoreID:   3,
+				NodeID:    3,
+				ReplicaID: 3,
+			},
+		},
+	}
+
+	testCases := []struct {
+		desc           roachpb.RangeDescriptor
+		live           []roachpb.StoreID
+		suspect        []roachpb.StoreID
+		expectedAction AllocatorAction
+	}{
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 2, 3},
+			suspect:        nil,
+			expectedAction: AllocatorConsiderRebalance,
+		},
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 2},
+			suspect:        []roachpb.StoreID{3},
+			expectedAction: AllocatorConsiderRebalance,
+		},
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 2, 4},
+			suspect:        []roachpb.StoreID{3},
+			expectedAction: AllocatorConsiderRebalance,
+		},
+		// Needs three replicas, two are suspect (i.e. the range lacks a quorum).
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 4},
+			suspect:        []roachpb.StoreID{2, 3},
+			expectedAction: AllocatorRangeUnavailable,
+		},
+	}
+
+	stopper, _, sp, a, _ := createTestAllocator(10, false /* deterministic */)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	for i, tcase := range testCases {
+		mockStorePool(sp, tcase.live, nil, nil, nil, nil, tcase.suspect)
 		action, _ := a.ComputeAction(ctx, &zone, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
@@ -5781,7 +5917,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned)
+		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
 		action, _ := a.ComputeAction(ctx, &tcase.zone, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %s, got action %s", i, tcase.expectedAction, action)
@@ -5820,7 +5956,7 @@ func TestAllocatorRemoveLearner(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	live, dead := []roachpb.StoreID{1, 2}, []roachpb.StoreID{3}
-	mockStorePool(sp, live, nil, dead, nil, nil)
+	mockStorePool(sp, live, nil, dead, nil, nil, nil)
 	action, _ := a.ComputeAction(ctx, &zone, &rangeWithLearnerDesc)
 	require.Equal(t, AllocatorRemoveLearner, action)
 }
@@ -6021,7 +6157,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			t.Run(prefixKey.String(), func(t *testing.T) {
 				numNodes = len(c.storeList) - len(c.decommissioning)
 				mockStorePool(sp, c.live, c.unavailable, c.dead,
-					c.decommissioning, []roachpb.StoreID{})
+					c.decommissioning, nil, nil)
 				desc := makeDescriptor(c.storeList)
 				desc.EndKey = prefixKey
 

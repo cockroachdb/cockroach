@@ -822,7 +822,7 @@ func (a *Allocator) allocateTargetFromList(
 		constraintsChecker,
 		existingReplicaSet,
 		a.storePool.getLocalitiesByStore(existingReplicaSet),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
 		allowMultipleReplsPerNode,
 		options,
 	)
@@ -1051,7 +1051,7 @@ func (a Allocator) rebalanceTarget(
 		replicaSetToRebalance,
 		replicasWithExcludedStores,
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
 		options,
 		targetType,
 	)
@@ -1254,7 +1254,7 @@ func (a *Allocator) TransferLeaseTarget(
 	checkCandidateFullness bool,
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 
 	// Filter stores that are on nodes containing existing replicas, but leave
@@ -1423,7 +1423,7 @@ func (a *Allocator) ShouldTransferLease(
 		}
 	}
 
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
