@@ -22,6 +22,16 @@ import (
 // assigned 1, the second 2, and so on.
 type NodeListOption []int
 
+// NewNodeListOptionRange returns a NodeListOption between start and end
+// inclusive.
+func NewNodeListOptionRange(start, end int) NodeListOption {
+	ret := make(NodeListOption, (end-start)+1)
+	for i := 0; i <= (end - start); i++ {
+		ret[i] = start + i
+	}
+	return ret
+}
+
 // Option implements Option.
 func (n NodeListOption) Option() {}
 
