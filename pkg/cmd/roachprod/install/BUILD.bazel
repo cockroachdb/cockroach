@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cluster_synced.go",
         "cockroach.go",
+        "download.go",
         "expander.go",
         "install.go",
         "iterm2.go",
