@@ -1324,7 +1324,7 @@ func (e *CacheEntry) evictLeaseholder(
 // IsRangeLookupErrorRetryable returns whether the provided range lookup error
 // can be retried or whether it should be propagated immediately.
 func IsRangeLookupErrorRetryable(err error) bool {
-	// For now, all errors are retryable except transport errors where request was
-	// rejected.
-	return !grpcutil.IsConnectionRejected(err)
+	// Auth errors are not retryable. These imply that the local node has been
+	// decommissioned or is otherwise not part of the cluster.
+	return !grpcutil.IsAuthError(err)
 }
