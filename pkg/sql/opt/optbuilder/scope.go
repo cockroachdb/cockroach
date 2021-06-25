@@ -458,7 +458,7 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.Typ
 	if err != nil {
 		panic(err)
 	}
-	return s.ensureNullType(texpr, desired)
+	return tree.ReType(s.ensureNullType(texpr, desired), desired)
 }
 
 // ensureNullType tests the type of the given expression. If types.Unknown, then
