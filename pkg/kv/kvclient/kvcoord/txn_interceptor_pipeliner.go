@@ -248,6 +248,8 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, pErr
 	}
 
+	ba.AsyncConsensus = tp.canUseAsyncConsensus(ba)
+
 	// Adjust the batch so that it doesn't miss any in-flight writes.
 	ba = tp.chainToInFlightWrites(ba)
 
@@ -332,15 +334,12 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 	return ba, nil
 }
 
-// chainToInFlightWrites ensures that we "chain" on to any in-flight writes that
-// overlap the keys we're trying to read/write. We do this by prepending
-// QueryIntent requests with the ErrorIfMissing option before each request that
-// touches any of the in-flight writes. In effect, this allows us to prove that
-// a write succeeded before depending on its existence. We later prune down the
-// list of writes we proved to exist that are no longer "in-flight" in
-// updateLockTracking.
-func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
-	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
+// canUseAsyncConsensus checks the conditions necessary for this batch to be
+// allowed to set the AsyncConsensus flag.
+func (tp *txnPipeliner) canUseAsyncConsensus(ba roachpb.BatchRequest) bool {
+	if !pipelinedWritesEnabled.Get(&tp.st.SV) || tp.disabled {
+		return false
+	}
 
 	// We provide a setting to bound the size of in-flight writes that the
 	// pipeliner is tracking. If this batch would push us over this setting,
@@ -356,8 +355,51 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	if maxBatch := pipelinedWritesMaxBatchSize.Get(&tp.st.SV); maxBatch > 0 {
 		batchSize := int64(len(ba.Requests))
 		if batchSize > maxBatch {
-			asyncConsensus = false
+			return false
 		}
+	}
+
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+
+		// Determine whether the current request prevents us from performing async
+		// consensus on the batch.
+		if !roachpb.IsIntentWrite(req) || roachpb.IsRange(req) {
+			// Only allow batches consisting of solely transactional point
+			// writes to perform consensus asynchronously.
+			// TODO(nvanbenschoten): We could allow batches with reads and point
+			// writes to perform async consensus, but this would be a bit
+			// tricky. Any read would need to chain on to any write that came
+			// before it in the batch and overlaps. For now, it doesn't seem
+			// worth it.
+			return false
+		}
+		// Only allow batches that would not push us over the maximum
+		// in-flight write size limit to perform consensus asynchronously.
+		//
+		// NB: this estimation is conservative because it doesn't factor
+		// in that some writes may be proven by this batch and removed
+		// from the in-flight write set. The real accounting in
+		// inFlightWriteSet.{insert,remove} gets this right.
+		addedIFBytes += keySize(req.Header().Key)
+		if (tp.ifWrites.byteSize() + addedIFBytes) > maxIFBytes {
+			return false
+		}
+	}
+	return true
+}
+
+// chainToInFlightWrites ensures that we "chain" on to any in-flight writes that
+// overlap the keys we're trying to read/write. We do this by prepending
+// QueryIntent requests with the ErrorIfMissing option before each request that
+// touches any of the in-flight writes. In effect, this allows us to prove that
+// a write succeeded before depending on its existence. We later prune down the
+// list of writes we proved to exist that are no longer "in-flight" in
+// updateLockTracking.
+func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
+	// If there are no in-flight writes, there's nothing to chain to.
+	if tp.ifWrites.len() == 0 {
+		return ba
 	}
 
 	forked := false
@@ -367,40 +409,11 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	// chainedKeys map between calls to this function.
 	var chainedKeys map[string]struct{}
 	for i, ru := range oldReqs {
-		if !asyncConsensus && !forked && tp.ifWrites.len() == len(chainedKeys) {
-			// If there are no in-flight writes or all in-flight writes
-			// have been chained onto and async consensus is disallowed,
-			// short-circuit immediately.
-			break
-		}
 		req := ru.GetInner()
 
-		if asyncConsensus {
-			// If we're currently planning on performing the batch with
-			// performing async consensus, determine whether this request
-			// changes that.
-			if !roachpb.IsIntentWrite(req) || roachpb.IsRange(req) {
-				// Only allow batches consisting of solely transactional point
-				// writes to perform consensus asynchronously.
-				// TODO(nvanbenschoten): We could allow batches with reads and point
-				// writes to perform async consensus, but this would be a bit
-				// tricky. Any read would need to chain on to any write that came
-				// before it in the batch and overlaps. For now, it doesn't seem
-				// worth it.
-				asyncConsensus = false
-			} else {
-				// Only allow batches that would not push us over the maximum
-				// in-flight write size limit to perform consensus asynchronously.
-				//
-				// NB: this estimation is conservative because it doesn't factor
-				// in that some writes may be proven by this batch and removed
-				// from the in-flight write set. The real accounting in
-				// inFlightWriteSet.{insert,remove} gets this right.
-				addedIFBytes += keySize(req.Header().Key)
-				asyncConsensus = (tp.ifWrites.byteSize() + addedIFBytes) <= maxIFBytes
-			}
-		}
-
+		// If we've chained onto all the in-flight writes (ifWrites.len() ==
+		// len(chainedKeys)), we don't need to pile on more QueryIntents. So, only
+		// do this work if that's not the case.
 		if tp.ifWrites.len() > len(chainedKeys) {
 			// For each conflicting in-flight write, add a QueryIntent request
 			// to the batch to assert that it has succeeded and "chain" onto it.
@@ -463,9 +476,6 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 		}
 	}
 
-	// Set the batch's AsyncConsensus flag based on whether AsyncConsensus is
-	// permitted for the batch.
-	ba.AsyncConsensus = asyncConsensus
 	return ba
 }
 
