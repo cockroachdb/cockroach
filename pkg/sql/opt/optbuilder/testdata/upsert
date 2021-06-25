@@ -1742,7 +1742,7 @@ upsert decimals
       │    │    │    │    ├── columns: decimals.a:15!null decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:18
-      │    │    │    │              └── decimals.a:15::DECIMAL + c:17::DECIMAL
+      │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
       │    │    │    └── filters
       │    │    │         └── a:10 = decimals.a:15
       │    │    └── projections
@@ -1814,7 +1814,7 @@ upsert decimals
       │    │    │    │    ├── columns: decimals.a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:18
-      │    │    │    │              └── decimals.a:15::DECIMAL + c:17::DECIMAL
+      │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
       │    │    │    └── filters
       │    │    │         └── a:10 = decimals.a:15
       │    │    └── projections
@@ -1894,7 +1894,7 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: decimals.a:15!null decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │         └── d:18
-      │    │    │    │    │    │              └── decimals.a:15::DECIMAL + c:17::DECIMAL
+      │    │    │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a:10 = decimals.a:15
       │    │    │    │    └── projections
