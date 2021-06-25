@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -44,7 +45,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
 			if local {
@@ -87,13 +88,15 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
 		},
 	})
 }
 
-func runSchemaChangeRandomLoad(ctx context.Context, t *test, c Cluster, maxOps, concurrency int) {
+func runSchemaChangeRandomLoad(
+	ctx context.Context, t *test, c cluster.Cluster, maxOps, concurrency int,
+) {
 	validate := func(db *gosql.DB) {
 		var (
 			id           int
@@ -132,7 +135,7 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c Cluster, maxOps, 
 	c.Put(ctx, workload, "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")
-	c.Start(ctx, t, roachNodes)
+	c.Start(ctx, roachNodes)
 	c.Run(ctx, loadNode, "./workload init schemachange")
 
 	storeDirectory, err := c.RunWithBuffer(ctx, t.l, c.Node(1), "echo", "-n", "{store-dir}")
@@ -179,7 +182,7 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c Cluster, maxOps, 
 }
 
 // saveArtifacts saves important test artifacts in the artifacts directory.
-func saveArtifacts(ctx context.Context, t *test, c Cluster, storeDirectory string) {
+func saveArtifacts(ctx context.Context, t *test, c cluster.Cluster, storeDirectory string) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 

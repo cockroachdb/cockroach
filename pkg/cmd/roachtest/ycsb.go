@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -34,7 +35,7 @@ func registerYCSB(r *testRegistry) {
 		"F": {8: 96, 32: 144},
 	}
 
-	runYCSB := func(ctx context.Context, t *test, c Cluster, wl string, cpus int) {
+	runYCSB := func(ctx context.Context, t *test, c cluster.Cluster, wl string, cpus int) {
 		nodes := c.Spec().NodeCount - 1
 
 		conc, ok := concurrencyConfigs[wl][cpus]
@@ -44,7 +45,7 @@ func registerYCSB(r *testRegistry) {
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, t, c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes))
 		waitForFullReplication(t, c.Conn(ctx, 1))
 
 		t.Status("running workload")
@@ -77,7 +78,7 @@ func registerYCSB(r *testRegistry) {
 				Name:    name,
 				Owner:   OwnerKV,
 				Cluster: r.makeClusterSpec(4, spec.CPU(cpus)),
-				Run: func(ctx context.Context, t *test, c Cluster) {
+				Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},
 			})

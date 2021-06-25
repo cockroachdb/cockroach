@@ -17,15 +17,16 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runStatusServer(ctx context.Context, t *test, c Cluster) {
+func runStatusServer(ctx context.Context, t *test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)

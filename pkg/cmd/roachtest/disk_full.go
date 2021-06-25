@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -25,8 +26,8 @@ func registerDiskFull(r *testRegistry) {
 		Owner:      OwnerStorage,
 		MinVersion: `v20.2.0`,
 		Cluster:    r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c Cluster) {
-			if c.isLocal() {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			if c.IsLocal() {
 				t.spec.Skip = "you probably don't want to fill your local disk"
 				return
 			}
@@ -34,7 +35,7 @@ func registerDiskFull(r *testRegistry) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, t, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))

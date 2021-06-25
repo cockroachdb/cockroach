@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -26,12 +27,12 @@ func registerHotSpotSplits(r *testRegistry) {
 	// This test sets up a cluster and runs kv on it with high concurrency and a large block size
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.
-	runHotSpot := func(ctx context.Context, t *test, c Cluster, duration time.Duration, concurrency int) {
+	runHotSpot := func(ctx context.Context, t *test, c cluster.Cluster, duration time.Duration, concurrency int) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		c.Start(ctx, t, roachNodes)
+		c.Start(ctx, roachNodes)
 
 		c.Put(ctx, workload, "./workload", appNode)
 		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
@@ -96,7 +97,7 @@ func registerHotSpotSplits(r *testRegistry) {
 		// https://github.com/cockroachdb/cockroach/pull/45323.
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			if local {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)

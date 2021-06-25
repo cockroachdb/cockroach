@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	_ "github.com/lib/pq"
 )
 
@@ -27,14 +28,14 @@ func registerInconsistency(r *testRegistry) {
 	})
 }
 
-func runInconsistency(ctx context.Context, t *test, c Cluster) {
+func runInconsistency(ctx context.Context, t *test, c cluster.Cluster) {
 	// With encryption on, our attempt below to manually introduce an inconsistency
 	// will fail.
 	c.EncryptDefault(false)
 
 	nodes := c.Range(1, 3)
 	c.Put(ctx, cockroach, "./cockroach", nodes)
-	c.Start(ctx, t, nodes)
+	c.Start(ctx, nodes)
 
 	{
 		db := c.Conn(ctx, 1)
@@ -89,7 +90,7 @@ func runInconsistency(ctx context.Context, t *test, c Cluster) {
 	m := newMonitor(ctx, c)
 	// If the consistency check "fails to fail", the verbose logging will help
 	// determine why.
-	c.Start(ctx, t, nodes, startArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))
+	c.Start(ctx, nodes, startArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))
 	m.Go(func(ctx context.Context) error {
 		select {
 		case <-time.After(5 * time.Minute):

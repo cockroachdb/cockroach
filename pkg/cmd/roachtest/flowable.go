@@ -13,6 +13,8 @@ package main
 import (
 	"context"
 	"regexp"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 var flowableReleaseTagRegex = regexp.MustCompile(`^flowable-(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -23,15 +25,15 @@ func registerFlowable(r *testRegistry) {
 	runFlowable := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster.Cluster,
 	) {
-		if c.isLocal() {
+		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		t.Status("cloning flowable and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
@@ -101,7 +103,7 @@ func registerFlowable(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runFlowable(ctx, t, c)
 		},
 	})

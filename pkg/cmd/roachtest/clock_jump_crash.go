@@ -15,11 +15,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	_ "github.com/lib/pq"
 )
 
-func runClockJump(ctx context.Context, t *test, c Cluster, tc clockJumpTestCase) {
+func runClockJump(ctx context.Context, t *test, c cluster.Cluster, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
 	if c.Spec().NodeCount != 1 {
@@ -36,7 +37,7 @@ func runClockJump(ctx context.Context, t *test, c Cluster, tc clockJumpTestCase)
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	db := c.Conn(ctx, c.Spec().NodeCount)
 	defer db.Close()
@@ -67,7 +68,7 @@ func runClockJump(ctx context.Context, t *test, c Cluster, tc clockJumpTestCase)
 		// restarting it if not.
 		time.Sleep(3 * time.Second)
 		if !isAlive(db, t.l) {
-			c.Start(ctx, t, c.Node(1))
+			c.Start(ctx, c.Node(1))
 		}
 	}()
 	defer offsetInjector.recover(ctx, c.Spec().NodeCount)
@@ -135,7 +136,7 @@ func registerClockJumpTests(r *testRegistry) {
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
 			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
 		}

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package cluster
 
 import (
 	"context"
@@ -49,7 +49,7 @@ type Cluster interface {
 	// Starting and stopping CockroachDB.
 
 	StartE(ctx context.Context, opts ...option.Option) error
-	Start(ctx context.Context, t *test, opts ...option.Option)
+	Start(ctx context.Context, opts ...option.Option)
 	StopE(ctx context.Context, opts ...option.Option) error
 	Stop(ctx context.Context, opts ...option.Option)
 	StopCockroachGracefullyOnNode(ctx context.Context, node int) error
@@ -95,7 +95,7 @@ type Cluster interface {
 
 	Spec() spec.ClusterSpec
 	Name() string
-	isLocal() bool
+	IsLocal() bool
 
 	// Deleting CockroachDB data and logs on nodes.
 
@@ -118,9 +118,8 @@ type Cluster interface {
 	// Methods whose inclusion on this interface is purely historical.
 	// These should be removed over time.
 
-	makeNodes(opts ...option.Option) string
-	CheckReplicaDivergenceOnDB(context.Context, *test, *gosql.DB) error
-	FetchDiskUsage(ctx context.Context, t *test) error
+	MakeNodes(opts ...option.Option) string
+	CheckReplicaDivergenceOnDB(context.Context, *logger.Logger, *gosql.DB) error
 	GitClone(
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error

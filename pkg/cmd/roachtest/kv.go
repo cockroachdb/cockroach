@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -62,11 +63,11 @@ func registerKV(r *testRegistry) {
 			return opts.splits
 		}
 	}
-	runKV := func(ctx context.Context, t *test, c Cluster, opts kvOptions) {
+	runKV := func(ctx context.Context, t *test, c cluster.Cluster, opts kvOptions) {
 		nodes := c.Spec().NodeCount - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, t, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
+		c.Start(ctx, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
 		if opts.splits < 0 {
 			// In addition to telling the workload to not split, disable load-based
@@ -228,7 +229,7 @@ func registerKV(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: minVersion,
 			Cluster:    r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
 			Tags: opts.tags,
@@ -243,7 +244,7 @@ func registerKVContention(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(nodes + 1),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 
@@ -252,7 +253,7 @@ func registerKVContention(r *testRegistry) {
 			// then it will take 10m for them to get unstuck, at which point the
 			// QPS threshold check in the test is guaranteed to fail.
 			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
-			c.Start(ctx, t, args, c.Range(1, nodes))
+			c.Start(ctx, args, c.Range(1, nodes))
 
 			conn := c.Conn(ctx, 1)
 			// Enable request tracing, which is a good tool for understanding
@@ -312,11 +313,11 @@ func registerKVQuiescenceDead(r *testRegistry) {
 		Owner:      OwnerKV,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v2.1.0",
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, t, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes))
 
 			run := func(cmd string, lastDown bool) {
 				n := nodes
@@ -375,7 +376,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				// other earlier kv invocation's footsteps.
 				run(kv+" --seed 2 {pgurl:1}", true)
 			})
-			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector, even if test fails below
+			c.Start(ctx, c.Node(nodes)) // satisfy dead node detector, even if test fails below
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
 				t.Fatalf(
@@ -393,7 +394,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -403,7 +404,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
 			args := startArgs(`--args=--vmodule=store=2,store_rebalancer=2`)
-			c.Start(ctx, t, args, c.Range(1, nodes))
+			c.Start(ctx, args, c.Range(1, nodes))
 
 			db := c.Conn(ctx, 1)
 			defer db.Close()
@@ -544,7 +545,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 						return nil
 					case <-time.After(1 * time.Minute):
 					}
-					c.Start(ctx, t, c.Node(nodes))
+					c.Start(ctx, c.Node(nodes))
 					m.ResetDeaths()
 				}
 
@@ -610,17 +611,16 @@ func registerKVSplits(r *testRegistry) {
 			Owner:   OwnerKV,
 			Timeout: item.timeout,
 			Cluster: r.makeClusterSpec(4),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-				c.Start(ctx, t, c.Range(1, nodes),
-					startArgs(
-						// NB: this works. Don't change it or only one of the two vars may actually
-						// make it to the server.
-						"--env", "COCKROACH_MEMPROF_INTERVAL=1m COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
-						"--args=--cache=256MiB",
-					))
+				c.Start(ctx, c.Range(1, nodes), startArgs(
+					// NB: this works. Don't change it or only one of the two vars may actually
+					// make it to the server.
+					"--env", "COCKROACH_MEMPROF_INTERVAL=1m COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce),
+					"--args=--cache=256MiB",
+				))
 
 				t.Status("running workload")
 				m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -642,7 +642,7 @@ func registerKVSplits(r *testRegistry) {
 }
 
 func registerKVScalability(r *testRegistry) {
-	runScalability := func(ctx context.Context, t *test, c Cluster, percent int) {
+	runScalability := func(ctx context.Context, t *test, c cluster.Cluster, percent int) {
 		nodes := c.Spec().NodeCount - 1
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -651,7 +651,7 @@ func registerKVScalability(r *testRegistry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			c.Wipe(ctx, c.Range(1, nodes))
-			c.Start(ctx, t, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -675,7 +675,7 @@ func registerKVScalability(r *testRegistry) {
 				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Owner:   OwnerKV,
 				Cluster: r.makeClusterSpec(7, spec.CPU(8)),
-				Run: func(ctx context.Context, t *test, c Cluster) {
+				Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 					runScalability(ctx, t, c, p)
 				},
 			})
@@ -695,13 +695,13 @@ func registerKVRangeLookups(r *testRegistry) {
 		cpus  = 8
 	)
 
-	runRangeLookups := func(ctx context.Context, t *test, c Cluster, workers int, workloadType rangeLookupWorkloadType, maximumRangeLookupsPerSec float64) {
+	runRangeLookups := func(ctx context.Context, t *test, c cluster.Cluster, workers int, workloadType rangeLookupWorkloadType, maximumRangeLookupsPerSec float64) {
 		nodes := c.Spec().NodeCount - 1
 		doneInit := make(chan struct{})
 		doneWorkload := make(chan struct{})
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, t, c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
 
@@ -810,7 +810,7 @@ func registerKVRangeLookups(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v19.2.0",
 			Cluster:    r.makeClusterSpec(nodes+1, spec.CPU(cpus)),
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},
 		})

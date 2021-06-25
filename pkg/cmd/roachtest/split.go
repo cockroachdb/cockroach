@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
@@ -44,7 +45,7 @@ func registerLoadSplits(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			// This number was determined experimentally. Often, but not always,
 			// more splits will happen.
 			expSplits := 10
@@ -88,7 +89,7 @@ func registerLoadSplits(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
 				concurrency:   64,       // 64 concurrent workers
@@ -109,7 +110,7 @@ func registerLoadSplits(r *testRegistry) {
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
 				concurrency:   64,       // 64 concurrent workers
@@ -127,10 +128,10 @@ func registerLoadSplits(r *testRegistry) {
 // runLoadSplits tests behavior of load based splitting under
 // conditions defined by the params. It checks whether certain number of
 // splits occur in different workload scenarios.
-func runLoadSplits(ctx context.Context, t *test, c Cluster, params splitParams) {
+func runLoadSplits(ctx context.Context, t *test, c cluster.Cluster, params splitParams) {
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.Node(1))
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	m := newMonitor(ctx, c, c.All())
 	m.Go(func(ctx context.Context) error {
@@ -216,7 +217,7 @@ func registerLargeRange(r *testRegistry) {
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(numNodes),
 		Timeout: 5 * time.Hour,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runLargeRangeSplits(ctx, t, c, size)
 		},
 	})
@@ -230,7 +231,7 @@ func bytesStr(size uint64) string {
 // so by setting the max range size to a huge number before populating the
 // table. It then drops the range size back down to normal and watches as
 // the large range splits apart.
-func runLargeRangeSplits(ctx context.Context, t *test, c Cluster, size int) {
+func runLargeRangeSplits(ctx context.Context, t *test, c cluster.Cluster, size int) {
 	// payload is the size of the payload column for each row in the Bank
 	// table.
 	const payload = 100
@@ -246,7 +247,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c Cluster, size int) {
 
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.All())
-	c.Start(ctx, t, c.All())
+	c.Start(ctx, c.All())
 
 	m := newMonitor(ctx, c, c.All())
 	m.Go(func(ctx context.Context) error {

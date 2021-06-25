@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -27,13 +28,13 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 		Name:    `schemachange/during/kv`,
 		Owner:   OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
 
-			c.Start(ctx, t, c.All())
+			c.Start(ctx, c.All())
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
@@ -59,7 +60,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 						t.Fatal(err)
 					}
 					defer l.Close()
-					_ = execCmd(ctx, t.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
+					_ = execCmd(ctx, t.l, roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
 				}()
 			}
 
@@ -302,7 +303,7 @@ func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Dur
 		Owner:   OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
@@ -337,11 +338,11 @@ func makeSchemaChangeBulkIngestTest(
 		Timeout: length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
 			// The payload column will be randomized and thus uncorrelated with the primary key (a, b, c).
 			aNum := numRows
-			if c.isLocal() {
+			if c.IsLocal() {
 				aNum = 100000
 			}
 			bNum := 1
@@ -354,7 +355,7 @@ func makeSchemaChangeBulkIngestTest(
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
-			c.Start(ctx, t, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
+			c.Start(ctx, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
 
 			// Don't add another index when importing.
 			cmdWrite := fmt.Sprintf(
@@ -369,7 +370,7 @@ func makeSchemaChangeBulkIngestTest(
 			m := newMonitor(ctx, c, crdbNodes)
 
 			indexDuration := length
-			if c.isLocal() {
+			if c.IsLocal() {
 				indexDuration = time.Second * 30
 			}
 			cmdWriteAndRead := fmt.Sprintf(
@@ -385,7 +386,7 @@ func makeSchemaChangeBulkIngestTest(
 				db := c.Conn(ctx, 1)
 				defer db.Close()
 
-				if !c.isLocal() {
+				if !c.IsLocal() {
 					// Wait for the load generator to run for a few minutes before creating the index.
 					sleepInterval := time.Minute * 5
 					maxSleep := length / 2
@@ -421,7 +422,7 @@ func makeSchemaChangeDuringTPCC(
 		Owner:   OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
@@ -472,7 +473,9 @@ func makeSchemaChangeDuringTPCC(
 	}
 }
 
-func runAndLogStmts(ctx context.Context, t *test, c Cluster, prefix string, stmts []string) error {
+func runAndLogStmts(
+	ctx context.Context, t *test, c cluster.Cluster, prefix string, stmts []string,
+) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 	t.l.Printf("%s: running %d statements\n", prefix, len(stmts))

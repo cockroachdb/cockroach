@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -54,12 +55,12 @@ func makeScrubTPCCTest(
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
 		Owner:   OwnerSQLQueries,
 		Cluster: r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,
 				ExtraRunArgs: "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
-					if !c.isLocal() {
+					if !c.IsLocal() {
 						// Wait until tpcc has been running for a few minutes to start SCRUB checks
 						sleepInterval := time.Minute * 10
 						maxSleep := length / 2

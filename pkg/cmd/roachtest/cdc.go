@@ -32,6 +32,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -65,13 +66,13 @@ type cdcTestArgs struct {
 	targetTxnPerSecond       float64
 }
 
-func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
+func cdcBasicTest(ctx context.Context, t *test, c cluster.Cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, t, crdbNodes)
+	c.Start(ctx, crdbNodes)
 
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
@@ -235,7 +236,7 @@ func cdcBasicTest(ctx context.Context, t *test, c Cluster, args cdcTestArgs) {
 	}
 }
 
-func runCDCBank(ctx context.Context, t *test, c Cluster) {
+func runCDCBank(ctx context.Context, t *test, c cluster.Cluster) {
 
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
@@ -244,14 +245,14 @@ func runCDCBank(ctx context.Context, t *test, c Cluster) {
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, t, crdbNodes)
+	c.Start(ctx, crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
 		nodes: kafkaNode,
 	}
 	kafka.install(ctx)
-	if !c.isLocal() {
+	if !c.IsLocal() {
 		// TODO(dan): This test currently connects to kafka from the test
 		// runner, so kafka needs to advertise the external address. Better
 		// would be a binary we could run on one of the roachprod machines.
@@ -392,11 +393,11 @@ func runCDCBank(ctx context.Context, t *test, c Cluster) {
 // This test verifies that the changefeed avro + confluent schema registry works
 // end-to-end (including the schema registry default of requiring backward
 // compatibility within a topic).
-func runCDCSchemaRegistry(ctx context.Context, t *test, c Cluster) {
+func runCDCSchemaRegistry(ctx context.Context, t *test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
-	c.Start(ctx, t, crdbNodes)
+	c.Start(ctx, crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -519,7 +520,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c Cluster) {
 	}
 }
 
-func runCDCKafkaAuth(ctx context.Context, t *test, c Cluster) {
+func runCDCKafkaAuth(ctx context.Context, t *test, c cluster.Cluster) {
 	lastCrdbNode := c.Spec().NodeCount - 1
 	if lastCrdbNode == 0 {
 		lastCrdbNode = 1
@@ -527,7 +528,7 @@ func runCDCKafkaAuth(ctx context.Context, t *test, c Cluster) {
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
-	c.Start(ctx, t, crdbNodes)
+	c.Start(ctx, crdbNodes)
 
 	kafka := kafkaManager{
 		t:     t,
@@ -610,7 +611,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           OwnerCDC,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1000,
@@ -626,7 +627,7 @@ func registerCDC(r *testRegistry) {
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1000,
@@ -642,7 +643,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           OwnerCDC,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -658,7 +659,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -674,7 +675,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -695,7 +696,7 @@ func registerCDC(r *testRegistry) {
 		// of this test. Look into it.
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
 				workloadDuration:         "30m",
@@ -711,7 +712,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType: tpccWorkloadType,
 				// Sending data to Google Cloud Storage is a bit slower than sending to
@@ -732,7 +733,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
@@ -741,7 +742,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
@@ -750,7 +751,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
 	})
@@ -1086,12 +1087,12 @@ confluent.support.customer.id=anonymous
 
 type kafkaManager struct {
 	t     *test
-	c     Cluster
+	c     cluster.Cluster
 	nodes option.NodeListOption
 }
 
 func (k kafkaManager) basePath() string {
-	if k.c.isLocal() {
+	if k.c.IsLocal() {
 		return `/tmp/confluent`
 	}
 	return `/mnt/data1/confluent`
@@ -1129,7 +1130,7 @@ func (k kafkaManager) install(ctx context.Context) {
 		k.t.Fatal(err)
 	}
 	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
-	if !k.c.isLocal() {
+	if !k.c.IsLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
 		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
 		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install openssl default-jre 2>&1 > logs/apt-get-install.log`)
@@ -1388,7 +1389,7 @@ type tpccWorkload struct {
 	tolerateErrors     bool
 }
 
-func (tw *tpccWorkload) install(ctx context.Context, c Cluster) {
+func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 	// For fixtures import, use the version built into the cockroach binary so
 	// the tpcc workload-versions match on release branches.
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
@@ -1398,7 +1399,7 @@ func (tw *tpccWorkload) install(ctx context.Context, c Cluster) {
 	))
 }
 
-func (tw *tpccWorkload) run(ctx context.Context, c Cluster, workloadDuration string) {
+func (tw *tpccWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
 	tolerateErrors := ""
 	if tw.tolerateErrors {
 		tolerateErrors = "--tolerate-errors"
@@ -1414,14 +1415,14 @@ type ledgerWorkload struct {
 	sqlNodes      option.NodeListOption
 }
 
-func (lw *ledgerWorkload) install(ctx context.Context, c Cluster) {
+func (lw *ledgerWorkload) install(ctx context.Context, c cluster.Cluster) {
 	c.Run(ctx, lw.workloadNodes.RandNode(), fmt.Sprintf(
 		`./workload init ledger {pgurl%s}`,
 		lw.sqlNodes.RandNode(),
 	))
 }
 
-func (lw *ledgerWorkload) run(ctx context.Context, c Cluster, workloadDuration string) {
+func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
 	c.Run(ctx, lw.workloadNodes, fmt.Sprintf(
 		`./workload run ledger --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
 		lw.sqlNodes,

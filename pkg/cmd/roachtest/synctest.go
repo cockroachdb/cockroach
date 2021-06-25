@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 )
 
@@ -36,7 +37,7 @@ fi
 		MinVersion: "v19.1.0",
 		// This test sets up a custom file system; we don't want the cluster reused.
 		Cluster: r.makeClusterSpec(1, spec.ReuseNone()),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")
 			if err != nil {
@@ -58,7 +59,7 @@ fi
 			c.Run(ctx, n, "mkdir -p {store-dir}/{real,faulty} || true")
 			t.Status("setting up charybdefs")
 
-			if err := execCmd(ctx, t.l, roachprod, "install", c.makeNodes(n), "charybdefs"); err != nil {
+			if err := execCmd(ctx, t.l, roachprod, "install", c.MakeNodes(n), "charybdefs"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real && chmod 777 {store-dir}/{real,faulty}")

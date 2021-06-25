@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -33,7 +34,7 @@ func registerMultiTenantUpgrade(r *testRegistry) {
 		Cluster:           r.makeClusterSpec(2),
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runMultiTenantUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -54,7 +55,7 @@ type tenantNode struct {
 func createTenantNode(
 	ctx context.Context,
 	t *test,
-	c Cluster,
+	c cluster.Cluster,
 	binary string,
 	kvAddrs []string,
 	tenantID int,
@@ -73,7 +74,7 @@ func createTenantNode(
 	return tn
 }
 
-func (tn *tenantNode) stop(ctx context.Context, t *test, c Cluster) {
+func (tn *tenantNode) stop(ctx context.Context, t *test, c cluster.Cluster) {
 	if tn.errCh == nil {
 		return
 	}
@@ -89,7 +90,7 @@ func (tn *tenantNode) logDir() string {
 	return fmt.Sprintf("logs/mt-%d", tn.tenantID)
 }
 
-func (tn *tenantNode) start(ctx context.Context, t *test, c Cluster, binary string) {
+func (tn *tenantNode) start(ctx context.Context, t *test, c cluster.Cluster, binary string) {
 	tn.binary = binary
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), binary, tn.kvAddrs, tn.tenantID,
@@ -155,7 +156,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c Cluster, binary stri
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 13 and make sure it still works.
 //  * Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
-func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Version) {
+func runMultiTenantUpgrade(ctx context.Context, t *test, c cluster.Cluster, v version.Version) {
 	predecessor, err := PredecessorVersion(v)
 	require.NoError(t, err)
 
@@ -164,7 +165,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Ve
 
 	kvNodes := c.Node(1)
 
-	c.Start(ctx, t, kvNodes, startArgs("--binary="+predecessorBinary))
+	c.Start(ctx, kvNodes, startArgs("--binary="+predecessorBinary))
 
 	kvAddrs, err := c.ExternalAddr(ctx, kvNodes)
 	require.NoError(t, err)
@@ -228,7 +229,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Ve
 
 	t.Status("upgrading host server")
 	c.Stop(ctx, kvNodes)
-	c.Start(ctx, t, kvNodes, startArgs("--binary="+currentBinary))
+	c.Start(ctx, kvNodes, startArgs("--binary="+currentBinary))
 	time.Sleep(time.Second)
 
 	t.Status("checking the pre-upgrade sql server still works after the KV binary upgrade")
@@ -407,7 +408,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c Cluster, v version.Ve
 
 func startTenantServer(
 	tenantCtx context.Context,
-	c Cluster,
+	c cluster.Cluster,
 	node option.NodeListOption,
 	binary string,
 	kvAddrs []string,

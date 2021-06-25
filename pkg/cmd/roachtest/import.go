@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -24,7 +25,7 @@ import (
 
 func registerImportNodeShutdown(r *testRegistry) {
 	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
-		startImport := func(c Cluster) (jobID string, err error) {
+		startImport := func(c cluster.Cluster) (jobID string, err error) {
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"
 			if local {
@@ -60,9 +61,9 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx, t)
+			c.Start(ctx)
 			gatewayNode := 2
 			nodeToShutdown := 3
 			startImport := getImportRunner(ctx, gatewayNode)
@@ -75,9 +76,9 @@ func registerImportNodeShutdown(r *testRegistry) {
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx, t)
+			c.Start(ctx)
 			gatewayNode := 2
 			nodeToShutdown := 2
 			startImport := getImportRunner(ctx, gatewayNode)
@@ -88,14 +89,14 @@ func registerImportNodeShutdown(r *testRegistry) {
 }
 
 func registerImportTPCC(r *testRegistry) {
-	runImportTPCC := func(ctx context.Context, t *test, c Cluster, testName string,
+	runImportTPCC := func(ctx context.Context, t *test, c cluster.Cluster, testName string,
 		timeout time.Duration, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
 		c.EncryptAtRandom(true)
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx, t)
+		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
@@ -137,7 +138,7 @@ func registerImportTPCC(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(numNodes),
 			Timeout: timeout,
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
 			},
 		})
@@ -150,7 +151,7 @@ func registerImportTPCC(r *testRegistry) {
 		Owner:   OwnerBulkIO,
 		Cluster: r.makeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
 		Timeout: 5 * time.Hour,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 				5*time.Hour, geoWarehouses)
 		},
@@ -179,13 +180,13 @@ func registerImportTPCH(r *testRegistry) {
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c Cluster) {
+			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
 
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
-				c.Start(ctx, t)
+				c.Start(ctx)
 				conn := c.Conn(ctx, 1)
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
 					t.Fatal(err)
@@ -277,7 +278,7 @@ func successfulImportStep(warehouses, nodeID int) versionStep {
 }
 
 func runImportMixedVersion(
-	ctx context.Context, t *test, c Cluster, warehouses int, predecessorVersion string,
+	ctx context.Context, t *test, c cluster.Cluster, warehouses int, predecessorVersion string,
 ) {
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
@@ -307,7 +308,7 @@ func registerImportMixedVersion(r *testRegistry) {
 		// Mixed-version support was added in 21.1.
 		MinVersion: "v21.1.0",
 		Cluster:    r.makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
@@ -322,7 +323,7 @@ func registerImportMixedVersion(r *testRegistry) {
 }
 
 func registerImportDecommissioned(r *testRegistry) {
-	runImportDecommissioned := func(ctx context.Context, t *test, c Cluster) {
+	runImportDecommissioned := func(ctx context.Context, t *test, c cluster.Cluster) {
 		warehouses := 100
 		if local {
 			warehouses = 10
@@ -331,7 +332,7 @@ func registerImportDecommissioned(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx, t)
+		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		// Decommission a node.

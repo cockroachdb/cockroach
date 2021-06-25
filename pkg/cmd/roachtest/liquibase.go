@@ -10,7 +10,11 @@
 
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+)
 
 var supportedLiquibaseHarnessTag = "liquibase-test-harness-1.0.1"
 
@@ -19,15 +23,15 @@ func registerLiquibase(r *testRegistry) {
 	runLiquibase := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster.Cluster,
 	) {
-		if c.isLocal() {
+		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
@@ -106,7 +110,7 @@ func registerLiquibase(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `tool`},
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runLiquibase(ctx, t, c)
 		},
 	})

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -90,7 +91,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 		Tags:    []string{"manual"},
 		Owner:   OwnerKV,
 		Cluster: nodes,
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)
 		},
 	})
@@ -177,7 +178,7 @@ func registerKVBench(r *testRegistry) {
 	}
 }
 
-func makeKVLoadGroup(c Cluster, numRoachNodes, numLoadNodes int) loadGroup {
+func makeKVLoadGroup(c cluster.Cluster, numRoachNodes, numLoadNodes int) loadGroup {
 	return loadGroup{
 		roachNodes: c.Range(1, numRoachNodes),
 		loadNodes:  c.Range(numRoachNodes+1, numRoachNodes+numLoadNodes),
@@ -192,7 +193,7 @@ func makeKVLoadGroup(c Cluster, numRoachNodes, numLoadNodes int) loadGroup {
 // This tool was primarily written with the objective of demonstrating the write
 // performance characteristics of using hash sharded indexes, for sequential workloads
 // which would've otherwise created a single-range hotspot.
-func runKVBench(ctx context.Context, t *test, c Cluster, b kvBenchSpec) {
+func runKVBench(ctx context.Context, t *test, c cluster.Cluster, b kvBenchSpec) {
 	loadGroup := makeKVLoadGroup(c, b.Nodes, 1)
 	roachNodes := loadGroup.roachNodes
 	loadNodes := loadGroup.loadNodes
@@ -225,7 +226,7 @@ func runKVBench(ctx context.Context, t *test, c Cluster, b kvBenchSpec) {
 		// splitting can significantly change the underlying layout of the table and
 		// affect benchmark results.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, t, roachNodes)
+		c.Start(ctx, roachNodes)
 		time.Sleep(restartWait)
 
 		// We currently only support one loadGroup.

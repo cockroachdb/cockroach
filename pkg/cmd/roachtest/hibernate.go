@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 )
 
 var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -25,7 +27,7 @@ type hibernateOptions struct {
 	buildCmd,
 	testCmd string
 	blocklists  blocklistsForVersion
-	dbSetupFunc func(ctx context.Context, t *test, c Cluster)
+	dbSetupFunc func(ctx context.Context, t *test, c cluster.Cluster)
 }
 
 var (
@@ -46,7 +48,7 @@ var (
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
 		blocklists: hibernateSpatialBlocklists,
-		dbSetupFunc: func(ctx context.Context, t *test, c Cluster) {
+		dbSetupFunc: func(ctx context.Context, t *test, c cluster.Cluster) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(
@@ -66,9 +68,9 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
 		t *test,
-		c Cluster,
+		c cluster.Cluster,
 	) {
-		if c.isLocal() {
+		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
 		node := c.Node(1)
@@ -77,7 +79,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, t, c.All())
+		c.Start(ctx, c.All())
 
 		if opt.dbSetupFunc != nil {
 			opt.dbSetupFunc(ctx, t, c)
@@ -237,7 +239,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		MinVersion: "v20.2.0",
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c Cluster) {
+		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
 		},
 	})

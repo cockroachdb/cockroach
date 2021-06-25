@@ -15,13 +15,14 @@ import (
 	"net/http"
 	"os/exec"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
-func runBuildInfo(ctx context.Context, t *test, c Cluster) {
+func runBuildInfo(ctx context.Context, t *test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t)
+	c.Start(ctx)
 
 	var details serverpb.DetailsResponse
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
@@ -50,9 +51,9 @@ func runBuildInfo(ctx context.Context, t *test, c Cluster) {
 
 // runBuildAnalyze performs static analysis on the built binary to
 // ensure it's built as expected.
-func runBuildAnalyze(ctx context.Context, t *test, c Cluster) {
+func runBuildAnalyze(ctx context.Context, t *test, c cluster.Cluster) {
 
-	if c.isLocal() {
+	if c.IsLocal() {
 		// This test is linux-specific and needs to be able to install apt
 		// packages, so only run it on dedicated remote VMs.
 		t.spec.Skip = "local execution not supported"
@@ -85,7 +86,7 @@ func runBuildAnalyze(ctx context.Context, t *test, c Cluster) {
 	c.Run(ctx, c.Node(1), "sudo apt-get update")
 	c.Run(ctx, c.Node(1), "sudo apt-get -qqy install pax-utils")
 
-	cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(c.Node(1)), "scanelf -qe cockroach")
+	cmd := exec.CommandContext(ctx, roachprod, "run", c.MakeNodes(c.Node(1)), "scanelf -qe cockroach")
 	output, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("scanelf failed: %s", err)
