@@ -227,21 +227,21 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 				newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
 					StatusCanceled, mutOptions)
 
-				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+				db.CheckQueryResults(t, `SELECT job_id FROM [SHOW JOBS] ORDER BY job_id`, [][]string{
 					{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
 					{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
 					t.Fatal(err)
 				}
-				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+				db.CheckQueryResults(t, `SELECT job_id FROM [SHOW JOBS] ORDER BY job_id`, [][]string{
 					{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newSucceededJob},
 					{newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
 					t.Fatal(err)
 				}
-				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+				db.CheckQueryResults(t, `SELECT job_id FROM [SHOW JOBS] ORDER BY job_id`, [][]string{
 					{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
 
 				// Delete the revert failed, and running jobs for the next run of the
@@ -273,6 +273,6 @@ func TestRegistryGCPagination(t *testing.T) {
 	ts := timeutil.Now()
 	require.NoError(t, s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(-10*time.Minute)))
 	var count int
-	db.QueryRow(t, `SELECT count(1) FROM system.jobs`).Scan(&count)
+	db.QueryRow(t, `SELECT count(1) FROM [SHOW JOBS]`).Scan(&count)
 	require.Zero(t, count)
 }

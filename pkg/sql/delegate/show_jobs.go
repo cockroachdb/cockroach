@@ -63,13 +63,17 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 	if n.Block {
+		// The AutoZoneConfigReconciliation job is never meant to complete so we
+		// explicitly exclude it here via the WHERE clause. This is required because
+		// we don't have control over which filter is applied first.
 		sqlStmt = fmt.Sprintf(
 			`SELECT * FROM [%s]
 			 WHERE
+					job_type != '%s' AND
 			    IF(finished IS NULL,
 			      IF(pg_sleep(1), crdb_internal.force_retry('24h'), 0),
 			      0
-			    ) = 0`, sqlStmt)
+			    ) = 0`, sqlStmt, jobspb.TypeAutoZoneConfigReconciliation)
 	}
 	return parse(sqlStmt)
 }

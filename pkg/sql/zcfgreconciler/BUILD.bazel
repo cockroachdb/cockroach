@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "zcfgreconciler",
     srcs = [
-        "reconciliation_manager.go",
-        "zcfg_reconciliation_job.go",
+        "manager.go",
+        "reconciler_job.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler",
     visibility = ["//visibility:public"],

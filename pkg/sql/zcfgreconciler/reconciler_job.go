@@ -1,3 +1,13 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package zcfgreconciler
 
 import (
@@ -24,14 +34,12 @@ var _ jobs.Resumer = (*resumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (z *resumer) Resume(ctx context.Context, _ interface{}) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-		// TODO(arul): This doesn't do anything yet.
-	}
+	// TODO(arul): This doesn't do anything yet.
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
 func (z *resumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
-	return errors.AssertionFailedf("zone config reconciliation job can never fail or be cancelled")
+	return errors.AssertionFailedf("zone config reconciliation job can never fail or be canceled")
 }

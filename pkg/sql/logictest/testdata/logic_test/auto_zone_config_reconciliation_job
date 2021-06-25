@@ -1,7 +1,7 @@
 # Ensure there's a single auto zone config reconciliation job in the system,
 # and that it's running.
 query ITT colnames
-SELECT COUNT(*), job_type, status FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO ZONE CONFIG RECONCILIATION' GROUP BY (job_type, status)
+SELECT count(*), job_type, status FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO ZONE CONFIG RECONCILIATION' GROUP BY (job_type, status)
 ----
 count  job_type                         status
 1      AUTO ZONE CONFIG RECONCILIATION  running
@@ -11,7 +11,7 @@ SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO ZONE CONFIG RECO
 
 # Ensure that the reconciliation job does not appear in SHOW JOBS.
 query I colnames
-SELECT COUNT(*) FROM [SHOW JOBS] WHERE job_id = $job_id
+SELECT count(*) FROM [SHOW JOBS] WHERE job_id = $job_id
 ----
 count
 0

@@ -32,9 +32,7 @@ type Manager struct {
 }
 
 // NewManager constructs a new reconciliation manager.
-func NewManager(
-	db *kv.DB, jr *jobs.Registry, ie *sql.InternalExecutor,
-) *Manager {
+func NewManager(db *kv.DB, jr *jobs.Registry, ie *sql.InternalExecutor) *Manager {
 	return &Manager{
 		db: db,
 		jr: jr,
@@ -52,7 +50,6 @@ func (z *Manager) CreateAndStartJobIfNoneExist(ctx context.Context, stopper *sto
 		if err := z.createAndStartJobIfNoneExist(ctx); err != nil {
 			log.Errorf(ctx, "zone config reconciliation error: %v", err)
 		}
-		return
 	})
 }
 
