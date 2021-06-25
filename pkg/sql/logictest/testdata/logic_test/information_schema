@@ -1097,7 +1097,7 @@ system         pg_extension        geography_columns                      SYSTEM
 system         pg_extension        geometry_columns                       SYSTEM VIEW  NO                  1
 system         pg_extension        spatial_ref_sys                        SYSTEM VIEW  NO                  1
 system         public              descriptor                             BASE TABLE   YES                 1
-system         public              users                                  BASE TABLE   YES                 1
+system         public              users                                  BASE TABLE   YES                 2
 system         public              zones                                  BASE TABLE   YES                 1
 system         public              settings                               BASE TABLE   YES                 1
 system         public              tenants                                BASE TABLE   YES                 1
@@ -1118,7 +1118,7 @@ system         public              reports_meta                           BASE T
 system         public              namespace                              BASE TABLE   YES                 1
 system         public              protected_ts_meta                      BASE TABLE   YES                 1
 system         public              protected_ts_records                   BASE TABLE   YES                 1
-system         public              role_options                           BASE TABLE   YES                 1
+system         public              role_options                           BASE TABLE   YES                 2
 system         public              statement_bundle_chunks                BASE TABLE   YES                 1
 system         public              statement_diagnostics_requests         BASE TABLE   YES                 1
 system         public              statement_diagnostics                  BASE TABLE   YES                 1
