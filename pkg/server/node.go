@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1323,11 +1324,37 @@ func (n *Node) Join(
 	}, nil
 }
 
+var _ spanconfig.Accessor = &Node{}
+
+// GetSpanConfigsFor implements the spanconfig.Accessor interface.
+// It's a convenience wrapper around the RPC implementation.
+func (n *Node) GetSpanConfigsFor(
+	ctx context.Context, span roachpb.Span,
+) ([]roachpb.SpanConfigEntry, error) {
+	resp, err := n.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{Span: span})
+	if err != nil {
+		return nil, err
+	}
+	return resp.SpanConfigs, nil
+}
+
+// UpdateSpanConfigEntries implements the spanconfig.Accessor
+// interface. It's a convenience wrapper around the RPC implementation.
+func (n *Node) UpdateSpanConfigEntries(
+	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,
+) error {
+	_, err := n.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
+		SpanConfigsToUpdate: update,
+		SpansToDelete:       delete,
+	})
+	return err
+}
+
 // GetSpanConfigs implements the roachpb.InternalServer interface.
 func (n *Node) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
 ) (resp *roachpb.GetSpanConfigsResponse, err error) {
-	if req.Span.Valid() || len(req.Span.EndKey) == 0 {
+	if !req.Span.Valid() || len(req.Span.EndKey) == 0 {
 		return nil, errors.Newf("invalid span: %s", req.Span)
 	}
 
@@ -1383,15 +1410,20 @@ func (n *Node) GetSpanConfigs(
 func (n *Node) UpdateSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
-	for _, list := range [][]roachpb.SpanConfigEntry{
-		req.SpanConfigsToDelete,
-		req.SpanConfigsToUpsert,
+	spansToUpdate := func(ents []roachpb.SpanConfigEntry) []roachpb.Span {
+		spans := make([]roachpb.Span, len(ents))
+		for i, ent := range ents {
+			spans[i] = ent.Span
+		}
+		return spans
+	}(req.SpanConfigsToUpdate)
+
+	for _, list := range [][]roachpb.Span{
+		req.SpansToDelete, spansToUpdate,
 	} {
-		for _, scfg := range list {
-			if scfg.Span.Valid() || len(scfg.Span.EndKey) == 0 {
-				// TODO(zcfgs-pod): Should we consider spans with empty end
-				// keys as invalid?
-				return nil, errors.Newf("invalid span: %s", scfg.Span)
+		for _, span := range list {
+			if !span.Valid() || len(span.EndKey) == 0 {
+				return nil, errors.Newf("invalid span: %s", span)
 			}
 		}
 
@@ -1401,19 +1433,19 @@ func (n *Node) UpdateSpanConfigs(
 					continue
 				}
 
-				if list[i].Span.Overlaps(list[j].Span) {
+				if list[i].Overlaps(list[j]) {
 					return nil, errors.Newf("found overlapping spans %s and %s in same list",
-						list[i].Span, list[j].Span)
+						list[i], list[j])
 				}
 			}
 		}
 	}
 
-	sort.Slice(req.SpanConfigsToDelete, func(i, j int) bool {
-		return req.SpanConfigsToDelete[i].Span.Key.Compare(req.SpanConfigsToDelete[j].Span.Key) < 0
+	sort.Slice(req.SpanConfigsToUpdate, func(i, j int) bool {
+		return req.SpanConfigsToUpdate[i].Span.Key.Compare(req.SpanConfigsToUpdate[j].Span.Key) < 0
 	})
-	sort.Slice(req.SpanConfigsToUpsert, func(i, j int) bool {
-		return req.SpanConfigsToUpsert[i].Span.Key.Compare(req.SpanConfigsToUpsert[j].Span.Key) < 0
+	sort.Slice(req.SpansToDelete, func(i, j int) bool {
+		return req.SpansToDelete[i].Key.Compare(req.SpansToDelete[j].Key) < 0
 	})
 
 	// TODO(zcfgs-pod): Instead of simply upserting/deleting into the table, we
@@ -1423,17 +1455,17 @@ func (n *Node) UpdateSpanConfigs(
 	//
 	// Initial      [--------A-------)     [-------B------)[---------C---------)
 	// -------------------------------------------------------------------------
-	// Upsert(+)         [----D------)         [-------B------)
+	// Update(+)         [----D------)         [-------B------)
 	// Delete(-)                                                         [-----)
 	// -------------------------------------------------------------------------
 	//              [-A-)[----D------)     [---------B--------)[----C----)
 
 	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		for _, scfg := range req.SpanConfigsToDelete {
+		for _, span := range req.SpansToDelete {
 			n, err := n.sqlExec.ExecEx(ctx, "update-span-cfgs", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"DELETE FROM system.span_configurations WHERE start_key = $1 AND end_key = $2",
-				scfg.Span.Key, scfg.Span.EndKey,
+				span.Key, span.EndKey,
 			)
 			if err != nil {
 				return err
@@ -1443,7 +1475,7 @@ func (n *Node) UpdateSpanConfigs(
 			}
 		}
 
-		for _, scfg := range req.SpanConfigsToUpsert {
+		for _, scfg := range req.SpanConfigsToUpdate {
 			buf, err := protoutil.Marshal(&scfg.Config)
 			if err != nil {
 				return err
@@ -1458,7 +1490,7 @@ func (n *Node) UpdateSpanConfigs(
 
 		}
 
-		for _, scfg := range req.SpanConfigsToUpsert {
+		for _, scfg := range req.SpanConfigsToUpdate {
 			datums, err := n.sqlExec.QueryRowEx(ctx, "check-span-cfgs", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				`SELECT count(*) FROM system.span_configurations WHERE $1 < end_key AND start_key < $2`,
