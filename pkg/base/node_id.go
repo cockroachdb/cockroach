@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -164,11 +165,27 @@ type SQLIDContainer struct {
 //
 // A zero sqlInstanceID falls back to the NodeID in SQLInstanceID().
 // This is used in single-tenant deployments.
+//
+// In a multi-tenant deployment, we could initialize the SQLIDContainer with
+// a nil nodeIDContainer and 0 as the instance ID. This is to aid bootstrapping.
+// In such a case, SetSQLInstanceID needs to be invoked prior to the SQLIDContainer
+// being used.
 func NewSQLIDContainer(sqlInstanceID SQLInstanceID, nodeID *NodeIDContainer) *SQLIDContainer {
 	return &SQLIDContainer{
 		w:             errorutil.MakeTenantSQLDeprecatedWrapper(nodeID, nodeID != nil),
 		sqlInstanceID: sqlInstanceID,
 	}
+}
+
+// SetSQLInstanceID sets the SQL instance ID. It returns an error if
+// we attempt to set an instance ID when the nodeID has already been
+// initialized.
+func (c *SQLIDContainer) SetSQLInstanceID(sqlInstanceID SQLInstanceID) error {
+	if _, ok := c.OptionalNodeID(); ok {
+		return errors.New("attempting to initialize instance ID when node ID is set")
+	}
+	c.sqlInstanceID = sqlInstanceID
+	return nil
 }
 
 // OptionalNodeID returns the NodeID and true, if the former is exposed.

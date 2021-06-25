@@ -6,6 +6,7 @@ go_library(
         "instancereader.go",
         "instancestorage.go",
         "row_codec.go",
+        "test_helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage",
     visibility = ["//visibility:public"],
@@ -26,6 +27,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -33,13 +35,12 @@ go_library(
 go_test(
     name = "instancestorage_test",
     srcs = [
-        "helpers_test.go",
         "instancereader_test.go",
         "instancestorage_test.go",
         "main_test.go",
     ],
-    embed = [":instancestorage"],
     deps = [
+        ":instancestorage",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/security",
