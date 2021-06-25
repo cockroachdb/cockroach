@@ -51,14 +51,6 @@ const (
 	cgroupV1MemLimitStatKey             = "hierarchical_memory_limit"
 )
 
-var (
-	// TODO(abarganier): Use GetMemoryUsage as heuristic in periodic query dumps
-	_, _, _ = GetMemoryUsage()
-	// TODO(abarganier): Use GetMemoryInactiveFileUsage as heuristic in periodic
-	// query dumps
-	_, _, _ = GetMemoryInactiveFileUsage()
-)
-
 // GetMemoryLimit attempts to retrieve the cgroup memory limit for the current
 // process
 func GetMemoryLimit() (limit int64, warnings string, err error) {
