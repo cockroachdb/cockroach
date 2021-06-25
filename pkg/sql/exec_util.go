@@ -75,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zcfgreconciler"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -82,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -918,7 +920,20 @@ type ExecutorConfig struct {
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
 	// perform compaction over a key span.
 	CompactEngineSpanFunc tree.CompactEngineSpanFunc
+
+	// ConfigReconciliationJobDeps is used to drive the zone config
+	// reconciliation job.
+	ConfigReconciliationJobDeps zcfgreconciler.JobDependencies
+
+	// StartConfigReconciliationJobHook is called during the SQL server startup
+	// process, to idempotently create and start a zone config reconciliation
+	// for the tenant if none exist.
+	StartConfigReconciliationJobHook StartConfigReconciliationJobHook
 }
+
+// StartConfigReconciliationJobHook is used to create and start the zone config
+// reconciliation job, if none exist.
+type StartConfigReconciliationJobHook func(ctx context.Context, stopper *stop.Stopper)
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.
 type VersionUpgradeHook func(

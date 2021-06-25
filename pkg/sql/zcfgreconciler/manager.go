@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -28,11 +28,25 @@ import (
 type Manager struct {
 	db *kv.DB
 	jr *jobs.Registry
-	ie *sql.InternalExecutor
+	ie tree.InternalExecutor
+}
+
+// SpanConfigAccessor mediates access to the subset of the cluster's span
+// configs applicable to a given tenant.
+//
+// Implementations are expected to be thread safe.
+type SpanConfigAccessor interface {
+	// GetSpanConfigsFor retrieves the span configurations for the requested
+	// span.
+	GetSpanConfigsFor(ctx context.Context, span roachpb.Span) ([]roachpb.SpanConfigEntry, error)
+
+	// UpdateSpanConfigEntries updates the span configurations over the given
+	// keyspans.
+	UpdateSpanConfigEntries(ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span) error
 }
 
 // NewManager constructs a new reconciliation manager.
-func NewManager(db *kv.DB, jr *jobs.Registry, ie *sql.InternalExecutor) *Manager {
+func NewManager(db *kv.DB, jr *jobs.Registry, ie tree.InternalExecutor) *Manager {
 	return &Manager{
 		db: db,
 		jr: jr,
@@ -106,4 +120,8 @@ SELECT EXISTS(
 		return false, err
 	}
 	return bool(*row[0].(*tree.DBool)), nil
+}
+
+type JobDependencies interface {
+	SpanConfigAccessor
 }

@@ -198,6 +198,9 @@ type sqlServerArgs struct {
 	// Used by the executor config.
 	systemConfigProvider config.SystemConfigProvider
 
+	// Used by the zone config reconciliation job.
+	spanConfigAccessor zcfgreconciler.SpanConfigAccessor
+
 	// Used by DistSQLPlanner.
 	nodeDialer *nodedialer.Dialer
 
@@ -560,12 +563,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.rangeFeedFactory,
 		),
 
-		QueryCache:                 querycache.New(cfg.QueryCacheSize),
-		ProtectedTimestampProvider: cfg.protectedtsProvider,
-		ExternalIODirConfig:        cfg.ExternalIODirConfig,
-		HydratedTables:             hydratedTablesCache,
-		GCJobNotifier:              gcJobNotifier,
-		RangeFeedFactory:           cfg.rangeFeedFactory,
+		QueryCache:                  querycache.New(cfg.QueryCacheSize),
+		ProtectedTimestampProvider:  cfg.protectedtsProvider,
+		ExternalIODirConfig:         cfg.ExternalIODirConfig,
+		HydratedTables:              hydratedTablesCache,
+		GCJobNotifier:               gcJobNotifier,
+		RangeFeedFactory:            cfg.rangeFeedFactory,
+		ConfigReconciliationJobDeps: cfg.spanConfigAccessor,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -695,6 +699,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.VersionUpgradeHook = migrationMgr.Migrate
 	}
 
+	{
+		reconciliationMgr := zcfgreconciler.NewManager(
+			cfg.db, jobRegistry, cfg.circularInternalExecutor,
+		)
+		execCfg.StartConfigReconciliationJobHook = reconciliationMgr.CreateAndStartJobIfNoneExist
+		execCfg.ConfigReconciliationJobDeps = cfg.spanConfigAccessor
+	}
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -816,10 +828,7 @@ func (s *SQLServer) preStart(
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
 
 	// Create and start the zone config reconciliation job if none exist.
-	zcfgreconcilerMgr := zcfgreconciler.NewManager(
-		s.execCfg.DB, s.jobRegistry, s.internalExecutor,
-	)
-	zcfgreconcilerMgr.CreateAndStartJobIfNoneExist(ctx, stopper)
+	s.execCfg.StartConfigReconciliationJobHook(ctx, stopper)
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.

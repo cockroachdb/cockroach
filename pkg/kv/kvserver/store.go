@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -1577,6 +1578,29 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.startLeaseRenewer(ctx)
 	}
 
+	// Initiate a watcher process to listen in on span config updates, and
+	// propagate said updates to the underlying store.
+	spanConfigWatcher := spanconfig.NewWatcher(s.DB(), s.Clock())
+	spanConfigUpdateC, err := spanConfigWatcher.Start(ctx, s.Stopper())
+	if err != nil {
+		return err
+	}
+	if err := s.stopper.RunAsyncTask(ctx, "spanconfig-watcher", func(context.Context) {
+		for {
+			select {
+			case update := <-spanConfigUpdateC:
+				if interceptor := s.TestingKnobs().SpanConfigUpdateInterceptor; interceptor != nil {
+					interceptor(update)
+				}
+				s.onSpanConfigUpdate(update)
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	}); err != nil {
+		return err
+	}
+
 	// Connect rangefeeds to closed timestamp updates.
 	s.startClosedTimestampRangefeedSubscriber(ctx)
 	s.startRangefeedUpdater(ctx)
@@ -1958,6 +1982,13 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		}
 		return true // more
 	})
+}
+
+// onSpanConfigUpdate is the callback invoked whenever this store learns of a
+// span config update.
+func (s *Store) onSpanConfigUpdate(spanconfig.Update) {
+	// TODO(zcfgs-pod): Apply the span config update locally, updating the
+	// relevant replicas and queuing up the implied merge/split actions.
 }
 
 func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {
