@@ -1287,6 +1287,7 @@ system              public             630200280_6_3_not_null    system         
 system              public             primary                   system         public        settings                         PRIMARY KEY      NO             NO
 system              public             630200280_42_1_not_null   system         public        span_configurations              CHECK            NO             NO
 system              public             630200280_42_2_not_null   system         public        span_configurations              CHECK            NO             NO
+system              public             630200280_42_3_not_null   system         public        span_configurations              CHECK            NO             NO
 system              public             primary                   system         public        span_configurations              PRIMARY KEY      NO             NO
 system              public             630200280_39_1_not_null   system         public        sqlliveness                      CHECK            NO             NO
 system              public             630200280_39_2_not_null   system         public        sqlliveness                      CHECK            NO             NO
@@ -1457,6 +1458,7 @@ system              public             630200280_41_2_not_null   secret IS NOT N
 system              public             630200280_41_3_not_null   expiration IS NOT NULL
 system              public             630200280_42_1_not_null   start_key IS NOT NULL
 system              public             630200280_42_2_not_null   end_key IS NOT NULL
+system              public             630200280_42_3_not_null   config IS NOT NULL
 system              public             630200280_4_1_not_null    username IS NOT NULL
 system              public             630200280_4_3_not_null    isRole IS NOT NULL
 system              public             630200280_5_1_not_null    id IS NOT NULL
