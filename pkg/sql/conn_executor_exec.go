@@ -728,18 +728,24 @@ func (ex *connExecutor) execStmtInOpenState(
 }
 
 func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) string {
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	var fmtCtx *tree.FmtCtx
+	fmtFlags := tree.FmtSimple
 
 	if evalCtx.HasPlaceholders() {
-		fmtCtx.SetPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-			d, err := placeholder.Eval(evalCtx)
-			if err != nil {
-				// Fall back to the default behavior if something goes wrong.
-				ctx.Printf("$%d", placeholder.Idx+1)
-				return
-			}
-			d.Format(ctx)
-		})
+		fmtCtx = tree.NewFmtCtx(
+			fmtFlags,
+			tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+				d, err := placeholder.Eval(evalCtx)
+				if err != nil {
+					// Fall back to the default behavior if something goes wrong.
+					ctx.Printf("$%d", placeholder.Idx+1)
+					return
+				}
+				d.Format(ctx)
+			}),
+		)
+	} else {
+		fmtCtx = tree.NewFmtCtx(fmtFlags)
 	}
 
 	fmtCtx.FormatNode(ast)

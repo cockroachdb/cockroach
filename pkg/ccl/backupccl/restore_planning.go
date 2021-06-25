@@ -94,16 +94,18 @@ func rewriteViewQueryDBNames(table *tabledesc.Mutable, newDB string) error {
 			"failed to parse underlying query from view %q", table.Name)
 	}
 	// Re-format to change all DB names to `newDB`.
-	f := tree.NewFmtCtx(tree.FmtParsable)
-	f.SetReformatTableNames(func(ctx *tree.FmtCtx, tn *tree.TableName) {
-		// empty catalog e.g. ``"".information_schema.tables` should stay empty.
-		if tn.CatalogName != "" {
-			tn.CatalogName = tree.Name(newDB)
-		}
-		ctx.WithReformatTableNames(nil, func() {
-			ctx.FormatNode(tn)
-		})
-	})
+	f := tree.NewFmtCtx(
+		tree.FmtParsable,
+		tree.FmtReformatTableNames(func(ctx *tree.FmtCtx, tn *tree.TableName) {
+			// empty catalog e.g. ``"".information_schema.tables` should stay empty.
+			if tn.CatalogName != "" {
+				tn.CatalogName = tree.Name(newDB)
+			}
+			ctx.WithReformatTableNames(nil, func() {
+				ctx.FormatNode(tn)
+			})
+		}),
+	)
 	f.FormatNode(stmt.AST)
 	table.ViewQuery = f.CloseAndGetString()
 	return nil
@@ -117,19 +119,21 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 		return "", err
 	}
 
-	ctx := tree.NewFmtCtx(tree.FmtSerializable)
-	ctx.SetIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
-		newRef := ref
-		var id descpb.ID
-		id, err = typedesc.UserDefinedTypeOIDToID(ref.OID)
-		if err != nil {
-			return
-		}
-		if rw, ok := rewrites[id]; ok {
-			newRef = &tree.OIDTypeReference{OID: typedesc.TypeIDToOID(rw.ID)}
-		}
-		ctx.WriteString(newRef.SQLString())
-	})
+	ctx := tree.NewFmtCtx(
+		tree.FmtSerializable,
+		tree.FmtIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
+			newRef := ref
+			var id descpb.ID
+			id, err = typedesc.UserDefinedTypeOIDToID(ref.OID)
+			if err != nil {
+				return
+			}
+			if rw, ok := rewrites[id]; ok {
+				newRef = &tree.OIDTypeReference{OID: typedesc.TypeIDToOID(rw.ID)}
+			}
+			ctx.WriteString(newRef.SQLString())
+		}),
+	)
 	if err != nil {
 		return "", err
 	}

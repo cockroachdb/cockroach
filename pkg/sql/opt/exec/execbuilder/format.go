@@ -41,10 +41,12 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 		// Not all scalar operators are supported (e.g. Projections).
 		return ""
 	}
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-		ctx.WriteString(f.ColumnString(opt.ColumnID(idx + 1)))
-	})
+	fmtCtx := tree.NewFmtCtx(
+		tree.FmtSimple,
+		tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+			ctx.WriteString(f.ColumnString(opt.ColumnID(idx + 1)))
+		}),
+	)
 	expr.Format(fmtCtx)
 	return fmtCtx.String()
 }
