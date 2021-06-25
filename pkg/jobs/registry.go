@@ -162,6 +162,8 @@ const PreventAdoptionFile = "DISABLE_STARTING_BACKGROUND_JOBS"
 // MakeRegistry creates a new Registry. planFn is a wrapper around
 // sql.newInternalPlanner. It returns a sql.JobExecCtx, but must be
 // coerced into that in the Resumer functions.
+// A nil nodeID can be passed while initializing SQL pods but then
+// SetNodeID needs to be called to initialize it.
 func MakeRegistry(
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
@@ -207,6 +209,14 @@ func (r *Registry) SetSessionBoundInternalExecutorFactory(
 	r.sessionBoundInternalExecutorFactory = factory
 }
 
+// SetNodeID sets the nodeID. We need to expose a setter for the nodeID
+// separate from the constructor for initializing the node id in the multi-tenant
+// environment. The nodeID will set to the SQL instance id while starting a
+// SQL pod in the multi-tenant environment.
+func (r *Registry) SetNodeID(nodeID *base.SQLIDContainer) {
+	r.nodeID = nodeID
+}
+
 // MetricsStruct returns the metrics for production monitoring of each job type.
 // They're all stored as the `metric.Struct` interface because of dependency
 // cycles.
@@ -225,7 +235,7 @@ func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 	return jobs
 }
 
-// ID returns a unique during the lifetume of the registry id that is
+// ID returns a unique ID during the lifetime of the registry ID that is
 // used for keying sqlliveness claims held by the registry.
 func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
@@ -581,7 +591,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 				return
 			}
-
 			log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
 			f(ctx, s)
 		}
