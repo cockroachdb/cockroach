@@ -137,6 +137,8 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqlinstance",
+        "//pkg/sql/sqlinstance/instanceprovider",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/sqlutil",

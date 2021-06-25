@@ -59,20 +59,7 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
-	s, err := newSQLServer(ctx, args)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	s.execCfg.SQLStatusServer = newTenantStatusServer(
-		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
-	)
-
-	// TODO(asubiotto): remove this. Right now it is needed to initialize the
-	// SpanResolver.
-	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
-
+	args.ValidateAddrs(ctx)
 	connManager := netutil.MakeServer(
 		args.stopper,
 		// The SQL server only uses connManager.ServeWith. The both below
@@ -122,9 +109,22 @@ func StartTenant(
 			return nil, "", "", err
 		}
 	}
-
 	pgLAddr := pgL.Addr().String()
 	httpLAddr := httpL.Addr().String()
+	args.addr = pgLAddr
+	s, err := newSQLServer(ctx, args)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	s.execCfg.SQLStatusServer = newTenantStatusServer(
+		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
+	)
+
+	// TODO(asubiotto): remove this. Right now it is needed to initialize the
+	// SpanResolver.
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
 	args.recorder.AddNode(
 		args.registry,
 		roachpb.NodeDescriptor{},
@@ -169,8 +169,6 @@ func StartTenant(
 	}); err != nil {
 		return nil, "", "", err
 	}
-
-	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(args.nodeIDContainer.SQLInstanceID())})
 
 	if err := s.preStart(ctx,
 		args.stopper,
@@ -320,9 +318,6 @@ func makeTenantSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	const sqlInstanceID = base.SQLInstanceID(10001)
-	idContainer := base.NewSQLIDContainer(sqlInstanceID, nil /* nodeID */)
-
 	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
 	registry.AddMetricStruct(runtime)
 
@@ -358,9 +353,11 @@ func makeTenantSQLServerArgs(
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
-			nodeIDContainer:        idContainer,
 			externalStorage:        externalStorage,
 			externalStorageFromURI: externalStorageFromURI,
+			// Set instance ID to 0 and node ID to nil to indicate
+			// that the instance ID will be bound later during preStart.
+			nodeIDContainer: base.NewSQLIDContainer(0, nil),
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantConnect: tenantConnect,
