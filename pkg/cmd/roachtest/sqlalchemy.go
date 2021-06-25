@@ -110,6 +110,27 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
+	// TODO(arul): This manual install of alembic should go in the
+	//  "install dependencies" above once alembic 1.7 is out.
+	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy-alembic", `
+		sudo rm -rf /mnt/data1/sqlalchemy-alembic
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repeatGitCloneE(ctx, t, c,
+		"https://github.com/sqlalchemy/alembic", "/mnt/data1/sqlalchemy-alembic",
+		"master", node); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Status("installing alembic from github")
+	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=alembic", `
+		cd /mnt/data1/sqlalchemy-alembic && sudo pip3 install .
+	`); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy", `
 		sudo rm -rf /mnt/data1/sqlalchemy
 	`); err != nil {
@@ -157,10 +178,9 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Note that this is expected to return an error, since the test suite
 	// will fail. And it is safe to swallow it here.
 	rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
-		`cd /mnt/data1/sqlalchemy/ && pytest --maxfail=0 \
-		--requirements=sqlalchemy_cockroachdb.requirements:Requirements \
+		`cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
 		--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable \
-		test/dialect/test_suite.py
+		test/test_suite_sqlalchemy.py
 	`)
 
 	t.Status("collating the test results")
