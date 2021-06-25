@@ -2598,7 +2598,7 @@ func (m *monitor) wait(args ...string) error {
 
 // TODO(nvanbenschoten): this function should take a context and be responsive
 // to context cancellation.
-func waitForFullReplication(t *test, db *gosql.DB) {
+func waitForFullReplication(t testI, db *gosql.DB) {
 	t.L().Printf("waiting for up-replication...")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
