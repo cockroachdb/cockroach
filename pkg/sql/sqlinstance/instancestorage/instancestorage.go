@@ -69,6 +69,12 @@ func NewStorage(db *kv.DB, codec keys.SQLCodec, slReader sqlliveness.Reader) *St
 func (s *Storage) CreateInstance(
 	ctx context.Context, sessionID sqlliveness.SessionID, addr string,
 ) (_ base.SQLInstanceID, err error) {
+	if len(addr) == 0 {
+		return base.SQLInstanceID(0), errors.New("no address information for instance")
+	}
+	if len(sessionID) == 0 {
+		return base.SQLInstanceID(0), errors.New("no session information for instance")
+	}
 	instanceID := base.SQLInstanceID(1) // Starter value
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		start := s.makeTablePrefix()
@@ -170,6 +176,7 @@ func (s *Storage) getAllInstancesData(ctx context.Context) (instances []instance
 					log.Warningf(ctx, "failed to decode row %s: %v", rows[i].Key.String(), err)
 					return err
 				}
+
 				curInstance := instancerow{
 					instanceID: instanceID,
 					addr:       addr,
@@ -200,7 +207,7 @@ func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) 
 		return s.db.Put(ctx, key, &value)
 	})
 	if err != nil {
-		return errors.Wrapf(err, "could not release instance %d", id)
+		return errors.Wrapf(err, "could not release Instance %d", id)
 	}
 	return nil
 }
