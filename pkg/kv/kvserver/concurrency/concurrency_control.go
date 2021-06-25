@@ -372,7 +372,10 @@ type Request struct {
 
 	// The maximal set of spans that the request will access. Latches
 	// will be acquired for these spans.
-	// TODO(nvanbenschoten): don't allocate these SpanSet objects.
+	//
+	// Note: ownership of the SpanSet is assumed by the Request once it is
+	// passed to SequenceReq. Only supplied to SequenceReq if the method is
+	// not also passed an exiting Guard.
 	LatchSpans *spanset.SpanSet
 
 	// The maximal set of spans within which the request expects to have
@@ -386,6 +389,10 @@ type Request struct {
 	// timestamp (Txn.WriteTimestamp). If the request is non-transactional
 	// (Txn == nil), all reads and writes are considered to take place at
 	// Timestamp.
+	//
+	// Note: ownership of the SpanSet is assumed by the Request once it is
+	// passed to SequenceReq. Only supplied to SequenceReq if the method is
+	// not also passed an exiting Guard.
 	LockSpans *spanset.SpanSet
 }
 

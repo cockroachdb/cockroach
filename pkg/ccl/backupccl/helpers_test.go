@@ -423,11 +423,11 @@ func getSpansFromManifest(t *testing.T, backupPath string) roachpb.Spans {
 	decompressedBytes, err := decompressData(backupManifestBytes)
 	require.NoError(t, err)
 	require.NoError(t, protoutil.Unmarshal(decompressedBytes, &backupManifest))
-	spans := make(roachpb.Spans, 0, len(backupManifest.Files))
+	spans := make([]roachpb.Span, 0, len(backupManifest.Files))
 	for _, file := range backupManifest.Files {
 		spans = append(spans, file.Span)
 	}
-	mergedSpans, _ := roachpb.MergeSpans(spans)
+	mergedSpans, _ := roachpb.MergeSpans(&spans)
 	return mergedSpans
 }
 
