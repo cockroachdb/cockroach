@@ -65,8 +65,8 @@ func WithOnInitialScanError(f OnInitialScanError) Option {
 	})
 }
 
-// WithDiff makes an option to enable an initial scan which defaults to
-// false.
+// WithDiff configures the RangeFeed to emit the previous value that was
+// overwritten.
 func WithDiff() Option {
 	return optionFunc(func(c *config) {
 		c.withDiff = true
