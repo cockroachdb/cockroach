@@ -14,7 +14,7 @@ package cockroach.util.metric;
 option go_package = "metric";
 
 import "gogoproto/gogo.proto";
-import "prometheus/client_model/metrics.proto";
+import "client_model/metrics.proto";
 
 // metric.LabelPair is a proxy for io.prometheus.client.LabelPair.
 // io.prometheus.client.LabelPair doesn't support gogoproto.marshaler
