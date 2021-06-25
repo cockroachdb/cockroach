@@ -81,6 +81,8 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u})
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, acc)
+		case isWebhookSink(u):
+			return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts)
 		case isCloudStorageSink(u):
 			return makeCloudStorageSink(
 				ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
@@ -88,6 +90,9 @@ func getSink(
 			)
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets)
+		case u.Scheme == changefeedbase.SinkSchemeHTTP || u.Scheme == changefeedbase.SinkSchemeHTTPS:
+			return nil, errors.Errorf(`unsupported sink: %s. HTTP endpoints can be used with %s and %s`,
+				u.Scheme, changefeedbase.SinkSchemeWebhookHTTPS, changefeedbase.SinkSchemeCloudStorageHTTPS)
 		default:
 			return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 		}
@@ -123,6 +128,31 @@ func (u *sinkURL) consumeParam(p string) string {
 	v := u.q.Get(p)
 	u.q.Del(p)
 	return v
+}
+
+func (u *sinkURL) consumeBool(param string, dest *bool) (wasSet bool, err error) {
+	if paramVal := u.consumeParam(param); paramVal != "" {
+		wasSet, err := strToBool(paramVal, dest)
+		if err != nil {
+			return false, errors.Wrapf(err, "param %s must be a bool", param)
+		}
+		return wasSet, err
+	}
+	return false, nil
+}
+
+func (u *sinkURL) decodeBase64(param string, dest *[]byte) error {
+	// TODO(dan): There's a straightforward and unambiguous transformation
+	//  between the base 64 encoding defined in RFC 4648 and the URL variant
+	//  defined in the same RFC: simply replace all `+` with `-` and `/` with
+	//  `_`. Consider always doing this for the user and accepting either
+	//  variant.
+	val := u.consumeParam(param)
+	err := decodeBase64FromString(val, dest)
+	if err != nil {
+		return errors.Wrapf(err, `param %s must be base 64 encoded`, param)
+	}
+	return nil
 }
 
 func (u *sinkURL) remainingQueryParams() (res []string) {
@@ -299,7 +329,7 @@ func (n *nullSink) pace(ctx context.Context) error {
 	return nil
 }
 
-// EmitRow implements SInk interface.
+// EmitRow implements Sink interface.
 func (n *nullSink) EmitRow(
 	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
@@ -312,7 +342,7 @@ func (n *nullSink) EmitRow(
 	return nil
 }
 
-// EmitResolvedTimestamp implements SInk interface.
+// EmitResolvedTimestamp implements Sink interface.
 func (n *nullSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
@@ -326,7 +356,7 @@ func (n *nullSink) EmitResolvedTimestamp(
 	return nil
 }
 
-// Flush implements SInk interface.
+// Flush implements Sink interface.
 func (n *nullSink) Flush(ctx context.Context) error {
 	if log.V(2) {
 		log.Info(ctx, "flushing")
@@ -335,12 +365,12 @@ func (n *nullSink) Flush(ctx context.Context) error {
 	return nil
 }
 
-// Close implements SInk interface.
+// Close implements Sink interface.
 func (n *nullSink) Close() error {
 	return nil
 }
 
-// Dial implements SInk interface.
+// Dial implements Sink interface.
 func (n *nullSink) Dial() error {
 	return nil
 }
