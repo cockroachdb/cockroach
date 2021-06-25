@@ -180,3 +180,97 @@ func b_false_4() int {
 }
 ----
 ----
+
+template
+package main
+
+func a(input bool) {
+  b(input)
+}
+
+// execgen:let
+var Bools = []bool{true, false}
+
+// execgen:let
+var MyIntegers = []int{1,4,7}
+
+// execgen:template<t, i>
+// execgen:instantiate<Bools, MyIntegers>
+func b(t bool, i int) int {
+  if t {
+    x = 3
+  } else {
+    x = 4
+  }
+  return x
+}
+----
+----
+package main
+
+func a(input bool) {
+	b_runtime_to_template(input)
+}
+
+const _ = "template_b"
+
+func b_runtime_to_template(t bool, i int) int {
+	switch t {
+	case true:
+		switch i {
+		case 1:
+			return b_true_1()
+		case 4:
+			return b_true_4()
+		case 7:
+			return b_true_7()
+		default:
+			panic(fmt.Sprint("unknown value", i))
+		}
+	case false:
+		switch i {
+		case 1:
+			return b_false_1()
+		case 4:
+			return b_false_4()
+		case 7:
+			return b_false_7()
+		default:
+			panic(fmt.Sprint("unknown value", i))
+		}
+	default:
+		panic(fmt.Sprint("unknown value", t))
+	}
+}
+
+func b_true_1() int {
+	x = 3
+	return x
+}
+
+func b_true_4() int {
+	x = 3
+	return x
+}
+
+func b_true_7() int {
+	x = 3
+	return x
+}
+
+func b_false_1() int {
+	x = 4
+	return x
+}
+
+func b_false_4() int {
+	x = 4
+	return x
+}
+
+func b_false_7() int {
+	x = 4
+	return x
+}
+----
+----
