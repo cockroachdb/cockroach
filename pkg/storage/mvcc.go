@@ -15,8 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"sync"
@@ -29,16 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
-	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/vfs"
-	"github.com/dustin/go-humanize"
 )
 
 const (
@@ -3708,99 +3701,6 @@ func ComputeStatsForRange(
 
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
-}
-
-// computeCapacity returns capacity details for the engine's available storage,
-// by querying the underlying file system.
-func computeCapacity(
-	fs vfs.FS, m *pebble.Metrics, path string, maxSizeBytes int64, auxDir string,
-) (roachpb.StoreCapacity, error) {
-	dir := path
-	if dir == "" {
-		// This is an in-memory instance. Pretend we're empty since we
-		// don't know better and only use this for testing. Using any
-		// part of the actual file system here can throw off allocator
-		// rebalancing in a hard-to-trace manner. See #7050.
-		return roachpb.StoreCapacity{
-			Capacity:  maxSizeBytes,
-			Available: maxSizeBytes,
-		}, nil
-	}
-	var err error
-	// Eval directory if it is a symbolic links.
-	if dir, err = filepath.EvalSymlinks(dir); err != nil {
-		return roachpb.StoreCapacity{}, err
-	}
-	du, err := fs.GetDiskUsage(dir)
-	if err != nil {
-		return roachpb.StoreCapacity{}, err
-	}
-
-	if du.TotalBytes > math.MaxInt64 {
-		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(du.TotalBytes), humanizeutil.IBytes(math.MaxInt64))
-	}
-	if du.AvailBytes > math.MaxInt64 {
-		return roachpb.StoreCapacity{}, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(du.AvailBytes), humanizeutil.IBytes(math.MaxInt64))
-	}
-	fsuTotal := int64(du.TotalBytes)
-	fsuAvail := int64(du.AvailBytes)
-
-	// Pebble has detailed accounting of its own disk space usage, and it's
-	// incrementally updated which helps avoid O(# files) work here.
-	totalUsedBytes := int64(m.DiskSpaceUsage())
-
-	// We don't have incremental accounting of the disk space usage of files
-	// in the auxiliary directory. Walk the auxiliary directory and all its
-	// subdirectories, adding to the total used bytes.
-	if errOuter := filepath.Walk(auxDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// This can happen if CockroachDB removes files out from under us -
-			// just keep going to get the best estimate we can.
-			if oserror.IsNotExist(err) {
-				return nil
-			}
-			// Special-case: if the store-dir is configured using the root of some fs,
-			// e.g. "/mnt/db", we might have special fs-created files like lost+found
-			// that we can't read, so just ignore them rather than crashing.
-			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
-				return nil
-			}
-			return err
-		}
-		if info.Mode().IsRegular() {
-			totalUsedBytes += info.Size()
-		}
-		return nil
-	}); errOuter != nil {
-		return roachpb.StoreCapacity{}, errOuter
-	}
-
-	// If no size limitation have been placed on the store size or if the
-	// limitation is greater than what's available, just return the actual
-	// totals.
-	if maxSizeBytes == 0 || maxSizeBytes >= fsuTotal || path == "" {
-		return roachpb.StoreCapacity{
-			Capacity:  fsuTotal,
-			Available: fsuAvail,
-			Used:      totalUsedBytes,
-		}, nil
-	}
-
-	available := maxSizeBytes - totalUsedBytes
-	if available > fsuAvail {
-		available = fsuAvail
-	}
-	if available < 0 {
-		available = 0
-	}
-
-	return roachpb.StoreCapacity{
-		Capacity:  maxSizeBytes,
-		Available: available,
-		Used:      totalUsedBytes,
-	}, nil
 }
 
 // checkForKeyCollisionsGo iterates through both existingIter and an SST
