@@ -73,7 +73,7 @@ func runRapidRestart(ctx context.Context, t *test, c cluster.Cluster) {
 				case <-time.After(10 * time.Second):
 					// We likely ended up killing before the process spawned.
 					// Loop around.
-					t.l.Printf("no exit status yet, killing again")
+					t.L().Printf("no exit status yet, killing again")
 				}
 			}
 			if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
@@ -114,7 +114,7 @@ func runRapidRestart(ctx context.Context, t *test, c cluster.Cluster) {
 			}
 		}
 
-		t.l.Printf("%d OK\n", j)
+		t.L().Printf("%d OK\n", j)
 	}
 
 	// Clean up for the test harness. Usually we want to leave nodes running so

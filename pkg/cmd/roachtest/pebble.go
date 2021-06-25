@@ -38,11 +38,11 @@ func registerPebble(r *testRegistry) {
 		const benchDir = dataDir + "/bench"
 
 		runCmd := func(cmd string) {
-			t.l.PrintfCtx(ctx, "> %s", cmd)
-			err := c.RunL(ctx, t.l, c.All(), cmd)
-			t.l.Printf("> result: %+v", err)
+			t.L().PrintfCtx(ctx, "> %s", cmd)
+			err := c.RunL(ctx, t.L(), c.All(), cmd)
+			t.L().Printf("> result: %+v", err)
 			if err := ctx.Err(); err != nil {
-				t.l.Printf("(note: incoming context was canceled: %s", err)
+				t.L().Printf("(note: incoming context was canceled: %s", err)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -87,13 +87,13 @@ func registerPebble(r *testRegistry) {
 			runCmd(fmt.Sprintf("tar cvPf profiles_%s.tar *.prof", workload))
 
 			dest := filepath.Join(t.artifactsDir, fmt.Sprintf("ycsb_%s.log", workload))
-			if err := c.Get(ctx, t.l, "ycsb.log", dest, c.All()); err != nil {
+			if err := c.Get(ctx, t.L(), "ycsb.log", dest, c.All()); err != nil {
 				t.Fatal(err)
 			}
 
 			profilesName := fmt.Sprintf("profiles_%s.tar", workload)
 			dest = filepath.Join(t.artifactsDir, profilesName)
-			if err := c.Get(ctx, t.l, profilesName, dest, c.All()); err != nil {
+			if err := c.Get(ctx, t.L(), profilesName, dest, c.All()); err != nil {
 				t.Fatal(err)
 			}
 

@@ -52,7 +52,7 @@ func runClockMonotonicity(
 	// Wait for Cockroach to process the above cluster setting
 	time.Sleep(10 * time.Second)
 
-	if !isAlive(db, t.l) {
+	if !isAlive(db, t.L()) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -63,18 +63,18 @@ func runClockMonotonicity(
 
 	// Recover from the injected clock offset after validation completes.
 	defer func() {
-		if !isAlive(db, t.l) {
+		if !isAlive(db, t.L()) {
 			t.Fatal("Node unexpectedly crashed")
 		}
 		// Stop cockroach node before recovering from clock offset as this clock
 		// jump can crash the node.
 		c.Stop(ctx, c.Node(c.Spec().NodeCount))
-		t.l.Printf("recovering from injected clock offset")
+		t.L().Printf("recovering from injected clock offset")
 
 		offsetInjector.recover(ctx, c.Spec().NodeCount)
 
 		c.Start(ctx, c.Node(c.Spec().NodeCount))
-		if !isAlive(db, t.l) {
+		if !isAlive(db, t.L()) {
 			t.Fatal("Node unexpectedly crashed")
 		}
 	}()
@@ -87,7 +87,7 @@ func runClockMonotonicity(
 	t.Status("starting cockroach post offset")
 	c.Start(ctx, c.Node(c.Spec().NodeCount))
 
-	if !isAlive(db, t.l) {
+	if !isAlive(db, t.L()) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -97,10 +97,10 @@ func runClockMonotonicity(
 	}
 
 	t.Status("validating clock monotonicity")
-	t.l.Printf("pre-restart time:  %f\n", preRestartTime)
-	t.l.Printf("post-restart time: %f\n", postRestartTime)
+	t.L().Printf("pre-restart time:  %f\n", preRestartTime)
+	t.L().Printf("post-restart time: %f\n", postRestartTime)
 	difference := postRestartTime - preRestartTime
-	t.l.Printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
+	t.L().Printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
 
 	if tc.expectIncreasingWallTime {
 		if preRestartTime > postRestartTime {

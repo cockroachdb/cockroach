@@ -43,7 +43,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c cluster.Cluster) {
 	}
 
 	nodeStatus := func() (raw string, _ []string) {
-		out, err := c.RunWithBuffer(ctx, t.l, c.Node(1),
+		out, err := c.RunWithBuffer(ctx, t.L(), c.Node(1),
 			"./cockroach node status --insecure -p {pgport:1}")
 		if err != nil {
 			t.Fatalf("%v\n%s", err, out)
@@ -74,7 +74,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c cluster.Cluster) {
 			if reflect.DeepEqual(expected, actual) {
 				break
 			}
-			t.l.Printf("not done: %s vs %s\n", expected, actual)
+			t.L().Printf("not done: %s vs %s\n", expected, actual)
 			time.Sleep(time.Second)
 		}
 		if !reflect.DeepEqual(expected, actual) {

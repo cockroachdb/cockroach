@@ -264,12 +264,12 @@ func runFollowerReadsTest(
 	timeoutCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	time.AfterFunc(loadDuration, func() {
-		t.l.Printf("stopping load")
+		t.L().Printf("stopping load")
 		cancel()
 	})
 	g, gCtx = errgroup.WithContext(timeoutCtx)
 	const concurrency = 32
-	t.l.Printf("starting read load")
+	t.L().Printf("starting read load")
 	for i := 0; i < concurrency; i++ {
 		g.Go(doSelects(gCtx, rand.Intn(c.Spec().NodeCount)+1))
 	}
@@ -279,7 +279,7 @@ func runFollowerReadsTest(
 		t.Fatalf("error reading data: %v", err)
 	}
 	end := timeutil.Now()
-	t.l.Printf("load stopped")
+	t.L().Printf("load stopped")
 
 	// Depending on the test's topology, we expect a different set of nodes to
 	// perform follower reads.
@@ -370,7 +370,7 @@ func initFollowerReadsDB(
 	}
 
 	// Wait until the table has completed up-replication.
-	t.l.Printf("waiting for up-replication...")
+	t.L().Printf("waiting for up-replication...")
 	require.NoError(t, retry.ForDuration(5*time.Minute, func() error {
 		// Check that the table has the expected number of voting and non-voting
 		// replicas.
@@ -395,7 +395,7 @@ func initFollowerReadsDB(
 				table_name = 'test'`, votersCol, nonVotersCol)
 		var voters, nonVoters int
 		if err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters); err != nil {
-			t.l.Printf("retrying: %v\n", err)
+			t.L().Printf("retrying: %v\n", err)
 			return err
 		}
 
@@ -426,7 +426,7 @@ func initFollowerReadsDB(
 				table_name = 'test'`
 			var distinctRegions int
 			if err := db.QueryRowContext(ctx, q2).Scan(&distinctRegions); err != nil {
-				t.l.Printf("retrying: %v\n", err)
+				t.L().Printf("retrying: %v\n", err)
 				return err
 			}
 			if distinctRegions != 3 {
@@ -759,7 +759,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 
 	// Upgrade one node to the new version and run the test.
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
-	t.l.Printf("upgrading n%d to current version", randNode)
+	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
 	upgradeNodes(ctx, nodeToUpgrade, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
@@ -772,7 +772,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 		}
 		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
-	t.l.Printf("upgrading nodes %s to current version", remainingNodes)
+	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
 	upgradeNodes(ctx, remainingNodes, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
 }

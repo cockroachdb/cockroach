@@ -51,7 +51,7 @@ func runClockJump(ctx context.Context, t *test, c cluster.Cluster, tc clockJumpT
 	// Wait for Cockroach to process the above cluster setting
 	time.Sleep(10 * time.Second)
 
-	if !isAlive(db, t.l) {
+	if !isAlive(db, t.L()) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -67,7 +67,7 @@ func runClockJump(ctx context.Context, t *test, c cluster.Cluster, tc clockJumpT
 		// seconds before checking whether the node is alive and
 		// restarting it if not.
 		time.Sleep(3 * time.Second)
-		if !isAlive(db, t.l) {
+		if !isAlive(db, t.L()) {
 			c.Start(ctx, c.Node(1))
 		}
 	}()
@@ -78,7 +78,7 @@ func runClockJump(ctx context.Context, t *test, c cluster.Cluster, tc clockJumpT
 	time.Sleep(3 * time.Second)
 
 	t.Status("validating health")
-	aliveAfterOffset = isAlive(db, t.l)
+	aliveAfterOffset = isAlive(db, t.L())
 	if aliveAfterOffset != tc.aliveAfterOffset {
 		t.Fatalf("Expected node health %v, got %v", tc.aliveAfterOffset, aliveAfterOffset)
 	}

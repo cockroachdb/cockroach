@@ -33,7 +33,7 @@ func registerAutoUpgrade(r *testRegistry) {
 	runAutoUpgrade := func(ctx context.Context, t *test, c cluster.Cluster, oldVersion string) {
 		nodes := c.Spec().NodeCount
 
-		if err := c.Stage(ctx, t.l, "release", "v"+oldVersion, "", c.Range(1, nodes)); err != nil {
+		if err := c.Stage(ctx, t.L(), "release", "v"+oldVersion, "", c.Range(1, nodes)); err != nil {
 			t.Fatal(err)
 		}
 

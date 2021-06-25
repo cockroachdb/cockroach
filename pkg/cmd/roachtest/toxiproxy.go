@@ -247,8 +247,8 @@ func (tc *ToxiCluster) Measure(ctx context.Context, fromNode int, stmt string) t
 	if err != nil {
 		tc.t.Fatal(err)
 	}
-	b, err := tc.Cluster.RunWithBuffer(ctx, tc.t.l, tc.Cluster.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
-	tc.t.l.Printf("%s\n", b)
+	b, err := tc.Cluster.RunWithBuffer(ctx, tc.t.L(), tc.Cluster.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
+	tc.t.L().Printf("%s\n", b)
 	if err != nil {
 		tc.t.Fatal(err)
 	}

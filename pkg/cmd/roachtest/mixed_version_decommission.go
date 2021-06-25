@@ -38,7 +38,7 @@ func runDecommissionMixedVersions(
 	// The v20.2 CLI can only be run against servers running v20.2. For this
 	// reason, we grab a handle on a specific server slated for an upgrade.
 	pinnedUpgrade := h.getRandNode()
-	t.l.Printf("pinned n%d for upgrade", pinnedUpgrade)
+	t.L().Printf("pinned n%d for upgrade", pinnedUpgrade)
 
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
@@ -162,7 +162,7 @@ func checkOneDecommissioning(from int) versionStep {
 				`select node_id from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&nodeID); err != nil {
 				t.Fatal(err)
 			}
-			t.l.Printf("n%d decommissioning=true", nodeID)
+			t.L().Printf("n%d decommissioning=true", nodeID)
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -216,7 +216,7 @@ func checkOneMembership(from int, membership string) versionStep {
 				`select node_id from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&nodeID); err != nil {
 				t.Fatal(err)
 			}
-			t.l.Printf("n%d membership=%s", nodeID, membership)
+			t.L().Printf("n%d membership=%s", nodeID, membership)
 			return nil
 		}); err != nil {
 			t.Fatal(err)

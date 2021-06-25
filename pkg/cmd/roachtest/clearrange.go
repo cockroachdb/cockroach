@@ -52,7 +52,7 @@ func runClearRange(ctx context.Context, t *test, c cluster.Cluster, aggressiveCh
 	tBegin := timeutil.Now()
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
-	t.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
+	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 	c.Stop(ctx)
 	t.Status()
 

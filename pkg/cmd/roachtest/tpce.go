@@ -45,7 +45,7 @@ func registerTPCE(r *testRegistry) {
 		))
 
 		t.Status("installing docker")
-		if err := c.Install(ctx, t.l, loadNode, "docker"); err != nil {
+		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -85,14 +85,14 @@ func registerTPCE(r *testRegistry) {
 			t.Status("running workload")
 			duration := 2 * time.Hour
 			threads := opts.nodes * opts.cpus
-			out, err := c.RunWithBuffer(ctx, t.l, loadNode,
+			out, err := c.RunWithBuffer(ctx, t.L(), loadNode,
 				fmt.Sprintf("%s --customers=%d --racks=%d --duration=%s --threads=%d %s",
 					dockerRun, opts.customers, racks, duration, threads, strings.Join(roachNodeIPFlags, " ")))
 			if err != nil {
 				t.Fatalf("%v\n%s", err, out)
 			}
 			outStr := string(out)
-			t.l.Printf("workload output:\n%s\n", outStr)
+			t.L().Printf("workload output:\n%s\n", outStr)
 			if strings.Contains(outStr, "Reported tpsE :    --   (not between 80% and 100%)") {
 				return errors.New("invalid tpsE fraction")
 			}

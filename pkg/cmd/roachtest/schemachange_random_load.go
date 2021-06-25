@@ -138,9 +138,9 @@ func runSchemaChangeRandomLoad(
 	c.Start(ctx, roachNodes)
 	c.Run(ctx, loadNode, "./workload init schemachange")
 
-	storeDirectory, err := c.RunWithBuffer(ctx, t.l, c.Node(1), "echo", "-n", "{store-dir}")
+	storeDirectory, err := c.RunWithBuffer(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
 	if err != nil {
-		t.l.Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
+		t.L().Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
 	}
 
 	runCmd := []string{
@@ -189,7 +189,7 @@ func saveArtifacts(ctx context.Context, t *test, c cluster.Cluster, storeDirecto
 	// Save a backup file called schemachange to the store directory.
 	_, err := db.Exec("BACKUP DATABASE schemachange to 'nodelocal://1/schemachange'")
 	if err != nil {
-		t.l.Printf("Failed execute backup command on node 1: %v\n", err.Error())
+		t.L().Printf("Failed execute backup command on node 1: %v\n", err.Error())
 	}
 
 	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange")
@@ -198,14 +198,14 @@ func saveArtifacts(ctx context.Context, t *test, c cluster.Cluster, storeDirecto
 	localTransactionsFilePath := filepath.Join(t.ArtifactsDir(), "transactions.ndjson")
 
 	// Copy the backup from the store directory to the artifacts directory.
-	err = c.Get(ctx, t.l, remoteBackupFilePath, localBackupFilePath, c.Node(1))
+	err = c.Get(ctx, t.L(), remoteBackupFilePath, localBackupFilePath, c.Node(1))
 	if err != nil {
-		t.l.Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
+		t.L().Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 
 	// Copy the txn log from the store directory to the artifacts directory.
-	err = c.Get(ctx, t.l, remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
+	err = c.Get(ctx, t.L(), remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
 	if err != nil {
-		t.l.Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
+		t.L().Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 }

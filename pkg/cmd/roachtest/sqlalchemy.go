@@ -54,8 +54,8 @@ func runSQLAlchemy(ctx context.Context, t *test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.l.Printf("Latest sqlalchemy release is %s.", latestTag)
-	t.l.Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
+	t.L().Printf("Latest sqlalchemy release is %s.", latestTag)
+	t.L().Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
 	if err := repeatRunE(ctx, t, c, node, "update apt-get", `
 		sudo add-apt-repository ppa:deadsnakes/ppa &&
@@ -149,13 +149,13 @@ func runSQLAlchemy(ctx context.Context, t *test, c cluster.Cluster) {
 	if expectedFailures == nil {
 		t.Fatalf("No sqlalchemy blocklist defined for cockroach version %s", version)
 	}
-	t.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+	t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 		version, blocklistName, ignoredlistName)
 
 	t.Status("running sqlalchemy test suite")
 	// Note that this is expected to return an error, since the test suite
 	// will fail. And it is safe to swallow it here.
-	rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
+	rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
 		`cd /mnt/data1/sqlalchemy/ && pytest --maxfail=0 \
 		--requirements=sqlalchemy_cockroachdb.requirements:Requirements \
 		--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable \
@@ -163,7 +163,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c cluster.Cluster) {
 	`)
 
 	t.Status("collating the test results")
-	t.l.Printf("Test Results: %s", rawResults)
+	t.L().Printf("Test Results: %s", rawResults)
 
 	// Find all the failed and errored tests.
 	results := newORMTestsResults()

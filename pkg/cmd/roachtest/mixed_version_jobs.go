@@ -76,7 +76,7 @@ func (s *backgroundStepper) wait(ctx context.Context, t *test, u *versionUpgrade
 
 func overrideErrorFromJobsTable(ctx context.Context, t *test, u *versionUpgradeTest, _ error) {
 	db := u.conn(ctx, t, 1)
-	t.l.Printf("Resuming any paused jobs left")
+	t.L().Printf("Resuming any paused jobs left")
 	for {
 		_, err := db.ExecContext(
 			ctx,
@@ -99,16 +99,16 @@ func overrideErrorFromJobsTable(ctx context.Context, t *test, u *versionUpgradeT
 		}
 		// Sleep a bit not to DOS the jobs table.
 		time.Sleep(10 * time.Second)
-		t.l.Printf("Waiting for %d jobs to pause", nNotYetPaused)
+		t.L().Printf("Waiting for %d jobs to pause", nNotYetPaused)
 	}
 
-	t.l.Printf("Waiting for jobs to complete...")
+	t.L().Printf("Waiting for jobs to complete...")
 	var err error
 	for {
 		q := "SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS]);"
 		_, err = db.ExecContext(ctx, q)
 		if testutils.IsError(err, "pq: restart transaction:.*") {
-			t.l.Printf("SHOW JOBS WHEN COMPLETE returned %s, retrying", err.Error())
+			t.L().Printf("SHOW JOBS WHEN COMPLETE returned %s, retrying", err.Error())
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -152,7 +152,7 @@ func pauseAllJobsStep() versionStep {
 		if err := row.Scan(&nPaused); err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Paused %d jobs", nPaused)
+		t.L().Printf("Paused %d jobs", nPaused)
 		time.Sleep(time.Second)
 	}
 }
@@ -161,7 +161,7 @@ func makeResumeAllJobsAndWaitStep(d time.Duration) versionStep {
 	var numResumes int
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		numResumes++
-		t.l.Printf("Resume all jobs number: %d", numResumes)
+		t.L().Printf("Resume all jobs number: %d", numResumes)
 		db := u.conn(ctx, t, 1)
 		_, err := db.ExecContext(
 			ctx,
@@ -180,13 +180,13 @@ func makeResumeAllJobsAndWaitStep(d time.Duration) versionStep {
 		if err := row.Scan(&nRunning); err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Resumed %d jobs", nRunning)
+		t.L().Printf("Resumed %d jobs", nRunning)
 		time.Sleep(d)
 	}
 }
 
 func checkForFailedJobsStep(ctx context.Context, t *test, u *versionUpgradeTest) {
-	t.l.Printf("Checking for failed jobs.")
+	t.L().Printf("Checking for failed jobs.")
 
 	db := u.conn(ctx, t, 1)
 	// The ifnull is because the move to session-based job claims in 20.2 has left

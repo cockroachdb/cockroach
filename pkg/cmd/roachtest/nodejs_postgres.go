@@ -38,7 +38,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		err := c.PutE(ctx, t.l, cockroach, "./cockroach", c.All())
+		err := c.PutE(ctx, t.L(), cockroach, "./cockroach", c.All())
 		require.NoError(t, err)
 		err = c.StartE(ctx, startArgs("--secure"))
 		require.NoError(t, err)
@@ -68,7 +68,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 		err = os.RemoveAll(localCertsDir)
 		require.NoError(t, err)
 
-		err = c.Get(ctx, t.l, certsDir, localCertsDir)
+		err = c.Get(ctx, t.L(), certsDir, localCertsDir)
 		require.NoError(t, err)
 
 		// Certs can have at max 0600 privilege.
@@ -153,7 +153,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 
 		t.Status("running node-postgres tests")
 		// Ignore the error, this is expected to fail.
-		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
 			fmt.Sprintf(
 				`cd /mnt/data1/node-postgres/ && sudo \
 PGPORT=26257 PGUSER=%s PGSSLMODE=require PGDATABASE=postgres_node_test \
@@ -162,7 +162,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 			),
 		)
 		rawResultsStr := string(rawResults)
-		t.l.Printf("Test Results: %s", rawResultsStr)
+		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			// The one failing test is `pool size of 1` which
 			// fails because it does SELECT count(*) FROM pg_stat_activity which is

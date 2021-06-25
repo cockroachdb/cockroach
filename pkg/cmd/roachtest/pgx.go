@@ -68,8 +68,8 @@ func registerPgx(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest jackc/pgx release is %s.", latestTag)
-		t.l.Printf("Supported release is %s.", supportedPGXTag)
+		t.L().Printf("Latest jackc/pgx release is %s.", latestTag)
+		t.L().Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
@@ -88,7 +88,7 @@ func registerPgx(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		t.l.Printf("%s", status)
+		t.L().Printf("%s", status)
 
 		t.Status("setting up test db")
 		db, err := c.ConnE(ctx, node[0])

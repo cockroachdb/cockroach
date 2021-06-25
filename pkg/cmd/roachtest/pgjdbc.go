@@ -57,8 +57,8 @@ func registerPgjdbc(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest pgjdbc release is %s.", latestTag)
-		t.l.Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
+		t.L().Printf("Latest pgjdbc release is %s.", latestTag)
+		t.L().Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -136,7 +136,7 @@ func registerPgjdbc(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		t.l.Printf("%s", status)
+		t.L().Printf("%s", status)
 
 		t.Status("running pgjdbc test suite")
 		// Note that this is expected to return an error, since the test suite

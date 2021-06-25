@@ -260,14 +260,14 @@ func uploadVersion(
 ) (binaryName string) {
 	binaryName = "./cockroach"
 	if newVersion == "" {
-		if err := c.PutE(ctx, t.l, cockroach, binaryName, nodes); err != nil {
+		if err := c.PutE(ctx, t.L(), cockroach, binaryName, nodes); err != nil {
 			t.Fatal(err)
 		}
 	} else if binary, ok := t.versionsBinaryOverride[newVersion]; ok {
 		// If an override has been specified for newVersion, use that binary.
-		t.l.Printf("using binary override for version %s: %s", newVersion, binary)
+		t.L().Printf("using binary override for version %s: %s", newVersion, binary)
 		binaryName = "./cockroach-" + newVersion
-		if err := c.PutE(ctx, t.l, binary, binaryName, nodes); err != nil {
+		if err := c.PutE(ctx, t.L(), binary, binaryName, nodes); err != nil {
 			t.Fatal(err)
 		}
 	} else {
@@ -279,7 +279,7 @@ func uploadVersion(
 			if err := c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
 				t.Fatal(err)
 			}
-			if err := c.Stage(ctx, t.l, "release", v, dir, nodes); err != nil {
+			if err := c.Stage(ctx, t.L(), "release", v, dir, nodes); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -406,7 +406,7 @@ func upgradeNodes(
 		if newVersion == "" {
 			newVersionMsg = "<current>"
 		}
-		t.l.Printf("restarting node %d into version %s", node, newVersionMsg)
+		t.L().Printf("restarting node %d into version %s", node, newVersionMsg)
 		c.Stop(ctx, c.Node(node))
 		args := startArgs("--binary=" + uploadVersion(ctx, t, c, c.Node(node), newVersion))
 		c.Start(ctx, c.Node(node), args, startArgsDontEncrypt)
@@ -454,7 +454,7 @@ func allowAutoUpgradeStep(node int) versionStep {
 func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		newVersion := u.binaryVersion(ctx, t, nodes[0]).String()
-		t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
+		t.L().Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
 
 		for _, i := range nodes {
 			err := retry.ForDuration(30*time.Second, func() error {
@@ -462,7 +462,7 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 				if currentVersion != newVersion {
 					return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)
 				}
-				t.l.Printf("%s: acked by n%d", currentVersion, i)
+				t.L().Printf("%s: acked by n%d", currentVersion, i)
 				return nil
 			})
 			if err != nil {
@@ -470,7 +470,7 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 			}
 		}
 
-		t.l.Printf("%s: nodes %v are upgraded\n", newVersion, nodes)
+		t.L().Printf("%s: nodes %v are upgraded\n", newVersion, nodes)
 
 		// TODO(nvanbenschoten): add upgrade qualification step.
 	}
@@ -478,7 +478,7 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 
 func setClusterSettingVersionStep(ctx context.Context, t *test, u *versionUpgradeTest) {
 	db := u.conn(ctx, t, 1)
-	t.l.Printf("bumping cluster version")
+	t.L().Printf("bumping cluster version")
 	// TODO(tbg): once this is using a job, poll and periodically print the job status
 	// instead of blocking.
 	if _, err := db.ExecContext(
@@ -486,7 +486,7 @@ func setClusterSettingVersionStep(ctx context.Context, t *test, u *versionUpgrad
 	); err != nil {
 		t.Fatal(err)
 	}
-	t.l.Printf("cluster version bumped")
+	t.L().Printf("cluster version bumped")
 }
 
 type versionFeatureTest struct {
@@ -499,14 +499,14 @@ type versionFeatureStep []versionFeatureTest
 func (vs versionFeatureStep) step(nodes option.NodeListOption) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		for _, feature := range vs {
-			t.l.Printf("checking %s", feature.name)
+			t.L().Printf("checking %s", feature.name)
 			tBegin := timeutil.Now()
 			skipped := feature.fn(ctx, t, u, nodes)
 			dur := fmt.Sprintf("%.2fs", timeutil.Since(tBegin).Seconds())
 			if skipped {
-				t.l.Printf("^-- skip (%s)", dur)
+				t.L().Printf("^-- skip (%s)", dur)
 			} else {
-				t.l.Printf("^-- ok (%s)", dur)
+				t.L().Printf("^-- ok (%s)", dur)
 			}
 		}
 	}
@@ -563,7 +563,7 @@ func makeVersionFixtureAndFatal(
 		t.Fatal(err)
 	}
 
-	t.l.Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
+	t.L().Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
 
 	if useLocalBinary {
 		// Make steps below use the main cockroach binary (in particular, don't try

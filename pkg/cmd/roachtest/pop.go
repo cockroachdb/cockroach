@@ -45,8 +45,8 @@ func registerPop(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest pop release is %s.", latestTag)
-		t.l.Printf("Supported pop release is %s.", popSupportedTag)
+		t.L().Printf("Latest pop release is %s.", latestTag)
+		t.L().Printf("Supported pop release is %s.", popSupportedTag)
 
 		installGolang(ctx, t, c, node)
 

@@ -35,7 +35,7 @@ func registerEngineSwitch(r *testRegistry) {
 		c.Start(ctx, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
 		if local {
-			t.l.Printf("local mode: speeding up test\n")
+			t.L().Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 		}
 		numIters := 5 * len(roachNodes)
@@ -66,7 +66,7 @@ func registerEngineSwitch(r *testRegistry) {
 		usingPebble := make([]bool, len(roachNodes))
 		rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 		m.Go(func(ctx context.Context) error {
-			l, err := t.l.ChildLogger("engine-switcher")
+			l, err := t.L().ChildLogger("engine-switcher")
 			if err != nil {
 				return err
 			}
@@ -90,7 +90,7 @@ func registerEngineSwitch(r *testRegistry) {
 					if err := rows.Close(); err != nil {
 						return err
 					}
-					if err := c.CheckReplicaDivergenceOnDB(ctx, t.l, db); err != nil {
+					if err := c.CheckReplicaDivergenceOnDB(ctx, t.L(), db); err != nil {
 						return errors.Wrapf(err, "node %d", i)
 					}
 				}

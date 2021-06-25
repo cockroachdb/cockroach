@@ -200,7 +200,7 @@ func parseAndSummarizeJavaORMTestsResults(
 		}
 	}
 	for i, file := range files {
-		t.l.Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
+		t.L().Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
 		fileOutput, err := repeatRunWithBuffer(
 			ctx,
 			c,

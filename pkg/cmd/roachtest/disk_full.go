@@ -50,7 +50,7 @@ func registerDiskFull(r *testRegistry) {
 				time.Sleep(30 * time.Second)
 				const n = 1
 				m.ExpectDeath()
-				t.l.Printf("filling disk on %d\n", n)
+				t.L().Printf("filling disk on %d\n", n)
 				// The 100% ballast size will cause the disk to fill up and the ballast
 				// command to exit with an error. The "|| true" is used to ignore that
 				// error.
@@ -61,7 +61,7 @@ func registerDiskFull(r *testRegistry) {
 					if t.Failed() {
 						return nil
 					}
-					t.l.Printf("starting %d when disk is full\n", n)
+					t.L().Printf("starting %d when disk is full\n", n)
 					// Pebble treats "no space left on device" as a background error. Kill
 					// cockroach if it is still running. Note that this is to kill the
 					// node that was started prior to this for loop, before the ballast
@@ -79,7 +79,7 @@ func registerDiskFull(r *testRegistry) {
 				}
 
 				// Clear the disk full condition and restart cockroach again.
-				t.l.Printf("clearing full disk on %d\n", n)
+				t.L().Printf("clearing full disk on %d\n", n)
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/ballast")
 				// Clear any death expectations that did not occur.
 				m.ResetDeaths()

@@ -63,8 +63,8 @@ func registerGopg(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest gopg release is %s.", gopgLatestTag)
-		t.l.Printf("Supported gopg release is %s.", gopgSupportedTag)
+		t.L().Printf("Latest gopg release is %s.", gopgLatestTag)
+		t.L().Printf("Supported gopg release is %s.", gopgSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -94,7 +94,7 @@ func registerGopg(r *testRegistry) {
 		if ignorelist == nil {
 			t.Fatalf("No gopg ignorelist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, blocklistName, ignorelistName)
 
 		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath))
@@ -106,14 +106,14 @@ func registerGopg(r *testRegistry) {
 		const removeColorCodes = `sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"`
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
 			fmt.Sprintf(
 				`cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -v ./... 2>&1 | %s | tee %s`,
 				destPath, removeColorCodes, resultsFilePath),
 		)
 
 		t.Status("collating the test results")
-		t.l.Printf("Test Results: %s", rawResults)
+		t.L().Printf("Test Results: %s", rawResults)
 		results := newORMTestsResults()
 
 		// gopg test suite consists of multiple tests, some of them being a full
@@ -129,7 +129,7 @@ func registerGopg(r *testRegistry) {
 
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		xmlResults, _ := c.RunWithBuffer(ctx, t.l, node,
+		xmlResults, _ := c.RunWithBuffer(ctx, t.L(), node,
 			// We pipe the test output into go-junit-report tool which will output
 			// it in XML format.
 			fmt.Sprintf(`cd %s &&

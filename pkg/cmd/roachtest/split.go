@@ -300,7 +300,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c cluster.Cluster, size i
 			if err := db.QueryRow(q).Scan(&ranges); err != nil {
 				t.Fatalf("failed to get range count: %v", err)
 			}
-			t.l.Printf("%d ranges in bank table", ranges)
+			t.L().Printf("%d ranges in bank table", ranges)
 			return ranges
 		}
 		if rc := rangeCount(); rc != 1 {
@@ -346,7 +346,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c cluster.Cluster, size i
 			if err := db.QueryRow(q).Scan(&minRangeCount, &maxRangeCount); err != nil {
 				t.Fatalf("failed to get per-store range count: %v", err)
 			}
-			t.l.Printf("min_range_count=%d, max_range_count=%d", minRangeCount, maxRangeCount)
+			t.L().Printf("min_range_count=%d, max_range_count=%d", minRangeCount, maxRangeCount)
 			if float64(minRangeCount) < 0.8*float64(maxRangeCount) {
 				return errors.Errorf("rebalancing incomplete: min_range_count=%d, max_range_count=%d",
 					minRangeCount, minRangeCount)

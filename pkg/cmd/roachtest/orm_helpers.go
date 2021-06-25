@@ -165,10 +165,10 @@ func (r *ormTestsResults) summarizeAll(
 		if !ok {
 			t.Fatalf("can't find %s in test result list", test)
 		}
-		t.l.Printf("%s\n", result)
+		t.L().Printf("%s\n", result)
 	}
 
-	t.l.Printf("------------------------\n")
+	t.L().Printf("------------------------\n")
 
 	r.summarizeFailed(
 		t, ormName, blocklistName, expectedFailures, version, tag, notRunCount,
@@ -221,8 +221,8 @@ func (r *ormTestsResults) summarizeFailed(
 	}
 
 	fmt.Fprintf(&bResults, "For a full summary look at the %s artifacts \n", ormName)
-	t.l.Printf("%s\n", bResults.String())
-	t.l.Printf("------------------------\n")
+	t.L().Printf("%s\n", bResults.String())
+	t.L().Printf("------------------------\n")
 
 	if r.failUnexpectedCount > 0 || r.passUnexpectedCount > 0 ||
 		notRunCount > 0 || r.unexpectedSkipCount > 0 {
@@ -242,8 +242,8 @@ func (r *ormTestsResults) summarizeFailed(
 			fmt.Fprintf(&b, "  \"%s\": \"%s\",\n", test, issue)
 		}
 		fmt.Fprintf(&b, "}\n\n")
-		t.l.Printf("\n\n%s\n\n", b.String())
-		t.l.Printf("------------------------\n")
+		t.L().Printf("\n\n%s\n\n", b.String())
+		t.L().Printf("------------------------\n")
 		t.Fatalf("\n%s\nAn updated blocklist (%s) is available in the artifacts' %s log\n",
 			bResults.String(),
 			blocklistName,

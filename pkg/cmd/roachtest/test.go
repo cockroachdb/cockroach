@@ -196,6 +196,12 @@ func (t *test) L() *logger.Logger {
 	return t.l
 }
 
+// ReplaceL replaces the test's logger.
+func (t *test) ReplaceL(l *logger.Logger) {
+	// TODO(tbg): get rid of this, this is racy & hacky.
+	t.l = l
+}
+
 func (t *test) status(ctx context.Context, id int64, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -212,11 +218,11 @@ func (t *test) status(ctx context.Context, id int64, args ...interface{}) {
 		msg:  msg,
 		time: timeutil.Now(),
 	}
-	if !t.l.Closed() {
+	if !t.L().Closed() {
 		if id == t.runnerID {
-			t.l.PrintfCtxDepth(ctx, 3, "test status: %s", msg)
+			t.L().PrintfCtxDepth(ctx, 3, "test status: %s", msg)
 		} else {
-			t.l.PrintfCtxDepth(ctx, 3, "test worker status: %s", msg)
+			t.L().PrintfCtxDepth(ctx, 3, "test worker status: %s", msg)
 		}
 	}
 }
@@ -294,7 +300,7 @@ func (t *test) Skipf(format string, args ...interface{}) {
 	panic(errTestFatal)
 }
 
-// Fatal marks the test as failed, prints the args to t.l, and calls
+// Fatal marks the test as failed, prints the args to t.L(), and calls
 // panic(errTestFatal). It can be called multiple times.
 //
 // If the only argument is an error, it is formatted by "%+v", so it will show
@@ -367,7 +373,7 @@ func (t *test) failWithMsg(msg string) {
 		// them.
 		msg = "\n" + msg
 	}
-	t.l.Printf("%stest failure: %s", prefix, msg)
+	t.L().Printf("%stest failure: %s", prefix, msg)
 
 	t.mu.failed = true
 	t.mu.failureMsg += msg

@@ -141,7 +141,7 @@ func cdcBasicTest(ctx context.Context, t *test, c cluster.Cluster, args cdcTestA
 		})
 	}
 
-	changefeedLogger, err := t.l.ChildLogger("changefeed")
+	changefeedLogger, err := t.L().ChildLogger("changefeed")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func cdcBasicTest(ctx context.Context, t *test, c cluster.Cluster, args cdcTestA
 			`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
 		); err != nil {
 			// We don't hard fail here because, not all versions support this setting
-			t.l.Printf("failed to set cluster setting: %s", err)
+			t.L().Printf("failed to set cluster setting: %s", err)
 		}
 
 		var targets string
@@ -318,7 +318,7 @@ func runCDCBank(ctx context.Context, t *test, c cluster.Cluster) {
 			_err = errors.Wrap(_err, "CDC failed")
 		}()
 
-		l, err := t.l.ChildLogger(`changefeed`)
+		l, err := t.L().ChildLogger(`changefeed`)
 		if err != nil {
 			return err
 		}
@@ -453,7 +453,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	output, err := c.RunWithBuffer(ctx, t.l, kafkaNode,
+	output, err := c.RunWithBuffer(ctx, t.L(), kafkaNode,
 		kafka.makeCommand("kafka-avro-console-consumer",
 			"--from-beginning",
 			"--topic=foo",
@@ -462,7 +462,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.l.Printf("\n%s\n", output)
+	t.L().Printf("\n%s\n", output)
 
 	updatedRE := regexp.MustCompile(`"updated":\{"string":"[^"]+"\}`)
 	updatedMap := make(map[string]struct{})

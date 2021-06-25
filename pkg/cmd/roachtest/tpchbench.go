@@ -74,7 +74,7 @@ func runTPCHBench(ctx context.Context, t *test, c cluster.Cluster, b tpchBenchSp
 			return err
 		}
 
-		t.l.Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
+		t.L().Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
 
 		numQueries, err := getNumQueriesInFile(filename, b.url)
 		if err != nil {

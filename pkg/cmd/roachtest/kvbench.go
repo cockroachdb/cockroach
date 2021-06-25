@@ -198,10 +198,10 @@ func runKVBench(ctx context.Context, t *test, c cluster.Cluster, b kvBenchSpec) 
 	roachNodes := loadGroup.roachNodes
 	loadNodes := loadGroup.loadNodes
 
-	if err := c.PutE(ctx, t.l, cockroach, "./cockroach", roachNodes); err != nil {
+	if err := c.PutE(ctx, t.L(), cockroach, "./cockroach", roachNodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.PutE(ctx, t.l, workload, "./workload", loadNodes); err != nil {
+	if err := c.PutE(ctx, t.L(), workload, "./workload", loadNodes); err != nil {
 		t.Fatal(err)
 	}
 
@@ -259,7 +259,7 @@ func runKVBench(ctx context.Context, t *test, c cluster.Cluster, b kvBenchSpec) 
 				splitCmd.WriteString(`;`)
 			}
 			if _, err := db.Exec(splitCmd.String()); err != nil {
-				t.l.Printf(splitCmd.String())
+				t.L().Printf(splitCmd.String())
 				return err
 			}
 
@@ -303,7 +303,7 @@ func runKVBench(ctx context.Context, t *test, c cluster.Cluster, b kvBenchSpec) 
 			}
 
 			localHistPath := filepath.Join(resultsDir, fmt.Sprintf(`kvbench-%d-stats.json`, maxrate))
-			if err := c.Get(ctx, t.l, clusterHistPath, localHistPath, loadNodes); err != nil {
+			if err := c.Get(ctx, t.L(), clusterHistPath, localHistPath, loadNodes); err != nil {
 				t.Fatal(err)
 			}
 
@@ -334,7 +334,7 @@ func runKVBench(ctx context.Context, t *test, c cluster.Cluster, b kvBenchSpec) 
 			msg = "FAIL"
 		}
 		ttycolor.Stdout(color)
-		t.l.Printf(`--- SEARCH ITER %s: kv workload avg latency: %0.1fms (threshold: %0.1fms), avg throughput: %d`,
+		t.L().Printf(`--- SEARCH ITER %s: kv workload avg latency: %0.1fms (threshold: %0.1fms), avg throughput: %d`,
 			msg, res.latency(), b.LatencyThresholdMs, res.throughput())
 		ttycolor.Stdout(ttycolor.Reset)
 		return pass, nil
@@ -343,7 +343,7 @@ func runKVBench(ctx context.Context, t *test, c cluster.Cluster, b kvBenchSpec) 
 		t.Fatal(err)
 	} else {
 		ttycolor.Stdout(ttycolor.Green)
-		t.l.Printf("-------\nMAX THROUGHPUT = %d\n--------\n\n", res)
+		t.L().Printf("-------\nMAX THROUGHPUT = %d\n--------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
 	}
 }

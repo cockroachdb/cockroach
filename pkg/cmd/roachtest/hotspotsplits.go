@@ -41,7 +41,7 @@ func registerHotSpotSplits(r *testRegistry) {
 		m, ctx = errgroup.WithContext(ctx)
 
 		m.Go(func() error {
-			t.l.Printf("starting load generator\n")
+			t.L().Printf("starting load generator\n")
 
 			const blockSize = 1 << 18 // 256 KB
 			return c.RunE(ctx, appNode, fmt.Sprintf(

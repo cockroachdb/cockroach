@@ -55,19 +55,19 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 				// but we can't put it in monitor as-is because the test deadlocks.
 				go func() {
 					const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127 --db=test`
-					l, err := t.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
+					l, err := t.L().ChildLogger(fmt.Sprintf(`kv-%d`, node))
 					if err != nil {
 						t.Fatal(err)
 					}
 					defer l.Close()
-					_ = execCmd(ctx, t.l, roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
+					_ = execCmd(ctx, t.L(), roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
 				}()
 			}
 
 			m = newMonitor(ctx, c, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
-				return waitForSchemaChanges(ctx, t.l, db)
+				return waitForSchemaChanges(ctx, t.L(), db)
 			})
 			m.Wait()
 		},
@@ -396,12 +396,12 @@ func makeSchemaChangeBulkIngestTest(
 					time.Sleep(sleepInterval)
 				}
 
-				t.l.Printf("Creating index")
+				t.L().Printf("Creating index")
 				before := timeutil.Now()
 				if _, err := db.Exec(`CREATE INDEX payload_a ON bulkingest.bulkingest (payload, a)`); err != nil {
 					t.Fatal(err)
 				}
-				t.l.Printf("CREATE INDEX took %v\n", timeutil.Since(before))
+				t.L().Printf("CREATE INDEX took %v\n", timeutil.Since(before))
 				return nil
 			})
 
@@ -478,18 +478,18 @@ func runAndLogStmts(
 ) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
-	t.l.Printf("%s: running %d statements\n", prefix, len(stmts))
+	t.L().Printf("%s: running %d statements\n", prefix, len(stmts))
 	start := timeutil.Now()
 	for i, stmt := range stmts {
 		// Let some traffic run before the schema change.
 		time.Sleep(time.Minute)
-		t.l.Printf("%s: running statement %d...\n", prefix, i+1)
+		t.L().Printf("%s: running statement %d...\n", prefix, i+1)
 		before := timeutil.Now()
 		if _, err := db.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("%s: statement %d: %q took %v\n", prefix, i+1, stmt, timeutil.Since(before))
+		t.L().Printf("%s: statement %d: %q took %v\n", prefix, i+1, stmt, timeutil.Since(before))
 	}
-	t.l.Printf("%s: ran %d statements in %v\n", prefix, len(stmts), timeutil.Since(start))
+	t.L().Printf("%s: ran %d statements in %v\n", prefix, len(stmts), timeutil.Since(start))
 	return nil
 }

@@ -206,7 +206,7 @@ func registerBackup(r *testRegistry) {
 
 				// Upload the perf artifacts to any one of the nodes so that the test
 				// runner copies it into an appropriate directory path.
-				if err := c.PutE(ctx, t.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+				if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
 					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 				}
 				return nil

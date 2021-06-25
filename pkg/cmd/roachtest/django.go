@@ -112,8 +112,8 @@ func registerDjango(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest Django release is %s.", djangoLatestTag)
-		t.l.Printf("Supported Django release is %s.", djangoSupportedTag)
+		t.L().Printf("Latest Django release is %s.", djangoLatestTag)
+		t.L().Printf("Supported Django release is %s.", djangoSupportedTag)
 
 		if err := repeatGitCloneE(
 			ctx,
@@ -133,8 +133,8 @@ func registerDjango(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
-		t.l.Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
+		t.L().Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
+		t.L().Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
 
 		if err := repeatGitCloneE(
 			ctx,
@@ -184,7 +184,7 @@ func registerDjango(r *testRegistry) {
 		if ignoredlist == nil {
 			t.Fatalf("No django ignorelist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 			version, blocklistName, ignoredlistName)
 
 		// TODO (rohany): move this to a file backed buffer if the output becomes
@@ -194,12 +194,12 @@ func registerDjango(r *testRegistry) {
 			t.Status("Running django test app ", testName)
 			// Running the test suite is expected to error out, so swallow the error.
 			rawResults, _ := c.RunWithBuffer(
-				ctx, t.l, node, fmt.Sprintf(djangoRunTestCmd, testName))
+				ctx, t.L(), node, fmt.Sprintf(djangoRunTestCmd, testName))
 			fullTestResults = append(fullTestResults, rawResults...)
-			t.l.Printf("Test results for app %s: %s", testName, rawResults)
-			t.l.Printf("Test stdout for app %s:", testName)
+			t.L().Printf("Test results for app %s: %s", testName, rawResults)
+			t.L().Printf("Test stdout for app %s:", testName)
 			if err := c.RunL(
-				ctx, t.l, node, fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
+				ctx, t.L(), node, fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
 			); err != nil {
 				t.Fatal(err)
 			}
