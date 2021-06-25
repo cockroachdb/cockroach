@@ -894,6 +894,14 @@ func backupPlanHook(
 			if err != nil {
 				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 			}
+
+			var qualifiedTablePatterns tree.TablePatterns
+			qualifiedTablePatterns, err = backupresolver.GetQualifiedTablePatterns(ctx, p, targetDescs, completeDBs, backupStmt.Targets.Tables)
+			if err != nil {
+				return errors.Wrap(err, "failed to fully qualify target table names")
+			}
+			backupStmt.Targets.Tables = qualifiedTablePatterns
+
 		case tree.AllDescriptors:
 			// Cluster backups include all of the descriptors in the cluster.
 			var allDescs []catalog.Descriptor
