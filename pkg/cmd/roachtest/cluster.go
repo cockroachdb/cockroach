@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -680,7 +680,7 @@ type clusterImpl struct {
 	name string
 	tag  string
 	spec spec.ClusterSpec
-	t    test2.Test
+	t    test.Test
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
@@ -1015,7 +1015,7 @@ func attachToExistingCluster(
 // setTest prepares c for being used on behalf of t.
 //
 // TODO(andrei): Get rid of c.t, c.l and of this method.
-func (c *clusterImpl) setTest(t test2.Test) {
+func (c *clusterImpl) setTest(t test.Test) {
 	c.t = t
 	c.l = t.L()
 }
@@ -2393,7 +2393,7 @@ func getDiskUsageInBytes(
 }
 
 type monitor struct {
-	t         test2.Test
+	t         test.Test
 	l         *logger.Logger
 	nodes     string
 	ctx       context.Context
@@ -2587,7 +2587,7 @@ func (m *monitor) wait(args ...string) error {
 
 // TODO(nvanbenschoten): this function should take a context and be responsive
 // to context cancellation.
-func waitForFullReplication(t test2.Test, db *gosql.DB) {
+func waitForFullReplication(t test.Test, db *gosql.DB) {
 	t.L().Printf("waiting for up-replication...")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
