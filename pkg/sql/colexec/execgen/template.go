@@ -20,6 +20,12 @@ import (
 	"github.com/dave/dst/dstutil"
 )
 
+type templateInfo struct {
+	funcInfos map[string]*funcInfo
+
+	letInfos map[string]*letInfo
+}
+
 type templateParamInfo struct {
 	fieldOrdinal int
 	field        *dst.Field
@@ -32,6 +38,13 @@ type funcInfo struct {
 	// instantiateArgs is a list of lists of arguments that were passed explicitly
 	// as execgen:instantiate declarations.
 	instantiateArgs [][]string
+}
+
+// letInfo contains a list of all of the values in an execgen:let declaration.
+type letInfo struct {
+	// typ is a type literal.
+	typ  *dst.ArrayType
+	vals []string
 }
 
 // Match // execgen:template<foo, bar>
@@ -321,10 +334,15 @@ func trimTemplateDeclMatches(matches []string) []string {
 
 const runtimeToTemplateSuffix = "_runtime_to_template"
 
-// findTemplateFuncs, given an AST, finds all functions annotated with
-// execgen:template<foo,bar>, and returns a funcInfo for each of them.
-func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
-	ret := make(map[string]*funcInfo)
+// findTemplateDecls, given an AST, finds all functions annotated with
+// execgen:template<foo,bar>, and returns a funcInfo for each of them, and
+// finds all var decls annotated with execgen:let, returning a letInfo for
+// each of them.
+func findTemplateDecls(f *dst.File) templateInfo {
+	ret := templateInfo{
+		funcInfos: make(map[string]*funcInfo),
+		letInfos:  make(map[string]*letInfo),
+	}
 
 	dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
@@ -340,7 +358,9 @@ func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
 				}
 
 				if matches := instantiateRe.FindStringSubmatch(dec); matches != nil {
-					instantiateArgs = append(instantiateArgs, trimTemplateDeclMatches(matches))
+					instantiateMatches := trimTemplateDeclMatches(matches)
+					newInstantiateArgs := expandInstantiateArgs(instantiateMatches, ret.letInfos)
+					instantiateArgs = append(instantiateArgs, newInstantiateArgs...)
 					// Eventually let's delete the instantiate comments as well.
 					continue
 				}
@@ -415,7 +435,7 @@ func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
 			n.Type.Params.List = newParamList
 			n.Decs.Start = trimStartDecs(n)
 			info.decl = n
-			ret[info.decl.Name.Name] = info
+			ret.funcInfos[info.decl.Name.Name] = info
 
 			for _, args := range info.instantiateArgs {
 				exprList := make([]dst.Expr, len(args))
@@ -450,10 +470,98 @@ func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
 				cursor.InsertAfter(decl)
 			}
 			cursor.Delete()
+
+		case *dst.GenDecl:
+			// Search for execgen:let declarations.
+			isLet := false
+			for _, dec := range n.Decs.Start {
+				if dec == "// execgen:let" {
+					isLet = true
+					break
+				}
+			}
+			if !isLet {
+				return true
+			}
+			if n.Tok != token.VAR {
+				panic("execgen:let only allowed on vars")
+			}
+			for _, spec := range n.Specs {
+				n := spec.(*dst.ValueSpec)
+				if len(n.Names) != 1 || len(n.Values) != 1 {
+					panic("execgen:let must have 1 name and one value per var")
+				}
+				info := &letInfo{}
+				name := n.Names[0].Name
+				c, ok := n.Values[0].(*dst.CompositeLit)
+				if !ok {
+					panic("execgen:let must use a composite literal value")
+				}
+				typ, ok := c.Type.(*dst.ArrayType)
+				if !ok {
+					panic("execgen:let must be on an array type literal")
+				}
+				info.vals = make([]string, len(c.Elts))
+				info.typ = typ
+				for i := range c.Elts {
+					info.vals[i] = prettyPrintExprs(c.Elts[i])
+				}
+				ret.letInfos[name] = info
+			}
+
+			cursor.Delete()
 		}
 		return true
 	}, nil)
 
+	return ret
+}
+
+// expandInstantiateArgs takes a list of strings, the arguments to an
+// execgen:instantiate annotation, and returns a list of list of strings, after
+// combinatorially expanding any execgen:let lists in the instantiate arguments.
+// For example, given the instantiateArgs:
+// ["Bools", "Bools", 3]
+// and an execgen:let that maps "Bools" to ["true", "false"], we'd return the
+// list of lists:
+// [true, true, 3]
+// [true, false, 3]
+// [false, true, 3]
+// [false, false, 3]
+func expandInstantiateArgs(instantiateArgs []string, letInfos map[string]*letInfo) [][]string {
+	expandedArgs := make([][]string, len(instantiateArgs))
+	for i, arg := range instantiateArgs {
+		if info := letInfos[arg]; info != nil {
+			expandedArgs[i] = info.vals
+		} else {
+			expandedArgs[i] = []string{arg}
+		}
+	}
+	return generateInstantiateCombinations(expandedArgs)
+}
+
+func generateInstantiateCombinations(args [][]string) [][]string {
+	if len(args) == 1 {
+		// Base case: transform the final options list into an arguments list of
+		// lists where each arguments list is a single element containing one of
+		// the final options.
+		// For example, given [[true, false]], we'll return:
+		// [[true], [false]]
+		ret := make([][]string, len(args[0]))
+		for i, arg := range args[0] {
+			ret[i] = []string{arg}
+		}
+		return ret
+	}
+	rest := generateInstantiateCombinations(args[1:])
+	ret := make([][]string, 0, len(rest)*len(args[0]))
+	for _, argOption := range args[0] {
+		// For every option of argument, prepend it to every args list from
+		// the recursive step.
+		for _, args := range rest {
+			ret = append(ret, append([]string{argOption}, args...))
+		}
+	}
 	return ret
 }
 
@@ -712,8 +820,8 @@ func findConcreteTemplateCallSites(
 // it modifies the dst.File to include all expanded template functions, and
 // edits call sites to call the newly expanded functions.
 func expandTemplates(f *dst.File) {
-	funcInfos := findTemplateFuncs(f)
-	replaceAndExpandTemplates(f, funcInfos)
+	templateInfo := findTemplateDecls(f)
+	replaceAndExpandTemplates(f, templateInfo.funcInfos)
 }
 
 // createTemplateFuncVariant creates a variant of the input funcInfo given the
