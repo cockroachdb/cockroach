@@ -69,7 +69,7 @@ func (t testWrapper) ArtifactsDir() string {
 }
 
 // logger is part of the testI interface.
-func (t testWrapper) logger() *logger.Logger {
+func (t testWrapper) L() *logger.Logger {
 	return nil
 }
 

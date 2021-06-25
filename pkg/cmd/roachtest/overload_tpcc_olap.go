@@ -114,7 +114,7 @@ func verifyNodeLiveness(
 		t.Fatalf("Node liveness failed %d times, expected no more than %d",
 			failures, maxFailures)
 	} else {
-		t.logger().Printf("Node liveness failed %d times which is fewer than %d",
+		t.L().Printf("Node liveness failed %d times which is fewer than %d",
 			failures, maxFailures)
 	}
 }
