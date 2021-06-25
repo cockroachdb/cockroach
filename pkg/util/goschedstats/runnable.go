@@ -53,7 +53,7 @@ func RecentNormalizedRunnableGoroutines() float64 {
 var _ = numRunnableGoroutines
 
 // We sample the number of runnable goroutines once per samplePeriod.
-const samplePeriod = time.Millisecond
+const samplePeriod = 250 * time.Millisecond
 
 // We "report" the average value every reportingPeriod.
 // Note: if this is changed from 1s, CumulativeNormalizedRunnableGoroutines()
