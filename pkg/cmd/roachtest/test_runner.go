@@ -561,7 +561,7 @@ fi'`
 			}
 			switch out := strings.TrimSpace(string(out)); out {
 			case "true":
-				dst := fmt.Sprintf("%s/%d.%s", t.artifactsDir, node, perfArtifactsDir)
+				dst := fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), node, perfArtifactsDir)
 				return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
 			case "false":
 				l.PrintfCtx(ctx, "no perf artifacts exist on node %v", c.Node(node))
@@ -650,7 +650,7 @@ func (r *testRunner) runTest(
 
 				// Copy a snapshot of the testrunner's log to the test's artifacts dir
 				// so that we collect it below.
-				cp := exec.Command("cp", testRunnerLogPath, t.artifactsDir)
+				cp := exec.Command("cp", testRunnerLogPath, t.ArtifactsDir())
 				if err := cp.Run(); err != nil {
 					l.ErrorfCtx(ctx, "failed to copy test runner's logs to test artifacts: %s", err)
 				}
@@ -671,7 +671,7 @@ func (r *testRunner) runTest(
 			// through zip files just fine, but we can't download subtrees of the
 			// artifacts storage. By zipping we get this capability as we can just
 			// download the zip file for the failing test instead.
-			if err := zipArtifacts(t.artifactsDir); err != nil {
+			if err := zipArtifacts(t.ArtifactsDir()); err != nil {
 				l.Printf("unable to zip artifacts: %s", err)
 			}
 

@@ -42,7 +42,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.
-	tlpLog, err := os.Create(filepath.Join(t.artifactsDir, "tlp.log"))
+	tlpLog, err := os.Create(filepath.Join(t.ArtifactsDir(), "tlp.log"))
 	if err != nil {
 		t.Fatalf("could not create tlp.log: %v", err)
 	}
