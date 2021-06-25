@@ -3,7 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "heapprofiler",
     srcs = [
+        "activequeryprofiler.go",
         "cgoprofiler.go",
+        "cluster_settings.go",
         "heapprofiler.go",
         "profiler_common.go",
         "profilestore.go",
@@ -12,12 +14,16 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/heapprofiler",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/server/debug",
         "//pkg/server/dumpstore",
         "//pkg/server/status",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/util/cgroups",
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -27,12 +33,16 @@ go_test(
     name = "heapprofiler_test",
     size = "small",
     srcs = [
+        "activequeryprofiler_test.go",
         "profiler_common_test.go",
         "profilestore_test.go",
     ],
     embed = [":heapprofiler"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/server/dumpstore",
+        "//pkg/settings/cluster",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
