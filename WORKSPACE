@@ -188,3 +188,12 @@ git_repository(
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 
 rules_foreign_cc_dependencies()
+
+http_archive(
+    name = "bazel_gomock",
+    sha256 = "692421b0c5e04ae4bc0bfff42fb1ce8671fe68daee2b8d8ea94657bb1fcddc0a",
+    strip_prefix = "bazel_gomock-fde78c91cf1783cc1e33ba278922ba67a6ee2a84",
+    urls = [
+        "https://github.com/jmhodges/bazel_gomock/archive/fde78c91cf1783cc1e33ba278922ba67a6ee2a84.tar.gz",
+    ],
+)
