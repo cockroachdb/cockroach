@@ -707,6 +707,10 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 				scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
 			})
+			// Paper over the problem, there's probably a better place to put this...
+			if scalar.DataType() != tabCol.DatumType() {
+				scalar = &memo.CastExpr{Input: scalar, Typ: tabCol.DatumType()}
+			}
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared
 			memo.BuildSharedProps(scalar, &sharedProps)
