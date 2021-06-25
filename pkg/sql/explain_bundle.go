@@ -168,7 +168,7 @@ type stmtBundleBuilder struct {
 	trace        tracing.Recording
 	placeholders *tree.PlaceholderInfo
 
-	z memZipper
+	z MemZipper
 }
 
 func makeStmtBundleBuilder(
@@ -408,19 +408,21 @@ func (b *stmtBundleBuilder) finalize() (*bytes.Buffer, error) {
 	return b.z.Finalize()
 }
 
-// memZipper builds a zip file into an in-memory buffer.
-type memZipper struct {
+// MemZipper builds a zip file into an in-memory buffer.
+type MemZipper struct {
 	buf *bytes.Buffer
 	z   *zip.Writer
 	err error
 }
 
-func (z *memZipper) Init() {
+// Init initializes the underlying MemZipper with a new zip writer.
+func (z *MemZipper) Init() {
 	z.buf = &bytes.Buffer{}
 	z.z = zip.NewWriter(z.buf)
 }
 
-func (z *memZipper) AddFile(name string, contents string) {
+// AddFile adds a file to the underlying MemZipper.
+func (z *MemZipper) AddFile(name string, contents string) {
 	if z.err != nil {
 		return
 	}
@@ -436,7 +438,8 @@ func (z *memZipper) AddFile(name string, contents string) {
 	_, z.err = w.Write([]byte(contents))
 }
 
-func (z *memZipper) Finalize() (*bytes.Buffer, error) {
+// Finalize finalizes the MemZipper by closing the zip writer.
+func (z *MemZipper) Finalize() (*bytes.Buffer, error) {
 	if z.err != nil {
 		return nil, z.err
 	}
@@ -444,7 +447,7 @@ func (z *memZipper) Finalize() (*bytes.Buffer, error) {
 		return nil, err
 	}
 	buf := z.buf
-	*z = memZipper{}
+	*z = MemZipper{}
 	return buf, nil
 }
 

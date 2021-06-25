@@ -11,11 +11,11 @@
 package cli
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
-	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -27,14 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
 
@@ -120,64 +117,38 @@ func TestDebugJobTrace(t *testing.T) {
 	// Wait for the job to record information in the trace span.
 	<-recordedSpanCh
 
-	tempDir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-	targetFilePath := filepath.Join(tempDir, "tracetest")
-	args := []string{strconv.Itoa(int(id)), targetFilePath}
+	args := []string{strconv.Itoa(int(id))}
 	pgURL, _ := sqlutils.PGUrl(t, c.TestServer.ServingSQLAddr(),
 		"TestDebugJobTrace", url.User(security.RootUser))
 
-	_, err := c.RunWithCaptureArgs([]string{`debug`, `job-trace`, args[0], args[1], fmt.Sprintf(`--url=%s`, pgURL.String()), `--format=csv`})
+	_, err := c.RunWithCaptureArgs([]string{`debug`, `job-trace`, args[0], fmt.Sprintf(`--url=%s`, pgURL.String()), `--format=csv`})
 	require.NoError(t, err)
-	actual, err := ioutil.ReadFile(targetFilePath)
-	if err != nil {
-		t.Errorf("Failed to read actual result from %v: %v", targetFilePath, err)
-	}
-
-	if err := matchCSVHeader(string(actual), jobTraceHeader); err != nil {
-		t.Fatal(err)
-	}
-
-	operationName := fmt.Sprintf("BACKUP-%d", id)
-	exp := [][]string{
-		// This is the span recording we injected above.
-		{`\d+`, `\d+`, operationName, ".*", ".*", "server.serverpb.TableStatsRequest", "{\"@type\": \"type.googleapis.com/cockroach.server.serverpb.TableStatsRequest\", \"database\": \"foo\", \"table\": \"bar\"}"},
-	}
-	if err := MatchCSV(string(actual), exp); err != nil {
-		t.Fatal(err)
-	}
+	checkBundle(t, id, "node1-trace.txt node1-trace.json node1-jaeger.json")
 }
 
-func matchCSVHeader(csvStr string, expectedHeader []string) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Errorf("csv input:\n%v\nexpected:\n%s\nerrors:%s",
-				csvStr, pretty.Sprint(expectedHeader), err)
+func checkBundle(t *testing.T, jobID jobspb.JobID, expectedFiles ...string) {
+	t.Helper()
+
+	filename := fmt.Sprintf("%d-%s", jobID, jobTraceZipSuffix)
+	r, err := zip.OpenReader(filename)
+	require.NoError(t, err)
+
+	// Make sure the bundle contains the expected list of files.
+	var files []string
+	for _, f := range r.File {
+		if f.UncompressedSize64 == 0 {
+			t.Fatalf("file %s is empty", f.Name)
 		}
-	}()
-
-	csvStr = ElideInsecureDeprecationNotice(csvStr)
-	reader := csv.NewReader(strings.NewReader(csvStr))
-	reader.FieldsPerRecord = -1
-	records, err := reader.ReadAll()
-	if err != nil {
-		return err
+		files = append(files, f.Name)
 	}
 
-	if len(records) < 1 {
-		return errors.Errorf("csv is empty")
+	var expList []string
+	for _, s := range expectedFiles {
+		expList = append(expList, strings.Split(s, " ")...)
 	}
-
-	// Only match the first record, i.e. the expectedHeader.
-	headerRow := records[0]
-	if lr, lm := len(headerRow), len(expectedHeader); lr != lm {
-		return errors.Errorf("csv header has %d columns, but expected %d", lr, lm)
+	sort.Strings(files)
+	sort.Strings(expList)
+	if fmt.Sprint(files) != fmt.Sprint(expList) {
+		t.Errorf("unexpected list of files:\n  %v\nexpected:\n  %v", files, expList)
 	}
-	for j := range expectedHeader {
-		exp, act := expectedHeader[j], headerRow[j]
-		if exp != act {
-			err = errors.Errorf("found %q which does not match %q", act, exp)
-		}
-	}
-	return err
 }
