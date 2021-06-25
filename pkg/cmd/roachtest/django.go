@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(\.(?P<point>\d+))?$`)
@@ -28,7 +29,7 @@ var djangoCockroachDBSupportedTag = "3.2.1"
 func registerDjango(r *testRegistry) {
 	runDjango := func(
 		ctx context.Context,
-		t *testImpl,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -219,7 +220,7 @@ func registerDjango(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1, spec.CPU(16)),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDjango(ctx, t, c)
 		},
 	})

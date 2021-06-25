@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -27,7 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func runClusterInit(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	addrs, err := c.InternalAddr(ctx, c.All())

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,7 +38,7 @@ func registerGopg(r *testRegistry) {
 
 	runGopg := func(
 		ctx context.Context,
-		t *testImpl,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -151,7 +152,7 @@ func registerGopg(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGopg(ctx, t, c)
 		},
 	})

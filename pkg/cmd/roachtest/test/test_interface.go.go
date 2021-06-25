@@ -10,16 +10,31 @@
 
 package test
 
-import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
+)
 
 // Test is the interface through which roachtests interact with the
 // test harness.
 type Test interface {
 	Name() string
+	BuildVersion() *version.Version
+	IsBuildVersion(string) bool // "vXX.YY"
+	Helper()
+	Spec() interface{} // main.TestSpec, TODO(tbg): clean up
+	VersionsBinaryOverride() map[string]string
+	Skip(args ...interface{})
+	Skipf(format string, args ...interface{})
+	Errorf(string, ...interface{})
+	FailNow()
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Failed() bool
 	ArtifactsDir() string
 	L() *logger.Logger
+	Progress(float64)
 	Status(args ...interface{})
+	WorkerStatus(args ...interface{})
+	WorkerProgress(float64)
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -26,7 +27,7 @@ import (
 // runDecommissionMixedVersions runs through randomized
 // decommission/recommission processes in mixed-version clusters.
 func runDecommissionMixedVersions(
-	ctx context.Context, t *testImpl, c cluster.Cluster, buildVersion version.Version,
+	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
@@ -109,7 +110,7 @@ func cockroachBinaryPath(version string) string {
 // given node, targeting another. It uses the specified binary version to run
 // the command.
 func partialDecommissionStep(target, from int, binaryVersion string) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
 			"--wait=none", "--insecure", strconv.Itoa(target))
@@ -120,7 +121,7 @@ func partialDecommissionStep(target, from int, binaryVersion string) versionStep
 // targeting all nodes in the cluster. It uses the specified binary version to
 // run the command.
 func recommissionAllStep(from int, binaryVersion string) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "recommission",
 			"--insecure", c.All().NodeIDsString())
@@ -130,7 +131,7 @@ func recommissionAllStep(from int, binaryVersion string) versionStep {
 // fullyDecommissionStep is like partialDecommissionStep, except it uses
 // `--wait=all`.
 func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
 			"--wait=all", "--insecure", strconv.Itoa(target))
@@ -141,7 +142,7 @@ func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
 // crdb_internal.gossip_liveness, asserting that only one node is marked as
 // decommissioning. This check can be run against both v20.1 and v20.2 servers.
 func checkOneDecommissioning(from int) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// We use a retry block here (and elsewhere) because we're consulting
 		// crdb_internal.gossip_liveness, and need to make allowances for gossip
 		// propagation delays.
@@ -174,7 +175,7 @@ func checkOneDecommissioning(from int) versionStep {
 // crdb_internal.gossip_liveness, asserting that only no nodes are marked as
 // decommissioning. This check can be run against both v20.1 and v20.2 servers.
 func checkNoDecommissioning(from int) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 			db := u.conn(ctx, t, from)
 			var count int
@@ -198,7 +199,7 @@ func checkNoDecommissioning(from int) versionStep {
 // the specified membership status. This check can be only be run against
 // servers running v20.2 and beyond.
 func checkOneMembership(from int, membership string) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 			db := u.conn(ctx, t, from)
 			var count int
@@ -229,7 +230,7 @@ func checkOneMembership(from int, membership string) versionStep {
 // the specified membership status. This check can be only be run against
 // servers running v20.2 and beyond.
 func checkAllMembership(from int, membership string) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 			db := u.conn(ctx, t, from)
 			var count int
@@ -251,7 +252,7 @@ func checkAllMembership(from int, membership string) versionStep {
 // uploadVersionStep uploads the specified cockroach binary version on the specified
 // nodes.
 func uploadVersionStep(nodes option.NodeListOption, version string) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Put the binary.
 		uploadVersion(ctx, t, u.c, nodes, version)
 	}
@@ -260,7 +261,7 @@ func uploadVersionStep(nodes option.NodeListOption, version string) versionStep 
 // startVersion starts the specified cockroach binary version on the specified
 // nodes.
 func startVersion(nodes option.NodeListOption, version string) versionStep {
-	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		args := startArgs("--binary=" + cockroachBinaryPath(version))
 		u.c.Start(ctx, nodes, args, startArgsDontEncrypt)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,7 +41,7 @@ func registerDecommission(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Cluster:    r.makeClusterSpec(4),
-			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if local {
 					duration = 5 * time.Minute
 					t.L().Printf("running with duration=%s in local mode\n", duration)
@@ -57,7 +58,7 @@ func registerDecommission(r *testRegistry) {
 			MinVersion: "v20.2.0",
 			Timeout:    10 * time.Minute,
 			Cluster:    r.makeClusterSpec(numNodes),
-			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
 		})
@@ -69,7 +70,7 @@ func registerDecommission(r *testRegistry) {
 			Owner:      OwnerKV,
 			MinVersion: "v20.2.0",
 			Cluster:    r.makeClusterSpec(numNodes),
-			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
 			},
 		})
@@ -86,7 +87,7 @@ func registerDecommission(r *testRegistry) {
 // start grepping the logs. An alternative is to introduce a metric
 // that would have signaled this and check that instead.
 func runDecommission(
-	ctx context.Context, t *testImpl, c cluster.Cluster, nodes int, duration time.Duration,
+	ctx context.Context, t test.Test, c cluster.Cluster, nodes int, duration time.Duration,
 ) {
 	const defaultReplicationFactor = 3
 	if defaultReplicationFactor > nodes {
@@ -301,7 +302,7 @@ func runDecommission(
 // through partial decommissioning of random nodes, ensuring we're able to undo
 // those operations. We then fully decommission nodes, verifying it's an
 // irreversible operation.
-func runDecommissionRandomized(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, args)
@@ -900,7 +901,7 @@ var statusHeaderWithDecommission = []string{
 const statusHeaderMembershipColumnIdx = 11
 
 type decommTestHelper struct {
-	t       *testImpl
+	t       test.Test
 	c       cluster.Cluster
 	nodeIDs []int
 	// randNodeBlocklist are the nodes that won't be returned from randNode().
@@ -908,7 +909,7 @@ type decommTestHelper struct {
 	randNodeBlocklist map[int]struct{}
 }
 
-func newDecommTestHelper(t *testImpl, c cluster.Cluster) *decommTestHelper {
+func newDecommTestHelper(t test.Test, c cluster.Cluster) *decommTestHelper {
 	var nodeIDs []int
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		nodeIDs = append(nodeIDs, i)
@@ -1059,7 +1060,7 @@ func (h *decommTestHelper) getRandNodeOtherThan(ids ...int) int {
 }
 
 func execCLI(
-	ctx context.Context, t *testImpl, c cluster.Cluster, runNode int, extraArgs ...string,
+	ctx context.Context, t test.Test, c cluster.Cluster, runNode int, extraArgs ...string,
 ) (string, error) {
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)

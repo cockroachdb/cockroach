@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
@@ -91,7 +92,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 		Tags:    []string{"manual"},
 		Owner:   OwnerKV,
 		Cluster: nodes,
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)
 		},
 	})
@@ -193,7 +194,7 @@ func makeKVLoadGroup(c cluster.Cluster, numRoachNodes, numLoadNodes int) loadGro
 // This tool was primarily written with the objective of demonstrating the write
 // performance characteristics of using hash sharded indexes, for sequential workloads
 // which would've otherwise created a single-range hotspot.
-func runKVBench(ctx context.Context, t *testImpl, c cluster.Cluster, b kvBenchSpec) {
+func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSpec) {
 	loadGroup := makeKVLoadGroup(c, b.Nodes, 1)
 	roachNodes := loadGroup.roachNodes
 	loadNodes := loadGroup.loadNodes

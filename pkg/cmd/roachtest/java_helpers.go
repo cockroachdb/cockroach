@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var issueRegexp = regexp.MustCompile(`See: https://[^\s]+issues?/(\d+)`)
@@ -117,7 +118,7 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string
 // parseJUnitXML parses testOutputInJUnitXMLFormat and updates the receiver
 // accordingly.
 func (r *ormTestsResults) parseJUnitXML(
-	t *testImpl, expectedFailures, ignorelist blocklist, testOutputInJUnitXMLFormat []byte,
+	t test.Test, expectedFailures, ignorelist blocklist, testOutputInJUnitXMLFormat []byte,
 ) {
 	tests, statuses, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
 	if err != nil {
@@ -176,7 +177,7 @@ func (r *ormTestsResults) parseJUnitXML(
 // passed), a new blocklist is populated.
 func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
-	t *testImpl,
+	t test.Test,
 	c cluster.Cluster,
 	node option.NodeListOption,
 	ormName string,

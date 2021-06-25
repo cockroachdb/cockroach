@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -38,7 +39,7 @@ func registerTLP(r *testRegistry) {
 	})
 }
 
-func runTLP(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.
@@ -99,7 +100,7 @@ func runTLP(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	defer smither.Close()
 
 	t.Status("running TLP")
-	until := time.After(t.Spec().Timeout / 2)
+	until := time.After(t.Spec().(*TestSpec).Timeout / 2)
 	done := ctx.Done()
 	for i := 1; ; i++ {
 		select {

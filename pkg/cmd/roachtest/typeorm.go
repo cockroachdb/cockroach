@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -26,7 +27,7 @@ var supportedTypeORMRelease = "0.2.32"
 func registerTypeORM(r *testRegistry) {
 	runTypeORM := func(
 		ctx context.Context,
-		t *testImpl,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -177,7 +178,7 @@ func registerTypeORM(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTypeORM(ctx, t, c)
 		},
 	})

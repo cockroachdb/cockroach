@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var sequelizeReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -24,7 +25,7 @@ var supportedSequelizeRelease = "v6.0.0-alpha.0"
 func registerSequelize(r *testRegistry) {
 	runSequelize := func(
 		ctx context.Context,
-		t *testImpl,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -151,7 +152,7 @@ func registerSequelize(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequelize(ctx, t, c)
 		},
 	})

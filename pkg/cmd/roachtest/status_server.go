@@ -18,13 +18,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runStatusServer(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx)
 

@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -26,7 +27,7 @@ var supportedPGXTag = "v4.11.0"
 func registerPgx(r *testRegistry) {
 	runPgx := func(
 		ctx context.Context,
-		t *testImpl,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -131,7 +132,7 @@ func registerPgx(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgx(ctx, t, c)
 		},
 	})

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 // alterZoneConfigAndClusterSettings changes the zone configurations so that GC
@@ -145,7 +146,7 @@ func newORMTestsResults() *ormTestsResults {
 // against a cockroach node. If an unexpected result is observed (for example,
 // a test unexpectedly failed or passed), a new blocklist is populated.
 func (r *ormTestsResults) summarizeAll(
-	t *testImpl, ormName, blocklistName string, expectedFailures blocklist, version, tag string,
+	t test.Test, ormName, blocklistName string, expectedFailures blocklist, version, tag string,
 ) {
 	// Collect all the tests that were not run.
 	notRunCount := 0
@@ -180,7 +181,7 @@ func (r *ormTestsResults) summarizeAll(
 // doesn't pay attention to all the tests - only to the failed ones.
 // If a test suite outputs only the failures, then this method should be used.
 func (r *ormTestsResults) summarizeFailed(
-	t *testImpl,
+	t test.Test,
 	ormName, blocklistName string,
 	expectedFailures blocklist,
 	version, latestTag string,

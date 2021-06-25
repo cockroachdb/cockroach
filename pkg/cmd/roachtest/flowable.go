@@ -15,6 +15,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var flowableReleaseTagRegex = regexp.MustCompile(`^flowable-(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -24,7 +25,7 @@ var flowableReleaseTagRegex = regexp.MustCompile(`^flowable-(?P<major>\d+)\.(?P<
 func registerFlowable(r *testRegistry) {
 	runFlowable := func(
 		ctx context.Context,
-		t *testImpl,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -103,7 +104,7 @@ func registerFlowable(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runFlowable(ctx, t, c)
 		},
 	})

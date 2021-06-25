@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
@@ -36,13 +37,13 @@ func registerSQLAlchemy(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},
 	})
 }
 
-func runSQLAlchemy(ctx context.Context, t *testImpl, c cluster.Cluster) {
+func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if c.IsLocal() {
 		t.Fatal("cannot be run in local mode")
 	}

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
 )
@@ -49,7 +50,7 @@ type tpchBenchSpec struct {
 //
 // This benchmark runs with a single load generator node running a single
 // worker.
-func runTPCHBench(ctx context.Context, t *testImpl, c cluster.Cluster, b tpchBenchSpec) {
+func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBenchSpec) {
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	loadNode := c.Node(c.Spec().NodeCount)
 
@@ -168,7 +169,7 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(numNodes),
 		MinVersion: minVersion,
-		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
 	})

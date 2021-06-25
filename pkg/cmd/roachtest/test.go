@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -85,7 +86,7 @@ type TestSpec struct {
 	RequiresLicense bool
 
 	// Run is the test function.
-	Run func(ctx context.Context, t *testImpl, c cluster.Cluster)
+	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
 }
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
@@ -180,9 +181,13 @@ func (t *testImpl) BuildVersion() *version.Version {
 	return &t.buildVersion
 }
 
+func (t *testImpl) VersionsBinaryOverride() map[string]string {
+	return t.versionsBinaryOverride
+}
+
 // Spec returns the TestSpec.
-func (t *testImpl) Spec() TestSpec {
-	return *t.spec
+func (t *testImpl) Spec() interface{} {
+	return t.spec
 }
 
 func (t *testImpl) Helper() {}
