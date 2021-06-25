@@ -46,7 +46,7 @@ func dbUnixEpoch(db *gosql.DB) (float64, error) {
 
 // offsetInjector is used to inject clock offsets in roachtests.
 type offsetInjector struct {
-	t        *test
+	t        *testImpl
 	c        cluster.Cluster
 	deployed bool
 }
@@ -123,6 +123,6 @@ func (oi *offsetInjector) recover(ctx context.Context, nodeID int) {
 
 // newOffsetInjector creates a offsetInjector which can be used to inject
 // and recover from clock offsets.
-func newOffsetInjector(t *test, c cluster.Cluster) *offsetInjector {
+func newOffsetInjector(t *testImpl, c cluster.Cluster) *offsetInjector {
 	return &offsetInjector{t: t, c: c}
 }

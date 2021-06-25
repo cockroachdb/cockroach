@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runStatusServer(ctx context.Context, t *test, c cluster.Cluster) {
+func runStatusServer(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx)
 

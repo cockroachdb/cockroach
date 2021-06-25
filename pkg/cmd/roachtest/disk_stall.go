@@ -37,7 +37,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 				Owner:      OwnerStorage,
 				MinVersion: "v19.2.0",
 				Cluster:    r.makeClusterSpec(1),
-				Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+				Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)
 				},
 			})
@@ -46,7 +46,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 }
 
 func runDiskStalledDetection(
-	ctx context.Context, t *test, c cluster.Cluster, affectsLogDir bool, affectsDataDir bool,
+	ctx context.Context, t *testImpl, c cluster.Cluster, affectsLogDir bool, affectsDataDir bool,
 ) {
 	if local && runtime.GOOS != "linux" {
 		t.Fatalf("must run on linux os, found %s", runtime.GOOS)

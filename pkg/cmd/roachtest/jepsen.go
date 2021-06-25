@@ -43,7 +43,7 @@ var jepsenNemeses = []struct {
 	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
 
-func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
+func initJepsen(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	// NB: comment this out to see the commands jepsen would run locally.
 	if c.IsLocal() {
 		t.Fatal("local execution not supported")
@@ -143,7 +143,7 @@ func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
 	c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 }
 
-func runJepsen(ctx context.Context, t *test, c cluster.Cluster, testName, nemesis string) {
+func runJepsen(ctx context.Context, t *testImpl, c cluster.Cluster, testName, nemesis string) {
 	initJepsen(ctx, t, c)
 
 	controller := c.Node(c.Spec().NodeCount)
@@ -355,7 +355,7 @@ func registerJepsen(r *testRegistry) {
 				// if they detect that the machines have already been properly
 				// initialized.
 				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
-				Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+				Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}

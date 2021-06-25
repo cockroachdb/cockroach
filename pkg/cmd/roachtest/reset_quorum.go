@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func runResetQuorum(ctx context.Context, t *test, c cluster.Cluster) {
+func runResetQuorum(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	skip.WithIssue(t, 58165)
 	args := func(attr string) option.Option {
 		return startArgs(

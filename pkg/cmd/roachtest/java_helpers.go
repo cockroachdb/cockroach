@@ -117,7 +117,7 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string
 // parseJUnitXML parses testOutputInJUnitXMLFormat and updates the receiver
 // accordingly.
 func (r *ormTestsResults) parseJUnitXML(
-	t *test, expectedFailures, ignorelist blocklist, testOutputInJUnitXMLFormat []byte,
+	t *testImpl, expectedFailures, ignorelist blocklist, testOutputInJUnitXMLFormat []byte,
 ) {
 	tests, statuses, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
 	if err != nil {
@@ -176,7 +176,7 @@ func (r *ormTestsResults) parseJUnitXML(
 // passed), a new blocklist is populated.
 func parseAndSummarizeJavaORMTestsResults(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	c cluster.Cluster,
 	node option.NodeListOption,
 	ormName string,

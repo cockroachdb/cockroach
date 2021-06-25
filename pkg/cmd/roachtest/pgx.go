@@ -26,7 +26,7 @@ var supportedPGXTag = "v4.11.0"
 func registerPgx(r *testRegistry) {
 	runPgx := func(
 		ctx context.Context,
-		t *test,
+		t *testImpl,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -131,7 +131,7 @@ func registerPgx(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runPgx(ctx, t, c)
 		},
 	})

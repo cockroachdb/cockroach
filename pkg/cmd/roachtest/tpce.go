@@ -32,7 +32,7 @@ func registerTPCE(r *testRegistry) {
 		timeout time.Duration
 	}
 
-	runTPCE := func(ctx context.Context, t *test, c cluster.Cluster, opts tpceOptions) {
+	runTPCE := func(ctx context.Context, t *testImpl, c cluster.Cluster, opts tpceOptions) {
 		roachNodes := c.Range(1, opts.nodes)
 		loadNode := c.Node(opts.nodes + 1)
 		racks := opts.nodes
@@ -114,7 +114,7 @@ func registerTPCE(r *testRegistry) {
 			Tags:    opts.tags,
 			Timeout: opts.timeout,
 			Cluster: r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				runTPCE(ctx, t, c, opts)
 			},
 		})

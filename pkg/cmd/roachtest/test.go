@@ -85,7 +85,7 @@ type TestSpec struct {
 	RequiresLicense bool
 
 	// Run is the test function.
-	Run func(ctx context.Context, t *test, c cluster.Cluster)
+	Run func(ctx context.Context, t *testImpl, c cluster.Cluster)
 }
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
@@ -121,7 +121,7 @@ type testStatus struct {
 	progress float64
 }
 
-type test struct {
+type testImpl struct {
 	spec *TestSpec
 
 	// buildVersion is the version of the Cockroach binary that the test will run
@@ -176,33 +176,33 @@ type test struct {
 
 // BuildVersion exposes the build version of the cluster
 // in this test.
-func (t *test) BuildVersion() *version.Version {
+func (t *testImpl) BuildVersion() *version.Version {
 	return &t.buildVersion
 }
 
 // Spec returns the TestSpec.
-func (t *test) Spec() TestSpec {
+func (t *testImpl) Spec() TestSpec {
 	return *t.spec
 }
 
-func (t *test) Helper() {}
+func (t *testImpl) Helper() {}
 
-func (t *test) Name() string {
+func (t *testImpl) Name() string {
 	return t.spec.Name
 }
 
 // L returns the test's logger.
-func (t *test) L() *logger.Logger {
+func (t *testImpl) L() *logger.Logger {
 	return t.l
 }
 
 // ReplaceL replaces the test's logger.
-func (t *test) ReplaceL(l *logger.Logger) {
+func (t *testImpl) ReplaceL(l *logger.Logger) {
 	// TODO(tbg): get rid of this, this is racy & hacky.
 	t.l = l
 }
 
-func (t *test) status(ctx context.Context, id int64, args ...interface{}) {
+func (t *testImpl) status(ctx context.Context, id int64, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -231,12 +231,12 @@ func (t *test) status(ctx context.Context, id int64, args ...interface{}) {
 // test goroutine (i.e. the goroutine on which TestSpec.Run is invoked), this
 // is equivalent to calling WorkerStatus. If no arguments are specified, the
 // status message is erased.
-func (t *test) Status(args ...interface{}) {
+func (t *testImpl) Status(args ...interface{}) {
 	t.status(context.TODO(), t.runnerID, args...)
 }
 
 // GetStatus returns the status of the tests's main goroutine.
-func (t *test) GetStatus() string {
+func (t *testImpl) GetStatus() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	status, ok := t.mu.status[t.runnerID]
@@ -249,11 +249,11 @@ func (t *test) GetStatus() string {
 // WorkerStatus sets the status message for a worker goroutine associated with
 // the test. The status message should be cleared before the goroutine exits by
 // calling WorkerStatus with no arguments.
-func (t *test) WorkerStatus(args ...interface{}) {
+func (t *testImpl) WorkerStatus(args ...interface{}) {
 	t.status(context.TODO(), goid.Get(), args...)
 }
 
-func (t *test) progress(id int64, frac float64) {
+func (t *testImpl) progress(id int64, frac float64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -269,22 +269,22 @@ func (t *test) progress(id int64, frac float64) {
 // the main test status messasge. When called from the main test goroutine
 // (i.e. the goroutine on which TestSpec.Run is invoked), this is equivalent to
 // calling WorkerProgress.
-func (t *test) Progress(frac float64) {
+func (t *testImpl) Progress(frac float64) {
 	t.progress(t.runnerID, frac)
 }
 
 // WorkerProgress sets the progress (a fraction in the range [0,1]) associated
 // with the a worker status messasge.
-func (t *test) WorkerProgress(frac float64) {
+func (t *testImpl) WorkerProgress(frac float64) {
 	t.progress(goid.Get(), frac)
 }
 
-var _ skip.SkippableTest = (*test)(nil)
+var _ skip.SkippableTest = (*testImpl)(nil)
 
 // Skip skips the test. The first argument if any is the main message.
 // The remaining argument, if any, form the details.
 // This implements the skip.SkippableTest interface.
-func (t *test) Skip(args ...interface{}) {
+func (t *testImpl) Skip(args ...interface{}) {
 	if len(args) > 0 {
 		t.spec.Skip = fmt.Sprint(args[0])
 		args = args[1:]
@@ -295,7 +295,7 @@ func (t *test) Skip(args ...interface{}) {
 
 // Skipf skips the test. The formatted message becomes the skip reason.
 // This implements the skip.SkippableTest interface.
-func (t *test) Skipf(format string, args ...interface{}) {
+func (t *testImpl) Skipf(format string, args ...interface{}) {
 	t.spec.Skip = fmt.Sprintf(format, args...)
 	panic(errTestFatal)
 }
@@ -308,26 +308,26 @@ func (t *test) Skipf(format string, args ...interface{}) {
 //
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
-func (t *test) Fatal(args ...interface{}) {
+func (t *testImpl) Fatal(args ...interface{}) {
 	t.fatalfInner("" /* format */, args...)
 }
 
 // Fatalf is like Fatal, but takes a format string.
-func (t *test) Fatalf(format string, args ...interface{}) {
+func (t *testImpl) Fatalf(format string, args ...interface{}) {
 	t.fatalfInner(format, args...)
 }
 
 // FailNow implements the TestingT interface.
-func (t *test) FailNow() {
+func (t *testImpl) FailNow() {
 	t.Fatal()
 }
 
 // Errorf implements the TestingT interface.
-func (t *test) Errorf(format string, args ...interface{}) {
+func (t *testImpl) Errorf(format string, args ...interface{}) {
 	t.Fatalf(format, args...)
 }
 
-func (t *test) fatalfInner(format string, args ...interface{}) {
+func (t *testImpl) fatalfInner(format string, args ...interface{}) {
 	// Skip two frames: our own and the caller.
 	if format != "" {
 		t.printfAndFail(2 /* skip */, format, args...)
@@ -337,7 +337,7 @@ func (t *test) fatalfInner(format string, args ...interface{}) {
 	panic(errTestFatal)
 }
 
-func (t *test) printAndFail(skip int, args ...interface{}) {
+func (t *testImpl) printAndFail(skip int, args ...interface{}) {
 	var msg string
 	if len(args) == 1 {
 		// If we were passed only an error, then format it with "%+v" in order to
@@ -352,14 +352,14 @@ func (t *test) printAndFail(skip int, args ...interface{}) {
 	t.failWithMsg(t.decorate(skip+1, msg))
 }
 
-func (t *test) printfAndFail(skip int, format string, args ...interface{}) {
+func (t *testImpl) printfAndFail(skip int, format string, args ...interface{}) {
 	if format == "" {
 		panic(fmt.Sprintf("invalid empty format. args: %s", args))
 	}
 	t.failWithMsg(t.decorate(skip+1, fmt.Sprintf(format, args...)))
 }
 
-func (t *test) failWithMsg(msg string) {
+func (t *testImpl) failWithMsg(msg string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -387,7 +387,7 @@ func (t *test) failWithMsg(msg string) {
 // skip: The number of stack frames to exclude from the result. 0 means that
 //   the caller will be the first frame identified. 1 means the caller's caller
 //   will be the first, etc.
-func (t *test) decorate(skip int, s string) string {
+func (t *testImpl) decorate(skip int, s string) string {
 	// Skip two extra frames to account for this function and runtime.Callers
 	// itself.
 	var pc [50]uintptr
@@ -449,23 +449,23 @@ func (t *test) decorate(skip int, s string) string {
 	return buf.String()
 }
 
-func (t *test) duration() time.Duration {
+func (t *testImpl) duration() time.Duration {
 	return t.end.Sub(t.start)
 }
 
-func (t *test) Failed() bool {
+func (t *testImpl) Failed() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.mu.failed
 }
 
-func (t *test) FailureMsg() string {
+func (t *testImpl) FailureMsg() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.mu.failureMsg
 }
 
-func (t *test) ArtifactsDir() string {
+func (t *testImpl) ArtifactsDir() string {
 	return t.artifactsDir
 }
 
@@ -474,7 +474,7 @@ func (t *test) ArtifactsDir() string {
 // depending on the cockroach version it is running against. Note that the
 // versions are Cockroach build tag version numbers, not the internal cluster
 // version number.
-func (t *test) IsBuildVersion(minVersion string) bool {
+func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	vers, err := version.Parse(minVersion)
 	if err != nil {
 		t.Fatal(err)
@@ -545,7 +545,7 @@ type workerStatus struct {
 		status string
 
 		ttr testToRunRes
-		t   *test
+		t   *testImpl
 		c   *clusterImpl
 	}
 }
@@ -580,13 +580,13 @@ func (w *workerStatus) TestToRun() testToRunRes {
 	return w.mu.ttr
 }
 
-func (w *workerStatus) Test() *test {
+func (w *workerStatus) Test() *testImpl {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.mu.t
 }
 
-func (w *workerStatus) SetTest(t *test, ttr testToRunRes) {
+func (w *workerStatus) SetTest(t *testImpl, ttr testToRunRes) {
 	w.mu.Lock()
 	w.mu.t = t
 	w.mu.ttr = ttr

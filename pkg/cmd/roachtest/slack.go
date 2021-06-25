@@ -44,13 +44,13 @@ func findChannel(client *slack.Client, name string) (string, error) {
 	return "", fmt.Errorf("not found")
 }
 
-func sortTests(tests []*test) {
+func sortTests(tests []*testImpl) {
 	sort.Slice(tests, func(i, j int) bool {
 		return tests[i].Name() < tests[j].Name()
 	})
 }
 
-func postSlackReport(pass, fail, skip map[*test]struct{}) {
+func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 	client := makeSlackClient()
 	if client == nil {
 		return
@@ -103,7 +103,7 @@ func postSlackReport(pass, fail, skip map[*test]struct{}) {
 	}
 
 	data := []struct {
-		tests map[*test]struct{}
+		tests map[*testImpl]struct{}
 		title string
 		color string
 	}{
@@ -112,7 +112,7 @@ func postSlackReport(pass, fail, skip map[*test]struct{}) {
 		{skip, "Skipped", "warning"},
 	}
 	for _, d := range data {
-		tests := make([]*test, 0, len(d.tests))
+		tests := make([]*testImpl, 0, len(d.tests))
 		for t := range d.tests {
 			tests = append(tests, t)
 		}

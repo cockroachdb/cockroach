@@ -28,7 +28,7 @@ var djangoCockroachDBSupportedTag = "3.2.1"
 func registerDjango(r *testRegistry) {
 	runDjango := func(
 		ctx context.Context,
-		t *test,
+		t *testImpl,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -219,7 +219,7 @@ func registerDjango(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1, spec.CPU(16)),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runDjango(ctx, t, c)
 		},
 	})

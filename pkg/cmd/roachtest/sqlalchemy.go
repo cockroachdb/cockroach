@@ -36,13 +36,13 @@ func registerSQLAlchemy(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},
 	})
 }
 
-func runSQLAlchemy(ctx context.Context, t *test, c cluster.Cluster) {
+func runSQLAlchemy(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	if c.IsLocal() {
 		t.Fatal("cannot be run in local mode")
 	}

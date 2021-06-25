@@ -66,7 +66,7 @@ type cdcTestArgs struct {
 	targetTxnPerSecond       float64
 }
 
-func cdcBasicTest(ctx context.Context, t *test, c cluster.Cluster, args cdcTestArgs) {
+func cdcBasicTest(ctx context.Context, t *testImpl, c cluster.Cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
@@ -236,7 +236,7 @@ func cdcBasicTest(ctx context.Context, t *test, c cluster.Cluster, args cdcTestA
 	}
 }
 
-func runCDCBank(ctx context.Context, t *test, c cluster.Cluster) {
+func runCDCBank(ctx context.Context, t *testImpl, c cluster.Cluster) {
 
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
@@ -393,7 +393,7 @@ func runCDCBank(ctx context.Context, t *test, c cluster.Cluster) {
 // This test verifies that the changefeed avro + confluent schema registry works
 // end-to-end (including the schema registry default of requiring backward
 // compatibility within a topic).
-func runCDCSchemaRegistry(ctx context.Context, t *test, c cluster.Cluster) {
+func runCDCSchemaRegistry(ctx context.Context, t *testImpl, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
@@ -520,7 +520,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c cluster.Cluster) {
 	}
 }
 
-func runCDCKafkaAuth(ctx context.Context, t *test, c cluster.Cluster) {
+func runCDCKafkaAuth(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	lastCrdbNode := c.Spec().NodeCount - 1
 	if lastCrdbNode == 0 {
 		lastCrdbNode = 1
@@ -611,7 +611,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           OwnerCDC,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1000,
@@ -627,7 +627,7 @@ func registerCDC(r *testRegistry) {
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1000,
@@ -643,7 +643,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           OwnerCDC,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -659,7 +659,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -675,7 +675,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       100,
@@ -696,7 +696,7 @@ func registerCDC(r *testRegistry) {
 		// of this test. Look into it.
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
 				workloadDuration:         "30m",
@@ -712,7 +712,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType: tpccWorkloadType,
 				// Sending data to Google Cloud Storage is a bit slower than sending to
@@ -733,7 +733,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
@@ -742,7 +742,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(4),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
@@ -751,7 +751,7 @@ func registerCDC(r *testRegistry) {
 		Owner:           `cdc`,
 		Cluster:         r.makeClusterSpec(1),
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
 	})
@@ -1086,7 +1086,7 @@ confluent.support.customer.id=anonymous
 )
 
 type kafkaManager struct {
-	t     *test
+	t     *testImpl
 	c     cluster.Cluster
 	nodes option.NodeListOption
 }
@@ -1534,7 +1534,7 @@ func (lv *latencyVerifier) pollLatency(
 	}
 }
 
-func (lv *latencyVerifier) assertValid(t *test) {
+func (lv *latencyVerifier) assertValid(t *testImpl) {
 	if lv.initialScanLatency == 0 {
 		t.Fatalf("initial scan did not complete")
 	}

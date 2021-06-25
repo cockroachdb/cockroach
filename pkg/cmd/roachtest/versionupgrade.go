@@ -80,7 +80,7 @@ DROP TABLE test.t;
 }
 
 func runVersionUpgrade(
-	ctx context.Context, t *test, c cluster.Cluster, buildVersion version.Version,
+	ctx context.Context, t *testImpl, c cluster.Cluster, buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
@@ -122,7 +122,7 @@ func runVersionUpgrade(
 	// TODO(irfansharif): All schema change instances were commented out while
 	// of #58489 is being addressed.
 	_ = schemaChangeStep
-	backupStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	backupStep := func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		// This check was introduced for the system.tenants table and the associated
 		// changes to full-cluster backup to include tenants. It mostly wants to
 		// check that 20.1 (which does not have system.tenants) and 20.2 (which
@@ -203,7 +203,7 @@ func runVersionUpgrade(
 	u.run(ctx, t)
 }
 
-func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
+func (u *versionUpgradeTest) run(ctx context.Context, t *testImpl) {
 	defer func() {
 		for _, db := range u.conns {
 			_ = db.Close()
@@ -239,7 +239,7 @@ func checkpointName(binaryVersion string) string { return "checkpoint-v" + binar
 
 // Return a cached conn to the given node. Don't call .Close(), the test harness
 // will do it.
-func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB {
+func (u *versionUpgradeTest) conn(ctx context.Context, t *testImpl, i int) *gosql.DB {
 	if u.conns == nil {
 		for _, i := range u.c.All() {
 			u.conns = append(u.conns, u.c.Conn(ctx, i))
@@ -256,7 +256,11 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 // path of the uploaded binaries on the nodes, suitable to be used with
 // `roachdprod start --binary=<path>`.
 func uploadVersion(
-	ctx context.Context, t *test, c cluster.Cluster, nodes option.NodeListOption, newVersion string,
+	ctx context.Context,
+	t *testImpl,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	newVersion string,
 ) (binaryName string) {
 	binaryName = "./cockroach"
 	if newVersion == "" {
@@ -298,7 +302,7 @@ func binaryPathFromVersion(v string) string {
 }
 
 func (u *versionUpgradeTest) uploadVersion(
-	ctx context.Context, t *test, nodes option.NodeListOption, newVersion string,
+	ctx context.Context, t *testImpl, nodes option.NodeListOption, newVersion string,
 ) option.Option {
 	return startArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
 }
@@ -306,7 +310,9 @@ func (u *versionUpgradeTest) uploadVersion(
 // binaryVersion returns the binary running on the (one-indexed) node.
 // NB: version means major.minor[-internal]; the patch level isn't returned. For example, a binary
 // of version 19.2.4 will return 19.2.
-func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) roachpb.Version {
+func (u *versionUpgradeTest) binaryVersion(
+	ctx context.Context, t *testImpl, i int,
+) roachpb.Version {
 	db := u.conn(ctx, t, i)
 
 	var sv string
@@ -329,7 +335,9 @@ func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) 
 // returned value might become stale due to the cluster auto-upgrading in the background plus
 // gossip asynchronicity.
 // NB: cluster versions are always major.minor[-internal]; there isn't a patch level.
-func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int) roachpb.Version {
+func (u *versionUpgradeTest) clusterVersion(
+	ctx context.Context, t *testImpl, i int,
+) roachpb.Version {
 	db := u.conn(ctx, t, i)
 
 	var sv string
@@ -345,10 +353,10 @@ func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int)
 }
 
 // versionStep is an isolated version migration on a running cluster.
-type versionStep func(ctx context.Context, t *test, u *versionUpgradeTest)
+type versionStep func(ctx context.Context, t *testImpl, u *versionUpgradeTest)
 
 func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
 		vv := version.MustParse("v" + v)
 		// The fixtures use cluster version (major.minor) but the input might be
@@ -376,7 +384,7 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 // version. Note that this does *not* wait for the cluster version to upgrade.
 // Use a waitForUpgradeStep() for that.
 func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		upgradeNodes(ctx, nodes, newVersion, t, u.c)
 		// TODO(nvanbenschoten): add upgrade qualification step. What should we
 		// test? We could run logictests. We could add custom logic here. Maybe
@@ -385,7 +393,11 @@ func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionSt
 }
 
 func upgradeNodes(
-	ctx context.Context, nodes option.NodeListOption, newVersion string, t *test, c cluster.Cluster,
+	ctx context.Context,
+	nodes option.NodeListOption,
+	newVersion string,
+	t *testImpl,
+	c cluster.Cluster,
 ) {
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
@@ -413,7 +425,7 @@ func upgradeNodes(
 	}
 }
 
-func enableTracingGloballyStep(ctx context.Context, t *test, u *versionUpgradeTest) {
+func enableTracingGloballyStep(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 	db := u.conn(ctx, t, 1)
 	// NB: this enables net/trace, and as a side effect creates verbose trace spans everywhere.
 	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING trace.debug.enable = $1`, true)
@@ -423,7 +435,7 @@ func enableTracingGloballyStep(ctx context.Context, t *test, u *versionUpgradeTe
 }
 
 func preventAutoUpgradeStep(node int) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		db := u.conn(ctx, t, node)
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, node).String())
 		if err != nil {
@@ -433,7 +445,7 @@ func preventAutoUpgradeStep(node int) versionStep {
 }
 
 func allowAutoUpgradeStep(node int) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		db := u.conn(ctx, t, node)
 		_, err := db.ExecContext(ctx, `RESET CLUSTER SETTING cluster.preserve_downgrade_option`)
 		if err != nil {
@@ -452,7 +464,7 @@ func allowAutoUpgradeStep(node int) versionStep {
 // learned of a cluster version bump (from Gossip) where others haven't. This
 // situation tends to exhibit unexpected behavior.
 func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		newVersion := u.binaryVersion(ctx, t, nodes[0]).String()
 		t.L().Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
 
@@ -476,7 +488,7 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 	}
 }
 
-func setClusterSettingVersionStep(ctx context.Context, t *test, u *versionUpgradeTest) {
+func setClusterSettingVersionStep(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 	db := u.conn(ctx, t, 1)
 	t.L().Printf("bumping cluster version")
 	// TODO(tbg): once this is using a job, poll and periodically print the job status
@@ -491,13 +503,13 @@ func setClusterSettingVersionStep(ctx context.Context, t *test, u *versionUpgrad
 
 type versionFeatureTest struct {
 	name string
-	fn   func(context.Context, *test, *versionUpgradeTest, option.NodeListOption) (skipped bool)
+	fn   func(context.Context, *testImpl, *versionUpgradeTest, option.NodeListOption) (skipped bool)
 }
 
 type versionFeatureStep []versionFeatureTest
 
 func (vs versionFeatureStep) step(nodes option.NodeListOption) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		for _, feature := range vs {
 			t.L().Printf("checking %s", feature.name)
 			tBegin := timeutil.Now()
@@ -517,7 +529,7 @@ func stmtFeatureTest(
 ) versionFeatureTest {
 	return versionFeatureTest{
 		name: name,
-		fn: func(ctx context.Context, t *test, u *versionUpgradeTest, nodes option.NodeListOption) (skipped bool) {
+		fn: func(ctx context.Context, t *testImpl, u *versionUpgradeTest, nodes option.NodeListOption) (skipped bool) {
 			i := nodes.RandNode()[0]
 			if u.clusterVersion(ctx, t, i).Less(minVersion) {
 				return true // skipped
@@ -545,7 +557,7 @@ func stmtFeatureTest(
 // test will then fail on purpose when it's done with instructions on where to
 // move the files.
 func makeVersionFixtureAndFatal(
-	ctx context.Context, t *test, c cluster.Cluster, makeFixtureVersion string,
+	ctx context.Context, t *testImpl, c cluster.Cluster, makeFixtureVersion string,
 ) {
 	var useLocalBinary bool
 	if makeFixtureVersion == "" {
@@ -590,7 +602,7 @@ func makeVersionFixtureAndFatal(
 		binaryUpgradeStep(c.All(), makeFixtureVersion),
 		waitForUpgradeStep(c.All()),
 
-		func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 			// If we're taking checkpoints, momentarily stop the cluster (we
 			// need to do that to get the checkpoints to reflect a
 			// consistent cluster state). The binary at this point will be
@@ -640,7 +652,7 @@ done
 func importTPCCStep(
 	oldV string, headroomWarehouses int, crdbNodes option.NodeListOption,
 ) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		// We need to use the predecessor binary to load into the
 		// predecessor cluster to avoid random breakage. For example, you
 		// can't use 21.1 to import into 20.2 due to some flag changes.
@@ -664,7 +676,7 @@ func importTPCCStep(
 }
 
 func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		// Use the predecessor binary to load into the predecessor
 		// cluster to avoid random breakage due to flag changes, etc.
 		binary := "./cockroach"

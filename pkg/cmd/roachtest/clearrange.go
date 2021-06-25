@@ -33,14 +33,14 @@ func registerClearRange(r *testRegistry) {
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
 			Cluster:    r.makeClusterSpec(10, spec.CPU(16)),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
 		})
 	}
 }
 
-func runClearRange(ctx context.Context, t *test, c cluster.Cluster, aggressiveChecks bool) {
+func runClearRange(ctx context.Context, t *testImpl, c cluster.Cluster, aggressiveChecks bool) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 	c.Put(ctx, cockroach, "./cockroach")

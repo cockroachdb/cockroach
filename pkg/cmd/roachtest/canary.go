@@ -144,7 +144,7 @@ var canaryRetryOptions = retry.Options{
 // repeatRunE is the same function as c.RunE but with an automatic retry loop.
 func repeatRunE(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	c cluster.Cluster,
 	node option.NodeListOption,
 	operation string,
@@ -175,7 +175,7 @@ func repeatRunE(
 func repeatRunWithBuffer(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t *testImpl,
 	node option.NodeListOption,
 	operation string,
 	args ...string,
@@ -207,7 +207,7 @@ func repeatRunWithBuffer(
 // retry loop.
 func repeatGitCloneE(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	c cluster.Cluster,
 	src, dest, branch string,
 	node option.NodeListOption,
@@ -239,7 +239,7 @@ func repeatGitCloneE(
 // may contain "minor", "point" and "subpoint" in order of decreasing importance
 // for sorting purposes.
 func repeatGetLatestTag(
-	ctx context.Context, t *test, user string, repo string, releaseRegex *regexp.Regexp,
+	ctx context.Context, t *testImpl, user string, repo string, releaseRegex *regexp.Regexp,
 ) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags", user, repo)
 	httpClient := &http.Client{Timeout: 10 * time.Second}

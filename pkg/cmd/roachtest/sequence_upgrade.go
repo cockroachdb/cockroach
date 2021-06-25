@@ -23,14 +23,14 @@ func registerSequenceUpgrade(r *testRegistry) {
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v21.1.0",
 		Cluster:    r.makeClusterSpec(1),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runSequenceUpgradeMigration(ctx, t, c)
 		},
 	})
 }
 
 func statementStep(stmt string, node int, args ...interface{}) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		db := u.conn(ctx, t, node)
 		_, err := db.ExecContext(ctx, stmt, args...)
 		if err != nil {
@@ -60,7 +60,7 @@ func insertSeqTableStep(node int, name string) versionStep {
 }
 
 func verifySequences(node int) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t *testImpl, u *versionUpgradeTest) {
 		db := u.conn(ctx, t, node)
 
 		// Verify that sequences created in older versions cannot be renamed, nor can any
@@ -80,7 +80,7 @@ func verifySequences(node int) versionStep {
 	}
 }
 
-func runSequenceUpgradeMigration(ctx context.Context, t *test, c cluster.Cluster) {
+func runSequenceUpgradeMigration(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	const (
 		v20_2 = "20.2.4"
 		// An empty string means that the cockroach binary specified by flag

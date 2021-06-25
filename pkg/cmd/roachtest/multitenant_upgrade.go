@@ -34,7 +34,7 @@ func registerMultiTenantUpgrade(r *testRegistry) {
 		Cluster:           r.makeClusterSpec(2),
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runMultiTenantUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -54,7 +54,7 @@ type tenantNode struct {
 
 func createTenantNode(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	c cluster.Cluster,
 	binary string,
 	kvAddrs []string,
@@ -74,7 +74,7 @@ func createTenantNode(
 	return tn
 }
 
-func (tn *tenantNode) stop(ctx context.Context, t *test, c cluster.Cluster) {
+func (tn *tenantNode) stop(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	if tn.errCh == nil {
 		return
 	}
@@ -90,7 +90,7 @@ func (tn *tenantNode) logDir() string {
 	return fmt.Sprintf("logs/mt-%d", tn.tenantID)
 }
 
-func (tn *tenantNode) start(ctx context.Context, t *test, c cluster.Cluster, binary string) {
+func (tn *tenantNode) start(ctx context.Context, t *testImpl, c cluster.Cluster, binary string) {
 	tn.binary = binary
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), binary, tn.kvAddrs, tn.tenantID,
@@ -156,7 +156,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c cluster.Cluster, bin
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 13 and make sure it still works.
 //  * Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
-func runMultiTenantUpgrade(ctx context.Context, t *test, c cluster.Cluster, v version.Version) {
+func runMultiTenantUpgrade(ctx context.Context, t *testImpl, c cluster.Cluster, v version.Version) {
 	predecessor, err := PredecessorVersion(v)
 	require.NoError(t, err)
 
@@ -456,7 +456,7 @@ func mkStmt(stmt string, args ...interface{}) sqlVerificationStmt {
 	return sqlVerificationStmt{stmt: stmt, args: args}
 }
 
-func verifySQL(t *test, url string, stmts ...sqlVerificationStmt) {
+func verifySQL(t *testImpl, url string, stmts ...sqlVerificationStmt) {
 	db, err := gosql.Open("postgres", url)
 	if err != nil {
 		t.Fatal(err)

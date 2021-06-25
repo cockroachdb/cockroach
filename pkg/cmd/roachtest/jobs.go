@@ -33,7 +33,7 @@ type jobStarter func(c cluster.Cluster) (string, error)
 // - That the statement running the job is a detached statement, and does not
 // block until the job completes.
 func jobSurvivesNodeShutdown(
-	ctx context.Context, t *test, c cluster.Cluster, nodeToShutdown int, startJob jobStarter,
+	ctx context.Context, t *testImpl, c cluster.Cluster, nodeToShutdown int, startJob jobStarter,
 ) {
 	watcherNode := 1 + (nodeToShutdown)%c.Spec().NodeCount
 	target := c.Node(nodeToShutdown)

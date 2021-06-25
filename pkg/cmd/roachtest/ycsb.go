@@ -35,7 +35,7 @@ func registerYCSB(r *testRegistry) {
 		"F": {8: 96, 32: 144},
 	}
 
-	runYCSB := func(ctx context.Context, t *test, c cluster.Cluster, wl string, cpus int) {
+	runYCSB := func(ctx context.Context, t *testImpl, c cluster.Cluster, wl string, cpus int) {
 		nodes := c.Spec().NodeCount - 1
 
 		conc, ok := concurrencyConfigs[wl][cpus]
@@ -78,7 +78,7 @@ func registerYCSB(r *testRegistry) {
 				Name:    name,
 				Owner:   OwnerKV,
 				Cluster: r.makeClusterSpec(4, spec.CPU(cpus)),
-				Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+				Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},
 			})

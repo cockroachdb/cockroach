@@ -27,7 +27,7 @@ type hibernateOptions struct {
 	buildCmd,
 	testCmd string
 	blocklists  blocklistsForVersion
-	dbSetupFunc func(ctx context.Context, t *test, c cluster.Cluster)
+	dbSetupFunc func(ctx context.Context, t *testImpl, c cluster.Cluster)
 }
 
 var (
@@ -48,7 +48,7 @@ var (
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
 		blocklists: hibernateSpatialBlocklists,
-		dbSetupFunc: func(ctx context.Context, t *test, c cluster.Cluster) {
+		dbSetupFunc: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(
@@ -67,7 +67,7 @@ var (
 func registerHibernate(r *testRegistry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
-		t *test,
+		t *testImpl,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -239,7 +239,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		MinVersion: "v20.2.0",
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
 		},
 	})

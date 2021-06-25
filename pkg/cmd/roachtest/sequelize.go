@@ -24,7 +24,7 @@ var supportedSequelizeRelease = "v6.0.0-alpha.0"
 func registerSequelize(r *testRegistry) {
 	runSequelize := func(
 		ctx context.Context,
-		t *test,
+		t *testImpl,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -151,7 +151,7 @@ func registerSequelize(r *testRegistry) {
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runSequelize(ctx, t, c)
 		},
 	})

@@ -25,7 +25,7 @@ import (
 )
 
 func registerAllocator(r *testRegistry) {
-	runAllocator := func(ctx context.Context, t *test, c cluster.Cluster, start int, maxStdDev float64) {
+	runAllocator := func(ctx context.Context, t *testImpl, c cluster.Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, cockroach, "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
@@ -77,7 +77,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/up/1to3`,
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
@@ -85,7 +85,7 @@ func registerAllocator(r *testRegistry) {
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t *testImpl, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
@@ -255,7 +255,7 @@ func waitForRebalance(
 	}
 }
 
-func runWideReplication(ctx context.Context, t *test, c cluster.Cluster) {
+func runWideReplication(ctx context.Context, t *testImpl, c cluster.Cluster) {
 	nodes := c.Spec().NodeCount
 	if nodes != 9 {
 		t.Fatalf("9-node cluster required")

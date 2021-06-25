@@ -30,7 +30,7 @@ import (
 // expensive dataset restore only if it doesn't.
 func loadTPCHDataset(
 	ctx context.Context,
-	t *test,
+	t *testImpl,
 	c cluster.Cluster,
 	sf int,
 	m *monitor,

@@ -30,7 +30,7 @@ var activerecordAdapterVersion = "v6.1.2"
 func registerActiveRecord(r *testRegistry) {
 	runActiveRecord := func(
 		ctx context.Context,
-		t *test,
+		t *testImpl,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
