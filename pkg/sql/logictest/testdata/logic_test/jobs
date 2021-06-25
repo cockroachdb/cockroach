@@ -22,7 +22,7 @@ SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)    root
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'root'
 ----
-AUTO ZONE CONFIG RECONCILIATION  reconciling zone configurations      root
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations      root
 SCHEMA CHANGE                    updating privileges for database 52  root
 SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)    root
 
@@ -68,7 +68,7 @@ SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)    testuser
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser')
 ----
-AUTO ZONE CONFIG RECONCILIATION  reconciling zone configurations      root
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations      root
 SCHEMA CHANGE                    updating privileges for database 52  root
 SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)    root
 SCHEMA CHANGE                    CREATE INDEX ON test.public.u (x)    testuser
