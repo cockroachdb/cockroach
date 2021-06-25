@@ -367,7 +367,7 @@ func registerBackup(r *testRegistry) {
 				"./workload init tpcc --warehouses=%d {pgurl:1-%d}",
 				warehouses, c.Spec().NodeCount,
 			)}
-			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+			if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
 				cmd = append(cmd, "--deprecated-fk-indexes")
 			}
 			c.Run(ctx, c.Node(1), cmd...)

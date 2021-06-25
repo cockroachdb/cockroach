@@ -174,6 +174,12 @@ type test struct {
 	versionsBinaryOverride map[string]string
 }
 
+// BuildVersion exposes the build version of the cluster
+// in this test.
+func (t *test) BuildVersion() *version.Version {
+	return &t.buildVersion
+}
+
 // Spec returns the TestSpec.
 func (t *test) Spec() TestSpec {
 	return *t.spec
@@ -473,7 +479,7 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 	// prereleases of the specified version. Otherwise, "v2.1.0" would compare
 	// greater than "v2.1.0-alpha.x".
 	vers = version.MustParse(minVersion + "-0")
-	return t.buildVersion.AtLeast(vers)
+	return t.BuildVersion().AtLeast(vers)
 }
 
 // teamCityEscape escapes a string for use as <value> in a key='<value>' attribute

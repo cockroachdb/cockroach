@@ -120,7 +120,7 @@ func setupTPCC(
 		case usingInit:
 			t.Status("initializing tables")
 			extraArgs := opts.ExtraSetupArgs
-			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+			if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
 				extraArgs += " --deprecated-fk-indexes"
 			}
 			cmd := fmt.Sprintf(

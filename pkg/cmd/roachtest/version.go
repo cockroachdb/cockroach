@@ -49,7 +49,7 @@ func registerVersion(r *testRegistry) {
 		loadDuration := " --duration=" + (time.Duration(3*nodes+2)*stageDuration + buffer).String()
 
 		var deprecatedWorkloadsStr string
-		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+		if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
 			deprecatedWorkloadsStr += " --deprecated-fk-indexes"
 		}
 

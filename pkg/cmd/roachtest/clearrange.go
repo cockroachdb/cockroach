@@ -74,7 +74,7 @@ func runClearRange(ctx context.Context, t *test, c cluster.Cluster, aggressiveCh
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
-	if t.buildVersion.AtLeast(version.MustParse("v19.2.0")) {
+	if t.BuildVersion().AtLeast(version.MustParse("v19.2.0")) {
 		conn := c.Conn(ctx, 1)
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 8`); err != nil {
 			t.Fatal(err)
