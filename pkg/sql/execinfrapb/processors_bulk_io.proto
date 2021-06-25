@@ -229,6 +229,8 @@ message SplitAndScatterSpec {
 
   repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
   repeated TableRekey rekeys = 2 [(gogoproto.nullable) = false];
+  // numRestoreWorkers is the number of restore workers on each node.
+  optional int64 num_restore_workers = 3 [(gogoproto.nullable) = false];
 }
 
 // FileCompression list of the compression codecs which are currently

@@ -10,12 +10,10 @@ package backupccl
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -27,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -44,10 +41,6 @@ type restoreDataProcessor struct {
 	output  execinfra.RowReceiver
 
 	kr *KeyRewriter
-
-	// concurrentWorkerLimit is a semaphore that can change capacity, which controls
-	// the number of active restore worker threads.
-	concurrentWorkerLimit *quotapool.IntPool
 
 	// phaseGroup manages the phases of the restore:
 	// 1) reading entries from the input
@@ -67,22 +60,6 @@ var _ execinfra.RowSource = &restoreDataProcessor{}
 
 const restoreDataProcName = "restoreDataProcessor"
 
-const maxConcurrentRestoreWorkers = 32
-
-// TODO(pbardea): It may be worthwhile to combine this setting with the one that
-// controls the number of concurrent AddSSTable requests if each restore worker
-// spends all if its time sending AddSSTable requests.
-//
-// The maximum is not enforced since if the maximum is reduced in the future that
-// may cause the cluster setting to fail.
-var numRestoreWorkers = settings.RegisterIntSetting(
-	"kv.bulk_io_write.restore_node_concurrency",
-	fmt.Sprintf("the number of workers processing a restore per job per node; maximum %d",
-		maxConcurrentRestoreWorkers),
-	1, /* default */
-	settings.PositiveInt,
-)
-
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -91,24 +68,14 @@ func newRestoreDataProcessor(
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	sv := &flowCtx.EvalCtx.Settings.SV
-
 	rd := &restoreDataProcessor{
 		flowCtx: flowCtx,
 		input:   input,
 		spec:    spec,
 		output:  output,
-		progCh:  make(chan RestoreProgress, maxConcurrentRestoreWorkers),
+		progCh:  make(chan RestoreProgress, 1),
 		metaCh:  make(chan *execinfrapb.ProducerMetadata, 1),
-		concurrentWorkerLimit: quotapool.NewIntPool(
-			"restore worker concurrency",
-			uint64(numRestoreWorkers.Get(sv)),
-		),
 	}
-
-	numRestoreWorkers.SetOnChange(sv, func(_ context.Context) {
-		rd.concurrentWorkerLimit.UpdateCapacity(uint64(numRestoreWorkers.Get(sv)))
-	})
 
 	var err error
 	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
@@ -135,7 +102,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.input.Start(ctx)
 
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
-	entries := make(chan execinfrapb.RestoreSpanEntry, maxConcurrentRestoreWorkers)
+	entries := make(chan execinfrapb.RestoreSpanEntry, 1)
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(entries)
 		return inputReader(ctx, rd.input, entries, rd.metaCh)
@@ -211,44 +178,38 @@ func inputReader(
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.RestoreSpanEntry) error {
-	return ctxgroup.GroupWorkers(rd.Ctx, maxConcurrentRestoreWorkers, func(ctx context.Context, n int) error {
-		for {
-			done, err := func() (done bool, _ error) {
-				workerAlloc, err := rd.concurrentWorkerLimit.Acquire(ctx, 1)
-				if err != nil {
-					return done, err
-				}
-				defer rd.concurrentWorkerLimit.Release(workerAlloc)
-
-				entry, ok := <-entries
-				if !ok {
-					done = true
-					return done, nil
-				}
-
-				summary, err := rd.processRestoreSpanEntry(entry)
-				if err != nil {
-					return done, err
-				}
-
-				select {
-				case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs):
-				case <-ctx.Done():
-					return done, ctx.Err()
-				}
-
+	ctx := rd.Ctx
+	doneCh := ctx.Done()
+	for {
+		done, err := func() (done bool, _ error) {
+			entry, ok := <-entries
+			if !ok {
+				done = true
 				return done, nil
-			}()
+			}
 
+			summary, err := rd.processRestoreSpanEntry(entry)
 			if err != nil {
-				return err
+				return done, err
 			}
 
-			if done {
-				return nil
+			select {
+			case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs):
+			case <-doneCh:
+				return done, ctx.Err()
 			}
+
+			return done, nil
+		}()
+
+		if err != nil {
+			return err
 		}
-	})
+
+		if done {
+			return nil
+		}
+	}
 }
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(

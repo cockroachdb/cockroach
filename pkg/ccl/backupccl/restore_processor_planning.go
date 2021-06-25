@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -23,10 +24,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
+
+var defaultRestoreWorkerCount = util.ConstantWithMetamorphicTestRange(
+	"default restore worker count",
+	1,               /* default */
+	1 /* min */, 16, /* max */
+)
+
+var numRestoreWorkers = settings.RegisterIntSetting(
+	"kv.bulk_io_write.restore_concurrency",
+	"the number of workers processing a restore per job per node",
+	int64(defaultRestoreWorkerCount),
+	settings.PositiveInt,
+)
+
+// restoreProcAddress locates a restoreDataProcessor. There may be several on
+// the same node (identified by workerIdx) when the concurrency of the restore
+// is increased.
+type restoreProcAddress struct {
+	nodeID    roachpb.NodeID
+	workerIdx int
+}
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
 // streams back progress updates over the given progCh. The first stage is a
@@ -81,7 +104,9 @@ func distRestore(
 		return err
 	}
 
-	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, rekeys)
+	restoreConcurrency := numRestoreWorkers.Get(&execCtx.ExecCfg().Settings.SV)
+
+	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, rekeys, restoreConcurrency)
 	if err != nil {
 		return err
 	}
@@ -116,18 +141,25 @@ func distRestore(
 			},
 		},
 	}
-	for stream, nodeID := range nodes {
-		startBytes, endBytes, err := routingSpanForNode(nodeID)
-		if err != nil {
-			return err
-		}
+	for nodeIdx, nodeID := range nodes {
+		for workerIdx := 0; workerIdx < int(restoreConcurrency); workerIdx++ {
+			stream := nodeIdx*int(restoreConcurrency) + workerIdx
+			restoreProcAddr := restoreProcAddress{
+				nodeID:    nodeID,
+				workerIdx: workerIdx,
+			}
+			startBytes, endBytes, err := routingSpanForNode(restoreProcAddr)
+			if err != nil {
+				return err
+			}
 
-		span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
-			Start:  startBytes,
-			End:    endBytes,
-			Stream: int32(stream),
+			span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
+				Start:  startBytes,
+				End:    endBytes,
+				Stream: int32(stream),
+			}
+			rangeRouterSpec.Spans = append(rangeRouterSpec.Spans, span)
 		}
-		rangeRouterSpec.Spans = append(rangeRouterSpec.Spans, span)
 	}
 	// The router expects the spans to be sorted.
 	sort.Slice(rangeRouterSpec.Spans, func(i, j int) bool {
@@ -162,42 +194,48 @@ func distRestore(
 		splitAndScatterProcs[n] = pIdx
 	}
 
-	// Plan RestoreData.
+	// Plan RestoreData processors.
 	restoreDataStageID := p.NewStageOnNodes(nodes)
-	restoreDataProcs := make(map[roachpb.NodeID]physicalplan.ProcessorIdx)
+	restoreDataProcs := make(map[restoreProcAddress]physicalplan.ProcessorIdx)
 	for _, n := range nodes {
-		proc := physicalplan.Processor{
-			Node: n,
-			Spec: execinfrapb.ProcessorSpec{
-				Input: []execinfrapb.InputSyncSpec{
-					{ColumnTypes: splitAndScatterOutputTypes},
+		for workerIdx := 0; workerIdx < int(restoreConcurrency); workerIdx++ {
+			proc := physicalplan.Processor{
+				Node: n,
+				Spec: execinfrapb.ProcessorSpec{
+					Input: []execinfrapb.InputSyncSpec{
+						{ColumnTypes: splitAndScatterOutputTypes},
+					},
+					Core:        execinfrapb.ProcessorCoreUnion{RestoreData: &restoreDataSpec},
+					Post:        execinfrapb.PostProcessSpec{},
+					Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+					StageID:     restoreDataStageID,
+					ResultTypes: []*types.T{},
 				},
-				Core:        execinfrapb.ProcessorCoreUnion{RestoreData: &restoreDataSpec},
-				Post:        execinfrapb.PostProcessSpec{},
-				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID:     restoreDataStageID,
-				ResultTypes: []*types.T{},
-			},
+			}
+			pIdx := p.AddProcessor(proc)
+			restoreProcAddr := restoreProcAddress{nodeID: n, workerIdx: workerIdx}
+			restoreDataProcs[restoreProcAddr] = pIdx
+			p.ResultRouters = append(p.ResultRouters, pIdx)
 		}
-		pIdx := p.AddProcessor(proc)
-		restoreDataProcs[n] = pIdx
-		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
 
 	for _, srcProc := range splitAndScatterProcs {
-		slot := 0
+		srcSlot := 0
 		for _, destNode := range nodes {
-			// Streams were added to the range router in the same order that the
-			// nodes appeared in `nodes`. Make sure that the `slot`s here are
-			// ordered the same way.
-			destProc := restoreDataProcs[destNode]
-			p.Streams = append(p.Streams, physicalplan.Stream{
-				SourceProcessor:  srcProc,
-				SourceRouterSlot: slot,
-				DestProcessor:    destProc,
-				DestInput:        0,
-			})
-			slot++
+			for workerIdx := 0; workerIdx < int(restoreConcurrency); workerIdx++ {
+				// Streams were added to the range router in the same order that the
+				// nodes appeared in `nodes`. Make sure that the `srcSlot`s here are
+				// ordered the same way.
+				restoreProcAddr := restoreProcAddress{nodeID: destNode, workerIdx: workerIdx}
+				destProc := restoreDataProcs[restoreProcAddr]
+				p.Streams = append(p.Streams, physicalplan.Stream{
+					SourceProcessor:  srcProc,
+					SourceRouterSlot: srcSlot,
+					DestProcessor:    destProc,
+					DestInput:        0,
+				})
+				srcSlot++
+			}
 		}
 	}
 
@@ -236,7 +274,10 @@ func distRestore(
 // spec that should be planned on that node. Given the chunks of ranges to
 // import it round-robin distributes the chunks amongst the given nodes.
 func makeSplitAndScatterSpecs(
-	nodes []roachpb.NodeID, chunks [][]execinfrapb.RestoreSpanEntry, rekeys []execinfrapb.TableRekey,
+	nodes []roachpb.NodeID,
+	chunks [][]execinfrapb.RestoreSpanEntry,
+	rekeys []execinfrapb.TableRekey,
+	restoreWorkerCount int64,
 ) (map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec, error) {
 	specsByNodes := make(map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {
@@ -247,6 +288,7 @@ func makeSplitAndScatterSpecs(
 			})
 		} else {
 			specsByNodes[node] = &execinfrapb.SplitAndScatterSpec{
+				NumRestoreWorkers: restoreWorkerCount,
 				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{{
 					Entries: chunk,
 				}},
