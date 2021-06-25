@@ -62,7 +62,7 @@ func registerSQLSmith(r *testRegistry) {
 		// Set up a statement logger for easy reproduction. We only
 		// want to log successful statements and statements that
 		// produced a final error or panic.
-		smithLog, err := os.Create(filepath.Join(t.artifactsDir, "sqlsmith.log"))
+		smithLog, err := os.Create(filepath.Join(t.ArtifactsDir(), "sqlsmith.log"))
 		if err != nil {
 			t.Fatalf("could not create sqlsmith.log: %v", err)
 		}
