@@ -1770,7 +1770,7 @@ var (
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "start_key", ID: 1, Type: types.Bytes},
 			{Name: "end_key", ID: 2, Type: types.Bytes},
-			{Name: "config", ID: 3, Type: types.Bytes, Nullable: true},
+			{Name: "config", ID: 3, Type: types.Bytes},
 		},
 		NextColumnID: 4,
 		Families: []descpb.ColumnFamilyDescriptor{

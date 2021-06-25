@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,7 +91,7 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
 
-var _ config.SpanConfigAccessor = (*Connector)(nil)
+var _ spanconfig.Accessor = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -438,7 +439,7 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	}
 }
 
-// GetSpanConfigsFor implements the config.SpanConfigAccessor interface.
+// GetSpanConfigsFor implements the spanconfig.Accessor interface.
 func (c *Connector) GetSpanConfigsFor(
 	ctx context.Context, span roachpb.Span,
 ) ([]roachpb.SpanConfigEntry, error) {
@@ -458,25 +459,21 @@ func (c *Connector) GetSpanConfigsFor(
 	return nil, ctx.Err()
 }
 
-// UpdateSpanConfigEntries implements the config.SpanConfigAccessor interface.
+// UpdateSpanConfigEntries implements the spanconfig.Accessor
+// interface.
 func (c *Connector) UpdateSpanConfigEntries(
-	ctx context.Context, upsert, delete []roachpb.SpanConfigEntry,
+	ctx context.Context, update []roachpb.SpanConfigEntry, delete []roachpb.Span,
 ) error {
-	// TODO(zcfgs-pod): Wire this up to the reconciliation job for it to be able
-	// to write out span config entries.
 	for ctx.Err() == nil {
 		client, err := c.getClient(ctx)
 		if err != nil {
 			continue
 		}
 		_, err = client.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			SpanConfigsToUpsert: upsert,
-			SpanConfigsToDelete: delete,
+			SpanConfigsToUpdate: update,
+			SpansToDelete:       delete,
 		})
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}
 	return ctx.Err()
 }
