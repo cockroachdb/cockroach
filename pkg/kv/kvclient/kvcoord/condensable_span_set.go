@@ -75,6 +75,9 @@ func (s *condensableSpanSet) mergeAndSort() {
 // limit. Condensing is only performed at the level of individual ranges, not
 // across ranges, so it's possible to not be able to condense as much as
 // desired.
+//
+// maxBytes may be zero, or even negative. In that case, each range will be
+// maximally condensed.
 func (s *condensableSpanSet) maybeCondense(
 	ctx context.Context, riGen rangeIteratorFactory, maxBytes int64,
 ) bool {
@@ -162,6 +165,14 @@ func (s *condensableSpanSet) maybeCondense(
 func (s *condensableSpanSet) asSlice() []roachpb.Span {
 	l := len(s.s)
 	return s.s[:l:l] // immutable on append
+}
+
+func (s *condensableSpanSet) asSortedSlice() []roachpb.Span {
+	set := s.asSlice()
+	cpy := make(roachpb.Spans, len(set))
+	copy(cpy, set)
+	sort.Sort(cpy)
+	return cpy
 }
 
 // empty returns whether the set is empty or whether it contains spans.

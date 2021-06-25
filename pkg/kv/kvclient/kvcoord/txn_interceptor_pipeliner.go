@@ -32,15 +32,10 @@ var pipelinedWritesEnabled = settings.RegisterBoolSetting(
 	"if enabled, transactional writes are pipelined through Raft consensus",
 	true,
 )
-var pipelinedWritesMaxInFlightSize = settings.RegisterByteSizeSetting(
-	// TODO(nvanbenschoten): The need for this extra setting alongside
-	// kv.transaction.max_intents_bytes indicates that we should explore
-	// the unification of intent tracking and in-flight write tracking.
-	// The two mechanisms track subtly different information, but there's
-	// no fundamental reason why they can't be unified.
+var _ = settings.RegisterByteSizeSetting(
 	"kv.transaction.write_pipelining_max_outstanding_size",
-	"maximum number of bytes used to track in-flight pipelined writes before disabling pipelining",
-	1<<18, /* 256 KB */
+	"deprecated setting; no longer has any effect",
+	0,
 )
 var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 	"kv.transaction.write_pipelining_max_batch_size",
@@ -57,16 +52,22 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// trackedWritesMaxSize is a threshold in bytes for lock spans stored on the
-// coordinator during the lifetime of a transaction. Locks are included with a
-// transaction on commit or abort, to be cleaned up asynchronously. If they
-// exceed this threshold, they're condensed to avoid memory blowup both on the
-// coordinator and (critically) on the EndTxn command at the Raft group
-// responsible for the transaction record.
+// trackedWritesMaxSize is a byte threshold for the tracking of writes performed
+// a single transaction. This includes the tracking of lock spans and of
+// in-flight writes, both stored in the txnPipeliner.
 //
-// NB: this is called "max_intents_bytes" instead of "max_lock_bytes" because
-// it was created before the concept of intents were generalized to locks.
-// Switching it would require a migration which doesn't seem worth it.
+// Locks are included with a transaction on commit or abort, to be cleaned up
+// asynchronously. If they exceed this threshold, they're condensed to avoid
+// memory blowup both on the coordinator and (critically) on the EndTxn command
+// at the Raft group responsible for the transaction record.
+//
+// The in-flight writes are, on the happy path, also attached to the commit
+// EndTxn. On less happy paths, they are turned into lock spans.
+//
+// NB: this is called "max_intents_bytes" instead of "max_lock_bytes" because it
+// was created before the concept of intents were generalized to locks, and also
+// before we introduced in-flight writes with the "parallel commits". Switching
+// it would require a migration which doesn't seem worth it.
 var trackedWritesMaxSize = settings.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
@@ -248,7 +249,7 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, pErr
 	}
 
-	ba.AsyncConsensus = tp.canUseAsyncConsensus(ba)
+	ba.AsyncConsensus = tp.canUseAsyncConsensus(ctx, ba)
 
 	// Adjust the batch so that it doesn't miss any in-flight writes.
 	ba = tp.chainToInFlightWrites(ba)
@@ -336,16 +337,15 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 
 // canUseAsyncConsensus checks the conditions necessary for this batch to be
 // allowed to set the AsyncConsensus flag.
-func (tp *txnPipeliner) canUseAsyncConsensus(ba roachpb.BatchRequest) bool {
+func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba roachpb.BatchRequest) bool {
 	if !pipelinedWritesEnabled.Get(&tp.st.SV) || tp.disabled {
 		return false
 	}
 
-	// We provide a setting to bound the size of in-flight writes that the
-	// pipeliner is tracking. If this batch would push us over this setting,
-	// don't allow it to perform async consensus.
+	// There's a memory budget for lock tracking. If this batch would push us over
+	// this setting, don't allow it to perform async consensus.
 	addedIFBytes := int64(0)
-	maxIFBytes := pipelinedWritesMaxInFlightSize.Get(&tp.st.SV)
+	maxTrackingBytes := trackedWritesMaxSize.Get(&tp.st.SV)
 
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove
@@ -374,15 +374,20 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ba roachpb.BatchRequest) bool {
 			// worth it.
 			return false
 		}
-		// Only allow batches that would not push us over the maximum
-		// in-flight write size limit to perform consensus asynchronously.
+		// Inhibit async consensus if the batch would push us over the maximum
+		// tracking memory budget. If we allowed async consensus on this batch, its
+		// writes would need to be tracked precisely. By inhibiting async consensus,
+		// its writes will only need to be tracked as locks, and we can compress the
+		// lock spans with loss of fidelity. This helps both memory usage and the
+		// eventual size of the Raft command for the commit.
 		//
 		// NB: this estimation is conservative because it doesn't factor
 		// in that some writes may be proven by this batch and removed
 		// from the in-flight write set. The real accounting in
 		// inFlightWriteSet.{insert,remove} gets this right.
 		addedIFBytes += keySize(req.Header().Key)
-		if (tp.ifWrites.byteSize() + addedIFBytes) > maxIFBytes {
+		if (tp.ifWrites.byteSize() + addedIFBytes + tp.lockFootprint.bytes) > maxTrackingBytes {
+			log.VEventf(ctx, 4, "cannot perform async consensus because of memory budget limit")
 			return false
 		}
 	}
@@ -505,7 +510,11 @@ func (tp *txnPipeliner) updateLockTracking(
 	// After adding new writes to the lock footprint, check whether we need to
 	// condense the set to stay below memory limits.
 	alreadyCondensed := tp.lockFootprint.condensed
-	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
+	// Compute how many bytes we can allocate for locks. We account for the
+	// inflight-writes conservatively, since these might turn into lock spans
+	// later.
+	locksBudget := trackedWritesMaxSize.Get(&tp.st.SV) - tp.ifWrites.byteSize()
+	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, locksBudget)
 	if condensed && !alreadyCondensed {
 		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
 			log.Warningf(ctx,
@@ -521,23 +530,6 @@ func (tp *txnPipeliner) updateLockTracking(
 func (tp *txnPipeliner) updateLockTrackingInner(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) {
-	// After adding new writes to the lock footprint, check whether we need to
-	// condense the set to stay below memory limits.
-	defer func() {
-		alreadyCondensed := tp.lockFootprint.condensed
-		condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
-		if condensed && !alreadyCondensed {
-			if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-				log.Warningf(ctx,
-					"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
-						"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
-					ba.Txn, ba.Summary())
-			}
-			tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
-			tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
-		}
-	}()
-
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
 	// concurrent requests for extended periods of time. See #3346.
