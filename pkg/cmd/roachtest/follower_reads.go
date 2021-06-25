@@ -623,7 +623,7 @@ func verifyHighFollowerReadRatios(
 		}
 	}
 
-	t.logger().Printf("interval stats: %s", intervalsToString(stats))
+	t.L().Printf("interval stats: %s", intervalsToString(stats))
 
 	// Now count how many intervals have more than the tolerated number of nodes
 	// with low follower read ratios.

@@ -660,7 +660,7 @@ type testI interface {
 	// Path to a directory where the test is supposed to store its log and other
 	// artifacts.
 	ArtifactsDir() string
-	logger() *logger.Logger
+	L() *logger.Logger
 	Status(args ...interface{})
 }
 
@@ -1028,7 +1028,7 @@ func attachToExistingCluster(
 // TODO(andrei): Get rid of c.t, c.l and of this method.
 func (c *clusterImpl) setTest(t testI) {
 	c.t = t
-	c.l = t.logger()
+	c.l = t.L()
 }
 
 // StopCockroachGracefullyOnNode stops a running cockroach instance on the requested

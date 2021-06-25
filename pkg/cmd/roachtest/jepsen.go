@@ -194,7 +194,7 @@ func runJepsen(ctx context.Context, t *test, c cluster.Cluster, testName, nemesi
 			r := regexp.MustCompile("Could not transfer artifact|Failed to read artifact descriptor for")
 			match := r.FindStringSubmatch(GetStderr(err))
 			if match != nil {
-				t.logger().PrintfCtx(ctx, "failure installing deps (\"%s\")\nfull err: %+v",
+				t.L().PrintfCtx(ctx, "failure installing deps (\"%s\")\nfull err: %+v",
 					match, err)
 				t.Skipf("failure installing deps (\"%s\"); in the past it's been transient", match)
 			}

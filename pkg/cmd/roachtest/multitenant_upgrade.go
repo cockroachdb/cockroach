@@ -82,7 +82,7 @@ func (tn *tenantNode) stop(ctx context.Context, t *test, c cluster.Cluster) {
 	// process to exit.
 	c.Run(ctx, c.Node(tn.node),
 		fmt.Sprintf("pkill -o -f '^%s mt start.*tenant-id=%d'", tn.binary, tn.tenantID))
-	t.logger().Printf("mt cluster exited: %v", <-tn.errCh)
+	t.L().Printf("mt cluster exited: %v", <-tn.errCh)
 	tn.errCh = nil
 }
 

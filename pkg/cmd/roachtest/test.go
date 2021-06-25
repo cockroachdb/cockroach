@@ -191,7 +191,8 @@ func (t *test) Name() string {
 	return t.spec.Name
 }
 
-func (t *test) logger() *logger.Logger {
+// L returns the test's logger.
+func (t *test) L() *logger.Logger {
 	return t.l
 }
 

@@ -115,7 +115,7 @@ func runSchemaChangeRandomLoad(
 			if err := rows.Scan(&id, &databaseName, &schemaName, &objName, &objError); err != nil {
 				t.Fatal(err)
 			}
-			t.logger().Errorf(
+			t.L().Errorf(
 				"invalid object found: id: %d, database_name: %s, schema_name: %s, obj_name: %s, error: %s",
 				id, databaseName, schemaName, objName, objError,
 			)
