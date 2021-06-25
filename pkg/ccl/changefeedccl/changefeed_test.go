@@ -120,6 +120,7 @@ func TestChangefeedBasics(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
 	// cloudStorageTest is a regression test for #36994.
@@ -212,6 +213,7 @@ func TestChangefeedDiff(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedTenants(t *testing.T) {
@@ -330,6 +332,7 @@ func TestChangefeedFullTableName(t *testing.T) {
 	//t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedMultiTable(t *testing.T) {
@@ -355,6 +358,7 @@ func TestChangefeedMultiTable(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedCursor(t *testing.T) {
@@ -415,6 +419,7 @@ func TestChangefeedCursor(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedTimestamps(t *testing.T) {
@@ -477,6 +482,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedMVCCTimestamps(t *testing.T) {
@@ -507,6 +513,7 @@ func TestChangefeedMVCCTimestamps(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {
@@ -539,6 +546,7 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
@@ -587,6 +595,7 @@ func TestChangefeedInitialScan(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedUserDefinedTypes(t *testing.T) {
@@ -647,6 +656,7 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedExternalIODisabled(t *testing.T) {
@@ -879,6 +889,7 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1, regexp.MustCompile("cdc ux violation"),
 		log.WithFlattenedSensitiveData)
@@ -1064,6 +1075,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
@@ -1119,6 +1131,7 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
@@ -1220,6 +1233,7 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
@@ -1315,6 +1329,7 @@ func TestChangefeedColumnFamily(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedAuthorization(t *testing.T) {
@@ -1448,6 +1463,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedFailOnRBRChange(t *testing.T) {
@@ -1489,6 +1505,7 @@ func TestChangefeedFailOnRBRChange(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTestWithServerArgs(withTestServerRegion, testFn))
 	t.Run(`cloudstorage`, cloudStorageTestWithServerArg(withTestServerRegion, testFn))
 	t.Run(`kafka`, kafkaTestWithServerArgs(withTestServerRegion, testFn))
+	t.Run(`webhook`, webhookTestWithServerArgs(withTestServerRegion, testFn))
 }
 
 func TestChangefeedStopOnSchemaChange(t *testing.T) {
@@ -1636,6 +1653,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedNoBackfill(t *testing.T) {
@@ -1753,6 +1771,7 @@ func TestChangefeedNoBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedComputedColumn(t *testing.T) {
@@ -1783,6 +1802,7 @@ func TestChangefeedComputedColumn(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedUpdatePrimaryKey(t *testing.T) {
@@ -1817,6 +1837,7 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedTruncateOrDrop(t *testing.T) {
@@ -1880,6 +1901,7 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedMonitoring(t *testing.T) {
@@ -2118,6 +2140,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 // TestChangefeedDataTTL ensures that changefeeds fail with an error in the case
@@ -2309,6 +2332,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn))
 	t.Run("cloudstorage", cloudStorageTest(testFn))
 	t.Run("kafka", kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedErrors(t *testing.T) {
@@ -2570,10 +2594,15 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `client has run out of available brokers`,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
-	// The avro format doesn't support key_in_value yet.
+	// The avro format doesn't support key_in_value or topic_in_value yet.
 	sqlDB.ExpectErr(
 		t, `key_in_value is not supported with format=experimental_avro`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, format='experimental_avro'`,
+		`kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `topic_in_value is not supported with format=experimental_avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, format='experimental_avro'`,
 		`kafka://nope`,
 	)
 
@@ -2597,6 +2626,16 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `key_in_value is only usable with envelope=wrapped`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, envelope='row'`, `kafka://nope`,
+	)
+
+	// WITH topic_in_value requires envelope=wrapped
+	sqlDB.ExpectErr(
+		t, `topic_in_value is only usable with envelope=wrapped`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, envelope='key_only'`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `topic_in_value is only usable with envelope=wrapped`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, envelope='row'`, `kafka://nope`,
 	)
 
 	// WITH diff requires envelope=wrapped
@@ -2629,6 +2668,59 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `failed to parse certificate data`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=Zm9v`,
+	)
+
+	// Sanity check http sink options.
+	sqlDB.ExpectErr(
+		t, `unsupported sink: https. HTTP endpoints can be used with webhook-https and experimental-https`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `param insecure_tls_skip_verify must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?insecure_tls_skip_verify=foo`,
+	)
+	sqlDB.ExpectErr(
+		t, `param ca_cert must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?ca_cert=?`,
+	)
+	sqlDB.ExpectErr(
+		t, `failed to parse certificate data`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?ca_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `sink requires https`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-http://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with format=experimental_avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`webhook-https://fake-host`, schemaReg.URL(),
+	)
+	sqlDB.ExpectErr(
+		t, `option webhook_client_timeout must be a positive duration`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='not_an_integer'`, `webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `option webhook_client_timeout must be a positive duration`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='0s'`, `webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `option webhook_client_timeout must be a positive duration`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='-500s'`, `webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `option webhook_client_timeout must be a positive duration`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='0.5'`, `webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with envelope=key_only`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
+		`webhook-https://fake-host`,
+	)
+	sqlDB.ExpectErr(
+		t, `this sink is incompatible with envelope=row`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='row'`,
+		`webhook-https://fake-host`,
 	)
 }
 
@@ -2722,6 +2814,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
@@ -2766,6 +2859,7 @@ func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedProtectedTimestamps(t *testing.T) {
@@ -3009,6 +3103,7 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 		t.Run(`enterprise`, enterpriseTest(testFn(shouldPause)))
 		t.Run(`cloudstorage`, cloudStorageTest(testFn(shouldPause)))
 		t.Run(`kafka`, kafkaTest(testFn(shouldPause)))
+		t.Run(`webhook`, webhookTest(testFn(shouldPause)))
 	})
 
 }
@@ -3070,6 +3165,7 @@ func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTestWithServerArgs(setStoreKnobs, testFn))
 	t.Run(`cloudstorage`, cloudStorageTestWithServerArg(setStoreKnobs, testFn))
 	t.Run(`kafka`, kafkaTestWithServerArgs(setStoreKnobs, testFn))
+	t.Run(`webhook`, webhookTestWithServerArgs(setStoreKnobs, testFn))
 }
 
 func TestManyChangefeedsOneTable(t *testing.T) {
@@ -3125,6 +3221,7 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestUnspecifiedPrimaryKey(t *testing.T) {
@@ -3543,6 +3640,7 @@ INSERT INTO foo VALUES (1, 'f');
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 // Primary key changes are supported by changefeeds starting in 21.1. This test
@@ -3643,6 +3741,7 @@ INSERT INTO bar VALUES (6, 'f');
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 // Primary key changes are supported by changefeeds starting in 21.1.
@@ -3685,6 +3784,7 @@ func TestChangefeedPrimaryKeyChangeMixedVersion(t *testing.T) {
 	t.Run("enterprise", enterpriseTestWithServerArgs(setMixedVersion, testFn))
 	t.Run("cloudstorage", cloudStorageTestWithServerArg(setMixedVersion, testFn))
 	t.Run("kafka", kafkaTestWithServerArgs(setMixedVersion, testFn))
+	t.Run("webhook", webhookTestWithServerArgs(setMixedVersion, testFn))
 }
 
 // TestChangefeedCheckpointSchemaChange tests to make sure that writes that
@@ -3830,6 +3930,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn))
 	t.Run("cloudstorage", cloudStorageTest(testFn))
 	t.Run("kafka", kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func TestChangefeedBackfillCheckpoint(t *testing.T) {

@@ -48,7 +48,7 @@ type TestFeed interface {
 	// by Next.
 	Partitions() []string
 	// Next returns the next message. Within a given topic+partition, the order is
-	// preserved, but not otherwisete. Either len(key) and len(value) will be
+	// preserved, but not otherwise. Either len(key) and len(value) will be
 	// greater than zero (a row updated) or len(payload) will be (a resolved
 	// timestamp).
 	Next() (*TestFeedMessage, error)
