@@ -1168,13 +1168,13 @@ insert decimals
       │    │    │    │    │    ├── columns: column1:6!null column2:7
       │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
       │    │    │    │    └── projections
-      │    │    │    │         └── 1.23 [as=column8:8]
+      │    │    │    │         └── 1.23::DECIMAL(10,1) [as=column8:8]
       │    │    │    └── projections
       │    │    │         ├── crdb_internal.round_decimal_values(column1:6, 0) [as=a:9]
       │    │    │         ├── crdb_internal.round_decimal_values(column2:7, 1) [as=b:10]
       │    │    │         └── crdb_internal.round_decimal_values(column8:8, 1) [as=c:11]
       │    │    └── projections
-      │    │         └── a:9 + c:11 [as=column12:12]
+      │    │         └── (a:9 + c:11::DECIMAL)::DECIMAL(10,1) [as=column12:12]
       │    └── projections
       │         └── crdb_internal.round_decimal_values(column12:12, 1) [as=d:13]
       └── projections

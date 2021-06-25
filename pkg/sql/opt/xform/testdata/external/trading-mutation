@@ -1593,7 +1593,7 @@ update cardsinfo [as=ci]
       │         └── const-agg [as=q:35, outer=(35)]
       │              └── q:35
       └── projections
-           ├── crdb_internal.round_decimal_values(buyprice:22::DECIMAL - discount:24::DECIMAL, 4) [as=discountbuyprice:50, outer=(22,24), immutable]
+           ├── crdb_internal.round_decimal_values((buyprice:22::DECIMAL - discount:24::DECIMAL)::DECIMAL(10,4), 4) [as=discountbuyprice:50, outer=(22,24), immutable]
            ├── CAST(NULL AS STRING) [as=column47:47]
            ├── 0 [as=column48:48]
            └── COALESCE(sum_int:44, 0) [as=actualinventory_new:46, outer=(44)]

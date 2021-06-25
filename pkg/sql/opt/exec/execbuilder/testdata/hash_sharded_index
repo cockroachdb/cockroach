@@ -28,7 +28,7 @@ vectorized: true
     └── • render
         │ columns: (column6, column1)
         │ estimated row count: 2
-        │ render column6: mod(fnv32(COALESCE(column1::STRING, '')), 11)
+        │ render column6: mod(fnv32(COALESCE(column1::STRING, '')), 11)::INT4
         │ render column1: column1
         │
         └── • values
@@ -63,7 +63,7 @@ vectorized: true
     └── • render
         │ columns: (column8, column7, column1)
         │ estimated row count: 2
-        │ render column8: mod(fnv32(COALESCE(column1::STRING, '')), 12)
+        │ render column8: mod(fnv32(COALESCE(column1::STRING, '')), 12)::INT4
         │ render column7: unique_rowid()
         │ render column1: column1
         │

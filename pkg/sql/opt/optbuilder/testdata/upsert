@@ -1722,13 +1722,13 @@ upsert decimals
       │    │    │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7
       │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── 1.23 [as=column8:8]
+      │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=column8:8]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:6, 0) [as=a:9]
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:7, 1) [as=b:10]
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column8:8, 1) [as=c:11]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a:9 + c:11 [as=column12:12]
+      │    │    │    │    │    │         └── (a:9 + c:11::DECIMAL)::DECIMAL(10,1) [as=column12:12]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── crdb_internal.round_decimal_values(column12:12, 1) [as=d:13]
       │    │    │    │    └── aggregations
@@ -1742,11 +1742,11 @@ upsert decimals
       │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── decimals.d:17
-      │    │    │    │              └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL
+      │    │    │    │              └── (decimals.a:14::DECIMAL + decimals.c:16::DECIMAL)::DECIMAL(10,1)
       │    │    │    └── filters
       │    │    │         └── a:9 = decimals.a:14
       │    │    └── projections
-      │    │         └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL [as=column19:19]
+      │    │         └── (decimals.a:14::DECIMAL + decimals.c:16::DECIMAL)::DECIMAL(10,1) [as=column19:19]
       │    └── projections
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN a:9 ELSE decimals.a:14 END [as=upsert_a:20]
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN c:11 ELSE decimals.c:16 END [as=upsert_c:21]
@@ -1794,13 +1794,13 @@ upsert decimals
       │    │    │    │    │    │    │    │    │    └── (1.1,)
       │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │         ├── NULL::DECIMAL(5,1)[] [as=column7:7]
-      │    │    │    │    │    │    │    │         └── 1.23 [as=column8:8]
+      │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=column8:8]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:6, 0) [as=a:9]
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column7:7, 1) [as=b:10]
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column8:8, 1) [as=c:11]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a:9 + c:11 [as=column12:12]
+      │    │    │    │    │    │         └── (a:9 + c:11::DECIMAL)::DECIMAL(10,1) [as=column12:12]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── crdb_internal.round_decimal_values(column12:12, 1) [as=d:13]
       │    │    │    │    └── aggregations
@@ -1814,11 +1814,11 @@ upsert decimals
       │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── decimals.d:17
-      │    │    │    │              └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL
+      │    │    │    │              └── (decimals.a:14::DECIMAL + decimals.c:16::DECIMAL)::DECIMAL(10,1)
       │    │    │    └── filters
       │    │    │         └── a:9 = decimals.a:14
       │    │    └── projections
-      │    │         └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL [as=column19:19]
+      │    │         └── (decimals.a:14::DECIMAL + decimals.c:16::DECIMAL)::DECIMAL(10,1) [as=column19:19]
       │    └── projections
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN a:9 ELSE decimals.a:14 END [as=upsert_a:20]
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN b:10 ELSE decimals.b:15 END [as=upsert_b:21]
@@ -1874,13 +1874,13 @@ upsert decimals
       │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7
       │    │    │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │    │         └── 1.23 [as=column8:8]
+      │    │    │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=column8:8]
       │    │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:6, 0) [as=a:9]
       │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:7, 1) [as=b:10]
       │    │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column8:8, 1) [as=c:11]
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── a:9 + c:11 [as=column12:12]
+      │    │    │    │    │    │    │    │         └── (a:9 + c:11::DECIMAL)::DECIMAL(10,1) [as=column12:12]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column12:12, 1) [as=d:13]
       │    │    │    │    │    │    └── aggregations
@@ -1894,7 +1894,7 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │         └── decimals.d:17
-      │    │    │    │    │    │              └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL
+      │    │    │    │    │    │              └── (decimals.a:14::DECIMAL + decimals.c:16::DECIMAL)::DECIMAL(10,1)
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a:9 = decimals.a:14
       │    │    │    │    └── projections
@@ -1902,7 +1902,7 @@ upsert decimals
       │    │    │    └── projections
       │    │    │         └── crdb_internal.round_decimal_values(b_new:19, 1) [as=b:20]
       │    │    └── projections
-      │    │         └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL [as=column21:21]
+      │    │         └── (decimals.a:14::DECIMAL + decimals.c:16::DECIMAL)::DECIMAL(10,1) [as=column21:21]
       │    └── projections
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN a:9 ELSE decimals.a:14 END [as=upsert_a:22]
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN b:10 ELSE b:20 END [as=upsert_b:23]
