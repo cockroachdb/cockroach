@@ -3077,8 +3077,6 @@ Support status: [reserved](#support-status)
 
 CARequest requests the CA cert anchoring this service.
 
-No information needed.
-
 
 
 

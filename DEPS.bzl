@@ -3403,17 +3403,14 @@ def go_deps():
     )
     go_repository(
         name = "com_github_prometheus_client_model",
-        build_directives = [
-            "gazelle:proto_import_prefix prometheus/client_model/",
-        ],
         build_file_proto_mode = "package",
         importpath = "github.com/prometheus/client_model",
         patch_args = ["-p1"],
         patches = [
             "@cockroach//build/patches:com_github_prometheus_client_model.patch",
         ],
-        sum = "h1:uq5h0d+GuxiXLJLNABMgp2qUWDPiLvgCzz2dUR+/W/M=",
-        version = "v0.2.0",
+        sum = "h1:CmF68hwI0XsOQ5UwlBopMi2Ow4Pbg32akc4KIVCOm+Y=",
+        version = "v0.2.1-0.20210607210712-147c58e9608a",
     )
     go_repository(
         name = "com_github_prometheus_common",
