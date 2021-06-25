@@ -75,7 +75,7 @@ func runNetworkSanity(ctx context.Context, t *test, origC cluster.Cluster, nodes
 				"BEGIN; INSERT INTO test.commit VALUES (2, %[1]d), (1, %[1]d), (3, %[1]d); COMMIT",
 				i,
 			))
-			t.l.Printf("%s\n", duration)
+			t.L().Printf("%s\n", duration)
 		}
 
 		c.Measure(ctx, 1, `
@@ -181,7 +181,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 		// both the "upstream" and "downstream" directions, this is in fact an asymmetric partition since
 		// it only affects connections *to* the node. n1 itself can connect to the cluster just fine.
 		proxy := c.Proxy(1)
-		t.l.Printf("letting inbound traffic to first node time out")
+		t.L().Printf("letting inbound traffic to first node time out")
 		for _, direction := range []string{"upstream", "downstream"} {
 			if _, err := proxy.AddToxic("", "timeout", direction, 1, toxiproxy.Attributes{
 				"timeout": 0, // forever
@@ -196,13 +196,13 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 		for {
 			cur := checkGoroutines(ctx)
 			if maxSeen < cur {
-				t.l.Printf("new goroutine peak: %d", cur)
+				t.L().Printf("new goroutine peak: %d", cur)
 				maxSeen = cur
 			}
 
 			select {
 			case <-done:
-				t.l.Printf("done checking goroutines, repairing network")
+				t.L().Printf("done checking goroutines, repairing network")
 				// Repair the network. Note that the TPCC workload would never
 				// finish (despite the duration) without this. In particular,
 				// we don't want to m.Wait() before we do this.
@@ -215,12 +215,12 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 						t.Fatal(err)
 					}
 				}
-				t.l.Printf("network is repaired")
+				t.L().Printf("network is repaired")
 
 				// Verify that goroutine count doesn't spike.
 				for i := 0; i < 20; i++ {
 					nowGoroutines := checkGoroutines(ctx)
-					t.l.Printf("currently at most %d goroutines per node", nowGoroutines)
+					t.L().Printf("currently at most %d goroutines per node", nowGoroutines)
 					time.Sleep(time.Second)
 				}
 

@@ -42,7 +42,7 @@ func registerFlowable(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest Flowable release is %s.", latestTag)
+		t.L().Printf("Latest Flowable release is %s.", latestTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,

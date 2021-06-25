@@ -696,7 +696,7 @@ type clusterImpl struct {
 	// unregister it.
 	r *clusterRegistry
 	// l is the logger used to log various cluster operations.
-	// DEPRECATED for use outside of cluster methods: Use a test's t.l instead.
+	// DEPRECATED for use outside of cluster methods: Use a test's t.L() instead.
 	// This is generally set to the current test's logger.
 	l          *logger.Logger
 	expiration time.Time
@@ -1160,7 +1160,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, t *test) error {
 		return nil
 	}
 
-	t.l.Printf("fetching logs\n")
+	t.L().Printf("fetching logs\n")
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
@@ -1171,14 +1171,14 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, t *test) error {
 		}
 
 		if err := execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */); err != nil {
-			t.l.Printf("failed to fetch logs: %v", err)
+			t.L().Printf("failed to fetch logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
 		}
 
 		if err := c.RunE(ctx, c.All(), "mkdir -p logs/redacted && ./cockroach debug merge-logs --redact logs/*.log > logs/redacted/combined.log"); err != nil {
-			t.l.Printf("failed to redact logs: %v", err)
+			t.L().Printf("failed to redact logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
@@ -1243,7 +1243,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *test) error {
 			if err == nil {
 				return nil
 			}
-			t.l.Printf("while fetching timeseries: %s", err)
+			t.L().Printf("while fetching timeseries: %s", err)
 		}
 		return err
 	})
@@ -1257,7 +1257,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
 		return nil
 	}
 
-	t.l.Printf("fetching debug zip\n")
+	t.L().Printf("fetching debug zip\n")
 	c.status("fetching debug zip")
 
 	// Don't hang forever if we can't fetch the debug zip.
@@ -1279,7 +1279,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
 			output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":"+si, "--",
 				"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:"+si+"}", zipName)
 			if err != nil {
-				t.l.Printf("./cockroach debug zip failed: %s", output)
+				t.L().Printf("./cockroach debug zip failed: %s", output)
 				if i < c.spec.NodeCount {
 					continue
 				}
@@ -1292,7 +1292,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
 }
 
 // FailOnDeadNodes fails the test if nodes that have a populated data dir are
-// found to be not running. It prints both to t.l and the test output.
+// found to be not running. It prints both to t.L() and the test output.
 func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *test) {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
@@ -1302,7 +1302,7 @@ func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *test) {
 	// Don't hang forever.
 	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", time.Minute, func(ctx context.Context) error {
 		output, err := execCmdWithBuffer(
-			ctx, t.l, roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
+			ctx, t.L(), roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
 		)
 		// If there's an error, it means either that the monitor command failed
 		// completely, or that it found a dead node worth complaining about.
@@ -1385,11 +1385,11 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
 			db = nil
 			continue
 		}
-		t.l.Printf("running (fast) consistency checks on node %d", i)
+		t.L().Printf("running (fast) consistency checks on node %d", i)
 		break
 	}
 	if db == nil {
-		t.l.Printf("no live node found, skipping consistency check")
+		t.L().Printf("no live node found, skipping consistency check")
 		return
 	}
 	defer db.Close()
@@ -1397,7 +1397,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", time.Minute,
 		func(ctx context.Context) error {
-			return c.CheckReplicaDivergenceOnDB(ctx, t.l, db)
+			return c.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
 	); err != nil {
 		// NB: we don't call t.Fatal() here because this method is
@@ -1416,7 +1416,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
 		return nil
 	}
 
-	t.l.Printf("fetching dmesg\n")
+	t.L().Printf("fetching dmesg\n")
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
@@ -1432,7 +1432,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
-			t.l.Printf("during dmesg fetching: %s", err)
+			t.L().Printf("during dmesg fetching: %s", err)
 		}
 		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
 	})
@@ -1447,7 +1447,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *test) error {
 		return nil
 	}
 
-	t.l.Printf("fetching journalctl\n")
+	t.L().Printf("fetching journalctl\n")
 	c.status("fetching journalctl")
 
 	// Don't hang forever.
@@ -1463,7 +1463,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *test) error {
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
-			t.l.Printf("during journalctl fetching: %s", err)
+			t.L().Printf("during journalctl fetching: %s", err)
 		}
 		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
 	})
@@ -1482,11 +1482,11 @@ func (c *clusterImpl) FetchCores(ctx context.Context, t *test) error {
 		// from having the cores, but we should push them straight into a temp
 		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
 		// of a recent example where we've wanted the Core dumps.
-		t.l.Printf("skipped fetching cores\n")
+		t.L().Printf("skipped fetching cores\n")
 		return nil
 	}
 
-	t.l.Printf("fetching cores\n")
+	t.L().Printf("fetching cores\n")
 	c.status("fetching cores")
 
 	// Don't hang forever. The core files can be large, so we give a generous
@@ -2599,7 +2599,7 @@ func (m *monitor) wait(args ...string) error {
 // TODO(nvanbenschoten): this function should take a context and be responsive
 // to context cancellation.
 func waitForFullReplication(t *test, db *gosql.DB) {
-	t.l.Printf("waiting for up-replication...")
+	t.L().Printf("waiting for up-replication...")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
 		if err := db.QueryRow(
@@ -2608,13 +2608,13 @@ func waitForFullReplication(t *test, db *gosql.DB) {
 			t.Fatal(err)
 		}
 		if timeutil.Since(tStart) > 30*time.Second {
-			t.l.Printf("still waiting for full replication")
+			t.L().Printf("still waiting for full replication")
 		}
 	}
 }
 
 func waitForUpdatedReplicationReport(ctx context.Context, t *test, db *gosql.DB) {
-	t.l.Printf("waiting for updated replication report...")
+	t.L().Printf("waiting for updated replication report...")
 
 	// Temporarily drop the replication report interval down.
 	if _, err := db.ExecContext(
@@ -2647,7 +2647,7 @@ func waitForUpdatedReplicationReport(ctx context.Context, t *test, db *gosql.DB)
 			return
 		}
 		if timeutil.Since(tStart) > 30*time.Second {
-			t.l.Printf("still waiting for updated replication report")
+			t.L().Printf("still waiting for updated replication report")
 		}
 	}
 }

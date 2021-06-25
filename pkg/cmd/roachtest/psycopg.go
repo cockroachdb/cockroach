@@ -51,8 +51,8 @@ func registerPsycopg(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest Psycopg release is %s.", latestTag)
-		t.l.Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
+		t.L().Printf("Latest Psycopg release is %s.", latestTag)
+		t.L().Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -103,13 +103,13 @@ func registerPsycopg(r *testRegistry) {
 		if ignoredlist == nil {
 			t.Fatalf("No psycopg ignorelist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 			version, blocklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
 			export PSYCOPG2_TESTDB_USER=root &&
@@ -119,7 +119,7 @@ func registerPsycopg(r *testRegistry) {
 		)
 
 		t.Status("collating the test results")
-		t.l.Printf("Test Results: %s", rawResults)
+		t.L().Printf("Test Results: %s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()

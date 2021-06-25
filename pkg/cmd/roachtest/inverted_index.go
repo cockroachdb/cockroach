@@ -69,7 +69,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster.Cluste
 		if err := db.QueryRow(`SELECT count(*) FROM json.j`).Scan(&count); err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("finished writing %d rows to table", count)
+		t.L().Printf("finished writing %d rows to table", count)
 
 		return nil
 	})
@@ -92,12 +92,12 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster.Cluste
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
-		t.l.Printf("creating index")
+		t.L().Printf("creating index")
 		start := timeutil.Now()
 		if _, err := db.Exec(`CREATE INVERTED INDEX ON json.j (v)`); err != nil {
 			return err
 		}
-		t.l.Printf("index was created, took %v", timeutil.Since(start))
+		t.L().Printf("index was created, took %v", timeutil.Since(start))
 
 		return nil
 	})

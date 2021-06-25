@@ -73,12 +73,12 @@ func makeScrubTPCCTest(
 					conn := c.Conn(ctx, 1)
 					defer conn.Close()
 
-					t.l.Printf("Starting %d SCRUB checks", numScrubRuns)
+					t.L().Printf("Starting %d SCRUB checks", numScrubRuns)
 					for i := 0; i < numScrubRuns; i++ {
-						t.l.Printf("Running SCRUB check %d\n", i+1)
+						t.L().Printf("Running SCRUB check %d\n", i+1)
 						before := timeutil.Now()
 						err := sqlutils.RunScrubWithOptions(conn, "tpcc", "order", stmtOptions)
-						t.l.Printf("SCRUB check %d took %v\n", i+1, timeutil.Since(before))
+						t.L().Printf("SCRUB check %d took %v\n", i+1, timeutil.Since(before))
 
 						if err != nil {
 							t.Fatal(err)

@@ -79,7 +79,7 @@ func runRestart(ctx context.Context, t *test, c cluster.Cluster, downDuration ti
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {
-		t.l.Printf(`connecting and query finished in %s`, took)
+		t.L().Printf(`connecting and query finished in %s`, took)
 	}
 }
 

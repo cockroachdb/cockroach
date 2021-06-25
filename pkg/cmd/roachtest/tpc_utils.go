@@ -39,7 +39,7 @@ func loadTPCHDataset(
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx, `USE tpch`); err == nil {
-		t.l.Printf("found existing tpch dataset, verifying scale factor\n")
+		t.L().Printf("found existing tpch dataset, verifying scale factor\n")
 
 		var supplierCardinality int
 		if err := db.QueryRowContext(
@@ -58,7 +58,7 @@ func loadTPCHDataset(
 		// factor.
 		expectedSupplierCardinality := 10000 * sf
 		if supplierCardinality >= expectedSupplierCardinality {
-			t.l.Printf("dataset is at least of scale factor %d, continuing", sf)
+			t.L().Printf("dataset is at least of scale factor %d, continuing", sf)
 			return nil
 		}
 
@@ -73,7 +73,7 @@ func loadTPCHDataset(
 		return err
 	}
 
-	t.l.Printf("restoring tpch scale factor %d\n", sf)
+	t.L().Printf("restoring tpch scale factor %d\n", sf)
 	tpchURL := fmt.Sprintf("gs://cockroach-fixtures/workload/tpch/scalefactor=%d/backup?AUTH=implicit", sf)
 	query := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS tpch; RESTORE tpch.* FROM '%s' WITH into_db = 'tpch';`, tpchURL)
 	_, err := db.ExecContext(ctx, query)

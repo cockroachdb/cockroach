@@ -81,12 +81,12 @@ func registerDrop(r *testRegistry) {
 			}
 
 			for j := 1; j <= nodes; j++ {
-				size, err := getDiskUsageInBytes(ctx, c, t.l, j)
+				size, err := getDiskUsageInBytes(ctx, c, t.L(), j)
 				if err != nil {
 					return err
 				}
 
-				t.l.Printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
+				t.L().Printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
 			}
 
 			for i := minWarehouse; i <= maxWarehouse; i++ {
@@ -95,7 +95,7 @@ func registerDrop(r *testRegistry) {
 				run(false, "DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
 				elapsed := timeutil.Since(tBegin)
 				// TODO(tschottdorf): check what's reasonable here and make sure we don't drop below it.
-				t.l.Printf("deleted from tpcc.stock for warehouse %d (100k rows) in %s (%.2f rows/sec)\n", i, elapsed, 100000.0/elapsed.Seconds())
+				t.L().Printf("deleted from tpcc.stock for warehouse %d (100k rows) in %s (%.2f rows/sec)\n", i, elapsed, 100000.0/elapsed.Seconds())
 			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
@@ -120,13 +120,13 @@ func registerDrop(r *testRegistry) {
 				sizeReport = ""
 				allNodesSpaceCleared = true
 				for j := 1; j <= nodes; j++ {
-					size, err := getDiskUsageInBytes(ctx, c, t.l, j)
+					size, err := getDiskUsageInBytes(ctx, c, t.L(), j)
 					if err != nil {
 						return err
 					}
 
 					nodeSpaceUsed := fmt.Sprintf("Node %d space after deletion used: %s\n", j, humanizeutil.IBytes(int64(size)))
-					t.l.Printf(nodeSpaceUsed)
+					t.L().Printf(nodeSpaceUsed)
 
 					// Return if the size of the directory is less than 100mb
 					if size > maxSizeBytes {

@@ -47,8 +47,8 @@ func registerLibPQ(r *testRegistry) {
 		latestTag, err := repeatGetLatestTag(
 			ctx, t, "lib", "pq", libPQReleaseTagRegex)
 		require.NoError(t, err)
-		t.l.Printf("Latest lib/pq release is %s.", latestTag)
-		t.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
+		t.L().Printf("Latest lib/pq release is %s.", latestTag)
+		t.L().Printf("Supported lib/pq release is %s.", libPQSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -88,7 +88,7 @@ func registerLibPQ(r *testRegistry) {
 		if expectedFailures == nil {
 			t.Fatalf("No lib/pq blocklist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		t.Status("running lib/pq test suite and collecting results")
 
@@ -96,7 +96,7 @@ func registerLibPQ(r *testRegistry) {
 		testListRegex := "^(Test|Example)"
 		buf, err := c.RunWithBuffer(
 			ctx,
-			t.l,
+			t.L(),
 			node,
 			fmt.Sprintf(`cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -list "%s"`, libPQPath, testListRegex),
 		)

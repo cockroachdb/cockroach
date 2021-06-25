@@ -67,7 +67,7 @@ func registerCancel(r *testRegistry) {
 				errCh := make(chan error, 1)
 				go func(query string) {
 					defer close(errCh)
-					t.l.Printf("executing q%d\n", queryNum)
+					t.L().Printf("executing q%d\n", queryNum)
 					sem <- struct{}{}
 					close(sem)
 					_, err := conn.Exec(queryPrefix + query)

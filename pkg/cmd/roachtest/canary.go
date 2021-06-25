@@ -159,10 +159,10 @@ func repeatRunE(
 			return fmt.Errorf("test has failed")
 		}
 		attempt++
-		t.l.Printf("attempt %d - %s", attempt, operation)
+		t.L().Printf("attempt %d - %s", attempt, operation)
 		lastError = c.RunE(ctx, node, args...)
 		if lastError != nil {
-			t.l.Printf("error - retrying: %s", lastError)
+			t.L().Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return nil
@@ -192,10 +192,10 @@ func repeatRunWithBuffer(
 			return nil, fmt.Errorf("test has failed")
 		}
 		attempt++
-		t.l.Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithBuffer(ctx, t.l, node, args...)
+		t.L().Printf("attempt %d - %s", attempt, operation)
+		lastResult, lastError = c.RunWithBuffer(ctx, t.L(), node, args...)
 		if lastError != nil {
-			t.l.Printf("error - retrying: %s\n%s", lastError, string(lastResult))
+			t.L().Printf("error - retrying: %s\n%s", lastError, string(lastResult))
 			continue
 		}
 		return lastResult, nil
@@ -221,10 +221,10 @@ func repeatGitCloneE(
 			return fmt.Errorf("test has failed")
 		}
 		attempt++
-		t.l.Printf("attempt %d - clone %s", attempt, src)
-		lastError = c.GitClone(ctx, t.l, src, dest, branch, node)
+		t.L().Printf("attempt %d - clone %s", attempt, src)
+		lastError = c.GitClone(ctx, t.L(), src, dest, branch, node)
 		if lastError != nil {
-			t.l.Printf("error - retrying: %s", lastError)
+			t.L().Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return nil
@@ -275,11 +275,11 @@ func repeatGetLatestTag(
 		}
 		attempt++
 
-		t.l.Printf("attempt %d - fetching %s", attempt, url)
+		t.L().Printf("attempt %d - fetching %s", attempt, url)
 		var resp *http.Response
 		resp, lastError = httpClient.Get(url)
 		if lastError != nil {
-			t.l.Printf("error fetching - retrying: %s", lastError)
+			t.L().Printf("error fetching - retrying: %s", lastError)
 			continue
 		}
 		defer resp.Body.Close()
@@ -287,7 +287,7 @@ func repeatGetLatestTag(
 		var tags Tags
 		lastError = json.NewDecoder(resp.Body).Decode(&tags)
 		if lastError != nil {
-			t.l.Printf("error decoding - retrying: %s", lastError)
+			t.L().Printf("error decoding - retrying: %s", lastError)
 			continue
 		}
 		if len(tags) == 0 {

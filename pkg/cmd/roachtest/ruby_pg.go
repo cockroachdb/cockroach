@@ -54,7 +54,7 @@ func registerRubyPG(r *testRegistry) {
 
 		t.Status("cloning rails and installing prerequisites")
 
-		t.l.Printf("Supported ruby-pg version is %s.", rubyPGVersion)
+		t.L().Printf("Supported ruby-pg version is %s.", rubyPGVersion)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -137,17 +137,17 @@ func registerRubyPG(r *testRegistry) {
 		}
 
 		// Write the cockroach config into the test suite to use.
-		err = c.PutE(ctx, t.l, "./pkg/cmd/roachtest/ruby_pg_helpers.rb", "/mnt/data1/ruby-pg/spec/helpers.rb", c.All())
+		err = c.PutE(ctx, t.L(), "./pkg/cmd/roachtest/ruby_pg_helpers.rb", "/mnt/data1/ruby-pg/spec/helpers.rb", c.All())
 		require.NoError(t, err)
 
 		t.Status("running ruby-pg test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
 			`cd /mnt/data1/ruby-pg/ && sudo rake`,
 		)
 
-		t.l.Printf("Test Results:\n%s", rawResults)
+		t.L().Printf("Test Results:\n%s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()

@@ -62,7 +62,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	conn := c.Conn(ctx, 1)
 
 	rnd, seed := randutil.NewPseudoRand()
-	t.l.Printf("seed: %d", seed)
+	t.L().Printf("seed: %d", seed)
 
 	c.Put(ctx, cockroach, "./cockroach")
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
@@ -73,7 +73,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	setup := sqlsmith.Setups["rand-tables"](rnd)
 
 	t.Status("executing setup")
-	t.l.Printf("setup:\n%s", setup)
+	t.L().Printf("setup:\n%s", setup)
 	if _, err := conn.Exec(setup); err != nil {
 		t.Fatal(err)
 	} else {
@@ -82,7 +82,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 
 	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
 	t.Status("setting statement_timeout")
-	t.l.Printf("statement timeout:\n%s", setStmtTimeout)
+	t.L().Printf("statement timeout:\n%s", setStmtTimeout)
 	if _, err := conn.Exec(setStmtTimeout); err != nil {
 		t.Fatal(err)
 	}

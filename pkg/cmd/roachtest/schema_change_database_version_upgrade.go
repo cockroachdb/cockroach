@@ -74,7 +74,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	}
 
 	createDatabaseWithTableStep := func(dbName string) versionStep {
-		t.l.Printf("creating database %s", dbName)
+		t.L().Printf("creating database %s", dbName)
 		return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 			db := u.conn(ctx, t, 1)
 			_, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE DATABASE %s; CREATE TABLE %s.t(a INT)`, dbName, dbName))
@@ -106,7 +106,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	// name.
 	runSchemaChangesStep := func(dbName string) versionStep {
 		return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-			t.l.Printf("running schema changes on %s", dbName)
+			t.L().Printf("running schema changes on %s", dbName)
 			newDbName := dbName + "_new_name"
 			dbNode1 := u.conn(ctx, t, 1)
 			dbNode2 := u.conn(ctx, t, 2)
@@ -164,7 +164,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	}
 
 	createParentDatabaseStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		t.l.Printf("creating parent database")
+		t.L().Printf("creating parent database")
 		db := u.conn(ctx, t, 1)
 		_, err := db.ExecContext(ctx, `CREATE DATABASE new_parent_db`)
 		require.NoError(t, err)
@@ -173,23 +173,23 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	reparentDatabaseStep := func(dbName string) versionStep {
 		return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 			db := u.conn(ctx, t, 1)
-			t.l.Printf("reparenting database %s", dbName)
+			t.L().Printf("reparenting database %s", dbName)
 			_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE %s CONVERT TO SCHEMA WITH PARENT new_parent_db;`, dbName))
 			require.NoError(t, err)
 		}
 	}
 
 	validationStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		t.l.Printf("validating")
-		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(1),
+		t.L().Printf("validating")
+		buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(1),
 			[]string{"./cockroach debug doctor cluster", "--url {pgurl:1}"}...)
 		require.NoError(t, err)
-		t.l.Printf("%s", buf)
+		t.L().Printf("%s", buf)
 	}
 
 	interactWithReparentedSchemaStep := func(schemaName string) versionStep {
 		return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-			t.l.Printf("running schema changes on %s", schemaName)
+			t.L().Printf("running schema changes on %s", schemaName)
 			db := u.conn(ctx, t, 1)
 
 			_, err = db.ExecContext(ctx, `USE new_parent_db`)
@@ -211,7 +211,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	}
 
 	dropDatabaseCascadeStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		t.l.Printf("dropping parent database")
+		t.L().Printf("dropping parent database")
 		db := u.conn(ctx, t, 1)
 		_, err = db.ExecContext(ctx, `
 USE defaultdb;

@@ -58,16 +58,16 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 		return nil
 	}
 
-	if err := oi.c.Install(ctx, oi.t.l, oi.c.All(), "ntp"); err != nil {
+	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "ntp"); err != nil {
 		return err
 	}
-	if err := oi.c.Install(ctx, oi.t.l, oi.c.All(), "gcc"); err != nil {
+	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "gcc"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.l, oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
+	if err := oi.c.RunL(ctx, oi.t.L(), oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.l,
+	if err := oi.c.RunL(ctx, oi.t.L(),
 		oi.c.All(),
 		"curl",
 		"--retry", "3",
@@ -78,7 +78,7 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.l,
+	if err := oi.c.RunL(ctx, oi.t.L(),
 		oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c",
 	); err != nil {
 		return err

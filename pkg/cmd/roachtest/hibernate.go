@@ -103,8 +103,8 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest Hibernate release is %s.", latestTag)
-		t.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
+		t.L().Printf("Latest Hibernate release is %s.", latestTag)
+		t.L().Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -174,7 +174,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
+		t.L().Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// Note that this will take upwards of 3 hours.

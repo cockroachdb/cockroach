@@ -45,8 +45,8 @@ func registerGORM(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest gorm release is %s.", latestTag)
-		t.l.Printf("Supported gorm release is %s.", gormSupportedTag)
+		t.L().Printf("Latest gorm release is %s.", latestTag)
+		t.L().Printf("Supported gorm release is %s.", gormSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -91,7 +91,7 @@ func registerGORM(r *testRegistry) {
 		if expectedFailures == nil {
 			t.Fatalf("No gorm blocklist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		// Write the cockroach config into the test suite to use.
 		if err := repeatRunE(

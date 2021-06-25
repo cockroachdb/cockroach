@@ -121,7 +121,7 @@ func verifyTxnPerSecond(
 	if avgTxnPerSec < txnTarget {
 		t.Fatalf("average txns per second %f was under target %f", avgTxnPerSec, txnTarget)
 	} else {
-		t.l.Printf("average txns per second: %f", avgTxnPerSec)
+		t.L().Printf("average txns per second: %f", avgTxnPerSec)
 	}
 
 	// Verify that less than the specified limit of each individual one minute
@@ -138,7 +138,7 @@ func verifyTxnPerSecond(
 			perc*100, txnTarget, maxPercentTimeUnderTarget*100,
 		)
 	} else {
-		t.l.Printf("spent %f%% of time below target of %f txn/s", perc*100, txnTarget)
+		t.L().Printf("spent %f%% of time below target of %f txn/s", perc*100, txnTarget)
 	}
 }
 
@@ -168,7 +168,7 @@ func verifyLookupsPerSec(
 		if dp.Value > rangeLookupsTarget {
 			t.Fatalf("Found minute interval with %f lookup/sec above target of %f lookup/sec\n", dp.Value, rangeLookupsTarget)
 		} else {
-			t.l.Printf("Found minute interval with %f lookup/sec\n", dp.Value)
+			t.L().Printf("Found minute interval with %f lookup/sec\n", dp.Value)
 		}
 	}
 }

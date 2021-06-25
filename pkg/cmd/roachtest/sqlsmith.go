@@ -80,7 +80,7 @@ func registerSQLSmith(r *testRegistry) {
 		}
 
 		rng, seed := randutil.NewPseudoRand()
-		t.l.Printf("seed: %d", seed)
+		t.L().Printf("seed: %d", seed)
 
 		c.Put(ctx, cockroach, "./cockroach")
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
@@ -102,7 +102,7 @@ func registerSQLSmith(r *testRegistry) {
 
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")
-		t.l.Printf("setup:\n%s", setup)
+		t.L().Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
 			t.Fatal(err)
 		} else {
@@ -112,7 +112,7 @@ func registerSQLSmith(r *testRegistry) {
 		const timeout = time.Minute
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
 		t.Status("setting statement_timeout")
-		t.l.Printf("statement timeout:\n%s", setStmtTimeout)
+		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
 		if _, err := conn.Exec(setStmtTimeout); err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func registerSQLSmith(r *testRegistry) {
 					// just timing out.
 					// TODO (rohany): once #45463 and #45461 have been resolved, return
 					//  to calling t.Fatalf here.
-					t.l.Printf("query timed out, but did not cancel execution:\n%s;", stmt)
+					t.L().Printf("query timed out, but did not cancel execution:\n%s;", stmt)
 					return nil
 				case err := <-done:
 					return err

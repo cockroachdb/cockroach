@@ -53,8 +53,8 @@ func registerTypeORM(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest TypeORM release is %s.", latestTag)
-		t.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
+		t.L().Printf("Latest TypeORM release is %s.", latestTag)
+		t.L().Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
@@ -151,11 +151,11 @@ func registerTypeORM(r *testRegistry) {
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
-		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
 			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
 		)
 		rawResultsStr := string(rawResults)
-		t.l.Printf("Test Results: %s", rawResultsStr)
+		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			// Ignore the failure discussed in #38180 and in
 			// https://github.com/typeorm/typeorm/pull/4298.

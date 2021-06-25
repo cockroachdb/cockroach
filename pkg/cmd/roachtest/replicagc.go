@@ -192,7 +192,7 @@ func (h *replicagcTestHelper) numReplicas(ctx context.Context, db *gosql.DB, tar
 	).Scan(&n); err != nil {
 		h.t.Fatal(err)
 	}
-	h.t.l.Printf("found %d replicas found on n%d\n", n, targetNode)
+	h.t.L().Printf("found %d replicas found on n%d\n", n, targetNode)
 	return n
 }
 
@@ -238,7 +238,7 @@ func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int)
 		"RANGE default", "RANGE meta", "RANGE system", "RANGE liveness", "DATABASE system", "TABLE system.jobs",
 	} {
 		stmt := `ALTER ` + change + ` CONFIGURE ZONE = 'constraints: {"-` + deadNodeAttr + `"}'`
-		h.t.l.Printf(stmt + "\n")
+		h.t.L().Printf(stmt + "\n")
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			h.t.Fatal(err)
 		}

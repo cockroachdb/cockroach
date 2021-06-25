@@ -767,11 +767,13 @@ func (r *testRunner) runTest(
 		if t.Failed() {
 			s = "failure"
 		}
-		t.l.Printf("tearing down after %s; see teardown.log", s)
-		l, c.l, t.l = teardownL, teardownL, teardownL
+		t.L().Printf("tearing down after %s; see teardown.log", s)
+		l, c.l = teardownL, teardownL
+		t.ReplaceL(teardownL)
 	case <-time.After(timeout):
-		t.l.Printf("tearing down after timeout; see teardown.log")
-		l, c.l, t.l = teardownL, teardownL, teardownL
+		t.L().Printf("tearing down after timeout; see teardown.log")
+		l, c.l = teardownL, teardownL
+		t.ReplaceL(teardownL)
 		// Timeouts are often opaque. Improve our changes by dumping the stack
 		// so that at least we can piece together what the test is trying to
 		// do at this very moment.
@@ -784,9 +786,9 @@ func (r *testRunner) runTest(
 		// Do this before we cancel the context, which might (hopefully) unblock
 		// the test. We want to see where it got stuck.
 		const stacksFile = "__stacks"
-		if cl, err := t.l.ChildLogger(stacksFile, logger.QuietStderr, logger.QuietStdout); err == nil {
+		if cl, err := t.L().ChildLogger(stacksFile, logger.QuietStderr, logger.QuietStdout); err == nil {
 			cl.PrintfCtx(ctx, "all stacks:\n\n%s\n", allStacks())
-			t.l.PrintfCtx(ctx, "dumped stacks to %s", stacksFile)
+			t.L().PrintfCtx(ctx, "dumped stacks to %s", stacksFile)
 		}
 		// Now kill anything going on in this cluster while collecting stacks
 		// to the logs, to get the server side of the hang.
@@ -824,7 +826,7 @@ func (r *testRunner) runTest(
 			// to deadlock without blocking on anything remote - since we killed
 			// everything.
 			const msg = "test timed out and afterwards failed to respond to cancelation"
-			t.l.PrintfCtx(ctx, msg)
+			t.L().PrintfCtx(ctx, msg)
 			r.collectClusterLogs(ctx, c, t)
 			// We return an error here because the test goroutine is still running, so
 			// we want to alert the caller of this unusual situation.
@@ -926,32 +928,32 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *clusterImpl, t *
 	// below has problems. For example, `debug zip` is known to
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
-	t.l.PrintfCtx(ctx, "collecting cluster logs")
+	t.L().PrintfCtx(ctx, "collecting cluster logs")
 	// Do this before collecting logs to make sure the file gets
 	// downloaded below.
 	if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
-		t.l.Printf("failed to fetch disk uage summary: %s", err)
+		t.L().Printf("failed to fetch disk uage summary: %s", err)
 	}
 	if err := c.FetchLogs(ctx, t); err != nil {
-		t.l.Printf("failed to download logs: %s", err)
+		t.L().Printf("failed to download logs: %s", err)
 	}
 	if err := c.FetchDmesg(ctx, t); err != nil {
-		t.l.Printf("failed to fetch dmesg: %s", err)
+		t.L().Printf("failed to fetch dmesg: %s", err)
 	}
 	if err := c.FetchJournalctl(ctx, t); err != nil {
-		t.l.Printf("failed to fetch journalctl: %s", err)
+		t.L().Printf("failed to fetch journalctl: %s", err)
 	}
 	if err := c.FetchCores(ctx, t); err != nil {
-		t.l.Printf("failed to fetch cores: %s", err)
+		t.L().Printf("failed to fetch cores: %s", err)
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
-		t.l.Printf("failed to copy roachprod state: %s", err)
+		t.L().Printf("failed to copy roachprod state: %s", err)
 	}
 	if err := c.FetchTimeseriesData(ctx, t); err != nil {
-		t.l.Printf("failed to fetch timeseries data: %s", err)
+		t.L().Printf("failed to fetch timeseries data: %s", err)
 	}
 	if err := c.FetchDebugZip(ctx, t); err != nil {
-		t.l.Printf("failed to collect zip: %s", err)
+		t.L().Printf("failed to collect zip: %s", err)
 	}
 }
 

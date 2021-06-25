@@ -84,7 +84,7 @@ func (g gossipAlerts) String() string {
 //
 // TODO(tschottdorf): actually let this fail the test instead of logging complaints.
 func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
-	logger, err := hc.t.l.ChildLogger("health")
+	logger, err := hc.t.L().ChildLogger("health")
 	if err != nil {
 		return err
 	}
@@ -169,11 +169,11 @@ func (dul *DiskUsageLogger) Done() {
 // Runner runs in a loop until Done() is called and prints the cluster-wide per
 // node disk usage in descending order.
 func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
-	l, err := dul.t.l.ChildLogger("diskusage")
+	l, err := dul.t.L().ChildLogger("diskusage")
 	if err != nil {
 		return err
 	}
-	quietLogger, err := dul.t.l.ChildLogger("diskusage-exec", logger.QuietStdout, logger.QuietStderr)
+	quietLogger, err := dul.t.L().ChildLogger("diskusage-exec", logger.QuietStdout, logger.QuietStderr)
 	if err != nil {
 		return err
 	}
@@ -221,11 +221,11 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 func registerRestoreNodeShutdown(r *testRegistry) {
 	makeRestoreStarter := func(ctx context.Context, t *test, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster) (string, error) {
-			t.l.Printf("connecting to gateway")
+			t.L().Printf("connecting to gateway")
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
 
-			t.l.Printf("creating bank database")
+			t.L().Printf("creating bank database")
 			if _, err := gatewayDB.Exec("CREATE DATABASE bank"); err != nil {
 				return "", err
 			}
@@ -238,11 +238,11 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 				restoreQuery := `RESTORE bank.bank FROM
 					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank?AUTH=implicit'`
 
-				t.l.Printf("starting to run the restore job")
+				t.L().Printf("starting to run the restore job")
 				if _, err := gatewayDB.Exec(restoreQuery); err != nil {
 					errCh <- err
 				}
-				t.l.Printf("done running restore job")
+				t.L().Printf("done running restore job")
 			}()
 
 			// Wait for the job.
@@ -265,12 +265,12 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 				}
 
 				if jobCount == 0 {
-					t.l.Printf("waiting for restore job")
+					t.L().Printf("waiting for restore job")
 				} else if jobCount == 1 {
-					t.l.Printf("found restore job")
+					t.L().Printf("found restore job")
 					break
 				} else {
-					t.l.Printf("found multiple restore jobs -- erroring")
+					t.L().Printf("found multiple restore jobs -- erroring")
 					return "", errors.New("unexpectedly found multiple restore jobs")
 				}
 			}
@@ -436,7 +436,7 @@ func registerRestore(r *testRegistry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, t.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil

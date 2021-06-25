@@ -70,7 +70,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		ctx, cancel := context.WithCancel(ctx)
 
 		m.Go(func() error {
-			t.l.Printf("starting load generator\n")
+			t.L().Printf("starting load generator\n")
 
 			err := c.RunE(ctx, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
@@ -103,7 +103,7 @@ func registerRebalanceLoad(r *testRegistry) {
 			}
 
 			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
-				if done, err := isLoadEvenlyDistributed(t.l, db, len(roachNodes)); err != nil {
+				if done, err := isLoadEvenlyDistributed(t.L(), db, len(roachNodes)); err != nil {
 					return err
 				} else if done {
 					t.Status("successfully achieved lease balance; waiting for kv to finish running")

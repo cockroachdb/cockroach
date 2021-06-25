@@ -140,7 +140,7 @@ func registerCopy(r *testRegistry) {
 				t.Fatalf("failed to get default range size: %v", err)
 			}
 			rc := rangeCount()
-			t.l.Printf("range count after copy = %d\n", rc)
+			t.L().Printf("range count after copy = %d\n", rc)
 			lowExp := (rows * rowEstimate) / rangeMaxBytes
 			highExp := int(math.Ceil(float64(rows*rowEstimate) / float64(rangeMinBytes)))
 			if rc > highExp || rc < lowExp {

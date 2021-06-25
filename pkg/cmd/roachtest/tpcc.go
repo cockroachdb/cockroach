@@ -164,10 +164,10 @@ func runTPCC(ctx context.Context, t *test, c cluster.Cluster, opts tpccOptions) 
 			if err := p.Snapshot(
 				ctx,
 				c,
-				t.l,
+				t.L(),
 				filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
 			); err != nil {
-				shout(ctx, t.l, os.Stderr, "failed to get prometheus snapshot: %v", err)
+				shout(ctx, t.L(), os.Stderr, "failed to get prometheus snapshot: %v", err)
 			}
 		}()
 	}
@@ -264,7 +264,7 @@ func registerTPCC(r *testRegistry) {
 		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.Spec().Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-			t.l.Printf("computed headroom warehouses of %d\n", headroomWarehouses)
+			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
@@ -300,7 +300,7 @@ func registerTPCC(r *testRegistry) {
 				nodes: crdbNodes,
 				run: func(ctx context.Context, u *versionUpgradeTest) error {
 					const duration = 120 * time.Minute
-					t.l.Printf("running background TPCC workload")
+					t.L().Printf("running background TPCC workload")
 					runTPCC(ctx, t, c, tpccOptions{
 						Warehouses: headroomWarehouses,
 						Duration:   duration,
@@ -742,7 +742,7 @@ func loadTPCCBench(
 	// Check if the dataset already exists and is already large enough to
 	// accommodate this benchmarking. If so, we can skip the fixture RESTORE.
 	if _, err := db.ExecContext(ctx, `USE tpcc`); err == nil {
-		t.l.Printf("found existing tpcc database\n")
+		t.L().Printf("found existing tpcc database\n")
 
 		var curWarehouses int
 		if err := db.QueryRowContext(ctx,
@@ -782,7 +782,7 @@ func loadTPCCBench(
 	}
 
 	// Load the corresponding fixture.
-	t.l.Printf("restoring tpcc fixture\n")
+	t.L().Printf("restoring tpcc fixture\n")
 	waitForFullReplication(t, db)
 	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
@@ -792,7 +792,7 @@ func loadTPCCBench(
 		return nil
 	}
 
-	t.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
+	t.L().Printf("waiting %v for rebalancing\n", rebalanceWait)
 	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='128MiB'`)
 	if err != nil {
 		return err
@@ -810,7 +810,7 @@ func loadTPCCBench(
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
 		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s}",
 		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes)
-	if out, err := c.RunWithBuffer(ctx, t.l, loadNode, cmd); err != nil {
+	if out, err := c.RunWithBuffer(ctx, t.L(), loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
 
@@ -865,7 +865,7 @@ func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSp
 				t.Fatal("distributed chaos benchmarking not supported")
 			}
 			t.Status("installing haproxy")
-			if err := c.Install(ctx, t.l, loadNodes, "haproxy"); err != nil {
+			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
@@ -911,7 +911,7 @@ func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSp
 		if err := c.Reset(ctx); err != nil {
 			// Reset() can flake sometimes, see for example:
 			// https://github.com/cockroachdb/cockroach/issues/61981#issuecomment-826838740
-			t.l.Printf("failed to reset VMs, proceeding anyway: %s", err)
+			t.L().Printf("failed to reset VMs, proceeding anyway: %s", err)
 			_ = err // intentionally continuing
 		}
 		var ok bool
@@ -922,7 +922,7 @@ func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSp
 			shortCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			if err := c.StopE(shortCtx, roachNodes); err != nil {
 				cancel()
-				t.l.Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
+				t.L().Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
 				// We usually spend a long time blocking in StopE anyway, but just in case
 				// of a fast-failure mode, we still want to spend a little bit of time over
 				// the course of 10 retries to maximize the chances of things going back to
@@ -948,7 +948,7 @@ func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSp
 	iteration := 0
 	if res, err := s.Search(func(warehouses int) (bool, error) {
 		iteration++
-		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
+		t.L().Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 
 		restart()
 
@@ -1028,7 +1028,7 @@ func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSp
 				}
 				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
 				if err := c.Get(
-					ctx, t.l, histogramsPath, roachtestHistogramsPath, group.loadNodes,
+					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.loadNodes,
 				); err != nil {
 					// NB: this will let the line search continue. The reason we do this
 					// is because it's conceivable that we made it here, but a VM just
@@ -1086,11 +1086,11 @@ func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSp
 		// Print the result.
 		if failErr == nil {
 			ttycolor.Stdout(ttycolor.Green)
-			t.l.Printf("--- SEARCH ITER PASS: TPCC %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
+			t.L().Printf("--- SEARCH ITER PASS: TPCC %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
 				warehouses, res.TpmC(), res.Efficiency())
 		} else {
 			ttycolor.Stdout(ttycolor.Red)
-			t.l.Printf("--- SEARCH ITER FAIL: TPCC %d resulted in %.1f tpmC and failed due to %v",
+			t.L().Printf("--- SEARCH ITER FAIL: TPCC %d resulted in %.1f tpmC and failed due to %v",
 				warehouses, res.TpmC(), failErr)
 		}
 		ttycolor.Stdout(ttycolor.Reset)
@@ -1103,7 +1103,7 @@ func runTPCCBench(ctx context.Context, t *test, c cluster.Cluster, b tpccBenchSp
 		// restarting the cluster so that it can run consistency checks.
 		restart()
 		ttycolor.Stdout(ttycolor.Green)
-		t.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
+		t.L().Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
 	}
 }

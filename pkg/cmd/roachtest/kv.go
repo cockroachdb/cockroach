@@ -384,7 +384,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 					qpsAllUp, qpsOneDown, actFrac, minFrac,
 				)
 			}
-			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
+			t.L().Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
 		},
 	})
 }

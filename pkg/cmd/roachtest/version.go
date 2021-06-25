@@ -28,7 +28,7 @@ func registerVersion(r *testRegistry) {
 	runVersion := func(ctx context.Context, t *test, c cluster.Cluster, binaryVersion string) {
 		nodes := c.Spec().NodeCount - 1
 
-		if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Range(1, nodes)); err != nil {
+		if err := c.Stage(ctx, t.L(), "release", "v"+binaryVersion, "", c.Range(1, nodes)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -41,7 +41,7 @@ func registerVersion(r *testRegistry) {
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
 		if local {
-			t.l.Printf("local mode: speeding up test\n")
+			t.L().Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 			buffer = time.Minute
 		}
@@ -68,7 +68,7 @@ func registerVersion(r *testRegistry) {
 		}
 
 		m.Go(func(ctx context.Context) error {
-			l, err := t.l.ChildLogger("upgrader")
+			l, err := t.L().ChildLogger("upgrader")
 			if err != nil {
 				return err
 			}
@@ -99,7 +99,7 @@ func registerVersion(r *testRegistry) {
 					//
 					// https://github.com/cockroachdb/cockroach/issues/37737#issuecomment-496026918
 					if !strings.HasPrefix(binaryVersion, "2.") {
-						if err := c.CheckReplicaDivergenceOnDB(ctx, t.l, db); err != nil {
+						if err := c.CheckReplicaDivergenceOnDB(ctx, t.L(), db); err != nil {
 							return errors.Wrapf(err, "node %d", i)
 						}
 					}
@@ -173,7 +173,7 @@ func registerVersion(r *testRegistry) {
 				if err := stop(i); err != nil {
 					return err
 				}
-				if err := c.Stage(ctx, t.l, "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
+				if err := c.Stage(ctx, t.L(), "release", "v"+binaryVersion, "", c.Node(i)); err != nil {
 					t.Fatal(err)
 				}
 				c.Start(ctx, c.Node(i), startArgsDontEncrypt)

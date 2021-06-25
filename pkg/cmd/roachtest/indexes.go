@@ -56,7 +56,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 				// Set lease preferences so that all leases for the table are
 				// located in the availability zone with the load generator.
 				if !local {
-					t.l.Printf("setting lease preferences")
+					t.L().Printf("setting lease preferences")
 					if _, err := conn.ExecContext(ctx, fmt.Sprintf(`
 						ALTER TABLE indexes.indexes
 						CONFIGURE ZONE USING
@@ -68,7 +68,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 					}
 
 					// Wait for ranges to rebalance across all three regions.
-					t.l.Printf("checking replica balance")
+					t.L().Printf("checking replica balance")
 					retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 						waitForUpdatedReplicationReport(ctx, t, conn)
@@ -85,12 +85,12 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 							break
 						}
 
-						t.l.Printf("replicas still rebalancing...")
+						t.L().Printf("replicas still rebalancing...")
 					}
 
 					// Wait for leases to adhere to preferences, if they aren't
 					// already.
-					t.l.Printf("checking lease preferences")
+					t.L().Printf("checking lease preferences")
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 						var ok bool
 						if err := conn.QueryRowContext(ctx, `
@@ -104,7 +104,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 							break
 						}
 
-						t.l.Printf("leases still rebalancing...")
+						t.L().Printf("leases still rebalancing...")
 					}
 				}
 

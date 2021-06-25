@@ -130,7 +130,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c cluster.Cluster, bin
 		t.Fatal(err)
 	}
 
-	t.l.Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
+	t.L().Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
 }
 
 // runMultiTenantUpgrade exercises upgrading tenants and their host cluster.

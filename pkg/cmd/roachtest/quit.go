@@ -79,14 +79,14 @@ func (q *quitTest) runTest(
 	//
 	// The shutdown method is passed in via the 'method' parameter, used
 	// below.
-	q.t.l.Printf("now running restart loop\n")
+	q.t.L().Printf("now running restart loop\n")
 	for i := 0; i < 3; i++ {
-		q.t.l.Printf("iteration %d\n", i)
+		q.t.L().Printf("iteration %d\n", i)
 		for nodeID := 1; nodeID <= q.c.Spec().NodeCount; nodeID++ {
-			q.t.l.Printf("stopping node %d\n", nodeID)
+			q.t.L().Printf("stopping node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { method(ctx, q.t, q.c, nodeID) })
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.checkNoLeases(ctx, nodeID) })
-			q.t.l.Printf("restarting node %d\n", nodeID)
+			q.t.L().Printf("restarting node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.restartNode(ctx, nodeID) })
 		}
 	}
@@ -97,7 +97,7 @@ func (q *quitTest) runTest(
 func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
 	q.c.Start(ctx, q.args, q.c.Node(nodeID))
 
-	q.t.l.Printf("waiting for readiness of node %d\n", nodeID)
+	q.t.L().Printf("waiting for readiness of node %d\n", nodeID)
 	// Now perform a SQL query. This achieves two goals:
 	// - it waits until the server is ready.
 	// - the particular query forces a cluster-wide RPC; which
@@ -121,7 +121,7 @@ func (q *quitTest) waitForUpReplication(ctx context.Context) {
 	}
 
 	err := retry.ForDuration(30*time.Second, func() error {
-		q.t.l.Printf("waiting for up-replication\n")
+		q.t.L().Printf("waiting for up-replication\n")
 		row := db.QueryRowContext(ctx, `SELECT min(array_length(replicas, 1)) FROM crdb_internal.ranges_no_leases`)
 		minReplicas := 0
 		if err := row.Scan(&minReplicas); err != nil {
@@ -181,7 +181,7 @@ CREATE TABLE t(x, y, PRIMARY KEY(x)) AS SELECT @1, 1 FROM generate_series(1,%[1]
 	// Also we do it a hundred at a time, so as to be able to see the
 	// progress when watching the roachtest progress interactively.
 	for i := numRanges; i > 1; i -= 100 {
-		q.t.l.Printf("creating %d ranges (%d-%d)...\n", numRanges, i, i-99)
+		q.t.L().Printf("creating %d ranges (%d-%d)...\n", numRanges, i, i-99)
 		if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 ALTER TABLE t SPLIT AT TABLE generate_series(%[1]d,%[1]d-99,-1)`, i)); err != nil {
 			q.Fatal(err)
@@ -234,7 +234,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 				continue
 			}
 
-			q.t.l.Printf("retrieving ranges for node %d\n", i)
+			q.t.L().Printf("retrieving ranges for node %d\n", i)
 			// Get the report via HTTP.
 			// Flag -s is to remove progress on stderr, so that the buffer
 			// contains the JSON of the response and nothing else.
@@ -242,7 +242,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			if err != nil {
 				q.Fatal(err)
 			}
-			buf, err := q.c.RunWithBuffer(ctx, q.t.l, q.c.Node(otherNodeID),
+			buf, err := q.c.RunWithBuffer(ctx, q.t.L(), q.c.Node(otherNodeID),
 				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/%d",
 					adminAddrs[0], i))
 			if err != nil {
@@ -317,8 +317,8 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			err := errors.Newf(
 				"(2) ranges with remaining leases on node %d, per node: %# v",
 				nodeID, pretty.Formatter(invLeaseMap))
-			q.t.l.Printf("condition failed: %v\n", err)
-			q.t.l.Printf("retrying until SucceedsSoon has enough...\n")
+			q.t.L().Printf("condition failed: %v\n", err)
+			q.t.L().Printf("retrying until SucceedsSoon has enough...\n")
 			return err
 		}
 		return nil
@@ -366,11 +366,11 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
 	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c cluster.Cluster, nodeID int) {
-		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID),
+		buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(nodeID),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
 		)
-		t.l.Printf("cockroach node drain:\n%s\n", buf)
+		t.L().Printf("cockroach node drain:\n%s\n", buf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -404,8 +404,8 @@ func runQuit(
 		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
 		fmt.Sprintf("--port={pgport:%d}", nodeID)},
 		extraArgs...)
-	buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID), args...)
-	t.l.Printf("cockroach quit:\n%s\n", buf)
+	buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(nodeID), args...)
+	t.L().Printf("cockroach quit:\n%s\n", buf)
 	if err != nil {
 		t.Fatal(err)
 	}
