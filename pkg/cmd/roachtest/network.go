@@ -15,11 +15,16 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 // runNetworkSanity is just a sanity check to make sure we're setting up toxiproxy
@@ -92,6 +97,203 @@ select age, message from [ show trace for session ];
 		return nil
 	})
 
+	m.Wait()
+}
+
+// runNetworkAuthentication creates a network black hole to the leaseholder
+// of system.users, and then measures how long it takes to be able to create
+// new connections to the cluster afterwards.
+func runNetworkAuthentication(ctx context.Context, t *test, c Cluster) {
+	n := c.Spec().NodeCount
+	serverNodes, clientNode := c.Range(1, n-1), c.Node(n)
+
+	c.Put(ctx, cockroach, "./cockroach", c.All())
+
+	t.l.Printf("starting nodes to initialize TLS certs...")
+	// NB: we need to start two times, because when we use
+	// c.Start() separately on nodes 1 and nodes 2-3,
+	// the logic will find the certs don't exist on node 2 and
+	// 3 will re-recreate a separate set of certs, which
+	// we don't want. Starting all nodes at once ensures
+	// that they use coherent certs.
+	c.Start(ctx, t, serverNodes, startArgs("--secure"))
+	require.NoError(t, c.StopE(ctx, serverNodes))
+
+	t.l.Printf("restarting nodes...")
+	c.Start(ctx, t, c.Node(1), startArgs(
+		"--secure",
+		"--args=--locality=node=1",
+		"--args=--accept-sql-without-tls",
+		"--env=COCKROACH_SCAN_INTERVAL=200ms",
+		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
+	))
+	c.Start(ctx, t, c.Range(2, n-1), startArgs(
+		"--secure",
+		"--args=--locality=node=other",
+		"--args=--accept-sql-without-tls",
+		"--env=COCKROACH_SCAN_INTERVAL=200ms",
+		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
+	))
+
+	t.l.Printf("retrieving server addresses...")
+	serverAddrs, err := c.InternalAddr(ctx, serverNodes)
+	require.NoError(t, err)
+
+	t.l.Printf("fetching certs...")
+	certsDir := "/home/ubuntu/certs"
+	localCertsDir, err := filepathAbs("./network-certs")
+	require.NoError(t, err)
+	require.NoError(t, os.RemoveAll(localCertsDir))
+	require.NoError(t, c.Get(ctx, t.l, certsDir, localCertsDir, c.Node(1)))
+	require.NoError(t, filepath.Walk(localCertsDir, func(path string, info os.FileInfo, err error) error {
+		// Don't change permissions for the certs directory.
+		if path == localCertsDir {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, os.FileMode(0600))
+	}))
+
+	t.l.Printf("connecting to cluster from roachtest...")
+	db, err := c.ConnSecure(ctx, 1, "root", localCertsDir, 26257)
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Wait for up-replication. This will also print a progress message.
+	waitForFullReplication(t, db)
+
+	t.l.Printf("creating test user...")
+	_, err = db.Exec(`CREATE USER testuser WITH PASSWORD 'password' VALID UNTIL '2060-01-01'`)
+	require.NoError(t, err)
+	_, err = db.Exec(`GRANT admin TO testuser`)
+	require.NoError(t, err)
+
+	const expectedLeaseholder = 1
+	lh := fmt.Sprintf("%d", expectedLeaseholder)
+
+	t.l.Printf("configuring zones to move ranges to node 1...")
+	for _, zone := range []string{
+		`RANGE liveness`,
+		`RANGE meta`,
+		`RANGE system`,
+		`RANGE default`,
+		`DATABASE system`,
+	} {
+		zoneCmd := `ALTER ` + zone + ` CONFIGURE ZONE USING lease_preferences = '[[+node=` + lh + `]]', constraints = '{"+node=` + lh + `": 1}'`
+		t.l.Printf("SQL: %s", zoneCmd)
+		_, err = db.Exec(zoneCmd)
+		require.NoError(t, err)
+	}
+
+	t.l.Printf("waiting for leases to move...")
+	{
+		tStart := timeutil.Now()
+		for ok := false; !ok; time.Sleep(time.Second) {
+			if timeutil.Since(tStart) > 30*time.Second {
+				t.l.Printf("still waiting for leases to move")
+				// The leases have not moved yet, so display some progress.
+				dumpRangesCmd := fmt.Sprintf(`./cockroach sql --certs-dir %s -e 'TABLE crdb_internal.ranges'`, certsDir)
+				t.l.Printf("SQL: %s", dumpRangesCmd)
+				err := c.RunE(ctx, c.Node(1), dumpRangesCmd)
+				require.NoError(t, err)
+			}
+
+			const waitLeases = `
+SELECT $1::INT = ALL (
+    SELECT lease_holder
+    FROM   crdb_internal.ranges
+    WHERE  (start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivenessMax')
+       OR  (database_name = 'system' AND table_name IN ('users', 'role_members', 'role_options'))
+)`
+			t.l.Printf("SQL: %s", waitLeases)
+			require.NoError(t, db.QueryRow(waitLeases, expectedLeaseholder).Scan(&ok))
+		}
+	}
+
+	errorCount := 0
+
+	cancelTest := make(chan struct{})
+	defer func() { close(cancelTest) }()
+
+	m := newMonitor(ctx, c, serverNodes)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	m.Go(func(ctx context.Context) error {
+		defer wg.Done()
+		endTest := time.After(20 * time.Second)
+		tick := time.Tick(500 * time.Millisecond)
+		keepLooping := true
+		for attempt := 0; keepLooping; attempt++ {
+			select {
+			case <-endTest:
+				keepLooping = false
+			case <-cancelTest:
+				keepLooping = false
+			case <-tick:
+			}
+			t.l.Printf("connection attempt %d\n", attempt)
+			for i := 1; i <= c.Spec().NodeCount-1; i++ {
+				if i == expectedLeaseholder {
+					continue
+				}
+
+				url := fmt.Sprintf("postgres://testuser:password@%s/defaultdb?sslmode=require", serverAddrs[i-1])
+				b, err := c.RunWithBuffer(ctx, t.l, clientNode, "time", "-p", "./cockroach", "sql",
+					"--url", url, "--certs-dir", certsDir, "-e", "'SELECT 1'")
+				t.l.Printf("%s\n", b)
+				if err != nil {
+					errorCount++
+				}
+			}
+		}
+
+		return nil
+	})
+
+	t.l.Printf("waiting for client to start connecting...")
+	time.Sleep(5 * time.Second)
+
+	t.l.Printf("blocking networking on node 1...")
+	const netConfigCmd = `
+# ensure any failure fails the entire script.
+set -e;
+
+# Setting default filter policy
+sudo iptables -P INPUT ACCEPT;
+sudo iptables -P OUTPUT ACCEPT;
+
+# Drop any node-to-node crdb traffic.
+sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
+
+sudo iptables-save
+`
+	t.l.Printf("config cmd:\n%s", netConfigCmd)
+	require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), netConfigCmd))
+
+	// (attempt to) restore iptables when test end, so that cluster
+	// can be investigated afterwards.
+	defer func() {
+		const restoreNet = `
+set -e;
+sudo iptables -A INPUT -p tcp --dport 26257 -j ACCEPT;
+sudo iptables -A OUTPUT -p tcp --dport 26257 -j ACCEPT;
+sudo iptables-save
+`
+		t.l.Printf("config cmd:\n%s", restoreNet)
+		require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), restoreNet))
+	}()
+
+	t.l.Printf("waiting for client to do its thing...")
+
+	wg.Wait()
+	if errorCount >= 1 /*c.Spec().NodeCount*/ {
+		t.Fatalf("failed authentication %d times; expected fewer than %d", errorCount, 1 /*c.Spec().NodeCount*/)
+	}
+
+	// Test finished.
 	m.Wait()
 }
 
@@ -242,6 +444,14 @@ func registerNetwork(r *testRegistry) {
 		Cluster: r.makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c Cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
+		},
+	})
+	r.Add(testSpec{
+		Name:    fmt.Sprintf("network/authentication/nodes=%d", numNodes),
+		Owner:   OwnerServer,
+		Cluster: makeClusterSpec(numNodes),
+		Run: func(ctx context.Context, t *test, c Cluster) {
+			runNetworkAuthentication(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{
