@@ -18,6 +18,7 @@ package main
 import (
 	"fmt"
 
+	_ "github.com/bufbuild/buf/cmd/buf"
 	_ "github.com/client9/misspell/cmd/misspell"
 	_ "github.com/cockroachdb/crlfmt"
 	_ "github.com/cockroachdb/go-test-teamcity"
