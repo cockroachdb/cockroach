@@ -1200,3 +1200,180 @@ func (k *kafkaFeed) Close() error {
 	}
 	return errors.CombineErrors(k.jobFeed.Close(), k.tg.wait())
 }
+
+type webhookFeedFactory struct {
+	enterpriseFeedFactory
+}
+
+var _ cdctest.TestFeedFactory = (*webhookFeedFactory)(nil)
+
+// makeWebhookFeedFactory returns a TestFeedFactory implementation using the `webhook-webhooks` uri.
+func makeWebhookFeedFactory(
+	srv serverutils.TestServerInterface, db *gosql.DB,
+) cdctest.TestFeedFactory {
+	return &webhookFeedFactory{
+		enterpriseFeedFactory: enterpriseFeedFactory{
+			s:  srv,
+			db: db,
+			di: newDepInjector(srv),
+		},
+	}
+}
+
+func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+
+	cert, _, err := cdctest.NewCACertBase64Encoded()
+	if err != nil {
+		return nil, err
+	}
+	sinkDest, err := cdctest.StartMockWebhookSink(cert)
+	if err != nil {
+		return nil, err
+	}
+
+	if createStmt.SinkURI == nil {
+		createStmt.SinkURI = tree.NewStrVal(
+			fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL()))
+	}
+	ss := &sinkSynchronizer{}
+	wrapSink := func(s Sink) Sink {
+		return &notifyFlushSink{Sink: s, sync: ss}
+	}
+
+	c := &webhookFeed{
+		jobFeed:        newJobFeed(f.db, wrapSink),
+		seenTrackerMap: make(map[string]struct{}),
+		ss:             ss,
+		mockSink:       sinkDest,
+	}
+	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+		sinkDest.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+func (f *webhookFeedFactory) Server() serverutils.TestServerInterface {
+	return f.s
+}
+
+type webhookFeed struct {
+	*jobFeed
+	seenTrackerMap
+	ss       *sinkSynchronizer
+	mockSink *cdctest.MockWebhookSink
+}
+
+var _ cdctest.TestFeed = (*webhookFeed)(nil)
+
+// Partitions implements TestFeed
+func (f *webhookFeed) Partitions() []string {
+	return []string{``}
+}
+
+// isResolvedTimestamp determines if the given JSON message is a resolved timestamp message.
+func isResolvedTimestamp(message []byte) (bool, error) {
+	parsed := make(map[string]interface{})
+	if err := gojson.Unmarshal(message, &parsed); err != nil {
+		return false, err
+	}
+	_, ok := parsed[`resolved`]
+	return ok, nil
+}
+
+// extractTopicFromJSONValue extracts the `WITH topic_in_value` topic from a `WITH
+// format=json, envelope=wrapped` value.
+func extractTopicFromJSONValue(wrapped []byte) (topic string, value []byte, _ error) {
+	parsed := make(map[string]interface{})
+	if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
+		return "", nil, err
+	}
+	topicParsed := parsed[`topic`]
+	delete(parsed, `topic`)
+
+	topic = fmt.Sprintf("%v", topicParsed)
+	var err error
+	if value, err = reformatJSON(parsed); err != nil {
+		return "", nil, err
+	}
+	return topic, value, nil
+}
+
+// extractValueFromJSONMessage extracts the value of the first element of
+// the payload array from an webhook sink JSON message.
+func extractValueFromJSONMessage(message []byte) ([]byte, error) {
+	parsed := make(map[string][]interface{})
+	if err := gojson.Unmarshal(message, &parsed); err != nil {
+		return nil, err
+	}
+	keyParsed := parsed[`payload`]
+	if len(keyParsed) <= 0 {
+		return nil, fmt.Errorf("payload value in json message contains no elements")
+	}
+
+	var err error
+	var value []byte
+	if value, err = reformatJSON(keyParsed[0]); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// Next implements TestFeed
+func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
+	for {
+		msg := f.mockSink.Pop()
+		if msg != "" {
+			m := &cdctest.TestFeedMessage{}
+			if msg != "" {
+				var err error
+				var resolved bool
+				resolved, err = isResolvedTimestamp([]byte(msg))
+				if err != nil {
+					return nil, err
+				}
+				if resolved {
+					m.Resolved = []byte(msg)
+				} else {
+					wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+					if err != nil {
+						return nil, err
+					}
+					if m.Key, m.Value, err = extractKeyFromJSONValue([]byte(wrappedValue)); err != nil {
+						return nil, err
+					}
+					if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
+						return nil, err
+					}
+					if isNew := f.markSeen(m); !isNew {
+						continue
+					}
+				}
+				return m, nil
+			}
+			m.Key, m.Value = nil, nil
+			return m, nil
+		}
+
+		select {
+		case <-f.ss.eventReady():
+		case <-f.shutdown:
+			return nil, f.terminalJobError()
+		}
+	}
+}
+
+// Close implements TestFeed
+func (f *webhookFeed) Close() error {
+	err := f.jobFeed.Close()
+	if err != nil {
+		return err
+	}
+	f.mockSink.Close()
+	return nil
+}

@@ -74,8 +74,9 @@ func TestShowChangefeedJobs(t *testing.T) {
 	type row struct {
 		id             jobspb.JobID
 		SinkURI        string
-		FulLTableNames []uint8
+		FullTableNames []uint8
 		format         string
+		description    string
 		DescriptorIDs  []descpb.ID
 	}
 
@@ -108,24 +109,28 @@ func TestShowChangefeedJobs(t *testing.T) {
 	query = `SET CLUSTER SETTING kv.rangefeed.enabled = true`
 	sqlDB.Exec(t, query)
 
-	var changefeedID jobspb.JobID
+	var singleChangefeedID, multiChangefeedID jobspb.JobID
+
+	query = `CREATE CHANGEFEED FOR TABLE foo INTO 
+		'webhook-https://fake-http-sink:8081' WITH webhook_auth_header='Basic Zm9v'`
+	sqlDB.QueryRow(t, query).Scan(&singleChangefeedID)
 
 	// Cannot use kafka for tests right now because of leaked goroutine issue
-	query = `CREATE CHANGEFEED FOR TABLE foo, bar INTO
-		'experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
-	sqlDB.QueryRow(t, query).Scan(&changefeedID)
+	query = `CREATE CHANGEFEED FOR TABLE foo, bar INTO 
+		'experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
+	sqlDB.QueryRow(t, query).Scan(&multiChangefeedID)
 
 	var out row
 
 	query = `SELECT job_id, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOB $1]`
-	sqlDB.QueryRow(t, query, changefeedID).Scan(&out.id, &out.SinkURI, &out.FulLTableNames, &out.format)
+	sqlDB.QueryRow(t, query, multiChangefeedID).Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format)
 
-	require.Equal(t, changefeedID, out.id, "Expected id:%d but found id:%d", changefeedID, out.id)
-	require.Equal(t, "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
-	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames))
+	require.Equal(t, multiChangefeedID, out.id, "Expected id:%d but found id:%d", multiChangefeedID, out.id)
+	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
+	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 
-	query = `SELECT job_id, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOBS] ORDER BY job_id`
+	query = `SELECT job_id, description, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOBS] ORDER BY sink_uri`
 	rowResults := sqlDB.Query(t, query)
 
 	if !rowResults.Next() {
@@ -136,14 +141,33 @@ func TestShowChangefeedJobs(t *testing.T) {
 			t.Fatalf("Expected more rows when querying and none found for query: %s", query)
 		}
 	}
-	err := rowResults.Scan(&out.id, &out.SinkURI, &out.FulLTableNames, &out.format)
+	err := rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	require.Equal(t, changefeedID, out.id, "Expected id:%d but found id:%d", changefeedID, out.id)
-	require.Equal(t, "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
-	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FulLTableNames))
+	require.Equal(t, multiChangefeedID, out.id, "Expected id:%d but found id:%d", multiChangefeedID, out.id)
+	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
+	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
+	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+
+	if !rowResults.Next() {
+		err := rowResults.Err()
+		if err != nil {
+			t.Fatalf("Error encountered while querying the next row: %v", err)
+		} else {
+			t.Fatalf("Expected more rows when querying and none found for query: %s", query)
+		}
+	}
+	err = rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	require.Equal(t, singleChangefeedID, out.id, "Expected id:%d but found id:%d", singleChangefeedID, out.id)
+	require.Equal(t, "CREATE CHANGEFEED FOR TABLE foo INTO 'webhook-https://fake-http-sink:8081' WITH webhook_auth_header = 'redacted'", out.description, "Expected description:%s but found description:%s", "CREATE CHANGEFEED FOR TABLE foo INTO 'webhook-https://fake-http-sink:8081' WITH webhook_auth_header = 'redacted'", out.description)
+	require.Equal(t, "webhook-https://fake-http-sink:8081", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "webhook-https://fake-http-sink:8081", out.SinkURI)
+	require.Equal(t, "{defaultdb.public.foo}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 
 	hasNext := rowResults.Next()
