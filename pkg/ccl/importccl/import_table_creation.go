@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -189,9 +190,10 @@ func MakeSimpleTableDescriptor(
 	create.Defs = filteredDefs
 
 	evalCtx := tree.EvalContext{
-		Context:     ctx,
-		Sequence:    &importSequenceOperators{},
-		SessionData: &sessiondata.SessionData{},
+		Context:            ctx,
+		Sequence:           &importSequenceOperators{},
+		SessionData:        &sessiondata.SessionData{},
+		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
 	}
 	affected := make(map[descpb.ID]*tabledesc.Mutable)
 
