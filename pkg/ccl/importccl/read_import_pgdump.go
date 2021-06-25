@@ -570,6 +570,7 @@ func readPostgresStmt(
 			Inverted:         stmt.Inverted,
 			Interleave:       stmt.Interleave,
 			PartitionByIndex: stmt.PartitionByIndex,
+			StorageParams:    stmt.StorageParams,
 		}
 		if stmt.Unique {
 			idx = &tree.UniqueConstraintTableDef{IndexTableDef: *idx.(*tree.IndexTableDef)}
