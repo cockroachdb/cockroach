@@ -705,6 +705,8 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			colID := tabMeta.MetaID.ColumnID(i)
 			var scalar opt.ScalarExpr
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				// TBD: should resolveAndRequireType do this?
+				texpr := tree.ReType(texpr, tabCol.DatumType())
 				scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
 			})
 			// Check if the expression contains non-immutable operators.
