@@ -578,6 +578,12 @@ func (tp *txnPipeliner) updateLockTracking(
 				// need to prove that these succeeded sometime before we commit.
 				header := req.Header()
 				tp.ifWrites.insert(header.Key, header.Sequence)
+				// The request is not expected to be a ranged one, as we're only
+				// tracking one key in the ifWrites. Ranged requests do not admit
+				// ba.AsyncConsensus.
+				if roachpb.IsRange(req) {
+					log.Fatalf(ctx, "unexpected range request with AsyncConsensus: %s", req)
+				}
 			} else {
 				// If the lock acquisitions weren't performed asynchronously
 				// then add them directly to our lock footprint. Locking read
