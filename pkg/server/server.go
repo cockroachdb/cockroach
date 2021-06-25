@@ -1687,6 +1687,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		goroutineDumpDirName: s.cfg.GoroutineDumpDirName,
 		heapProfileDirName:   s.cfg.HeapProfileDirName,
 		runtime:              s.runtime,
+		sessionRegistry:      s.status.sessionRegistry,
 	}); err != nil {
 		return err
 	}
@@ -2416,6 +2417,7 @@ type sampleEnvironmentCfg struct {
 	goroutineDumpDirName string
 	heapProfileDirName   string
 	runtime              *status.RuntimeStatSampler
+	sessionRegistry      *sql.SessionRegistry
 }
 
 // startSampleEnvironment starts a periodic loop that samples the environment and,
@@ -2451,6 +2453,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 	var heapProfiler *heapprofiler.HeapProfiler
 	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
 	var statsProfiler *heapprofiler.StatsProfiler
+	var queryProfiler *heapprofiler.QueryProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
@@ -2476,6 +2479,10 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 			statsProfiler, err = heapprofiler.NewStatsProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				return errors.Wrap(err, "starting memory stats collector worker")
+			}
+			queryProfiler, err = heapprofiler.NewQueryProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			if err != nil {
+				return errors.Wrap(err, "starting query profiler worker")
 			}
 		}
 	}
@@ -2536,6 +2543,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 					heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
 					nonGoAllocProfiler.MaybeTakeProfile(ctx, cfg.runtime.CgoTotalBytes.Value())
 					statsProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), curStats, cgoStats)
+					queryProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), cfg.sessionRegistry)
 				}
 			}
 		}
