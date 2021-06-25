@@ -73,14 +73,14 @@ RUN mkdir -p /usr/local/lib/ccache \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-gnu-c++ \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-cc \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-c++ \
- && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-cc \
- && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnu-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnu-c++ \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/s390x-ibm-linux-gnu-c++ \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/s390x-ibm-linux-gnu-cc \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin19-cc \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin19-c++
 
-ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin:/x-tools/s390x-ibm-linux-gnu/bin:/x-tools/x86_64-apple-darwin19/bin
+ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnu/bin:/x-tools/s390x-ibm-linux-gnu/bin:/x-tools/x86_64-apple-darwin19/bin
 
 # Compile GNU sed from source to pick up an unreleased change that buffers
 # output. This speeds up compiles on Docker for Mac by *minutes*.
