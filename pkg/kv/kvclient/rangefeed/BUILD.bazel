@@ -1,7 +1,8 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "rangefeed",
+    name = "rangefeed_base",
     srcs = [
         "config.go",
         "db_adapter.go",
@@ -9,7 +10,7 @@ go_library(
         "rangefeed.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
-    visibility = ["//visibility:public"],
+    visibility = ["//visibility:private"],
     deps = [
         "//pkg/base",
         "//pkg/kv",
@@ -26,6 +27,30 @@ go_library(
     ],
 )
 
+# keep
+go_library(
+    name = "rangefeed",
+    srcs = [
+        ":mocks_rangefeed",  # keep
+    ],
+    embed = [":rangefeed_base"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@org_golang_google_grpc//metadata",
+    ],
+)
+
+gomock(
+    name = "mocks_rangefeed",
+    out = "mocks_generated.go",
+    interfaces = [""],  # required, yet ignored when using source -- bug?
+    library = ":rangefeed_base",
+    package = "rangefeed",
+    self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
+    source = "rangefeed.go",
+)
+
 go_test(
     name = "rangefeed_test",
     srcs = [
@@ -38,12 +63,11 @@ go_test(
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",
+        "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
@@ -53,8 +77,8 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@org_golang_google_grpc//:go_default_library",
     ],
 )
