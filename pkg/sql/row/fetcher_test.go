@@ -998,7 +998,7 @@ func TestNextRowInterleaved(t *testing.T) {
 				}
 			}
 
-			lookupSpans, _ = roachpb.MergeSpans(lookupSpans)
+			lookupSpans, _ = roachpb.MergeSpans(&lookupSpans)
 
 			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
 			if err != nil {

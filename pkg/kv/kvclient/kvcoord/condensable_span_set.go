@@ -54,7 +54,7 @@ func (s *condensableSpanSet) insert(spans ...roachpb.Span) {
 // The method has the side effect of sorting the stable write set.
 func (s *condensableSpanSet) mergeAndSort() {
 	oldLen := len(s.s)
-	s.s, _ = roachpb.MergeSpans(s.s)
+	s.s, _ = roachpb.MergeSpans(&s.s)
 	// Recompute the size if anything has changed.
 	if oldLen != len(s.s) {
 		s.bytes = 0
