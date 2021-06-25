@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -652,18 +653,6 @@ func MachineTypeToCPUs(s string) int {
 	return -1
 }
 
-type testI interface {
-	Name() string
-	Fatal(args ...interface{})
-	Fatalf(format string, args ...interface{})
-	Failed() bool
-	// Path to a directory where the test is supposed to store its log and other
-	// artifacts.
-	ArtifactsDir() string
-	L() *logger.Logger
-	Status(args ...interface{})
-}
-
 type nodeSelector interface {
 	option.Option
 	Merge(option.NodeListOption) option.NodeListOption
@@ -691,7 +680,7 @@ type clusterImpl struct {
 	name string
 	tag  string
 	spec spec.ClusterSpec
-	t    testI
+	t    test2.Test
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
@@ -1026,7 +1015,7 @@ func attachToExistingCluster(
 // setTest prepares c for being used on behalf of t.
 //
 // TODO(andrei): Get rid of c.t, c.l and of this method.
-func (c *clusterImpl) setTest(t testI) {
+func (c *clusterImpl) setTest(t test2.Test) {
 	c.t = t
 	c.l = t.L()
 }
@@ -2404,7 +2393,7 @@ func getDiskUsageInBytes(
 }
 
 type monitor struct {
-	t         testI
+	t         test2.Test
 	l         *logger.Logger
 	nodes     string
 	ctx       context.Context
@@ -2598,7 +2587,7 @@ func (m *monitor) wait(args ...string) error {
 
 // TODO(nvanbenschoten): this function should take a context and be responsive
 // to context cancellation.
-func waitForFullReplication(t testI, db *gosql.DB) {
+func waitForFullReplication(t test2.Test, db *gosql.DB) {
 	t.L().Printf("waiting for up-replication...")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
