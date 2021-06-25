@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
@@ -30,68 +31,17 @@ type Owner string
 // The allowable values of Owner.
 const (
 	OwnerSQLExperience Owner = `sql-experience`
-	OwnerBulkIO        Owner = `bulkio`
+	OwnerBulkIO        Owner = `bulk-io`
 	OwnerCDC           Owner = `cdc`
 	OwnerKV            Owner = `kv`
-	OwnerPartitioning  Owner = `partitioning`
+	OwnerServer        Owner = `server`
 	OwnerSQLQueries    Owner = `sql-queries`
 	OwnerSQLSchema     Owner = `sql-schema`
 	OwnerStorage       Owner = `storage`
 )
 
-// OwnerMetadata contains information about a roachtest owning team, such as
-// team slack room, and github project.
-type OwnerMetadata struct {
-	SlackRoom string
-	// Mention is a slice of Github handles to notify (via mentioning) in posted
-	// issues.
-	Mention []string
-	// TriageColumnID is the column id of the project column the team uses to
-	// triage issues. Unfortunately, there appears to be no way to retrieve this
-	// programmatically from the API.
-	//
-	// To find the triage column for a project, run the following curl command:
-	// curl -u yourusername:githubaccesstoken -H "Accept: application/vnd.githubinertia-preview+json" \
-	// https://api.github.com/repos/cockroachdb/cockroach/projects
-	//
-	// Then, for the project you care about, curl its columns URL, which looks
-	// like this:
-	// https://api.github.com/projects/3842382/columns
-	//
-	// Find the triage column you want, and pick its ID field.
-	TriageColumnID int
-}
-
-// roachtestOwners maps an owner in code (as specified on a roachtest spec) to
-// metadata used for github issue posting/slack rooms, etc.
-var roachtestOwners = map[Owner]OwnerMetadata{
-	OwnerSQLExperience: {SlackRoom: `sql-experience`, Mention: []string{`@cockroachdb/sql-experience`},
-		TriageColumnID: 7259065,
-	},
-	OwnerBulkIO: {SlackRoom: `bulk-io`, Mention: []string{`@cockroachdb/bulk-io`},
-		TriageColumnID: 3097123,
-	},
-	OwnerCDC: {SlackRoom: `cdc`, Mention: []string{`@cockroachdb/cdc`},
-		TriageColumnID: 3570120,
-	},
-	OwnerKV: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv`},
-		TriageColumnID: 3550674,
-	},
-	// This is an alias for the KV team.
-	OwnerPartitioning: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv`},
-		TriageColumnID: 3550674,
-	},
-	OwnerSQLQueries: {SlackRoom: `sql-queries`, Mention: []string{`@cockroachdb/sql-queries`},
-		TriageColumnID: 6837155,
-	},
-	OwnerSQLSchema: {SlackRoom: `sql-schema`, Mention: []string{`@cockroachdb/sql-schema`},
-		TriageColumnID: 8946818,
-	},
-	OwnerStorage: {SlackRoom: `storage`, Mention: []string{`@cockroachdb/storage`},
-		TriageColumnID: 6668367,
-	},
-	// Only for use in roachtest package unittests.
-	`unittest`: {},
+func ownerToAlias(o Owner) team.Alias {
+	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
 }
 
 const defaultTag = "default"
@@ -165,7 +115,11 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 	if spec.Owner == `` {
 		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
 	}
-	if _, ok := roachtestOwners[spec.Owner]; !ok {
+	teams, err := team.DefaultLoadTeams()
+	if err != nil {
+		return err
+	}
+	if _, ok := teams[ownerToAlias(spec.Owner)]; !ok {
 		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
 	}
 	if len(spec.Tags) == 0 {

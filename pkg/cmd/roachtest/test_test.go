@@ -26,7 +26,7 @@ import (
 	"github.com/kr/pretty"
 )
 
-const OwnerUnitTest Owner = `unittest`
+const OwnerUnitTest Owner = `unowned`
 
 const defaultParallelism = 10
 

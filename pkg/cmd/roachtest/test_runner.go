@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"math/rand"
 	"net"
@@ -28,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -634,48 +636,7 @@ func (r *testRunner) runTest(
 			}
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
-			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
-			if issues.DefaultOptionsFromEnv().CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				owner := roachtestOwners[t.spec.Owner]
-
-				branch := "<unknown branch>"
-				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
-					branch = b
-				}
-				msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
-					branch, cloud, output)
-				artifacts := fmt.Sprintf("/%s", t.Name())
-
-				// Issues posted from roachtest are identifiable as such and
-				// they are also release blockers (this label may be removed
-				// by a human upon closer investigation).
-				labels := []string{"O-roachtest"}
-				if !t.spec.NonReleaseBlocker {
-					labels = append(labels, "release-blocker")
-				}
-
-				req := issues.PostRequest{
-					AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
-					Mention:         owner.Mention,
-					ProjectColumnID: owner.TriageColumnID,
-					PackageName:     "roachtest",
-					TestName:        t.Name(),
-					Message:         msg,
-					Artifacts:       artifacts,
-					ExtraLabels:     labels,
-					ReproductionCommand: fmt.Sprintf(
-						`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
-caffeinate ./roachstress.sh %s
-`, t.Name()),
-				}
-				if err := issues.Post(
-					context.Background(),
-					issues.UnitTestFormatter,
-					req,
-				); err != nil {
-					shout(ctx, l, stdout, "failed to post issue: %s", err)
-				}
-			}
+			r.maybePostGithubIssue(ctx, l, t, stdout, output)
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", t.Name(), durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -867,6 +828,64 @@ caffeinate ./roachstress.sh %s
 		return false, nil
 	}
 	return true, nil
+}
+
+func (r *testRunner) shouldPostGithubIssue(t *test) bool {
+	// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
+	opts := issues.DefaultOptionsFromEnv()
+	return opts.CanPost() && opts.IsReleaseBranch() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0
+}
+
+func (r *testRunner) maybePostGithubIssue(
+	ctx context.Context, l *logger, t *test, stdout io.Writer, output string,
+) {
+	if !r.shouldPostGithubIssue(t) {
+		return
+	}
+
+	teams, err := team.DefaultLoadTeams()
+	if err != nil {
+		t.Fatalf("could not load teams: %v", err)
+	}
+	team := teams[ownerToAlias(t.spec.Owner)]
+
+	branch := "<unknown branch>"
+	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+		branch = b
+	}
+	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
+		branch, cloud, output)
+	artifacts := fmt.Sprintf("/%s", t.Name())
+
+	// Issues posted from roachtest are identifiable as such and
+	// they are also release blockers (this label may be removed
+	// by a human upon closer investigation).
+	labels := []string{"O-roachtest"}
+	if !t.spec.NonReleaseBlocker {
+		labels = append(labels, "release-blocker")
+	}
+
+	req := issues.PostRequest{
+		AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
+		Mention:         []string{"@" + string(team.Name())},
+		ProjectColumnID: team.TriageColumnID,
+		PackageName:     "roachtest",
+		TestName:        t.Name(),
+		Message:         msg,
+		Artifacts:       artifacts,
+		ExtraLabels:     labels,
+		ReproductionCommand: fmt.Sprintf(
+			`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
+caffeinate ./roachstress.sh %s
+`, t.Name()),
+	}
+	if err := issues.Post(
+		context.Background(),
+		issues.UnitTestFormatter,
+		req,
+	); err != nil {
+		shout(ctx, l, stdout, "failed to post issue: %s", err)
+	}
 }
 
 func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
@@ -1081,17 +1100,21 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 				clusterReused = "no"
 			}
 		}
-		var clusterName string
+		var clusterName, clusterAdminUIAddr string
 		if w.Cluster() != nil {
 			clusterName = w.Cluster().name
+			clusterAdminUIAddr = w.Cluster().ExternalAdminUIAddr(
+				req.Context(),
+				w.Cluster().Node(1),
+			)[0]
 		}
 		t := w.Test()
 		testStatus := "N/A"
 		if t != nil {
 			testStatus = t.GetStatus()
 		}
-		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
-			w.name, w.Status(), testName, clusterName, clusterReused, testStatus)
+		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='//%s'>%s</a></td><td>%s</td><td>%s</td></tr>\n",
+			w.name, w.Status(), testName, clusterAdminUIAddr, clusterName, clusterReused, testStatus)
 	}
 	fmt.Fprintf(wr, "</table>")
 
@@ -1107,7 +1130,7 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		name := fmt.Sprintf("%s (run %d)", t.test, t.run)
 		status := "PASS"
 		if !t.pass {
-			status = "FAIL " + t.failure
+			status = "FAIL " + strings.ReplaceAll(html.EscapeString(t.failure), "\n", "<br>")
 		}
 		duration := fmt.Sprintf("%s (%s - %s)", t.end.Sub(t.start), t.start, t.end)
 		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><tr/>", name, status, duration)

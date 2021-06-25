@@ -252,6 +252,12 @@ func (o *Options) CanPost() bool {
 	return o.Token != ""
 }
 
+// IsReleaseBranch returns true for branches that we want to treat as
+// "release" branches, including master and provisional branches.
+func (o *Options) IsReleaseBranch() bool {
+	return o.Branch == "master" || strings.HasPrefix(o.Branch, "release-") || strings.HasPrefix(o.Branch, "provisional_")
+}
+
 // TemplateData is the input on which an IssueFormatter operates. It has
 // everything known about the test failure in a predigested form.
 type TemplateData struct {

@@ -1574,7 +1574,7 @@ func (c *cluster) FetchDiskUsage(ctx context.Context) error {
 		}
 		if err := execCmd(
 			ctx, c.l, roachprod, "ssh", c.name, "--",
-			"/bin/bash", "-c", "'du -c /mnt/data1 > "+name+"'",
+			"/bin/bash", "-c", "'du -c /mnt/data1 --exclude lost+found > "+name+"'",
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
@@ -1751,7 +1751,10 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 			return c.CheckReplicaDivergenceOnDB(ctx, db)
 		},
 	); err != nil {
-		t.Fatal(err)
+		// NB: we don't call t.Fatal() here because this method is
+		// for use by the test harness beyond the point at which
+		// it can interpret `t.Fatal`.
+		t.printAndFail(0, err)
 	}
 }
 
@@ -2199,6 +2202,23 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	if err := c.StopE(ctx, opts...); err != nil {
 		c.t.Fatal(err)
 	}
+}
+
+func (c *cluster) Reset(ctx context.Context) error {
+	if c.t.Failed() {
+		return errors.New("already failed")
+	}
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Reset")
+	}
+	args := []string{
+		roachprod,
+		"reset",
+		c.name,
+	}
+	c.status("resetting cluster")
+	defer c.status()
+	return execCmd(ctx, c.l, args...)
 }
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
