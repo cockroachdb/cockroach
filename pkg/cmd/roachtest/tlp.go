@@ -27,7 +27,7 @@ import (
 const statementTimeout = time.Minute
 
 func registerTLP(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tlp",
 		Owner:      OwnerSQLQueries,
 		Timeout:    time.Minute * 5,

@@ -155,7 +155,7 @@ func registerDrop(r *testRegistry) {
 	warehouses := 100
 	numNodes := 9
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
 		Owner:      OwnerKV,
 		MinVersion: `v2.1.0`,

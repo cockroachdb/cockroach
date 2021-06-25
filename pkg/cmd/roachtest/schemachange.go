@@ -24,7 +24,7 @@ import (
 )
 
 func registerSchemaChangeDuringKV(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    `schemachange/during/kv`,
 		Owner:   OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(5),
@@ -297,8 +297,8 @@ func registerSchemaChangeIndexTPCC100(r *testRegistry) {
 	r.Add(makeIndexAddTpccTest(r.makeClusterSpec(5), 100, time.Minute*15))
 }
 
-func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Duration) testSpec {
-	return testSpec{
+func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Duration) TestSpec {
+	return TestSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
 		Owner:   OwnerSQLSchema,
 		Cluster: spec,
@@ -330,8 +330,8 @@ func registerSchemaChangeBulkIngest(r *testRegistry) {
 
 func makeSchemaChangeBulkIngestTest(
 	r *testRegistry, numNodes, numRows int, length time.Duration,
-) testSpec {
-	return testSpec{
+) TestSpec {
+	return TestSpec{
 		Name:    "schemachange/bulkingest",
 		Owner:   OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(numNodes),
@@ -416,8 +416,8 @@ func registerSchemaChangeDuringTPCC1000(r *testRegistry) {
 
 func makeSchemaChangeDuringTPCC(
 	spec spec.ClusterSpec, warehouses int, length time.Duration,
-) testSpec {
-	return testSpec{
+) TestSpec {
+	return TestSpec{
 		Name:    "schemachange/during/tpcc",
 		Owner:   OwnerSQLSchema,
 		Cluster: spec,

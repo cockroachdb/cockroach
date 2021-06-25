@@ -242,7 +242,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		c.Start(ctx, c.Node(nodeDecommissioned))
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       `autoupgrade`,
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",

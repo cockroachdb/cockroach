@@ -74,7 +74,7 @@ func registerYCSB(r *testRegistry) {
 				name = fmt.Sprintf("ycsb/%s/nodes=3/cpu=%d", wl, cpus)
 			}
 			wl, cpus := wl, cpus
-			r.Add(testSpec{
+			r.Add(TestSpec{
 				Name:    name,
 				Owner:   OwnerKV,
 				Cluster: r.makeClusterSpec(4, spec.CPU(cpus)),

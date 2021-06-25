@@ -163,7 +163,7 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 		minVersion = "v19.1.0" // needed for import
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       strings.Join(nameParts, "/"),
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(numNodes),

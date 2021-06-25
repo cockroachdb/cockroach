@@ -135,7 +135,7 @@ func registerLibPQ(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "lib/pq",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",

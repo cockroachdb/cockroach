@@ -66,7 +66,7 @@ func registerRoachmart(r *testRegistry) {
 
 	for _, v := range []bool{true, false} {
 		v := v
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("roachmart/partition=%v", v),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),

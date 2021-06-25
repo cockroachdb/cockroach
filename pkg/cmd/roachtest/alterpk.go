@@ -167,7 +167,7 @@ func registerAlterPK(r *testRegistry) {
 		c.Run(ctx, loadNode, checkCmd)
 		t.Status("finished database verification")
 	}
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "alterpk-bank",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
@@ -176,7 +176,7 @@ func registerAlterPK(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(4),
 		Run:        runAlterPKBank,
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "alterpk-tpcc-250",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
@@ -187,7 +187,7 @@ func registerAlterPK(r *testRegistry) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "alterpk-tpcc-500",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the

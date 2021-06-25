@@ -21,7 +21,7 @@ import (
 )
 
 func registerDiskFull(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "disk-full",
 		Owner:      OwnerStorage,
 		MinVersion: `v20.2.0`,

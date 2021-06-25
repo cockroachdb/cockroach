@@ -179,7 +179,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "node-postgres",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),

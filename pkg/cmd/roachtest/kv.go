@@ -224,7 +224,7 @@ func registerKV(r *testRegistry) {
 			minVersion = "v2.1.0"
 		}
 
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:       strings.Join(nameParts, "/"),
 			Owner:      OwnerKV,
 			MinVersion: minVersion,
@@ -239,7 +239,7 @@ func registerKV(r *testRegistry) {
 
 func registerKVContention(r *testRegistry) {
 	const nodes = 4
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Owner:      OwnerKV,
 		MinVersion: "v20.1.0",
@@ -308,7 +308,7 @@ func registerKVContention(r *testRegistry) {
 }
 
 func registerKVQuiescenceDead(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "kv/quiescence/nodes=3",
 		Owner:      OwnerKV,
 		Cluster:    r.makeClusterSpec(4),
@@ -390,7 +390,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 }
 
 func registerKVGracefulDraining(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(4),
@@ -606,7 +606,7 @@ func registerKVSplits(r *testRegistry) {
 		{false, 30000, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
 			Owner:   OwnerKV,
 			Timeout: item.timeout,
@@ -671,7 +671,7 @@ func registerKVScalability(r *testRegistry) {
 	if false {
 		for _, p := range []int{0, 95} {
 			p := p
-			r.Add(testSpec{
+			r.Add(TestSpec{
 				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Owner:   OwnerKV,
 				Cluster: r.makeClusterSpec(7, spec.CPU(8)),
@@ -805,7 +805,7 @@ func registerKVRangeLookups(r *testRegistry) {
 		default:
 			panic("unexpected")
 		}
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
 			Owner:      OwnerKV,
 			MinVersion: "v19.2.0",

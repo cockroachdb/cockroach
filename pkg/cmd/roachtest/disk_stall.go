@@ -29,7 +29,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 			// Everyone's favorite bug to write in Go.
 			affectsLogDir := affectsLogDir
 			affectsDataDir := affectsDataDir
-			r.Add(testSpec{
+			r.Add(TestSpec{
 				Name: fmt.Sprintf(
 					"disk-stalled/log=%t,data=%t",
 					affectsLogDir, affectsDataDir,

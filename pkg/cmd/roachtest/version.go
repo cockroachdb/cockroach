@@ -210,7 +210,7 @@ func registerVersion(r *testRegistry) {
 	}
 
 	for _, n := range []int{3, 5} {
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:       fmt.Sprintf("version/mixed/nodes=%d", n),
 			Owner:      OwnerKV,
 			MinVersion: "v2.1.0",

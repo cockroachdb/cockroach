@@ -84,7 +84,7 @@ func runRestart(ctx context.Context, t *test, c cluster.Cluster, downDuration ti
 }
 
 func registerRestart(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "restart/down-for-2m",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(3),

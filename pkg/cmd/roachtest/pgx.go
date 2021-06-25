@@ -125,7 +125,7 @@ func registerPgx(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "pgx",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),

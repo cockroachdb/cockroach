@@ -79,7 +79,7 @@ func registerEncryption(r *testRegistry) {
 	}
 
 	for _, n := range []int{1} {
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
 			Owner:      OwnerStorage,
 			MinVersion: "v2.1.0",

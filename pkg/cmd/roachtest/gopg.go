@@ -145,7 +145,7 @@ func registerGopg(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "gopg",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),

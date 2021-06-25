@@ -19,7 +19,7 @@ import (
 )
 
 func registerSchemaChangeMixedVersions(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "schemachange/mixed-versions",
 		Owner: OwnerSQLSchema,
 		// This tests the work done for 20.1 that made schema changes jobs and in
