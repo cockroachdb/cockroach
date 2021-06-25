@@ -281,6 +281,10 @@ func doCreateBackupSchedules(
 		return errors.Wrapf(err, "failed to dry run backup")
 	}
 
+	if err := fullyQualifyTargetTableNames(p.CurrentDatabase(), backupNode); err != nil {
+		return errors.Wrapf(err, "failed to fully qualify target table names")
+	}
+
 	var scheduleLabel string
 	if eval.scheduleLabel != nil {
 		label, err := eval.scheduleLabel()
@@ -381,6 +385,49 @@ func doCreateBackupSchedules(
 	collectScheduledBackupTelemetry(incRecurrence, firstRun, fullRecurrencePicked, details)
 	return emitSchedule(full, backupNode, destinations, nil /* incrementalFrom */, kmsURIs,
 		resultsCh)
+}
+
+func fullyQualifyTargetTableNames(currDatabase string, backupNode *tree.Backup) error {
+	if backupNode.Targets == nil {
+		return nil
+	}
+
+	for i, pattern := range backupNode.Targets.Tables {
+		normalizedPattern, err := pattern.NormalizeTablePattern()
+		if err != nil {
+			return err
+		}
+
+		// There are 3 cases to consider:
+		// case 1): unqualified table name => fill in default public
+		// 	schema and current database.
+		// case 2): partially qualified table name => the schema field
+		// 	either be a SchemaName or a CatalogName since if only one of
+		//	them is present, the name gets resolved to the schema field
+		//	during planning. We should not attempt to update the
+		//  table name due to this uncertainty.
+		// case 3): fully qualified table name => no need for updates.
+		switch t := normalizedPattern.(type) {
+		case *tree.TableName:
+			if !t.ExplicitSchema {
+				t.ExplicitSchema = true
+				t.SchemaName = tree.PublicSchemaName
+				t.CatalogName = tree.Name(currDatabase)
+				t.ExplicitCatalog = true
+				backupNode.Targets.Tables[i] = t
+			}
+		case *tree.AllTablesSelector:
+			if !t.ExplicitSchema {
+				t.ExplicitSchema = true
+				t.SchemaName = tree.PublicSchemaName
+				t.CatalogName = tree.Name(currDatabase)
+				t.ExplicitCatalog = true
+				backupNode.Targets.Tables[i] = t
+			}
+		}
+	}
+
+	return nil
 }
 
 // checkForExistingBackupsInCollection checks that there are no existing backups
@@ -666,6 +713,7 @@ func createBackupScheduleHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+
 	eval, err := makeScheduledBackupEval(ctx, p, schedule)
 	if err != nil {
 		return nil, nil, nil, false, err
