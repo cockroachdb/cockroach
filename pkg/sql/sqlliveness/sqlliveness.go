@@ -71,6 +71,7 @@ type Session interface {
 	// See discussion in Open Questions in
 	// http://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20200615_sql_liveness.md
 	Expiration() hlc.Timestamp
+	RegisterCallbackForSessionExpiry(func(ctx context.Context))
 }
 
 // Reader abstracts over the state of session records.

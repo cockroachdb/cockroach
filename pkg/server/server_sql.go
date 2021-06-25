@@ -65,6 +65,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -118,6 +120,7 @@ type SQLServer struct {
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	sqlLivenessProvider     sqlliveness.Provider
+	sqlInstanceProvider     sqlinstance.Provider
 	metricsRegistry         *metric.Registry
 	diagnosticsReporter     *diagnostics.Reporter
 
@@ -233,6 +236,9 @@ type sqlServerArgs struct {
 	// Stores and deletes expired liveness sessions.
 	sqlLivenessProvider sqlliveness.Provider
 
+	// Stores and manages sql instance information.
+	sqlInstanceProvider sqlinstance.Provider
+
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
@@ -250,7 +256,7 @@ type sqlServerArgs struct {
 	rangeFeedFactory *rangefeed.Factory
 }
 
-func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
+func newSQLServer(ctx context.Context, cfg sqlServerArgs, httpAddr string) (*SQLServer, error) {
 	// NB: ValidateAddrs also fills in defaults.
 	if err := cfg.Config.ValidateAddrs(ctx); err != nil {
 		return nil, err
@@ -273,12 +279,26 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Create trace service for inter-node sharing of inflight trace spans.
 	tracingService := service.New(cfg.Settings.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
-
+	cfg.sqlLivenessProvider = slprovider.New(
+		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
+	)
+	cfg.sqlInstanceProvider = instanceprovider.New(
+		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, httpAddr,
+	)
+	err = startSQLLivenessAndInstanceProviders(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	// Initialize SQLIDContainer, if necessary.
+	if cfg.nodeIDContainer == nil {
+		instance, err := cfg.sqlInstanceProvider.Instance(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cfg.nodeIDContainer = base.NewSQLIDContainer(instance.InstanceID(), nil)
+	}
 	jobRegistry := cfg.circularJobRegistry
 	{
-		cfg.sqlLivenessProvider = slprovider.New(
-			cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
-		)
 		cfg.registry.AddMetricStruct(cfg.sqlLivenessProvider.Metrics())
 
 		var jobsKnobs *jobs.TestingKnobs
@@ -783,6 +803,22 @@ func maybeCheckTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB)
 	return nil
 }
 
+func startSQLLivenessAndInstanceProviders(ctx context.Context, cfg sqlServerArgs) error {
+	// If necessary, start the tenant proxy first, to ensure all other
+	// components can properly route to KV nodes. The Start method will block
+	// until a connection is established to the cluster and its ID has been
+	// determined.
+	if cfg.tenantConnect != nil {
+		if err := cfg.tenantConnect.Start(ctx); err != nil {
+			return err
+		}
+	}
+	// sqlLivenessProvider must always be started before the sqlInstanceProvider.
+	cfg.sqlLivenessProvider.Start(ctx)
+	cfg.sqlInstanceProvider.Start(ctx)
+	return nil
+}
+
 func (s *SQLServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
@@ -792,15 +828,6 @@ func (s *SQLServer) preStart(
 	socketFile string,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
-	// If necessary, start the tenant proxy first, to ensure all other
-	// components can properly route to KV nodes. The Start method will block
-	// until a connection is established to the cluster and its ID has been
-	// determined.
-	if s.tenantConnect != nil {
-		if err := s.tenantConnect.Start(ctx); err != nil {
-			return err
-		}
-	}
 	// Confirm tenant exists prior to initialization. This is a sanity
 	// check for the dev environment to ensure that a tenant has been
 	// successfully created before attempting to initialize a SQL
@@ -830,8 +857,6 @@ func (s *SQLServer) preStart(
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
-
-	s.sqlLivenessProvider.Start(ctx)
 
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)

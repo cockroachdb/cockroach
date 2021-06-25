@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package slinstance_test
+package instanceprovider_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -33,61 +33,41 @@ func TestSQLInstance(t *testing.T) {
 
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
-
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,
 		true /* initializeVersion */)
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Microsecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
+	expiration := 2 * time.Microsecond
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, expiration)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 1*time.Microsecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
+	const httpAddr = "http_addr"
 	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
+	instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, sqlInstance, httpAddr)
 	sqlInstance.Start(ctx)
-
-	// Add one more instance to introduce concurrent access to storage.
-	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
-	dummy.Start(ctx)
-
-	s1, err := sqlInstance.Session(ctx)
+	instanceProvider.Start(ctx)
+	instance, err := instanceProvider.Instance(ctx)
 	require.NoError(t, err)
-	a, err := fakeStorage.IsAlive(ctx, s1.ID())
+	addr, err := instanceProvider.GetInstanceAddr(ctx, instance.InstanceID())
 	require.NoError(t, err)
-	require.True(t, a)
-
-	s2, err := sqlInstance.Session(ctx)
-	require.NoError(t, err)
-	require.Equal(t, s1.ID(), s2.ID())
-
-	_ = fakeStorage.Delete(ctx, s2.ID())
-	t.Logf("deleted session %s", s2.ID())
-	a, err = fakeStorage.IsAlive(ctx, s2.ID())
-	require.NoError(t, err)
-	require.False(t, a)
-
-	var s3 sqlliveness.Session
+	require.Equal(t, httpAddr, addr)
+	session, err := sqlInstance.Session(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.Update(session.Expiration().Add(1, 0).UnsafeToClockTimestamp())
+	// Force call to clearSession by deleting the active session.
+	sqlInstance.ClearSessionForTest(ctx)
+	// Verify that the sqlinstance is shutdown on session expiry.
 	require.Eventually(
 		t,
 		func() bool {
-			s3, err = sqlInstance.Session(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return s3.ID().String() != s2.ID().String()
+			_, err := instanceProvider.Instance(ctx)
+			return err == stop.ErrUnavailable
 		},
 		time.Second, 10*time.Millisecond,
 	)
-
-	a, err = fakeStorage.IsAlive(ctx, s3.ID())
-	require.NoError(t, err)
-	require.True(t, a)
-	require.NotEqual(t, s2.ID(), s3.ID())
-
-	// Force next call to Session to fail.
-	stopper.Stop(ctx)
-	sqlInstance.ClearSessionForTest(ctx)
-	_, err = sqlInstance.Session(ctx)
-	require.Error(t, err)
 }

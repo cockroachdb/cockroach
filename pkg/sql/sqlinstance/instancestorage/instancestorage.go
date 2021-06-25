@@ -88,7 +88,7 @@ func (s *Storage) Start() {
 	s.mu.started = true
 }
 
-// CreateInstance allocates a unique instance identifier for the
+// CreateInstance allocates a unique Instance identifier for the
 // sql pod and associates it with its http address and session
 // information.
 func (s *Storage) CreateInstance(
@@ -97,7 +97,7 @@ func (s *Storage) CreateInstance(
 	if err = s.checkStarted(); err != nil {
 		return nil, err
 	}
-	instance := newSQLInstance(base.SQLInstanceID(1), httpAddr, sessionID) // Starter value
+	instance := NewSQLInstance(base.SQLInstanceID(1), httpAddr, sessionID) // Starter value
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		start := s.makeTablePrefix()
 		end := start.PrefixEnd()
@@ -116,7 +116,7 @@ func (s *Storage) CreateInstance(
 					log.Warningf(ctx, "failed to decode row %s: %v", rows[i].Key.String(), err)
 					return err
 				}
-				// If instance id is available, reuse it.
+				// If Instance id is available, reuse it.
 				if len(currentRow.httpAddr) == 0 {
 					instance.id = currentRow.id
 					break
@@ -130,7 +130,7 @@ func (s *Storage) CreateInstance(
 		key := s.makeInstanceKey(instance.id)
 		value, err := s.rowcodec.encodeRow(instance)
 		if err != nil {
-			log.Warningf(ctx, "failed to encode row for instance id %d: %v", instance.id, err)
+			log.Warningf(ctx, "failed to encode row for Instance id %d: %v", instance.id, err)
 			return err
 		}
 		return s.db.Put(ctx, key, &value)
@@ -141,8 +141,8 @@ func (s *Storage) CreateInstance(
 	return instance, nil
 }
 
-// GetInstanceAddr retrieves the network address for an instance
-// given its instance id.
+// GetInstanceAddr retrieves the network address for an Instance
+// given its Instance id.
 func (s *Storage) GetInstanceAddr(
 	ctx context.Context, id base.SQLInstanceID,
 ) (httpAddr string, err error) {
@@ -153,13 +153,13 @@ func (s *Storage) GetInstanceAddr(
 		k := s.makeInstanceKey(id)
 		var err error
 		var row kv.KeyValue
-		var i *instance
+		var i *Instance
 		row, err = s.db.Get(ctx, k)
 		if err != nil {
 			return err
 		}
 		if instanceExists := row.Value != nil; !instanceExists {
-			return errors.New("non existent instance")
+			return errors.New("non existent Instance")
 		}
 		i, err = s.rowcodec.decodeRow(row)
 		if err != nil {
@@ -168,20 +168,20 @@ func (s *Storage) GetInstanceAddr(
 		if len(i.httpAddr) == 0 {
 			// Instance is no longer active
 			s.removeCacheEntry(id)
-			return errors.New("inactive instance")
+			return errors.New("inactive Instance")
 		}
 		s.updateCacheEntry(i)
 		httpAddr = i.httpAddr
 		return nil
 	})
 	if err != nil {
-		return "", errors.Wrapf(err, "could not fetch instance %d", id)
+		return "", errors.Wrapf(err, "could not fetch Instance %d", id)
 	}
 	return httpAddr, nil
 }
 
-// GetAllInstancesForTenant retrieves instance information
-// on all active instances for the tenant.
+// GetAllInstancesForTenant retrieves Instance information
+// on all active Instances for the tenant.
 func (s *Storage) GetAllInstancesForTenant(
 	ctx context.Context,
 ) (instances []sqlinstance.SQLInstance, err error) {
@@ -207,11 +207,11 @@ func (s *Storage) GetAllInstancesForTenant(
 					return err
 				}
 				if len(currentRow.httpAddr) != 0 {
-					// Add active instance details to cache.
+					// Add active Instance details to cache.
 					s.updateCacheEntry(currentRow)
 					instances = append(instances, currentRow)
 				} else {
-					// Remove inactive instance details from cache.
+					// Remove inactive Instance details from cache.
 					s.removeCacheEntry(currentRow.id)
 				}
 			}
@@ -225,8 +225,8 @@ func (s *Storage) GetAllInstancesForTenant(
 	return instances, nil
 }
 
-// ReleaseInstanceID releases an instance id prior to shutdown of a SQL pod
-// The instance id can be reused by another SQL pod of the same tenant.
+// ReleaseInstanceID releases an Instance id prior to shutdown of a SQL pod
+// The Instance id can be reused by another SQL pod of the same tenant.
 func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) error {
 	if !s.mu.started {
 		s.mu.Unlock()
@@ -241,7 +241,7 @@ func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) 
 		return s.db.Put(ctx, key, &value)
 	})
 	if err != nil {
-		return errors.Wrapf(err, "could not release instance %d", id)
+		return errors.Wrapf(err, "could not release Instance %d", id)
 	}
 	return nil
 }

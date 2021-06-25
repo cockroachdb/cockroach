@@ -571,9 +571,6 @@ func makeSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	const sqlInstanceID = base.SQLInstanceID(10001)
-	idContainer := base.NewSQLIDContainer(sqlInstanceID, nil /* nodeID */)
-
 	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
 	registry.AddMetricStruct(runtime)
 
@@ -605,7 +602,6 @@ func makeSQLServerArgs(
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
-			nodeIDContainer:        idContainer,
 			externalStorage:        externalStorage,
 			externalStorageFromURI: externalStorageFromURI,
 		},

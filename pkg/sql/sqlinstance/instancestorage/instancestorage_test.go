@@ -96,14 +96,14 @@ func TestStorage(t *testing.T) {
 			require.Equal(t, httpAddr, addr)
 		}
 		{
-			// Non existent instance.
+			// Non existent Instance.
 			nonExistentID := base.SQLInstanceID(2)
 			addr, err := storage.GetInstanceAddr(ctx, nonExistentID)
 			require.Errorf(t, err, "could not fetch instance %d non existent instance id", nonExistentID)
 			require.Equal(t, 0, len(addr))
 		}
 	})
-	t.Run("release-instance-get-all-instances", func(t *testing.T) {
+	t.Run("release-Instance-get-all-instances", func(t *testing.T) {
 		stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
 		storage.Start()
@@ -135,7 +135,7 @@ func TestStorage(t *testing.T) {
 			}
 		}
 
-		// Release an instance and verify only active instances
+		// Release an Instance and verify only active instances
 		// are returned by GetAllInstancesForTenant.
 		{
 			require.NoError(t, storage.ReleaseInstanceID(ctx, instanceIDs[0]))
@@ -150,7 +150,7 @@ func TestStorage(t *testing.T) {
 			}
 		}
 
-		// Verify release instance id gets reused.
+		// Verify released Instance id gets reused.
 		{
 			var err error
 			var instance sqlinstance.SQLInstance
@@ -266,8 +266,8 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			return base.SQLInstanceID(i)
 		}
 
-		// checkGetInstance verifies that GetInstance returns the instance
-		// details when the instance is live and error otherwise.
+		// checkGetInstance verifies that GetInstance returns the Instance
+		// details when the Instance is live and error otherwise.
 		checkGetInstance = func(t *testing.T, i base.SQLInstanceID) {
 			t.Helper()
 			state.RLock()

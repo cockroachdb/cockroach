@@ -38,6 +38,17 @@ type AddressResolver interface {
 	GetAllInstancesForTenant(ctx context.Context) ([]SQLInstance, error)
 }
 
+// Provider is a wrapper around sqlinstance subsystem for
+// external consumption.
+type Provider interface {
+	AddressResolver
+	Instance(ctx context.Context) (SQLInstance, error)
+	Start(ctx context.Context)
+}
+
+// SessionExpiry executes SQL pod shutdown on sqlliveness.Session expiration.
+type SessionExpiry func(ctx context.Context)
+
 // NotStartedError can be returned from calls to the sqlinstance subsystem
 // prior to its being started.
 var NotStartedError = errors.Errorf("sqlinstance subsystem has not yet been started")

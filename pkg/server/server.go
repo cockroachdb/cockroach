@@ -737,7 +737,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:      protectedtsProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
-	})
+	}, "" /* httpAddr */)
 	if err != nil {
 		return nil, err
 	}

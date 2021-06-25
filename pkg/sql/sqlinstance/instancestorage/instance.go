@@ -15,16 +15,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 )
 
-type instance struct {
+// Instance implements the sqlinstance.SQLInstance
+// interface.
+type Instance struct {
 	id        base.SQLInstanceID
 	httpAddr  string
 	sessionID sqlliveness.SessionID
 }
 
-func newSQLInstance(
+// NewSQLInstance constructs a new instancestorage.Instance.
+func NewSQLInstance(
 	id base.SQLInstanceID, httpAddr string, sessionID sqlliveness.SessionID,
-) *instance {
-	return &instance{
+) *Instance {
+	return &Instance{
 		id:        id,
 		httpAddr:  httpAddr,
 		sessionID: sessionID,
@@ -33,18 +36,18 @@ func newSQLInstance(
 
 // InstanceID returns the base.SQLInstanceID
 // associated with the sqlinstance.Instance.
-func (i *instance) InstanceID() base.SQLInstanceID {
+func (i *Instance) InstanceID() base.SQLInstanceID {
 	return i.id
 }
 
 // InstanceAddr returns the HTTP address
 // associated with the sqlinstance.Instance
-func (i *instance) InstanceAddr() string {
+func (i *Instance) InstanceAddr() string {
 	return i.httpAddr
 }
 
 // SessionID returns the sqlliveness.SessionID
 // associated with the sqlinstance.Instance
-func (i *instance) SessionID() sqlliveness.SessionID {
+func (i *Instance) SessionID() sqlliveness.SessionID {
 	return i.sessionID
 }

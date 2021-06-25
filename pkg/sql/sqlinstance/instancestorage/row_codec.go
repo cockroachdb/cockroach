@@ -46,8 +46,8 @@ func makeRowCodec(codec keys.SQLCodec) RowCodec {
 	}
 }
 
-// encodeRow encodes a row of the sql_instances table.
-func (d *RowCodec) encodeRow(i *instance) (v roachpb.Value, err error) {
+// encodeRow encodes a row of the sqlinstances table
+func (d *RowCodec) encodeRow(i *Instance) (v roachpb.Value, err error) {
 	addrDatum := tree.NewDString(i.httpAddr)
 	var valueBuf []byte
 	valueBuf, err = rowenc.EncodeTableValue(
@@ -84,9 +84,9 @@ func (d *RowCodec) encodeEmptyRow() (v roachpb.Value, err error) {
 }
 
 // decodeRow decodes a row of the sql_instances table.
-func (d *RowCodec) decodeRow(kv kv.KeyValue) (*instance, error) {
+func (d *RowCodec) decodeRow(kv kv.KeyValue) (*Instance, error) {
 	tbl := systemschema.SQLInstancesTable
-	var i instance
+	var i Instance
 	// First, decode the id field from the index key.
 	{
 		types := []*types.T{tbl.PublicColumns()[0].GetType()}

@@ -36,20 +36,7 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
-	s, err := newSQLServer(ctx, args)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	s.execCfg.SQLStatusServer = newTenantStatusServer(
-		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
-	)
-
-	// TODO(asubiotto): remove this. Right now it is needed to initialize the
-	// SpanResolver.
-	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
-
+	args.ValidateAddrs(ctx)
 	connManager := netutil.MakeServer(
 		args.stopper,
 		// The SQL server only uses connManager.ServeWith. The both below
@@ -100,6 +87,20 @@ func StartTenant(
 		}
 	}
 
+	s, err := newSQLServer(ctx, args, args.Config.HTTPAdvertiseAddr)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	s.execCfg.SQLStatusServer = newTenantStatusServer(
+		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
+	)
+
+	// TODO(asubiotto): remove this. Right now it is needed to initialize the
+	// SpanResolver.
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
+
 	pgLAddr := pgL.Addr().String()
 	httpLAddr := httpL.Addr().String()
 	args.recorder.AddNode(
@@ -147,7 +148,7 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(args.nodeIDContainer.SQLInstanceID())})
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(s.SQLInstanceID())})
 
 	if err := s.preStart(ctx,
 		args.stopper,

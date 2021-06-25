@@ -8,5 +8,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/sql/sqlliveness",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

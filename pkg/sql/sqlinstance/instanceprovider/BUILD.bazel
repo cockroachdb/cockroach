@@ -1,41 +1,41 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "slinstance",
+    name = "instanceprovider",
     srcs = [
-        "slinstance.go",
+        "instanceprovider.go",
         "test_helpers.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/settings",
-        "//pkg/settings/cluster",
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/sqlinstance",
+        "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness",
-        "//pkg/util/hlc",
         "//pkg/util/log",
-        "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
-        "//pkg/util/uuid",
     ],
 )
 
 go_test(
-    name = "slinstance_test",
-    size = "small",
-    srcs = ["slinstance_test.go"],
+    name = "instanceprovider_test",
+    srcs = ["instanceprovider_test.go"],
     deps = [
-        ":slinstance",
+        ":instanceprovider",
+        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
-        "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )
