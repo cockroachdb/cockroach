@@ -586,6 +586,16 @@ func TestValidate(t *testing.T) {
 			expected: nil,
 		},
 		{
+			name: "one reverse scan after writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(reverseScan(`a`, `c`), scanKV(`b`, `v2`), scanKV(`a`, `v1`))),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: nil,
+		},
+		{
 			name: "one scan after write returning extra key",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
@@ -596,6 +606,19 @@ func TestValidate(t *testing.T) {
 			expected: []string{
 				`committed scan non-atomic timestamps: ` +
 					`[s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, 0,0), 2:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a":v1, "a2":v3, "b":v2]`,
+			},
+		},
+		{
+			name: "one reverse scan after write returning extra key",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(reverseScan(`a`, `c`), scanKV(`b`, `v2`), scanKV(`a2`, `v3`), scanKV(`a`, `v1`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed reverse scan non-atomic timestamps: ` +
+					`[rs]{a-c}:{0:[0.000000002,0, <max>), 1:[0,0, 0,0), 2:[0.000000001,0, <max>), gap:[<min>, <max>)}->["b":v2, "a2":v3, "a":v1]`,
 			},
 		},
 		{
@@ -612,6 +635,19 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			name: "one reverse scan after write returning missing key",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(reverseScan(`a`, `c`), scanKV(`b`, `v2`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed reverse scan non-atomic timestamps: ` +
+					`[rs]{a-c}:{0:[0.000000002,0, <max>), gap:[<min>, 0.000000001,0)}->["b":v2]`,
+			},
+		},
+		{
 			name: "one scan after writes returning results in wrong order",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
@@ -625,16 +661,44 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			name: "one reverse scan after writes returning results in wrong order",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(reverseScan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`scan result not ordered correctly: ` +
+					`[rs]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a":v1, "b":v2]`,
+			},
+		},
+		{
 			name: "one scan after writes returning results outside scan boundary",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`c`, `v3`))),
+				step(withResult(put(`c`, `v3`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`), scanKV(`c`, `v3`))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`)),
 			expected: []string{
 				`key "c" outside scan bounds: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, 0,0), gap:[<min>, 0.000000002,0)}->["a":v1, "c":v3]`,
+					`[s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), 2:[0.000000003,0, <max>), gap:[<min>, <max>)}->["a":v1, "b":v2, "c":v3]`,
+			},
+		},
+		{
+			name: "one reverse scan after writes returning results outside scan boundary",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(put(`c`, `v3`), nil)),
+				step(withScanResult(reverseScan(`a`, `c`), scanKV(`c`, `v3`), scanKV(`b`, `v2`), scanKV(`a`, `v1`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`)),
+			expected: []string{
+				`key "c" outside scan bounds: ` +
+					`[rs]{a-c}:{0:[0.000000003,0, <max>), 1:[0.000000002,0, <max>), 2:[0.000000001,0, <max>), gap:[<min>, <max>)}->["c":v3, "b":v2, "a":v1]`,
 			},
 		},
 		{
