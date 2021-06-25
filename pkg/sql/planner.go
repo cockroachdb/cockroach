@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -518,6 +519,11 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 // MigrationJobDeps returns the migration.JobDeps.
 func (p *planner) MigrationJobDeps() migration.JobDeps {
 	return p.execCfg.MigrationJobDeps
+}
+
+// ConfigReconciliationJobDeps returns the zcfgreconciler.JobDependencies.
+func (p *planner) ConfigReconciliationJobDeps() spanconfigmanager.JobDependencies {
+	return p.execCfg.ConfigReconciliationJobDeps
 }
 
 // GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.

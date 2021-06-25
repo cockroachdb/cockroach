@@ -205,16 +205,17 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 		return nil
 	}
 
-	for _, entries := range [][]roachpb.SpanConfigEntry{
-		args.SpanConfigsToUpsert,
-		args.SpanConfigsToDelete,
-	} {
-		for _, entry := range entries {
-			if err := validate(entry.Span); err != nil {
-				return err
-			}
+	for _, entry := range args.SpanConfigsToUpdate {
+		if err := validate(entry.Span); err != nil {
+			return err
 		}
 	}
+	for _, span := range args.SpansToDelete {
+		if err := validate(span); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
