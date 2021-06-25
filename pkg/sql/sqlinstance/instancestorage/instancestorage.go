@@ -74,6 +74,12 @@ func (s *Storage) CreateInstance(
 	sessionExpiration hlc.Timestamp,
 	addr string,
 ) (instanceID base.SQLInstanceID, _ error) {
+	if len(addr) == 0 {
+		return base.SQLInstanceID(0), errors.New("no address information for instance")
+	}
+	if len(sessionID) == 0 {
+		return base.SQLInstanceID(0), errors.New("no session information for instance")
+	}
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Set the transaction deadline to the session expiration to
 		// ensure transaction commits before the session expires.
