@@ -488,6 +488,29 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 func (tp *txnPipeliner) updateLockTracking(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) {
+	tp.updateLockTrackingInner(ctx, ba, br)
+
+	// Deal with compacting the lock spans.
+
+	// After adding new writes to the lock footprint, check whether we need to
+	// condense the set to stay below memory limits.
+	alreadyCondensed := tp.lockFootprint.condensed
+	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
+	if condensed && !alreadyCondensed {
+		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
+			log.Warningf(ctx,
+				"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
+					"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
+				ba.Txn, ba.Summary())
+		}
+		tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
+		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
+	}
+}
+
+func (tp *txnPipeliner) updateLockTrackingInner(
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+) {
 	// After adding new writes to the lock footprint, check whether we need to
 	// condense the set to stay below memory limits.
 	defer func() {
