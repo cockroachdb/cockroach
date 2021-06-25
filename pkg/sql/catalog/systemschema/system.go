@@ -371,10 +371,10 @@ CREATE TABLE system.join_tokens (
 
 	SpanConfigurationsTableSchema = `
 CREATE TABLE system.span_configurations (
-	start_key		BYTES NOT NULL PRIMARY KEY,
-	end_key			BYTES NOT NULL,
-	config BYTES,
-    FAMILY "primary" (start_key, end_key, config)
+	start_key BYTES NOT NULL PRIMARY KEY,
+	end_key   BYTES NOT NULL,
+	config    BYTES NOT NULL,
+	FAMILY "primary" (start_key, end_key, config)
 )`
 )
 
@@ -1770,7 +1770,7 @@ var (
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "start_key", ID: 1, Type: types.Bytes},
 			{Name: "end_key", ID: 2, Type: types.Bytes},
-			{Name: "config", ID: 3, Type: types.Bytes, Nullable: true},
+			{Name: "config", ID: 3, Type: types.Bytes},
 		},
 		NextColumnID: 4,
 		Families: []descpb.ColumnFamilyDescriptor{
