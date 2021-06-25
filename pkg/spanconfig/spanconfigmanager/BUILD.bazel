@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "manager",
+    srcs = ["manager.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/manager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/spanconfig",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+    ],
+)
+
+go_library(
+    name = "spanconfigmanager",
+    srcs = ["manager.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/spanconfig",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+    ],
+)

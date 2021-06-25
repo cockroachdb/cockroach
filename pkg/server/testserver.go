@@ -620,6 +620,7 @@ func makeSQLServerArgs(
 		rpcContext:               rpcContext,
 		nodeDescs:                tenantConnect,
 		systemConfigProvider:     tenantConnect,
+		spanConfigAccessor:       tenantConnect,
 		nodeDialer:               nodeDialer,
 		distSender:               ds,
 		db:                       db,
