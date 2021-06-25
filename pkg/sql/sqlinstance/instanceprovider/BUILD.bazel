@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "instanceprovider",
+    srcs = [
+        "instanceprovider.go",
+        "test_helpers.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/sqlinstance",
+        "//pkg/sql/sqlinstance/instancestorage",
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "instanceprovider_test",
+    srcs = ["instanceprovider_test.go"],
+    deps = [
+        ":instanceprovider",
+        "//pkg/base",
+        "//pkg/clusterversion",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

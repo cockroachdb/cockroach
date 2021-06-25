@@ -41,5 +41,11 @@ type AddressResolver interface {
 	GetAllInstances(context.Context) ([]InstanceInfo, error)
 }
 
+// Provider is a wrapper around sqlinstance subsystem for external consumption.
+type Provider interface {
+	AddressResolver
+	Instance(context.Context) (base.SQLInstanceID, error)
+}
+
 // NonExistentInstanceError can be returned if a SQL instance does not exist.
 var NonExistentInstanceError = errors.Errorf("non existent SQL instance")
