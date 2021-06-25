@@ -174,6 +174,11 @@ type test struct {
 	versionsBinaryOverride map[string]string
 }
 
+// Spec returns the TestSpec.
+func (t *test) Spec() TestSpec {
+	return *t.spec
+}
+
 func (t *test) Helper() {}
 
 func (t *test) Name() string {

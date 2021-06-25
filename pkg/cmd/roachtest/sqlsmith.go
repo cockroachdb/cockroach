@@ -137,7 +137,7 @@ func registerSQLSmith(r *testRegistry) {
 		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
-		until := time.After(t.spec.Timeout / 2)
+		until := time.After(t.Spec().Timeout / 2)
 		done := ctx.Done()
 		for i := 1; ; i++ {
 			if i%10000 == 0 {

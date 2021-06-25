@@ -56,8 +56,7 @@ func runBuildAnalyze(ctx context.Context, t *test, c cluster.Cluster) {
 	if c.IsLocal() {
 		// This test is linux-specific and needs to be able to install apt
 		// packages, so only run it on dedicated remote VMs.
-		t.spec.Skip = "local execution not supported"
-		return
+		t.Skip("local execution not supported")
 	}
 
 	c.Put(ctx, cockroach, "./cockroach")
