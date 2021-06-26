@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -26,7 +27,7 @@ var supportedPGJDBCTag = "REL42.2.19"
 func registerPgjdbc(r *testRegistry) {
 	runPgjdbc := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -57,8 +58,8 @@ func registerPgjdbc(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest pgjdbc release is %s.", latestTag)
-		t.l.Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
+		t.L().Printf("Latest pgjdbc release is %s.", latestTag)
+		t.L().Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -136,7 +137,7 @@ func registerPgjdbc(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		t.l.Printf("%s", status)
+		t.L().Printf("%s", status)
 
 		t.Status("running pgjdbc test suite")
 		// Note that this is expected to return an error, since the test suite
@@ -188,13 +189,13 @@ func registerPgjdbc(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		MinVersion: "v20.2.0",
 		Name:       "pgjdbc",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgjdbc(ctx, t, c)
 		},
 	})

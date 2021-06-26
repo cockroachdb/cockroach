@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +24,7 @@ var popReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<po
 var popSupportedTag = "v5.3.3"
 
 func registerPop(r *testRegistry) {
-	runPop := func(ctx context.Context, t *test, c cluster.Cluster) {
+	runPop := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -45,8 +46,8 @@ func registerPop(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest pop release is %s.", latestTag)
-		t.l.Printf("Supported pop release is %s.", popSupportedTag)
+		t.L().Printf("Latest pop release is %s.", latestTag)
+		t.L().Printf("Supported pop release is %s.", popSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -94,7 +95,7 @@ func registerPop(r *testRegistry) {
 		require.NoError(t, err, "error while running pop tests")
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "pop",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",

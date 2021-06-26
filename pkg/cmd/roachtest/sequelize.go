@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var sequelizeReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -24,7 +25,7 @@ var supportedSequelizeRelease = "v6.0.0-alpha.0"
 func registerSequelize(r *testRegistry) {
 	runSequelize := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -66,8 +67,8 @@ func registerSequelize(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest Sequelize release is %s.", latestTag)
-		t.l.Printf("Supported Sequelize release is %s.", supportedSequelizeRelease)
+		t.L().Printf("Latest Sequelize release is %s.", latestTag)
+		t.L().Printf("Supported Sequelize release is %s.", supportedSequelizeRelease)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -135,23 +136,23 @@ func registerSequelize(r *testRegistry) {
 		}
 
 		t.Status("running Sequelize test suite")
-		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
 			`cd /mnt/data1/sequelize/ && npm test`,
 		)
 		rawResultsStr := string(rawResults)
-		t.l.Printf("Test Results: %s", rawResultsStr)
+		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		MinVersion: "v20.2.0",
 		Name:       "sequelize",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequelize(ctx, t, c)
 		},
 	})

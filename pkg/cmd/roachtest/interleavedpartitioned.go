@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 func registerInterleaved(r *testRegistry) {
@@ -34,7 +35,7 @@ func registerInterleaved(r *testRegistry) {
 
 	runInterleaved := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 		config config,
 	) {
@@ -49,8 +50,8 @@ func registerInterleaved(r *testRegistry) {
 		cockroachNodes := loadGroups.roachNodes()
 		workloadNodes := loadGroups.loadNodes()
 
-		t.l.Printf("cockroach nodes: %s", cockroachNodes.String()[1:])
-		t.l.Printf("workload nodes: %s", workloadNodes.String()[1:])
+		t.L().Printf("cockroach nodes: %s", cockroachNodes.String()[1:])
+		t.L().Printf("workload nodes: %s", workloadNodes.String()[1:])
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
@@ -121,11 +122,11 @@ func registerInterleaved(r *testRegistry) {
 		m.Wait()
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "interleavedpartitioned",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(12, spec.Geo(), spec.Zones("us-east1-b,us-west1-b,europe-west2-b")),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runInterleaved(ctx, t, c,
 				config{
 					eastName:        `europe-west2-b`,

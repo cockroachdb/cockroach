@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 type randomLoadBenchSpec struct {
@@ -33,7 +34,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "schemachange/random-load",
 		Owner: OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(
@@ -45,7 +46,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
 			if local {
@@ -80,7 +81,7 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 	}
 	name := strings.Join(nameParts, "/")
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       name,
 		Owner:      OwnerSQLSchema,
 		Cluster:    r.makeClusterSpec(b.Nodes),
@@ -88,14 +89,14 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
 		},
 	})
 }
 
 func runSchemaChangeRandomLoad(
-	ctx context.Context, t *test, c cluster.Cluster, maxOps, concurrency int,
+	ctx context.Context, t test.Test, c cluster.Cluster, maxOps, concurrency int,
 ) {
 	validate := func(db *gosql.DB) {
 		var (
@@ -115,7 +116,7 @@ func runSchemaChangeRandomLoad(
 			if err := rows.Scan(&id, &databaseName, &schemaName, &objName, &objError); err != nil {
 				t.Fatal(err)
 			}
-			t.logger().Errorf(
+			t.L().Errorf(
 				"invalid object found: id: %d, database_name: %s, schema_name: %s, obj_name: %s, error: %s",
 				id, databaseName, schemaName, objName, objError,
 			)
@@ -138,9 +139,9 @@ func runSchemaChangeRandomLoad(
 	c.Start(ctx, roachNodes)
 	c.Run(ctx, loadNode, "./workload init schemachange")
 
-	storeDirectory, err := c.RunWithBuffer(ctx, t.l, c.Node(1), "echo", "-n", "{store-dir}")
+	storeDirectory, err := c.RunWithBuffer(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
 	if err != nil {
-		t.l.Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
+		t.L().Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
 	}
 
 	runCmd := []string{
@@ -182,14 +183,14 @@ func runSchemaChangeRandomLoad(
 }
 
 // saveArtifacts saves important test artifacts in the artifacts directory.
-func saveArtifacts(ctx context.Context, t *test, c cluster.Cluster, storeDirectory string) {
+func saveArtifacts(ctx context.Context, t test.Test, c cluster.Cluster, storeDirectory string) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
 	// Save a backup file called schemachange to the store directory.
 	_, err := db.Exec("BACKUP DATABASE schemachange to 'nodelocal://1/schemachange'")
 	if err != nil {
-		t.l.Printf("Failed execute backup command on node 1: %v\n", err.Error())
+		t.L().Printf("Failed execute backup command on node 1: %v\n", err.Error())
 	}
 
 	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange")
@@ -198,14 +199,14 @@ func saveArtifacts(ctx context.Context, t *test, c cluster.Cluster, storeDirecto
 	localTransactionsFilePath := filepath.Join(t.ArtifactsDir(), "transactions.ndjson")
 
 	// Copy the backup from the store directory to the artifacts directory.
-	err = c.Get(ctx, t.l, remoteBackupFilePath, localBackupFilePath, c.Node(1))
+	err = c.Get(ctx, t.L(), remoteBackupFilePath, localBackupFilePath, c.Node(1))
 	if err != nil {
-		t.l.Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
+		t.L().Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 
 	// Copy the txn log from the store directory to the artifacts directory.
-	err = c.Get(ctx, t.l, remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
+	err = c.Get(ctx, t.L(), remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
 	if err != nil {
-		t.l.Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
+		t.L().Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
 	}
 }

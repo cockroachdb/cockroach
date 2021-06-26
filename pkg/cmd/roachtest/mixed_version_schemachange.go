@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func registerSchemaChangeMixedVersions(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "schemachange/mixed-versions",
 		Owner: OwnerSQLSchema,
 		// This tests the work done for 20.1 that made schema changes jobs and in
@@ -27,7 +28,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 		// order to prevent bugs during upgrades.
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(4),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 100
 			concurrency := 5
 			if local {
@@ -40,7 +41,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 }
 
 func uploadAndInitSchemaChangeWorkload() versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Stage workload on all nodes as the load node to run workload is chosen
 		// randomly.
 		u.c.Put(ctx, workload, "./workload", u.c.All())
@@ -50,9 +51,9 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 
 func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep {
 	var numFeatureRuns int
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		numFeatureRuns++
-		t.l.Printf("Workload step run: %d", numFeatureRuns)
+		t.L().Printf("Workload step run: %d", numFeatureRuns)
 		runCmd := []string{
 			"./workload run schemachange --verbose=1",
 			// The workload is still in development and occasionally discovers schema
@@ -71,7 +72,7 @@ func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep 
 
 func runSchemaChangeMixedVersions(
 	ctx context.Context,
-	t *test,
+	t test.Test,
 	c cluster.Cluster,
 	maxOps int,
 	concurrency int,

@@ -18,13 +18,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func runStatusServer(ctx context.Context, t *test, c cluster.Cluster) {
+func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx)
 
@@ -69,7 +70,7 @@ func runStatusServer(ctx context.Context, t *test, c cluster.Cluster) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 		}
-		t.l.Printf("OK response from %s\n", url)
+		t.L().Printf("OK response from %s\n", url)
 		return body
 	}
 

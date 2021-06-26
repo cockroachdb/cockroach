@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -27,7 +28,7 @@ import (
 const statementTimeout = time.Minute
 
 func registerTLP(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tlp",
 		Owner:      OwnerSQLQueries,
 		Timeout:    time.Minute * 5,
@@ -38,11 +39,11 @@ func registerTLP(r *testRegistry) {
 	})
 }
 
-func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
+func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.
-	tlpLog, err := os.Create(filepath.Join(t.artifactsDir, "tlp.log"))
+	tlpLog, err := os.Create(filepath.Join(t.ArtifactsDir(), "tlp.log"))
 	if err != nil {
 		t.Fatalf("could not create tlp.log: %v", err)
 	}
@@ -62,7 +63,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	conn := c.Conn(ctx, 1)
 
 	rnd, seed := randutil.NewPseudoRand()
-	t.l.Printf("seed: %d", seed)
+	t.L().Printf("seed: %d", seed)
 
 	c.Put(ctx, cockroach, "./cockroach")
 	if err := c.PutLibraries(ctx, "./lib"); err != nil {
@@ -73,7 +74,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	setup := sqlsmith.Setups["rand-tables"](rnd)
 
 	t.Status("executing setup")
-	t.l.Printf("setup:\n%s", setup)
+	t.L().Printf("setup:\n%s", setup)
 	if _, err := conn.Exec(setup); err != nil {
 		t.Fatal(err)
 	} else {
@@ -82,7 +83,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 
 	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
 	t.Status("setting statement_timeout")
-	t.l.Printf("statement timeout:\n%s", setStmtTimeout)
+	t.L().Printf("statement timeout:\n%s", setStmtTimeout)
 	if _, err := conn.Exec(setStmtTimeout); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +100,7 @@ func runTLP(ctx context.Context, t *test, c cluster.Cluster) {
 	defer smither.Close()
 
 	t.Status("running TLP")
-	until := time.After(t.spec.Timeout / 2)
+	until := time.After(t.Spec().(*TestSpec).Timeout / 2)
 	done := ctx.Done()
 	for i := 1; ; i++ {
 		select {

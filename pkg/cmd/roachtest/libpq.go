@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +25,7 @@ var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 var libPQSupportedTag = "v1.10.0"
 
 func registerLibPQ(r *testRegistry) {
-	runLibPQ := func(ctx context.Context, t *test, c cluster.Cluster) {
+	runLibPQ := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -47,8 +48,8 @@ func registerLibPQ(r *testRegistry) {
 		latestTag, err := repeatGetLatestTag(
 			ctx, t, "lib", "pq", libPQReleaseTagRegex)
 		require.NoError(t, err)
-		t.l.Printf("Latest lib/pq release is %s.", latestTag)
-		t.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
+		t.L().Printf("Latest lib/pq release is %s.", latestTag)
+		t.L().Printf("Supported lib/pq release is %s.", libPQSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -88,7 +89,7 @@ func registerLibPQ(r *testRegistry) {
 		if expectedFailures == nil {
 			t.Fatalf("No lib/pq blocklist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		t.Status("running lib/pq test suite and collecting results")
 
@@ -96,7 +97,7 @@ func registerLibPQ(r *testRegistry) {
 		testListRegex := "^(Test|Example)"
 		buf, err := c.RunWithBuffer(
 			ctx,
-			t.l,
+			t.L(),
 			node,
 			fmt.Sprintf(`cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -list "%s"`, libPQPath, testListRegex),
 		)
@@ -135,7 +136,7 @@ func registerLibPQ(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "lib/pq",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",

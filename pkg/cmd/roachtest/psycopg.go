@@ -15,6 +15,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
@@ -24,7 +25,7 @@ var supportedPsycopgTag = "2_8_6"
 func registerPsycopg(r *testRegistry) {
 	runPsycopg := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -51,8 +52,8 @@ func registerPsycopg(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest Psycopg release is %s.", latestTag)
-		t.l.Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
+		t.L().Printf("Latest Psycopg release is %s.", latestTag)
+		t.L().Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -103,13 +104,13 @@ func registerPsycopg(r *testRegistry) {
 		if ignoredlist == nil {
 			t.Fatalf("No psycopg ignorelist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 			version, blocklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
 			`cd /mnt/data1/psycopg/ &&
 			export PSYCOPG2_TESTDB=defaultdb &&
 			export PSYCOPG2_TESTDB_USER=root &&
@@ -119,7 +120,7 @@ func registerPsycopg(r *testRegistry) {
 		)
 
 		t.Status("collating the test results")
-		t.l.Printf("Test Results: %s", rawResults)
+		t.L().Printf("Test Results: %s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
@@ -130,13 +131,13 @@ func registerPsycopg(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "psycopg",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPsycopg(ctx, t, c)
 		},
 	})

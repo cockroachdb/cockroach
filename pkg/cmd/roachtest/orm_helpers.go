@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 // alterZoneConfigAndClusterSettings changes the zone configurations so that GC
@@ -145,7 +146,7 @@ func newORMTestsResults() *ormTestsResults {
 // against a cockroach node. If an unexpected result is observed (for example,
 // a test unexpectedly failed or passed), a new blocklist is populated.
 func (r *ormTestsResults) summarizeAll(
-	t *test, ormName, blocklistName string, expectedFailures blocklist, version, tag string,
+	t test.Test, ormName, blocklistName string, expectedFailures blocklist, version, tag string,
 ) {
 	// Collect all the tests that were not run.
 	notRunCount := 0
@@ -165,10 +166,10 @@ func (r *ormTestsResults) summarizeAll(
 		if !ok {
 			t.Fatalf("can't find %s in test result list", test)
 		}
-		t.l.Printf("%s\n", result)
+		t.L().Printf("%s\n", result)
 	}
 
-	t.l.Printf("------------------------\n")
+	t.L().Printf("------------------------\n")
 
 	r.summarizeFailed(
 		t, ormName, blocklistName, expectedFailures, version, tag, notRunCount,
@@ -180,7 +181,7 @@ func (r *ormTestsResults) summarizeAll(
 // doesn't pay attention to all the tests - only to the failed ones.
 // If a test suite outputs only the failures, then this method should be used.
 func (r *ormTestsResults) summarizeFailed(
-	t *test,
+	t test.Test,
 	ormName, blocklistName string,
 	expectedFailures blocklist,
 	version, latestTag string,
@@ -221,8 +222,8 @@ func (r *ormTestsResults) summarizeFailed(
 	}
 
 	fmt.Fprintf(&bResults, "For a full summary look at the %s artifacts \n", ormName)
-	t.l.Printf("%s\n", bResults.String())
-	t.l.Printf("------------------------\n")
+	t.L().Printf("%s\n", bResults.String())
+	t.L().Printf("------------------------\n")
 
 	if r.failUnexpectedCount > 0 || r.passUnexpectedCount > 0 ||
 		notRunCount > 0 || r.unexpectedSkipCount > 0 {
@@ -242,8 +243,8 @@ func (r *ormTestsResults) summarizeFailed(
 			fmt.Fprintf(&b, "  \"%s\": \"%s\",\n", test, issue)
 		}
 		fmt.Fprintf(&b, "}\n\n")
-		t.l.Printf("\n\n%s\n\n", b.String())
-		t.l.Printf("------------------------\n")
+		t.L().Printf("\n\n%s\n\n", b.String())
+		t.L().Printf("------------------------\n")
 		t.Fatalf("\n%s\nAn updated blocklist (%s) is available in the artifacts' %s log\n",
 			bResults.String(),
 			blocklistName,

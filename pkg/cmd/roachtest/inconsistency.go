@@ -15,11 +15,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	_ "github.com/lib/pq"
 )
 
 func registerInconsistency(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "inconsistency",
 		Owner:      OwnerKV,
 		MinVersion: "v19.2.2", // https://github.com/cockroachdb/cockroach/pull/42149 is new in 19.2.2
@@ -28,7 +29,7 @@ func registerInconsistency(r *testRegistry) {
 	})
 }
 
-func runInconsistency(ctx context.Context, t *test, c cluster.Cluster) {
+func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// With encryption on, our attempt below to manually introduce an inconsistency
 	// will fail.
 	c.EncryptDefault(false)

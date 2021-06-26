@@ -17,24 +17,25 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerQueue(r *testRegistry) {
 	// One node runs the workload generator, all other nodes host CockroachDB.
 	const numNodes = 2
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/17229",
 		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runQueue(ctx, t, c)
 		},
 	})
 }
 
-func runQueue(ctx context.Context, t *test, c cluster.Cluster) {
+func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	dbNodeCount := c.Spec().NodeCount - 1
 	workloadNode := c.Spec().NodeCount
 

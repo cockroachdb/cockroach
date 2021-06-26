@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -40,14 +41,14 @@ import (
 // proposals, liveness problems, or whatever else might get added in the
 // future.
 type HealthChecker struct {
-	t      *test
+	t      test.Test
 	c      cluster.Cluster
 	nodes  option.NodeListOption
 	doneCh chan struct{}
 }
 
 // NewHealthChecker returns a populated HealthChecker.
-func NewHealthChecker(t *test, c cluster.Cluster, nodes option.NodeListOption) *HealthChecker {
+func NewHealthChecker(t test.Test, c cluster.Cluster, nodes option.NodeListOption) *HealthChecker {
 	return &HealthChecker{
 		t:      t,
 		c:      c,
@@ -84,7 +85,7 @@ func (g gossipAlerts) String() string {
 //
 // TODO(tschottdorf): actually let this fail the test instead of logging complaints.
 func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
-	logger, err := hc.t.l.ChildLogger("health")
+	logger, err := hc.t.L().ChildLogger("health")
 	if err != nil {
 		return err
 	}
@@ -147,13 +148,13 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 
 // DiskUsageLogger regularly logs the disk spaced used by the nodes in the cluster.
 type DiskUsageLogger struct {
-	t      *test
+	t      test.Test
 	c      cluster.Cluster
 	doneCh chan struct{}
 }
 
 // NewDiskUsageLogger populates a DiskUsageLogger.
-func NewDiskUsageLogger(t *test, c cluster.Cluster) *DiskUsageLogger {
+func NewDiskUsageLogger(t test.Test, c cluster.Cluster) *DiskUsageLogger {
 	return &DiskUsageLogger{
 		t:      t,
 		c:      c,
@@ -169,11 +170,11 @@ func (dul *DiskUsageLogger) Done() {
 // Runner runs in a loop until Done() is called and prints the cluster-wide per
 // node disk usage in descending order.
 func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
-	l, err := dul.t.l.ChildLogger("diskusage")
+	l, err := dul.t.L().ChildLogger("diskusage")
 	if err != nil {
 		return err
 	}
-	quietLogger, err := dul.t.l.ChildLogger("diskusage-exec", logger.QuietStdout, logger.QuietStderr)
+	quietLogger, err := dul.t.L().ChildLogger("diskusage-exec", logger.QuietStdout, logger.QuietStderr)
 	if err != nil {
 		return err
 	}
@@ -219,13 +220,13 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 	}
 }
 func registerRestoreNodeShutdown(r *testRegistry) {
-	makeRestoreStarter := func(ctx context.Context, t *test, c cluster.Cluster, gatewayNode int) jobStarter {
+	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster) (string, error) {
-			t.l.Printf("connecting to gateway")
+			t.L().Printf("connecting to gateway")
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
 
-			t.l.Printf("creating bank database")
+			t.L().Printf("creating bank database")
 			if _, err := gatewayDB.Exec("CREATE DATABASE bank"); err != nil {
 				return "", err
 			}
@@ -238,11 +239,11 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 				restoreQuery := `RESTORE bank.bank FROM
 					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank?AUTH=implicit'`
 
-				t.l.Printf("starting to run the restore job")
+				t.L().Printf("starting to run the restore job")
 				if _, err := gatewayDB.Exec(restoreQuery); err != nil {
 					errCh <- err
 				}
-				t.l.Printf("done running restore job")
+				t.L().Printf("done running restore job")
 			}()
 
 			// Wait for the job.
@@ -265,12 +266,12 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 				}
 
 				if jobCount == 0 {
-					t.l.Printf("waiting for restore job")
+					t.L().Printf("waiting for restore job")
 				} else if jobCount == 1 {
-					t.l.Printf("found restore job")
+					t.L().Printf("found restore job")
 					break
 				} else {
-					t.l.Printf("found multiple restore jobs -- erroring")
+					t.L().Printf("found multiple restore jobs -- erroring")
 					return "", errors.New("unexpectedly found multiple restore jobs")
 				}
 			}
@@ -283,12 +284,12 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "restore/nodeShutdown/worker",
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, cockroach, "./cockroach")
@@ -298,12 +299,12 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 		},
 	})
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "restore/nodeShutdown/coordinator",
 		Owner:      OwnerBulkIO,
 		Cluster:    r.makeClusterSpec(4),
 		MinVersion: "v21.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, cockroach, "./cockroach")
@@ -381,12 +382,12 @@ func registerRestore(r *testRegistry) {
 			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
 		}
 
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    testName,
 			Owner:   OwnerBulkIO,
 			Cluster: r.makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// Randomize starting with encryption-at-rest enabled.
 				c.EncryptAtRandom(true)
 				c.Put(ctx, cockroach, "./cockroach")
@@ -436,7 +437,7 @@ func registerRestore(r *testRegistry) {
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
-					if err := c.PutE(ctx, t.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					if err := c.PutE(ctx, t.L(), perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
 						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
 					}
 					return nil

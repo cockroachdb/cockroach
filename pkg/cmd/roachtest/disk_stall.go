@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -29,7 +30,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 			// Everyone's favorite bug to write in Go.
 			affectsLogDir := affectsLogDir
 			affectsDataDir := affectsDataDir
-			r.Add(testSpec{
+			r.Add(TestSpec{
 				Name: fmt.Sprintf(
 					"disk-stalled/log=%t,data=%t",
 					affectsLogDir, affectsDataDir,
@@ -37,7 +38,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 				Owner:      OwnerStorage,
 				MinVersion: "v19.2.0",
 				Cluster:    r.makeClusterSpec(1),
-				Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)
 				},
 			})
@@ -46,7 +47,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 }
 
 func runDiskStalledDetection(
-	ctx context.Context, t *test, c cluster.Cluster, affectsLogDir bool, affectsDataDir bool,
+	ctx context.Context, t test.Test, c cluster.Cluster, affectsLogDir bool, affectsDataDir bool,
 ) {
 	if local && runtime.GOOS != "linux" {
 		t.Fatalf("must run on linux os, found %s", runtime.GOOS)
@@ -62,13 +63,13 @@ func runDiskStalledDetection(
 
 	t.Status("setting up charybdefs")
 
-	if err := execCmd(ctx, t.l, roachprod, "install", c.MakeNodes(n), "charybdefs"); err != nil {
+	if err := execCmd(ctx, t.L(), roachprod, "install", c.MakeNodes(n), "charybdefs"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real")
 	c.Run(ctx, n, "sudo mkdir -p {store-dir}/real/logs")
 	c.Run(ctx, n, "sudo chmod -R 777 {store-dir}/{real,faulty}")
-	l, err := t.l.ChildLogger("cockroach")
+	l, err := t.L().ChildLogger("cockroach")
 	if err != nil {
 		t.Fatal(err)
 	}

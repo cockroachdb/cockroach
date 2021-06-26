@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -26,7 +27,7 @@ var supportedTypeORMRelease = "0.2.32"
 func registerTypeORM(r *testRegistry) {
 	runTypeORM := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -53,8 +54,8 @@ func registerTypeORM(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest TypeORM release is %s.", latestTag)
-		t.l.Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
+		t.L().Printf("Latest TypeORM release is %s.", latestTag)
+		t.L().Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
@@ -151,11 +152,11 @@ func registerTypeORM(r *testRegistry) {
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
-		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
 			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
 		)
 		rawResultsStr := string(rawResults)
-		t.l.Printf("Test Results: %s", rawResultsStr)
+		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			// Ignore the failure discussed in #38180 and in
 			// https://github.com/typeorm/typeorm/pull/4298.
@@ -171,13 +172,13 @@ func registerTypeORM(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "typeorm",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTypeORM(ctx, t, c)
 		},
 	})

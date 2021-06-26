@@ -14,13 +14,16 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
 
 // runIndexUpgrade runs a test that creates an index before a version upgrade,
 // and modifies it in a mixed version setting. It aims to test the changes made
 // to index encodings done to allow secondary indexes to respect column families.
-func runIndexUpgrade(ctx context.Context, t *test, c cluster.Cluster, predecessorVersion string) {
+func runIndexUpgrade(
+	ctx context.Context, t test.Test, c cluster.Cluster, predecessorVersion string,
+) {
 	firstExpected := [][]int{
 		{2, 3, 4},
 		{6, 7, 8},
@@ -84,7 +87,7 @@ func runIndexUpgrade(ctx context.Context, t *test, c cluster.Cluster, predecesso
 }
 
 func createDataStep() versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		conn := u.conn(ctx, t, 1)
 		if _, err := conn.Exec(`
 CREATE TABLE t (
@@ -100,7 +103,7 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 }
 
 func modifyData(node int, sql ...string) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Write some data into the table.
 		conn := u.conn(ctx, t, node)
 		for _, s := range sql {
@@ -112,7 +115,7 @@ func modifyData(node int, sql ...string) versionStep {
 }
 
 func verifyTableData(node int, expected [][]int) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		conn := u.conn(ctx, t, node)
 		rows, err := conn.Query(`SELECT y, z, w FROM t@i ORDER BY y`)
 		if err != nil {
@@ -131,12 +134,12 @@ func verifyTableData(node int, expected [][]int) versionStep {
 }
 
 func registerSecondaryIndexesMultiVersionCluster(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "schemachange/secondary-index-multi-version",
 		Owner:      OwnerSQLSchema,
 		Cluster:    r.makeClusterSpec(3),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)

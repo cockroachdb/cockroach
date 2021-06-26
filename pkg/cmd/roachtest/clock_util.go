@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 // isAlive returns whether the node queried by db is alive.
@@ -46,7 +47,7 @@ func dbUnixEpoch(db *gosql.DB) (float64, error) {
 
 // offsetInjector is used to inject clock offsets in roachtests.
 type offsetInjector struct {
-	t        *test
+	t        test.Test
 	c        cluster.Cluster
 	deployed bool
 }
@@ -58,16 +59,16 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 		return nil
 	}
 
-	if err := oi.c.Install(ctx, oi.t.l, oi.c.All(), "ntp"); err != nil {
+	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "ntp"); err != nil {
 		return err
 	}
-	if err := oi.c.Install(ctx, oi.t.l, oi.c.All(), "gcc"); err != nil {
+	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "gcc"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.l, oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
+	if err := oi.c.RunL(ctx, oi.t.L(), oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.l,
+	if err := oi.c.RunL(ctx, oi.t.L(),
 		oi.c.All(),
 		"curl",
 		"--retry", "3",
@@ -78,7 +79,7 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, oi.t.l,
+	if err := oi.c.RunL(ctx, oi.t.L(),
 		oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c",
 	); err != nil {
 		return err
@@ -123,6 +124,6 @@ func (oi *offsetInjector) recover(ctx context.Context, nodeID int) {
 
 // newOffsetInjector creates a offsetInjector which can be used to inject
 // and recover from clock offsets.
-func newOffsetInjector(t *test, c cluster.Cluster) *offsetInjector {
+func newOffsetInjector(t test.Test, c cluster.Cluster) *offsetInjector {
 	return &offsetInjector{t: t, c: c}
 }

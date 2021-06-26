@@ -24,6 +24,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -33,7 +34,7 @@ import (
 )
 
 func registerGossip(r *testRegistry) {
-	runGossipChaos := func(ctx context.Context, t *test, c cluster.Cluster) {
+	runGossipChaos := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		args := startArgs("--args=--vmodule=*=1")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, c.All(), args)
@@ -95,11 +96,11 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 					continue
 				}
 
-				t.l.Printf("%d: checking gossip\n", i)
+				t.L().Printf("%d: checking gossip\n", i)
 				liveNodes, gossipNetwork := nodesInNetworkAccordingTo(i)
 				for _, id := range liveNodes {
 					if id == deadNode {
-						t.l.Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
+						t.L().Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
 							i, deadNode, gossipNetwork, timeutil.Since(start).Seconds())
 						return false
 					}
@@ -112,20 +113,20 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 				}
 
 				if len(liveNodes) != len(expLiveNodes) {
-					t.l.Printf("%d: gossip not ok (mismatched size of network: %s); expected %d, got %d (%.0fs)\n",
+					t.L().Printf("%d: gossip not ok (mismatched size of network: %s); expected %d, got %d (%.0fs)\n",
 						i, gossipNetwork, len(expLiveNodes), len(liveNodes), timeutil.Since(start).Seconds())
 					return false
 				}
 
 				for i := range liveNodes {
 					if liveNodes[i] != expLiveNodes[i] {
-						t.l.Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
+						t.L().Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
 							i, gossipNetwork, expLiveNodes, liveNodes, timeutil.Since(start).Seconds())
 						return false
 					}
 				}
 			}
-			t.l.Printf("gossip ok: %s (size: %d) (%0.0fs)\n", expGossipNetwork, len(expLiveNodes), timeutil.Since(start).Seconds())
+			t.L().Printf("gossip ok: %s (size: %d) (%0.0fs)\n", expGossipNetwork, len(expLiveNodes), timeutil.Since(start).Seconds())
 			return true
 		}
 
@@ -150,11 +151,11 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(9),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGossipChaos(ctx, t, c)
 		},
 	})
@@ -166,7 +167,7 @@ type gossipUtil struct {
 	conn     func(ctx context.Context, i int) *gosql.DB
 }
 
-func newGossipUtil(ctx context.Context, t *test, c cluster.Cluster) *gossipUtil {
+func newGossipUtil(ctx context.Context, t test.Test, c cluster.Cluster) *gossipUtil {
 	urlMap := make(map[int]string)
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
 	if err != nil {
@@ -237,8 +238,10 @@ func (gossipUtil) hasClusterID(infos map[string]gossip.Info) error {
 	return nil
 }
 
-func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c cluster.Cluster) {
-	t.l.Printf("waiting for gossip to be connected\n")
+func (g *gossipUtil) checkConnectedAndFunctional(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) {
+	t.L().Printf("waiting for gossip to be connected\n")
 	if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount)); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +285,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c
 	}
 }
 
-func runGossipPeerings(ctx context.Context, t *test, c cluster.Cluster) {
+func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx)
 
@@ -302,11 +305,11 @@ func runGossipPeerings(ctx context.Context, t *test, c cluster.Cluster) {
 		if err := g.check(ctx, c, g.hasSentinel); err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("%d: OK\n", i)
+		t.L().Printf("%d: OK\n", i)
 
 		// Restart a random node.
 		node := c.All().RandNode()
-		t.l.Printf("%d: restarting node %d\n", i, node[0])
+		t.L().Printf("%d: restarting node %d\n", i, node[0])
 		c.Stop(ctx, node)
 		c.Start(ctx, node)
 		// Sleep a bit to avoid hitting:
@@ -315,7 +318,7 @@ func runGossipPeerings(ctx context.Context, t *test, c cluster.Cluster) {
 	}
 }
 
-func runGossipRestart(ctx context.Context, t *test, c cluster.Cluster) {
+func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Skip("skipping flaky acceptance/gossip/restart", "https://github.com/cockroachdb/cockroach/issues/48423")
 
 	c.Put(ctx, cockroach, "./cockroach")
@@ -331,17 +334,17 @@ func runGossipRestart(ctx context.Context, t *test, c cluster.Cluster) {
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
 		g.checkConnectedAndFunctional(ctx, t, c)
-		t.l.Printf("%d: OK\n", i)
+		t.L().Printf("%d: OK\n", i)
 
-		t.l.Printf("%d: killing all nodes\n", i)
+		t.L().Printf("%d: killing all nodes\n", i)
 		c.Stop(ctx)
 
-		t.l.Printf("%d: restarting all nodes\n", i)
+		t.L().Printf("%d: restarting all nodes\n", i)
 		c.Start(ctx)
 	}
 }
 
-func runGossipRestartNodeOne(ctx context.Context, t *test, c cluster.Cluster) {
+func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", "--encrypt=false")
 	c.Put(ctx, cockroach, "./cockroach")
 	// Reduce the scan max idle time to speed up evacuation of node 1.
@@ -352,13 +355,13 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c cluster.Cluster) {
 
 	run := func(stmtStr string) {
 		stmt := fmt.Sprintf(stmtStr, "", "=")
-		t.l.Printf("%s\n", stmt)
+		t.L().Printf("%s\n", stmt)
 		_, err := db.ExecContext(ctx, stmt)
 		if err != nil && strings.Contains(err.Error(), "syntax error") {
 			// Pre-2.1 was EXPERIMENTAL.
 			// TODO(knz): Remove this in 2.2.
 			stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
-			t.l.Printf("%s\n", stmt)
+			t.L().Printf("%s\n", stmt)
 			_, err = db.ExecContext(ctx, stmt)
 		}
 		if err != nil {
@@ -381,7 +384,7 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c cluster.Cluster) {
 				count, util.Pluralize(int64(count)))
 			if count != lastNodeCount {
 				lastNodeCount = count
-				t.l.Printf("%s\n", err)
+				t.L().Printf("%s\n", err)
 			}
 			return err
 		}
@@ -421,7 +424,7 @@ SELECT count(replicas)
 			err := errors.Errorf("node 1 still has %d replicas", count)
 			if count != lastReplCount {
 				lastReplCount = count
-				t.l.Printf("%s\n", err)
+				t.L().Printf("%s\n", err)
 			}
 			return err
 		}
@@ -430,7 +433,7 @@ SELECT count(replicas)
 		t.Fatal(err)
 	}
 
-	t.l.Printf("killing all nodes\n")
+	t.L().Printf("killing all nodes\n")
 	c.Stop(ctx)
 
 	// Restart node 1, but have it listen on a different port for internal
@@ -492,7 +495,7 @@ SELECT count(replicas)
 	c.Start(ctx, c.Node(1))
 }
 
-func runCheckLocalityIPAddress(ctx context.Context, t *test, c cluster.Cluster) {
+func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	externalIP, err := c.ExternalIP(ctx, c.Range(1, c.Spec().NodeCount))

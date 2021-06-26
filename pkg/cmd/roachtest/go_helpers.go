@@ -15,13 +15,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 const goPath = `/mnt/data1/go`
 
 // installGolang installs a specific version of Go on all nodes in
 // "node".
-func installGolang(ctx context.Context, t *test, c cluster.Cluster, node option.NodeListOption) {
+func installGolang(
+	ctx context.Context, t test.Test, c cluster.Cluster, node option.NodeListOption,
+) {
 	if err := repeatRunE(
 		ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
 	); err != nil {

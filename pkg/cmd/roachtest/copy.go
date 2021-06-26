@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 )
@@ -28,7 +29,7 @@ func registerCopy(r *testRegistry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
-	runCopy := func(ctx context.Context, t *test, c cluster.Cluster, rows int, inTxn bool) {
+	runCopy := func(ctx context.Context, t test.Test, c cluster.Cluster, rows int, inTxn bool) {
 		// payload is the size of the payload column for each row in the Bank
 		// table. If this is adjusted, a new fixture may need to be generated.
 		const payload = 100
@@ -140,7 +141,7 @@ func registerCopy(r *testRegistry) {
 				t.Fatalf("failed to get default range size: %v", err)
 			}
 			rc := rangeCount()
-			t.l.Printf("range count after copy = %d\n", rc)
+			t.L().Printf("range count after copy = %d\n", rc)
 			lowExp := (rows * rowEstimate) / rangeMaxBytes
 			highExp := int(math.Ceil(float64(rows*rowEstimate) / float64(rangeMinBytes)))
 			if rc > highExp || rc < lowExp {
@@ -171,11 +172,11 @@ func registerCopy(r *testRegistry) {
 
 	for _, tc := range testcases {
 		tc := tc
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(tc.nodes),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},
 		})

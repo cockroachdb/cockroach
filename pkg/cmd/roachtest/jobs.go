@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -33,11 +34,11 @@ type jobStarter func(c cluster.Cluster) (string, error)
 // - That the statement running the job is a detached statement, and does not
 // block until the job completes.
 func jobSurvivesNodeShutdown(
-	ctx context.Context, t *test, c cluster.Cluster, nodeToShutdown int, startJob jobStarter,
+	ctx context.Context, t test.Test, c cluster.Cluster, nodeToShutdown int, startJob jobStarter,
 ) {
 	watcherNode := 1 + (nodeToShutdown)%c.Spec().NodeCount
 	target := c.Node(nodeToShutdown)
-	t.l.Printf("test has chosen shutdown target node %d, and watcher node %d",
+	t.L().Printf("test has chosen shutdown target node %d, and watcher node %d",
 		nodeToShutdown, watcherNode)
 
 	jobIDCh := make(chan string, 1)
@@ -51,7 +52,7 @@ func jobSurvivesNodeShutdown(
 		if err != nil {
 			return errors.Wrap(err, "starting the job")
 		}
-		t.l.Printf("started running job with ID %s", jobID)
+		t.L().Printf("started running job with ID %s", jobID)
 		jobIDCh <- jobID
 
 		pollInterval := 5 * time.Second
@@ -74,7 +75,7 @@ func jobSurvivesNodeShutdown(
 					t.Status("job completed")
 					return nil
 				case jobs.StatusRunning:
-					t.l.Printf("job %s still running, waiting to succeed", jobID)
+					t.L().Printf("job %s still running, waiting to succeed", jobID)
 				default:
 					// Waiting for job to complete.
 					return errors.Newf("unexpectedly found job %s in state %s", jobID, status)
@@ -118,11 +119,11 @@ func jobSurvivesNodeShutdown(
 				status)
 		}
 
-		t.l.Printf(`stopping node %s`, target)
+		t.L().Printf(`stopping node %s`, target)
 		if err := c.StopE(ctx, target); err != nil {
 			return errors.Wrapf(err, "could not stop node %s", target)
 		}
-		t.l.Printf("stopped node %s", target)
+		t.L().Printf("stopped node %s", target)
 
 		return nil
 	})

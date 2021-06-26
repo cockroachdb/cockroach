@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -144,7 +145,7 @@ var canaryRetryOptions = retry.Options{
 // repeatRunE is the same function as c.RunE but with an automatic retry loop.
 func repeatRunE(
 	ctx context.Context,
-	t *test,
+	t test.Test,
 	c cluster.Cluster,
 	node option.NodeListOption,
 	operation string,
@@ -159,10 +160,10 @@ func repeatRunE(
 			return fmt.Errorf("test has failed")
 		}
 		attempt++
-		t.l.Printf("attempt %d - %s", attempt, operation)
+		t.L().Printf("attempt %d - %s", attempt, operation)
 		lastError = c.RunE(ctx, node, args...)
 		if lastError != nil {
-			t.l.Printf("error - retrying: %s", lastError)
+			t.L().Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return nil
@@ -175,7 +176,7 @@ func repeatRunE(
 func repeatRunWithBuffer(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t test.Test,
 	node option.NodeListOption,
 	operation string,
 	args ...string,
@@ -192,10 +193,10 @@ func repeatRunWithBuffer(
 			return nil, fmt.Errorf("test has failed")
 		}
 		attempt++
-		t.l.Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithBuffer(ctx, t.l, node, args...)
+		t.L().Printf("attempt %d - %s", attempt, operation)
+		lastResult, lastError = c.RunWithBuffer(ctx, t.L(), node, args...)
 		if lastError != nil {
-			t.l.Printf("error - retrying: %s\n%s", lastError, string(lastResult))
+			t.L().Printf("error - retrying: %s\n%s", lastError, string(lastResult))
 			continue
 		}
 		return lastResult, nil
@@ -207,7 +208,7 @@ func repeatRunWithBuffer(
 // retry loop.
 func repeatGitCloneE(
 	ctx context.Context,
-	t *test,
+	t test.Test,
 	c cluster.Cluster,
 	src, dest, branch string,
 	node option.NodeListOption,
@@ -221,10 +222,10 @@ func repeatGitCloneE(
 			return fmt.Errorf("test has failed")
 		}
 		attempt++
-		t.l.Printf("attempt %d - clone %s", attempt, src)
-		lastError = c.GitClone(ctx, t.l, src, dest, branch, node)
+		t.L().Printf("attempt %d - clone %s", attempt, src)
+		lastError = c.GitClone(ctx, t.L(), src, dest, branch, node)
 		if lastError != nil {
-			t.l.Printf("error - retrying: %s", lastError)
+			t.L().Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return nil
@@ -239,7 +240,7 @@ func repeatGitCloneE(
 // may contain "minor", "point" and "subpoint" in order of decreasing importance
 // for sorting purposes.
 func repeatGetLatestTag(
-	ctx context.Context, t *test, user string, repo string, releaseRegex *regexp.Regexp,
+	ctx context.Context, t test.Test, user string, repo string, releaseRegex *regexp.Regexp,
 ) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags", user, repo)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
@@ -275,11 +276,11 @@ func repeatGetLatestTag(
 		}
 		attempt++
 
-		t.l.Printf("attempt %d - fetching %s", attempt, url)
+		t.L().Printf("attempt %d - fetching %s", attempt, url)
 		var resp *http.Response
 		resp, lastError = httpClient.Get(url)
 		if lastError != nil {
-			t.l.Printf("error fetching - retrying: %s", lastError)
+			t.L().Printf("error fetching - retrying: %s", lastError)
 			continue
 		}
 		defer resp.Body.Close()
@@ -287,7 +288,7 @@ func repeatGetLatestTag(
 		var tags Tags
 		lastError = json.NewDecoder(resp.Body).Decode(&tags)
 		if lastError != nil {
-			t.l.Printf("error decoding - retrying: %s", lastError)
+			t.L().Printf("error decoding - retrying: %s", lastError)
 			continue
 		}
 		if len(tags) == 0 {

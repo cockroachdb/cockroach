@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -25,7 +26,7 @@ import (
 )
 
 func registerEngineSwitch(r *testRegistry) {
-	runEngineSwitch := func(ctx context.Context, t *test, c cluster.Cluster, additionalArgs ...string) {
+	runEngineSwitch := func(ctx context.Context, t test.Test, c cluster.Cluster, additionalArgs ...string) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		c.Put(ctx, workload, "./workload", loadNode)
@@ -35,7 +36,7 @@ func registerEngineSwitch(r *testRegistry) {
 		c.Start(ctx, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
 		if local {
-			t.l.Printf("local mode: speeding up test\n")
+			t.L().Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 		}
 		numIters := 5 * len(roachNodes)
@@ -43,7 +44,7 @@ func registerEngineSwitch(r *testRegistry) {
 		loadDuration := " --duration=" + (time.Duration(numIters) * stageDuration).String()
 
 		var deprecatedWorkloadsStr string
-		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+		if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
 			deprecatedWorkloadsStr += " --deprecated-fk-indexes"
 		}
 
@@ -66,7 +67,7 @@ func registerEngineSwitch(r *testRegistry) {
 		usingPebble := make([]bool, len(roachNodes))
 		rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 		m.Go(func(ctx context.Context) error {
-			l, err := t.l.ChildLogger("engine-switcher")
+			l, err := t.L().ChildLogger("engine-switcher")
 			if err != nil {
 				return err
 			}
@@ -90,7 +91,7 @@ func registerEngineSwitch(r *testRegistry) {
 					if err := rows.Close(); err != nil {
 						return err
 					}
-					if err := c.CheckReplicaDivergenceOnDB(ctx, t.l, db); err != nil {
+					if err := c.CheckReplicaDivergenceOnDB(ctx, t.L(), db); err != nil {
 						return errors.Wrapf(err, "node %d", i)
 					}
 				}
@@ -139,23 +140,23 @@ func registerEngineSwitch(r *testRegistry) {
 	}
 
 	n := 3
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("engine/switch/nodes=%d", n),
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(n + 1),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runEngineSwitch(ctx, t, c)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("engine/switch/encrypted/nodes=%d", n),
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(n + 1),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runEngineSwitch(ctx, t, c, "--encrypt=true")
 		},
 	})

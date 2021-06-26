@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -25,7 +26,7 @@ import (
 func registerClearRange(r *testRegistry) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:  fmt.Sprintf(`clearrange/checks=%t`, checks),
 			Owner: OwnerStorage,
 			// 5h for import, 90 for the test. The import should take closer
@@ -33,14 +34,14 @@ func registerClearRange(r *testRegistry) {
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
 			Cluster:    r.makeClusterSpec(10, spec.CPU(16)),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
 		})
 	}
 }
 
-func runClearRange(ctx context.Context, t *test, c cluster.Cluster, aggressiveChecks bool) {
+func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 	c.Put(ctx, cockroach, "./cockroach")
@@ -52,7 +53,7 @@ func runClearRange(ctx context.Context, t *test, c cluster.Cluster, aggressiveCh
 	tBegin := timeutil.Now()
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
 		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
-	t.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
+	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 	c.Stop(ctx)
 	t.Status()
 
@@ -74,7 +75,7 @@ func runClearRange(ctx context.Context, t *test, c cluster.Cluster, aggressiveCh
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
-	if t.buildVersion.AtLeast(version.MustParse("v19.2.0")) {
+	if t.BuildVersion().AtLeast(version.MustParse("v19.2.0")) {
 		conn := c.Conn(ctx, 1)
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 8`); err != nil {
 			t.Fatal(err)
