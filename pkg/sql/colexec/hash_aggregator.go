@@ -546,7 +546,7 @@ func (op *hashAggregator) Close() error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
-	op.accountingHelper.Close()
+	op.accountingHelper.Release()
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
 		retErr = op.inputTrackingState.tuples.Close(op.EnsureCtx())
