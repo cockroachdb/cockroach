@@ -2633,7 +2633,7 @@ func MVCCScanAsTxn(
 
 // MVCCIterate iterates over the key range [start,end). At each step of the
 // iteration, f() is invoked with the current key/value pair. If f returns
-// iterutil.StopIteration, the iteration stops and no error propagated. If f
+// iterutil.StopIteration, the iteration stops with no error propagated. If f
 // returns any other error, the iteration stops and the error is propagated. If
 // the reverse flag is set, the iterator will be moved in reverse order. If the
 // scan options specify an inconsistent scan, all "ignored" intents will be
