@@ -6,12 +6,14 @@ go_library(
     srcs = [
         "cfetcher.go",
         "colbatch_scan.go",
+        "index_join.go",
         ":gen-fetcherstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colfetcher",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/col/typeconv",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
@@ -21,11 +23,13 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/colconv",
         "//pkg/sql/colencoding",
+        "//pkg/sql/colexec/colexecspan",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/memsize",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/scrub",
