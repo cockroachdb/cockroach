@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -41,8 +40,9 @@ import (
 // should get rid off table readers entirely. We will have to be careful about
 // propagating the metadata though.
 
-// ColBatchScan is the exec.Operator implementation of TableReader. It reads a table
-// from kv, presenting it as coldata.Batches via the exec.Operator interface.
+// ColBatchScan is the exec.Operator implementation of TableReader. It reads a
+// table from kv, presenting it as coldata.Batches via the exec.Operator
+// interface.
 type ColBatchScan struct {
 	colexecop.ZeroInputNode
 	colexecop.InitHelper
@@ -67,10 +67,15 @@ type ColBatchScan struct {
 	ResultTypes []*types.T
 }
 
-var _ colexecop.KVReader = &ColBatchScan{}
-var _ execinfra.Releasable = &ColBatchScan{}
-var _ colexecop.Closer = &ColBatchScan{}
-var _ colexecop.Operator = &ColBatchScan{}
+// ScanOperator combines common interfaces between operators that perform KV
+// scans, such as ColBatchScan and ColIndexJoin.
+type ScanOperator interface {
+	colexecop.KVReader
+	execinfra.Releasable
+	colexecop.ClosableOperator
+}
+
+var _ ScanOperator = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init(ctx context.Context) {
@@ -187,27 +192,9 @@ func NewColBatchScan(
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
 	virtualColumn := tabledesc.FindVirtualColumn(table, spec.VirtualColumn)
-	cols := table.PublicColumns()
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = table.DeletableColumns()
-	}
-	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	typs := catalog.ColumnTypesWithVirtualCol(cols, virtualColumn)
-
-	// Add all requested system columns to the output.
-	if spec.HasSystemColumns {
-		for _, sysCol := range table.SystemColumns() {
-			typs = append(typs, sysCol.GetType())
-			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
-		}
-	}
-
-	// Before we can safely use types from the table descriptor, we need to
-	// make sure they are hydrated. In row execution engine it is done during
-	// the processor initialization, but neither ColBatchScan nor cFetcher are
-	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
+	typs, columnIdxMap, err := retrieveTypsAndColOrds(
+		ctx, flowCtx, evalCtx, table, virtualColumn, spec.Visibility, spec.HasSystemColumns)
+	if err != nil {
 		return nil, err
 	}
 
@@ -216,11 +203,20 @@ func NewColBatchScan(
 		neededColumns.Add(int(neededColumn))
 	}
 
-	fetcher := cFetcherPool.Get().(*cFetcher)
-	fetcher.estimatedRowCount = estimatedRowCount
-	if _, _, err := initCRowFetcher(
-		flowCtx, allocator, fetcher, table, columnIdxMap, neededColumns, spec, spec.HasSystemColumns,
-	); err != nil {
+	fetcher, err := initCFetcher(
+		flowCtx, allocator, table, table.ActiveIndexes()[spec.IndexIdx],
+		neededColumns, columnIdxMap, virtualColumn,
+		cFetcherArgs{
+			visibility:        spec.Visibility,
+			lockingStrength:   spec.LockingStrength,
+			lockingWaitPolicy: spec.LockingWaitPolicy,
+			hasSystemColumns:  spec.HasSystemColumns,
+			reverse:           spec.Reverse,
+			memoryLimit:       execinfra.GetWorkMemLimit(flowCtx),
+			estimatedRowCount: estimatedRowCount,
+		},
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -244,49 +240,43 @@ func NewColBatchScan(
 	return s, nil
 }
 
-// initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
-func initCRowFetcher(
+// retrieveTypsAndColOrds extracts logic that retrieves a slice with the column
+// types and a map between column IDs and ordinal positions for the columns from
+// the given table.
+func retrieveTypsAndColOrds(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	allocator *colmem.Allocator,
-	fetcher *cFetcher,
-	desc catalog.TableDescriptor,
-	colIdxMap catalog.TableColMap,
-	valNeededForCol util.FastIntSet,
-	spec *execinfrapb.TableReaderSpec,
-	withSystemColumns bool,
-) (index catalog.Index, isSecondaryIndex bool, err error) {
-	indexIdx := int(spec.IndexIdx)
-	if indexIdx >= len(desc.ActiveIndexes()) {
-		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
+	evalCtx *tree.EvalContext,
+	table catalog.TableDescriptor,
+	virtualCol catalog.Column,
+	visibility execinfrapb.ScanVisibility,
+	hasSystemColumns bool,
+) ([]*types.T, catalog.TableColMap, error) {
+	cols := table.PublicColumns()
+	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
+		cols = table.DeletableColumns()
 	}
-	index = desc.ActiveIndexes()[indexIdx]
-	isSecondaryIndex = !index.Primary()
+	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
+	typs := catalog.ColumnTypesWithVirtualCol(cols, virtualCol)
 
-	tableArgs := row.FetcherTableArgs{
-		Desc:             desc,
-		Index:            index,
-		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: isSecondaryIndex,
-		ValNeededForCol:  valNeededForCol,
+	// Add all requested system columns to the output.
+	if hasSystemColumns {
+		for _, sysCol := range table.SystemColumns() {
+			typs = append(typs, sysCol.GetType())
+			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
+		}
 	}
 
-	virtualColumn := tabledesc.FindVirtualColumn(desc, spec.VirtualColumn)
-	tableArgs.InitCols(desc, spec.Visibility, withSystemColumns, virtualColumn)
-
-	if err := fetcher.Init(
-		flowCtx.Codec(),
-		allocator,
-		execinfra.GetWorkMemLimit(flowCtx),
-		spec.Reverse,
-		spec.LockingStrength,
-		spec.LockingWaitPolicy,
-		flowCtx.EvalCtx.SessionData.LockTimeout,
-		tableArgs,
-	); err != nil {
-		return nil, false, err
+	// Before we can safely use types from the table descriptor, we need to
+	// make sure they are hydrated. In row execution engine it is done during
+	// the processor initialization, but neither ColBatchScan nor cFetcher are
+	// processors, so we need to do the hydration ourselves.
+	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
+	if err := resolver.HydrateTypeSlice(ctx, typs); err != nil {
+		return nil, catalog.TableColMap{}, err
 	}
 
-	return index, isSecondaryIndex, nil
+	return typs, columnIdxMap, nil
 }
 
 // Release implements the execinfra.Releasable interface.
