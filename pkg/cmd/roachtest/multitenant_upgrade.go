@@ -36,7 +36,7 @@ func registerMultiTenantUpgrade(r *testRegistry) {
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runMultiTenantUpgrade(ctx, t, c, r.buildVersion)
+			runMultiTenantUpgrade(ctx, t, c, *t.BuildVersion())
 		},
 	})
 }

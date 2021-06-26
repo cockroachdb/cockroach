@@ -217,7 +217,7 @@ func registerVersion(r *testRegistry) {
 			MinVersion: "v2.1.0",
 			Cluster:    r.makeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				pred, err := PredecessorVersion(r.buildVersion)
+				pred, err := PredecessorVersion(*t.BuildVersion())
 				if err != nil {
 					t.Fatal(err)
 				}

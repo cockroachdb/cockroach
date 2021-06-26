@@ -70,7 +70,7 @@ func registerFollowerReads(r *testRegistry) {
 			spec.CPU(2),
 		),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, r.buildVersion)
+			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, *t.BuildVersion())
 		},
 	})
 }
