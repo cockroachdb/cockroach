@@ -383,6 +383,9 @@ const sizeOfInt32 = unsafe.Sizeof(int32(0))
 
 // Size returns the total size of the receiver in bytes.
 func (b *Bytes) Size() uintptr {
+	if b == nil {
+		return uintptr(0)
+	}
 	return FlatBytesOverhead +
 		uintptr(cap(b.data)) +
 		uintptr(cap(b.offsets))*sizeOfInt32
@@ -408,6 +411,15 @@ func (b *Bytes) Reset() {
 	}
 	b.data = b.data[:0]
 	b.maxSetLength = 0
+}
+
+// ResetForAppend is similar to Reset, but it also resets the offsets slice so
+// that future calls to AppendSlice or AppendVal will append starting from index
+// zero. TODO(drewk): once Set is removed, this can just be Reset.
+func (b *Bytes) ResetForAppend() {
+	b.Reset()
+	// The first offset indicates where the first element will start.
+	b.offsets = b.offsets[:1]
 }
 
 // String is used for debugging purposes.
