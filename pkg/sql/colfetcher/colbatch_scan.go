@@ -42,8 +42,9 @@ import (
 // should get rid off table readers entirely. We will have to be careful about
 // propagating the metadata though.
 
-// ColBatchScan is the exec.Operator implementation of TableReader. It reads a table
-// from kv, presenting it as coldata.Batches via the exec.Operator interface.
+// ColBatchScan is the exec.Operator implementation of TableReader. It reads a
+// table from kv, presenting it as coldata.Batches via the exec.Operator
+// interface.
 type ColBatchScan struct {
 	colexecop.ZeroInputNode
 	colexecop.InitHelper

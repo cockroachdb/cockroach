@@ -17,6 +17,9 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",
+        "//pkg/keys",  # keep
+        "//pkg/roachpb",  # keep
+        "//pkg/sql/catalog",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec/colexecbase",
@@ -27,10 +30,12 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/rowenc",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/duration",  # keep
+        "//pkg/util/encoding",  # keep
         "//pkg/util/json",  # keep
         "//pkg/util/mon",
         "@com_github_cockroachdb_apd_v2//:apd",  # keep
@@ -45,25 +50,35 @@ go_test(
         "dep_test.go",
         "main_test.go",
         "mergejoiner_test.go",
+        "span_assembler_test.go",
     ],
     embed = [":colexecjoin"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/span",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/skip",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
@@ -87,6 +102,8 @@ targets = [
     ("mergejoiner_rightanti.eg.go", "mergejoiner_tmpl.go"),
     ("mergejoiner_rightouter.eg.go", "mergejoiner_tmpl.go"),
     ("mergejoiner_rightsemi.eg.go", "mergejoiner_tmpl.go"),
+    ("span_assembler.eg.go", "span_assembler_tmpl.go"),
+    ("span_encoder.eg.go", "span_encoder_tmpl.go"),
 ]
 
 # Define a file group for all the .eg.go targets.
