@@ -11,10 +11,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/col/coldataext",  # keep
         "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/rowenc",  # keep
         "//pkg/sql/types",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

@@ -888,6 +888,8 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightanti.eg.go \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightouter.eg.go \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightsemi.eg.go \
+  pkg/sql/colexec/colexecjoin/span_assembler.eg.go \
+  pkg/sql/colexec/colexecjoin/span_encoder.eg.go \
   pkg/sql/colexec/colexecproj/default_cmp_proj_ops.eg.go \
   pkg/sql/colexec/colexecproj/proj_const_left_ops.eg.go \
   pkg/sql/colexec/colexecproj/proj_const_right_ops.eg.go \
