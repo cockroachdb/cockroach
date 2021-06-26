@@ -178,6 +178,20 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		}
 		return nil
 
+	case spec.Core.JoinReader != nil:
+		if spec.Core.JoinReader.LookupColumns != nil || !spec.Core.JoinReader.LookupExpr.Empty() {
+			return errLookupJoinUnsupported
+		}
+		for i := range spec.Core.JoinReader.Table.Indexes {
+			if spec.Core.JoinReader.Table.Indexes[i].IsInterleaved() {
+				// Interleaved indexes are going to be removed anyway, so there is no
+				// point in handling the extra complexity. Just let the row engine
+				// handle this.
+				return errInterleavedIndexJoin
+			}
+		}
+		return nil
+
 	case spec.Core.Filterer != nil:
 		return nil
 
@@ -249,6 +263,8 @@ var (
 	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
 	errWrappedCast                    = errors.New("mismatched types in NewColOperator and unsupported casts")
+	errLookupJoinUnsupported          = errors.New("lookup join reader is unsupported in vectorized")
+	errInterleavedIndexJoin           = errors.New("vectorized join reader is unsupported for interleaved indexes")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
@@ -781,6 +797,40 @@ func NewColOperator(
 			result.Root = colexecutils.NewCancelChecker(result.Root)
 			result.ColumnTypes = scanOp.ResultTypes
 			result.ToClose = append(result.ToClose, scanOp)
+
+		case core.JoinReader != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return r, err
+			}
+			if core.JoinReader.LookupColumns != nil || !core.JoinReader.LookupExpr.Empty() {
+				return r, errors.AssertionFailedf("lookup join reader is unsupported in vectorized")
+			}
+			// We have to create a separate account in order for the cFetcher to
+			// be able to precisely track the size of its output batch. This
+			// memory account is "streaming" in its nature, so we create an
+			// unlimited one.
+			cFetcherMemAcc := result.createUnlimitedMemAccount(
+				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
+			)
+			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
+			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
+			copy(inputTypes, spec.Input[0].ColumnTypes)
+			indexJoinOp, err := colfetcher.NewColIndexJoin(
+				ctx, streamingAllocator, colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
+				flowCtx, evalCtx, semaCtx, inputs[0].Root, core.JoinReader, post, inputTypes)
+			if err != nil {
+				return r, err
+			}
+			result.Root = indexJoinOp
+			if util.CrdbTestBuild {
+				result.Root = colexec.NewInvariantsChecker(result.Root)
+			}
+			result.KVReader = indexJoinOp
+			result.MetadataSources = append(result.MetadataSources, result.Root.(colexecop.MetadataSource))
+			result.Releasables = append(result.Releasables, indexJoinOp)
+			result.Root = colexecutils.NewCancelChecker(result.Root)
+			result.ColumnTypes = indexJoinOp.ResultTypes
+			result.ToClose = append(result.ToClose, indexJoinOp)
 
 		case core.Filterer != nil:
 			if err := checkNumIn(inputs, 1); err != nil {

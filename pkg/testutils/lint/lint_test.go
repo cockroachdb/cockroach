@@ -1953,6 +1953,7 @@ func TestLint(t *testing.T) {
 			"../../sql/colexec/colexecjoin",
 			"../../sql/colexec/colexecproj",
 			"../../sql/colexec/colexecsel",
+			"../../sql/colexec/colexecspan",
 			"../../sql/colexec/colexecwindow",
 			"../../sql/colfetcher",
 			"../../sql/row",
