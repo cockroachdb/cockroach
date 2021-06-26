@@ -547,12 +547,10 @@ func NewLeaseManager(
 		},
 		rangeFeedFactory: rangeFeedFactory,
 		testingKnobs:     testingKnobs,
-		names: nameCache{
-			descriptors: make(map[nameCacheKey]*descriptorVersionState),
-		},
-		ambientCtx: ambientCtx,
-		stopper:    stopper,
-		sem:        quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
+		names:            makeNameCache(),
+		ambientCtx:       ambientCtx,
+		stopper:          stopper,
+		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
 	}
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
