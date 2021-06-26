@@ -115,11 +115,13 @@ func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	}
 
 	m.names.mu.Lock()
-	for _, desc := range m.names.descriptors {
+	m.names.descriptors.IterateByID(func(entry catalog.NameEntry) error {
+		desc := entry.(*descriptorVersionState)
 		desc.mu.Lock()
+		defer desc.mu.Unlock()
 		desc.mu.expiration = past
-		desc.mu.Unlock()
-	}
+		return nil
+	})
 	m.names.mu.Unlock()
 }
 

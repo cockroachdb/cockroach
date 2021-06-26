@@ -12,19 +12,14 @@ package lease
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
-// nameCacheKey is a key for the descriptor cache, with the same fields
-// as the system.namespace key: name is the descriptor name; parentID is
-// populated for schemas, descriptors, and types; and parentSchemaID is
-// populated for descriptors and types.
-type nameCacheKey struct {
-	parentID       descpb.ID
-	parentSchemaID descpb.ID
-	name           string
+func makeNameCache() nameCache {
+	return nameCache{descriptors: nstree.MakeMap()}
 }
 
 // nameCache is a cache of descriptor name -> latest version mappings.
@@ -33,7 +28,7 @@ type nameCacheKey struct {
 // All methods are thread-safe.
 type nameCache struct {
 	mu          syncutil.Mutex
-	descriptors map[nameCacheKey]*descriptorVersionState
+	descriptors nstree.Map
 }
 
 // Resolves a (qualified) name to the descriptor's ID.
@@ -47,7 +42,9 @@ func (c *nameCache) get(
 	parentID descpb.ID, parentSchemaID descpb.ID, name string, timestamp hlc.Timestamp,
 ) *descriptorVersionState {
 	c.mu.Lock()
-	desc, ok := c.descriptors[makeNameCacheKey(parentID, parentSchemaID, name)]
+	desc, ok := c.descriptors.GetByName(
+		parentID, parentSchemaID, name,
+	).(*descriptorVersionState)
 	c.mu.Unlock()
 	if !ok {
 		return nil
@@ -84,44 +81,21 @@ func (c *nameCache) get(
 func (c *nameCache) insert(desc *descriptorVersionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	key := makeNameCacheKey(desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName())
-	existing, ok := c.descriptors[key]
-	if !ok {
-		c.descriptors[key] = desc
+	got, ok := c.descriptors.GetByName(
+		desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName(),
+	).(*descriptorVersionState)
+	if ok && desc.getExpiration().Less(got.getExpiration()) {
 		return
 	}
-	// If we already have a lease in the cache for this name, see if this one is
-	// better (higher version or later expiration).
-	if desc.GetVersion() > existing.GetVersion() ||
-		(desc.GetVersion() == existing.GetVersion() &&
-			existing.getExpiration().Less(desc.getExpiration())) {
-		// Overwrite the old lease. The new one is better. From now on, we want
-		// clients to use the new one.
-		c.descriptors[key] = desc
-	}
+	c.descriptors.Upsert(desc)
 }
 
 func (c *nameCache) remove(desc *descriptorVersionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	key := makeNameCacheKey(desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName())
-	existing, ok := c.descriptors[key]
-	if !ok {
-		// Descriptor for lease not found in name cache. This can happen if we had
-		// a more recent lease on the descriptor in the nameCache, then the
-		// descriptor gets dropped, then the more recent lease is remove()d - which
-		// clears the cache.
-		return
-	}
 	// If this was the lease that the cache had for the descriptor name, remove
 	// it. If the cache had some other descriptor, this remove is a no-op.
-	if existing == desc {
-		delete(c.descriptors, key)
+	if got := c.descriptors.GetByID(desc.GetID()); got == desc {
+		c.descriptors.Remove(desc.GetID())
 	}
-}
-
-func makeNameCacheKey(parentID descpb.ID, parentSchemaID descpb.ID, name string) nameCacheKey {
-	return nameCacheKey{parentID, parentSchemaID, name}
 }
