@@ -415,40 +415,16 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	numUUIDVectors := 0
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-		case types.BoolFamily:
-			acc += memsize.Bool
 		case types.BytesFamily:
 			if t.Family() == types.UuidFamily {
 				numUUIDVectors++
 			} else {
 				numBytesVectors++
 			}
-		case types.IntFamily:
-			switch t.Width() {
-			case 16:
-				acc += memsize.Int16
-			case 32:
-				acc += memsize.Int32
-			default:
-				acc += memsize.Int64
-			}
-		case types.FloatFamily:
-			acc += memsize.Float64
 		case types.DecimalFamily:
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects.
 			acc += decimalEstimate
-		case types.TimestampTZFamily:
-			// time.Time consists of two 64 bit integers and a pointer to
-			// time.Location. We will only account for this 3 bytes without paying
-			// attention to the full time.Location struct. The reason is that it is
-			// likely that time.Location's are cached and are shared among all the
-			// timestamps, so if we were to include that in the estimation, we would
-			// significantly overestimate.
-			// TODO(yuzefovich): figure out whether the caching does take place.
-			acc += memsize.Time
-		case types.IntervalFamily:
-			acc += memsize.Duration
 		case types.JsonFamily:
 			numBytesVectors++
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -461,6 +437,14 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 			// Note: keep the calculation here in line with datumVec.Size.
 			implementationSize, _ := tree.DatumTypeSize(t)
 			acc += int64(implementationSize) + memsize.DatumOverhead
+		case
+			types.BoolFamily,
+			types.IntFamily,
+			types.FloatFamily,
+			types.TimestampTZFamily,
+			types.IntervalFamily:
+			// Types that have a statically known size.
+			acc += GetFixedSizeTypeSize(t)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 		}
@@ -481,6 +465,40 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	// Add the offsets.
 	bytesVectorsSize += int64(numBytesVectors+numUUIDVectors) * memsize.Int32 * int64(batchLength+1)
 	return acc*int64(batchLength) + bytesVectorsSize
+}
+
+// GetFixedSizeTypeSize returns the size of a type that is not variable in size;
+// e.g. its size is known statically.
+func GetFixedSizeTypeSize(t *types.T) (size int64) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily:
+		size = memsize.Bool
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			size = memsize.Int16
+		case 32:
+			size = memsize.Int32
+		default:
+			size = memsize.Int64
+		}
+	case types.FloatFamily:
+		size = memsize.Float64
+	case types.TimestampTZFamily:
+		// time.Time consists of two 64 bit integers and a pointer to
+		// time.Location. We will only account for this 3 bytes without paying
+		// attention to the full time.Location struct. The reason is that it is
+		// likely that time.Location's are cached and are shared among all the
+		// timestamps, so if we were to include that in the estimation, we would
+		// significantly overestimate.
+		// TODO(yuzefovich): figure out whether the caching does take place.
+		size = memsize.Time
+	case types.IntervalFamily:
+		size = memsize.Duration
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
+	}
+	return size
 }
 
 // SetAccountingHelper is a utility struct that should be used by callers that
@@ -660,8 +678,8 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 	}
 }
 
-// Close releases all of the resources so that they could be garbage collected.
+// Release releases all of the resources so that they can be garbage collected.
 // It should be called once the caller is done with batch manipulation.
-func (h *SetAccountingHelper) Close() {
+func (h *SetAccountingHelper) Release() {
 	*h = SetAccountingHelper{}
 }

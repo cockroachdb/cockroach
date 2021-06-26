@@ -706,7 +706,7 @@ func init() {
 // PrettyPrintRange pretty prints a compact representation of a key range. The
 // output is of the form:
 //    commonPrefix{remainingStart-remainingEnd}
-// If the end key is empty, the outut is of the form:
+// If the end key is empty, the output is of the form:
 //    start
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.

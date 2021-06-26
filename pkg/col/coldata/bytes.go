@@ -384,6 +384,9 @@ const FlatBytesOverhead = int64(unsafe.Sizeof(Bytes{}))
 
 // Size returns the total size of the receiver in bytes.
 func (b *Bytes) Size() int64 {
+	if b == nil {
+		return 0
+	}
 	return FlatBytesOverhead +
 		int64(cap(b.data)) +
 		int64(cap(b.offsets))*memsize.Int32
@@ -398,6 +401,16 @@ func (b *Bytes) ProportionalSize(n int64) int64 {
 	// It is possible that we have a "window" into the vector that doesn't start
 	// from the offset of 0, so we have to look at the first actual offset.
 	return FlatBytesOverhead + int64(len(b.data[b.offsets[0]:b.offsets[n]])) + n*memsize.Int32
+}
+
+// ElemSize returns the size in bytes of the []byte elem at the given index.
+// Panics if passed an invalid element.
+func (b *Bytes) ElemSize(idx int) int64 {
+	if idx < 0 || idx >= b.Len() {
+		colexecerror.InternalError(
+			errors.AssertionFailedf("called ElemSize with invalid index: %d", idx))
+	}
+	return int64(b.offsets[idx+1] - b.offsets[idx])
 }
 
 // Abbreviated returns a uint64 slice where each uint64 represents the first
@@ -454,6 +467,15 @@ func (b *Bytes) Reset() {
 	}
 	b.data = b.data[:0]
 	b.maxSetLength = 0
+}
+
+// ResetForAppend is similar to Reset, but it also resets the offsets slice so
+// that future calls to AppendSlice or AppendVal will append starting from index
+// zero. TODO(drewk): once Set is removed, this can just be Reset.
+func (b *Bytes) ResetForAppend() {
+	b.Reset()
+	// The first offset indicates where the first element will start.
+	b.offsets = b.offsets[:1]
 }
 
 // Truncate truncates the underlying bytes to the given length. This allows Set

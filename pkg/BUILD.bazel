@@ -210,6 +210,7 @@ ALL_TESTS = [
     "//pkg/sql/colexec/colexecjoin:colexecjoin_test",
     "//pkg/sql/colexec/colexecproj:colexecproj_test",
     "//pkg/sql/colexec/colexecsel:colexecsel_test",
+    "//pkg/sql/colexec/colexecspan:colexecspan_test",
     "//pkg/sql/colexec/colexectestutils:colexectestutils_test",
     "//pkg/sql/colexec/colexecutils:colexecutils_test",
     "//pkg/sql/colexec/colexecwindow:colexecwindow_test",

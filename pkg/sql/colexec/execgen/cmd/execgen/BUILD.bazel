@@ -50,6 +50,8 @@ go_library(
         "select_in_gen.go",
         "selection_ops_gen.go",
         "sort_gen.go",
+        "span_assembler_gen.go",
+        "span_encoder_gen.go",
         "substring_gen.go",
         "sum_agg_gen.go",
         "values_differ_gen.go",
