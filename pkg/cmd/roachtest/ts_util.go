@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
@@ -43,7 +44,7 @@ type tsQuery struct {
 }
 
 func mustGetMetrics(
-	t *test, adminURL string, start, end time.Time, tsQueries []tsQuery,
+	t test.Test, adminURL string, start, end time.Time, tsQueries []tsQuery,
 ) tspb.TimeSeriesQueryResponse {
 	response, err := getMetrics(adminURL, start, end, tsQueries)
 	if err != nil {
@@ -94,7 +95,7 @@ func getMetrics(
 func verifyTxnPerSecond(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t test.Test,
 	adminNode option.NodeListOption,
 	start, end time.Time,
 	txnTarget, maxPercentTimeUnderTarget float64,
@@ -121,7 +122,7 @@ func verifyTxnPerSecond(
 	if avgTxnPerSec < txnTarget {
 		t.Fatalf("average txns per second %f was under target %f", avgTxnPerSec, txnTarget)
 	} else {
-		t.l.Printf("average txns per second: %f", avgTxnPerSec)
+		t.L().Printf("average txns per second: %f", avgTxnPerSec)
 	}
 
 	// Verify that less than the specified limit of each individual one minute
@@ -138,14 +139,14 @@ func verifyTxnPerSecond(
 			perc*100, txnTarget, maxPercentTimeUnderTarget*100,
 		)
 	} else {
-		t.l.Printf("spent %f%% of time below target of %f txn/s", perc*100, txnTarget)
+		t.L().Printf("spent %f%% of time below target of %f txn/s", perc*100, txnTarget)
 	}
 }
 
 func verifyLookupsPerSec(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t test.Test,
 	adminNode option.NodeListOption,
 	start, end time.Time,
 	rangeLookupsTarget float64,
@@ -168,7 +169,7 @@ func verifyLookupsPerSec(
 		if dp.Value > rangeLookupsTarget {
 			t.Fatalf("Found minute interval with %f lookup/sec above target of %f lookup/sec\n", dp.Value, rangeLookupsTarget)
 		} else {
-			t.l.Printf("Found minute interval with %f lookup/sec\n", dp.Value)
+			t.L().Printf("Found minute interval with %f lookup/sec\n", dp.Value)
 		}
 	}
 }

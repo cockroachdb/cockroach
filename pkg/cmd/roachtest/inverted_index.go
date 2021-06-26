@@ -16,15 +16,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerSchemaChangeInvertedIndex(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "schemachange/invertedindex",
 		Owner:   OwnerSQLSchema,
 		Cluster: r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
 	})
@@ -32,7 +33,7 @@ func registerSchemaChangeInvertedIndex(r *testRegistry) {
 
 // runInvertedIndex tests the correctness and performance of building an
 // inverted index on randomly generated JSON data (from the JSON workload).
-func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster.Cluster) {
+func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 
@@ -69,7 +70,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster.Cluste
 		if err := db.QueryRow(`SELECT count(*) FROM json.j`).Scan(&count); err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("finished writing %d rows to table", count)
+		t.L().Printf("finished writing %d rows to table", count)
 
 		return nil
 	})
@@ -92,12 +93,12 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t *test, c cluster.Cluste
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
-		t.l.Printf("creating index")
+		t.L().Printf("creating index")
 		start := timeutil.Now()
 		if _, err := db.Exec(`CREATE INVERTED INDEX ON json.j (v)`); err != nil {
 			return err
 		}
-		t.l.Printf("index was created, took %v", timeutil.Since(start))
+		t.L().Printf("index was created, took %v", timeutil.Since(start))
 
 		return nil
 	})

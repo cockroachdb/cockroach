@@ -19,6 +19,7 @@ import (
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	_ "github.com/lib/pq"
 )
@@ -26,7 +27,7 @@ import (
 // runNetworkSanity is just a sanity check to make sure we're setting up toxiproxy
 // correctly. It injects latency between the nodes and verifies that we're not
 // seeing the latency on the client connection running `SELECT 1` on each node.
-func runNetworkSanity(ctx context.Context, t *test, origC cluster.Cluster, nodes int) {
+func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, nodes int) {
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
 	c, err := Toxify(ctx, t, origC, origC.All())
 	if err != nil {
@@ -75,7 +76,7 @@ func runNetworkSanity(ctx context.Context, t *test, origC cluster.Cluster, nodes
 				"BEGIN; INSERT INTO test.commit VALUES (2, %[1]d), (1, %[1]d), (3, %[1]d); COMMIT",
 				i,
 			))
-			t.l.Printf("%s\n", duration)
+			t.L().Printf("%s\n", duration)
 		}
 
 		c.Measure(ctx, 1, `
@@ -96,7 +97,7 @@ select age, message from [ show trace for session ];
 	m.Wait()
 }
 
-func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes int) {
+func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nodes int) {
 	n := origC.Spec().NodeCount
 	serverNodes, workerNode := origC.Range(1, n-1), origC.Node(n)
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
@@ -181,7 +182,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 		// both the "upstream" and "downstream" directions, this is in fact an asymmetric partition since
 		// it only affects connections *to* the node. n1 itself can connect to the cluster just fine.
 		proxy := c.Proxy(1)
-		t.l.Printf("letting inbound traffic to first node time out")
+		t.L().Printf("letting inbound traffic to first node time out")
 		for _, direction := range []string{"upstream", "downstream"} {
 			if _, err := proxy.AddToxic("", "timeout", direction, 1, toxiproxy.Attributes{
 				"timeout": 0, // forever
@@ -196,13 +197,13 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 		for {
 			cur := checkGoroutines(ctx)
 			if maxSeen < cur {
-				t.l.Printf("new goroutine peak: %d", cur)
+				t.L().Printf("new goroutine peak: %d", cur)
 				maxSeen = cur
 			}
 
 			select {
 			case <-done:
-				t.l.Printf("done checking goroutines, repairing network")
+				t.L().Printf("done checking goroutines, repairing network")
 				// Repair the network. Note that the TPCC workload would never
 				// finish (despite the duration) without this. In particular,
 				// we don't want to m.Wait() before we do this.
@@ -215,12 +216,12 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 						t.Fatal(err)
 					}
 				}
-				t.l.Printf("network is repaired")
+				t.L().Printf("network is repaired")
 
 				// Verify that goroutine count doesn't spike.
 				for i := 0; i < 20; i++ {
 					nowGoroutines := checkGoroutines(ctx)
-					t.l.Printf("currently at most %d goroutines per node", nowGoroutines)
+					t.L().Printf("currently at most %d goroutines per node", nowGoroutines)
 					time.Sleep(time.Second)
 				}
 
@@ -237,15 +238,15 @@ func runNetworkTPCC(ctx context.Context, t *test, origC cluster.Cluster, nodes i
 func registerNetwork(r *testRegistry) {
 	const numNodes = 4
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    fmt.Sprintf("network/sanity/nodes=%d", numNodes),
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(numNodes),
@@ -271,7 +272,7 @@ there to resolve the partition when the test aborts prematurely. (And the
 command to resolve the partition should not be sensitive to the test
 context's Done() channel, because during a tear-down that is closed already)
 `,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkTPCC(ctx, t, c, numNodes)
 		},
 	})

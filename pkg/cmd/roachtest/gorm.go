@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +24,7 @@ var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<p
 var gormSupportedTag = "v1.21.8"
 
 func registerGORM(r *testRegistry) {
-	runGORM := func(ctx context.Context, t *test, c cluster.Cluster) {
+	runGORM := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
 		}
@@ -45,8 +46,8 @@ func registerGORM(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest gorm release is %s.", latestTag)
-		t.l.Printf("Supported gorm release is %s.", gormSupportedTag)
+		t.L().Printf("Latest gorm release is %s.", latestTag)
+		t.L().Printf("Supported gorm release is %s.", gormSupportedTag)
 
 		installGolang(ctx, t, c, node)
 
@@ -91,7 +92,7 @@ func registerGORM(r *testRegistry) {
 		if expectedFailures == nil {
 			t.Fatalf("No gorm blocklist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		// Write the cockroach config into the test suite to use.
 		if err := repeatRunE(
@@ -119,7 +120,7 @@ PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v 2>&1 | %s/bin/go-junit-rep
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "gorm",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",

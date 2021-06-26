@@ -17,19 +17,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerDiskFull(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "disk-full",
 		Owner:      OwnerStorage,
 		MinVersion: `v20.2.0`,
 		Cluster:    r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
-				t.spec.Skip = "you probably don't want to fill your local disk"
-				return
+				t.Skip("you probably don't want to fill your local disk")
 			}
 
 			nodes := c.Spec().NodeCount - 1
@@ -51,7 +51,7 @@ func registerDiskFull(r *testRegistry) {
 				time.Sleep(30 * time.Second)
 				const n = 1
 				m.ExpectDeath()
-				t.l.Printf("filling disk on %d\n", n)
+				t.L().Printf("filling disk on %d\n", n)
 				// The 100% ballast size will cause the disk to fill up and the ballast
 				// command to exit with an error. The "|| true" is used to ignore that
 				// error.
@@ -62,7 +62,7 @@ func registerDiskFull(r *testRegistry) {
 					if t.Failed() {
 						return nil
 					}
-					t.l.Printf("starting %d when disk is full\n", n)
+					t.L().Printf("starting %d when disk is full\n", n)
 					// Pebble treats "no space left on device" as a background error. Kill
 					// cockroach if it is still running. Note that this is to kill the
 					// node that was started prior to this for loop, before the ballast
@@ -80,7 +80,7 @@ func registerDiskFull(r *testRegistry) {
 				}
 
 				// Clear the disk full condition and restart cockroach again.
-				t.l.Printf("clearing full disk on %d\n", n)
+				t.L().Printf("clearing full disk on %d\n", n)
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/ballast")
 				// Clear any death expectations that did not occur.
 				m.ResetDeaths()

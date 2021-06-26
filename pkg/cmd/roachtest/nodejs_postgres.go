@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ var supportedBranch = "allowing_passing_certs_through_pg_env"
 func registerNodeJSPostgres(r *testRegistry) {
 	runNodeJSPostgres := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -38,7 +39,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		err := c.PutE(ctx, t.l, cockroach, "./cockroach", c.All())
+		err := c.PutE(ctx, t.L(), cockroach, "./cockroach", c.All())
 		require.NoError(t, err)
 		err = c.StartE(ctx, startArgs("--secure"))
 		require.NoError(t, err)
@@ -68,7 +69,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 		err = os.RemoveAll(localCertsDir)
 		require.NoError(t, err)
 
-		err = c.Get(ctx, t.l, certsDir, localCertsDir)
+		err = c.Get(ctx, t.L(), certsDir, localCertsDir)
 		require.NoError(t, err)
 
 		// Certs can have at max 0600 privilege.
@@ -153,7 +154,7 @@ func registerNodeJSPostgres(r *testRegistry) {
 
 		t.Status("running node-postgres tests")
 		// Ignore the error, this is expected to fail.
-		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
 			fmt.Sprintf(
 				`cd /mnt/data1/node-postgres/ && sudo \
 PGPORT=26257 PGUSER=%s PGSSLMODE=require PGDATABASE=postgres_node_test \
@@ -162,7 +163,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 			),
 		)
 		rawResultsStr := string(rawResults)
-		t.l.Printf("Test Results: %s", rawResultsStr)
+		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
 			// The one failing test is `pool size of 1` which
 			// fails because it does SELECT count(*) FROM pg_stat_activity which is
@@ -179,13 +180,13 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "node-postgres",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.1.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNodeJSPostgres(ctx, t, c)
 		},
 	})

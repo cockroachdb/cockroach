@@ -18,12 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func registerAlterPK(r *testRegistry) {
 
-	setupTest := func(ctx context.Context, t *test, c cluster.Cluster) (option.NodeListOption, option.NodeListOption) {
+	setupTest := func(ctx context.Context, t test.Test, c cluster.Cluster) (option.NodeListOption, option.NodeListOption) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		t.Status("copying binaries")
@@ -36,7 +37,7 @@ func registerAlterPK(r *testRegistry) {
 	}
 
 	// runAlterPKBank runs a primary key change while the bank workload runs.
-	runAlterPKBank := func(ctx context.Context, t *test, c cluster.Cluster) {
+	runAlterPKBank := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		const numRows = 1000000
 		const duration = 1 * time.Minute
 
@@ -91,7 +92,7 @@ func registerAlterPK(r *testRegistry) {
 	}
 
 	// runAlterPKTPCC runs a primary key change while the TPCC workload runs.
-	runAlterPKTPCC := func(ctx context.Context, t *test, c cluster.Cluster, warehouses int, expensiveChecks bool) {
+	runAlterPKTPCC := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, expensiveChecks bool) {
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
@@ -167,7 +168,7 @@ func registerAlterPK(r *testRegistry) {
 		c.Run(ctx, loadNode, checkCmd)
 		t.Status("finished database verification")
 	}
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "alterpk-bank",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
@@ -176,25 +177,25 @@ func registerAlterPK(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(4),
 		Run:        runAlterPKBank,
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "alterpk-tpcc-250",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(4, spec.CPU(32)),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "alterpk-tpcc-500",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
 		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 500 /* warehouses */, false /* expensiveChecks */)
 		},
 	})

@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -26,7 +27,7 @@ var supportedPGXTag = "v4.11.0"
 func registerPgx(r *testRegistry) {
 	runPgx := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -68,8 +69,8 @@ func registerPgx(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest jackc/pgx release is %s.", latestTag)
-		t.l.Printf("Supported release is %s.", supportedPGXTag)
+		t.L().Printf("Latest jackc/pgx release is %s.", latestTag)
+		t.L().Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
@@ -88,7 +89,7 @@ func registerPgx(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		t.l.Printf("%s", status)
+		t.L().Printf("%s", status)
 
 		t.Status("setting up test db")
 		db, err := c.ConnE(ctx, node[0])
@@ -125,13 +126,13 @@ func registerPgx(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "pgx",
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgx(ctx, t, c)
 		},
 	})

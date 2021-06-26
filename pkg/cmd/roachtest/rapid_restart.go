@@ -18,13 +18,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-func runRapidRestart(ctx context.Context, t *test, c cluster.Cluster) {
+func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Use a single-node cluster which speeds the stop/start cycle.
 	nodes := c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", nodes)
@@ -73,7 +74,7 @@ func runRapidRestart(ctx context.Context, t *test, c cluster.Cluster) {
 				case <-time.After(10 * time.Second):
 					// We likely ended up killing before the process spawned.
 					// Loop around.
-					t.l.Printf("no exit status yet, killing again")
+					t.L().Printf("no exit status yet, killing again")
 				}
 			}
 			if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
@@ -114,7 +115,7 @@ func runRapidRestart(ctx context.Context, t *test, c cluster.Cluster) {
 			}
 		}
 
-		t.l.Printf("%d OK\n", j)
+		t.L().Printf("%d OK\n", j)
 	}
 
 	// Clean up for the test harness. Usually we want to leave nodes running so

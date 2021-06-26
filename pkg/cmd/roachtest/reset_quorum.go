@@ -18,11 +18,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
-func runResetQuorum(ctx context.Context, t *test, c cluster.Cluster) {
+func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	skip.WithIssue(t, 58165)
 	args := func(attr string) option.Option {
 		return startArgs(
@@ -92,7 +93,7 @@ OR
 		if buf.Len() == 0 {
 			break
 		}
-		t.l.Printf("still waiting:\n" + buf.String())
+		t.L().Printf("still waiting:\n" + buf.String())
 		time.Sleep(5 * time.Second)
 	}
 
@@ -107,7 +108,7 @@ OR
 	// Should not be able to read from it even (generously) after a lease timeout.
 	_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; SELECT * FROM lostrange;`)
 	require.Error(t, err)
-	t.l.Printf("table is now unavailable, as planned")
+	t.L().Printf("table is now unavailable, as planned")
 
 	const nodeID = 1 // where to put the replica, matches node number in roachtest
 	for rangeID := range lostRangeIDs {

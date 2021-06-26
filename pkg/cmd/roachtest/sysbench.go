@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 type sysbenchWorkload int
@@ -86,7 +87,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 	)
 }
 
-func runSysbench(ctx context.Context, t *test, c cluster.Cluster, opts sysbenchOptions) {
+func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbenchOptions) {
 	allNodes := c.Range(1, c.Spec().NodeCount)
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	loadNode := c.Node(c.Spec().NodeCount)
@@ -97,14 +98,14 @@ func runSysbench(ctx context.Context, t *test, c cluster.Cluster, opts sysbenchO
 	waitForFullReplication(t, c.Conn(ctx, allNodes[0]))
 
 	t.Status("installing haproxy")
-	if err := c.Install(ctx, t.l, loadNode, "haproxy"); err != nil {
+	if err := c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
 	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	if err := c.Install(ctx, t.l, loadNode, "sysbench"); err != nil {
+	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +122,7 @@ func runSysbench(ctx context.Context, t *test, c cluster.Cluster, opts sysbenchO
 		if err != nil && !strings.Contains(err.Error(), "Segmentation fault") {
 			return err
 		}
-		t.l.Printf("sysbench segfaulted; passing test anyway")
+		t.L().Printf("sysbench segfaulted; passing test anyway")
 		return nil
 	})
 	m.Wait()
@@ -140,11 +141,11 @@ func registerSysbench(r *testRegistry) {
 			rowsPerTable: 10000000,
 		}
 
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(n+1, spec.CPU(cpus)),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},
 		})

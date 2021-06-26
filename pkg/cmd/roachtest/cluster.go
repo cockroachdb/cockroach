@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -652,18 +653,6 @@ func MachineTypeToCPUs(s string) int {
 	return -1
 }
 
-type testI interface {
-	Name() string
-	Fatal(args ...interface{})
-	Fatalf(format string, args ...interface{})
-	Failed() bool
-	// Path to a directory where the test is supposed to store its log and other
-	// artifacts.
-	ArtifactsDir() string
-	logger() *logger.Logger
-	Status(args ...interface{})
-}
-
 type nodeSelector interface {
 	option.Option
 	Merge(option.NodeListOption) option.NodeListOption
@@ -691,12 +680,12 @@ type clusterImpl struct {
 	name string
 	tag  string
 	spec spec.ClusterSpec
-	t    testI
+	t    test.Test
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
 	// l is the logger used to log various cluster operations.
-	// DEPRECATED for use outside of cluster methods: Use a test's t.l instead.
+	// DEPRECATED for use outside of cluster methods: Use a test's t.L() instead.
 	// This is generally set to the current test's logger.
 	l          *logger.Logger
 	expiration time.Time
@@ -746,7 +735,7 @@ func (c *clusterImpl) status(args ...interface{}) {
 }
 
 func (c *clusterImpl) workerStatus(args ...interface{}) {
-	if impl, ok := c.t.(*test); ok {
+	if impl, ok := c.t.(*testImpl); ok {
 		impl.WorkerStatus(args...)
 	}
 }
@@ -1026,9 +1015,9 @@ func attachToExistingCluster(
 // setTest prepares c for being used on behalf of t.
 //
 // TODO(andrei): Get rid of c.t, c.l and of this method.
-func (c *clusterImpl) setTest(t testI) {
+func (c *clusterImpl) setTest(t test.Test) {
 	c.t = t
-	c.l = t.logger()
+	c.l = t.L()
 }
 
 // StopCockroachGracefullyOnNode stops a running cockroach instance on the requested
@@ -1154,13 +1143,13 @@ func (c *clusterImpl) Node(i int) option.NodeListOption {
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
 // The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchLogs(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchLogs(ctx context.Context, t test.Test) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
 	}
 
-	t.l.Printf("fetching logs\n")
+	t.L().Printf("fetching logs\n")
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
@@ -1171,14 +1160,14 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, t *test) error {
 		}
 
 		if err := execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */); err != nil {
-			t.l.Printf("failed to fetch logs: %v", err)
+			t.L().Printf("failed to fetch logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
 		}
 
 		if err := c.RunE(ctx, c.All(), "mkdir -p logs/redacted && ./cockroach debug merge-logs --redact logs/*.log > logs/redacted/combined.log"); err != nil {
-			t.l.Printf("failed to redact logs: %v", err)
+			t.L().Printf("failed to redact logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
@@ -1232,7 +1221,7 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 // the first available node. They can be visualized via:
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
-func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t test.Test) error {
 	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		var err error
 		for i := 1; i <= c.spec.NodeCount; i++ {
@@ -1243,7 +1232,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *test) error {
 			if err == nil {
 				return nil
 			}
-			t.l.Printf("while fetching timeseries: %s", err)
+			t.L().Printf("while fetching timeseries: %s", err)
 		}
 		return err
 	})
@@ -1251,13 +1240,13 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t *test) error {
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchDebugZip(ctx context.Context, t test.Test) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
 	}
 
-	t.l.Printf("fetching debug zip\n")
+	t.L().Printf("fetching debug zip\n")
 	c.status("fetching debug zip")
 
 	// Don't hang forever if we can't fetch the debug zip.
@@ -1279,7 +1268,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
 			output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":"+si, "--",
 				"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:"+si+"}", zipName)
 			if err != nil {
-				t.l.Printf("./cockroach debug zip failed: %s", output)
+				t.L().Printf("./cockroach debug zip failed: %s", output)
 				if i < c.spec.NodeCount {
 					continue
 				}
@@ -1292,8 +1281,8 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t *test) error {
 }
 
 // FailOnDeadNodes fails the test if nodes that have a populated data dir are
-// found to be not running. It prints both to t.l and the test output.
-func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *test) {
+// found to be not running. It prints both to t.L() and the test output.
+func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t test.Test) {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return
@@ -1302,7 +1291,7 @@ func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *test) {
 	// Don't hang forever.
 	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", time.Minute, func(ctx context.Context) error {
 		output, err := execCmdWithBuffer(
-			ctx, t.l, roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
+			ctx, t.L(), roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
 		)
 		// If there's an error, it means either that the monitor command failed
 		// completely, or that it found a dead node worth complaining about.
@@ -1311,7 +1300,8 @@ func (c *clusterImpl) FailOnDeadNodes(ctx context.Context, t *test) {
 				// Don't fail if we timed out.
 				return nil
 			}
-			t.printfAndFail(0 /* skip */, "dead node detection: %s %s", err, output)
+			// TODO(tbg): remove this type assertion.
+			t.(*testImpl).printfAndFail(0 /* skip */, "dead node detection: %s %s", err, output)
 		}
 		return nil
 	})
@@ -1364,7 +1354,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 // crdb_internal.check_consistency(true, '', '') indicates that any ranges'
 // replicas are inconsistent with each other. It uses the first node that
 // is up to run the query.
-func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
+func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t test.Test) {
 	if c.spec.NodeCount < 1 {
 		return // unit tests
 	}
@@ -1385,11 +1375,11 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
 			db = nil
 			continue
 		}
-		t.l.Printf("running (fast) consistency checks on node %d", i)
+		t.L().Printf("running (fast) consistency checks on node %d", i)
 		break
 	}
 	if db == nil {
-		t.l.Printf("no live node found, skipping consistency check")
+		t.L().Printf("no live node found, skipping consistency check")
 		return
 	}
 	defer db.Close()
@@ -1397,26 +1387,28 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *test) {
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", time.Minute,
 		func(ctx context.Context) error {
-			return c.CheckReplicaDivergenceOnDB(ctx, t.l, db)
+			return c.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
 	); err != nil {
 		// NB: we don't call t.Fatal() here because this method is
 		// for use by the test harness beyond the point at which
 		// it can interpret `t.Fatal`.
-		t.printAndFail(0, err)
+		//
+		// TODO(tbg): remove this type assertion.
+		t.(*testImpl).printAndFail(0, err)
 	}
 }
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
-func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchDmesg(ctx context.Context, t test.Test) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
 		return nil
 	}
 
-	t.l.Printf("fetching dmesg\n")
+	t.L().Printf("fetching dmesg\n")
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
@@ -1432,7 +1424,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
-			t.l.Printf("during dmesg fetching: %s", err)
+			t.L().Printf("during dmesg fetching: %s", err)
 		}
 		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
 	})
@@ -1440,14 +1432,14 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t *test) error {
 
 // FetchJournalctl grabs the journalctl logs if possible. This requires being
 // able to run `sudo journalctl` on the remote nodes.
-func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchJournalctl(ctx context.Context, t test.Test) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab journalctl on local runs.
 		return nil
 	}
 
-	t.l.Printf("fetching journalctl\n")
+	t.L().Printf("fetching journalctl\n")
 	c.status("fetching journalctl")
 
 	// Don't hang forever.
@@ -1463,14 +1455,14 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t *test) error {
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
-			t.l.Printf("during journalctl fetching: %s", err)
+			t.L().Printf("during journalctl fetching: %s", err)
 		}
 		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
 	})
 }
 
 // FetchCores fetches any core files on the cluster.
-func (c *clusterImpl) FetchCores(ctx context.Context, t *test) error {
+func (c *clusterImpl) FetchCores(ctx context.Context, t test.Test) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
@@ -1482,11 +1474,11 @@ func (c *clusterImpl) FetchCores(ctx context.Context, t *test) error {
 		// from having the cores, but we should push them straight into a temp
 		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
 		// of a recent example where we've wanted the Core dumps.
-		t.l.Printf("skipped fetching cores\n")
+		t.L().Printf("skipped fetching cores\n")
 		return nil
 	}
 
-	t.l.Printf("fetching cores\n")
+	t.L().Printf("fetching cores\n")
 	c.status("fetching cores")
 
 	// Don't hang forever. The core files can be large, so we give a generous
@@ -2404,7 +2396,7 @@ func getDiskUsageInBytes(
 }
 
 type monitor struct {
-	t         testI
+	t         test.Test
 	l         *logger.Logger
 	nodes     string
 	ctx       context.Context
@@ -2457,7 +2449,7 @@ func (m *monitor) Go(fn func(context.Context) error) {
 				err = errTestFatal
 			}
 		}()
-		if impl, ok := m.t.(*test); ok {
+		if impl, ok := m.t.(*testImpl); ok {
 			// Automatically clear the worker status message when the goroutine exits.
 			defer impl.WorkerStatus()
 		}
@@ -2598,8 +2590,8 @@ func (m *monitor) wait(args ...string) error {
 
 // TODO(nvanbenschoten): this function should take a context and be responsive
 // to context cancellation.
-func waitForFullReplication(t *test, db *gosql.DB) {
-	t.l.Printf("waiting for up-replication...")
+func waitForFullReplication(t test.Test, db *gosql.DB) {
+	t.L().Printf("waiting for up-replication...")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
 		if err := db.QueryRow(
@@ -2608,13 +2600,13 @@ func waitForFullReplication(t *test, db *gosql.DB) {
 			t.Fatal(err)
 		}
 		if timeutil.Since(tStart) > 30*time.Second {
-			t.l.Printf("still waiting for full replication")
+			t.L().Printf("still waiting for full replication")
 		}
 	}
 }
 
-func waitForUpdatedReplicationReport(ctx context.Context, t *test, db *gosql.DB) {
-	t.l.Printf("waiting for updated replication report...")
+func waitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql.DB) {
+	t.L().Printf("waiting for updated replication report...")
 
 	// Temporarily drop the replication report interval down.
 	if _, err := db.ExecContext(
@@ -2647,7 +2639,7 @@ func waitForUpdatedReplicationReport(ctx context.Context, t *test, db *gosql.DB)
 			return
 		}
 		if timeutil.Since(tStart) > 30*time.Second {
-			t.l.Printf("still waiting for updated replication report")
+			t.L().Printf("still waiting for updated replication report")
 		}
 	}
 }

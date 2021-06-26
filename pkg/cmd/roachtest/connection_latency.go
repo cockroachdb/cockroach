@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,12 +29,12 @@ const (
 )
 
 func runConnectionLatencyTest(
-	ctx context.Context, t *test, c cluster.Cluster, numNodes int, numZones int,
+	ctx context.Context, t test.Test, c cluster.Cluster, numNodes int, numZones int,
 ) {
-	err := c.PutE(ctx, t.l, cockroach, "./cockroach")
+	err := c.PutE(ctx, t.L(), cockroach, "./cockroach")
 	require.NoError(t, err)
 
-	err = c.PutE(ctx, t.l, workload, "./workload")
+	err = c.PutE(ctx, t.L(), workload, "./workload")
 	require.NoError(t, err)
 
 	err = c.StartE(ctx, startArgs("--secure"))
@@ -93,12 +94,12 @@ func runConnectionLatencyTest(
 func registerConnectionLatencyTest(r *testRegistry) {
 	// Single region test.
 	numNodes := 3
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		MinVersion: "v20.1.0",
 		Name:       fmt.Sprintf("connection_latency/nodes=%d", numNodes),
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(numNodes + 1), // Add one for load node.
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1)
 		},
 	})
@@ -108,12 +109,12 @@ func registerConnectionLatencyTest(r *testRegistry) {
 	numMultiRegionNodes := 9
 	numZones := len(geoZones)
 	loadNodes := numZones
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		MinVersion: "v20.1.0",
 		Name:       fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
 		Owner:      OwnerSQLExperience,
 		Cluster:    r.makeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones)
 		},
 	})

@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
@@ -57,7 +58,7 @@ type tpchVecTestRunConfig struct {
 }
 
 // performClusterSetup executes all queries in clusterSetup on conn.
-func performClusterSetup(t *test, conn *gosql.DB, clusterSetup []string) {
+func performClusterSetup(t test.Test, conn *gosql.DB, clusterSetup []string) {
 	for _, query := range clusterSetup {
 		if _, err := conn.Exec(query); err != nil {
 			t.Fatal(err)
@@ -71,13 +72,13 @@ type tpchVecTestCase interface {
 	// preTestRunHook is called before any tpch query is run. Can be used to
 	// perform any setup that cannot be expressed as a modification to
 	// cluster-wide settings (those should go into tpchVecTestRunConfig).
-	preTestRunHook(ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string)
+	preTestRunHook(ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string)
 	// postQueryRunHook is called after each tpch query is run with the output and
 	// the index of the setup it was run in.
-	postQueryRunHook(t *test, output []byte, setupIdx int)
+	postQueryRunHook(t test.Test, output []byte, setupIdx int)
 	// postTestRunHook is called after all tpch queries are run. Can be used to
 	// perform teardown or general validation.
-	postTestRunHook(ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB)
+	postTestRunHook(ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB)
 }
 
 // tpchVecTestCaseBase is a default tpchVecTestCase implementation that can be
@@ -100,7 +101,7 @@ func (b tpchVecTestCaseBase) getRunConfig() tpchVecTestRunConfig {
 }
 
 func (b tpchVecTestCaseBase) preTestRunHook(
-	t *test, conn *gosql.DB, clusterSetup []string, createStats bool,
+	t test.Test, conn *gosql.DB, clusterSetup []string, createStats bool,
 ) {
 	performClusterSetup(t, conn, clusterSetup)
 	if createStats {
@@ -108,9 +109,11 @@ func (b tpchVecTestCaseBase) preTestRunHook(
 	}
 }
 
-func (b tpchVecTestCaseBase) postQueryRunHook(*test, []byte, int) {}
+func (b tpchVecTestCaseBase) postQueryRunHook(test.Test, []byte, int) {}
 
-func (b tpchVecTestCaseBase) postTestRunHook(context.Context, *test, cluster.Cluster, *gosql.DB) {
+func (b tpchVecTestCaseBase) postTestRunHook(
+	context.Context, test.Test, cluster.Cluster, *gosql.DB,
+) {
 }
 
 type tpchVecPerfHelper struct {
@@ -127,7 +130,7 @@ func newTpchVecPerfHelper(numSetups int) *tpchVecPerfHelper {
 	}
 }
 
-func (h *tpchVecPerfHelper) parseQueryOutput(t *test, output []byte, setupIdx int) {
+func (h *tpchVecPerfHelper) parseQueryOutput(t test.Test, output []byte, setupIdx int) {
 	runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
@@ -193,17 +196,17 @@ func (p tpchVecPerfTest) getRunConfig() tpchVecTestRunConfig {
 }
 
 func (p tpchVecPerfTest) preTestRunHook(
-	ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string,
+	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	p.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, !p.disableStatsCreation /* createStats */)
 }
 
-func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, setupIdx int) {
+func (p *tpchVecPerfTest) postQueryRunHook(t test.Test, output []byte, setupIdx int) {
 	p.parseQueryOutput(t, output, setupIdx)
 }
 
 func (p *tpchVecPerfTest) postTestRunHook(
-	ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB,
+	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB,
 ) {
 	runConfig := p.getRunConfig()
 	t.Status("comparing the runtimes (only median values for each query are compared)")
@@ -225,14 +228,14 @@ func (p *tpchVecPerfTest) postTestRunHook(
 		vecOnTime := findMedian(vecOnTimes)
 		vecOffTime := findMedian(vecOffTimes)
 		if vecOffTime < vecOnTime {
-			t.l.Printf(
+			t.L().Printf(
 				fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
 					"%.2fs ON vs %.2fs OFF --- WARNING\n"+
 					"vec ON times: %v\t vec OFF times: %v",
 					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
 					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 		} else {
-			t.l.Printf(
+			t.L().Printf(
 				fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
 					"%.2fs ON vs %.2fs OFF\n"+
 					"vec ON times: %v\t vec OFF times: %v",
@@ -299,7 +302,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					curlCmd := fmt.Sprintf(
 						"curl %s > logs/bundle_%s_%d.zip", url, runConfig.setupNames[setupIdx], i,
 					)
-					if err = c.RunL(ctx, t.l, c.Node(1), curlCmd); err != nil {
+					if err = c.RunL(ctx, t.L(), c.Node(1), curlCmd); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -357,17 +360,17 @@ func (b tpchVecBenchTest) getRunConfig() tpchVecTestRunConfig {
 }
 
 func (b tpchVecBenchTest) preTestRunHook(
-	_ context.Context, t *test, _ cluster.Cluster, conn *gosql.DB, clusterSetup []string,
+	_ context.Context, t test.Test, _ cluster.Cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	b.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 }
 
-func (b *tpchVecBenchTest) postQueryRunHook(t *test, output []byte, setupIdx int) {
+func (b *tpchVecBenchTest) postQueryRunHook(t test.Test, output []byte, setupIdx int) {
 	b.tpchVecPerfHelper.parseQueryOutput(t, output, setupIdx)
 }
 
 func (b *tpchVecBenchTest) postTestRunHook(
-	ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB,
+	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB,
 ) {
 	runConfig := b.getRunConfig()
 	t.Status("comparing the runtimes (average of values (excluding best and worst) for each query are compared)")
@@ -400,11 +403,11 @@ func (b *tpchVecBenchTest) postTestRunHook(
 				bestSetupIdx = setupIdx
 			}
 		}
-		t.l.Printf(fmt.Sprintf("[q%d] best setup is %s", queryNum, runConfig.setupNames[bestSetupIdx]))
+		t.L().Printf(fmt.Sprintf("[q%d] best setup is %s", queryNum, runConfig.setupNames[bestSetupIdx]))
 		for setupIdx, setupName := range runConfig.setupNames {
 			setupTime := findAvgTime(b.timeByQueryNum[setupIdx][queryNum])
 			scores[setupIdx] += setupTime / bestTime
-			t.l.Printf(fmt.Sprintf("[q%d] setup %s took %.2fs", queryNum, setupName, setupTime))
+			t.L().Printf(fmt.Sprintf("[q%d] setup %s took %.2fs", queryNum, setupName, setupTime))
 		}
 	}
 	t.Status("----- scores of the setups -----")
@@ -412,7 +415,7 @@ func (b *tpchVecBenchTest) postTestRunHook(
 	var bestSetupIdx int
 	for setupIdx, setupName := range runConfig.setupNames {
 		score := scores[setupIdx]
-		t.l.Printf(fmt.Sprintf("score of %s is %.2f", setupName, score))
+		t.L().Printf(fmt.Sprintf("score of %s is %.2f", setupName, score))
 		if bestScore > score {
 			bestScore = score
 			bestSetupIdx = setupIdx
@@ -426,7 +429,7 @@ type tpchVecDiskTest struct {
 }
 
 func (d tpchVecDiskTest) preTestRunHook(
-	ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string,
+	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	d.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	// In order to stress the disk spilling of the vectorized engine, we will
@@ -450,7 +453,7 @@ func (d tpchVecDiskTest) preTestRunHook(
 }
 
 func baseTestRun(
-	ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
+	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
 ) {
 	firstNode := c.Node(1)
 	runConfig := tc.getRunConfig()
@@ -465,8 +468,8 @@ func baseTestRun(
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
 				"--default-vectorize --max-ops=%d --queries=%d {pgurl:1} --enable-checks=true",
 				runConfig.numRunsPerQuery, queryNum)
-			workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
-			t.l.Printf("\n" + string(workloadOutput))
+			workloadOutput, err := c.RunWithBuffer(ctx, t.L(), firstNode, cmd)
+			t.L().Printf("\n" + string(workloadOutput))
 			if err != nil {
 				// Note: if you see an error like "exit status 1", it is likely caused
 				// by the erroneous output of the query.
@@ -484,7 +487,7 @@ type tpchVecSmithcmpTest struct {
 const tpchVecSmithcmp = "smithcmp"
 
 func (s tpchVecSmithcmpTest) preTestRunHook(
-	ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string,
+	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	s.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	const smithcmpSHA = "a3f41f5ba9273249c5ecfa6348ea8ee3ac4b77e3"
@@ -510,7 +513,7 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 }
 
 func smithcmpTestRun(
-	ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
+	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
 ) {
 	runConfig := tc.getRunConfig()
 	tc.preTestRunHook(ctx, t, c, conn, runConfig.clusterSetups[0])
@@ -530,10 +533,10 @@ func smithcmpTestRun(
 
 func runTPCHVec(
 	ctx context.Context,
-	t *test,
+	t test.Test,
 	c cluster.Cluster,
 	testCase tpchVecTestCase,
-	testRun func(ctx context.Context, t *test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase),
+	testRun func(ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase),
 ) {
 	firstNode := c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -561,56 +564,56 @@ func runTPCHVec(
 const tpchVecNodeCount = 3
 
 func registerTPCHVec(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpchvec/perf",
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v19.2.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(false /* disableStatsCreation */), baseTestRun)
 		},
 	})
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "tpchvec/disk",
 		Owner:   OwnerSQLQueries,
 		Cluster: r.makeClusterSpec(tpchVecNodeCount),
 		// 19.2 version doesn't have disk spilling nor memory monitoring, so
 		// there is no point in running this config on that version.
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun)
 		},
 	})
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpchvec/smithcmp",
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v20.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
 		},
 	})
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpchvec/perf_no_stats",
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v20.2.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(true /* disableStatsCreation */), baseTestRun)
 		},
 	})
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       "tpchvec/bench",
 		Owner:      OwnerSQLQueries,
 		Cluster:    r.makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v20.2.0",
 		Skip: "This config can be used to perform some benchmarking and is not " +
 			"meant to be run on a nightly basis",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// In order to use this test for benchmarking, include the queries
 			// that modify the cluster settings for all configs to benchmark
 			// like in the example below. The example benchmarks three values

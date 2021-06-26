@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -58,11 +59,11 @@ func registerSQLSmith(r *testRegistry) {
 		"no-ddl":       sqlsmith.Settings["no-ddl"],
 	}
 
-	runSQLSmith := func(ctx context.Context, t *test, c cluster.Cluster, setupName, settingName string) {
+	runSQLSmith := func(ctx context.Context, t test.Test, c cluster.Cluster, setupName, settingName string) {
 		// Set up a statement logger for easy reproduction. We only
 		// want to log successful statements and statements that
 		// produced a final error or panic.
-		smithLog, err := os.Create(filepath.Join(t.artifactsDir, "sqlsmith.log"))
+		smithLog, err := os.Create(filepath.Join(t.ArtifactsDir(), "sqlsmith.log"))
 		if err != nil {
 			t.Fatalf("could not create sqlsmith.log: %v", err)
 		}
@@ -80,7 +81,7 @@ func registerSQLSmith(r *testRegistry) {
 		}
 
 		rng, seed := randutil.NewPseudoRand()
-		t.l.Printf("seed: %d", seed)
+		t.L().Printf("seed: %d", seed)
 
 		c.Put(ctx, cockroach, "./cockroach")
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
@@ -102,7 +103,7 @@ func registerSQLSmith(r *testRegistry) {
 
 		conn := c.Conn(ctx, 1)
 		t.Status("executing setup")
-		t.l.Printf("setup:\n%s", setup)
+		t.L().Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
 			t.Fatal(err)
 		} else {
@@ -112,7 +113,7 @@ func registerSQLSmith(r *testRegistry) {
 		const timeout = time.Minute
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
 		t.Status("setting statement_timeout")
-		t.l.Printf("statement timeout:\n%s", setStmtTimeout)
+		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
 		if _, err := conn.Exec(setStmtTimeout); err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +138,7 @@ func registerSQLSmith(r *testRegistry) {
 		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
-		until := time.After(t.spec.Timeout / 2)
+		until := time.After(t.Spec().(*TestSpec).Timeout / 2)
 		done := ctx.Done()
 		for i := 1; ; i++ {
 			if i%10000 == 0 {
@@ -193,7 +194,7 @@ func registerSQLSmith(r *testRegistry) {
 					// just timing out.
 					// TODO (rohany): once #45463 and #45461 have been resolved, return
 					//  to calling t.Fatalf here.
-					t.l.Printf("query timed out, but did not cancel execution:\n%s;", stmt)
+					t.L().Printf("query timed out, but did not cancel execution:\n%s;", stmt)
 					return nil
 				case err := <-done:
 					return err
@@ -240,14 +241,14 @@ func registerSQLSmith(r *testRegistry) {
 	}
 
 	register := func(setup, setting string) {
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:      OwnerSQLQueries,
 			Cluster:    r.makeClusterSpec(4),
 			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
 		})

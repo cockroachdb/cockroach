@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var jepsenNemeses = []struct {
@@ -43,7 +44,7 @@ var jepsenNemeses = []struct {
 	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
 
-func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
+func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// NB: comment this out to see the commands jepsen would run locally.
 	if c.IsLocal() {
 		t.Fatal("local execution not supported")
@@ -62,7 +63,7 @@ func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
 	// Install jepsen. This part is fast if the repo is already there,
 	// so do it before the initialization check for ease of iteration.
 	if err := c.GitClone(
-		ctx, t.l,
+		ctx, t.L(),
 		"https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller,
 	); err != nil {
 		t.Fatal(err)
@@ -70,10 +71,10 @@ func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
 
 	// Check to see if the cluster has already been initialized.
 	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
-		t.l.Printf("cluster already initialized\n")
+		t.L().Printf("cluster already initialized\n")
 		return
 	}
-	t.l.Printf("initializing cluster\n")
+	t.L().Printf("initializing cluster\n")
 	t.Status("initializing cluster")
 
 	// Roachprod collects this directory by default. If we fail early,
@@ -104,7 +105,7 @@ func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
 
 	// Install Jepsen's prereqs on the controller.
 	if out, err := c.RunWithBuffer(
-		ctx, t.l, controller, "sh", "-c",
+		ctx, t.L(), controller, "sh", "-c",
 		`"sudo apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
 	); err != nil {
 		if strings.Contains(string(out), "exit status 100") {
@@ -122,7 +123,7 @@ func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd := loggedCommand(ctx, t.l, roachprod, "get", c.MakeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
+	cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -139,11 +140,11 @@ func initJepsen(ctx context.Context, t *test, c cluster.Cluster) {
 		c.Run(ctx, controller, "sh", "-c", fmt.Sprintf(`"ssh-keyscan -t rsa %s >> .ssh/known_hosts"`, ip))
 	}
 
-	t.l.Printf("cluster initialization complete\n")
+	t.L().Printf("cluster initialization complete\n")
 	c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 }
 
-func runJepsen(ctx context.Context, t *test, c cluster.Cluster, testName, nemesis string) {
+func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, nemesis string) {
 	initJepsen(ctx, t, c)
 
 	controller := c.Node(c.Spec().NodeCount)
@@ -165,14 +166,14 @@ func runJepsen(ctx context.Context, t *test, c cluster.Cluster, testName, nemesi
 			return
 		}
 		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
-		t.l.Printf("> %s\n", strings.Join(args, " "))
+		t.L().Printf("> %s\n", strings.Join(args, " "))
 	}
 	runE := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
 		if !c.IsLocal() {
 			return c.RunE(ctx, node, args...)
 		}
 		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
-		t.l.Printf("> %s\n", strings.Join(args, " "))
+		t.L().Printf("> %s\n", strings.Join(args, " "))
 		return nil
 	}
 
@@ -194,7 +195,7 @@ func runJepsen(ctx context.Context, t *test, c cluster.Cluster, testName, nemesi
 			r := regexp.MustCompile("Could not transfer artifact|Failed to read artifact descriptor for")
 			match := r.FindStringSubmatch(GetStderr(err))
 			if match != nil {
-				t.logger().PrintfCtx(ctx, "failure installing deps (\"%s\")\nfull err: %+v",
+				t.L().PrintfCtx(ctx, "failure installing deps (\"%s\")\nfull err: %+v",
 					match, err)
 				t.Skipf("failure installing deps (\"%s\"); in the past it's been transient", match)
 			}
@@ -229,9 +230,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	select {
 	case testErr = <-errCh:
 		if testErr == nil {
-			t.l.Printf("passed, grabbing minimal logs")
+			t.L().Printf("passed, grabbing minimal logs")
 		} else {
-			t.l.Printf("failed: %s", testErr)
+			t.L().Printf("failed: %s", testErr)
 		}
 
 	case <-time.After(40 * time.Minute):
@@ -246,12 +247,12 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		run(c, ctx, controller, "pkill -QUIT java")
 		time.Sleep(10 * time.Second)
 		run(c, ctx, controller, "pkill java")
-		t.l.Printf("timed out")
+		t.L().Printf("timed out")
 		testErr = fmt.Errorf("timed out")
 	}
 
 	if testErr != nil {
-		t.l.Printf("grabbing artifacts from controller. Tail of controller log:")
+		t.L().Printf("grabbing artifacts from controller. Tail of controller log:")
 		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
 		// We recognize some errors and ignore them.
 		// We're looking for the "Oh jeez" message that Jepsen prints as the test's
@@ -275,7 +276,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				`-e "Everything looks good" `+
 				`-e "RuntimeException: Connection to"`, // timeout
 		); err == nil {
-			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
+			t.L().Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
 				"Ignoring it and considering the test successful. " +
 				"See #30527 or #26082 for some of the ignored exceptions.")
 			ignoreErr = true
@@ -286,11 +287,11 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			// -f- sends the output to stdout, we read it and save it to a local file.
 			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log")
 		if output, err := cmd.Output(); err != nil {
-			t.l.Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
+			t.L().Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
 		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
 		} else {
-			t.l.Printf("downloaded jepsen logs in failure-logs.tbz")
+			t.L().Printf("downloaded jepsen logs in failure-logs.tbz")
 		}
 		if ignoreErr {
 			t.Skip("recognized known error", testErr.Error())
@@ -302,24 +303,24 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		anyFailed := false
 		for _, file := range collectFiles {
-			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.MakeNodes(controller),
+			cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
 				filepath.Join(outputDir, file))
-			cmd.Stdout = t.l.Stdout
-			cmd.Stderr = t.l.Stderr
+			cmd.Stdout = t.L().Stdout
+			cmd.Stderr = t.L().Stderr
 			if err := cmd.Run(); err != nil {
-				t.l.Printf("failed to retrieve %s: %s", file, err)
+				t.L().Printf("failed to retrieve %s: %s", file, err)
 			}
 		}
 		if anyFailed {
 			// Try to figure out why this is so common.
-			cmd := loggedCommand(ctx, t.l, roachprod, "get", c.MakeNodes(controller),
+			cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
 				filepath.Join(outputDir, "invoke.log"))
-			cmd.Stdout = t.l.Stdout
-			cmd.Stderr = t.l.Stderr
+			cmd.Stdout = t.L().Stdout
+			cmd.Stderr = t.L().Stderr
 			if err := cmd.Run(); err != nil {
-				t.l.Printf("failed to retrieve invoke.log: %s", err)
+				t.L().Printf("failed to retrieve invoke.log: %s", err)
 			}
 		}
 	}
@@ -342,7 +343,7 @@ func registerJepsen(r *testRegistry) {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
-			s := testSpec{
+			s := TestSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
 				MinVersion: "v20.1.0",
@@ -355,7 +356,7 @@ func registerJepsen(r *testRegistry) {
 				// if they detect that the machines have already been properly
 				// initialized.
 				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
-				Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}

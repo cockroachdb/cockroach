@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -27,7 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func runClusterInit(ctx context.Context, t *test, c cluster.Cluster) {
+func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
 	addrs, err := c.InternalAddr(ctx, c.All())
@@ -170,8 +171,8 @@ func runClusterInit(ctx context.Context, t *test, c cluster.Cluster) {
 				args = append(args, extraArgs...)
 				args = append(args, "--insecure")
 				args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-				buf, err := c.RunWithBuffer(ctx, t.l, c.Node(runNode), args...)
-				t.l.Printf("%s\n", buf)
+				buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(runNode), args...)
+				t.L().Printf("%s\n", buf)
 				return string(buf), err
 			}
 

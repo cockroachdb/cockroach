@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -41,11 +42,11 @@ import (
 
 func registerFollowerReads(r *testRegistry) {
 	register := func(survival survivalGoal, locality localitySetting) {
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Wipe(ctx)
 				c.Start(ctx)
@@ -61,14 +62,14 @@ func registerFollowerReads(r *testRegistry) {
 		}
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:  "follower-reads/mixed-version/single-region",
 		Owner: OwnerKV,
 		Cluster: r.makeClusterSpec(
 			3, /* nodeCount */
 			spec.CPU(2),
 		),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -119,7 +120,7 @@ type topologySpec struct {
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
 func runFollowerReadsTest(
-	ctx context.Context, t *test, c cluster.Cluster, topology topologySpec, data map[int]int64,
+	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec, data map[int]int64,
 ) {
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
@@ -264,12 +265,12 @@ func runFollowerReadsTest(
 	timeoutCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	time.AfterFunc(loadDuration, func() {
-		t.l.Printf("stopping load")
+		t.L().Printf("stopping load")
 		cancel()
 	})
 	g, gCtx = errgroup.WithContext(timeoutCtx)
 	const concurrency = 32
-	t.l.Printf("starting read load")
+	t.L().Printf("starting read load")
 	for i := 0; i < concurrency; i++ {
 		g.Go(doSelects(gCtx, rand.Intn(c.Spec().NodeCount)+1))
 	}
@@ -279,7 +280,7 @@ func runFollowerReadsTest(
 		t.Fatalf("error reading data: %v", err)
 	}
 	end := timeutil.Now()
-	t.l.Printf("load stopped")
+	t.L().Printf("load stopped")
 
 	// Depending on the test's topology, we expect a different set of nodes to
 	// perform follower reads.
@@ -311,7 +312,7 @@ func runFollowerReadsTest(
 // initFollowerReadsDB initializes a database for the follower reads test.
 // Returns the data inserted into the test table.
 func initFollowerReadsDB(
-	ctx context.Context, t *test, c cluster.Cluster, topology topologySpec,
+	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
 	db := c.Conn(ctx, 1)
 	// Disable load based splitting and range merging because splits and merges
@@ -370,7 +371,7 @@ func initFollowerReadsDB(
 	}
 
 	// Wait until the table has completed up-replication.
-	t.l.Printf("waiting for up-replication...")
+	t.L().Printf("waiting for up-replication...")
 	require.NoError(t, retry.ForDuration(5*time.Minute, func() error {
 		// Check that the table has the expected number of voting and non-voting
 		// replicas.
@@ -395,7 +396,7 @@ func initFollowerReadsDB(
 				table_name = 'test'`, votersCol, nonVotersCol)
 		var voters, nonVoters int
 		if err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters); err != nil {
-			t.l.Printf("retrying: %v\n", err)
+			t.L().Printf("retrying: %v\n", err)
 			return err
 		}
 
@@ -426,7 +427,7 @@ func initFollowerReadsDB(
 				table_name = 'test'`
 			var distinctRegions int
 			if err := db.QueryRowContext(ctx, q2).Scan(&distinctRegions); err != nil {
-				t.l.Printf("retrying: %v\n", err)
+				t.L().Printf("retrying: %v\n", err)
 				return err
 			}
 			if distinctRegions != 3 {
@@ -490,7 +491,7 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 func verifySQLLatency(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t test.Test,
 	adminNode option.NodeListOption,
 	start, end time.Time,
 	targetLatency time.Duration,
@@ -543,7 +544,7 @@ func verifySQLLatency(
 func verifyHighFollowerReadRatios(
 	ctx context.Context,
 	c cluster.Cluster,
-	t *test,
+	t test.Test,
 	node option.NodeListOption,
 	start, end time.Time,
 	toleratedNodes int,
@@ -623,7 +624,7 @@ func verifyHighFollowerReadRatios(
 		}
 	}
 
-	t.logger().Printf("interval stats: %s", intervalsToString(stats))
+	t.L().Printf("interval stats: %s", intervalsToString(stats))
 
 	// Now count how many intervals have more than the tolerated number of nodes
 	// with low follower read ratios.
@@ -743,7 +744,7 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 // sufficient for this purpose; we're not testing non-voting replicas here
 // (which are used in multi-region tests).
 func runFollowerReadsMixedVersionSingleRegionTest(
-	ctx context.Context, t *test, c cluster.Cluster, buildVersion version.Version,
+	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	require.NoError(t, err)
@@ -759,7 +760,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 
 	// Upgrade one node to the new version and run the test.
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
-	t.l.Printf("upgrading n%d to current version", randNode)
+	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
 	upgradeNodes(ctx, nodeToUpgrade, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
@@ -772,7 +773,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 		}
 		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
-	t.l.Printf("upgrading nodes %s to current version", remainingNodes)
+	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
 	upgradeNodes(ctx, remainingNodes, curVersion, t, c)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, data)
 }

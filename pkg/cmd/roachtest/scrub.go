@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -36,7 +37,7 @@ func makeScrubTPCCTest(
 	length time.Duration,
 	optionName string,
 	numScrubRuns int,
-) testSpec {
+) TestSpec {
 	var stmtOptions string
 	// SCRUB checks are run at -1m to avoid contention with TPCC traffic.
 	// By the time the SCRUB queries start, the tables will have been loaded for
@@ -51,11 +52,11 @@ func makeScrubTPCCTest(
 		panic(fmt.Sprintf("Not a valid option: %s", optionName))
 	}
 
-	return testSpec{
+	return TestSpec{
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
 		Owner:   OwnerSQLQueries,
 		Cluster: r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,
 				ExtraRunArgs: "--wait=false --tolerate-errors",
@@ -73,12 +74,12 @@ func makeScrubTPCCTest(
 					conn := c.Conn(ctx, 1)
 					defer conn.Close()
 
-					t.l.Printf("Starting %d SCRUB checks", numScrubRuns)
+					t.L().Printf("Starting %d SCRUB checks", numScrubRuns)
 					for i := 0; i < numScrubRuns; i++ {
-						t.l.Printf("Running SCRUB check %d\n", i+1)
+						t.L().Printf("Running SCRUB check %d\n", i+1)
 						before := timeutil.Now()
 						err := sqlutils.RunScrubWithOptions(conn, "tpcc", "order", stmtOptions)
-						t.l.Printf("SCRUB check %d took %v\n", i+1, timeutil.Since(before))
+						t.L().Printf("SCRUB check %d took %v\n", i+1, timeutil.Since(before))
 
 						if err != nil {
 							t.Fatal(err)

@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
 
@@ -22,7 +23,7 @@ func registerEncryption(r *testRegistry) {
 	// Note that no workload is run in this roachtest because kv roachtest
 	// ideally runs with encryption turned on to see the performance impact and
 	// to test the correctness of encryption at rest.
-	runEncryption := func(ctx context.Context, t *test, c cluster.Cluster) {
+	runEncryption := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes := c.Spec().NodeCount
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
@@ -79,12 +80,12 @@ func registerEncryption(r *testRegistry) {
 	}
 
 	for _, n := range []int{1} {
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
 			Owner:      OwnerStorage,
 			MinVersion: "v2.1.0",
 			Cluster:    r.makeClusterSpec(n),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEncryption(ctx, t, c)
 			},
 		})

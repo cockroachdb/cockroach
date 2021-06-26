@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 func registerAllocator(r *testRegistry) {
-	runAllocator := func(ctx context.Context, t *test, c cluster.Cluster, start int, maxStdDev float64) {
+	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, cockroach, "./cockroach")
 
 		// Start the first `start` nodes and restore a tpch fixture.
@@ -56,40 +57,40 @@ func registerAllocator(r *testRegistry) {
 			// but we can't put it in monitor as-is because the test deadlocks.
 			go func() {
 				const cmd = `./cockroach workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127`
-				l, err := t.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
+				l, err := t.L().ChildLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer l.Close()
-				_ = execCmd(ctx, t.l, roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
+				_ = execCmd(ctx, t.L(), roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
 			}()
 		}
 
 		m = newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
-			return waitForRebalance(ctx, t.l, db, maxStdDev)
+			return waitForRebalance(ctx, t.L(), db, maxStdDev)
 		})
 		m.Wait()
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    `replicate/up/1to3`,
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(3),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       `replicate/wide`,
 		Owner:      OwnerKV,
 		Timeout:    10 * time.Minute,
@@ -255,7 +256,7 @@ func waitForRebalance(
 	}
 }
 
-func runWideReplication(ctx context.Context, t *test, c cluster.Cluster) {
+func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 	nodes := c.Spec().NodeCount
 	if nodes != 9 {
 		t.Fatalf("9-node cluster required")
@@ -289,7 +290,7 @@ func runWideReplication(ctx context.Context, t *test, c cluster.Cluster) {
 	}
 
 	run := func(stmt string) {
-		t.l.Printf("%s\n", stmt)
+		t.L().Printf("%s\n", stmt)
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			t.Fatal(err)
 		}
@@ -318,7 +319,7 @@ func runWideReplication(ctx context.Context, t *test, c cluster.Cluster) {
 	waitForReplication := func(width int) {
 		for count := -1; count != 0; time.Sleep(time.Second) {
 			count = countMisreplicated(width)
-			t.l.Printf("%d mis-replicated ranges\n", count)
+			t.L().Printf("%d mis-replicated ranges\n", count)
 		}
 	}
 
@@ -348,7 +349,7 @@ FROM crdb_internal.kv_store_status
 			if err := db.QueryRow(query).Scan(&unavailable, &underReplicated); err != nil {
 				t.Fatal(err)
 			}
-			t.l.Printf("%d unavailable, %d under-replicated ranges\n", unavailable, underReplicated)
+			t.L().Printf("%d unavailable, %d under-replicated ranges\n", unavailable, underReplicated)
 			if unavailable != 0 {
 				// A freshly started cluster might show unavailable ranges for a brief
 				// period of time due to the way that metric is calculated. Only

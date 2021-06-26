@@ -23,6 +23,7 @@ import (
 	toxiproxy "github.com/Shopify/toxiproxy/client"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
 
@@ -74,7 +75,7 @@ until nc -z localhost $1; do sleep 0.1; echo "waiting for toxiproxy-server..."; 
 // A ToxiCluster wraps a cluster and sets it up for use with toxiproxy.
 // See Toxify() for details.
 type ToxiCluster struct {
-	t *test
+	t test.Test
 	cluster.Cluster
 	toxClients map[int]*toxiproxy.Client
 	toxProxies map[int]*toxiproxy.Proxy
@@ -87,7 +88,7 @@ type ToxiCluster struct {
 // toxiproxy. The upstream (i.e. non-intercepted) addresses are accessible via
 // getters prefixed with "External".
 func Toxify(
-	ctx context.Context, t *test, c cluster.Cluster, node option.NodeListOption,
+	ctx context.Context, t test.Test, c cluster.Cluster, node option.NodeListOption,
 ) (*ToxiCluster, error) {
 	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
 	if local && runtime.GOOS == "darwin" {
@@ -247,8 +248,8 @@ func (tc *ToxiCluster) Measure(ctx context.Context, fromNode int, stmt string) t
 	if err != nil {
 		tc.t.Fatal(err)
 	}
-	b, err := tc.Cluster.RunWithBuffer(ctx, tc.t.l, tc.Cluster.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
-	tc.t.l.Printf("%s\n", b)
+	b, err := tc.Cluster.RunWithBuffer(ctx, tc.t.L(), tc.Cluster.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
+	tc.t.L().Printf("%s\n", b)
 	if err != nil {
 		tc.t.Fatal(err)
 	}

@@ -16,10 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func runRestart(ctx context.Context, t *test, c cluster.Cluster, downDuration time.Duration) {
+func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuration time.Duration) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount)
 	workloadNode := c.Node(1)
 	const restartNode = 3
@@ -79,18 +80,18 @@ func runRestart(ctx context.Context, t *test, c cluster.Cluster, downDuration ti
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {
-		t.l.Printf(`connecting and query finished in %s`, took)
+		t.L().Printf(`connecting and query finished in %s`, took)
 	}
 }
 
 func registerRestart(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:    "restart/down-for-2m",
 		Owner:   OwnerKV,
 		Cluster: r.makeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
 		MinVersion: "v19.1.0",
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRestart(ctx, t, c, 2*time.Minute)
 		},
 	})

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -28,13 +29,13 @@ import (
 )
 
 func registerMultiTenantUpgrade(r *testRegistry) {
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:              "multitenant-upgrade",
 		MinVersion:        "v21.1.0",
 		Cluster:           r.makeClusterSpec(2),
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultiTenantUpgrade(ctx, t, c, r.buildVersion)
 		},
 	})
@@ -54,7 +55,7 @@ type tenantNode struct {
 
 func createTenantNode(
 	ctx context.Context,
-	t *test,
+	t test.Test,
 	c cluster.Cluster,
 	binary string,
 	kvAddrs []string,
@@ -74,7 +75,7 @@ func createTenantNode(
 	return tn
 }
 
-func (tn *tenantNode) stop(ctx context.Context, t *test, c cluster.Cluster) {
+func (tn *tenantNode) stop(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if tn.errCh == nil {
 		return
 	}
@@ -82,7 +83,7 @@ func (tn *tenantNode) stop(ctx context.Context, t *test, c cluster.Cluster) {
 	// process to exit.
 	c.Run(ctx, c.Node(tn.node),
 		fmt.Sprintf("pkill -o -f '^%s mt start.*tenant-id=%d'", tn.binary, tn.tenantID))
-	t.logger().Printf("mt cluster exited: %v", <-tn.errCh)
+	t.L().Printf("mt cluster exited: %v", <-tn.errCh)
 	tn.errCh = nil
 }
 
@@ -90,7 +91,7 @@ func (tn *tenantNode) logDir() string {
 	return fmt.Sprintf("logs/mt-%d", tn.tenantID)
 }
 
-func (tn *tenantNode) start(ctx context.Context, t *test, c cluster.Cluster, binary string) {
+func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster, binary string) {
 	tn.binary = binary
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), binary, tn.kvAddrs, tn.tenantID,
@@ -130,7 +131,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c cluster.Cluster, bin
 		t.Fatal(err)
 	}
 
-	t.l.Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
+	t.L().Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
 }
 
 // runMultiTenantUpgrade exercises upgrading tenants and their host cluster.
@@ -156,7 +157,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c cluster.Cluster, bin
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 13 and make sure it still works.
 //  * Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //  * Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
-func runMultiTenantUpgrade(ctx context.Context, t *test, c cluster.Cluster, v version.Version) {
+func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, v version.Version) {
 	predecessor, err := PredecessorVersion(v)
 	require.NoError(t, err)
 
@@ -456,7 +457,7 @@ func mkStmt(stmt string, args ...interface{}) sqlVerificationStmt {
 	return sqlVerificationStmt{stmt: stmt, args: args}
 }
 
-func verifySQL(t *test, url string, stmts ...sqlVerificationStmt) {
+func verifySQL(t test.Test, url string, stmts ...sqlVerificationStmt) {
 	db, err := gosql.Open("postgres", url)
 	if err != nil {
 		t.Fatal(err)

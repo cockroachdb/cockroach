@@ -18,6 +18,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
@@ -30,7 +31,7 @@ var activerecordAdapterVersion = "v6.1.2"
 func registerActiveRecord(r *testRegistry) {
 	runActiveRecord := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -83,9 +84,9 @@ func registerActiveRecord(r *testRegistry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest rails release is %s.", latestTag)
-		t.l.Printf("Supported rails release is %s.", supportedRailsVersion)
-		t.l.Printf("Supported adapter version is %s.", activerecordAdapterVersion)
+		t.L().Printf("Latest rails release is %s.", latestTag)
+		t.L().Printf("Supported rails release is %s.", supportedRailsVersion)
+		t.L().Printf("Supported adapter version is %s.", activerecordAdapterVersion)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -172,17 +173,17 @@ func registerActiveRecord(r *testRegistry) {
 			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 				version, blocklistName, ignorelistName)
 		}
-		t.l.Printf("%s", status)
+		t.L().Printf("%s", status)
 
 		t.Status("running activerecord test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
+		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
 			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
 				`sudo RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`,
 		)
 
-		t.l.Printf("Test Results:\n%s", rawResults)
+		t.L().Printf("Test Results:\n%s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
@@ -237,7 +238,7 @@ func registerActiveRecord(r *testRegistry) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		MinVersion: "v20.2.0",
 		Name:       "activerecord",
 		Owner:      OwnerSQLExperience,

@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,7 +63,35 @@ type testWrapper struct {
 	*testing.T
 }
 
-var _ testI = testWrapper{}
+func (t testWrapper) BuildVersion() *version.Version {
+	panic("implement me")
+}
+
+func (t testWrapper) IsBuildVersion(s string) bool {
+	panic("implement me")
+}
+
+func (t testWrapper) Spec() interface{} {
+	panic("implement me")
+}
+
+func (t testWrapper) VersionsBinaryOverride() map[string]string {
+	panic("implement me")
+}
+
+func (t testWrapper) Progress(f float64) {
+	panic("implement me")
+}
+
+func (t testWrapper) WorkerStatus(args ...interface{}) {
+	panic("implement me")
+}
+
+func (t testWrapper) WorkerProgress(f float64) {
+	panic("implement me")
+}
+
+var _ test2.Test = testWrapper{}
 
 // ArtifactsDir is part of the testI interface.
 func (t testWrapper) ArtifactsDir() string {
@@ -69,7 +99,7 @@ func (t testWrapper) ArtifactsDir() string {
 }
 
 // logger is part of the testI interface.
-func (t testWrapper) logger() *logger.Logger {
+func (t testWrapper) L() *logger.Logger {
 	return nil
 }
 

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,7 +33,7 @@ func registerTPCE(r *testRegistry) {
 		timeout time.Duration
 	}
 
-	runTPCE := func(ctx context.Context, t *test, c cluster.Cluster, opts tpceOptions) {
+	runTPCE := func(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
 		roachNodes := c.Range(1, opts.nodes)
 		loadNode := c.Node(opts.nodes + 1)
 		racks := opts.nodes
@@ -45,7 +46,7 @@ func registerTPCE(r *testRegistry) {
 		))
 
 		t.Status("installing docker")
-		if err := c.Install(ctx, t.l, loadNode, "docker"); err != nil {
+		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -85,14 +86,14 @@ func registerTPCE(r *testRegistry) {
 			t.Status("running workload")
 			duration := 2 * time.Hour
 			threads := opts.nodes * opts.cpus
-			out, err := c.RunWithBuffer(ctx, t.l, loadNode,
+			out, err := c.RunWithBuffer(ctx, t.L(), loadNode,
 				fmt.Sprintf("%s --customers=%d --racks=%d --duration=%s --threads=%d %s",
 					dockerRun, opts.customers, racks, duration, threads, strings.Join(roachNodeIPFlags, " ")))
 			if err != nil {
 				t.Fatalf("%v\n%s", err, out)
 			}
 			outStr := string(out)
-			t.l.Printf("workload output:\n%s\n", outStr)
+			t.L().Printf("workload output:\n%s\n", outStr)
 			if strings.Contains(outStr, "Reported tpsE :    --   (not between 80% and 100%)") {
 				return errors.New("invalid tpsE fraction")
 			}
@@ -108,13 +109,13 @@ func registerTPCE(r *testRegistry) {
 		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: []string{"weekly"}, timeout: 36 * time.Hour},
 	} {
 		opts := opts
-		r.Add(testSpec{
+		r.Add(TestSpec{
 			Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", opts.customers, opts.nodes),
 			Owner:   OwnerKV,
 			Tags:    opts.tags,
 			Timeout: opts.timeout,
 			Cluster: r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
-			Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runTPCE(ctx, t, c, opts)
 			},
 		})

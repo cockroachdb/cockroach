@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -27,7 +28,7 @@ type hibernateOptions struct {
 	buildCmd,
 	testCmd string
 	blocklists  blocklistsForVersion
-	dbSetupFunc func(ctx context.Context, t *test, c cluster.Cluster)
+	dbSetupFunc func(ctx context.Context, t test.Test, c cluster.Cluster)
 }
 
 var (
@@ -48,7 +49,7 @@ var (
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
 		blocklists: hibernateSpatialBlocklists,
-		dbSetupFunc: func(ctx context.Context, t *test, c cluster.Cluster) {
+		dbSetupFunc: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(
@@ -67,7 +68,7 @@ var (
 func registerHibernate(r *testRegistry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
-		t *test,
+		t test.Test,
 		c cluster.Cluster,
 	) {
 		if c.IsLocal() {
@@ -103,8 +104,8 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.l.Printf("Latest Hibernate release is %s.", latestTag)
-		t.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
+		t.L().Printf("Latest Hibernate release is %s.", latestTag)
+		t.L().Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -174,7 +175,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
-		t.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
+		t.L().Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// Note that this will take upwards of 3 hours.
@@ -233,13 +234,13 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		)
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       opt.testName,
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",
 		Cluster:    r.makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
 		},
 	})

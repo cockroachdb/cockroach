@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 )
@@ -30,10 +31,10 @@ import (
 // You want to look at versionupgrade.go, which has a test harness you
 // can use.
 func registerAutoUpgrade(r *testRegistry) {
-	runAutoUpgrade := func(ctx context.Context, t *test, c cluster.Cluster, oldVersion string) {
+	runAutoUpgrade := func(ctx context.Context, t test.Test, c cluster.Cluster, oldVersion string) {
 		nodes := c.Spec().NodeCount
 
-		if err := c.Stage(ctx, t.l, "release", "v"+oldVersion, "", c.Range(1, nodes)); err != nil {
+		if err := c.Stage(ctx, t.L(), "release", "v"+oldVersion, "", c.Range(1, nodes)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -242,12 +243,12 @@ func registerAutoUpgrade(r *testRegistry) {
 		c.Start(ctx, c.Node(nodeDecommissioned))
 	}
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       `autoupgrade`,
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(5),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			pred, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
@@ -30,7 +31,7 @@ func registerDrop(r *testRegistry) {
 	// by a truncation for the `stock` table (which contains warehouses*100k
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
-	runDrop := func(ctx context.Context, t *test, c cluster.Cluster, warehouses, nodes int) {
+	runDrop := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses, nodes int) {
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
@@ -81,12 +82,12 @@ func registerDrop(r *testRegistry) {
 			}
 
 			for j := 1; j <= nodes; j++ {
-				size, err := getDiskUsageInBytes(ctx, c, t.l, j)
+				size, err := getDiskUsageInBytes(ctx, c, t.L(), j)
 				if err != nil {
 					return err
 				}
 
-				t.l.Printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
+				t.L().Printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
 			}
 
 			for i := minWarehouse; i <= maxWarehouse; i++ {
@@ -95,7 +96,7 @@ func registerDrop(r *testRegistry) {
 				run(false, "DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
 				elapsed := timeutil.Since(tBegin)
 				// TODO(tschottdorf): check what's reasonable here and make sure we don't drop below it.
-				t.l.Printf("deleted from tpcc.stock for warehouse %d (100k rows) in %s (%.2f rows/sec)\n", i, elapsed, 100000.0/elapsed.Seconds())
+				t.L().Printf("deleted from tpcc.stock for warehouse %d (100k rows) in %s (%.2f rows/sec)\n", i, elapsed, 100000.0/elapsed.Seconds())
 			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
@@ -120,13 +121,13 @@ func registerDrop(r *testRegistry) {
 				sizeReport = ""
 				allNodesSpaceCleared = true
 				for j := 1; j <= nodes; j++ {
-					size, err := getDiskUsageInBytes(ctx, c, t.l, j)
+					size, err := getDiskUsageInBytes(ctx, c, t.L(), j)
 					if err != nil {
 						return err
 					}
 
 					nodeSpaceUsed := fmt.Sprintf("Node %d space after deletion used: %s\n", j, humanizeutil.IBytes(int64(size)))
-					t.l.Printf(nodeSpaceUsed)
+					t.L().Printf(nodeSpaceUsed)
 
 					// Return if the size of the directory is less than 100mb
 					if size > maxSizeBytes {
@@ -155,12 +156,12 @@ func registerDrop(r *testRegistry) {
 	warehouses := 100
 	numNodes := 9
 
-	r.Add(testSpec{
+	r.Add(TestSpec{
 		Name:       fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
 		Owner:      OwnerKV,
 		MinVersion: `v2.1.0`,
 		Cluster:    r.makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c cluster.Cluster) {
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.
 			if local {
