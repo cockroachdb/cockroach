@@ -249,7 +249,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		MinVersion: "v19.1.0",
 		Cluster:    r.makeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			pred, err := PredecessorVersion(r.buildVersion)
+			pred, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

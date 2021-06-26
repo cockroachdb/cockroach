@@ -310,7 +310,7 @@ func registerImportMixedVersion(r *testRegistry) {
 		MinVersion: "v21.1.0",
 		Cluster:    r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := PredecessorVersion(r.buildVersion)
+			predV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
