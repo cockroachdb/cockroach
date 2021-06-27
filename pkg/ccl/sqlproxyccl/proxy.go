@@ -25,13 +25,13 @@ var pgSSLRequest = []int32{8, 80877103}
 // the transmission of the err back to the client.
 func updateMetricsAndSendErrToClient(err error, conn net.Conn, metrics *metrics) {
 	metrics.updateForError(err)
-	sendErrToClient(conn, err)
+	SendErrToClient(conn, err)
 }
 
-// sendErrToClient will encode and pass back to the SQL client an error message.
+// SendErrToClient will encode and pass back to the SQL client an error message.
 // It can be called by the implementors of proxyHandler to give more
 // information to the end user in case of a problem.
-var sendErrToClient = func(conn net.Conn, err error) {
+var SendErrToClient = func(conn net.Conn, err error) {
 	if err == nil || conn == nil {
 		return
 	}
@@ -76,9 +76,9 @@ var sendErrToClient = func(conn net.Conn, err error) {
 	}
 }
 
-// connectionCopy does a bi-directional copy between the backend and frontend
+// ConnectionCopy does a bi-directional copy between the backend and frontend
 // connections. It terminates when one of connections terminate.
-func connectionCopy(crdbConn, conn net.Conn) error {
+func ConnectionCopy(crdbConn, conn net.Conn) error {
 	errOutgoing := make(chan error, 1)
 	errIncoming := make(chan error, 1)
 

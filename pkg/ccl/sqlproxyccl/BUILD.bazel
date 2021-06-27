@@ -17,7 +17,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/ccl/sqlproxyccl/cache",
         "//pkg/ccl/sqlproxyccl/denylist",
         "//pkg/ccl/sqlproxyccl/idle",
@@ -49,7 +48,6 @@ go_test(
     size = "small",
     srcs = [
         "authentication_test.go",
-        "backend_dialer_test.go",
         "frontend_admitter_test.go",
         "main_test.go",
         "proxy_handler_test.go",

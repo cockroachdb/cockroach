@@ -9,51 +9,18 @@
 package sqlproxyccl
 
 import (
-	"context"
 	"crypto/tls"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 )
 
-// backendLookupAddr looks up the given address using usual DNS resolution
-// mechanisms. It returns the first resolved address, or an error if the lookup
-// failed in some way. This can be overridden in tests.
-var backendLookupAddr = func(ctx context.Context, addr string) (string, error) {
-	// Address must have a port. SplitHostPort returns an error if the address
-	// does not have a port.
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", err
-	}
-	if host == "" {
-		return "", fmt.Errorf("no host was provided for '%s'", addr)
-	}
-	if port == "" {
-		return "", fmt.Errorf("no port was provided for '%s'", addr)
-	}
-
-	// Note that LookupAddr might return an IPv6 address if no IPv4 addresses
-	// are found. We will punt on that since this function will go away soon,
-	// and we don't currently use IPv6.
-	ip, err := base.LookupAddr(ctx, net.DefaultResolver, host)
-	if err != nil {
-		// Assume that any errors are due to missing or mismatched tenant.
-		return "", errors.Wrapf(err, "DNS lookup failed for '%s'", addr)
-	}
-
-	return net.JoinHostPort(ip, port), nil
-}
-
-// backendDial is an example backend dialer that does a TCP/IP connection
+// BackendDial is an example backend dialer that does a TCP/IP connection
 // to a backend, SSL and forwards the start message. It is defined as a variable
 // so it can be redirected for testing.
-var backendDial = func(
+var BackendDial = func(
 	msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 ) (net.Conn, error) {
 	conn, err := net.Dial("tcp", outgoingAddress)

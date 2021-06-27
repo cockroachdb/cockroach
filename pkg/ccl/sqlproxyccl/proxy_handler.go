@@ -182,10 +182,10 @@ func newProxyHandler(
 // handle is called by the proxy server to handle a single incoming client
 // connection.
 func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn) error {
-	conn, msg, err := frontendAdmit(incomingConn, handler.incomingTLSConfig())
+	conn, msg, err := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
 	defer func() { _ = conn.Close() }()
 	if err != nil {
-		sendErrToClient(conn, err)
+		SendErrToClient(conn, err)
 		return err
 	}
 
@@ -274,7 +274,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		}
 
 		// Now actually dial the backend server.
-		crdbConn, err = backendDial(backendStartupMsg, outgoingAddress, TLSConf)
+		crdbConn, err = BackendDial(backendStartupMsg, outgoingAddress, TLSConf)
 
 		// If we get a backend down error, retry the connection.
 		var codeErr *codeError
@@ -371,7 +371,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	// Copy all pgwire messages from frontend to backend connection until we
 	// encounter an error or shutdown signal.
 	go func() {
-		err := connectionCopy(crdbConn, conn)
+		err := ConnectionCopy(crdbConn, conn)
 		errConnectionCopy <- err
 	}()
 
@@ -393,6 +393,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		return nil
 	}
 }
+
+// resolveTCPAddr indirection to allow test hooks.
+var resolveTCPAddr = net.ResolveTCPAddr
 
 // outgoingAddress resolves a tenant ID and a tenant cluster name to the address
 // of a backend pod.
@@ -418,7 +421,7 @@ func (handler *proxyHandler) outgoingAddress(
 	addr := strings.ReplaceAll(
 		handler.RoutingRule, "{{clusterName}}", fmt.Sprintf("%s-%d", name, tenID.ToUint64()),
 	)
-	_, err := backendLookupAddr(ctx, addr)
+	_, err := resolveTCPAddr("tcp", addr)
 	if err != nil {
 		return "", status.Error(codes.NotFound, err.Error())
 	}
