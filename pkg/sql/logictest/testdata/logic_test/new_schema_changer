@@ -642,6 +642,30 @@ DROP DATABASE db1
 statement ok
 DROP DATABASE db1 CASCADE
 
+# Tests for computed column rewrites.
+statement ok
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
+
+statement error context-dependent operators are not allowed in computed column
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+statement ok
+SET CLUSTER SETTING sql.computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
+
+statement ok
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT new_primary_key PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts (k, ts, c)
+)
+
 # Works around view back references to tables not being cleaned up.
 # see issue #66677
 statement ok
