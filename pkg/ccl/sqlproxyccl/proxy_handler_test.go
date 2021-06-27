@@ -62,7 +62,7 @@ func TestLongDBName(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	defer testutils.TestingHook(&backendDial, func(
+	defer testutils.TestingHook(&BackendDial, func(
 		_ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
 	) (net.Conn, error) {
 		require.Equal(t, outgoingAddr, "dim-dog-28-0.cockroachdb:26257")
@@ -90,13 +90,14 @@ func TestBackendDownRetry(t *testing.T) {
 	defer te.Close()
 
 	callCount := 0
-	defer testutils.TestingHook(&backendLookupAddr, func(_ context.Context, addr string) (string, error) {
-		callCount++
-		if callCount >= 3 {
-			return "", errors.New("tenant not found")
-		}
-		return addr, nil
-	})()
+	defer testutils.TestingHook(&resolveTCPAddr,
+		func(network, addr string) (*net.TCPAddr, error) {
+			callCount++
+			if callCount >= 3 {
+				return nil, errors.New("tenant not found")
+			}
+			return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
+		})()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -166,10 +167,10 @@ func TestUnexpectedError(t *testing.T) {
 
 	// Set up a Server whose FrontendAdmitter function always errors with a
 	// non-codeError error.
-	defer testutils.TestingHook(&frontendAdmit, func(
+	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
 	) (net.Conn, *pgproto3.StartupMessage, error) {
-		log.Infof(context.Background(), "frontendAdmit returning unexpected error")
+		log.Infof(context.Background(), "frontend admitter returning unexpected error")
 		return conn, nil, errors.New("unexpected error")
 	})()
 
@@ -244,8 +245,8 @@ func TestProxyTLSClose(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	var proxyIncomingConn atomic.Value // *conn
-	originalFrontendAdmit := frontendAdmit
-	defer testutils.TestingHook(&frontendAdmit, func(
+	originalFrontendAdmit := FrontendAdmit
+	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
 	) (net.Conn, *pgproto3.StartupMessage, error) {
 		proxyIncomingConn.Store(conn)
@@ -290,8 +291,8 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
 
-	originalBackendDial := backendDial
-	defer testutils.TestingHook(&backendDial, func(
+	originalBackendDial := BackendDial
+	defer testutils.TestingHook(&BackendDial, func(
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		params := msg.Parameters
@@ -356,7 +357,7 @@ func TestErroneousFrontend(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	defer testutils.TestingHook(&frontendAdmit, func(
+	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
 	) (net.Conn, *pgproto3.StartupMessage, error) {
 		return conn, nil, errors.New(frontendError)
@@ -381,7 +382,7 @@ func TestErroneousBackend(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	defer testutils.TestingHook(&backendDial, func(
+	defer testutils.TestingHook(&BackendDial, func(
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		return nil, errors.New(backendError)
@@ -406,7 +407,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	defer testutils.TestingHook(&backendDial, func(
+	defer testutils.TestingHook(&BackendDial, func(
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		return nil, newErrorf(codeProxyRefusedConnection, "too many attempts")
@@ -442,8 +443,8 @@ func TestDenylistUpdate(t *testing.T) {
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
 
-	originalBackendDial := backendDial
-	defer testutils.TestingHook(&backendDial, func(
+	originalBackendDial := BackendDial
+	defer testutils.TestingHook(&BackendDial, func(
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		time.AfterFunc(100*time.Millisecond, func() {
@@ -504,8 +505,8 @@ func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
 
 	idleTimeout, _ := time.ParseDuration("0.5s")
-	originalBackendDial := backendDial
-	defer testutils.TestingHook(&backendDial, func(
+	originalBackendDial := BackendDial
+	defer testutils.TestingHook(&BackendDial, func(
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
@@ -559,11 +560,12 @@ func TestDirectoryConnect(t *testing.T) {
 	_, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
 	t.Run("fallback when tenant not found", func(t *testing.T) {
-		defer testutils.TestingHook(&backendLookupAddr, func(_ context.Context, addr string) (string, error) {
-			// Expect fallback.
-			require.Equal(t, srv.ServingSQLAddr(), addr)
-			return addr, nil
-		})()
+		defer testutils.TestingHook(&resolveTCPAddr,
+			func(network, addr string) (*net.TCPAddr, error) {
+				// Expect fallback.
+				require.Equal(t, srv.ServingSQLAddr(), addr)
+				return net.ResolveTCPAddr(network, addr)
+			})()
 
 		url := fmt.Sprintf(
 			"postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-%d",
@@ -574,7 +576,7 @@ func TestDirectoryConnect(t *testing.T) {
 	t.Run("fail to connect to backend", func(t *testing.T) {
 		// Retry the backend connection 3 times before permanent failure.
 		countFailures := 0
-		defer testutils.TestingHook(&backendDial, func(
+		defer testutils.TestingHook(&BackendDial, func(
 			*pgproto3.StartupMessage, string, *tls.Config,
 		) (net.Conn, error) {
 			countFailures++
@@ -856,19 +858,20 @@ type tester struct {
 		errToClient   *codeError
 	}
 
-	restoreBackendLookupAddr func()
-	restoreAuthenticate      func()
-	restoreSendErrToClient   func()
+	restoreResolveTCPAddr  func()
+	restoreAuthenticate    func()
+	restoreSendErrToClient func()
 }
 
 func newTester() *tester {
 	te := &tester{}
 
-	// Override default lookup function so that it does not use base.LookupAddr.
-	te.restoreBackendLookupAddr =
-		testutils.TestingHook(&backendLookupAddr, func(ctx context.Context, addr string) (string, error) {
-			return addr, nil
-		})
+	// Override default lookup function so that it does not use net.ResolveTCPAddr.
+	te.restoreResolveTCPAddr =
+		testutils.TestingHook(&resolveTCPAddr,
+			func(network, addr string) (*net.TCPAddr, error) {
+				return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
+			})
 
 	// Record successful connection and authentication.
 	originalAuthenticate := authenticate
@@ -880,9 +883,9 @@ func newTester() *tester {
 		})
 
 	// Capture any error sent to the client.
-	originalSendErrToClient := sendErrToClient
+	originalSendErrToClient := SendErrToClient
 	te.restoreSendErrToClient =
-		testutils.TestingHook(&sendErrToClient, func(conn net.Conn, err error) {
+		testutils.TestingHook(&SendErrToClient, func(conn net.Conn, err error) {
 			if codeErr, ok := err.(*codeError); ok {
 				te.setErrToClient(codeErr)
 			}
@@ -893,7 +896,7 @@ func newTester() *tester {
 }
 
 func (te *tester) Close() {
-	te.restoreBackendLookupAddr()
+	te.restoreResolveTCPAddr()
 	te.restoreAuthenticate()
 	te.restoreSendErrToClient()
 }
