@@ -81,7 +81,7 @@ func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) err
 			period, downTime := ch.Timer.Timing()
 
 			target := ch.Target()
-			m.ExpectDeath()
+			m.ExpectDeaths(int32(len(target)))
 
 			if ch.DrainAndQuit {
 				l.Printf("stopping and draining %v\n", target)
