@@ -15,13 +15,13 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
-// frontendAdmit is the default implementation of a frontend admitter. It can
+// FrontendAdmit is the default implementation of a frontend admitter. It can
 // upgrade to an optional SSL connection, and will handle and verify the startup
 // message received from the PG SQL client. The connection returned should never
 // be nil in case of error. Depending on whether the error happened before the
 // connection was upgraded to TLS or not it will either be the original or the
 // TLS connection.
-var frontendAdmit = func(
+var FrontendAdmit = func(
 	conn net.Conn, incomingTLSConfig *tls.Config,
 ) (net.Conn, *pgproto3.StartupMessage, error) {
 	// `conn` could be replaced by `conn` embedded in a `tls.Conn` connection,
@@ -39,7 +39,7 @@ var frontendAdmit = func(
 		case *pgproto3.SSLRequest:
 		case *pgproto3.CancelRequest:
 			// Ignore CancelRequest explicitly. We don't need to do this but it
-			// makes testing easier by avoiding a call to sendErrToClient on this
+			// makes testing easier by avoiding a call to SendErrToClient on this
 			// path (which would confuse assertCtx).
 			return conn, nil, nil
 		default:
