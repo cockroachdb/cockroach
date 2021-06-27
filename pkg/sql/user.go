@@ -71,8 +71,8 @@ func GetUserHashedPassword(
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
 		rootFn := func(ctx context.Context) ([]byte, error) {
-			_, _, hashedPassword, _, err := retrieveUserAndPassword(ctx, ie, isRoot, username)
-			return hashedPassword, err
+			authInfo, err := retrieveUserAndPassword(ctx, ie, isRoot, username)
+			return authInfo.hashedPassword, err
 		}
 
 		// Root user cannot have password expiry and must have login.
@@ -84,16 +84,25 @@ func GetUserHashedPassword(
 
 	// Other users must reach for system.users no matter what, because
 	// only that contains the truth about whether the user exists.
-	exists, canLogin, hashedPassword, validUntil, err := retrieveUserAndPassword(ctx, ie, isRoot, username)
-	return exists, canLogin,
-		func(ctx context.Context) ([]byte, error) { return hashedPassword, nil },
-		func(ctx context.Context) (*tree.DTimestamp, error) { return validUntil, nil },
+	authInfo, err := retrieveUserAndPassword(
+		ctx, ie, isRoot, username,
+	)
+	return authInfo.userExists, authInfo.canLogin,
+		func(ctx context.Context) ([]byte, error) { return authInfo.hashedPassword, nil },
+		func(ctx context.Context) (*tree.DTimestamp, error) { return authInfo.validUntil, nil },
 		err
+}
+
+type authInfo struct {
+	userExists     bool
+	canLogin       bool
+	hashedPassword []byte
+	validUntil     *tree.DTimestamp
 }
 
 func retrieveUserAndPassword(
 	ctx context.Context, ie *InternalExecutor, isRoot bool, normalizedUsername security.SQLUsername,
-) (exists bool, canLogin bool, hashedPassword []byte, validUntil *tree.DTimestamp, err error) {
+) (pInfo authInfo, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
@@ -123,13 +132,13 @@ func retrieveUserAndPassword(
 			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
 		}
 		if values != nil {
-			exists = true
+			pInfo.userExists = true
 			if v := values[0]; v != tree.DNull {
-				hashedPassword = []byte(*(v.(*tree.DBytes)))
+				pInfo.hashedPassword = []byte(*(v.(*tree.DBytes)))
 			}
 		}
 
-		if !exists {
+		if !pInfo.userExists {
 			return nil
 		}
 
@@ -152,14 +161,14 @@ func retrieveUserAndPassword(
 
 		// To support users created before 20.1, allow all USERS/ROLES to login
 		// if NOLOGIN is not found.
-		canLogin = true
+		pInfo.canLogin = true
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
 			option := string(tree.MustBeDString(row[0]))
 
 			if option == "NOLOGIN" {
-				canLogin = false
+				pInfo.canLogin = false
 			}
 
 			if option == "VALID UNTIL" {
@@ -169,7 +178,7 @@ func retrieveUserAndPassword(
 					// representation of a TimestampTZ which has the same underlying
 					// representation in the table as a Timestamp (UTC time).
 					timeCtx := tree.NewParseTimeContext(timeutil.Now())
-					validUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
+					pInfo.validUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 					if err != nil {
 						return errors.Wrap(err,
 							"error trying to parse timestamp while retrieving password valid until value")
@@ -186,7 +195,7 @@ func retrieveUserAndPassword(
 		log.Warningf(ctx, "user lookup for %q failed: %v", normalizedUsername, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account")
 	}
-	return exists, canLogin, hashedPassword, validUntil, err
+	return pInfo, err
 }
 
 var userLoginTimeout = settings.RegisterDurationSetting(
