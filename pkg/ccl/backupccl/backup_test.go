@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -6092,6 +6093,7 @@ func getMockTableDesc(
 // TODO(pbardea): Add ADDING and DROPPING indexes to these tests.
 func TestLogicallyMergedTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	codec := keys.TODOSQLCodec
 	unusedMap := make(map[tableAndIndex]bool)
 	testCases := []struct {
@@ -6213,7 +6215,7 @@ func TestLogicallyMergedTableSpans(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
 				test.indexes, test.addingIndexes, test.droppingIndexes)
-			spans, err := getLogicallyMergedTableSpans(tableDesc, unusedMap, codec,
+			spans, err := getLogicallyMergedTableSpans(ctx, tableDesc, unusedMap, codec,
 				hlc.Timestamp{}, test.checkForKVInBoundsOverride)
 			var mergedSpans []string
 			for _, span := range spans {
@@ -8091,4 +8093,84 @@ func TestBackupWorkerFailure(t *testing.T) {
 	var actualCount int
 	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&actualCount)
 	require.Equal(t, expectedCount, actualCount)
+}
+
+// Regression test for #66797 ensuring that the span merging optimization
+// doesn't produce an error when there are span-merging opportunities on
+// descriptor revisions from before the GC threshold of the table.
+func TestSpanMergeingBeforeGCThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+	kvDB := tc.Server(0).DB()
+
+	sqlDB.Exec(t, `
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1;
+CREATE DATABASE test; USE test;
+`)
+
+	// Produce a table with the following indexes over time:
+	//
+	//       |             |
+	//   t@1 |     xxxxxxxx|xxxxxxxxxxxxxxxxxxxxxxx
+	//   t@2 |     xxxxxxxx|xxxxxxxxx
+	//   t@3 |             |
+	//   t@4 |     xxxxxxxx|xxxxxxxxx
+	//       ----------------------------------------
+	//             t1    gc_tresh    t2            t3
+	//
+	// The span-merging optimization will first look at t3, find only 1 index and
+	// continue It will then look at t1 and see a span-merging opportunity over
+	// t@3, but a read at this timestamp should fail as it's older than the GC
+	// TTL.
+	startTime := timeutil.Now()
+	sqlDB.Exec(t, `
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX idx_2 (b), INDEX idx_3 (c), INDEX idx_4 (b, c));
+DROP INDEX idx_3;
+`)
+
+	clearHistoricalTableVersions := func() {
+		// Save the latest value of the descriptor.
+		table := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		mutTable := tabledesc.NewBuilder(table.TableDesc()).BuildExistingMutableTable()
+		mutTable.Version = 0
+
+		// Reset the descriptor table to clear the revisions of the initial table
+		// descriptor.
+		var b kv.Batch
+		descriptorTableSpan := makeTableSpan(keys.DescriptorTableID)
+		b.AddRawRequest(&roachpb.RevertRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    descriptorTableSpan.Key,
+				EndKey: descriptorTableSpan.EndKey,
+			},
+			TargetTime: hlc.Timestamp{WallTime: startTime.UnixNano()},
+		})
+		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
+		require.NoError(t, kvDB.Run(context.Background(), &b))
+
+		// Re-insert the latest value of the table descriptor.
+		desc, err := protoutil.Marshal(mutTable.DescriptorProto())
+		require.NoError(t, err)
+		insertQ := fmt.Sprintf("SELECT crdb_internal.unsafe_upsert_descriptor(%d, decode('%s', 'hex'), true);",
+			table.GetID(), hex.EncodeToString(desc))
+		sqlDB.Exec(t, insertQ)
+	}
+
+	// Clear previous MVCC versions of the table descriptor so that the oldest
+	// version of the table descriptor (which has an MVCC timestamp outside the GC
+	// window) will trigger a scan during the span-merging phase of backup
+	// planning.
+	clearHistoricalTableVersions()
+
+	// Drop all of the secondary indexes since backup first checks the current
+	// schema.
+	sqlDB.Exec(t, `DROP INDEX idx_2, idx_4`)
+
+	// Wait for the old schema to exceed the GC window.
+	time.Sleep(2 * time.Second)
+
+	sqlDB.Exec(t, `BACKUP test.t TO 'nodelocal://1/backup_test' WITH revision_history`)
 }
