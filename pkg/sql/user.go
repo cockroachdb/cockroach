@@ -124,100 +124,6 @@ func retrieveUserAndPasswordWithCache(
 	isRoot bool,
 	normalizedUsername security.SQLUsername,
 ) (aInfo authInfo, err error) {
-	err = descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, ie, execCfg.DB,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
-			_, usersTableDesc, err := descriptors.GetImmutableTableByName(
-				ctx,
-				txn,
-				userTableName,
-				tree.ObjectLookupFlagsWithRequired(),
-			)
-			if err != nil {
-				return err
-			}
-			_, roleOptionsTableDesc, err := descriptors.GetImmutableTableByName(
-				ctx,
-				txn,
-				RoleOptionsTableName,
-				tree.ObjectLookupFlagsWithRequired(),
-			)
-			if err != nil {
-				return err
-			}
-			if usersTableDesc.IsUncommittedVersion() || roleOptionsTableDesc.IsUncommittedVersion() {
-				aInfo, err = retrieveUserAndPassword(ctx, txn, ie, isRoot, normalizedUsername)
-				if err != nil {
-					return err
-				}
-			}
-
-			authInfoCache := execCfg.AuthenticationInfoCache
-			usersTableVersion := usersTableDesc.GetVersion()
-			roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
-			// We loop in case the table version changes while looking up
-			// password or role options.
-			for {
-				// Check version and maybe clear cache while holding the mutex.
-				var found bool
-				aInfo, found = func() (authInfo, bool) {
-					authInfoCache.Lock()
-					defer authInfoCache.Unlock()
-					if authInfoCache.usersTableVersion != usersTableVersion {
-						// Update users table version and drop the map.
-						authInfoCache.usersTableVersion = usersTableVersion
-						authInfoCache.cache = make(map[security.SQLUsername]authInfo)
-					}
-					if authInfoCache.roleOptionsTableVersion != roleOptionsTableVersion {
-						// Update role_optiosn table version and drop the map.
-						authInfoCache.roleOptionsTableVersion = roleOptionsTableVersion
-						authInfoCache.cache = make(map[security.SQLUsername]authInfo)
-					}
-					aInfo, found = authInfoCache.cache[normalizedUsername]
-					return aInfo, found
-				}()
-
-				if found {
-					return nil
-				}
-
-				// Lookup memberships outside the lock.
-				aInfo, err = retrieveUserAndPassword(ctx, txn, ie, isRoot, normalizedUsername)
-				if err != nil {
-					return err
-				}
-
-				updatedCache := func() bool {
-					// Update membership.
-					authInfoCache.Lock()
-					defer authInfoCache.Unlock()
-					// Table version has changed while we were looking: unlock and start over.
-					if authInfoCache.usersTableVersion != usersTableVersion {
-						usersTableVersion = authInfoCache.usersTableVersion
-						return false
-					}
-					if authInfoCache.roleOptionsTableVersion != roleOptionsTableVersion {
-						roleOptionsTableVersion = authInfoCache.roleOptionsTableVersion
-						return false
-					}
-					// Table version remains the same: update map, unlock, return.
-					authInfoCache.cache[normalizedUsername] = aInfo
-					return true
-				}()
-				if updatedCache {
-					return nil
-				}
-			}
-		})
-	return aInfo, err
-}
-
-func retrieveUserAndPassword(
-	ctx context.Context,
-	txn *kv.Txn,
-	ie *InternalExecutor,
-	isRoot bool,
-	normalizedUsername security.SQLUsername,
-) (aInfo authInfo, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
@@ -233,76 +139,91 @@ func retrieveUserAndPassword(
 			return contextutil.RunWithTimeout(ctx, "get-user-timeout", timeout, fn)
 		}
 	}
-
-	// Perform the lookup with a timeout.
 	err = runFn(func(ctx context.Context) (retErr error) {
-		// Use fully qualified table name to avoid looking up "".system.users.
-		const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
-			`WHERE username=$1`
-		values, err := ie.QueryRowEx(
-			ctx, "get-hashed-pwd", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			getHashedPassword, normalizedUsername)
-		if err != nil {
-			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
-		}
-		if values != nil {
-			aInfo.userExists = true
-			if v := values[0]; v != tree.DNull {
-				aInfo.hashedPassword = []byte(*(v.(*tree.DBytes)))
-			}
-		}
-
-		if !aInfo.userExists {
-			return nil
-		}
-
-		// Use fully qualified table name to avoid looking up "".system.role_options.
-		getLoginDependencies := `SELECT option, value FROM system.public.role_options ` +
-			`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL')`
-
-		it, err := ie.QueryIteratorEx(
-			ctx, "get-login-dependencies", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			getLoginDependencies,
-			normalizedUsername,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
-		}
-		// We have to make sure to close the iterator since we might return from
-		// the for loop early (before Next() returns false).
-		defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
-
-		// To support users created before 20.1, allow all USERS/ROLES to login
-		// if NOLOGIN is not found.
-		aInfo.canLogin = true
-		var ok bool
-		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-			row := it.Cur()
-			option := string(tree.MustBeDString(row[0]))
-
-			if option == "NOLOGIN" {
-				aInfo.canLogin = false
-			}
-
-			if option == "VALID UNTIL" {
-				if tree.DNull.Compare(nil, row[1]) != 0 {
-					ts := string(tree.MustBeDString(row[1]))
-					// This is okay because the VALID UNTIL is stored as a string
-					// representation of a TimestampTZ which has the same underlying
-					// representation in the table as a Timestamp (UTC time).
-					timeCtx := tree.NewParseTimeContext(timeutil.Now())
-					aInfo.validUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
+		return descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, ie, execCfg.DB,
+			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
+				_, usersTableDesc, err := descriptors.GetImmutableTableByName(
+					ctx,
+					txn,
+					userTableName,
+					tree.ObjectLookupFlagsWithRequired(),
+				)
+				if err != nil {
+					return err
+				}
+				_, roleOptionsTableDesc, err := descriptors.GetImmutableTableByName(
+					ctx,
+					txn,
+					RoleOptionsTableName,
+					tree.ObjectLookupFlagsWithRequired(),
+				)
+				if err != nil {
+					return err
+				}
+				if usersTableDesc.IsUncommittedVersion() || roleOptionsTableDesc.IsUncommittedVersion() {
+					aInfo, err = retrieveUserAndPassword(ctx, txn, ie, normalizedUsername)
 					if err != nil {
-						return errors.Wrap(err,
-							"error trying to parse timestamp while retrieving password valid until value")
+						return err
 					}
 				}
-			}
-		}
+				authInfoCache := execCfg.AuthenticationInfoCache
+				usersTableVersion := usersTableDesc.GetVersion()
+				roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
+				// We loop in case the table version changes while looking up
+				// password or role options.
 
-		return err
+				for {
+					// Check version and maybe clear cache while holding the mutex.
+					var found bool
+					aInfo, found = func() (authInfo, bool) {
+						authInfoCache.Lock()
+						defer authInfoCache.Unlock()
+						if authInfoCache.usersTableVersion != usersTableVersion {
+							// Update users table version and drop the map.
+							authInfoCache.usersTableVersion = usersTableVersion
+							authInfoCache.cache = make(map[security.SQLUsername]authInfo)
+						}
+						if authInfoCache.roleOptionsTableVersion != roleOptionsTableVersion {
+							// Update role_optiosn table version and drop the map.
+							authInfoCache.roleOptionsTableVersion = roleOptionsTableVersion
+							authInfoCache.cache = make(map[security.SQLUsername]authInfo)
+						}
+						aInfo, found = authInfoCache.cache[normalizedUsername]
+						return aInfo, found
+					}()
+
+					if found {
+						return nil
+					}
+
+					// Lookup memberships outside the lock.
+					aInfo, err = retrieveUserAndPassword(ctx, txn, ie, normalizedUsername)
+					if err != nil {
+						return err
+					}
+
+					updatedCache := func() bool {
+						// Update membership.
+						authInfoCache.Lock()
+						defer authInfoCache.Unlock()
+						// Table version has changed while we were looking: unlock and start over.
+						if authInfoCache.usersTableVersion != usersTableVersion {
+							usersTableVersion = authInfoCache.usersTableVersion
+							return false
+						}
+						if authInfoCache.roleOptionsTableVersion != roleOptionsTableVersion {
+							roleOptionsTableVersion = authInfoCache.roleOptionsTableVersion
+							return false
+						}
+						// Table version remains the same: update map, unlock, return.
+						authInfoCache.cache[normalizedUsername] = aInfo
+						return true
+					}()
+					if updatedCache {
+						return nil
+					}
+				}
+			})
 	})
 
 	if err != nil {
@@ -310,6 +231,78 @@ func retrieveUserAndPassword(
 		log.Warningf(ctx, "user lookup for %q failed: %v", normalizedUsername, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account")
 	}
+	return aInfo, err
+}
+
+func retrieveUserAndPassword(
+	ctx context.Context, txn *kv.Txn, ie *InternalExecutor, normalizedUsername security.SQLUsername,
+) (aInfo authInfo, retErr error) {
+	// Use fully qualified table name to avoid looking up "".system.users.
+	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
+		`WHERE username=$1`
+	values, err := ie.QueryRowEx(
+		ctx, "get-hashed-pwd", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		getHashedPassword, normalizedUsername)
+	if err != nil {
+		return authInfo{}, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+	}
+	if values != nil {
+		aInfo.userExists = true
+		if v := values[0]; v != tree.DNull {
+			aInfo.hashedPassword = []byte(*(v.(*tree.DBytes)))
+		}
+	}
+
+	if !aInfo.userExists {
+		return authInfo{}, nil
+	}
+
+	// Use fully qualified table name to avoid looking up "".system.role_options.
+	getLoginDependencies := `SELECT option, value FROM system.public.role_options ` +
+		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL')`
+
+	it, err := ie.QueryIteratorEx(
+		ctx, "get-login-dependencies", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		getLoginDependencies,
+		normalizedUsername,
+	)
+	if err != nil {
+		return authInfo{}, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+	}
+	// We have to make sure to close the iterator since we might return from
+	// the for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+	// To support users created before 20.1, allow all USERS/ROLES to login
+	// if NOLOGIN is not found.
+	aInfo.canLogin = true
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		option := string(tree.MustBeDString(row[0]))
+
+		if option == "NOLOGIN" {
+			aInfo.canLogin = false
+		}
+
+		if option == "VALID UNTIL" {
+			if tree.DNull.Compare(nil, row[1]) != 0 {
+				ts := string(tree.MustBeDString(row[1]))
+				// This is okay because the VALID UNTIL is stored as a string
+				// representation of a TimestampTZ which has the same underlying
+				// representation in the table as a Timestamp (UTC time).
+				timeCtx := tree.NewParseTimeContext(timeutil.Now())
+				aInfo.validUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
+				if err != nil {
+					return authInfo{}, errors.Wrap(err,
+						"error trying to parse timestamp while retrieving password valid until value")
+				}
+			}
+		}
+	}
+
 	return aInfo, err
 }
 
