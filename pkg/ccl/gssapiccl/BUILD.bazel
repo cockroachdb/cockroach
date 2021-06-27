@@ -3,10 +3,22 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "gssapiccl",
     # keep
-    srcs = ["empty.go"],
-    cgo = True,
+    srcs = ["gssapi.go"],
     clinkopts = [],  # keep
     cppopts = [],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/utilccl",
+        "//pkg/security",
+        "//pkg/sql",
+        "//pkg/sql/pgwire",
+        "//pkg/sql/pgwire/hba",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jcmturner_gofork//encoding/asn1",
+        "@in_gopkg_jcmturner_goidentity_v3//:goidentity_v3",
+        "@in_gopkg_jcmturner_gokrb5_v7//keytab",
+        "@in_gopkg_jcmturner_gokrb5_v8//gssapi",
+        "@in_gopkg_jcmturner_gokrb5_v8//spnego",
+    ],
 )

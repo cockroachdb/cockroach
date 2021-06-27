@@ -4236,6 +4236,14 @@ def go_deps():
         version = "v7.5.0",
     )
     go_repository(
+        name = "in_gopkg_jcmturner_gokrb5_v8",
+        build_file_proto_mode = "disable_global",
+        importpath = "gopkg.in/jcmturner/gokrb5.v8",
+        sum = "h1:bsqMkak5JarHZFBfMcchYgcKVY5BYx8NtMI6/yfU9BA=",
+        version = "v8.4.2",
+    )
+
+    go_repository(
         name = "in_gopkg_jcmturner_rpc_v1",
         build_file_proto_mode = "disable_global",
         importpath = "gopkg.in/jcmturner/rpc.v1",

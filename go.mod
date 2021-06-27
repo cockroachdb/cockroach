@@ -96,6 +96,7 @@ require (
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v4 v4.6.0
 	github.com/jaegertracing/jaeger v1.18.1
+	github.com/jcmturner/gofork v1.0.0
 	github.com/jordanlewis/gcassert v0.0.0-20200706043056-bf61eb72ee48
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.5.0
@@ -172,6 +173,9 @@ require (
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.26.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.28.0
+	gopkg.in/jcmturner/goidentity.v3 v3.0.0
+	gopkg.in/jcmturner/gokrb5.v7 v7.5.0
+	gopkg.in/jcmturner/gokrb5.v8 v8.4.2
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools/v3 v3.0.3 // indirect
 	honnef.co/go/tools v0.2.0
