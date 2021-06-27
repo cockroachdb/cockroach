@@ -77,6 +77,10 @@ func (b *buildContext) alterTableAddColumn(
 ) {
 	d := t.ColumnDef
 
+	if d.IsComputed() {
+		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, &b.EvalCtx.Settings.SV)
+	}
+
 	version := b.EvalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
 	toType, err := tree.ResolveType(ctx, d.Type, b.SemaCtx.GetTypeResolver())
 	if err != nil {

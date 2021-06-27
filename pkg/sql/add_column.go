@@ -32,7 +32,13 @@ func (p *planner) addColumnImpl(
 	t *tree.AlterTableAddColumn,
 ) error {
 	d := t.ColumnDef
-	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
+
+	st := params.ExecCfg().Settings
+	if d.IsComputed() {
+		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, &st.SV)
+	}
+
+	version := st.Version.ActiveVersionOrEmpty(params.ctx)
 	toType, err := tree.ResolveType(params.ctx, d.Type, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
@@ -106,7 +112,7 @@ func (p *planner) addColumnImpl(
 	// its descriptor and this column descriptor.
 	if d.HasDefaultExpr() {
 		changedSeqDescs, err := maybeAddSequenceDependencies(
-			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil,
+			params.ctx, st, params.p, n.tableDesc, col, expr, nil,
 		)
 		if err != nil {
 			return err
