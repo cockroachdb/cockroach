@@ -6,19 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-// We use a non-standard build tag here because we want to only build on
-// linux-gnu targets (i.e., not musl). Since go doesn't have a builtin way
-// to do that, we have to set this in the top-level Makefile.
-
-// +build gss
-
 package gssapiccl
 
 import (
 	"context"
 	"crypto/tls"
-	"strings"
-	"unsafe"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -26,17 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/errors"
+	"github.com/jcmturner/gofork/encoding/asn1"
+	"github.com/jcmturner/goidentity/v6"
+	"github.com/jcmturner/gokrb5/v8/gssapi"
+	"github.com/jcmturner/gokrb5/v8/keytab"
+	"github.com/jcmturner/gokrb5/v8/spnego"
 )
 
-// #cgo LDFLAGS: -lgssapi_krb5 -lcom_err -lkrb5 -lkrb5support -ldl -lk5crypto -lresolv
-//
-// #include <gssapi/gssapi.h>
-// #include <stdlib.h>
-import "C"
-
 const (
-	authTypeGSS         int32 = 7
-	authTypeGSSContinue int32 = 8
+	authTypeGSS int32 = 7
+	// authTypeGSSContinue int32 = 8
 )
 
 // authGSS performs GSS authentication. See:
@@ -51,89 +43,66 @@ func authGSS(
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
 	return func(ctx context.Context, requestedUser security.SQLUsername, clientConnection bool) (func(), error) {
-		var (
-			majStat, minStat, lminS, gflags C.OM_uint32
-			gbuf                            C.gss_buffer_desc
-			contextHandle                   C.gss_ctx_id_t  = C.GSS_C_NO_CONTEXT
-			acceptorCredHandle              C.gss_cred_id_t = C.GSS_C_NO_CREDENTIAL
-			srcName                         C.gss_name_t
-			outputToken                     C.gss_buffer_desc
-
-			token []byte
-			err   error
-		)
-
-		if err = c.SendAuthRequest(authTypeGSS, nil); err != nil {
+		ktPath := os.Getenv("KRB5_KTNAME")
+		if ktPath == "" {
+			return nil, errors.New("KRB5_KTNAME is not set")
+		}
+		kt, err := keytab.Load(ktPath)
+		if err != nil {
 			return nil, err
 		}
 
-		// This cleanup function must be called at the
-		// "completion of a communications session", not
-		// merely at the end of an authentication init. See
-		// https://tools.ietf.org/html/rfc2744.html, section
-		// `1. Introduction`, stage `d`:
-		//
-		//   At the completion of a communications session (which
-		//   may extend across several transport connections),
-		//   each application calls a GSS-API routine to delete
-		//   the security context.
-		//
-		// See https://github.com/postgres/postgres/blob/f4d59369d2ddf0ad7850112752ec42fd115825d4/src/backend/libpq/pqcomm.c#L269
-		connClose := func() {
-			C.gss_delete_sec_context(&lminS, &contextHandle, C.GSS_C_NO_BUFFER)
+		if err := c.SendAuthRequest(authTypeGSS, nil); err != nil {
+			return nil, err
 		}
 
-		for {
-			token, err = c.GetPwdData()
-			if err != nil {
-				return connClose, err
+		tokenBytes, err := c.GetPwdData()
+		if err != nil {
+			return nil, err
+		}
+		var token spnego.SPNEGOToken
+		err = token.Unmarshal(tokenBytes)
+		if err != nil {
+			// If this is a raw KRB5 token, wrap it (see jcmturner/gokrb5#347).
+			var rawk5Token spnego.KRB5Token
+			if rawk5Token.Unmarshal(tokenBytes) != nil {
+				return nil, err
 			}
-
-			gbuf.length = C.ulong(len(token))
-			gbuf.value = C.CBytes([]byte(token))
-
-			majStat = C.gss_accept_sec_context(
-				&minStat,
-				&contextHandle,
-				acceptorCredHandle,
-				&gbuf,
-				C.GSS_C_NO_CHANNEL_BINDINGS,
-				&srcName,
-				nil,
-				&outputToken,
-				&gflags,
-				nil,
-				nil,
-			)
-			C.free(unsafe.Pointer(gbuf.value))
-
-			if outputToken.length != 0 {
-				outputBytes := C.GoBytes(outputToken.value, C.int(outputToken.length))
-				C.gss_release_buffer(&lminS, &outputToken)
-				if err = c.SendAuthRequest(authTypeGSSContinue, outputBytes); err != nil {
-					return connClose, err
-				}
-			}
-			if majStat != C.GSS_S_COMPLETE && majStat != C.GSS_S_CONTINUE_NEEDED {
-				return connClose, gssError("accepting GSS security context failed", majStat, minStat)
-			}
-			if majStat != C.GSS_S_CONTINUE_NEEDED {
-				break
+			token.Init = true
+			token.NegTokenInit = spnego.NegTokenInit{
+				MechTypes:      []asn1.ObjectIdentifier{rawk5Token.OID},
+				MechTokenBytes: tokenBytes,
 			}
 		}
 
-		majStat = C.gss_display_name(&minStat, srcName, &gbuf, nil)
-		if majStat != C.GSS_S_COMPLETE {
-			return connClose, gssError("retrieving GSS user name failed", majStat, minStat)
+		sp := spnego.SPNEGOService(kt)
+		authed, reqCtx, status := sp.AcceptSecContext(&token)
+
+		if status.Code == gssapi.StatusContinueNeeded {
+			// TODO: in krb5 the gss_accept_sec_context function provides an output
+			// token here, to reply with to the initiator, to continue negotiation. We
+			// could potentially do something similar if we constructed a NegTokenResp
+			// and marshaled it to send as c.SendAuthRequest(authTypeGSSContinue, t).
+			return nil, errors.Errorf("accepting GSS security context requires unsupported continue: %s", status.Message)
 		}
-		gssUser := C.GoStringN((*C.char)(gbuf.value), C.int(gbuf.length))
-		C.gss_release_buffer(&lminS, &gbuf)
+
+		if status.Code != gssapi.StatusComplete || !authed {
+			return nil, errors.Errorf("accepting GSS security context failed: %s", status.Message)
+		}
+
+		// TODO(dt): https://github.com/jcmturner/gokrb5/issues/359
+		const ctxCredentialsKey = "github.com/jcmturner/gokrb5/v8/ctxCredentials"
+		id := reqCtx.Value(ctxCredentialsKey).(goidentity.Identity)
+		if id == nil {
+			return nil, errors.Errorf("accepting GSS security context failed: credentials missing")
+		}
+
+		gssUser := id.DisplayName()
 
 		realms := entry.GetOptions("krb_realm")
 
-		if idx := strings.IndexByte(gssUser, '@'); idx >= 0 {
+		if realm := id.Domain(); realm != "" {
 			if len(realms) > 0 {
-				realm := gssUser[idx+1:]
 				matched := false
 				for _, krbRealm := range realms {
 					if realm == krbRealm {
@@ -142,46 +111,27 @@ func authGSS(
 					}
 				}
 				if !matched {
-					return connClose, errors.Errorf("GSSAPI realm (%s) didn't match any configured realm", realm)
+					return nil, errors.Errorf("GSSAPI realm (%s) didn't match any configured realm", realm)
 				}
 			}
-			if entry.GetOption("include_realm") != "1" {
-				gssUser = gssUser[:idx]
+			if entry.GetOption("include_realm") == "1" {
+				gssUser = gssUser + "@" + realm
 			}
 		} else if len(realms) > 0 {
-			return connClose, errors.New("GSSAPI did not return realm but realm matching was requested")
+			return nil, errors.New("GSSAPI did not return realm but realm matching was requested")
 		}
 
 		gssUsername, _ := security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation)
 		if gssUsername != requestedUser {
-			return connClose, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
+			return nil, errors.Errorf("requested user is %s, but GSSAPI auth is for %s", requestedUser, gssUser)
 		}
 
 		// Do the license check last so that administrators are able to test whether
 		// their GSS configuration is correct. That is, the presence of this error
 		// message means they have a correctly functioning GSS/Kerberos setup,
 		// but now need to enable enterprise features.
-		return connClose, utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(), "GSS authentication")
+		return nil, utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(), "GSS authentication")
 	}, nil
-}
-
-func gssError(msg string, majStat, minStat C.OM_uint32) error {
-	var (
-		gmsg          C.gss_buffer_desc
-		lminS, msgCtx C.OM_uint32
-	)
-
-	msgCtx = 0
-	C.gss_display_status(&lminS, majStat, C.GSS_C_GSS_CODE, C.GSS_C_NO_OID, &msgCtx, &gmsg)
-	msgMajor := C.GoString((*C.char)(gmsg.value))
-	C.gss_release_buffer(&lminS, &gmsg)
-
-	msgCtx = 0
-	C.gss_display_status(&lminS, minStat, C.GSS_C_MECH_CODE, C.GSS_C_NO_OID, &msgCtx, &gmsg)
-	msgMinor := C.GoString((*C.char)(gmsg.value))
-	C.gss_release_buffer(&lminS, &gmsg)
-
-	return errors.Errorf("%s: %s: %s", msg, msgMajor, msgMinor)
 }
 
 func checkEntry(entry hba.Entry) error {

@@ -450,6 +450,8 @@ func TestLint(t *testing.T) {
 					":!ccl/backupccl/backup_cloud_test.go",
 					// KMS requires AWS credentials from environment variables.
 					":!ccl/backupccl/backup_test.go",
+					// GSS reads standard krb keytab env var.
+					":!ccl/gssapiccl/gssapi.go",
 					":!storage/cloud",
 					":!ccl/workloadccl/fixture_test.go",
 					":!internal/reporoot/reporoot.go",
@@ -1073,6 +1075,7 @@ func TestLint(t *testing.T) {
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!sql/types/types_jsonpb.go",
+			":!ccl/gssapiccl/gssapi.go", // false positive: *SPNEGOToken.Unmarhsal().
 		)
 		if err != nil {
 			t.Fatal(err)
