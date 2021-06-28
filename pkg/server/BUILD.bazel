@@ -140,6 +140,7 @@ go_library(
         "//pkg/sql/stats",
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/types",
+        "//pkg/sql/zcfgreconciler",
         "//pkg/sqlmigrations",
         "//pkg/storage",
         "//pkg/storage/cloud",

@@ -2443,6 +2443,7 @@ var charts = []sectionDescription{
 					"jobs.typedesc_schema_change.currently_running",
 					"jobs.stream_ingestion.currently_running",
 					"jobs.migration.currently_running",
+					"jobs.auto_zone_config_reconciliation.currently_running",
 				},
 			},
 			{
@@ -2528,6 +2529,17 @@ var charts = []sectionDescription{
 					"jobs.schema_change.resume_retry_error",
 				},
 				Rate: DescribeDerivative_NON_NEGATIVE_DERIVATIVE,
+			},
+			{
+				Title: "Auto Zone Config Reconciliation",
+				Metrics: []string{
+					"jobs.auto_zone_config_reconciliation.fail_or_cancel_completed",
+					"jobs.auto_zone_config_reconciliation.fail_or_cancel_failed",
+					"jobs.auto_zone_config_reconciliation.fail_or_cancel_retry_error",
+					"jobs.auto_zone_config_reconciliation.resume_completed",
+					"jobs.auto_zone_config_reconciliation.resume_failed",
+					"jobs.auto_zone_config_reconciliation.resume_retry_error",
+				},
 			},
 			{
 				Title: "Schema Change (New Implementation)",
