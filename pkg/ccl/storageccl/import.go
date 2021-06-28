@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
-// ImportBatchSize is a cluster setting that controls the maximum size of the
+// IngestBatchSize is a cluster setting that controls the maximum size of the
 // payload in an AddSSTable request.
-var ImportBatchSize = func() *settings.ByteSizeSetting {
+var IngestBatchSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
 		"kv.bulk_ingest.batch_size",
 		"the maximum size of the payload in an AddSSTable request",
@@ -43,12 +43,12 @@ func init() {
 	}
 }
 
-// MaxImportBatchSize determines the maximum size of the payload in an
-// AddSSTable request. It uses the ImportBatchSize setting directly unless the
+// MaxIngestBatchSize determines the maximum size of the payload in an
+// AddSSTable request. It uses the IngestBatchSize setting directly unless the
 // specified value would exceed the maximum Raft command size, in which case it
 // returns the maximum batch size that will fit within a Raft command.
-func MaxImportBatchSize(st *cluster.Settings) int64 {
-	desiredSize := ImportBatchSize.Get(&st.SV)
+func MaxIngestBatchSize(st *cluster.Settings) int64 {
+	desiredSize := IngestBatchSize.Get(&st.SV)
 	maxCommandSize := kvserver.MaxCommandSize.Get(&st.SV)
 	if desiredSize+commandMetadataEstimate > maxCommandSize {
 		return maxCommandSize - commandMetadataEstimate

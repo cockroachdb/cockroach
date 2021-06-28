@@ -177,7 +177,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	db := sip.FlowCtx.Cfg.DB
 	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
+		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return
