@@ -19,7 +19,10 @@ import {
 } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
-import { StatementDenialsClusterSettingsTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import {
+  StatementDenialsClusterSettingsTooltip,
+  TransactionRestartsToolTip,
+} from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
@@ -300,6 +303,57 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.sql.txn.abort.count"
           title="Aborts"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Transaction Restarts"
+      sources={nodeSources}
+      tooltip={
+        <TransactionRestartsToolTip tooltipSelection={tooltipSelection} />
+      }
+    >
+      <Axis label="restarts">
+        <Metric
+          name="cr.node.txn.restarts.writetooold"
+          title="Write Too Old"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.writetoooldmulti"
+          title="Write Too Old (multiple)"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.serializable"
+          title="Forwarded Timestamp (iso=serializable)"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.asyncwritefailure"
+          title="Async Consensus Failure"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.readwithinuncertainty"
+          title="Read Within Uncertainty Interval"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.txnaborted"
+          title="Aborted"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.txnpush"
+          title="Push Failure"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.unknown"
+          title="Unknown"
           nonNegativeRate
         />
       </Axis>

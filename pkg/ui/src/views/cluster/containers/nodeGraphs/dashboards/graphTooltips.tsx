@@ -119,3 +119,14 @@ export const StatementDenialsClusterSettingsTooltip: React.FC<{
     in the format feature.statement_type.enabled = FALSE.
   </div>
 );
+
+export const TransactionRestartsToolTip: React.FC<{
+  tooltipSelection?: string;
+}> = ({ tooltipSelection }) => (
+  <div>
+    The number of transactions restarted broken down by errors{" "}
+    {tooltipSelection}. Refer to the transaction retry error reference{" "}
+    <Anchor href={docsURL.transactionRetryErrorReference}>documentation</Anchor>{" "}
+    for more details.
+  </div>
+);
