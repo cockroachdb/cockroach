@@ -3,8 +3,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "lease",
     srcs = [
+        "count.go",
+        "descriptor_set.go",
+        "descriptor_state.go",
+        "descriptor_version_state.go",
         "lease.go",
         "lease_test_utils.go",
+        "name_cache.go",
+        "storage.go",
+        "testutils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/lease",
     visibility = ["//visibility:public"],
@@ -20,6 +27,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/nstree",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
