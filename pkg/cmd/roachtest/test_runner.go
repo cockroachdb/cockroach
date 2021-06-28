@@ -576,6 +576,9 @@ func allStacks() []byte {
 // testRunnerLogPath: The path to the test runner's log. It will be copied to
 //  	the test's artifacts dir if the test fails and we're running under
 //  	TeamCity.
+//
+// TODO(test-eng): the `bool` should go away, instead `t.Failed()` can be consulted
+// by the caller to determine whether the test passed.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *test,
@@ -799,9 +802,9 @@ func (r *testRunner) runTest(
 			const msg = "test timed out and afterwards failed to respond to cancelation"
 			t.l.PrintfCtx(ctx, msg)
 			r.collectClusterLogs(ctx, c, t.l)
-			// We return an error here because the test goroutine is still running, so
-			// we want to alert the caller of this unusual situation.
-			return false, errors.New(msg)
+			// We already marked the test as failing, so don't return an error here.
+			// Doing so would shut down the entire roachtest run.
+			return false, nil
 		}
 	}
 
