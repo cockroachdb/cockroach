@@ -262,10 +262,6 @@ func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
 			"end must be greater or equal to the start")
 	}
 
-	if start == end {
-		return LineInterpolatePoints(g, start, false)
-	}
-
 	lineT, err := g.AsGeomT()
 	if err != nil {
 		return g, err
@@ -273,7 +269,15 @@ func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
 	lineString, ok := lineT.(*geom.LineString)
 	if !ok {
 		return g, pgerror.Newf(pgcode.InvalidParameterValue,
-			"first parameter has to be of type LineString")
+			"geometry has to be of type LineString")
+	}
+	if lineString.Empty() {
+		return geo.MakeGeometryFromGeomT(
+			geom.NewLineString(geom.XY).SetSRID(lineString.SRID()),
+		)
+	}
+	if start == end {
+		return LineInterpolatePoints(g, start, false)
 	}
 
 	lsLength := lineString.Length()

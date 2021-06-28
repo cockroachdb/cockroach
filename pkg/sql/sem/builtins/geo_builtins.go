@@ -6694,6 +6694,10 @@ May return a Point or LineString in the case of degenerate inputs.`,
 				if err != nil {
 					return nil, err
 				}
+				// PostGIS returns nil for empty linestrings.
+				if g.Empty() && g.ShapeType2D() == geopb.ShapeType_LineString {
+					return tree.DNull, nil
+				}
 				geometry, err := geomfn.LineSubstring(g.Geometry, startFractionFloat, endFractionFloat)
 				if err != nil {
 					return nil, err
