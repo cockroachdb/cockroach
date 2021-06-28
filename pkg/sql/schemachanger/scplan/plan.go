@@ -58,27 +58,27 @@ type Params struct {
 // A Plan is a schema change plan, primarily containing ops to be executed that
 // are partitioned into stages.
 type Plan struct {
-	Params       Params
-	InitialNodes []*scpb.Node
-	Graph        *scgraph.Graph
-	Stages       []Stage
+	Params  Params
+	Initial scpb.State
+	Graph   *scgraph.Graph
+	Stages  []Stage
 }
 
 // A Stage is a sequence of ops to be executed "together" as part of a schema
 // change.
 //
-// Stages also contain their corresponding targets and states before and after
-// the execution of the ops in the stage, reflecting the fact that any set of
-// ops can be thought of as a transition from a set of target states to another.
+// Stages also contain the state before and after the execution of the ops in
+// the stage, reflecting the fact that any set of ops can be thought of as a
+// transition from one state to another.
 type Stage struct {
-	Before, After []*scpb.Node
+	Before, After scpb.State
 	Ops           scop.Ops
 	Revertible    bool
 }
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
-// the initial states for a set of targets.
-func MakePlan(initialStates []*scpb.Node, params Params) (_ Plan, err error) {
+// the initial state for a set of targets.
+func MakePlan(initial scpb.State, params Params) (_ Plan, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			rAsErr, ok := r.(error)
@@ -89,36 +89,36 @@ func MakePlan(initialStates []*scpb.Node, params Params) (_ Plan, err error) {
 		}
 	}()
 
-	g, err := scgraph.New(initialStates)
+	g, err := scgraph.New(initial)
 	if err != nil {
 		return Plan{}, err
 	}
 	// TODO(ajwerner): Generate the stages for all of the phases as it will make
 	// debugging easier.
-	for _, ts := range initialStates {
-		p[reflect.TypeOf(ts.Element())].ops(g, ts.Target, ts.State, params)
+	for _, ts := range initial {
+		p[reflect.TypeOf(ts.Element())].ops(g, ts.Target, ts.Status, params)
 	}
 	if err := g.ForEachNode(func(n *scpb.Node) error {
 		d, ok := p[reflect.TypeOf(n.Element())]
 		if !ok {
 			return errors.Errorf("not implemented for %T", n.Target)
 		}
-		d.deps(g, n.Target, n.State)
+		d.deps(g, n.Target, n.Status)
 		return nil
 	}); err != nil {
 		return Plan{}, err
 	}
-	stages := buildStages(initialStates, g, params)
+	stages := buildStages(initial, g, params)
 	return Plan{
-		Params:       params,
-		InitialNodes: initialStates,
-		Graph:        g,
-		Stages:       stages,
+		Params:  params,
+		Initial: initial,
+		Graph:   g,
+		Stages:  stages,
 	}, nil
 }
 
-func buildStages(init []*scpb.Node, g *scgraph.Graph, params Params) []Stage {
-	// TODO(ajwerner): deal with the case where the target state was
+func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
+	// TODO(ajwerner): deal with the case where the target status was
 	// fulfilled by something that preceded the initial state.
 	cur := init
 	fulfilled := map[*scpb.Node]struct{}{}

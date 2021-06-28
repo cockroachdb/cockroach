@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -61,9 +62,9 @@ type Dependencies struct {
 type buildContext struct {
 	Dependencies
 
-	// outputNodes contains the internal state when building targets for an individual
+	// output contains the internal state when building targets for an individual
 	// statement.
-	outputNodes []*scpb.Node
+	output scpb.State
 }
 
 type notImplementedError struct {
@@ -110,28 +111,31 @@ func (e *ConcurrentSchemaChangeError) DescriptorID() descpb.ID {
 	return e.descID
 }
 
-// Build builds targets and transforms the provided schema change nodes
-// accordingly, given a statement.
+// Build constructs a new set state from an initial state and a statement.
 func Build(
-	ctx context.Context, n tree.Statement, dependencies Dependencies, initialNodes []*scpb.Node,
-) (outputNodes []*scpb.Node, err error) {
+	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
+) (built scpb.State, err error) {
 	buildContext := &buildContext{
 		Dependencies: dependencies,
-		outputNodes:  initialNodes,
+		output:       cloneState(initial),
 	}
 	return buildContext.build(ctx, n)
 }
 
+func cloneState(state scpb.State) scpb.State {
+	clone := make(scpb.State, len(state))
+	for i, n := range state {
+		clone[i] = &scpb.Node{
+			Target: protoutil.Clone(n.Target).(*scpb.Target),
+			Status: n.Status,
+		}
+	}
+	return clone
+}
+
 // build builds targets and transforms the provided schema change nodes
 // accordingly, given a statement.
-//
-// TODO(ajwerner): Clarify whether the nodes will be mutated. Potentially just
-// clone them defensively here. Similarly, close the statement as some schema
-// changes mutate the AST. It's best if this method had a clear contract that
-// it did not mutate its arguments.
-func (b *buildContext) build(
-	ctx context.Context, n tree.Statement,
-) (outputNodes []*scpb.Node, err error) {
+func (b *buildContext) build(ctx context.Context, n tree.Statement) (output scpb.State, err error) {
 	defer func() {
 		if recErr := recover(); recErr != nil {
 			if errObj, ok := recErr.(error); ok {
@@ -159,7 +163,7 @@ func (b *buildContext) build(
 	default:
 		return nil, &notImplementedError{n: n}
 	}
-	return b.outputNodes, nil
+	return b.output, nil
 }
 
 // checkIfNodeExists checks if an existing node is already there,
@@ -169,7 +173,7 @@ func (b *buildContext) checkIfNodeExists(
 ) (exists bool, index int) {
 	// Check if any existing node matches the new node we are
 	// trying to add.
-	for idx, node := range b.outputNodes {
+	for idx, node := range b.output {
 		if scpb.EqualElements(node.Element(), elem) {
 			return true, idx
 		}
@@ -178,12 +182,12 @@ func (b *buildContext) checkIfNodeExists(
 }
 
 func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
-	var s scpb.State
+	var s scpb.Status
 	switch dir {
 	case scpb.Target_ADD:
-		s = scpb.State_ABSENT
+		s = scpb.Status_ABSENT
 	case scpb.Target_DROP:
-		s = scpb.State_PUBLIC
+		s = scpb.Status_PUBLIC
 	default:
 		panic(errors.Errorf("unknown direction %s", dir))
 	}
@@ -191,9 +195,9 @@ func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 	if exists, _ := b.checkIfNodeExists(dir, elem); exists {
 		panic(errors.Errorf("attempted to add duplicate element %s", elem))
 	}
-	b.outputNodes = append(b.outputNodes, &scpb.Node{
+	b.output = append(b.output, &scpb.Node{
 		Target: scpb.NewTarget(dir, elem),
-		State:  s,
+		Status: s,
 	})
 }
 

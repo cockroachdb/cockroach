@@ -51,8 +51,8 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 	dg := dot.NewGraph()
 	stagesSubgraph := dg.Subgraph("stages", dot.ClusterOption{})
 	targetsSubgraph := stagesSubgraph.Subgraph("targets", dot.ClusterOption{})
-	targetNodes := make(map[*scpb.Target]dot.Node, len(p.InitialNodes))
-	for idx, n := range p.InitialNodes {
+	targetNodes := make(map[*scpb.Target]dot.Node, len(p.Initial))
+	for idx, n := range p.Initial {
 		t := n.Target
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
 		tn.Attr("label", htmlLabel(t.Element()))
@@ -61,12 +61,12 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 		targetNodes[t] = tn
 	}
 
-	// Want to draw an edge to the initial target states with some dots
+	// Want to draw an edge to the initial target statuses with some dots
 	// or something.
-	curNodes := make([]dot.Node, len(p.InitialNodes))
-	cur := p.InitialNodes
-	for i, n := range p.InitialNodes {
-		label := targetStateID(i, n.State)
+	curNodes := make([]dot.Node, len(p.Initial))
+	cur := p.Initial
+	for i, n := range p.Initial {
+		label := targetStatusID(i, n.Status)
 		tsn := stagesSubgraph.Node(fmt.Sprintf("initial %d", i))
 		tsn.Attr("label", label)
 		tn := targetNodes[n.Target]
@@ -82,7 +82,7 @@ func drawStages(p *scplan.Plan) (*dot.Graph, error) {
 		nextNodes := make([]dot.Node, len(curNodes))
 		for i, st := range next {
 			cst := sg.Node(fmt.Sprintf("stage %d: %d", id, i))
-			cst.Attr("label", targetStateID(i, st.State))
+			cst.Attr("label", targetStatusID(i, st.Status))
 			if st != cur[i] {
 				ge := curNodes[i].Edge(cst)
 				oe, ok := p.Graph.GetOpEdgeFrom(cur[i])
@@ -107,9 +107,9 @@ func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
 
 	depsSubgraph := dg.Subgraph("deps", dot.ClusterOption{})
 	targetsSubgraph := depsSubgraph.Subgraph("targets", dot.ClusterOption{})
-	targetNodes := make(map[*scpb.Target]dot.Node, len(p.InitialNodes))
+	targetNodes := make(map[*scpb.Target]dot.Node, len(p.Initial))
 	targetIdxMap := make(map[*scpb.Target]int)
-	for idx, n := range p.InitialNodes {
+	for idx, n := range p.Initial {
 		t := n.Target
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
 		tn.Attr("label", htmlLabel(t.Element()))
@@ -121,11 +121,11 @@ func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
 
 	nodeNodes := make(map[*scpb.Node]dot.Node)
 	_ = p.Graph.ForEachNode(func(n *scpb.Node) error {
-		nodeNodes[n] = depsSubgraph.Node(targetStateID(targetIdxMap[n.Target], n.State))
+		nodeNodes[n] = depsSubgraph.Node(targetStatusID(targetIdxMap[n.Target], n.Status))
 		return nil
 	})
 
-	for _, n := range p.InitialNodes {
+	for _, n := range p.Initial {
 		nn := nodeNodes[n]
 		tn := targetNodes[n.Target]
 		e := tn.Edge(nn)
@@ -149,8 +149,8 @@ func drawDeps(p *scplan.Plan) (*dot.Graph, error) {
 	return dg, nil
 }
 
-func targetStateID(targetID int, state scpb.State) string {
-	return fmt.Sprintf("%d:%s", targetID, state)
+func targetStatusID(targetID int, status scpb.Status) string {
+	return fmt.Sprintf("%d:%s", targetID, status)
 }
 
 func htmlLabel(o interface{}) dot.HTML {

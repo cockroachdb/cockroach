@@ -25,17 +25,17 @@ type Attribute int
 //go:generate stringer -type=Attribute  -trimprefix=Attribute
 const (
 
-	// AttributeType type id of the element
+	// AttributeType type id of the element.
 	AttributeType Attribute = iota
-	// AttributeDescID main descriptor ID
+	// AttributeDescID is the descriptor ID to which this element belongs.
 	AttributeDescID
-	// AttributeDepID dependent descriptor ID
-	AttributeDepID
-	//AttributeColumnID column ID
+	// AttributeReferencedDescID is the descriptor ID to which this element refers.
+	AttributeReferencedDescID
+	//AttributeColumnID is the column ID to which this element corresponds.
 	AttributeColumnID
-	// AttributeElementName name of the element
+	// AttributeElementName is the name of the element.
 	AttributeElementName
-	// AttributeIndexID index ID
+	// AttributeIndexID is the index ID to which this element corresponds.
 	AttributeIndexID
 
 	numAttributes int = iota
@@ -44,7 +44,7 @@ const (
 var attributeOrder = [numAttributes]Attribute{
 	0: AttributeType,
 	1: AttributeDescID,
-	2: AttributeDepID,
+	2: AttributeReferencedDescID,
 	3: AttributeColumnID,
 	4: AttributeElementName,
 	5: AttributeIndexID,

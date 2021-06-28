@@ -219,7 +219,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts []*scpb.Node
+		var ts scpb.State
 		var targetSlice []*scpb.Target
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -277,18 +277,18 @@ func TestSchemaChanger(t *testing.T) {
 				}),
 			}
 
-			targetStates := []*scpb.Node{
+			nodes := scpb.State{
 				{
 					Target: targetSlice[0],
-					State:  scpb.State_ABSENT,
+					Status: scpb.Status_ABSENT,
 				},
 				{
 					Target: targetSlice[1],
-					State:  scpb.State_ABSENT,
+					Status: scpb.Status_ABSENT,
 				},
 				{
 					Target: targetSlice[2],
-					State:  scpb.State_PUBLIC,
+					Status: scpb.Status_PUBLIC,
 				},
 			}
 
@@ -296,7 +296,7 @@ func TestSchemaChanger(t *testing.T) {
 				scplan.StatementPhase,
 				scplan.PreCommitPhase,
 			} {
-				sc, err := scplan.MakePlan(targetStates, scplan.Params{
+				sc, err := scplan.MakePlan(nodes, scplan.Params{
 					ExecutionPhase: phase,
 				})
 				require.NoError(t, err)
@@ -318,7 +318,7 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		var after []*scpb.Node
+		var after scpb.State
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
@@ -333,18 +333,18 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		require.Equal(t, []*scpb.Node{
+		require.Equal(t, scpb.State{
 			{
 				Target: targetSlice[0],
-				State:  scpb.State_PUBLIC,
+				Status: scpb.Status_PUBLIC,
 			},
 			{
 				Target: targetSlice[1],
-				State:  scpb.State_PUBLIC,
+				Status: scpb.Status_PUBLIC,
 			},
 			{
 				Target: targetSlice[2],
-				State:  scpb.State_ABSENT,
+				Status: scpb.Status_ABSENT,
 			},
 		}, after)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
@@ -355,7 +355,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts []*scpb.Node
+		var ts scpb.State
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -385,7 +385,7 @@ func TestSchemaChanger(t *testing.T) {
 			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 			require.NoError(t, err)
 			require.Len(t, parsed, 1)
-			outputNodes, err := scbuild.Build(ctx, parsed[0].AST.(*tree.AlterTable), buildDeps, nil)
+			outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
 			require.NoError(t, err)
 
 			for _, phase := range []scplan.Phase{

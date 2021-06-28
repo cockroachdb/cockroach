@@ -190,6 +190,7 @@ func (t *TraceCollector) getTraceSpanRecordingsForNode(
 		}
 		res = append(res, recording.RecordedSpans)
 	}
+	resp.Recordings = nil
 
 	// This sort ensures that if a node has multiple trace.Recordings then they
 	// are ordered relative to each other by StartTime.

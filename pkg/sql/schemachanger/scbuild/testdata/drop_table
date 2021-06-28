@@ -77,7 +77,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   details:
     columnId: 6
     tableId: 57
-- DROP InboundForeignKey:{DescID: 52, DepID: 57, ElementName: "fk_customers"}
+- DROP InboundForeignKey:{DescID: 52, ReferencedDescID: 57, ElementName: "fk_customers"}
   state: PUBLIC
   details:
     name: fk_customers
@@ -87,7 +87,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 4
     referenceId: 57
-- DROP InboundForeignKey:{DescID: 53, DepID: 57, ElementName: "fk_orders"}
+- DROP InboundForeignKey:{DescID: 53, ReferencedDescID: 57, ElementName: "fk_orders"}
   state: PUBLIC
   details:
     name: fk_orders
@@ -97,7 +97,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 4
     referenceId: 57
-- DROP OutboundForeignKey:{DescID: 57, DepID: 52, ElementName: "fk_customers"}
+- DROP OutboundForeignKey:{DescID: 57, ReferencedDescID: 52, ElementName: "fk_customers"}
   state: PUBLIC
   details:
     name: fk_customers
@@ -107,7 +107,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 1
     referenceId: 52
-- DROP OutboundForeignKey:{DescID: 57, DepID: 53, ElementName: "fk_orders"}
+- DROP OutboundForeignKey:{DescID: 57, ReferencedDescID: 53, ElementName: "fk_orders"}
   state: PUBLIC
   details:
     name: fk_orders
@@ -117,7 +117,7 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 2
     referenceId: 53
-- DROP RelationDependedOnBy:{DescID: 54, DepID: 57}
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 57}
   state: PUBLIC
   details:
     dependedOn: 57
@@ -126,7 +126,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   state: PUBLIC
   details:
     sequenceId: 58
-- DROP SequenceOwnedBy:{DescID: 58, DepID: 57}
+- DROP SequenceOwnedBy:{DescID: 58, ReferencedDescID: 57}
   state: PUBLIC
   details:
     ownerTableId: 57
@@ -135,12 +135,12 @@ DROP TABLE defaultdb.shipments CASCADE;
   state: PUBLIC
   details:
     tableId: 57
-- DROP TypeReference:{DescID: 57, DepID: 55}
+- DROP TypeReference:{DescID: 57, ReferencedDescID: 55}
   state: PUBLIC
   details:
     descriptorId: 57
     typeId: 55
-- DROP TypeReference:{DescID: 57, DepID: 56}
+- DROP TypeReference:{DescID: 57, ReferencedDescID: 56}
   state: PUBLIC
   details:
     descriptorId: 57

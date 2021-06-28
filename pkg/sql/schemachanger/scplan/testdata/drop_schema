@@ -64,13 +64,13 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Table:{DescID: 54}, PUBLIC]
   to:   [DefaultExpression:{DescID: 54, ColumnID: 3}, ABSENT]
 - from: [Table:{DescID: 54}, PUBLIC]
-  to:   [RelationDependedOnBy:{DescID: 53, DepID: 54}, ABSENT]
+  to:   [RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}, ABSENT]
 - from: [Table:{DescID: 54}, PUBLIC]
   to:   [View:{DescID: 55}, ABSENT]
 - from: [Type:{DescID: 59}, PUBLIC]
-  to:   [TypeReference:{DescID: 61, DepID: 59}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 59}, DELETE_ONLY]
 - from: [Type:{DescID: 60}, PUBLIC]
-  to:   [TypeReference:{DescID: 61, DepID: 60}, DELETE_ONLY]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 60}, DELETE_ONLY]
 - from: [View:{DescID: 55}, ABSENT]
   to:   [View:{DescID: 56}, ABSENT]
 - from: [View:{DescID: 55}, ABSENT]
@@ -82,9 +82,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 58}, ABSENT]
   to:   [View:{DescID: 61}, ABSENT]
 - from: [View:{DescID: 61}, ABSENT]
-  to:   [TypeReference:{DescID: 61, DepID: 59}, ABSENT]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 59}, ABSENT]
 - from: [View:{DescID: 61}, ABSENT]
-  to:   [TypeReference:{DescID: 61, DepID: 60}, ABSENT]
+  to:   [TypeReference:{DescID: 61, ReferencedDescID: 60}, ABSENT]
 
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 	jaegerjson "github.com/jaegertracing/jaeger/model/json"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -213,6 +214,24 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 		ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
 	}
 
+	// If the span was verbose then the Structured events would have been
+	// stringified and included in the Logs above. If the span was not verbose
+	// we should add the Structured events now.
+	if !isVerbose(sp) {
+		sp.Structured(func(sr *types.Any, t time.Time) {
+			lr := opentracing.LogRecord{
+				Timestamp: t,
+			}
+			str, err := MessageToJSONString(sr, true /* emitDefaults */)
+			if err != nil {
+				return
+			}
+			lr.Fields = append(lr.Fields, otlog.String("structured", str))
+			lastLog := ownLogs[len(ownLogs)-1]
+			ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
+		})
+	}
+
 	childSpans := make([][]traceLogData, 0)
 	for _, osp := range r {
 		if osp.ParentSpanID != sp.SpanID {
@@ -261,7 +280,7 @@ func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogDat
 // The format is described here: https://github.com/jaegertracing/jaeger-ui/issues/381#issuecomment-494150826
 //
 // The statement is passed in so it can be included in the trace.
-func (r Recording) ToJaegerJSON(stmt string) (string, error) {
+func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	if len(r) == 0 {
 		return "", nil
 	}
@@ -294,6 +313,10 @@ func (r Recording) ToJaegerJSON(stmt string) (string, error) {
 				node = fmt.Sprintf("node %s", v)
 				break
 			}
+		}
+		// If we have passed in an explicit nodeStr then use that as a processID.
+		if nodeStr != "" {
+			node = nodeStr
 		}
 		pid := jaegerjson.ProcessID(node)
 		if _, ok := processes[pid]; !ok {
@@ -345,6 +368,26 @@ func (r Recording) ToJaegerJSON(stmt string) (string, error) {
 			}
 			s.Logs = append(s.Logs, jl)
 		}
+
+		// If the span was verbose then the Structured events would have been
+		// stringified and included in the Logs above. If the span was not verbose
+		// we should add the Structured events now.
+		if !isVerbose(sp) {
+			sp.Structured(func(sr *types.Any, t time.Time) {
+				jl := jaegerjson.Log{Timestamp: uint64(t.UnixNano() / 1000)}
+				jsonStr, err := MessageToJSONString(sr, true /* emitDefaults */)
+				if err != nil {
+					return
+				}
+				jl.Fields = append(jl.Fields, jaegerjson.KeyValue{
+					Key:   "structured",
+					Value: jsonStr,
+					Type:  "STRING",
+				})
+				s.Logs = append(s.Logs, jl)
+			})
+		}
+
 		t.Spans = append(t.Spans, s)
 	}
 
@@ -353,11 +396,7 @@ func (r Recording) ToJaegerJSON(stmt string) (string, error) {
 		// Add a comment that will show-up at the top of the JSON file, is someone opens the file.
 		// NOTE: This comment is scarce on newlines because they appear as \n in the
 		// generated file doing more harm than good.
-		Comment: fmt.Sprintf(`This is a trace for SQL statement: %s
-This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select JSON File.
-Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
-The UI can then be accessed at http://localhost:16686/search`,
-			stmt),
+		Comment: comment,
 	}
 	json, err := json.MarshalIndent(data, "" /* prefix */, "\t" /* indent */)
 	if err != nil {
@@ -372,6 +411,15 @@ type TraceCollection struct {
 	// Comment is a dummy field we use to put instructions on how to load the trace.
 	Comment string             `json:"_comment"`
 	Data    []jaegerjson.Trace `json:"data"`
+}
+
+// isVerbose returns true if the RecordedSpan was started is a verbose mode.
+func isVerbose(s tracingpb.RecordedSpan) bool {
+	if s.Baggage == nil {
+		return false
+	}
+	_, isVerbose := s.Baggage[verboseTracingBaggageKey]
+	return isVerbose
 }
 
 // TestingCheckRecordedSpans checks whether a recording looks like an expected
