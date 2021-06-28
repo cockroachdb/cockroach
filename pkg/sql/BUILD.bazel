@@ -301,6 +301,8 @@ go_library(
         "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob/gcjobnotifier",
+        "//pkg/sql/indexusagestats",
+        "//pkg/sql/indexusagestats/indexstatslocal",
         "//pkg/sql/inverted",
         "//pkg/sql/lex",
         "//pkg/sql/mutations",

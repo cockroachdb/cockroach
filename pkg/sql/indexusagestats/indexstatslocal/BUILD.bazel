@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "indexstatslocal",
+    srcs = [
+        "idx_usage_provider.go",
+        "test_utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/indexusagestats/indexstatslocal",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/indexusagestats",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "indexstatslocal_test",
+    srcs = ["idx_usage_provider_test.go"],
+    deps = [
+        ":indexstatslocal",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/indexusagestats",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

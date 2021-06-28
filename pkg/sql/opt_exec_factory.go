@@ -13,7 +13,6 @@ package sql
 import (
 	"bytes"
 	"compress/zlib"
-	"context"
 	"encoding/base64"
 	"fmt"
 	"net/url"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -96,7 +96,8 @@ func (ef *execFactory) ConstructScan(
 	// users might be able to access a view that uses a higher privilege table.
 	ef.planner.skipSelectPrivilegeChecks = true
 	defer func() { ef.planner.skipSelectPrivilegeChecks = false }()
-	if err := scan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := scan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -129,6 +130,17 @@ func (ef *execFactory) ConstructScan(
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
 	scan.localityOptimized = params.LocalityOptimized
+	if !ef.isExplain {
+		indexUsageMd := indexusagestats.MetaData{
+			Key: roachpb.IndexUsageKey{
+				TableID: roachpb.TableID(tabDesc.GetID()),
+				IndexID: roachpb.IndexID(idx.GetID()),
+			},
+		}
+		indexUsageMd.UsageType = indexusagestats.ReadOp
+		ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(ctx, indexUsageMd)
+	}
+
 	return scan, nil
 }
 
@@ -607,7 +619,8 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -654,7 +667,8 @@ func (ef *execFactory) ConstructLookupJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -662,6 +676,17 @@ func (ef *execFactory) ConstructLookupJoin(
 	if locking != nil {
 		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	}
+
+	if !ef.isExplain {
+		indexUsageMd := indexusagestats.MetaData{
+			Key: roachpb.IndexUsageKey{
+				TableID: roachpb.TableID(tabDesc.GetID()),
+				IndexID: roachpb.IndexID(idx.GetID()),
+			},
+			UsageType: indexusagestats.ReadOp,
+		}
+		ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(ctx, indexUsageMd)
 	}
 
 	n := &lookupJoinNode{
@@ -728,7 +753,8 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	// Set up a scanNode that we won't actually use, just to get the needed
 	// column analysis.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	if err := tableScan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -779,10 +805,23 @@ func (ef *execFactory) ConstructInvertedJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
+
+	if !ef.isExplain {
+		indexUsageMd := indexusagestats.MetaData{
+			Key: roachpb.IndexUsageKey{
+				TableID: roachpb.TableID(tabDesc.GetID()),
+				IndexID: roachpb.IndexID(idx.GetID()),
+			},
+			UsageType: indexusagestats.ReadOp,
+		}
+
+		ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(ctx, indexUsageMd)
+	}
 
 	n := &invertedJoinNode{
 		input:                     input.(planNode),
@@ -835,8 +874,21 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	scan := ef.planner.Scan()
-	if err := scan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
+	ctx := ef.planner.extendedEvalCtx.Ctx()
+	if err := scan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
 		return nil, err
+	}
+
+	if !ef.isExplain {
+		indexUsageMd := indexusagestats.MetaData{
+			Key: roachpb.IndexUsageKey{
+				TableID: roachpb.TableID(tableDesc.GetID()),
+				IndexID: roachpb.IndexID(index.GetID()),
+			},
+			UsageType: indexusagestats.ReadOp,
+		}
+
+		ef.planner.extendedEvalCtx.indexUsageStatsWriter.Record(ctx, indexUsageMd)
 	}
 
 	scan.index = index

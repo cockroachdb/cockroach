@@ -1,0 +1,210 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package indexstatslocal_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats"
+	"github.com/cockroachdb/cockroach/pkg/sql/indexusagestats/indexstatslocal"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
+)
+
+func checkTimeHelpr(t *testing.T, expected, actual time.Time, delta time.Duration) {
+	diff := actual.Sub(expected)
+	require.Less(t, diff, delta)
+}
+
+func checkStatsHelper(t *testing.T, expected, actual roachpb.IndexUsageStatistics) {
+	require.Equal(t, expected.TotalReadCount, actual.TotalReadCount)
+	require.Equal(t, expected.TotalWriteCount, actual.TotalWriteCount)
+
+	require.Equal(t, expected.TotalRowsRead, actual.TotalRowsRead)
+	require.Equal(t, expected.TotalRowsWrite, actual.TotalRowsWrite)
+
+	checkTimeHelpr(t, expected.LastRead, actual.LastRead, time.Second)
+	checkTimeHelpr(t, expected.LastWrite, actual.LastWrite, time.Second)
+}
+
+func TestIndexUsageStatisticsSubsystem(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+
+	indices := []roachpb.IndexUsageKey{
+		{
+			TableID: 1,
+			IndexID: 1,
+		},
+		{
+			TableID: 2,
+			IndexID: 1,
+		},
+		{
+			TableID: 2,
+			IndexID: 2,
+		},
+	}
+
+	testInputs := []indexusagestats.MetaData{
+		{
+			Key:       indices[0],
+			UsageType: indexusagestats.ReadOp,
+		},
+		{
+			Key:       indices[0],
+			UsageType: indexusagestats.ReadOp,
+		},
+		{
+			Key:       indices[0],
+			UsageType: indexusagestats.WriteOp,
+		},
+		{
+			Key:       indices[1],
+			UsageType: indexusagestats.ReadOp,
+		},
+		{
+			Key:       indices[1],
+			UsageType: indexusagestats.ReadOp,
+		},
+		{
+			Key:       indices[2],
+			UsageType: indexusagestats.WriteOp,
+		},
+		{
+			Key:       indices[2],
+			UsageType: indexusagestats.WriteOp,
+		},
+	}
+
+	expectedIndexUsage := map[roachpb.IndexUsageKey]roachpb.IndexUsageStatistics{
+		indices[0]: {
+			TotalReadCount:  2,
+			LastRead:        timeutil.Now(),
+			TotalWriteCount: 1,
+			LastWrite:       timeutil.Now(),
+		},
+		indices[1]: {
+			TotalReadCount: 2,
+			LastRead:       timeutil.Now(),
+		},
+		indices[2]: {
+			TotalWriteCount: 2,
+			LastWrite:       timeutil.Now(),
+		},
+	}
+
+	statsProcessedSignal := make(chan struct{})
+	onStatsIngested := func(_ indexusagestats.MetaData) {
+		statsProcessedSignal <- struct{}{}
+	}
+	waitForStatsIngested := func() {
+		statsProcessed := 0
+		var timer timeutil.Timer
+		timer.Reset(time.Second)
+		for statsProcessed < len(testInputs) {
+			select {
+			case <-statsProcessedSignal:
+				statsProcessed++
+			case <-timer.C:
+				timer.Read = true
+				t.Fatalf("expected stats ingestion to complete, but it didn't.")
+			}
+		}
+	}
+
+	subsystem := indexstatslocal.New(&indexstatslocal.Config{
+		ChannelSize: 10,
+		Setting:     cluster.MakeTestingClusterSettings(),
+		Knobs: &indexstatslocal.TestingKnobs{
+			OnIndexUsageStatsProcessedCallback: onStatsIngested,
+		},
+	})
+
+	subsystem.Start(ctx, stopper)
+	defer stopper.Stop(ctx)
+
+	var statsWriter indexusagestats.Writer = subsystem
+
+	for _, input := range testInputs {
+		statsWriter.Record(ctx, input)
+	}
+
+	waitForStatsIngested()
+
+	t.Run("point lookup", func(t *testing.T) {
+		actualEntryCount := 0
+		for _, index := range indices {
+			stats := subsystem.GetIndexUsageStats(index)
+			require.NotNil(t, stats)
+
+			actualEntryCount++
+
+			checkStatsHelper(t, expectedIndexUsage[index], stats)
+		}
+		require.Equal(t, len(indices), actualEntryCount)
+	})
+
+	t.Run("iterator", func(t *testing.T) {
+		actualEntryCount := 0
+		err := subsystem.IterateIndexUsageStats(indexusagestats.IteratorOptions{}, func(key *roachpb.IndexUsageKey, value *roachpb.IndexUsageStatistics) error {
+			actualEntryCount++
+
+			checkStatsHelper(t, expectedIndexUsage[*key], *value)
+			return nil
+		})
+		require.Equal(t, len(indices), actualEntryCount)
+		require.NoError(t, err)
+	})
+
+	t.Run("iterator with options", func(t *testing.T) {
+		actualEntryCount := uint64(0)
+		maxEntry := uint64(1)
+		err := subsystem.IterateIndexUsageStats(indexusagestats.IteratorOptions{
+			SortedTableID: true,
+			SortedIndexID: true,
+			Max:           &maxEntry,
+		}, func(key *roachpb.IndexUsageKey, value *roachpb.IndexUsageStatistics) error {
+			actualEntryCount++
+			require.Equal(t, indices[0], *key)
+
+			checkStatsHelper(t, expectedIndexUsage[*key], *value)
+
+			return nil
+		})
+		require.Equal(t, maxEntry, actualEntryCount)
+		require.NoError(t, err)
+	})
+
+	t.Run("reset", func(t *testing.T) {
+		minResetTimestamp := timeutil.Now()
+		subsystem.Clear()
+		actualEntryCount := 0
+		err := subsystem.IterateIndexUsageStats(indexusagestats.IteratorOptions{}, func(key *roachpb.IndexUsageKey, value *roachpb.IndexUsageStatistics) error {
+			actualEntryCount++
+			return nil
+		})
+		require.Equal(t, 0 /* expected */, actualEntryCount)
+		require.NoError(t, err)
+
+		require.True(t, minResetTimestamp.Before(subsystem.GetLastReset()), "expected subsystem to reset at least after %v, but found %v", minResetTimestamp, subsystem.GetLastReset())
+	})
+}
