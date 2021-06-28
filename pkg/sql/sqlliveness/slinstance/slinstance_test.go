@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancemanager"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -44,11 +45,22 @@ func TestSQLInstance(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
+	instanceMgr := instancemanager.NewSQLInstanceManager(settings, stopper)
+	sqlInstance := slinstance.NewSQLInstance(
+		stopper,
+		clock,
+		fakeStorage,
+		settings,
+		instanceMgr.ShutdownInstance)
 	sqlInstance.Start(ctx)
 
 	// Add one more instance to introduce concurrent access to storage.
-	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
+	dummy := slinstance.NewSQLInstance(
+		stopper,
+		clock,
+		fakeStorage,
+		settings,
+		instanceMgr.ShutdownInstance)
 	dummy.Start(ctx)
 
 	s1, err := sqlInstance.Session(ctx)

@@ -32,15 +32,16 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
-	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
-	if err != nil {
-		return nil, "", "", err
-	}
-	s, err := newSQLServer(ctx, args)
+	args, err := makeSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
 	}
 
+	// Bind instance id release method within sqlliveness provider
+	s, err := newSQLServer(ctx, args)
+	if err != nil {
+		return nil, "", "", err
+	}
 	s.execCfg.SQLStatusServer = newTenantStatusServer(
 		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
 		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, s,
@@ -110,7 +111,7 @@ func StartTenant(
 		httpLAddr, // http addr
 		pgLAddr,   // sql addr
 	)
-
+	args.sqlInstanceManager.SetInstanceAddr(s.SQLInstanceID(), httpLAddr)
 	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
 		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
@@ -147,7 +148,7 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(args.nodeIDContainer.SQLInstanceID())})
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(s.SQLInstanceID())})
 
 	if err := s.preStart(ctx,
 		args.stopper,

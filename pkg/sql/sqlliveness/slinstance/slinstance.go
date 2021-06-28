@@ -47,6 +47,9 @@ var (
 	)
 )
 
+// ShutdownInstance shuts down the SQL server for an expired session
+type ShutdownInstance func(ctx context.Context, id sqlliveness.SessionID)
+
 // Writer provides interactions with the storage of session records.
 type Writer interface {
 	// Insert stores the input Session.
@@ -72,6 +75,8 @@ func (s *session) Expiration() hlc.Timestamp { return s.exp }
 // liveness sessions in table system.sqlliveness and relying on a heart beat
 // loop to extend the existing sessions' expirations or creating a new session
 // to replace a session that has expired and deleted from the table.
+// TODO(rima): Rename Instance to avoid confusion with sqlinstance
+// package
 type Instance struct {
 	clock    *hlc.Clock
 	settings *cluster.Settings
@@ -79,6 +84,7 @@ type Instance struct {
 	storage  Writer
 	ttl      func() time.Duration
 	hb       func() time.Duration
+	si       ShutdownInstance
 	mu       struct {
 		started bool
 		syncutil.Mutex
@@ -109,6 +115,7 @@ func (l *Instance) clearSession() {
 	defer l.mu.Unlock()
 	l.mu.s = nil
 	l.mu.blockCh = make(chan struct{})
+	// Call shutdown method
 }
 
 // createSession tries until it can create a new session and returns an error
@@ -202,6 +209,12 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 				t.Reset(l.hb())
 				continue
 			}
+			// Check if session has expired
+			if expiration := s.Expiration(); expiration.Less(l.clock.Now()) {
+				// Shutdown associated SQL instance and terminate session
+				l.si(ctx, s.ID())
+			}
+			// Attempt to extend session expiry
 			found, err := l.extendSession(ctx, s)
 			if err != nil {
 				l.clearSession()
@@ -224,7 +237,11 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 // NewSQLInstance returns a new Instance struct and starts its heartbeating
 // loop.
 func NewSQLInstance(
-	stopper *stop.Stopper, clock *hlc.Clock, storage Writer, settings *cluster.Settings,
+	stopper *stop.Stopper,
+	clock *hlc.Clock,
+	storage Writer,
+	settings *cluster.Settings,
+	si ShutdownInstance,
 ) *Instance {
 	l := &Instance{
 		clock:    clock,
@@ -237,6 +254,7 @@ func NewSQLInstance(
 		hb: func() time.Duration {
 			return DefaultHeartBeat.Get(&settings.SV)
 		},
+		si: si,
 	}
 	l.mu.blockCh = make(chan struct{})
 	return l

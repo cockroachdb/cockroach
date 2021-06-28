@@ -330,6 +330,7 @@ type connKey struct {
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
 	TenantID   roachpb.TenantID
+	InstanceID base.SQLInstanceID
 	AmbientCtx log.AmbientContext
 	Config     *base.Config
 	Clock      *hlc.Clock
@@ -1016,6 +1017,13 @@ func (ctx *Context) GRPCDialNode(
 		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
 	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
+}
+
+func (ctx *Context) GRPCDialPod(
+	target string, remoteInstanceID base.SQLInstanceID, class ConnectionClass,
+) *Connection {
+	// TODO(davidh): TBD from server team
+	return nil
 }
 
 func (ctx *Context) grpcDialNodeInternal(

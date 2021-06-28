@@ -30,6 +30,7 @@ go_test(
     deps = [
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
+        "//pkg/sql/sqlinstance/instancemanager",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/hlc",

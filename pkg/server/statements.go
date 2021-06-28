@@ -43,6 +43,58 @@ func (s *statusServer) Statements(
 		NodeID: "local",
 	}
 
+	// TODO(davidh): something more "mature" needed here to decide if we're running on a tenant or not
+	if s.rpcCtx.TenantID.ToUint64() > roachpb.SystemTenantID.ToUint64() {
+		if len(req.NodeID) > 0 {
+			// TODO(davidh): parsing a `NodeID` as an `InstanceID` instead of
+			// adding an `InstanceID` field to the request. Should this be avoided?
+			requestedInstanceID, local, err := s.parseInstanceID(req.NodeID)
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			}
+			if local {
+				// TODO(davidh): putting an InstanceID in a NodeIDContainer...can this be avoided?
+				container := &base.NodeIDContainer{}
+				container.Set(ctx, roachpb.NodeID(s.rpcCtx.InstanceID))
+				return statementsLocal(ctx, container, s.admin.server.sqlServer)
+			}
+			status, err := s.dialPod(ctx, requestedInstanceID)
+			if err != nil {
+				return nil, err
+			}
+			return status.Statements(ctx, localReq)
+		}
+
+		dialFn := func(ctx context.Context, instanceID base.SQLInstanceID) (interface{}, error) {
+			client, err := s.dialPod(ctx, instanceID)
+			return client, err
+		}
+		nodeStatement := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+			status := client.(serverpb.StatusClient)
+			return status.Statements(ctx, localReq)
+		}
+
+		if err := s.iteratePods(ctx, fmt.Sprintf("statement statistics for node %s", req.NodeID),
+			dialFn,
+			nodeStatement,
+			func(instanceID base.SQLInstanceID, resp interface{}) {
+				statementsResp := resp.(*serverpb.StatementsResponse)
+				response.Statements = append(response.Statements, statementsResp.Statements...)
+				response.Transactions = append(response.Transactions, statementsResp.Transactions...)
+				if response.LastReset.After(statementsResp.LastReset) {
+					response.LastReset = statementsResp.LastReset
+				}
+			},
+			func(instanceID base.SQLInstanceID, err error) {
+				// TODO(couchand): do something here...
+			},
+		); err != nil {
+			return nil, err
+		}
+
+		return response, nil
+	}
+
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {

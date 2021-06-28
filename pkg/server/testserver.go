@@ -57,6 +57,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancemanager"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -465,7 +467,11 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 }
 
 func makeSQLServerArgs(
-	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	kvClusterName string,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 	baseCfg.AmbientCtx.AddLogTag("sql", nil)
@@ -571,9 +577,6 @@ func makeSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	const sqlInstanceID = base.SQLInstanceID(10001)
-	idContainer := base.NewSQLIDContainer(sqlInstanceID, nil /* nodeID */)
-
 	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
 	registry.AddMetricStruct(runtime)
 
@@ -588,7 +591,6 @@ func makeSQLServerArgs(
 	}
 
 	esb.init(sqlCfg.ExternalIODirConfig, baseCfg.Settings, nil, circularInternalExecutor, db)
-
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
@@ -596,6 +598,27 @@ func makeSQLServerArgs(
 	sessionRegistry := sql.NewSessionRegistry()
 	contentionRegistry := contention.NewRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
+	codec := keys.MakeSQLCodec(sqlCfg.TenantID)
+	if knobs := baseCfg.TestingKnobs.TenantTestingKnobs; knobs != nil {
+		override := knobs.(*sql.TenantTestingKnobs).TenantIDCodecOverride
+		if override != (roachpb.TenantID{}) {
+			codec = keys.MakeSQLCodec(override)
+		}
+	}
+	sqlInstanceManager := instancemanager.NewSQLInstanceManager(st, stopper)
+	sqlLivenessProvider, err := slprovider.InitAndStartSlProvider(ctx,
+		stopper,
+		clock,
+		db,
+		codec,
+		st,
+		tenantConnect,
+		sqlInstanceManager.ShutdownInstance)
+
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
+
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
@@ -605,7 +628,7 @@ func makeSQLServerArgs(
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
-			nodeIDContainer:        idContainer,
+			nodeIDContainer:        nil,
 			externalStorage:        externalStorage,
 			externalStorageFromURI: externalStorageFromURI,
 		},
@@ -632,6 +655,9 @@ func makeSQLServerArgs(
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
+		sqlLivenessProvider:      sqlLivenessProvider,
+		sqlInstanceManager:       sqlInstanceManager,
+		codec:                    codec,
 	}, nil
 }
 
