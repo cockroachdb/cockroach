@@ -236,6 +236,7 @@ ON metric_id=id
 WHERE
   time BETWEEN '2020-01-01 00:00:00+00:00' AND '2020-01-01 00:10:00+00:00' AND
   name='cpu'
+ORDER BY value
 ----
 1  2020-01-01 00:00:00 +0000 UTC  0  1  cpu
 1  2020-01-01 00:00:01 +0000 UTC  1  1  cpu
@@ -258,6 +259,7 @@ SELECT *
 FROM metric_values mv
 WHERE
   mv.metric_id IN (SELECT id FROM metrics)
+ORDER BY value
 ----
 1  2020-01-01 00:00:00 +0000 UTC  0
 1  2020-01-01 00:00:01 +0000 UTC  1
