@@ -502,6 +502,11 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       if (this.u) {
         this.u.destroy();
       }
+
+      if (options.series?.length < 2) {
+        options.series.push({ scale: "1" });
+      }
+
       this.u = new uPlot(options, uPlotData, this.el.current);
     }
   }
