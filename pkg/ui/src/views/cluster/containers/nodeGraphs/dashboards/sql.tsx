@@ -26,6 +26,20 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
+      title="SQL Statement Contention"
+      sources={nodeSources}
+      tooltip={`The total number of SQL statements that experienced contention ${tooltipSelection}.`}
+    >
+      <Axis label="queries">
+        <Metric
+          name="cr.node.sql.distsql.contended_queries.count"
+          title="Contention"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Open SQL Sessions"
       sources={nodeSources}
       tooltip={`The total number of open SQL Sessions ${tooltipSelection}.`}
@@ -118,20 +132,6 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.sql.failure.count"
           title="Errors"
-          nonNegativeRate
-        />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="SQL Statement Contention"
-      sources={nodeSources}
-      tooltip={`The total number of SQL statements that experienced contention ${tooltipSelection}.`}
-    >
-      <Axis label="queries">
-        <Metric
-          name="cr.node.sql.distsql.contended_queries.count"
-          title="Contention"
           nonNegativeRate
         />
       </Axis>
