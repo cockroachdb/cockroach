@@ -332,7 +332,6 @@ func registerJobsMixedVersions(r registry.Registry) {
 		// state machine states `Status{Pause,Cancel}Requested`. This test purpose
 		// is to to test the state transitions of jobs from paused to resumed and
 		// vice versa in order to detect regressions in the work done for 20.1.
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/57230",
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(*t.BuildVersion())
