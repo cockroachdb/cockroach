@@ -516,7 +516,7 @@ func registerTPCC(r *testRegistry) {
 							workloadInstance{
 								nodes:          option.NewNodeListOptionRange((i*nodesPerRegion)+1, ((i + 1) * nodesPerRegion)), // 1-indexed
 								prometheusPort: prometheusLocalPortStart + i,
-								extraRunArgs:   fmt.Sprintf("--partition-affinity=%d", i-1), // 0-indexed
+								extraRunArgs:   fmt.Sprintf("--partition-affinity=%d", i), // 0-indexed
 							},
 						)
 						// Data partitioned in a different region.
@@ -527,7 +527,7 @@ func registerTPCC(r *testRegistry) {
 							workloadInstance{
 								nodes:          option.NewNodeListOptionRange((i*nodesPerRegion)+1, ((i + 1) * nodesPerRegion)), // 1-indexed
 								prometheusPort: prometheusRemotePortStart + i,
-								extraRunArgs:   fmt.Sprintf("--partition-affinity=%d", i%len(regions)), // 0-indexed
+								extraRunArgs:   fmt.Sprintf("--partition-affinity=%d", (i+1)%len(regions)), // 0-indexed
 							},
 						)
 					}
