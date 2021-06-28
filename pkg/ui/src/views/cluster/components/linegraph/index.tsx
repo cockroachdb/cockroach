@@ -445,9 +445,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   xAxisDomain: AxisDomain;
 
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
-    if (!this.props.data || !this.props.data.results) {
+    if (
+      !this.props.data ||
+      !this.props.data.results ||
+      prevProps.data === this.props.data
+    ) {
       return;
     }
+
     const data = this.props.data;
     const metrics = this.metrics(this.props);
     const axis = this.axis(this.props);
@@ -475,7 +480,6 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     if (
       this.u && // we already created a uPlot instance
       prevProps.data && // prior update had data as well
-      prevProps.data !== this.props.data && // prior update had different data
       sameKeys // prior update had same set of series identified by key
     ) {
       // The axis label option on uPlot doesn't accept
