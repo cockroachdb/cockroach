@@ -86,7 +86,10 @@ func TestUnresolvedNameAnnotation(t *testing.T) {
 
 	expect := func(expected string) {
 		t.Helper()
-		ctx := tree.NewFmtCtxEx(tree.FmtAlwaysQualifyTableNames, &ann)
+		ctx := tree.NewFmtCtx(
+			tree.FmtAlwaysQualifyTableNames,
+			tree.FmtAnnotations(&ann),
+		)
 		ctx.FormatNode(u)
 		if actual := ctx.CloseAndGetString(); actual != expected {
 			t.Errorf("expected: `%s`, got `%s`", expected, actual)

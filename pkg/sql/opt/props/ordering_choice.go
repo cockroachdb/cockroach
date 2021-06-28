@@ -290,7 +290,7 @@ func (oc *OrderingChoice) Implies(other *OrderingChoice) bool {
 
 	// Copy the optional columns so we can add to the set. All group columns
 	// become optional after one column in the group is used.
-	optional := other.Optional.Copy()
+	optional := colSetHelper{colSet: other.Optional}
 
 	for left, right := 0, 0; right < len(other.Columns); {
 		if left >= len(oc.Columns) {
@@ -302,10 +302,10 @@ func (oc *OrderingChoice) Implies(other *OrderingChoice) bool {
 		switch {
 		case leftCol.Descending == rightCol.Descending && leftCol.Group.SubsetOf(rightCol.Group):
 			// The columns match.
-			optional.UnionWith(rightCol.Group)
+			optional.unionWith(rightCol.Group)
 			left, right = left+1, right+1
 
-		case leftCol.Group.Intersects(optional):
+		case optional.intersects(leftCol.Group):
 			// Left column is optional in the right set.
 			left++
 
@@ -321,26 +321,26 @@ func (oc *OrderingChoice) Implies(other *OrderingChoice) bool {
 func (oc *OrderingChoice) Intersects(other *OrderingChoice) bool {
 	// Copy the optional columns so we can add to the sets. All group columns
 	// become optional after one column in the group is used.
-	leftOptional := oc.Optional.Copy()
-	rightOptional := other.Optional.Copy()
+	leftOptional := colSetHelper{colSet: oc.Optional}
+	rightOptional := colSetHelper{colSet: other.Optional}
 
 	for left, right := 0, 0; left < len(oc.Columns) && right < len(other.Columns); {
 		leftCol, rightCol := &oc.Columns[left], &other.Columns[right]
 		switch {
 		case leftCol.Descending == rightCol.Descending && leftCol.Group.Intersects(rightCol.Group):
 			// The columns match.
-			leftOptional.UnionWith(leftCol.Group)
-			rightOptional.UnionWith(rightCol.Group)
+			leftOptional.unionWith(leftCol.Group)
+			rightOptional.unionWith(rightCol.Group)
 			left, right = left+1, right+1
 
-		case leftCol.Group.Intersects(rightOptional):
+		case rightOptional.intersects(leftCol.Group):
 			// Left column is optional in the right set.
-			leftOptional.UnionWith(leftCol.Group)
+			leftOptional.unionWith(leftCol.Group)
 			left++
 
-		case rightCol.Group.Intersects(leftOptional):
+		case leftOptional.intersects(rightCol.Group):
 			// Right column is optional in the left set.
-			rightOptional.UnionWith(rightCol.Group)
+			rightOptional.unionWith(rightCol.Group)
 			right++
 
 		default:
@@ -382,8 +382,8 @@ func (oc *OrderingChoice) Intersection(other *OrderingChoice) OrderingChoice {
 
 	// Copy the optional columns so we can add to the sets. All group columns
 	// become optional after one column in the group is used.
-	leftOptional := oc.Optional.Copy()
-	rightOptional := other.Optional.Copy()
+	leftOptional := colSetHelper{colSet: oc.Optional}
+	rightOptional := colSetHelper{colSet: other.Optional}
 
 	left, right := 0, 0
 	for left < len(oc.Columns) && right < len(other.Columns) {
@@ -396,26 +396,26 @@ func (oc *OrderingChoice) Intersection(other *OrderingChoice) OrderingChoice {
 				Group:      leftCol.Group.Intersection(rightCol.Group),
 				Descending: leftCol.Descending,
 			})
-			leftOptional.UnionWith(leftCol.Group)
-			rightOptional.UnionWith(rightCol.Group)
+			leftOptional.unionWith(leftCol.Group)
+			rightOptional.unionWith(rightCol.Group)
 			left, right = left+1, right+1
 
-		case leftCol.Group.Intersects(rightOptional):
+		case rightOptional.intersects(leftCol.Group):
 			// Left column is optional in the right set.
 			result = append(result, OrderingColumnChoice{
-				Group:      leftCol.Group.Intersection(rightOptional),
+				Group:      rightOptional.intersection(leftCol.Group),
 				Descending: leftCol.Descending,
 			})
-			leftOptional.UnionWith(leftCol.Group)
+			leftOptional.unionWith(leftCol.Group)
 			left++
 
-		case rightCol.Group.Intersects(leftOptional):
+		case leftOptional.intersects(rightCol.Group):
 			// Right column is optional in the left set.
 			result = append(result, OrderingColumnChoice{
-				Group:      rightCol.Group.Intersection(leftOptional),
+				Group:      leftOptional.intersection(rightCol.Group),
 				Descending: rightCol.Descending,
 			})
-			rightOptional.UnionWith(rightCol.Group)
+			rightOptional.unionWith(rightCol.Group)
 			right++
 
 		default:
@@ -457,10 +457,8 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 
 	result := make([]OrderingColumnChoice, 0, len(oc.Columns))
 
-	// Copy the optional columns so we can add to the sets. All group columns
-	// become optional after one column in the group is used.
-	leftOptional := oc.Optional.Copy()
-	rightOptional := other.Optional.Copy()
+	leftOptional := colSetHelper{colSet: oc.Optional}
+	rightOptional := colSetHelper{colSet: other.Optional}
 
 	left, right := 0, 0
 	for left < len(oc.Columns) && right < len(other.Columns) {
@@ -473,26 +471,26 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 				Group:      leftCol.Group.Intersection(rightCol.Group),
 				Descending: leftCol.Descending,
 			})
-			leftOptional.UnionWith(leftCol.Group)
-			rightOptional.UnionWith(rightCol.Group)
+			leftOptional.unionWith(leftCol.Group)
+			rightOptional.unionWith(rightCol.Group)
 			left, right = left+1, right+1
 
-		case leftCol.Group.Intersects(rightOptional):
+		case rightOptional.intersects(leftCol.Group):
 			// Left column is optional in the right set.
 			result = append(result, OrderingColumnChoice{
-				Group:      leftCol.Group.Intersection(rightOptional),
+				Group:      rightOptional.intersection(leftCol.Group),
 				Descending: leftCol.Descending,
 			})
-			leftOptional.UnionWith(leftCol.Group)
+			leftOptional.unionWith(leftCol.Group)
 			left++
 
-		case rightCol.Group.Intersects(leftOptional):
+		case leftOptional.intersects(rightCol.Group):
 			// Right column is optional in the left set.
 			result = append(result, OrderingColumnChoice{
-				Group:      rightCol.Group.Intersection(leftOptional),
+				Group:      leftOptional.intersection(rightCol.Group),
 				Descending: rightCol.Descending,
 			})
-			rightOptional.UnionWith(rightCol.Group)
+			rightOptional.unionWith(rightCol.Group)
 			right++
 
 		default:
@@ -506,11 +504,11 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 	// included in the optional columns of oc.
 	for ; right < len(other.Columns); right++ {
 		rightCol := &other.Columns[right]
-		if !rightCol.Group.Intersects(leftOptional) {
+		if !leftOptional.intersects(rightCol.Group) {
 			break
 		}
 		result = append(result, OrderingColumnChoice{
-			Group:      rightCol.Group.Intersection(leftOptional),
+			Group:      leftOptional.intersection(rightCol.Group),
 			Descending: rightCol.Descending,
 		})
 	}
@@ -518,6 +516,62 @@ func (oc *OrderingChoice) CommonPrefix(other *OrderingChoice) OrderingChoice {
 		Optional: oc.Optional.Intersection(other.Optional),
 		Columns:  result,
 	}
+}
+
+// commonPrefixLength returns the length of the OrderingChoice that would be
+// returned by CommonPrefix, along with a boolean indicating whether the common
+// prefix between the receiver and 'other' implies 'other'.
+func (oc *OrderingChoice) commonPrefixLength(other *OrderingChoice) (length int, implies bool) {
+	if oc.Any() || other.Any() {
+		return 0 /* length */, other.Any()
+	}
+
+	leftOptional := colSetHelper{colSet: oc.Optional}
+	rightOptional := colSetHelper{colSet: other.Optional}
+
+	left, right := 0, 0
+	for left < len(oc.Columns) && right < len(other.Columns) {
+		leftCol, rightCol := &oc.Columns[left], &other.Columns[right]
+
+		switch {
+		case leftCol.Descending == rightCol.Descending && leftCol.Group.Intersects(rightCol.Group):
+			// The columns match.
+			length++
+			leftOptional.unionWith(leftCol.Group)
+			rightOptional.unionWith(rightCol.Group)
+			left, right = left+1, right+1
+
+		case rightOptional.intersects(leftCol.Group):
+			// Left column is optional in the right set.
+			length++
+			leftOptional.unionWith(leftCol.Group)
+			left++
+
+		case leftOptional.intersects(rightCol.Group):
+			// Right column is optional in the left set.
+			length++
+			rightOptional.unionWith(rightCol.Group)
+			right++
+
+		default:
+			// If we have reached this point, the common prefix will not include all
+			// of the non-optional columns from the 'other' OrderingChoice, and
+			// therefore will not imply 'other'.
+			return length, false
+		}
+	}
+	// oc matched a prefix of other. Append the tail of the other ordering that is
+	// included in the optional columns of oc.
+	for ; right < len(other.Columns); right++ {
+		rightCol := &other.Columns[right]
+		if !leftOptional.intersects(rightCol.Group) {
+			break
+		}
+		length++
+	}
+	// The common prefix will imply 'other' if and only if it includes all of the
+	// non-optional columns from 'other'.
+	return length, right == len(other.Columns)
 }
 
 // SubsetOfCols is true if the OrderingChoice only references columns in the
@@ -776,11 +830,11 @@ func (oc OrderingChoice) PrefixIntersection(
 	var result OrderingChoice
 	oc = oc.Copy()
 
-	prefix = prefix.Copy()
+	prefixHelper := colSetHelper{colSet: prefix}
 
 	for {
 		switch {
-		case prefix.Empty() && len(suffix) == 0:
+		case prefixHelper.empty() && len(suffix) == 0:
 			// Any ordering is allowed by <prefix>+<suffix>, so use <oc> directly.
 			result.Columns = append(result.Columns, oc.Columns...)
 			return result, true
@@ -788,13 +842,13 @@ func (oc OrderingChoice) PrefixIntersection(
 			// Any ordering is allowed by <oc>, so pick an arbitrary ordering of the
 			// columns in <prefix> then append suffix.
 			// TODO(justin): investigate picking an order more intelligently here.
-			for col, ok := prefix.Next(0); ok; col, ok = prefix.Next(col + 1) {
+			for col, ok := prefixHelper.next(0); ok; col, ok = prefixHelper.next(col + 1) {
 				result.AppendCol(col, false /* descending */)
 			}
 
 			result.Columns = append(result.Columns, suffix...)
 			return result, true
-		case prefix.Empty() && len(oc.Columns) > 0 && len(suffix) > 0 &&
+		case prefixHelper.empty() && len(oc.Columns) > 0 && len(suffix) > 0 &&
 			oc.Columns[0].Group.Intersects(suffix[0].Group) &&
 			oc.Columns[0].Descending == suffix[0].Descending:
 			// <prefix> is empty, and <suffix> and <oc> agree on the first column, so
@@ -805,12 +859,12 @@ func (oc OrderingChoice) PrefixIntersection(
 
 			oc.Columns = oc.Columns[1:]
 			suffix = suffix[1:]
-		case len(oc.Columns) > 0 && prefix.Intersects(oc.Columns[0].Group):
+		case len(oc.Columns) > 0 && prefixHelper.intersects(oc.Columns[0].Group):
 			// <prefix> contains the first column in <oc>, so emit it and remove it
 			// from both.
 			result.Columns = append(result.Columns, oc.Columns[0])
 
-			prefix.DifferenceWith(oc.Columns[0].Group)
+			prefixHelper.differenceWith(oc.Columns[0].Group)
 			oc.Columns = oc.Columns[1:]
 		default:
 			// If no rule applied, fail.
@@ -1024,4 +1078,78 @@ func (os OrderingSet) RemapColumns(from, to opt.ColList) OrderingSet {
 		res[i] = os[i].RemapColumns(from, to)
 	}
 	return res
+}
+
+// LongestCommonPrefix returns the longest common prefix between the
+// OrderingChoices within the receiver and the given OrderingChoice. However, if
+// the longest common prefix implies the given OrderingChoice, nil is returned
+// instead. This allows LongestCommonPrefix to avoid allocating in the common
+// case where its result is just discarded by Optimizer.enforceProps.
+func (os OrderingSet) LongestCommonPrefix(other *OrderingChoice) *OrderingChoice {
+	var bestPrefixLength, bestPrefixIdx int
+	for i, orderingChoice := range os {
+		length, implies := orderingChoice.commonPrefixLength(other)
+		if implies {
+			// We have found a prefix that implies the required ordering. No order
+			// needs to be enforced.
+			return nil
+		}
+		if length > bestPrefixLength {
+			bestPrefixLength = length
+			bestPrefixIdx = i
+		}
+	}
+	if bestPrefixLength == 0 {
+		// No need to call CommonPrefix since no 'best' prefix was found.
+		return &OrderingChoice{}
+	}
+	commonPrefix := os[bestPrefixIdx].CommonPrefix(other)
+	return &commonPrefix
+}
+
+// colSetHelper is used to lazily copy the wrapped ColSet only when a mutating
+// function is first called.
+type colSetHelper struct {
+	colSet opt.ColSet
+	copied bool
+}
+
+// unionWith returns a colSetHelper reflecting a UnionWith operation performed
+// on the receiver ColSet. If the original ColSet has not been copied, unionWith
+// copies it now.
+func (h *colSetHelper) unionWith(other opt.ColSet) {
+	if !h.copied {
+		h.colSet = h.colSet.Copy()
+		h.copied = true
+	}
+	h.colSet.UnionWith(other)
+}
+
+// differenceWith returns a colSetHelper reflecting a DifferenceWith operation
+// performed on the receiver ColSet. If the original ColSet has not been copied,
+// differenceWith copies it now.
+func (h *colSetHelper) differenceWith(other opt.ColSet) {
+	if !h.copied {
+		h.colSet = h.colSet.Copy()
+		h.copied = true
+	}
+	h.colSet.DifferenceWith(other)
+}
+
+func (h *colSetHelper) intersects(other opt.ColSet) bool {
+	// No need to copy, since intersects will not modify the ColSet.
+	return h.colSet.Intersects(other)
+}
+
+func (h *colSetHelper) intersection(other opt.ColSet) opt.ColSet {
+	// No need to copy, since intersection will not modify the ColSet.
+	return h.colSet.Intersection(other)
+}
+
+func (h *colSetHelper) next(startVal opt.ColumnID) (opt.ColumnID, bool) {
+	return h.colSet.Next(startVal)
+}
+
+func (h *colSetHelper) empty() bool {
+	return h.colSet.Empty()
 }

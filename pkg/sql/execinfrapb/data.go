@@ -75,15 +75,18 @@ func ConvertToMappedSpecOrdering(
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
 func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
-	fmtCtx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
-	fmtCtx.SetPlaceholderFormat(
-		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
-			d, err := p.Eval(evalCtx)
-			if err != nil {
-				panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
-			}
-			d.Format(fmtCtx)
-		})
+	fmtCtx := tree.NewFmtCtx(
+		tree.FmtCheckEquivalence,
+		tree.FmtPlaceholderFormat(
+			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
+				d, err := p.Eval(evalCtx)
+				if err != nil {
+					panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
+				}
+				d.Format(fmtCtx)
+			},
+		),
+	)
 	return fmtCtx
 }
 
