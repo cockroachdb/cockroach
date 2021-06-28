@@ -593,6 +593,18 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		baseCost += virtualScanTableDescriptorFetchCost
 	}
 
+	// Performing a reverse scan is more expensive than a forward scan, but it's
+	// still preferable to sorting the output of a forward scan. To ensure we
+	// choose a reverse scan over a sort, add the reverse scan cost before we
+	// alter the row count for unbounded scan penalties below. This cost must also
+	// be added before adjusting the row count for the limit hint.
+	if ordering.ScanIsReverse(scan, &required.Ordering) {
+		if rowCount > 1 {
+			// Need to do binary search to seek to the previous row.
+			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
+		}
+	}
+
 	// Add a penalty to full table scans. All else being equal, we prefer a
 	// constrained scan. Adding a few rows worth of cost helps prevent surprising
 	// plans for very small tables.
@@ -612,13 +624,6 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 
 	if required.LimitHint != 0 {
 		rowCount = math.Min(rowCount, required.LimitHint)
-	}
-
-	if ordering.ScanIsReverse(scan, &required.Ordering) {
-		if rowCount > 1 {
-			// Need to do binary search to seek to the previous row.
-			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
-		}
 	}
 
 	cost := baseCost + memo.Cost(rowCount)*(seqIOCostFactor+perRowCost)
