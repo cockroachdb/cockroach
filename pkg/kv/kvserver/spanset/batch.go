@@ -402,7 +402,7 @@ func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
 }
 
-// ExportMVCCToSst is part of the engine.Reader interface.
+// ExportMVCCToSst is part of the storage.Reader interface.
 func (s spanSetReader) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
@@ -479,8 +479,14 @@ func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.Engin
 	}
 }
 
+// ConsistentIterators implements the storage.Reader interface.
 func (s spanSetReader) ConsistentIterators() bool {
 	return s.r.ConsistentIterators()
+}
+
+// PinEngineStateForIterators implements the storage.Reader interface.
+func (s spanSetReader) PinEngineStateForIterators() error {
+	return s.r.PinEngineStateForIterators()
 }
 
 // GetDBEngine recursively searches for the underlying rocksDB engine.
@@ -495,7 +501,7 @@ func GetDBEngine(reader storage.Reader, span roachpb.Span) storage.Reader {
 	}
 }
 
-// getSpanReader is a getter to access the engine.Reader field of the
+// getSpanReader is a getter to access the storage.Reader field of the
 // spansetReader.
 func getSpanReader(r ReadWriter, span roachpb.Span) storage.Reader {
 	if err := r.spanSetReader.spans.CheckAllowed(SpanReadOnly, span); err != nil {
@@ -700,7 +706,7 @@ func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Times
 	}
 }
 
-// NewReadWriterAt returns an engine.ReadWriter that asserts access of the
+// NewReadWriterAt returns a storage.ReadWriter that asserts access of the
 // underlying ReadWriter against the given SpanSet at a given timestamp.
 // If zero timestamp is provided, accesses are considered non-MVCC.
 func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) storage.ReadWriter {
@@ -734,7 +740,7 @@ func (s spanSetBatch) Repr() []byte {
 	return s.b.Repr()
 }
 
-// NewBatch returns an engine.Batch that asserts access of the underlying
+// NewBatch returns a storage.Batch that asserts access of the underlying
 // Batch against the given SpanSet. We only consider span boundaries, associated
 // timestamps are not considered.
 func NewBatch(b storage.Batch, spans *SpanSet) storage.Batch {
@@ -746,7 +752,7 @@ func NewBatch(b storage.Batch, spans *SpanSet) storage.Batch {
 	}
 }
 
-// NewBatchAt returns an engine.Batch that asserts access of the underlying
+// NewBatchAt returns an storage.Batch that asserts access of the underlying
 // Batch against the given SpanSet at the given timestamp.
 // If the zero timestamp is used, all accesses are considered non-MVCC.
 func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch {
