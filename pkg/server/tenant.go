@@ -13,15 +13,36 @@ package server
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -32,7 +53,7 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
-	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeTenantSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -178,4 +199,175 @@ func StartTenant(
 	}
 
 	return s, pgLAddr, httpLAddr, nil
+}
+
+func makeTenantSQLServerArgs(
+	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
+) (sqlServerArgs, error) {
+	st := baseCfg.Settings
+	baseCfg.AmbientCtx.AddLogTag("sql", nil)
+	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
+	// and this tenant work.
+	//
+	// TODO(tbg): address this when we introduce the real tenant RPCs in:
+	// https://github.com/cockroachdb/cockroach/issues/47898
+	baseCfg.ClusterName = kvClusterName
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseCfg.MaxOffset))
+
+	registry := metric.NewRegistry()
+
+	var rpcTestingKnobs rpc.ContextTestingKnobs
+	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
+		rpcTestingKnobs = p.ContextTestingKnobs
+	}
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   sqlCfg.TenantID,
+		AmbientCtx: baseCfg.AmbientCtx,
+		Config:     baseCfg.Config,
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   st,
+		Knobs:      rpcTestingKnobs,
+	})
+
+	var dsKnobs kvcoord.ClientTestingKnobs
+	if dsKnobsP, ok := baseCfg.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
+		dsKnobs = *dsKnobsP
+	}
+	rpcRetryOptions := base.DefaultRetryOptions()
+
+	tcCfg := kvtenant.ConnectorConfig{
+		AmbientCtx:        baseCfg.AmbientCtx,
+		RPCContext:        rpcContext,
+		RPCRetryOptions:   rpcRetryOptions,
+		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
+	}
+	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, sqlCfg.TenantKVAddrs)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
+	resolver := kvtenant.AddressResolver(tenantConnect)
+	nodeDialer := nodedialer.New(rpcContext, resolver)
+
+	dsCfg := kvcoord.DistSenderConfig{
+		AmbientCtx:        baseCfg.AmbientCtx,
+		Settings:          st,
+		Clock:             clock,
+		NodeDescs:         tenantConnect,
+		RPCRetryOptions:   &rpcRetryOptions,
+		RPCContext:        rpcContext,
+		NodeDialer:        nodeDialer,
+		RangeDescriptorDB: tenantConnect,
+		TestingKnobs:      dsKnobs,
+	}
+	ds := kvcoord.NewDistSender(dsCfg)
+
+	var clientKnobs kvcoord.ClientTestingKnobs
+	if p, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
+		clientKnobs = *p
+	}
+
+	txnMetrics := kvcoord.MakeTxnMetrics(baseCfg.HistogramWindowInterval())
+	registry.AddMetricStruct(txnMetrics)
+	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx:        baseCfg.AmbientCtx,
+			Settings:          st,
+			Clock:             clock,
+			Stopper:           stopper,
+			HeartbeatInterval: base.DefaultTxnHeartbeatInterval,
+			Linearizable:      false,
+			Metrics:           txnMetrics,
+			TestingKnobs:      clientKnobs,
+		},
+		ds,
+	)
+	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
+	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
+	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, rangeFeedKnobs)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
+
+	circularInternalExecutor := &sql.InternalExecutor{}
+	// Protected timestamps won't be available (at first) in multi-tenant
+	// clusters.
+	var protectedTSProvider protectedts.Provider
+	{
+		pp, err := ptprovider.New(ptprovider.Config{
+			DB:               db,
+			InternalExecutor: circularInternalExecutor,
+			Settings:         st,
+		})
+		if err != nil {
+			panic(err)
+		}
+		protectedTSProvider = dummyProtectedTSProvider{pp}
+	}
+
+	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
+
+	const sqlInstanceID = base.SQLInstanceID(10001)
+	idContainer := base.NewSQLIDContainer(sqlInstanceID, nil /* nodeID */)
+
+	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
+	registry.AddMetricStruct(runtime)
+
+	esb := &externalStorageBuilder{}
+	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.
+		ExternalStorage, error) {
+		return esb.makeExternalStorage(ctx, dest)
+	}
+	externalStorageFromURI := func(ctx context.Context, uri string,
+		user security.SQLUsername) (cloud.ExternalStorage, error) {
+		return esb.makeExternalStorageFromURI(ctx, uri, user)
+	}
+
+	esb.init(sqlCfg.ExternalIODirConfig, baseCfg.Settings, nil, circularInternalExecutor, db)
+
+	// We don't need this for anything except some services that want a gRPC
+	// server to register against (but they'll never get RPCs at the time of
+	// writing): the blob service and DistSQL.
+	dummyRPCServer := rpc.NewServer(rpcContext)
+	sessionRegistry := sql.NewSessionRegistry()
+	contentionRegistry := contention.NewRegistry()
+	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
+	return sqlServerArgs{
+		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
+			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
+			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
+			gossip:            gossip.MakeOptionalGossip(nil),
+			grpcServer:        dummyRPCServer,
+			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
+				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
+			},
+			nodeIDContainer:        idContainer,
+			externalStorage:        externalStorage,
+			externalStorageFromURI: externalStorageFromURI,
+		},
+		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
+			tenantConnect: tenantConnect,
+		},
+		SQLConfig:                &sqlCfg,
+		BaseConfig:               &baseCfg,
+		stopper:                  stopper,
+		clock:                    clock,
+		runtime:                  runtime,
+		rpcContext:               rpcContext,
+		nodeDescs:                tenantConnect,
+		systemConfigProvider:     tenantConnect,
+		nodeDialer:               nodeDialer,
+		distSender:               ds,
+		db:                       db,
+		registry:                 registry,
+		recorder:                 recorder,
+		sessionRegistry:          sessionRegistry,
+		contentionRegistry:       contentionRegistry,
+		flowScheduler:            flowScheduler,
+		circularInternalExecutor: circularInternalExecutor,
+		circularJobRegistry:      &jobs.Registry{},
+		protectedtsProvider:      protectedTSProvider,
+		rangeFeedFactory:         rangeFeedFactory,
+	}, nil
 }
