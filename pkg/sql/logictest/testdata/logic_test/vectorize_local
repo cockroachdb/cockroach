@@ -98,7 +98,7 @@ EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
 project
  ├── columns: a:1
  ├── stats: [rows=10]
- ├── cost: 1100.77
+ ├── cost: 1122.17
  ├── prune: (1)
  └── inner-join (merge)
       ├── columns: c.a:1 d.b:8
@@ -106,12 +106,12 @@ project
       ├── left ordering: +1
       ├── right ordering: +8
       ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
-      ├── cost: 1100.66
+      ├── cost: 1122.06
       ├── fd: (1)==(8), (8)==(1)
       ├── sort
       │    ├── columns: c.a:1
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-      │    ├── cost: 15.93
+      │    ├── cost: 26.73
       │    ├── ordering: +1
       │    ├── prune: (1)
       │    ├── interesting orderings: (+1)
@@ -119,14 +119,14 @@ project
       │    └── scan c@sec
       │         ├── columns: c.a:1
       │         ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-      │         ├── cost: 15.89
+      │         ├── cost: 26.69
       │         ├── prune: (1)
       │         ├── interesting orderings: (+1)
       │         └── unfiltered-cols: (1-6)
       ├── scan d
       │    ├── columns: d.b:8
       │    ├── stats: [rows=1000, distinct(8)=100, null(8)=0]
-      │    ├── cost: 1074.61
+      │    ├── cost: 1085.21
       │    ├── ordering: +8
       │    ├── prune: (8)
       │    ├── interesting orderings: (+8)
