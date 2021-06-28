@@ -37,12 +37,13 @@ type pebbleBatch struct {
 	// need separate iterators for EngineKey and MVCCKey iteration since
 	// iterators that make separated locks/intents look as interleaved need to
 	// use both simultaneously.
-	// When the first iterator is initialized, the underlying *pebble.Iterator
-	// is stashed in iter, so that subsequent iterator initialization can use
-	// Iterator.Clone to use the same underlying engine state. This relies on
-	// the fact that all pebbleIterators created here are marked as reusable,
-	// which causes pebbleIterator.Close to not close iter. iter will be closed
-	// when pebbleBatch.Close is called.
+	// When the first iterator is initialized, or when
+	// PinEngineStateForIterators is called (whichever happens first), the
+	// underlying *pebble.Iterator is stashed in iter, so that subsequent
+	// iterator initialization can use Iterator.Clone to use the same underlying
+	// engine state. This relies on the fact that all pebbleIterators created
+	// here are marked as reusable, which causes pebbleIterator.Close to not
+	// close iter. iter will be closed when pebbleBatch.Close is called.
 	prefixIter       pebbleIterator
 	normalIter       pebbleIterator
 	prefixEngineIter pebbleIterator
@@ -297,6 +298,18 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 // ConsistentIterators implements the Batch interface.
 func (p *pebbleBatch) ConsistentIterators() bool {
 	return true
+}
+
+// PinEngineStateForIterators implements the Batch interface.
+func (p *pebbleBatch) PinEngineStateForIterators() error {
+	if p.iter == nil {
+		if p.batch.Indexed() {
+			p.iter = p.batch.NewIter(nil)
+		} else {
+			p.iter = p.db.NewIter(nil)
+		}
+	}
+	return nil
 }
 
 // NewMVCCIterator implements the Batch interface.
