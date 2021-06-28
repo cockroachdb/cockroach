@@ -46,3 +46,45 @@ func (s *State) Request(
 	res.MaxBurstTokens = 0
 	return res
 }
+
+// Reconfigure updates the settings for the token bucket.
+//
+// Arguments:
+//
+//  - availableRU is the amount of Request Units that the tenant can consume at
+//    will. Also known as "burst RUs".
+//
+//  - refillRate is the amount of Request Units per second that the tenant
+//    receives.
+//
+//  - maxBurstRU is the maximum amount of Request Units that can be accumulated
+//    from the refill rate, or 0 if there is no limit.
+//
+//  - asOf is a timestamp; the reconfiguration request is assumed to be based on
+//    the consumption at that time. This timestamp is used to compensate for any
+//    refill that would have happened in the meantime.
+//
+//  - asOfConsumedRequestUnits is the total number of consumed RUs based on
+//    which the reconfiguration values were calculated (i.e. at the asOf time).
+//    It is used to adjust availableRU with the consumption that happened in the
+//    meantime.
+//
+//  - now is the current time.
+//
+//  - currentConsumedRequestUnits is the current total number of consumed RUs.
+//
+func (s *State) Reconfigure(
+	availableRU float64,
+	refillRate float64,
+	maxBurstRU float64,
+	asOf time.Time,
+	asOfConsumedRequestUnits float64,
+	now time.Time,
+	currentConsumedRequestUnits float64,
+) {
+	// TODO(radu): adjust available RUs according to asOf and asOfConsumedUnits
+	// and add tests.
+	s.RUCurrent = availableRU
+	s.RURefillRate = refillRate
+	s.RUBurstLimit = maxBurstRU
+}
