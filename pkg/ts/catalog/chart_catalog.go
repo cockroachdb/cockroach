@@ -2259,6 +2259,14 @@ var charts = []sectionDescription{
 				Metrics: []string{"rocksdb.estimated-pending-compaction"},
 			},
 			{
+				Title:   "L0 Sublevels",
+				Metrics: []string{"storage.l0-sublevels"},
+			},
+			{
+				Title:   "L0 Files",
+				Metrics: []string{"storage.l0-num-files"},
+			},
+			{
 				Title:   "Ingestion",
 				Metrics: []string{"rocksdb.ingested-bytes"},
 			},

@@ -406,6 +406,18 @@ var (
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaRdbL0Sublevels = metric.Metadata{
+		Name:        "storage.l0-sublevels",
+		Help:        "Number of Level 0 sublevels",
+		Measurement: "Storage",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRdbL0NumFiles = metric.Metadata{
+		Name:        "storage.l0-num-files",
+		Help:        "Number of Level 0 files",
+		Measurement: "Storage",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Disk health metrics.
 	metaDiskSlow = metric.Metadata{
@@ -1145,6 +1157,8 @@ type StoreMetrics struct {
 	RdbReadAmplification        *metric.Gauge
 	RdbNumSSTables              *metric.Gauge
 	RdbPendingCompaction        *metric.Gauge
+	RdbL0Sublevels              *metric.Gauge
+	RdbL0NumFiles               *metric.Gauge
 
 	// Disk health metrics.
 	DiskSlow    *metric.Gauge
@@ -1510,7 +1524,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Server-side transaction metrics.
 		CommitWaitsBeforeCommitTrigger: metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
 
-		// RocksDB metrics.
+		// RocksDB/Pebble metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
 		RdbBlockCacheMisses:         metric.NewGauge(metaRdbBlockCacheMisses),
 		RdbBlockCacheUsage:          metric.NewGauge(metaRdbBlockCacheUsage),
@@ -1528,6 +1542,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
+		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
+		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
 
 		// Disk health metrics.
 		DiskSlow:    metric.NewGauge(metaDiskSlow),
@@ -1735,6 +1751,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbTableReadersMemEstimate.Update(m.TableCache.Size)
 	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
 	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
+	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
+	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
 	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
