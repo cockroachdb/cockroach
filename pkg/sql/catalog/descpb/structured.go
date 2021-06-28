@@ -82,7 +82,7 @@ type IndexID tree.IndexID
 func (IndexID) SafeValue() {}
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
-type DescriptorVersion uint32
+type DescriptorVersion uint64
 
 // SafeValue implements the redact.SafeValue interface.
 func (DescriptorVersion) SafeValue() {}
