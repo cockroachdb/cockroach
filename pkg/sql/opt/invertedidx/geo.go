@@ -310,7 +310,7 @@ func (g *geoJoinPlanner) extractGeoJoinCondition(
 func constructFunction(
 	factory *norm.Factory, name string, args memo.ScalarListExpr,
 ) opt.ScalarExpr {
-	props, overload, ok := memo.FindFunction(&args, name)
+	props, overload, ok := memo.FindFunction(&args, name, false)
 	if !ok {
 		panic(errors.AssertionFailedf("could not find overload for %s", name))
 	}

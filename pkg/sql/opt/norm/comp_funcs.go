@@ -119,7 +119,7 @@ func findTimeZoneFunction(typ *types.T) (*tree.FunctionProperties, *tree.Overloa
 func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.ScalarExpr {
 	const name = "st_intersects"
 	resultType := types.Bool
-	props, overload, ok := memo.FindFunction(&args, name)
+	props, overload, ok := memo.FindFunction(&args, name, false)
 	if !ok {
 		panic(errors.AssertionFailedf("could not find overload for %s", name))
 	}
@@ -249,7 +249,7 @@ func (c *CustomFuncs) makeSTDWithin(
 		newArgs[useSpheroidIdx] = args[useSpheroidIdx-1]
 	}
 
-	props, overload, ok := memo.FindFunction(&newArgs, name)
+	props, overload, ok := memo.FindFunction(&newArgs, name, false)
 	if !ok {
 		panic(errors.AssertionFailedf("could not find overload for %s", name))
 	}

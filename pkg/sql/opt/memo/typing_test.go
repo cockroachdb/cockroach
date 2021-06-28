@@ -48,6 +48,8 @@ func TestBinaryOverloadExists(t *testing.T) {
 	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.Unknown, types.IntArray))
 }
 
+
+
 func TestBinaryAllowsNullArgs(t *testing.T) {
 	test := func(expected, actual bool) {
 		if expected != actual {

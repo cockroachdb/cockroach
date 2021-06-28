@@ -111,7 +111,7 @@ func TestInvertedJoinProvided(t *testing.T) {
 				f.ConstructVariable(opt.ColumnID(8)), f.ConstructVariable(opt.ColumnID(3)),
 			}
 			name := "st_intersects"
-			funcProps, overload, ok := memo.FindFunction(&args, name)
+			funcProps, overload, ok := memo.FindFunction(&args, name, false)
 			if !ok {
 				panic(errors.AssertionFailedf("could not find overload for %s", name))
 			}
