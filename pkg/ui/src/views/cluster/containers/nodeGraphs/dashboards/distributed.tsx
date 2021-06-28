@@ -86,51 +86,6 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="KV Transaction Restarts" sources={nodeSources}>
-      <Axis label="restarts">
-        <Metric
-          name="cr.node.txn.restarts.writetooold"
-          title="Write Too Old"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.writetoooldmulti"
-          title="Write Too Old (multiple)"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.serializable"
-          title="Forwarded Timestamp (iso=serializable)"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.asyncwritefailure"
-          title="Async Consensus Failure"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.readwithinuncertainty"
-          title="Read Within Uncertainty Interval"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.txnaborted"
-          title="Aborted"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.txnpush"
-          title="Push Failure"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.unknown"
-          title="Unknown"
-          nonNegativeRate
-        />
-      </Axis>
-    </LineGraph>,
-
     <LineGraph
       title="KV Transaction Durations: 99th percentile"
       tooltip={`The 99th percentile of transaction durations over a 1 minute period.
