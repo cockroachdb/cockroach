@@ -20,7 +20,8 @@ import (
 func TestLoadTeams(t *testing.T) {
 	yamlFile := []byte(`
 sql:
-  aliases: [sql-alias]
+  aliases:
+    sql-alias: other
   email: otan@cockroachlabs.com
   slack: otan
   triage_column_id: 1
@@ -31,23 +32,21 @@ test-infra-team:
 `)
 	ret, err := LoadTeams(bytes.NewReader(yamlFile))
 	require.NoError(t, err)
+	sqlTeam := Team{
+		TeamName:       "sql",
+		Aliases:        map[Alias]string{"sql-alias": "other"},
+		Email:          "otan@cockroachlabs.com",
+		Slack:          "otan",
+		TriageColumnID: 1,
+	}
+	require.Equal(t, sqlTeam.TeamName, sqlTeam.Name())
 	require.Equal(
 		t,
 		map[Alias]Team{
-			"sql": {
-				Aliases:        []Alias{"sql", "sql-alias"},
-				Email:          "otan@cockroachlabs.com",
-				Slack:          "otan",
-				TriageColumnID: 1,
-			},
-			"sql-alias": {
-				Aliases:        []Alias{"sql", "sql-alias"},
-				Email:          "otan@cockroachlabs.com",
-				Slack:          "otan",
-				TriageColumnID: 1,
-			},
+			"sql":       sqlTeam,
+			"sql-alias": sqlTeam,
 			"test-infra-team": {
-				Aliases:        []Alias{"test-infra-team"},
+				TeamName:       "test-infra-team",
 				Email:          "jlinder@cockroachlabs.com",
 				Slack:          "jlinder",
 				TriageColumnID: 2,
