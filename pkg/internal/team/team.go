@@ -36,7 +36,7 @@ type Team struct {
 	// the @cockroachdb/bulk-prs team which exists primarily to route, via
 	// CODEOWNERS, code reviews for the @cockroachdb/bulk-io team). This map
 	// does not contain TeamName.
-	Aliases map[Alias]string `yaml:"aliases"`
+	Aliases map[Alias]Purpose `yaml:"aliases"`
 	// TriageColumnID is the Github Column ID to assign issues to.
 	TriageColumnID int `yaml:"triage_column_id"`
 	// Email is the email address for this team.
@@ -54,8 +54,35 @@ func (t Team) Name() Alias {
 	return t.TeamName
 }
 
+// Map contains the in-memory representation of TEAMS.yaml.
+type Map map[Alias]Team
+
+// GetAliasesForPurpose collects and returns, for the team indicated by any of
+// its aliases, the aliases for the supplied purpose. If the team exists but no
+// alias for the purpose is defined, falls back to the team's main alias. In
+// particular, when `true` is returned, the slice is nonempty.
+//
+// Returns `nil, false` if the supplied alias does not belong to any team.
+func (m Map) GetAliasesForPurpose(alias Alias, purpose Purpose) ([]Alias, bool) {
+	tm, ok := m[alias]
+	if !ok {
+		return nil, false
+	}
+	var sl []Alias
+	for hdl, purp := range tm.Aliases {
+		if purpose != purp {
+			continue
+		}
+		sl = append(sl, hdl)
+	}
+	if len(sl) == 0 {
+		sl = append(sl, tm.Name())
+	}
+	return sl, true
+}
+
 // DefaultLoadTeams loads teams from the repo root's TEAMS.yaml.
-func DefaultLoadTeams() (map[Alias]Team, error) {
+func DefaultLoadTeams() (Map, error) {
 	path := reporoot.GetFor(".", "TEAMS.yaml")
 	if path == "" {
 		return nil, errors.New("TEAMS.yaml not found")
@@ -69,13 +96,25 @@ func DefaultLoadTeams() (map[Alias]Team, error) {
 	return LoadTeams(f)
 }
 
-var validPurposes = map[string]struct{}{
-	"other": {},
+// Purpose determines which alias to return for a given team via
+type Purpose string
+
+const (
+	// PurposeOther is the generic catch-all.
+	PurposeOther = Purpose("other")
+	// PurposeRoachtest indicates that the team handles that should be mentioned
+	// in roachtest issues should be returned.
+	PurposeRoachtest = Purpose("roachtest")
+)
+
+var validPurposes = map[Purpose]struct{}{
+	PurposeOther:     {},
+	PurposeRoachtest: {}, // mention in roachtest issues
 }
 
 // LoadTeams loads the teams from an io input.
 // It is expected the input is in YAML format.
-func LoadTeams(f io.Reader) (map[Alias]Team, error) {
+func LoadTeams(f io.Reader) (Map, error) {
 	b, err := ioutil.ReadAll(f)
 	if err != nil {
 		return nil, err
