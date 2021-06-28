@@ -8,7 +8,7 @@ SELECT k, s FROM a
 scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=1000]
- ├── cost: 1074.61
+ ├── cost: 1085.21
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -111,7 +111,7 @@ SELECT * FROM a ORDER BY k DESC
 scan a,rev
  ├── columns: k:1!null i:2 s:3 d:4!null
  ├── stats: [rows=1]
- ├── cost: 15.89
+ ├── cost: 26.69
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: -1
@@ -150,7 +150,7 @@ select
  ├── cardinality: [0 - 2000]
  ├── immutable
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
- ├── cost: 1034.03
+ ├── cost: 1039.13
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
@@ -158,7 +158,7 @@ select
  │    ├── flags: force-index=primary
  │    ├── cardinality: [0 - 2000]
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1024.01
+ │    ├── cost: 1029.11
  │    └── key: (1)
  └── filters
       └── (id:1 % 16) = 0 [outer=(1), immutable]
@@ -289,5 +289,160 @@ scan t60493
  ├── stats: [rows=2, distinct(2)=2, null(2)=0]
  │   histogram(2)=  0     1      0     1
  │                <--- 'useast' --- 'uswest'
- ├── cost: 10.09
+ ├── cost: 20.49
  └── key: (1,2)
+
+# Regression test for #64570. Ensure we always prefer bounded over unbounded scans.
+exec-ddl
+CREATE TABLE t64570 (x INT, y INT, v INT, INDEX (y, v), PRIMARY KEY (x,y))
+----
+
+# Inject stats corresponding to running:
+# INSERT INTO t VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+#
+# These stats are important for the test below, which tries to search for
+# the row (10, 10, 10). That row doesn't exist (and therefore doesn't show up
+# in the histograms).
+exec-ddl
+ALTER TABLE t64570 INJECT STATISTICS '[
+    {
+        "columns": [
+            "x"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "foo",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "columns": [
+            "y"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "foo",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "columns": [
+            "v"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "foo",
+        "null_count": 0,
+        "row_count": 3
+    }
+]'
+----
+
+# We should choose a constrained scan of the primary index with cardinality 1,
+# not a constrained scan of the secondary index with unbounded cardinality.
+opt
+UPSERT INTO t64570 VALUES (10, 10, 10)
+----
+upsert t64570
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: x:9
+ ├── fetch columns: x:9 y:10 v:11
+ ├── insert-mapping:
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => v:3
+ ├── update-mapping:
+ │    └── column3:8 => v:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 5.14883333
+ └── left-join (cross)
+      ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 v:11
+      ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      ├── stats: [rows=1]
+      ├── cost: 5.13883333
+      ├── key: ()
+      ├── fd: ()-->(6-11)
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── cost: 0.02
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    └── (10, 10, 10)
+      ├── scan t64570
+      │    ├── columns: x:9!null y:10!null v:11
+      │    ├── constraint: /9/10: [/10/10 - /10/10]
+      │    ├── cardinality: [0 - 1]
+      │    ├── stats: [rows=0.933333333, distinct(9)=0.933333333, null(9)=0, distinct(10)=0.933333333, null(10)=0, distinct(9,10)=0.933333333, null(9,10)=0]
+      │    ├── cost: 5.07
+      │    ├── key: ()
+      │    └── fd: ()-->(9-11)
+      └── filters (true)

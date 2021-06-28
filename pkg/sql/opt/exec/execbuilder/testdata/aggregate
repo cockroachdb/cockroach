@@ -670,7 +670,7 @@ vectorized: true
 • group (scalar)
 │ columns: (min int)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: min(x)
+│ aggregate 0: any_not_null(x)
 │
 └── • project
     │ columns: (x int)
@@ -680,6 +680,7 @@ vectorized: true
           estimated row count: 1 (missing stats)
           table: xyz@zyx
           spans: /3/2-/3/3
+          limit: 1
 
 statement ok
 SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
@@ -701,16 +702,17 @@ vectorized: true
 • group (scalar)
 │ columns: (max int)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: max(x)
+│ aggregate 0: any_not_null(x)
 │
 └── • project
     │ columns: (x int)
     │
-    └── • scan
+    └── • revscan
           columns: (x int, y int, z float)
           estimated row count: 1 (missing stats)
           table: xyz@zyx
           spans: /3/2-/3/3
+          limit: 1
 
 # VARIANCE/STDDEV
 
