@@ -3,8 +3,7 @@
 workspace(
     name = "cockroach",
     managed_directories = {
-       "@npm": ["pkg/ui/node_modules"],
-       "@npm_cluster_ui": ["pkg/ui/cluster-ui/node_modules"],
+       "@npm": ["pkg/ui/node_modules"]
     },
 )
 
@@ -122,15 +121,7 @@ yarn_install(
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
     frozen_lockfile = False,
-)
-
-# install external dependencies for pkg/ui/cluster-ui
-yarn_install(
-    name = "npm_cluster_ui",
-    package_json = "//pkg/ui/cluster-ui:package.json",
-    yarn_lock = "//pkg/ui/cluster-ui:yarn.lock",
     strict_visibility = False,
-    frozen_lockfile = False,
 )
 
 # NB: @bazel_skylib comes from go_rules_dependencies().
