@@ -94,9 +94,9 @@ func TestBuilderAlterTable(t *testing.T) {
 
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
-				var outputNodes []*scpb.Node
+				var outputNodes scpb.State
 				for i := range stmts {
-					outputNodes, err = scbuild.Build(ctx, stmts[i].AST, *deps, outputNodes)
+					outputNodes, err = scbuild.Build(ctx, *deps, outputNodes, stmts[i].AST)
 					require.NoError(t, err)
 				}
 
@@ -112,7 +112,7 @@ func TestBuilderAlterTable(t *testing.T) {
 				stmt := stmts[0]
 				alter, ok := stmt.AST.(*tree.AlterTable)
 				require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-				_, err = scbuild.Build(ctx, alter, *deps, nil)
+				_, err = scbuild.Build(ctx, *deps, nil, alter)
 				require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				return ""
 
@@ -138,8 +138,8 @@ func indentText(input string, tab string) string {
 	return result.String()
 }
 
-// marshalNodes marshals a []*scpb.Node to YAML.
-func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
+// marshalNodes marshals a scpb.State to YAML.
+func marshalNodes(t *testing.T, nodes scpb.State) string {
 	var sortedEntries []string
 	for _, node := range nodes {
 		var buf bytes.Buffer
@@ -152,7 +152,7 @@ func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
 		entry.WriteString(" ")
 		scpb.FormatAttributes(node.Element(), &entry)
 		entry.WriteString("\n")
-		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.State.String()), "  "))
+		entry.WriteString(indentText(fmt.Sprintf("state: %s\n", node.Status.String()), "  "))
 		entry.WriteString(indentText("details:\n", "  "))
 		out, err := yaml.Marshal(target)
 		require.NoError(t, err)

@@ -69,6 +69,7 @@ table_name NOT IN (
 	'cluster_contended_keys',
 	'cluster_contended_indexes',
 	'cluster_contended_tables',
+	'cluster_inflight_traces',
 	'create_statements',
 	'create_type_statements',
 	'cross_db_references',

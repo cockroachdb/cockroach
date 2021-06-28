@@ -40,12 +40,12 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- DROP TypeReference:{DescID: 59, DepID: 57}
+- DROP TypeReference:{DescID: 59, ReferencedDescID: 57}
   state: PUBLIC
   details:
     descriptorId: 59
     typeId: 57
-- DROP TypeReference:{DescID: 59, DepID: 58}
+- DROP TypeReference:{DescID: 59, ReferencedDescID: 58}
   state: PUBLIC
   details:
     descriptorId: 59

@@ -10,15 +10,15 @@ func _() {
 	var x [1]struct{}
 	_ = x[AttributeType-0]
 	_ = x[AttributeDescID-1]
-	_ = x[AttributeDepID-2]
+	_ = x[AttributeReferencedDescID-2]
 	_ = x[AttributeColumnID-3]
 	_ = x[AttributeElementName-4]
 	_ = x[AttributeIndexID-5]
 }
 
-const _Attribute_name = "TypeDescIDDepIDColumnIDElementNameIndexID"
+const _Attribute_name = "TypeDescIDReferencedDescIDColumnIDElementNameIndexID"
 
-var _Attribute_index = [...]uint8{0, 4, 10, 15, 23, 34, 41}
+var _Attribute_index = [...]uint8{0, 4, 10, 26, 34, 45, 52}
 
 func (i Attribute) String() string {
 	if i < 0 || i >= Attribute(len(_Attribute_index)-1) {

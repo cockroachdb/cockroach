@@ -94,9 +94,9 @@ func TestPlanAlterTable(t *testing.T) {
 
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
-				var outputNodes []*scpb.Node
+				var outputNodes scpb.State
 				for i := range stmts {
-					outputNodes, err = scbuild.Build(ctx, stmts[i].AST, *deps, outputNodes)
+					outputNodes, err = scbuild.Build(ctx, *deps, outputNodes, stmts[i].AST)
 					require.NoError(t, err)
 				}
 
@@ -121,7 +121,7 @@ func TestPlanAlterTable(t *testing.T) {
 				stmt := stmts[0]
 				alter, ok := stmt.AST.(*tree.AlterTable)
 				require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-				_, err = scbuild.Build(ctx, alter, *deps, nil)
+				_, err = scbuild.Build(ctx, *deps, nil, alter)
 				require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				return ""
 
@@ -154,9 +154,9 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
 			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
-				scpb.AttributesString(de.From().Element()), de.From().State)
+				scpb.AttributesString(de.From().Element()), de.From().Status)
 			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
-				scpb.AttributesString(de.To().Element()), de.To().State)
+				scpb.AttributesString(de.To().Element()), de.To().Status)
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})

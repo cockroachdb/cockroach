@@ -31,9 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/jsonpb"
 )
 
 // setExplainBundleResult sets the result of an EXPLAIN ANALYZE (DEBUG)
@@ -86,39 +84,6 @@ func setExplainBundleResult(
 		}
 	}
 	return nil
-}
-
-// traceToJSON returns the string representation of the trace in JSON format.
-//
-// traceToJSON assumes that the first span in the recording contains all the
-// other spans.
-func traceToJSON(trace tracing.Recording) (string, error) {
-	root := normalizeSpan(trace[0], trace)
-	marshaller := jsonpb.Marshaler{
-		Indent: "\t",
-	}
-	str, err := marshaller.MarshalToString(&root)
-	if err != nil {
-		return "", err
-	}
-	return str, nil
-}
-
-func normalizeSpan(s tracingpb.RecordedSpan, trace tracing.Recording) tracingpb.NormalizedSpan {
-	var n tracingpb.NormalizedSpan
-	n.Operation = s.Operation
-	n.StartTime = s.StartTime
-	n.Duration = s.Duration
-	n.Tags = s.Tags
-	n.Logs = s.Logs
-
-	for _, ss := range trace {
-		if ss.ParentSpanID != s.SpanID {
-			continue
-		}
-		n.Children = append(n.Children, normalizeSpan(ss, trace))
-	}
-	return n
 }
 
 // diagnosticsBundle contains diagnostics information collected for a statement.
@@ -322,7 +287,7 @@ func (b *stmtBundleBuilder) addExplainVec() {
 // trace (the default and the jaeger formats), the third one is a human-readable
 // representation.
 func (b *stmtBundleBuilder) addTrace() {
-	traceJSONStr, err := traceToJSON(b.trace)
+	traceJSONStr, err := tracing.TraceToJSON(b.trace)
 	if err != nil {
 		b.z.AddFile("trace.json", err.Error())
 	} else {
@@ -343,7 +308,11 @@ func (b *stmtBundleBuilder) addTrace() {
 
 	// Note that we're going to include the non-anonymized statement in the trace.
 	// But then again, nothing in the trace is anonymized.
-	jaegerJSON, err := b.trace.ToJaegerJSON(stmt)
+	comment := fmt.Sprintf(`This is a trace for SQL statement: %s
+This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select the JSON File.
+Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
+The UI can then be accessed at http://localhost:16686/search`, stmt)
+	jaegerJSON, err := b.trace.ToJaegerJSON(stmt, comment, "")
 	if err != nil {
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {

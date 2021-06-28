@@ -62,7 +62,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     tableId: 55
     usesSequenceIDs:
     - 54
-- DROP RelationDependedOnBy:{DescID: 54, DepID: 55}
+- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
   state: PUBLIC
   details:
     dependedOn: 55
@@ -97,22 +97,22 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   state: PUBLIC
   details:
     typeId: 61
-- DROP TypeReference:{DescID: 62, DepID: 60}
+- DROP TypeReference:{DescID: 62, ReferencedDescID: 60}
   state: PUBLIC
   details:
     descriptorId: 62
     typeId: 60
-- DROP TypeReference:{DescID: 62, DepID: 61}
+- DROP TypeReference:{DescID: 62, ReferencedDescID: 61}
   state: PUBLIC
   details:
     descriptorId: 62
     typeId: 61
-- DROP TypeReference:{DescID: 63, DepID: 60}
+- DROP TypeReference:{DescID: 63, ReferencedDescID: 60}
   state: PUBLIC
   details:
     descriptorId: 63
     typeId: 60
-- DROP TypeReference:{DescID: 63, DepID: 61}
+- DROP TypeReference:{DescID: 63, ReferencedDescID: 61}
   state: PUBLIC
   details:
     descriptorId: 63
