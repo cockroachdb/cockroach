@@ -10,9 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -31,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -318,40 +314,6 @@ func TestAvroEncoder(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
-func newCACertBase64Encoded() (*tls.Certificate, string, error) {
-	keyLength := 2048
-
-	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "CA private key")
-	}
-
-	CACert, _, err := cdctest.GenerateCACert(CAKey)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "CA cert gen")
-	}
-
-	CAKeyPEM, err := cdctest.PemEncodePrivateKey(CAKey)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "pem encode CA key")
-	}
-
-	CACertPEM, err := cdctest.PemEncodeCert(CACert)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "pem encode CA cert")
-	}
-
-	cert, err := tls.X509KeyPair([]byte(CACertPEM), []byte(CAKeyPEM))
-	if err != nil {
-		return nil, "", errors.Wrap(err, "CA cert parse from PEM")
-	}
-
-	var CACertBase64 string
-	cdctest.EncodeBase64ToString([]byte(CACertPEM), &CACertBase64)
-
-	return &cert, CACertBase64, nil
-}
-
 func TestAvroEncoderWithTLS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -379,7 +341,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 	}
 
 	t.Run("format=experimental_avro,envelope=key_only", func(t *testing.T) {
-		cert, certBase64, err := newCACertBase64Encoded()
+		cert, certBase64, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 
 		var rowStringFn func([]byte, []byte) string
@@ -455,7 +417,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			"Get \"%s/mode\": x509: certificate signed by unknown authority",
 			opts[changefeedbase.OptConfluentSchemaRegistry]))
 
-		wrongCert, _, err := newCACertBase64Encoded()
+		wrongCert, _, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 
 		wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert)

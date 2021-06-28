@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -108,7 +109,7 @@ func TestCloudStorageSink(t *testing.T) {
 		changefeedbase.OptCompression: ``, // NB: overridden in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e, err := makeJSONEncoder(opts)
+	e, err := makeJSONEncoder(opts, jobspb.ChangefeedTargets{})
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)

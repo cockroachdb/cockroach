@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/binary"
 	gojson "encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -84,7 +85,7 @@ func getEncoder(
 ) (Encoder, error) {
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case ``, changefeedbase.OptFormatJSON:
-		return makeJSONEncoder(opts)
+		return makeJSONEncoder(opts, targets)
 	case changefeedbase.OptFormatAvro:
 		return newConfluentAvroEncoder(ctx, opts, targets)
 	case changefeedbase.OptFormatNative:
@@ -99,16 +100,20 @@ func getEncoder(
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue bool
+	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
-	alloc rowenc.DatumAlloc
-	buf   bytes.Buffer
+	targets jobspb.ChangefeedTargets
+	alloc   rowenc.DatumAlloc
+	buf     bytes.Buffer
 }
 
 var _ Encoder = &jsonEncoder{}
 
-func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
+func makeJSONEncoder(
+	opts map[string]string, targets jobspb.ChangefeedTargets,
+) (*jsonEncoder, error) {
 	e := &jsonEncoder{
+		targets: targets,
 		keyOnly: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
 		wrapped: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
 	}
@@ -123,6 +128,11 @@ func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
 	if e.keyInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
+	}
+	_, e.topicInValue = opts[changefeedbase.OptTopicInValue]
+	if e.topicInValue && !e.wrapped {
+		return nil, errors.Errorf(`%s is only usable with %s=%s`,
+			changefeedbase.OptTopicInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
 	return e, nil
 }
@@ -164,6 +174,17 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 		}
 	}
 	return jsonEntries, nil
+}
+
+func (e *jsonEncoder) encodeTopicRaw(row encodeRow) (interface{}, error) {
+	descID := row.tableDesc.GetID()
+	// use the target list since row.tableDesc.GetName() will not have fully qualified names
+	topicName, ok := e.targets[descID]
+	if !ok {
+		return nil, fmt.Errorf("table with name %s and descriptor ID %d not found in changefeed target list",
+			row.tableDesc.GetName(), descID)
+	}
+	return topicName.StatementTimeName, nil
 }
 
 // EncodeValue implements the Encoder interface.
@@ -226,6 +247,13 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 				return nil, err
 			}
 			jsonEntries[`key`] = keyEntries
+		}
+		if e.topicInValue {
+			topicEntry, err := e.encodeTopicRaw(row)
+			if err != nil {
+				return nil, err
+			}
+			jsonEntries[`topic`] = topicEntry
 		}
 	} else {
 		jsonEntries = after
@@ -337,6 +365,10 @@ func newConfluentAvroEncoder(
 	if _, ok := opts[changefeedbase.OptKeyInValue]; ok {
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
+	}
+	if _, ok := opts[changefeedbase.OptTopicInValue]; ok {
+		return nil, errors.Errorf(`%s is not supported with %s=%s`,
+			changefeedbase.OptTopicInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
 	if len(opts[changefeedbase.OptConfluentSchemaRegistry]) == 0 {
 		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,

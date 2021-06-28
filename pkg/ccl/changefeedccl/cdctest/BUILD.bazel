@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "cdctest",
     srcs = [
+        "mock_webhook_sink.go",
         "nemeses.go",
         "schema_registry.go",
         "testfeed.go",
