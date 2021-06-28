@@ -495,12 +495,19 @@ func TestRemovePoint(t *testing.T) {
 func TestLineSubstring(t *testing.T) {
 	tests := []struct {
 		name          string
-		lineString    *geom.LineString
+		lineString    geom.T
 		start         float64
 		end           float64
 		wantGeomT     geom.T
 		wantErrString string
 	}{
+		{
+			name:       "empty",
+			lineString: geom.NewLineString(geom.XY),
+			start:      0.1,
+			end:        0.2,
+			wantGeomT:  geom.NewLineString(geom.XY),
+		},
 		{
 			name:       "1/3 mid-range part of a linestring",
 			lineString: geom.NewLineStringFlat(geom.XY, []float64{25, 50, 100, 125, 150, 190}),
@@ -579,6 +586,13 @@ func TestLineSubstring(t *testing.T) {
 			end:           0.1,
 			wantGeomT:     geom.NewLineStringFlat(geom.XY, []float64{25, 50, 100, 125, 150, 190}),
 			wantErrString: "end must be greater or equal to the start",
+		},
+		{
+			name:          "not a line string",
+			lineString:    geom.NewPointEmpty(geom.XY),
+			start:         0.4,
+			end:           0.6,
+			wantErrString: "geometry has to be of type LineString",
 		},
 	}
 	for _, tt := range tests {
