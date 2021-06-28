@@ -307,7 +307,7 @@ func registerTPCC(r *testRegistry) {
 		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    headroomSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.Spec().(*TestSpec).Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -334,7 +334,7 @@ func registerTPCC(r *testRegistry) {
 			crdbNodes := c.Range(1, 4)
 			workloadNode := c.Node(5)
 
-			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.Spec().(*TestSpec).Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			if local {
 				headroomWarehouses = 10
@@ -370,7 +370,7 @@ func registerTPCC(r *testRegistry) {
 				bankRows = 1000
 			}
 
-			oldV, err := PredecessorVersion(r.buildVersion)
+			oldV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

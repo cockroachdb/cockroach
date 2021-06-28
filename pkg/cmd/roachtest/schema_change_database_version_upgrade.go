@@ -38,7 +38,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Cluster:    r.makeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, r.buildVersion)
+			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, *t.BuildVersion())
 		},
 	})
 }

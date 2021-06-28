@@ -35,7 +35,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 				maxOps = 10
 				concurrency = 2
 			}
-			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency, r.buildVersion)
+			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency, *t.BuildVersion())
 		},
 	})
 }

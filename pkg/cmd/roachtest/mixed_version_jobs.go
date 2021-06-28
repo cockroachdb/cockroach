@@ -337,7 +337,7 @@ func registerJobsMixedVersions(r *testRegistry) {
 		Skip:       "https://github.com/cockroachdb/cockroach/issues/57230",
 		Cluster:    r.makeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := PredecessorVersion(r.buildVersion)
+			predV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

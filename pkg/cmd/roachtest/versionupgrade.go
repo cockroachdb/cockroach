@@ -80,10 +80,8 @@ DROP TABLE test.t;
 	`),
 }
 
-func runVersionUpgrade(
-	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
-) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
+	predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
 	if err != nil {
 		t.Fatal(err)
 	}
