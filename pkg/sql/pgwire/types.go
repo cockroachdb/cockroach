@@ -648,8 +648,7 @@ func writeBinaryDatumNotNull(
 		writeBinaryInterval(b, v.Duration)
 
 	case *tree.DTuple:
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+		subWriter := b.tempWriteBuffer
 		// Put the number of datums.
 		subWriter.putInt32(int32(len(v.D)))
 		tupleTypes := t.TupleContents()
@@ -659,6 +658,7 @@ func writeBinaryDatumNotNull(
 			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+		subWriter.reset()
 
 	case *tree.DBox2D:
 		b.putInt32(32)
@@ -681,8 +681,7 @@ func writeBinaryDatumNotNull(
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
+		subWriter := b.tempWriteBuffer
 		// Put the number of dimensions. We currently support 1d arrays only.
 		var ndims int32 = 1
 		if v.Len() == 0 {
@@ -705,6 +704,7 @@ func writeBinaryDatumNotNull(
 			}
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+		subWriter.reset()
 
 	case *tree.DJSON:
 		writeBinaryJSON(b, v.JSON)

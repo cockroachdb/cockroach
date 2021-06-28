@@ -40,11 +40,22 @@ type writeBuffer struct {
 	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
 	// socket, reducing the onus on the many callers of finishMsg.
 	bytecount *metric.Counter
+
+	// (Fixes #21711) This tempWriteBuffer will be used to store temporary data when serializing
+	// array/tuple
+	tempWriteBuffer *writeBuffer
 }
 
 func newWriteBuffer(bytecount *metric.Counter) *writeBuffer {
 	b := new(writeBuffer)
 	b.init(bytecount)
+
+	// Initializing the temporary buffer also, see the writeBuffer defination for more info
+	b.tempWriteBuffer = new(writeBuffer)
+	b.tempWriteBuffer.init(nil)
+
+	// Set it to nil as we will not use the temporary buffer inside the temporary buffer.
+	b.tempWriteBuffer.tempWriteBuffer = nil
 	return b
 }
 
