@@ -482,6 +482,18 @@ func (a internalClientAdapter) ResetQuorum(
 	return a.InternalServer.ResetQuorum(ctx, req)
 }
 
+func (a internalClientAdapter) GetSpanConfigs(
+	ctx context.Context, req *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return a.InternalServer.GetSpanConfigs(ctx, req)
+}
+
+func (a internalClientAdapter) UpdateSpanConfigs(
+	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return a.InternalServer.UpdateSpanConfigs(ctx, req)
+}
+
 type respStreamClientAdapter struct {
 	ctx   context.Context
 	respC chan interface{}

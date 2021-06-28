@@ -10,6 +10,12 @@
 
 package config
 
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
 // SystemConfigProvider is capable of providing the SystemConfig, as well as
 // notifying clients of updates to the SystemConfig.
 type SystemConfigProvider interface {
@@ -37,4 +43,19 @@ func (EmptySystemConfigProvider) GetSystemConfig() *SystemConfig {
 func (EmptySystemConfigProvider) RegisterSystemConfigChannel() <-chan struct{} {
 	// The system config will never be updated, so return a nil channel.
 	return nil
+}
+
+// SpanConfigAccessor mediates access to the subset of the cluster's span
+// configs applicable to secondary tenants.
+//
+// Implementations are expected to be thread safe.
+type SpanConfigAccessor interface {
+	// GetSpanConfigsFor retrieves the span configurations for the requested
+	// span.
+	GetSpanConfigsFor(ctx context.Context, span roachpb.Span) ([]roachpb.SpanConfigEntry, error)
+
+	// UpdateSpanConfigEntries updates the span configurations over the given
+	// keyspans. It'll add the span configurations specified in the first
+	// parameter and delete the ones specified in the second.
+	UpdateSpanConfigEntries(ctx context.Context, upsert, delete []roachpb.SpanConfigEntry) error
 }
