@@ -242,14 +242,18 @@ func changefeedPlanHook(
 		//   and `format` if the user didn't specify them.
 		// - Then `getEncoder` is run to return any configuration errors.
 		// - Then the changefeed is opted in to `OptKeyInValue` for any cloud
-		//   storage sink. Kafka etc have a key and value field in each message but
-		//   cloud storage sinks don't have anywhere to put the key. So if the key
-		//   is not in the value, then for DELETEs there is no way to recover which
-		//   key was deleted. We could make the user explicitly pass this option for
-		//   every cloud storage sink and error if they don't, but that seems
-		//   user-hostile for insufficient reason. We can't do this any earlier,
-		//   because we might return errors about `key_in_value` being incompatible
-		//   which is confusing when the user didn't type that option.
+		//   storage sink or webhook sink. Kafka etc have a key and value field in
+		//   each message but cloud storage sinks and webhook sinks don't have
+		//   anywhere to put the key. So if the key is not in the value, then for
+		//   DELETEs there is no way to recover which key was deleted. We could make
+		//   the user explicitly pass this option for every cloud storage sink/
+		//   webhook sink and error if they don't, but that seems user-hostile for
+		//   insufficient reason. We can't do this any earlier, because we might
+		//   return errors about `key_in_value` being incompatible which is
+		//   confusing when the user didn't type that option.
+		//   This is the same for the topic and webhook sink, which uses
+		//   `topic_in_value` to embed the topic in the value by default, since it
+		//   has no other avenue to express the topic.
 		// - Finally, we create a "canary" sink to test sink configuration and
 		//   connectivity. This has to go last because it is strange to return sink
 		//   connectivity errors before we've finished validating all the other
@@ -270,8 +274,11 @@ func changefeedPlanHook(
 		if _, err := getEncoder(ctx, details.Opts, details.Targets); err != nil {
 			return err
 		}
-		if isCloudStorageSink(parsedSink) {
+		if isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink) {
 			details.Opts[changefeedbase.OptKeyInValue] = ``
+		}
+		if isWebhookSink(parsedSink) {
+			details.Opts[changefeedbase.OptTopicInValue] = ``
 		}
 
 		if !unspecifiedSink && p.ExecCfg().ExternalIODirConfig.DisableOutbound {
@@ -424,6 +431,9 @@ func changefeedJobDescription(
 		SinkURI: tree.NewDString(cleanedSinkURI),
 	}
 	for k, v := range opts {
+		if k == changefeedbase.OptWebhookAuthHeader {
+			v = redactWebhookAuthHeader(v)
+		}
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
