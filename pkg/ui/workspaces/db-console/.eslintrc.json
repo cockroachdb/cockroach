@@ -1,0 +1,17 @@
+{
+  "root": true,
+  "extends": "@cockroachlabs/eslint-config",
+  "ignorePatterns": ["protos.d.ts", "protos.js"],
+  "rules": {
+    "@typescript-eslint/no-inferrable-types": "off",
+    "react/jsx-key": "off",
+    "@typescript-eslint/ban-types": "off",
+    "react/no-unescaped-entities": "off",
+    "@typescript-eslint/no-unused-vars": "off",
+    "@typescript-eslint/explicit-module-boundary-types": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "no-restricted-imports": ["error", {
+      "patterns": ["@cockroachlabs/cluster-ui/src/*"]
+    }]
+  }
+}
