@@ -463,7 +463,7 @@ var operators = func() map[oid.Oid][]operator {
 			bo := ov.(*tree.BinOp)
 			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
 				BinOp:    bo,
-				Operator: BinaryOperator,
+				Operator: tree.MakeBinaryOperator(BinaryOperator),
 			})
 		}
 	}

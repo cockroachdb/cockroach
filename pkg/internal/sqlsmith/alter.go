@@ -214,7 +214,12 @@ func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
 		return nil, false
 	}
 	col.Computed.Computed = true
-	col.Computed.Expr = tree.NewTypedBinaryExpr(tree.JSONFetchText, ref.typedExpr(), randgen.RandDatumSimple(s.rnd, types.String), types.String)
+	col.Computed.Expr = tree.NewTypedBinaryExpr(
+		tree.MakeBinaryOperator(tree.JSONFetchText),
+		ref.typedExpr(),
+		randgen.RandDatumSimple(s.rnd, types.String),
+		types.String,
+	)
 
 	return &tree.AlterTable{
 		Table: tableRef.TableName.ToUnresolvedObjectName(),

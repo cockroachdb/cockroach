@@ -2256,7 +2256,7 @@ CREATE TABLE operator_tbl (
   b INT DEFAULT 1 OPERATOR(pg_catalog.+) 2
 )
 ----
-CREATE TABLE operator_tbl (a INT8 DEFAULT 1 + 2, b INT8 DEFAULT 1 + 2) -- normalized!
-CREATE TABLE operator_tbl (a INT8 DEFAULT ((1) + (2)), b INT8 DEFAULT ((1) + (2))) -- fully parenthesized
-CREATE TABLE operator_tbl (a INT8 DEFAULT _ + _, b INT8 DEFAULT _ + _) -- literals removed
-CREATE TABLE _ (_ INT8 DEFAULT 1 + 2, _ INT8 DEFAULT 1 + 2) -- identifiers removed
+CREATE TABLE operator_tbl (a INT8 DEFAULT 1 OPERATOR(+) 2, b INT8 DEFAULT 1 OPERATOR(+) 2) -- normalized!
+CREATE TABLE operator_tbl (a INT8 DEFAULT ((1) OPERATOR(+) (2)), b INT8 DEFAULT ((1) OPERATOR(+) (2))) -- fully parenthesized
+CREATE TABLE operator_tbl (a INT8 DEFAULT _ OPERATOR(+) _, b INT8 DEFAULT _ OPERATOR(+) _) -- literals removed
+CREATE TABLE _ (_ INT8 DEFAULT 1 OPERATOR(+) 2, _ INT8 DEFAULT 1 OPERATOR(+) 2) -- identifiers removed

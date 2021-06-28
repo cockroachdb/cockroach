@@ -1704,18 +1704,18 @@ SELECT (1 + COALESCE(NULL, 'a', _)) - ARRAY[3.14] -- identifiers removed
 parse
 SELECT 1 OPERATOR(+) 2, 1 OPERATOR(pg_catalog.+) 2
 ----
-SELECT 1 + 2, 1 + 2 -- normalized!
-SELECT ((1) + (2)), ((1) + (2)) -- fully parenthesized
-SELECT _ + _, _ + _ -- literals removed
-SELECT 1 + 2, 1 + 2 -- identifiers removed
+SELECT 1 OPERATOR(+) 2, 1 OPERATOR(+) 2 -- normalized!
+SELECT ((1) OPERATOR(+) (2)), ((1) OPERATOR(+) (2)) -- fully parenthesized
+SELECT _ OPERATOR(+) _, _ OPERATOR(+) _ -- literals removed
+SELECT 1 OPERATOR(+) 2, 1 OPERATOR(+) 2 -- identifiers removed
 
 parse
 SELECT 1 OPERATOR(<<) 2, 1 OPERATOR(pg_catalog.<<) 2
 ----
-SELECT 1 << 2, 1 << 2 -- normalized!
-SELECT ((1) << (2)), ((1) << (2)) -- fully parenthesized
-SELECT _ << _, _ << _ -- literals removed
-SELECT 1 << 2, 1 << 2 -- identifiers removed
+SELECT 1 OPERATOR(<<) 2, 1 OPERATOR(<<) 2 -- normalized!
+SELECT ((1) OPERATOR(<<) (2)), ((1) OPERATOR(<<) (2)) -- fully parenthesized
+SELECT _ OPERATOR(<<) _, _ OPERATOR(<<) _ -- literals removed
+SELECT 1 OPERATOR(<<) 2, 1 OPERATOR(<<) 2 -- identifiers removed
 
 parse
 SELECT OPERATOR(+) 1, OPERATOR(-) 1, OPERATOR(~) 1, OPERATOR(|/) 1, OPERATOR(||/) 1

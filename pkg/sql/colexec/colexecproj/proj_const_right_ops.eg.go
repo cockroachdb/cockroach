@@ -58523,7 +58523,7 @@ func GetProjectionRConstOperator(
 	leftType, rightType := inputTypes[colIdx], constType
 	switch op.(type) {
 	case tree.BinaryOperator:
-		switch op {
+		switch op.(tree.BinaryOperator).Symbol {
 		case tree.Bitand:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:

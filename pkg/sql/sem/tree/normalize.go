@@ -93,9 +93,12 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		switch b := val.(type) {
 		// -(a - b) -> (b - a)
 		case *BinaryExpr:
-			if b.Operator == Minus {
-				newBinExpr := newBinExprIfValidOverload(Minus,
-					b.TypedRight(), b.TypedLeft())
+			if b.Operator.Symbol == Minus {
+				newBinExpr := newBinExprIfValidOverload(
+					MakeBinaryOperator(Minus),
+					b.TypedRight(),
+					b.TypedLeft(),
+				)
 				if newBinExpr != nil {
 					newBinExpr.memoizeFn()
 					b = newBinExpr
@@ -124,7 +127,7 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 
 	var final TypedExpr
 
-	switch expr.Operator {
+	switch expr.Operator.Symbol {
 	case Plus:
 		if v.isNumericZero(right) {
 			final = ReType(left, expectedType)
@@ -283,7 +286,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 
 			switch {
 			case v.isConst(left.Right) &&
-				(left.Operator == Plus || left.Operator == Minus || left.Operator == Div):
+				(left.Operator.Symbol == Plus || left.Operator.Symbol == Minus || left.Operator.Symbol == Div):
 
 				//        cmp          cmp
 				//       /   \        /   \
@@ -291,13 +294,13 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				//   /     \            /     \
 				//  a       1          2       1
 				var op BinaryOperator
-				switch left.Operator {
+				switch left.Operator.Symbol {
 				case Plus:
-					op = Minus
+					op = MakeBinaryOperator(Minus)
 				case Minus:
-					op = Plus
+					op = MakeBinaryOperator(Plus)
 				case Div:
-					op = Mult
+					op = MakeBinaryOperator(Mult)
 					if expr.Operator != EQ {
 						// In this case, we must remember to *flip* the inequality if the
 						// divisor is negative, since we are in effect multiplying both sides
@@ -354,7 +357,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					continue
 				}
 
-			case v.isConst(left.Left) && (left.Operator == Plus || left.Operator == Minus):
+			case v.isConst(left.Left) && (left.Operator.Symbol == Plus || left.Operator.Symbol == Minus):
 				//       cmp              cmp
 				//      /   \            /   \
 				//    [+-]   2  ->     [+-]   a
@@ -364,19 +367,25 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				op := expr.Operator
 				var newBinExpr *BinaryExpr
 
-				switch left.Operator {
+				switch left.Operator.Symbol {
 				case Plus:
 					//
 					// (A + X) cmp B => X cmp (B - C)
 					//
-					newBinExpr = newBinExprIfValidOverload(Minus,
-						expr.TypedRight(), left.TypedLeft())
+					newBinExpr = newBinExprIfValidOverload(
+						MakeBinaryOperator(Minus),
+						expr.TypedRight(),
+						left.TypedLeft(),
+					)
 				case Minus:
 					//
 					// (A - X) cmp B => X cmp' (A - B)
 					//
-					newBinExpr = newBinExprIfValidOverload(Minus,
-						left.TypedLeft(), expr.TypedRight())
+					newBinExpr = newBinExprIfValidOverload(
+						MakeBinaryOperator(Minus),
+						left.TypedLeft(),
+						expr.TypedRight(),
+					)
 					op, v.err = invertComparisonOp(op)
 					if v.err != nil {
 						return expr
@@ -408,7 +417,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					continue
 				}
 
-			case expr.Operator == EQ && left.Operator == JSONFetchVal && v.isConst(left.Right) &&
+			case expr.Operator == EQ && left.Operator.Symbol == JSONFetchVal && v.isConst(left.Right) &&
 				v.isConst(expr.Right):
 				// This is a JSONB inverted index normalization, changing things of the form
 				// x->y=z to x @> {y:z} which can be used to build spans for inverted index

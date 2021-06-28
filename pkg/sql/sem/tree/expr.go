@@ -104,7 +104,7 @@ type Operator interface {
 }
 
 var _ Operator = (*UnaryOperator)(nil)
-var _ Operator = BinaryOperator(0)
+var _ Operator = (*BinaryOperator)(nil)
 var _ Operator = ComparisonOperator(0)
 
 // SubqueryExpr is an interface used to identify an expression as a subquery.
@@ -1099,14 +1099,33 @@ func (node *TypedDummy) Eval(*EvalContext) (Datum, error) {
 	return nil, errors.AssertionFailedf("should not eval typed dummy")
 }
 
-// BinaryOperator represents a binary operator.
-type BinaryOperator int
+// BinaryOperator represents a unary operator used in a BinaryExpr.
+type BinaryOperator struct {
+	Symbol BinaryOperatorSymbol
+	// IsOperator is true if OPERATOR(symbol) is used.
+	IsOperator bool
+}
+
+// MakeBinaryOperator creates a BinaryOperator given a symbol.
+func MakeBinaryOperator(symbol BinaryOperatorSymbol) BinaryOperator {
+	return BinaryOperator{Symbol: symbol}
+}
+
+func (o BinaryOperator) String() string {
+	if o.IsOperator {
+		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
+	}
+	return o.Symbol.String()
+}
 
 func (BinaryOperator) operator() {}
 
+// BinaryOperatorSymbol is a symbol for a binary operator.
+type BinaryOperatorSymbol int
+
 // BinaryExpr.Operator
 const (
-	Bitand BinaryOperator = iota
+	Bitand BinaryOperatorSymbol = iota
 	Bitor
 	Bitxor
 	Plus
@@ -1124,10 +1143,10 @@ const (
 	JSONFetchValPath
 	JSONFetchTextPath
 
-	NumBinaryOperators
+	NumBinaryOperatorSymbols
 )
 
-var _ = NumBinaryOperators
+var _ = NumBinaryOperatorSymbols
 
 var binaryOpName = [...]string{
 	Bitand:            "&",
@@ -1174,12 +1193,12 @@ var binaryOpFullyAssoc = [...]bool{
 	Concat: true, JSONFetchVal: false, JSONFetchText: false, JSONFetchValPath: false, JSONFetchTextPath: false,
 }
 
-func (i BinaryOperator) isPadded() bool {
+func (i BinaryOperatorSymbol) isPadded() bool {
 	return !(i == JSONFetchVal || i == JSONFetchText || i == JSONFetchValPath || i == JSONFetchTextPath)
 }
 
-func (i BinaryOperator) String() string {
-	if i < 0 || i > BinaryOperator(len(binaryOpName)-1) {
+func (i BinaryOperatorSymbol) String() string {
+	if i < 0 || i > BinaryOperatorSymbol(len(binaryOpName)-1) {
 		return fmt.Sprintf("BinaryOp(%d)", i)
 	}
 	return binaryOpName[i]
@@ -1222,7 +1241,7 @@ func (*BinaryExpr) operatorExpr() {}
 
 func (node *BinaryExpr) memoizeFn() {
 	leftRet, rightRet := node.Left.(TypedExpr).ResolvedType(), node.Right.(TypedExpr).ResolvedType()
-	fn, ok := BinOps[node.Operator].lookupImpl(leftRet, rightRet)
+	fn, ok := BinOps[node.Operator.Symbol].lookupImpl(leftRet, rightRet)
 	if !ok {
 		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
@@ -1235,7 +1254,7 @@ func (node *BinaryExpr) memoizeFn() {
 // BinaryOperator.
 func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExpr) *BinaryExpr {
 	leftRet, rightRet := left.ResolvedType(), right.ResolvedType()
-	fn, ok := BinOps[op].lookupImpl(leftRet, rightRet)
+	fn, ok := BinOps[op.Symbol].lookupImpl(leftRet, rightRet)
 	if ok {
 		expr := &BinaryExpr{
 			Operator: op,
@@ -1251,7 +1270,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(ctx *FmtCtx) {
-	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.isPadded())
+	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.isPadded())
 }
 
 // UnaryOperator represents a unary operator used in a UnaryExpr.

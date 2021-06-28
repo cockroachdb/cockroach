@@ -516,7 +516,7 @@ func GetJSONPath(j json.JSON, ary DArray) (json.JSON, error) {
 }
 
 // BinOps contains the binary operations indexed by operation type.
-var BinOps = map[BinaryOperator]binOpOverload{
+var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 	Bitand: {
 		&BinOp{
 			LeftType:   types.Int,
