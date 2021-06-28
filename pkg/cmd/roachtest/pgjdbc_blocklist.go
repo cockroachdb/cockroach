@@ -493,7 +493,6 @@ var pgjdbcBlockList21_2 = blocklist{
 	"org.postgresql.test.jdbc2.ResultSetMetaDataTest.testUnexecutedStatement[databaseMetadataCacheFields = null, databaseMetadataCacheFieldsMib = null]":                       "32565",
 	"org.postgresql.test.jdbc2.ResultSetTest.testRowResultPositioning":                                                                                                         "unknown",
 	"org.postgresql.test.jdbc2.ResultSetTest.testgetBadBoolean":                                                                                                                "32552",
-	"org.postgresql.test.jdbc2.SearchPathLookupTest.testSearchPathBackwardsCompatibleLookup":                                                                                   "unknown",
 	"org.postgresql.test.jdbc2.SearchPathLookupTest.testSearchPathHiddenLookup":                                                                                                "unknown",
 	"org.postgresql.test.jdbc2.SearchPathLookupTest.testSearchPathNormalLookup":                                                                                                "unknown",
 	"org.postgresql.test.jdbc2.ServerCursorTest.testBasicFetch":                                                                                                                "41412",
