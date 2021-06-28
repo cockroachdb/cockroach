@@ -738,7 +738,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    contention_time_var FLOAT8 NULL,
    implicit_txn BOOL NOT NULL,
    full_scan BOOL NOT NULL,
-   sample_plan JSONB NULL,
+   sample_plan STRING NULL,
    database_name STRING NOT NULL,
    exec_node_ids INT8[] NOT NULL
 )  CREATE TABLE crdb_internal.node_statement_statistics (
@@ -780,7 +780,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    contention_time_var FLOAT8 NULL,
    implicit_txn BOOL NOT NULL,
    full_scan BOOL NOT NULL,
-   sample_plan JSONB NULL,
+   sample_plan STRING NULL,
    database_name STRING NOT NULL,
    exec_node_ids INT8[] NOT NULL
 )  {}  {}
