@@ -312,7 +312,7 @@ func ingestKvs(
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 
-	flushSize := func() int64 { return storageccl.MaxImportBatchSize(flowCtx.Cfg.Settings) }
+	flushSize := func() int64 { return storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings) }
 
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and
