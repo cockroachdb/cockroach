@@ -113,9 +113,7 @@ func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 // FindFunction returns the function properties and overload of the function
 // with the given name and argument types matching the children of the given
 // input.
-func FindFunction(
-	e opt.ScalarExpr, name string,
-) (props *tree.FunctionProperties, overload *tree.Overload, ok bool) {
+func FindFunction(e interface{}, name string) (props *interface{}, overload *interface{}, ok bool) {
 	props, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
