@@ -843,7 +843,7 @@ message TableDescriptor {
   //
   // Multiple schema change mutations can be grouped together on a
   // particular version increment.
-  optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  optional uint64 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   // Last modification time of the table descriptor.
   // Starting in 19.2 this field's value may sometime be zero-valued in which
   // case the MVCC timestamp of the row containing the value should be used to
@@ -1216,7 +1216,7 @@ message DatabaseDescriptor {
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   // Last modification time of the descriptor.
   optional util.hlc.Timestamp modification_time = 4 [(gogoproto.nullable) = false];
-  optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  optional uint64 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   repeated NameInfo draining_names = 6 [(gogoproto.nullable) = false];
 
   optional PrivilegeDescriptor privileges = 3;
@@ -1276,7 +1276,7 @@ message TypeDescriptor {
   optional uint32 id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
 
-  optional uint32 version = 9 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  optional uint64 version = 9 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   // Last modification time of the descriptor.
   optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
   repeated NameInfo draining_names = 11 [(gogoproto.nullable) = false];
@@ -1395,7 +1395,7 @@ message SchemaDescriptor {
 
   // Last modification time of the descriptor.
   optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];
-  optional uint32 version = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  optional uint64 version = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   repeated NameInfo draining_names = 7 [(gogoproto.nullable) = false];
 
   // parent_id refers to the database the schema is in.
