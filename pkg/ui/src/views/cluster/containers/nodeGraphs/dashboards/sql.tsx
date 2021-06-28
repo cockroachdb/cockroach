@@ -141,6 +141,24 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Full Table/Index Scans"
+      sources={nodeSources}
+      tooltip={`The total number of full table/index scans ${tooltipSelection}.`}
+    >
+      <Axis label="full scans">
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.sql.full.scan.count"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Active Flows for Distributed SQL Statements"
       tooltip="The number of flows on each node contributing to currently running distributed SQL statements."
     >
