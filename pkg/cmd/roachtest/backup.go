@@ -359,7 +359,7 @@ func registerBackup(r *testRegistry) {
 
 			backupDir := "gs://cockroachdb-backup-testing/" + c.Name() + "?AUTH=implicit"
 			// Use inter-node file sharing on 20.1+.
-			if r.buildVersion.AtLeast(version.MustParse(`v20.1.0-0`)) {
+			if t.BuildVersion().AtLeast(version.MustParse(`v20.1.0-0`)) {
 				backupDir = "nodelocal://1/" + c.Name()
 			}
 			fullDir := backupDir + "/full"

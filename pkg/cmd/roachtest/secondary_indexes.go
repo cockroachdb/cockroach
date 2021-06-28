@@ -140,7 +140,7 @@ func registerSecondaryIndexesMultiVersionCluster(r *testRegistry) {
 		Cluster:    r.makeClusterSpec(3),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := PredecessorVersion(r.buildVersion)
+			predV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

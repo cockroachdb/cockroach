@@ -71,7 +71,7 @@ func registerDecommission(r *testRegistry) {
 			MinVersion: "v20.2.0",
 			Cluster:    r.makeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
+				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
 			},
 		})
 	}
