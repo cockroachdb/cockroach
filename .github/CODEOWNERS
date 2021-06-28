@@ -19,6 +19,8 @@
 
 /.github/                    @cockroachdb/dev-inf
 
+/build/                      @cockroachdb/dev-inf
+
 /docs/RFCS/                  @cockroachdb/rfc-prs
 
 /Makefile                    @cockroachdb/dev-inf
