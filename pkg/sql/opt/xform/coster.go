@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -138,6 +139,17 @@ const (
 	// useful for empty or very small tables, where we would get plans that are
 	// surprising to users (like full scans instead of point lookups).
 	fullScanRowCountPenalty = 10
+
+	// unboundedMaxCardinalityScanRowCountPenalty adds a penalty to scans with
+	// unbounded maximum cardinality. This helps prevent surprising plans for very
+	// small tables or for when stats are stale.
+	unboundedMaxCardinalityScanRowCountPenalty = fullScanRowCountPenalty
+
+	// largeMaxCardinalityScanRowCountPenalty is the maximum penalty to add to
+	// scans with a bounded maximum cardinality exceeding the row count estimate.
+	// This helps prevent surprising plans for very small tables or for when stats
+	// are stale.
+	largeMaxCardinalityScanRowCountPenalty = unboundedMaxCardinalityScanRowCountPenalty / 2
 
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
@@ -640,6 +652,11 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		}
 	}
 
+	// Add a penalty if the cardinality exceeds the row count estimate. Adding a
+	// few rows worth of cost helps prevent surprising plans for very small tables
+	// or for when stats are stale.
+	rowCount += c.largeCardinalityRowCountPenalty(scan.Relational().Cardinality, rowCount)
+
 	if required.LimitHint != 0 {
 		rowCount = math.Min(rowCount, required.LimitHint)
 	}
@@ -1030,6 +1047,12 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 
 	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
 
+	// Add a penalty if the cardinality exceeds the row count estimate. Adding a
+	// few rows worth of cost helps prevent surprising plans for very small tables
+	// or for when stats are stale. This is also needed to ensure parity with the
+	// cost of scans.
+	rowCount += c.largeCardinalityRowCountPenalty(join.Relational().Cardinality, rowCount)
+
 	// Double the cost of emitting rows as well as the cost of seeking rows,
 	// given two indexes will be accessed.
 	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost + filterPerRow)
@@ -1255,6 +1278,27 @@ func (c *coster) rowBufferCost(rowCount float64) memo.Cost {
 	}
 
 	return memo.Cost(rowCount) * spillCostFactor * fraction
+}
+
+// largeCardinalityRowCountPenalty returns a penalty that should be added to the
+// row count of scans. It is non-zero for expressions with unbounded maximum
+// cardinality or with maximum cardinality exceeding the row count estimate.
+// Adding a few rows worth of cost helps prevent surprising plans for very small
+// tables or for when stats are stale.
+func (c *coster) largeCardinalityRowCountPenalty(
+	cardinality props.Cardinality, rowCount float64,
+) float64 {
+	if cardinality.IsUnbounded() {
+		return unboundedMaxCardinalityScanRowCountPenalty
+	}
+	if maxCard := float64(cardinality.Max); maxCard > rowCount {
+		penalty := maxCard - rowCount
+		if penalty > largeMaxCardinalityScanRowCountPenalty {
+			penalty = largeMaxCardinalityScanRowCountPenalty
+		}
+		return penalty
+	}
+	return 0
 }
 
 // localityMatchScore returns a number from 0.0 to 1.0 that describes how well
