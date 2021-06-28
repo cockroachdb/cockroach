@@ -59,7 +59,7 @@ func TestRangeIterForward(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,
@@ -96,7 +96,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,
@@ -136,7 +136,7 @@ func TestRangeIterReverse(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,
@@ -173,7 +173,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,

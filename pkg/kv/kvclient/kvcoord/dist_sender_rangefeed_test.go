@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvcoord
+package kvcoord_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -59,7 +60,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-			g := makeGossip(t, stopper, rpcContext)
+			g := kvcoord.TestingMakeGossip(t, stopper, rpcContext)
 
 			desc := roachpb.RangeDescriptor{
 				RangeID:    1,
@@ -74,7 +75,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			for _, repl := range desc.InternalReplicas {
 				require.NoError(t, g.AddInfoProto(
 					gossip.MakeNodeIDKey(repl.NodeID),
-					newNodeDesc(repl.NodeID),
+					kvcoord.TestingNewNodeDesc(repl.NodeID),
 					gossip.NodeDescriptorTTL,
 				))
 			}
@@ -127,14 +128,14 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				transport.EXPECT().Release()
 			}
 
-			ds := NewDistSender(DistSenderConfig{
+			ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 				AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
 				Clock:           clock,
 				NodeDescs:       g,
 				RPCRetryOptions: &retry.Options{MaxRetries: 10},
 				RPCContext:      rpcContext,
-				TestingKnobs: ClientTestingKnobs{
-					TransportFactory: func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error) {
+				TestingKnobs: kvcoord.ClientTestingKnobs{
+					TransportFactory: func(kvcoord.SendOptions, *nodedialer.Dialer, kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
 						return transport, nil
 					},
 				},
@@ -142,7 +143,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 				Settings:          cluster.MakeTestingClusterSettings(),
 			})
-			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+			ds.RangeDescriptorCache().Insert(ctx, roachpb.RangeInfo{
 				Desc:  desc,
 				Lease: cachedLease,
 			})

@@ -299,7 +299,7 @@ func sendBatch(
 ) (*roachpb.BatchResponse, error) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	desc := new(roachpb.RangeDescriptor)
 	desc.StartKey = roachpb.RKeyMin

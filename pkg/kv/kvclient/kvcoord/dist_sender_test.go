@@ -200,12 +200,14 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 
 func (l *simpleTransportAdapter) Release() {}
 
-func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
+func TestingMakeGossip(
+	t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context,
+) *gossip.Gossip {
 	server := rpc.NewServer(rpcContext)
 
 	const nodeID = 1
 	g := gossip.NewTest(nodeID, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
-	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
@@ -215,7 +217,7 @@ func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *g
 	return g
 }
 
-func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
+func TestingNewNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 	return &roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("invalid.invalid:%d", nodeID)),
@@ -234,7 +236,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	rangeID := roachpb.RangeID(99)
 
 	nodeTiers := map[int32][]roachpb.Tier{
@@ -535,7 +537,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	var testFn simpleSendFn = func(
 		_ context.Context, args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
@@ -645,11 +647,11 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-			g := makeGossip(t, stopper, rpcContext)
+			g := TestingMakeGossip(t, stopper, rpcContext)
 			for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 				require.NoError(t, g.AddInfoProto(
 					gossip.MakeNodeIDKey(n.NodeID),
-					newNodeDesc(n.NodeID),
+					TestingNewNodeDesc(n.NodeID),
 					gossip.NodeDescriptorTTL,
 				))
 			}
@@ -724,12 +726,12 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	repls := testUserRangeDescriptor3Replicas.InternalReplicas
 	for _, n := range repls {
 		if err := g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
-			newNodeDesc(n.NodeID),
+			TestingNewNodeDesc(n.NodeID),
 			gossip.NodeDescriptorTTL,
 		); err != nil {
 			t.Fatal(err)
@@ -844,12 +846,12 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	repls := testUserRangeDescriptor3Replicas.InternalReplicas
 	for _, n := range repls {
 		if err := g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
-			newNodeDesc(n.NodeID),
+			TestingNewNodeDesc(n.NodeID),
 			gossip.NodeDescriptorTTL,
 		); err != nil {
 			t.Fatal(err)
@@ -905,11 +907,11 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 		require.NoError(t, g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
-			newNodeDesc(n.NodeID),
+			TestingNewNodeDesc(n.NodeID),
 			gossip.NodeDescriptorTTL,
 		))
 	}
@@ -998,11 +1000,11 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 		t.Run(fmt.Sprintf("retry_after_%v", spec.errorCode), func(t *testing.T) {
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-			g := makeGossip(t, stopper, rpcContext)
+			g := TestingMakeGossip(t, stopper, rpcContext)
 			for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 				require.NoError(t, g.AddInfoProto(
 					gossip.MakeNodeIDKey(n.NodeID),
-					newNodeDesc(n.NodeID),
+					TestingNewNodeDesc(n.NodeID),
 					gossip.NodeDescriptorTTL,
 				))
 			}
@@ -1085,10 +1087,10 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	if err := g.AddInfoProto(
 		gossip.MakeNodeIDKey(roachpb.NodeID(2)),
-		newNodeDesc(2),
+		TestingNewNodeDesc(2),
 		gossip.NodeDescriptorTTL,
 	); err != nil {
 		t.Fatal(err)
@@ -1195,7 +1197,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	errs := []error{
 		errors.New("boom"),
@@ -1247,7 +1249,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	sender := func(
 		_ context.Context, ba roachpb.BatchRequest,
@@ -1398,7 +1400,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-			g := makeGossip(t, stopper, rpcContext)
+			g := TestingMakeGossip(t, stopper, rpcContext)
 			leaseHolder := roachpb.ReplicaDescriptor{
 				NodeID:  99,
 				StoreID: 999,
@@ -1469,11 +1471,11 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	// Gossip the two nodes referred to in testUserRangeDescriptor3Replicas.
 	for i := 2; i <= 3; i++ {
-		nd := newNodeDesc(roachpb.NodeID(i))
+		nd := TestingNewNodeDesc(roachpb.NodeID(i))
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)
 		}
@@ -1531,7 +1533,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMetaRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -1627,7 +1629,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMetaRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -1779,8 +1781,8 @@ func TestSendRPCRetry(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	g := TestingMakeGossip(t, stopper, rpcContext)
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1850,8 +1852,8 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	g := TestingMakeGossip(t, stopper, rpcContext)
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1994,8 +1996,8 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	g := TestingMakeGossip(t, stopper, rpcContext)
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2089,7 +2091,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:         log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:              clock,
@@ -2099,7 +2101,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 		Settings:           cluster.MakeTestingClusterSettings(),
 	})
 	g.NodeID.Reset(5)
-	if err := g.SetNodeDescriptor(newNodeDesc(5)); err != nil {
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(5)); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -2119,7 +2121,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	var descs []roachpb.RangeDescriptor
 	splits := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")}
@@ -2213,7 +2215,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	// Assume we have two ranges, [a-b) and [b-KeyMax).
 	merged := false
 	// The stale first range descriptor which is unaware of the merge.
@@ -2314,7 +2316,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
@@ -2353,7 +2355,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	cfg := DistSenderConfig{
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,
@@ -2412,8 +2414,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	g := TestingMakeGossip(t, stopper, rpcContext)
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -2537,8 +2539,8 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	g := TestingMakeGossip(t, stopper, rpcContext)
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -2662,7 +2664,7 @@ func TestMultiRangeWithEndTxn(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	testCases := []struct {
 		put1, put2, et roachpb.Key
 		parCommit      bool
@@ -2749,7 +2751,7 @@ func TestMultiRangeWithEndTxn(t *testing.T) {
 		},
 	}
 
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -2859,7 +2861,7 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("ab")
 	put1 := roachpb.NewPut(keyA, roachpb.MakeValueFromString("val1"))
@@ -2975,7 +2977,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	key := roachpb.Key("a")
 	txn := roachpb.MakeTransaction(
@@ -3116,7 +3118,7 @@ func TestCountRanges(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	// Create a slice of fake descriptors.
 	const numDescriptors = 9
 	const firstKeyBoundary = 'a'
@@ -3220,9 +3222,9 @@ func TestGatewayNodeID(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	const expNodeID = 42
-	nd := newNodeDesc(expNodeID)
+	nd := TestingNewNodeDesc(expNodeID)
 	g.NodeID.Reset(nd.NodeID)
 	if err := g.SetNodeDescriptor(nd); err != nil {
 		t.Fatal(err)
@@ -3270,9 +3272,9 @@ func TestMultipleErrorsMerged(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -3479,9 +3481,9 @@ func TestErrorIndexAlignment(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+	if err := g.SetNodeDescriptor(TestingNewNodeDesc(1)); err != nil {
 		t.Fatal(err)
 	}
 	nd := &roachpb.NodeDescriptor{
@@ -3632,12 +3634,12 @@ func TestCanSendToFollower(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	repls := testUserRangeDescriptor3Replicas.InternalReplicas
 	for _, n := range repls {
 		if err := g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
-			newNodeDesc(n.NodeID),
+			TestingNewNodeDesc(n.NodeID),
 			gossip.NodeDescriptorTTL,
 		); err != nil {
 			t.Fatal(err)
@@ -3781,7 +3783,7 @@ func TestEvictMetaRange(t *testing.T) {
 
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 		rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-		g := makeGossip(t, stopper, rpcContext)
+		g := TestingMakeGossip(t, stopper, rpcContext)
 		if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMeta1RangeDescriptor, time.Hour); err != nil {
 			t.Fatal(err)
 		}
@@ -3972,7 +3974,7 @@ func TestConnectionClass(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
@@ -4041,7 +4043,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMetaRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -4190,7 +4192,7 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
+	g := TestingMakeGossip(t, stopper, rpcContext)
 
 	// First request will be sent to an unsplit descriptor.
 	var initialDesc = roachpb.RangeDescriptor{

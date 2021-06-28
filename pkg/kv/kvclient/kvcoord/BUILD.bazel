@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
-    name = "kvcoord_base",
+    name = "kvcoord",
     srcs = [
         "batch.go",
         "condensable_span_set.go",
@@ -32,7 +32,7 @@ go_library(
         ":gen-txnstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/gossip",
@@ -70,27 +70,12 @@ go_library(
     ],
 )
 
-# keep
-go_library(
-    name = "kvcoord",
-    srcs = [":mocks_transport"],
-    embed = [":kvcoord_base"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_github_golang_mock//gomock",
-        "@org_golang_google_grpc//metadata",
-    ],
-)
-
 gomock(
     name = "mocks_transport",
-    out = "mocks_generated.go",
-    interfaces = [
-        "Transport",
-    ],
-    library = ":kvcoord_base",
-    package = "kvcoord",
-    self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+    out = "mocks_generated_test.go",
+    interfaces = ["Transport"],
+    library = ":kvcoord",
+    package = "kvcoord_test",
 )
 
 go_test(
@@ -120,6 +105,7 @@ go_test(
         "txn_interceptor_seq_num_allocator_test.go",
         "txn_interceptor_span_refresher_test.go",
         "txn_test.go",
+        "mocks_generated_test.go",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":kvcoord"],
