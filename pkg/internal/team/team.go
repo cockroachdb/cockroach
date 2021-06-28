@@ -28,11 +28,15 @@ type Alias string
 
 // Team is a team in the CockroachDB repo.
 type Team struct {
-	// Alias is the main name of the team, followed by any other
-	// Aliases that refer to the same team. For example, the Bulk I/O
-	// team at the time of writing is team @cockroachdb/bulk-io but
-	// primarily uses @cockroachdb/bulk-prs in CODEOWNERS.
-	Aliases []Alias `yaml:"aliases"`
+	// TeamName is the distinguished Alias of the team.
+	TeamName Alias
+	// Aliases is a map from additional team name to purpose for which to use
+	// them. The purpose "other" indicates a team that exists but which has no
+	// particular purpose as far as `teams` is concerned (for example, teams like
+	// the @cockroachdb/bulk-prs team which exists primarily to route, via
+	// CODEOWNERS, code reviews for the @cockroachdb/bulk-io team). This map
+	// does not contain TeamName.
+	Aliases map[Alias]string `yaml:"aliases"`
 	// TriageColumnID is the Github Column ID to assign issues to.
 	TriageColumnID int `yaml:"triage_column_id"`
 	// Email is the email address for this team.
@@ -47,10 +51,7 @@ type Team struct {
 
 // Name returns the main Alias of the team.
 func (t Team) Name() Alias {
-	if len(t.Aliases) == 0 {
-		return "unknown"
-	}
-	return t.Aliases[0]
+	return t.TeamName
 }
 
 // DefaultLoadTeams loads teams from the repo root's TEAMS.yaml.
@@ -68,6 +69,10 @@ func DefaultLoadTeams() (map[Alias]Team, error) {
 	return LoadTeams(f)
 }
 
+var validPurposes = map[string]struct{}{
+	"other": {},
+}
+
 // LoadTeams loads the teams from an io input.
 // It is expected the input is in YAML format.
 func LoadTeams(f io.Reader) (map[Alias]Team, error) {
@@ -83,17 +88,24 @@ func LoadTeams(f io.Reader) (map[Alias]Team, error) {
 	dst := map[Alias]Team{}
 
 	for k, v := range src {
-		v.Aliases = append([]Alias{k}, v.Aliases...)
-		dst[k] = v
-		for _, alias := range v.Aliases[1:] {
+		v.TeamName = k
+		aliases := []Alias{v.TeamName}
+		for alias, purpose := range v.Aliases {
+			if _, ok := validPurposes[purpose]; !ok {
+				return nil, errors.Errorf("team %s has alias %s with invalid purpose %s", k, alias, purpose)
+			}
+			aliases = append(aliases, alias)
+		}
+		for _, alias := range aliases {
 			if conflicting, ok := dst[alias]; ok {
 				return nil, errors.Errorf(
 					"team %s has alias %s which conflicts with team %s",
-					k, alias, conflicting.Aliases[0],
+					k, alias, conflicting.Name(),
 				)
 			}
 			dst[alias] = v
 		}
+		dst[k] = v
 	}
 	return dst, nil
 }
