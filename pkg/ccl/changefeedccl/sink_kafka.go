@@ -466,52 +466,27 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		saslMechanism string
 	}{}
 
-	consumeBool := func(param string, dest *bool) (wasSet bool, err error) {
-		if paramVal := u.consumeParam(param); paramVal != "" {
-			wasSet, err := strToBool(paramVal, dest)
-			if err != nil {
-				return false, errors.Wrapf(err, "param %s must be a bool", param)
-			}
-			return wasSet, err
-		}
-		return false, nil
-	}
-
-	decodeBase64 := func(param string, dest *[]byte) error {
-		// TODO(dan): There's a straightforward and unambiguous transformation
-		//  between the base 64 encoding defined in RFC 4648 and the URL variant
-		//  defined in the same RFC: simply replace all `+` with `-` and `/` with
-		//  `_`. Consider always doing this for the user and accepting either
-		//  variant.
-		val := u.consumeParam(param)
-		err := decodeBase64FromString(val, dest)
-		if err != nil {
-			return errors.Wrapf(err, `param %s must be base 64 encoded`, param)
-		}
-		return nil
-	}
-
-	if _, err := consumeBool(changefeedbase.SinkParamTLSEnabled, &dialConfig.tlsEnabled); err != nil {
+	if _, err := u.consumeBool(changefeedbase.SinkParamTLSEnabled, &dialConfig.tlsEnabled); err != nil {
 		return nil, err
 	}
-	if _, err := consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
+	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
 		return nil, err
 	}
-	if err := decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
+	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
 		return nil, err
 	}
-	if err := decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
+	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
 		return nil, err
 	}
-	if err := decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
+	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
 		return nil, err
 	}
 
-	if _, err := consumeBool(changefeedbase.SinkParamSASLEnabled, &dialConfig.saslEnabled); err != nil {
+	if _, err := u.consumeBool(changefeedbase.SinkParamSASLEnabled, &dialConfig.saslEnabled); err != nil {
 		return nil, err
 	}
 
-	if wasSet, err := consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); !wasSet && err == nil {
+	if wasSet, err := u.consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); !wasSet && err == nil {
 		dialConfig.saslHandshake = true
 	} else {
 		if err != nil {
