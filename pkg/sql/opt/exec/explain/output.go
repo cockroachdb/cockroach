@@ -147,12 +147,14 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns colinf
 	if ob.flags.HideValues {
 		flags |= tree.FmtHideConstants
 	}
-	f := tree.NewFmtCtx(flags)
-	f.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-		// Ensure proper quoting.
-		n := tree.Name(varColumns[idx].Name)
-		ctx.WriteString(n.String())
-	})
+	f := tree.NewFmtCtx(
+		flags,
+		tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+			// Ensure proper quoting.
+			n := tree.Name(varColumns[idx].Name)
+			ctx.WriteString(n.String())
+		}),
+	)
 	f.FormatNode(expr)
 	ob.AddField(key, f.CloseAndGetString())
 }

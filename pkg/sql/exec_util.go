@@ -1614,9 +1614,15 @@ func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *
 
 func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
 	// Re-format to remove most names.
-	f := tree.NewFmtCtx(tree.FmtAnonymize | tree.FmtHideConstants)
+	fmtFlags := tree.FmtAnonymize | tree.FmtHideConstants
+	var f *tree.FmtCtx
 	if vt != nil {
-		f.SetReformatTableNames(hideNonVirtualTableNameFunc(vt))
+		f = tree.NewFmtCtx(
+			fmtFlags,
+			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)),
+		)
+	} else {
+		f = tree.NewFmtCtx(fmtFlags)
 	}
 	f.FormatNode(stmt)
 	return f.CloseAndGetString()
@@ -2509,8 +2515,10 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	f := tree.NewFmtCtx(tree.FmtAnonymize)
-	f.SetReformatTableNames(hideNonVirtualTableNameFunc(vt))
+	f := tree.NewFmtCtx(
+		tree.FmtAnonymize,
+		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)),
+	)
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
 }

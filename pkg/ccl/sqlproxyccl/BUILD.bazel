@@ -25,7 +25,6 @@ go_library(
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/roachpb",
         "//pkg/security/certmgr",
-        "//pkg/util",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/httputil",
