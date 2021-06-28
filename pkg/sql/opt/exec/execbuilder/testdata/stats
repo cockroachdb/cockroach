@@ -219,13 +219,13 @@ distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=20.0617284, distinct(1,2)=20.0617284, null(1,2)=0]
- ├── cost: 41.897284
+ ├── cost: 52.897284
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
       ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, distinct(1,2)=20.0617284, null(1,2)=0]
-      ├── cost: 40.6766667
+      ├── cost: 51.6766667
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 
@@ -239,13 +239,13 @@ distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=33.3333333, distinct(1,2)=33.3333333, null(1,2)=0]
- ├── cost: 42.03
+ ├── cost: 53.03
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
       ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, distinct(1,2)=33.3333333, null(1,2)=0]
-      ├── cost: 40.6766667
+      ├── cost: 51.6766667
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 
@@ -259,7 +259,7 @@ distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=100, distinct(1,2)=100, null(1,2)=0]
- ├── cost: 118.030563
+ ├── cost: 129.030563
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
@@ -267,7 +267,7 @@ distinct-on
       ├── stats: [rows=100, distinct(1)=20, null(1)=0, distinct(1,2)=100, null(1,2)=0]
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
-      ├── cost: 114.01
+      ├── cost: 125.01
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 
@@ -281,7 +281,7 @@ distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=25, distinct(1,2)=25, null(1,2)=0]
- ├── cost: 117.28
+ ├── cost: 128.28
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
@@ -289,7 +289,7 @@ distinct-on
       ├── stats: [rows=100, distinct(1)=20, null(1)=0, distinct(1,2)=25, null(1,2)=0]
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
-      ├── cost: 114.01
+      ├── cost: 125.01
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
 

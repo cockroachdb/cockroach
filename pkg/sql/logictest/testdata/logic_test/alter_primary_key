@@ -118,7 +118,7 @@ SELECT * FROM parent
 4 5
 
 query T
-SELECT * FROM [EXPLAIN SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM child@primary WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6] OFFSET 2
 ----
 ·
 • filter
@@ -130,7 +130,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND
       spans: [/1/2 - /4/6]
 
 query III rowsort
-SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
+SELECT * FROM child@primary WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
 ----
 1 2 3
 4 5 6
