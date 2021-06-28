@@ -53,11 +53,11 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 	case types.BytesFamily:
 		return int64(vec.Bytes().Size())
 	case types.DecimalFamily:
-		return int64(sizeOfDecimals(vec.Decimal()))
+		return int64(sizeOfDecimals(vec.Decimal(), 0 /* startIdx */))
 	case types.JsonFamily:
 		return int64(vec.JSON().Size())
 	case typeconv.DatumVecCanonicalTypeFamily:
-		return int64(vec.Datum().Size())
+		return int64(vec.Datum().Size(0 /* startIdx */))
 	}
 	return int64(EstimateBatchSizeBytes([]*types.T{vec.Type()}, vec.Capacity()))
 }
@@ -305,6 +305,42 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	a.AdjustMemoryUsage(after - before)
 }
 
+// PerformAppend is used to account for memory usage during calls to
+// AppendBufferedBatch.AppendTuples. It is more efficient than PerformOperation
+// for appending to Decimal column types since the expensive portion of the cost
+// calculation only needs to be performed for the newly appended elements.
+func (a *Allocator) PerformAppend(destVecs []coldata.Vec, operation func()) {
+	var before int64
+	var prevLength int
+	for _, dest := range destVecs {
+		switch dest.CanonicalTypeFamily() {
+		case types.DecimalFamily:
+			// Don't add the size of the existing decimals to the 'before' cost, since
+			// they are guaranteed not to be modified by an append operation.
+			prevLength = dest.Length()
+			before += int64(sizeOfDecimals(dest.Decimal(), prevLength))
+		case typeconv.DatumVecCanonicalTypeFamily:
+			prevLength = dest.Length()
+			before += int64(dest.Datum().Size(prevLength))
+		default:
+			before += getVecMemoryFootprint(dest)
+		}
+	}
+	operation()
+	var after int64
+	for _, dest := range destVecs {
+		switch dest.CanonicalTypeFamily() {
+		case types.DecimalFamily:
+			after += int64(sizeOfDecimals(dest.Decimal(), prevLength))
+		case typeconv.DatumVecCanonicalTypeFamily:
+			after += int64(dest.Datum().Size(prevLength))
+		default:
+			after += getVecMemoryFootprint(dest)
+		}
+	}
+	a.AdjustMemoryUsage(after - before)
+}
+
 // Used returns the number of bytes currently allocated through this allocator.
 func (a *Allocator) Used() int64 {
 	return a.acc.Used()
@@ -347,12 +383,25 @@ const (
 	sizeOfDecimal  = unsafe.Sizeof(apd.Decimal{})
 )
 
-func sizeOfDecimals(decimals coldata.Decimals) uintptr {
-	var size uintptr
-	for i := range decimals {
+// sizeOfDecimals returns the size of the given decimals slice. It only accounts
+// for the size of the decimal objects starting from the given index. For that
+// reason, sizeOfDecimals is relatively cheap when startIdx >= length, and
+// expensive when startIdx < length (with a maximum at startIdx = 0).
+func sizeOfDecimals(decimals coldata.Decimals, startIdx int) uintptr {
+	if startIdx >= cap(decimals) {
+		return 0
+	}
+	if startIdx >= len(decimals) {
+		return uintptr(cap(decimals)-startIdx) * sizeOfDecimal
+	}
+	if startIdx < 0 {
+		startIdx = 0
+	}
+	// Account for the allocated memory beyond the length of the slice.
+	size := uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
+	for i := startIdx; i < decimals.Len(); i++ {
 		size += tree.SizeOfDecimal(&decimals[i])
 	}
-	size += uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
 	return size
 }
 
