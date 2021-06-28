@@ -23,6 +23,10 @@ const (
 	// CheckpointEvent indicates that GetResolved will be meaningful. The resolved
 	// timestamp indicates that all KVs have been emitted up to this timestamp.
 	CheckpointEvent
+	// GenerationEvent indicates that GetTopology will be meaningful. The topology
+	// indicates the number of partitions and partition addresses that the stream
+	// should be ingesting from.
+	GenerationEvent
 )
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
@@ -37,6 +41,8 @@ type Event interface {
 	// CheckpointEvent. The resolved timestamp indicates that all KV events until
 	// this time have been emitted.
 	GetResolved() *hlc.Timestamp
+	// GetTopology returns a topology if the EventType is GenerationEvent.
+	GetTopology() *Topology
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -58,6 +64,11 @@ func (kve kvEvent) GetKV() *roachpb.KeyValue {
 
 // GetResolved implements the Event interface.
 func (kve kvEvent) GetResolved() *hlc.Timestamp {
+	return nil
+}
+
+// GetTopology implements the Event interface.
+func (kve kvEvent) GetTopology() *Topology {
 	return nil
 }
 
@@ -84,6 +95,38 @@ func (ce checkpointEvent) GetResolved() *hlc.Timestamp {
 	return &ce.resolvedTimestamp
 }
 
+// GetTopology implements the Event interface.
+func (ce checkpointEvent) GetTopology() *Topology {
+	return nil
+}
+
+// generationEvent indicates that the topology of the stream has changed.
+type generationEvent struct {
+	topology  Topology
+}
+
+var _ Event = generationEvent{}
+
+// Type implements the Event interface.
+func (ge generationEvent) Type() EventType {
+	return GenerationEvent
+}
+
+// GetKV implements the Event interface.
+func (ge generationEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetResolved implements the Event interface.
+func (ge generationEvent) GetResolved() *hlc.Timestamp {
+	return nil
+}
+
+// GetTopology implements the Event interface.
+func (ge generationEvent) GetTopology() *Topology {
+	return &ge.topology
+}
+
 // MakeKVEvent creates an Event from a KV.
 func MakeKVEvent(kv roachpb.KeyValue) Event {
 	return kvEvent{kv: kv}
@@ -92,4 +135,9 @@ func MakeKVEvent(kv roachpb.KeyValue) Event {
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
 func MakeCheckpointEvent(resolvedTimestamp hlc.Timestamp) Event {
 	return checkpointEvent{resolvedTimestamp: resolvedTimestamp}
+}
+
+// MakeGenerationEvent creates an Event from a topology.
+func MakeGenerationEvent(topology Topology) Event {
+	return generationEvent{topology:  topology}
 }
