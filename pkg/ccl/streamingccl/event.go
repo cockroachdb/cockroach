@@ -116,3 +116,8 @@ func MakeKVEvent(kv roachpb.KeyValue) Event {
 func MakeCheckpointEvent(resolvedTimestamp hlc.Timestamp) Event {
 	return checkpointEvent{resolvedTimestamp: resolvedTimestamp}
 }
+
+// MakeGenerationEvent creates an GenerationEvent.
+func MakeGenerationEvent() Event {
+	return generationEvent{}
+}
