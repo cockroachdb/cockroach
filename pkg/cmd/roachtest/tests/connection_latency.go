@@ -30,7 +30,7 @@ const (
 )
 
 func runConnectionLatencyTest(
-	ctx context.Context, t test.Test, c cluster.Cluster, numNodes int, numZones int,
+	ctx context.Context, t test.Test, c cluster.Cluster, numNodes int, numZones int, password bool,
 ) {
 	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach")
 	require.NoError(t, err)
@@ -42,33 +42,50 @@ func runConnectionLatencyTest(
 	require.NoError(t, err)
 
 	certsDir := "certs"
-	urlTemplate := "postgres://%s@%s:%s?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
-	var urls []string
+	var urlString string
+	var passwordFlag string
 	externalIps, err := c.ExternalIP(ctx, c.All())
 	require.NoError(t, err)
-	for _, u := range externalIps {
-		url := fmt.Sprintf(urlTemplate, "testuser", u, "26257", certsDir, "testuser", certsDir, "testuser", certsDir)
-		urls = append(urls, fmt.Sprintf("'%s'", url))
-	}
-
-	urlString := strings.Join(urls, " ")
 
 	// Only create the user once.
-	err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs -e "CREATE USER testuser CREATEDB"`)
-	require.NoError(t, err)
+	if password {
+		urlTemplate := "postgres://%s:%s@%s:%s?sslmode=require&sslrootcert=%s/ca.crt"
+		var urls []string
+		for _, u := range externalIps {
+			url := fmt.Sprintf(urlTemplate, "testuser", "123", u, "26257", certsDir)
+			urls = append(urls, fmt.Sprintf("'%s'", url))
+		}
+		urlString = strings.Join(urls, " ")
 
-	err = c.RunE(ctx, c.All(),
-		fmt.Sprintf(`./cockroach cert create-client testuser --certs-dir %s --ca-key=%s/ca.key`,
-			certsDir, certsDir))
-	require.NoError(t, err)
+		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs -e "CREATE USER testuser WITH PASSWORD '123' CREATEDB"`)
+		require.NoError(t, err)
+		err = c.RunE(ctx, c.Node(1), "./workload init connectionlatency --user testuser --password '123' --secure")
+		require.NoError(t, err)
+		passwordFlag = "--password 123 "
+	} else {
+		urlTemplate := "postgres://%s@%s:%s?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
+		var urls []string
+		for _, u := range externalIps {
+			url := fmt.Sprintf(urlTemplate, "testuser", u, "26257", certsDir, "testuser", certsDir, "testuser", certsDir)
+			urls = append(urls, fmt.Sprintf("'%s'", url))
+		}
+		urlString = strings.Join(urls, " ")
 
-	err = c.RunE(ctx, c.Node(1), "./workload init connectionlatency --user testuser --secure")
-	require.NoError(t, err)
+		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs -e "CREATE USER testuser CREATEDB"`)
+		require.NoError(t, err)
+		err = c.RunE(ctx, c.All(),
+			fmt.Sprintf(`./cockroach cert create-client testuser --certs-dir %s --ca-key=%s/ca.key`,
+				certsDir, certsDir))
+		require.NoError(t, err)
+		err = c.RunE(ctx, c.Node(1), "./workload init connectionlatency --user testuser --secure")
+		require.NoError(t, err)
+	}
 
 	runWorkload := func(loadNode option.NodeListOption, locality string) {
 		workloadCmd := fmt.Sprintf(
-			`./workload run connectionlatency %s --user testuser --secure --duration 30s --histograms=%s/stats.json --locality %s`,
+			`./workload run connectionlatency %s --user testuser --secure %s --duration 30s --histograms=%s/stats.json --locality %s`,
 			urlString,
+			passwordFlag,
 			t.PerfArtifactsDir(),
 			locality,
 		)
@@ -96,11 +113,11 @@ func registerConnectionLatencyTest(r registry.Registry) {
 	// Single region test.
 	numNodes := 3
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("connection_latency/nodes=%d", numNodes),
+		Name:    fmt.Sprintf("connection_latency/nodes=%d/certs", numNodes),
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(numNodes + 1), // Add one for load node.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runConnectionLatencyTest(ctx, t, c, numNodes, 1)
+			runConnectionLatencyTest(ctx, t, c, numNodes, 1, false /*password*/)
 		},
 	})
 
@@ -109,12 +126,22 @@ func registerConnectionLatencyTest(r registry.Registry) {
 	numMultiRegionNodes := 9
 	numZones := len(geoZones)
 	loadNodes := numZones
+
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
+		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion/certs", numMultiRegionNodes),
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones)
+			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, false /*password*/)
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion/password", numMultiRegionNodes),
+		Owner:   registry.OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, true /*password*/)
 		},
 	})
 }
