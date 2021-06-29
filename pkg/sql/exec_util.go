@@ -1065,6 +1065,7 @@ type ExecutorConfig struct {
 	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
 	IndexUsageStatsTestingKnobs   *idxusage.TestingKnobs
 	SQLStatsTestingKnobs          *sqlstats.TestingKnobs
+	TelemetryLoggingTestingKnobs  *TelemetryLoggingTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
