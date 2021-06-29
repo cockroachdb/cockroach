@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -223,6 +224,8 @@ type planner struct {
 	// the type resolution steps will disallow resolution of types that have a
 	// parentID != contextDatabaseID when it is set.
 	contextDatabaseID descpb.ID
+
+	rng *rand.Rand
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
