@@ -13,8 +13,8 @@ set -euo pipefail
 # These values are substituted in the Go code that uses this.
 SOURCE_URL="%s"
 CACHE_URL="%s"
-OUTPUT_FILE="%s"
 SHA256="%s"
+OUTPUT_FILE="%s"
 
 checkFile() {
   local file_name="${1}"
@@ -50,11 +50,12 @@ download() {
   # curl options:
   #            -s: silent
   #            -o: output file
+  #            -L: follow redirects
   #  --show-error: show errors depsite silent flag
   #        --fail: Exit non-0 for non-2XX HTTP status codes
   #       --retry: Retry transient errors
   # --retry-delay: Time to wait (in seconds) between retries
-  if curl -s --retry 3 --retry-delay 1 --fail --show-error -o "$tmpfile" "$url"; then
+  if curl -s -L --retry 3 --retry-delay 1 --fail --show-error -o "$tmpfile" "$url"; then
       mv "$tmpfile" "$output_file"
   else
       rm -f "$tmpfile"
