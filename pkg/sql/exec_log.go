@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -133,8 +134,9 @@ func (p *planner) maybeLogStatement(
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryLoggingMetrics TelemetryLoggingMetrics,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -144,6 +146,7 @@ func (p *planner) maybeLogStatementInternal(
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryMetrics TelemetryLoggingMetrics,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -346,6 +349,18 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+	}
+
+	queryCounts := telemetryMetrics.QueryCounts
+	shouldSampleEventToTelemetry := p.stmt.AST.StatementType() == tree.TypeDML &&
+		calcAvgQPS(queryCounts.curr, &queryCounts.prev) > telemetryMetrics.QpsThreshold()
+	// If we DO NOT need to sample the event, log immediately to the telemetry channel with sampled status set to false.
+	// If we DO need to sample the event AND the sampling "passes", log to the telemetry channel but with sampled
+	// status set to true.
+	if !shouldSampleEventToTelemetry {
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.TelemetryEvent{CommonSQLExecDetails: execDetails, Sampled: "false"}})
+	} else if shouldSampleEventToTelemetry && sampleRatePass(telemetryMetrics.SampleRate()) {
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.TelemetryEvent{CommonSQLExecDetails: execDetails, Sampled: "true"}})
 	}
 }
 
