@@ -77,6 +77,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.SQLStatsTable),
 		sqlTransactionStatsTableMigration,
 	),
+	migration.NewTenantMigration(
+		"add the systems.tenant_usage table",
+		toCV(clusterversion.TenantUsageTable),
+		tenantUsageTableMigration,
+	),
 }
 
 func init() {
