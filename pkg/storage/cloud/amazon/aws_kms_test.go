@@ -80,7 +80,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-			_, err := cloud.KMSFromURI(uri, &testKMSEnv{})
+			_, err := cloud.KMSFromURI(uri, &testKMSEnv{externalIOConfig: &base.ExternalIODirConfig{}})
 			require.EqualError(t, err, fmt.Sprintf(
 				`%s is set to '%s', but %s is not set`,
 				cloud.AuthParam,
