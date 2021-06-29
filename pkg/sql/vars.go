@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -798,7 +799,26 @@ var varGen = map[string]sessionVar{
 	`integer_datetimes`: makeReadOnlyVar("on"),
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
-	`intervalstyle`: makeCompatStringVar(`IntervalStyle`, "postgres"),
+	`intervalstyle`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			style, ok := duration.IntervalStyle_value[strings.ToUpper(s)]
+			if !ok {
+				validIntervalStyles := make([]string, 0, len(duration.IntervalStyle_value))
+				for k := range duration.IntervalStyle_value {
+					validIntervalStyles = append(validIntervalStyles, strings.ToLower(k))
+				}
+				return newVarValueError(`IntervalStyle`, s, validIntervalStyles...)
+			}
+			m.SetIntervalStyle(duration.IntervalStyle(style))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return strings.ToLower(evalCtx.SessionData.DataConversionConfig.IntervalStyle.String())
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strings.ToLower(duration.IntervalStyle_name[int32(intervalStyle.Get(sv))])
+		},
+	},
 
 	// CockroachDB extension.
 	`locality`: {
