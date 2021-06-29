@@ -32,6 +32,19 @@ func NewNodeListOptionRange(start, end int) NodeListOption {
 	return ret
 }
 
+// Equals returns true if the nodes are an exact match.
+func (n NodeListOption) Equals(o NodeListOption) bool {
+	if len(n) != len(o) {
+		return false
+	}
+	for i := range n {
+		if n[i] != o[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // Option implements Option.
 func (n NodeListOption) Option() {}
 

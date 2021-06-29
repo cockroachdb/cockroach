@@ -16,6 +16,7 @@ pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generi
 pkg/roachpb/batch.go://go:generate go run -tags gen-batch gen/main.go
 pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated.go -source=cert.go . Cert
 pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . cluster
+pkg/cmd/roachtest/drt.go://go:generate mockgen -source drt.go -package main -destination drt_generated.go
 pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
