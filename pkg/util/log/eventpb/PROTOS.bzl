@@ -16,6 +16,7 @@ EVENTPB_PROTOS = [
     "cluster_events.proto",
     "job_events.proto",
     "health_events.proto",
+    "telemetry.proto",
 ]
 
 # The same list as above, but formatted such that outside Bazel rules can depend
