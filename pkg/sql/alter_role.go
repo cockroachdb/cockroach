@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -148,7 +149,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		opName,
 		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", userTableName),
+		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", authentication.UsersTableName),
 		normalizedUsername,
 	)
 	if err != nil {

@@ -107,6 +107,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/authentication",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catconstants",
