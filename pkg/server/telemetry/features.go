@@ -111,6 +111,10 @@ type CounterWithMetric struct {
 	metric    *metric.Counter
 }
 
+func (c *CounterWithMetric) GetMetric() *metric.Counter {
+	return c.metric
+}
+
 // Necessary for metric metadata registration.
 var _ metric.Iterable = CounterWithMetric{}
 

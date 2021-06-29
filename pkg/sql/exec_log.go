@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -112,6 +113,19 @@ const (
 	executorTypeInternal
 )
 
+// prevQueryCount is the query count at a previous timestamp. It is used to calculate cluster QPS by determing the difference
+// with the current query count.
+var prevQueryCount queryCountAndTime
+
+// telemetrySampleRate is the rate of queries at which we sample queries for telemetry.
+// The probability of a sampled query event being logged for a query is 1/telemetrySampleRate.
+// TODO(thomas): determine sample rate with performance testing.
+const telemetrySampleRate = 100000
+
+// qpsThreshold is the QPS threshold at which we begin sampling DML statements for telemetry logs.
+// TODO(thomas): determine qps threshold value with performance testing.
+const qpsThreshold int64 = 10
+
 // vLevel returns the vmodule log level at which logs from the given executor
 // should be written to the logs.
 func (s executorType) vLevel() log.Level { return log.Level(s) + 2 }
@@ -133,8 +147,9 @@ func (p *planner) maybeLogStatement(
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	queryCount int64,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, queryCount)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -144,6 +159,7 @@ func (p *planner) maybeLogStatementInternal(
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	queryCount int64,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -346,6 +362,18 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+	}
+
+	currQueryCount := queryCountAndTime{
+		timeutil.Now(),
+		queryCount,
+	}
+	shouldSampleEventToTelemetry := p.stmt.AST.StatementType() == tree.TypeDML && getClusterQPS(currQueryCount, &prevQueryCount) > qpsThreshold
+	// If we DO NOT need to sample the event, log immediately to the telemetry channel.
+	// If we DO need to sample the event AND the sampling "passes", then also log to the telemetry channel.
+	// TODO(thomas): create another event to emit to telemetry other than "SampledQuery"?
+	if !shouldSampleEventToTelemetry || (shouldSampleEventToTelemetry && sampleRatePass(telemetrySampleRate)) {
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/url"
 	"reflect"
@@ -85,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -2642,4 +2644,46 @@ func anonymizeStmt(ast tree.Statement) string {
 		return ""
 	}
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
+}
+
+type queryCountAndTime struct {
+	timestamp time.Time
+	count     int64
+}
+
+// getClusterQPS gets the average cluster QPS between two timestamps. The difference in the number of queries executed
+// between the timestamps is divided by the number of seconds between the timestamps.
+func getClusterQPS(currQueryCount queryCountAndTime, prevQueryCount *queryCountAndTime) int64 {
+
+	// If the previous query count has not been tracked, return 0.
+	if prevQueryCount == (&queryCountAndTime{}) {
+		*prevQueryCount = currQueryCount
+		return 0
+	}
+
+	// Determine the time since the previous query count in number of seconds.
+	timeSincePrev := int64(currQueryCount.timestamp.Sub(prevQueryCount.timestamp).Seconds())
+
+	// If number of seconds since previous query count is less than 1, set to 1.
+	// Avoid divide by 0.
+	if timeSincePrev < 1 {
+		timeSincePrev = 1
+	}
+
+	// Calculate the average cluster QPS since the previous query count.
+	clusterQPS := (currQueryCount.count - prevQueryCount.count) / timeSincePrev
+	*prevQueryCount = currQueryCount
+	return clusterQPS
+}
+
+// sampleRatePass is a sampling function. It generates a random number between 1 and the given sampling rate,
+// if the random number is one, the item sampling consideration, should be sampled.
+func sampleRatePass(samplingRate int) bool {
+	// Generate random number between 1 and telemetrySampleRate.
+	rand.Seed(timeutil.Now().UnixNano())
+	randNum := rand.Intn(samplingRate-1) + 1
+
+	// If the random number equals 1, we log a sampled query event.
+	// There is a 1/telemetrySampleRate probability that a query is sampled for telemetry.
+	return randNum == 1
 }

@@ -900,6 +900,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			res.Err(),
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
+			ex.metrics.ExecutedStatementCounters.QueryCount.GetMetric().Count(),
 		)
 	}()
 
