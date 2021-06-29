@@ -549,7 +549,7 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Errorf("failed to get desc: %s", err)
 	}
 	if !ok {
-		return OutgoingSnapshot{}, errors.Errorf("couldn't find range descriptor")
+		return OutgoingSnapshot{}, errors.Mark(errors.Errorf("couldn't find range descriptor"), errMarkSnapshotError)
 	}
 
 	// Read the range metadata from the snapshot instead of the members
