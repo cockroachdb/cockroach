@@ -277,6 +277,9 @@ type Server struct {
 
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
+
+	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
+	TelemetryLoggingMetrics TelemetryLoggingMetrics
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -297,6 +300,85 @@ type Metrics struct {
 
 	// StatsMetrics contains metrics for SQL statistics collection.
 	StatsMetrics StatsMetrics
+}
+
+type TelemetryLoggingMetrics struct {
+	QueryCounts QueryCountsAndTimes
+	// SampleRate is the rate of queries at which we sample queries for telemetry.
+	// The probability of a sampled query event being logged for a query is 1/telemetrySampleRate.
+	sampleRate int
+	// QpsThreshold is the QPS threshold at which we begin sampling DML statements for telemetry logs.
+	// TODO(thomas): determine qps threshold value with performance testing.
+	qpsThreshold int64
+}
+
+// SampleRate returns the sample rate.
+func (t *TelemetryLoggingMetrics) SampleRate() int {
+	return t.sampleRate
+}
+
+// QpsThreshold returns the qps threshold.
+func (t *TelemetryLoggingMetrics) QpsThreshold() int64 {
+	return t.qpsThreshold
+}
+
+// newTelemetryLoggingMetrics returns a new TelemetryLoggingMetrics object
+func newTelemetryLoggingMetrics() TelemetryLoggingMetrics {
+	const sampleRate = 100000
+	const qpsThreshold = int64(10)
+
+	return TelemetryLoggingMetrics{
+		QueryCounts: QueryCountsAndTimes{
+			curr: QueryCountAndTime{
+				count:     0,
+				timestamp: timeutil.Now().Unix(),
+			},
+			prev: QueryCountAndTime{
+				count:     0,
+				timestamp: timeutil.Now().Unix(),
+			},
+		},
+		sampleRate:   sampleRate,
+		qpsThreshold: qpsThreshold,
+	}
+}
+
+// QueryCountsAndTimes keeps track of the current and previous
+// QueryCountAndTime.
+// The current and previous QueryCountAndTime are used to approximate node QPS.
+// Approximate node QPS is calculated by comparing the current query count and time
+// with the PrevQueryCountAndTime: (current count - prev count) / (current time - prev time).
+type QueryCountsAndTimes struct {
+	curr QueryCountAndTime
+	prev QueryCountAndTime
+}
+
+// Inc increments the current query count and updates its timestamp.
+func (q *QueryCountsAndTimes) Inc() {
+	q.curr.Inc()
+}
+
+// QueryCountAndTime keeps a count of user initiated statements,
+// and the timestamp at the latest count change.
+type QueryCountAndTime struct {
+	timestamp int64
+	count     int64
+}
+
+// Count atomically returns the query count of a QueryCountAndTime object
+func (q *QueryCountAndTime) Count() int64 {
+	return atomic.LoadInt64(&q.count)
+}
+
+// Timestamp atomically returns the timestamp of a QueryCountAndTime object
+func (q *QueryCountAndTime) Timestamp() time.Time {
+	return timeutil.Unix(atomic.LoadInt64(&q.timestamp), 0)
+}
+
+// Inc increments the query count and updates the timestamp on count change.
+func (q *QueryCountAndTime) Inc() {
+	atomic.AddInt64(&q.count, 1)
+	atomic.StoreInt64(&q.timestamp, timeutil.Now().Unix())
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -336,6 +418,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			Setting:     cfg.Settings,
 			Knobs:       cfg.IndexUsageStatsTestingKnobs,
 		}),
+		TelemetryLoggingMetrics: newTelemetryLoggingMetrics(),
 	}
 
 	return s
