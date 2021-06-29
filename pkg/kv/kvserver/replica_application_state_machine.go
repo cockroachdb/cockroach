@@ -773,7 +773,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	// it will shut down with an error. If the WriteBatch is nil then we expect
 	// the logical operation log to also be nil. We don't want to trigger a
 	// shutdown of the rangefeed in that situation, so we don't pass anything to
-	// the rangefed. If no rangefeed is running at all, this call will be a noop.
+	// the rangefeed. If no rangefeed is running at all, this call will be a noop.
 	if ops := cmd.raftCmd.LogicalOpLog; cmd.raftCmd.WriteBatch != nil {
 		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	} else if ops != nil {
