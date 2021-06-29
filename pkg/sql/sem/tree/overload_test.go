@@ -141,7 +141,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		return &StrVal{s: s}
 	}
 	plus := func(left, right Expr) Expr {
-		return &BinaryExpr{Operator: Plus, Left: left, Right: right}
+		return &BinaryExpr{Operator: MakeBinaryOperator(Plus), Left: left, Right: right}
 	}
 	placeholder := func(id int) *Placeholder {
 		return &Placeholder{Idx: PlaceholderIdx(id)}

@@ -125,7 +125,7 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 			count := h.IndexedVar(varIdxs[1])
 
 			expr := &tree.BinaryExpr{
-				Operator: tree.Div,
+				Operator: tree.MakeBinaryOperator(tree.Div),
 				Left:     sum,
 				Right:    count,
 			}

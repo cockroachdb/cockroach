@@ -147,7 +147,7 @@ var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperator{
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // binary operator type.
-var BinaryOpReverseMap = map[Operator]tree.BinaryOperator{
+var BinaryOpReverseMap = map[Operator]tree.BinaryOperatorSymbol{
 	BitandOp:        tree.Bitand,
 	BitorOp:         tree.Bitor,
 	BitxorOp:        tree.Bitxor,

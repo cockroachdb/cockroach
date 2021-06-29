@@ -202,8 +202,8 @@ func TestParsePrecedence(t *testing.T) {
 	unary := func(op tree.UnaryOperatorSymbol, expr tree.Expr) tree.Expr {
 		return &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(op), Expr: expr}
 	}
-	binary := func(op tree.BinaryOperator, left, right tree.Expr) tree.Expr {
-		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
+	binary := func(op tree.BinaryOperatorSymbol, left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(op), Left: left, Right: right}
 	}
 	cmp := func(op tree.ComparisonOperator, left, right tree.Expr) tree.Expr {
 		return &tree.ComparisonExpr{Operator: op, Left: left, Right: right}
@@ -218,7 +218,7 @@ func TestParsePrecedence(t *testing.T) {
 		return &tree.OrExpr{Left: left, Right: right}
 	}
 	concat := func(left, right tree.Expr) tree.Expr {
-		return &tree.BinaryExpr{Operator: tree.Concat, Left: left, Right: right}
+		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: left, Right: right}
 	}
 	regmatch := func(left, right tree.Expr) tree.Expr {
 		return &tree.ComparisonExpr{Operator: tree.RegMatch, Left: left, Right: right}

@@ -263,7 +263,7 @@ func (b *Builder) buildBinary(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 		return nil, err
 	}
 	operator := opt.BinaryOpReverseMap[scalar.Op()]
-	return tree.NewTypedBinaryExpr(operator, left, right, scalar.DataType()), nil
+	return tree.NewTypedBinaryExpr(tree.MakeBinaryOperator(operator), left, right, scalar.DataType()), nil
 }
 
 func (b *Builder) buildFunction(

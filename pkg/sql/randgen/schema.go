@@ -398,7 +398,7 @@ func randComputedColumnTableDef(
 			expr = tree.NewUnresolvedName(string(cols[0].Name))
 			for _, x := range cols[1:] {
 				expr = &tree.BinaryExpr{
-					Operator: tree.Plus,
+					Operator: tree.MakeBinaryOperator(tree.Plus),
 					Left:     expr,
 					Right:    tree.NewUnresolvedName(string(x.Name)),
 				}
@@ -428,7 +428,7 @@ func randComputedColumnTableDef(
 	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
 		newDef.Type = xTyp
 		newDef.Computed.Expr = &tree.BinaryExpr{
-			Operator: tree.Plus,
+			Operator: tree.MakeBinaryOperator(tree.Plus),
 			Left:     tree.NewUnresolvedName(string(x.Name)),
 			Right:    RandDatum(rng, xTyp, nullOk),
 		}
