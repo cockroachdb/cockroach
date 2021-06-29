@@ -37,6 +37,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//sstable",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_gogo_protobuf//types",
         "@org_golang_x_crypto//pbkdf2",
     ],
 )
