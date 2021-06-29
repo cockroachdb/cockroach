@@ -425,7 +425,9 @@ func registerTPCC(r *testRegistry) {
 		MinVersion: "v19.1.0",
 		Tags:       []string{`weekly`},
 		Cluster:    r.makeClusterSpec(4, spec.CPU(16)),
-		Timeout:    time.Duration(4*24)*time.Hour + time.Duration(10)*time.Minute,
+		// Give the test a generous extra 10 hours to load the dataset and
+		// slowly ramp up the load.
+		Timeout: 4*24*time.Hour + 10*time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
