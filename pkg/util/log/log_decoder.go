@@ -12,13 +12,13 @@ package log
 
 import (
 	"bufio"
-	"errors"
+	"bytes"
 	"io"
 	"regexp"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/errors"
 )
 
 type EntryDecoder interface {
@@ -28,9 +28,12 @@ type EntryDecoder interface {
 // NewEntryDecoder creates a new instance of EntryDecoder.
 // The format of the log file determines how the decoder is constructed.
 func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) (EntryDecoder, error) {
-	return NewEntryDecoderf(in, editMode, "" /*format*/)
+	return NewEntryDecoderWithFormat(in, editMode, "" /*format*/)
 }
-func NewEntryDecoderf(
+
+// NewEntryDecoderWithFormat is like NewEntryDecoder but has the log entry format with 'logFormat'.
+// The header lines do not need to be searched for the log entry format when 'logFormat' is non-empty.
+func NewEntryDecoderWithFormat(
 	in io.Reader, editMode EditSensitiveData, logFormat string,
 ) (EntryDecoder, error) {
 	var d EntryDecoder
@@ -52,21 +55,35 @@ func NewEntryDecoderf(
 	}
 
 	// If the log format has been specified, use the corresponding parser.
-	if logFormat != "" {
-		f, ok := formats[logFormat]
-		if !ok {
-			return nil, errors.New("unknown log file format")
+	if logFormat == "" {
+		var buf bytes.Buffer
+		rest := bufio.NewReader(in)
+		r := io.TeeReader(rest, &buf)
+		{
+			const headerBytes = 8096
+			header := make([]byte, headerBytes)
+			n, err := r.Read(header)
+			if err != nil {
+				return nil, err
+			}
+			header = header[:n]
+			logFormat, err = getLogFormat(header)
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding format")
+			}
 		}
-		format = f
-	} else { // otherwise, get the log format from the top of the log
-		/*TODO*/
-		return nil, errors.New("failed to get log format")
+		in = io.MultiReader(&buf, rest)
 	}
+	f, ok := formats[logFormat]
+	if !ok {
+		return nil, errors.New("unknown log file format")
+	}
+	format = f
 
 	switch format {
 	case "v2":
 		d = &entryDecoderV2{
-			reader:          bufio.NewReader(io.MultiReader(in, strings.NewReader("\n"))),
+			reader:          bufio.NewReader(in),
 			sensitiveEditor: getEditor(editMode),
 		}
 	case "v1":
@@ -96,60 +113,4 @@ func getLogFormat(data []byte) (string, error) {
 	}
 
 	return string(m[1]), nil
-}
-
-// split function for the crdb-v1 entry decoder scanner.
-func (d *entryDecoderV1) split(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	if atEOF && len(data) == 0 {
-		return 0, nil, nil
-	}
-	if d.truncatedLastEntry {
-		i := entryREV1.FindIndex(data)
-		if i == nil {
-			// If there's no entry that starts in this chunk, advance past it, since
-			// we've truncated the entry it was originally part of.
-			return len(data), nil, nil
-		}
-		d.truncatedLastEntry = false
-		if i[0] > 0 {
-			// If an entry starts anywhere other than the first index, advance to it
-			// to maintain the invariant that entries start at the beginning of data.
-			// This isn't necessary, but simplifies the code below.
-			return i[0], nil, nil
-		}
-		// If i[0] == 0, then a new entry starts at the beginning of data, so fall
-		// through to the normal logic.
-	}
-	// From this point on, we assume we're currently positioned at a log entry.
-	// We want to find the next one so we start our search at data[1].
-	i := entryREV1.FindIndex(data[1:])
-	if i == nil {
-		if atEOF {
-			return len(data), data, nil
-		}
-		if len(data) >= bufio.MaxScanTokenSize {
-			// If there's no room left in the buffer, return the current truncated
-			// entry.
-			d.truncatedLastEntry = true
-			return len(data), data, nil
-		}
-		// If there is still room to read more, ask for more before deciding whether
-		// to truncate the entry.
-		return 0, nil, nil
-	}
-	// i[0] is the start of the next log entry, but we need to adjust the value
-	// to account for using data[1:] above.
-	i[0]++
-	return i[0], data[:i[0]], nil
-}
-
-func trimFinalNewLines(s []byte) []byte {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == '\n' {
-			s = s[:i]
-		} else {
-			break
-		}
-	}
-	return s
 }
