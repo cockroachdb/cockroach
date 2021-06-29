@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -105,6 +106,24 @@ var adminAuditLogEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+const defaultSampleRate = 100000
+
+var telemetrySampleRate = settings.RegisterFloatSetting(
+	"sql.log.telemetry_sample_rate",
+	"the rate/probability at which we sample queries for telemetry",
+	defaultSampleRate,
+	settings.NonNegativeFloat,
+)
+
+const defaultQPSThreshold = 10
+
+var telemetryQPSThreshold = settings.RegisterIntSetting(
+	"sql.log.telemetry_qps_threshold",
+	"the QPS threshold at which we begin sampling DML statements for telemetry logs",
+	defaultQPSThreshold,
+	settings.NonNegativeInt,
+)
+
 type executorType int
 
 const (
@@ -133,8 +152,9 @@ func (p *planner) maybeLogStatement(
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryLoggingMetrics *TelemetryLoggingMetrics,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -144,6 +164,7 @@ func (p *planner) maybeLogStatementInternal(
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryMetrics *TelemetryLoggingMetrics,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -157,6 +178,8 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
+	sampleRate := telemetrySampleRate.Get(&p.execCfg.Settings.SV)
+	qpsThreshold := telemetryQPSThreshold.Get(&p.execCfg.Settings.SV)
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -346,6 +369,16 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+	}
+
+	shouldSampleEventToTelemetry := p.stmt.AST.StatementType() == tree.TypeDML && telemetryMetrics.ExpSmoothQPS() > qpsThreshold
+
+	// If we DO NOT need to sample the event, log immediately to the telemetry channel with a full sampling rate (1.0).
+	// If we DO need to sample the event, log to the telemetry channel with the configured probabilistic sampling rate.
+	if !shouldSampleEventToTelemetry {
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.TelemetryEvent{CommonSQLExecDetails: execDetails, EffectiveSampleRate: 1.0}})
+	} else if shouldSampleEventToTelemetry && sampleRatePass(sampleRate) {
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.TelemetryEvent{CommonSQLExecDetails: execDetails, EffectiveSampleRate: sampleRate}})
 	}
 }
 
