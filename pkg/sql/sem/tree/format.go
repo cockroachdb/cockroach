@@ -306,6 +306,15 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 	return ctx
 }
 
+// WithDataConversionConfig modifies FmtCtx to substitute the DataConversionConfig,
+// calls fn, then restore the original session data.
+func (ctx *FmtCtx) WithDataConversionConfig(dcc sessiondatapb.DataConversionConfig, fn func()) {
+	old := ctx.dataConversionConfig
+	FmtDataConversionConfig(dcc)(ctx)
+	defer func() { ctx.dataConversionConfig = old }()
+	fn()
+}
+
 // WithReformatTableNames modifies FmtCtx to to substitute the printing of table
 // names using the provided function, calls fn, then restores the original table
 // formatting.
