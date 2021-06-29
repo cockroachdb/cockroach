@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -1123,4 +1124,172 @@ func (f *dynamicRequestFilter) filter(
 // noopRequestFilter is a kvserverbase.ReplicaRequestFilter that does nothing.
 func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 	return nil
+}
+
+type fakeTime struct {
+	syncutil.RWMutex
+	t time.Time
+}
+
+func (s *fakeTime) setTime(t time.Time) {
+	s.RWMutex.Lock()
+	defer s.RWMutex.Unlock()
+	s.t = t
+}
+
+func (s *fakeTime) TimeNow() time.Time {
+	s.RWMutex.RLock()
+	defer s.RWMutex.RUnlock()
+	return s.t
+}
+
+func TestUpdateRollingQueryCounts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defaultAlpha := 0.8
+	defaultIntervalLength := 10
+	stubTime := fakeTime{}
+	stubTime.setTime(timeutil.Now())
+
+	type numUpdatesPerDelay struct {
+		numUpdates int
+		timeDelay  time.Duration
+	}
+
+	testData := []struct {
+		intervalLength      int
+		updatesPerDelay     []numUpdatesPerDelay
+		expectedQueryCounts []int64
+	}{
+		// Test case for single update.
+		{
+			intervalLength:      defaultIntervalLength,
+			updatesPerDelay:     []numUpdatesPerDelay{{1, 0}},
+			expectedQueryCounts: []int64{1},
+		},
+		// Test case for multiple updates in same timestamp.
+		{
+			intervalLength:      defaultIntervalLength,
+			updatesPerDelay:     []numUpdatesPerDelay{{3, 0}},
+			expectedQueryCounts: []int64{3},
+		},
+		// Test case for multiple updates, with multiple timestamps.
+		{
+			intervalLength:      defaultIntervalLength,
+			updatesPerDelay:     []numUpdatesPerDelay{{2, 0}, {5, 1}, {3, 3}},
+			expectedQueryCounts: []int64{2, 5, 3},
+		},
+	}
+
+	for _, tc := range testData {
+		freshMetrics := sql.NewTelemetryLoggingMetrics(defaultAlpha, int64(tc.intervalLength))
+		freshMetrics.Knobs = &sql.TelemetryLoggingTestingKnobs{
+			GetTimeNow: stubTime.TimeNow,
+		}
+
+		for i := 0; i < len(tc.updatesPerDelay); i++ {
+			secondsDelay := tc.updatesPerDelay[i].timeDelay
+			numUpdates := tc.updatesPerDelay[i].numUpdates
+			stubTime.setTime(stubTime.TimeNow().Add(time.Second * secondsDelay))
+			for j := 0; j < numUpdates; j++ {
+				freshMetrics.UpdateRollingQueryCounts()
+			}
+		}
+
+		for idx, queryCount := range freshMetrics.RollingQueryCounts.QueryCounts {
+			require.Equal(t, tc.expectedQueryCounts[idx], queryCount.Count())
+		}
+	}
+}
+
+func TestExpSmoothQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defaultAlpha := 0.8
+	defaultIntervalLength := 6
+
+	startTime := timeutil.Now()
+
+	testData := []struct {
+		intervalLength    int
+		testQueryCounts   []sql.QueryCountAndTime
+		expectedSmoothQPS int64
+	}{
+		// Test case for when number of recorded query counts is less
+		// than the designated interval length.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), 1),
+			},
+			0,
+		},
+		// Test case for interval length of 1.
+		{
+			1,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), 1),
+			},
+			1,
+		},
+		// Test case for erratic increases in query count and timestamp.
+		// Also testing truncation of final smoothed value due to int64 type casting.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), 1),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*2).Unix(), 8),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*5).Unix(), 15),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*9).Unix(), 28),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*11).Unix(), 54),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*12).Unix(), 103),
+			},
+			// Result is 87.02 truncated to 87
+			87,
+		},
+
+		// Test case for fluctuation in query count.
+		// Also testing truncation of final smoothed value due to int64 type casting.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), 1),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*3).Unix(), 21),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*10).Unix(), 4),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*12).Unix(), 34),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*15).Unix(), 12),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*16).Unix(), 40),
+			},
+			// Average QPS is 16.4, truncated to 16 when used as the initially smoothed value.
+			// Result is 33.2 truncated to 33
+			33,
+		},
+		// Test case for truncation of individual QPS values (i.e. between each query count)
+		// due to int64 type casting. Consequently impacts the initial smoothed value (average QPS)
+		// and final smoothed value.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), 1),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*4).Unix(), 2),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*7).Unix(), 11),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*10).Unix(), 4),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*13).Unix(), 5),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*15).Unix(), 11),
+			},
+			// Average QPS is 2.
+			// Result is 4.2 truncated to 4.
+			4,
+		},
+	}
+
+	for _, tc := range testData {
+		freshMetrics := sql.NewTelemetryLoggingMetrics(defaultAlpha, int64(tc.intervalLength))
+		for _, tcQc := range tc.testQueryCounts {
+			freshMetrics.RollingQueryCounts.Insert(tcQc)
+		}
+		require.Equal(t, tc.expectedSmoothQPS, freshMetrics.ExpSmoothQPS())
+	}
 }

@@ -13,12 +13,14 @@ package sql
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,5 +59,84 @@ func TestHideNonVirtualTableNameFunc(t *testing.T) {
 		f.FormatNode(stmt.AST)
 		actual := f.CloseAndGetString()
 		require.Equal(t, test.expected, actual)
+	}
+}
+
+func TestCalcAvgQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	startTime := timeutil.Now()
+	startTimePlusOneSecond := startTime.Add(time.Second)
+	startTimePlusTenSeconds := startTime.Add(time.Second * 10)
+
+	type QueryCountsAndTimes struct {
+		curr QueryCountAndTime
+		prev QueryCountAndTime
+	}
+
+	testData := []struct {
+		queryCountAndTimes QueryCountsAndTimes
+		expectedQPS        int64
+	}{
+		{
+			QueryCountsAndTimes{
+				curr: QueryCountAndTime{
+					startTimePlusTenSeconds.Unix(),
+					20,
+				},
+				prev: QueryCountAndTime{
+					startTime.Unix(),
+					10,
+				},
+			},
+			2,
+		},
+		{
+			QueryCountsAndTimes{
+				curr: QueryCountAndTime{
+					startTimePlusOneSecond.Unix(),
+					20,
+				},
+				prev: QueryCountAndTime{
+					startTime.Unix(),
+					10,
+				},
+			},
+			20,
+		},
+		{
+			QueryCountsAndTimes{
+				curr: QueryCountAndTime{
+					startTimePlusOneSecond.Unix(),
+					5,
+				},
+				prev: QueryCountAndTime{
+					startTime.Unix(),
+					10,
+				},
+			},
+			5,
+		},
+		{
+			QueryCountsAndTimes{
+				curr: QueryCountAndTime{
+					startTimePlusTenSeconds.Unix(),
+					6,
+				},
+				prev: QueryCountAndTime{
+					startTime.Unix(),
+					1,
+				},
+			},
+			0,
+		},
+	}
+
+	for _, test := range testData {
+		curr := test.queryCountAndTimes.curr
+		prev := test.queryCountAndTimes.prev
+		resultQPS := calcAvgQPS(curr, prev)
+		require.Equal(t, resultQPS, test.expectedQPS)
 	}
 }

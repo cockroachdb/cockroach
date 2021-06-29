@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/url"
 	"reflect"
@@ -978,6 +979,7 @@ type ExecutorConfig struct {
 	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
 	IndexUsageStatsTestingKnobs   *idxusage.TestingKnobs
 	SQLStatsTestingKnobs          *persistedsqlstats.TestingKnobs
+	TelemetryLoggingTestingKnobs  *TelemetryLoggingTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
@@ -2762,4 +2764,26 @@ func DescsTxn(
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
 	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+}
+
+// calcAvgQPS gets the average cluster QPS between two timestamps. The difference in the number of queries executed
+// between the timestamps is divided by the number of seconds between the timestamps.
+func calcAvgQPS(currQueryCount QueryCountAndTime, prevQueryCount QueryCountAndTime) int64 {
+	// Determine the time since the previous query count in number of seconds.
+	timeSincePrev := currQueryCount.Timestamp().Sub(prevQueryCount.Timestamp()).Seconds()
+
+	// Calculate the QPS since the previous query count:
+	//	(current number of queries) / (difference in seconds since last timestamp)
+	// Timestamps between query counts are at least 1 second long, no need to check for
+	// divide by 0.
+	clusterQPS := currQueryCount.Count() / int64(timeSincePrev)
+	return clusterQPS
+}
+
+// sampleRatePass is a sampling function. It generates a random float between 0 and 1 and
+// compares it to the given samplingRate. If the random number less than the given
+// samplingRate, the item should be sampled.
+func sampleRatePass(samplingRate float64) bool {
+	randNum := rand.Float64()
+	return randNum < samplingRate
 }
