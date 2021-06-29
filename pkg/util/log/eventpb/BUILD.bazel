@@ -14,6 +14,7 @@ exports_files([
     "role_events.proto",
     "session_events.proto",
     "sql_audit_events.proto",
+    "telemetry.proto",
     "zone_events.proto",
 ])
 
@@ -72,6 +73,7 @@ proto_library(
         "role_events.proto",
         "session_events.proto",
         "sql_audit_events.proto",
+        "telemetry.proto",
         "zone_events.proto",
     ],
     strip_import_prefix = "/pkg",
@@ -104,6 +106,7 @@ genrule(
         "//pkg/util/log/eventpb:role_events.proto",
         "//pkg/util/log/eventpb:session_events.proto",
         "//pkg/util/log/eventpb:sql_audit_events.proto",
+        "//pkg/util/log/eventpb:telemetry.proto",
         "//pkg/util/log/eventpb:zone_events.proto",
     ],
     outs = ["eventlog_channels_generated.go"],
@@ -130,6 +133,7 @@ genrule(
         "//pkg/util/log/eventpb:role_events.proto",
         "//pkg/util/log/eventpb:session_events.proto",
         "//pkg/util/log/eventpb:sql_audit_events.proto",
+        "//pkg/util/log/eventpb:telemetry.proto",
         "//pkg/util/log/eventpb:zone_events.proto",
     ],
     outs = ["json_encode_generated.go"],

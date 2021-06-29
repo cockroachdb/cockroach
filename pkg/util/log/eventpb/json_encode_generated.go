@@ -2768,6 +2768,27 @@ func (m *SlowQueryInternal) AppendJSONFields(printComma bool, b redact.Redactabl
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *TelemetryEvent) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLExecDetails.AppendJSONFields(printComma, b)
+
+	if m.EffectiveSampleRate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"EffectiveSampleRate\":"...)
+		b = strconv.AppendFloat(b, float64(m.EffectiveSampleRate), 'f', -1, 64)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *TruncateTable) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

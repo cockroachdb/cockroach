@@ -42,6 +42,7 @@ genrule(
         "//pkg/util/log/eventpb:role_events.proto",
         "//pkg/util/log/eventpb:session_events.proto",
         "//pkg/util/log/eventpb:sql_audit_events.proto",
+        "//pkg/util/log/eventpb:telemetry.proto",
         "//pkg/util/log/eventpb:zone_events.proto",
     ],
     outs = ["eventlog.md"],
