@@ -21,7 +21,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const crdbV2testdataPath = "testdata/merge_logs_crdb_v2"
+const crdbV2testdataPath = "testdata/merge_logs_v2"
 const crdbV1testdataPath = "testdata/merge_logs"
 
 type testCase struct {
@@ -31,7 +31,7 @@ type testCase struct {
 	args   []string
 }
 
-func getCases(format string) []testCase{
+func getCases(format string) []testCase {
 	var testdataPath string
 	switch format {
 	case "crdb-v2":
@@ -43,92 +43,92 @@ func getCases(format string) []testCase{
 		{
 			name:   "1.all",
 			format: format,
-			args:   []string{testdataPath+"/1/*/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false"},
+			args:   []string{testdataPath + "/1/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false"},
 		},
 		{
 			name:   "1.filter-program",
 			format: format,
-			args:   []string{testdataPath+"/1/*/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--program-filter", "not-cockroach"},
+			args:   []string{testdataPath + "/1/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--program-filter", "not-cockroach"},
 		},
 		{
 			name:   "1.seek-past-end-of-file",
 			format: format,
-			args:   []string{testdataPath+"/1/*/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525317"},
+			args:   []string{testdataPath + "/1/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525317"},
 		},
 		{
 			name:   "1.filter-message",
 			format: format,
-			args:   []string{testdataPath+"/1/*/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--filter", "gossip"},
+			args:   []string{testdataPath + "/1/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--filter", "gossip"},
 		},
 		{
 			name:   "2.multiple-files-from-node",
 			format: format,
-			args:   []string{testdataPath+"/2/*/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false"},
+			args:   []string{testdataPath + "/2/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false"},
 		},
 		{
 			// NB: the output here matches 2.multiple-files-from-node.
 			name:   "2.walk-directory",
 			format: format,
-			args:   []string{testdataPath+"/2"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false"},
+			args:   []string{testdataPath + "/2"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false"},
 		},
 		{
 			name:   "2.skip-file",
 			format: format,
-			args:   []string{testdataPath+"/2/*/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525316"},
+			args:   []string{testdataPath + "/2/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525316"},
 		},
 		{
 			name:   "2.remove-duplicates",
 			format: format,
-			args:   []string{
-				testdataPath+"/2/1.logs/cockroach.test-0001.ubuntu.2018-11-30T22_06_47Z.004130.log",
-				testdataPath+"/2/1.logs/cockroach.test-0001.ubuntu.2018-11-30T22_14_47Z.004130.log",
-				testdataPath+"/2/2.logs/cockroach.stderr",
-				testdataPath+"/2/2.logs/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
-				testdataPath+"/2/2.logs/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
-				testdataPath+"/2/2.logs/roachprod.log",
+			args: []string{
+				testdataPath + "/2/1.logs/cockroach.test-0001.ubuntu.2018-11-30T22_06_47Z.004130.log",
+				testdataPath + "/2/1.logs/cockroach.test-0001.ubuntu.2018-11-30T22_14_47Z.004130.log",
+				testdataPath + "/2/2.logs/cockroach.stderr",
+				testdataPath + "/2/2.logs/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
+				testdataPath + "/2/2.logs/cockroach.test-0002.ubuntu.2018-11-30T22_06_47Z.003959.log",
+				testdataPath + "/2/2.logs/roachprod.log",
 			},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525316"},
+			flags: []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525316"},
 		},
 		{
 			name:   "3.non-standard",
 			format: format,
-			args:   []string{testdataPath+"/3/*/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--prefix", ""},
+			args:   []string{testdataPath + "/3/*/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--prefix", ""},
 		},
 		{
 			// Prints only lines that match the filter (if no submatches).
 			name:   "4.filter",
 			format: format,
-			args:   []string{testdataPath+"/4/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "3:0"},
+			args:   []string{testdataPath + "/4/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "3:0"},
 		},
 		{
 			// Prints only the submatch.
 			name:   "4.filter-submatch",
 			format: format,
-			args:   []string{testdataPath+"/4/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "(3:)0"},
+			args:   []string{testdataPath + "/4/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "(3:)0"},
 		},
 		{
 			// Prints only the submatches.
 			name:   "4.filter-submatch-double",
 			format: format,
-			args:   []string{testdataPath+"/4/*"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "(3):(0)"},
+			args:   []string{testdataPath + "/4/*"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", "(3):(0)"},
 		},
 		{
 			// Simple grep for a panic line only.
 			name:   "4.filter-npe",
 			format: format,
-			args:   []string{testdataPath+"/4/npe.log"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(panic: .*)`},
+			args:   []string{testdataPath + "/4/npe.log"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(panic: .*)`},
 		},
 		{
 			// Grep for a panic and a few lines more. This is often not so useful
@@ -136,8 +136,8 @@ func getCases(format string) []testCase{
 			// source of the panic is harder to find.
 			name:   "4.filter-npe-with-context",
 			format: format,
-			args:   []string{testdataPath+"/4/npe.log"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(?m)(panic:.(?:.*\n){0,5})`},
+			args:   []string{testdataPath + "/4/npe.log"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(?m)(panic:.(?:.*\n){0,5})`},
 		},
 		{
 			// This regexp attempts to find the source of the panic, essentially by
@@ -154,33 +154,33 @@ func getCases(format string) []testCase{
 			// usually alternate with panic().
 			name:   "4.filter-npe-origin-stack-only",
 			format: format,
-			args:   []string{testdataPath+"/4/npe-repanic.log"}, // (?:panic\(.*)*
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(?m)^(panic\(.*\n.*\n.*\n.*\n[^p].*)`},
+			args:   []string{testdataPath + "/4/npe-repanic.log"}, // (?:panic\(.*)*
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--filter", `(?m)^(panic\(.*\n.*\n.*\n.*\n[^p].*)`},
 		},
 		{
 			name:   "5.redact-off-redactable-off",
 			format: format,
-			args:   []string{testdataPath+"/5/redactable.log"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*"},
+			args:   []string{testdataPath + "/5/redactable.log"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=false", "--file-pattern", ".*"},
 		},
 		{
 			name:   "5.redact-off-redactable-on",
 			format: format,
-			args:   []string{testdataPath+"/5/redactable.log"},
-			flags:  []string{"--format="+format, "--redact=false", "--redactable-output=true", "--file-pattern", ".*"},
-	},
-	{
+			args:   []string{testdataPath + "/5/redactable.log"},
+			flags:  []string{"--format=" + format, "--redact=false", "--redactable-output=true", "--file-pattern", ".*"},
+		},
+		{
 			name:   "5.redact-on-redactable-off",
 			format: format,
-			args:   []string{testdataPath+"/5/redactable.log"},
-			flags:  []string{"--format="+format, "--redact=true", "--redactable-output=false", "--file-pattern", ".*"},
-	},
-	{
+			args:   []string{testdataPath + "/5/redactable.log"},
+			flags:  []string{"--format=" + format, "--redact=true", "--redactable-output=false", "--file-pattern", ".*"},
+		},
+		{
 			name:   "5.redact-on-redactable-on",
 			format: format,
-			args:   []string{testdataPath+"/5/redactable.log"},
-			flags:  []string{"--format="+format, "--redact=true", "--redactable-output=true", "--file-pattern", ".*"},
-	},
+			args:   []string{testdataPath + "/5/redactable.log"},
+			flags:  []string{"--format=" + format, "--redact=true", "--redactable-output=true", "--file-pattern", ".*"},
+		},
 	}
 }
 
@@ -235,5 +235,3 @@ func TestFormatCrdbV1DebugMergeLogs(t *testing.T) {
 		t.Run(c.name, c.run)
 	}
 }
-
-
