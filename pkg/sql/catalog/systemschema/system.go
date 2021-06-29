@@ -437,6 +437,46 @@ CREATE TABLE system.transaction_statistics (
 		)
 );
 `
+
+	TenantUsageTableSchema = `
+CREATE TABLE system.tenant_usage (
+  tenant_id INT NOT NULL,
+
+	-- Sequence number. Each update to the bucket state has a new sequence number
+  -- and there are no gaps.
+  seq INT NOT NULL,
+
+  -- Operation ID, to detect duplicate (retried) requests.
+  op_id UUID NOT NULL,
+
+  -- Bucket configuration.
+  ru_burst_limit FLOAT NOT NULL,
+  ru_refill_rate FLOAT NOT NULL,
+
+  -- Current amount of RUs in the bucket.
+  ru_current FLOAT NOT NULL,
+
+  -- Current sum of the shares values for all nodes.
+  current_share_sum FLOAT NOT NULL,
+
+  -- Cumulative usage statistics.
+  total_ru_usage FLOAT NOT NULL,
+  total_read_requests INT NOT NULL,
+  total_read_bytes INT NOT NULL,
+  total_write_requests INT NOT NULL,
+  total_write_bytes INT NOT NULL,
+  total_sql_pod_cpu_seconds FLOAT NOT NULL, -- TODO: Maybe milliseconds and INT8?
+
+	FAMILY "primary" (
+	  tenant_id, seq, op_id,
+		ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
+		total_ru_usage, total_read_requests, total_read_bytes, total_write_requests,
+		total_write_bytes, total_sql_pod_cpu_seconds
+	),
+
+  PRIMARY KEY (tenant_id, seq DESC),
+  UNIQUE INDEX "op_idx" (tenant_id, op_id)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -518,7 +558,7 @@ var (
 			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "parentSchemaID", "name"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
 			{Name: "fam_4_id", ID: catconstants.NamespaceTableFamilyID, ColumnNames: []string{"id"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
 		},
-		NextFamilyID: 5,
+		NextFamilyID: catconstants.NamespaceTableFamilyID + 1,
 		PrimaryIndex: descpb.IndexDescriptor{
 			Name:                "primary",
 			ID:                  catconstants.NamespaceTablePrimaryIndexID,
@@ -1785,9 +1825,7 @@ var (
 		NextMutationID: 1,
 	})
 
-	// MigrationsTable is the descriptor for the migrations table. It stores facts
-	// about the completion state of long-running migrations. It is used to
-	// prevent migrations from running again after they have been completed.
+	// JoinTokensTable is the descriptor for the join_tokens table.
 	JoinTokensTable = makeTable(descpb.TableDescriptor{
 		Name:                    "join_tokens",
 		ID:                      keys.JoinTokensTableID,
@@ -2054,6 +2092,77 @@ var (
 		NextIndexID: 3,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.TransactionStatisticsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// TenantUsageTable is the descriptor for the tenant_usage table. It is used
+	// to coordinate throttling of tenant SQL pods and to track consumption.
+	TenantUsageTable = makeTable(descpb.TableDescriptor{
+		Name:                    "tenant_usage",
+		ID:                      keys.TenantUsageTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "tenant_id", ID: 1, Type: types.Int, Nullable: false},
+			{Name: "seq", ID: 2, Type: types.Int, Nullable: false},
+			{Name: "op_id", ID: 3, Type: types.Uuid, Nullable: false},
+			{Name: "ru_burst_limit", ID: 4, Type: types.Float, Nullable: false},
+			{Name: "ru_refill_rate", ID: 5, Type: types.Float, Nullable: false},
+			{Name: "ru_current", ID: 6, Type: types.Float, Nullable: false},
+			{Name: "current_share_sum", ID: 7, Type: types.Float, Nullable: false},
+			{Name: "total_ru_usage", ID: 8, Type: types.Float, Nullable: false},
+			{Name: "total_read_requests", ID: 9, Type: types.Int, Nullable: false},
+			{Name: "total_read_bytes", ID: 10, Type: types.Int, Nullable: false},
+			{Name: "total_write_requests", ID: 11, Type: types.Int, Nullable: false},
+			{Name: "total_write_bytes", ID: 12, Type: types.Int, Nullable: false},
+			{Name: "total_sql_pod_cpu_seconds", ID: 13, Type: types.Float, Nullable: false},
+		},
+		NextColumnID: 14,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name: "primary",
+				ID:   0,
+				ColumnNames: []string{
+					"tenant_id", "seq", "op_id",
+					"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
+					"total_ru_usage", "total_read_requests", "total_read_bytes", "total_write_requests",
+					"total_write_bytes", "total_sql_pod_cpu_seconds",
+				},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
+				DefaultColumnID: 0,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:           tabledesc.PrimaryKeyIndexName,
+			ID:             1,
+			Unique:         true,
+			KeyColumnNames: []string{"tenant_id", "seq"},
+			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_DESC,
+			},
+			KeyColumnIDs: []descpb.ColumnID{1, 2},
+			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+		},
+		Indexes: []descpb.IndexDescriptor{
+			{
+				Name:                "op_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"tenant_id", "op_id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 3},
+				KeySuffixColumnIDs:  []descpb.ColumnID{2},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		},
+		NextIndexID: 3,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.TenantUsageTableID], security.NodeUserName(),
+		),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
