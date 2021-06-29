@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -2720,19 +2719,6 @@ func (s *Store) relocateReplicas(
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	startKey := rangeDesc.StartKey.AsRawKey()
-	canRetry := func(err error) bool {
-		allowlist := []string{
-			snapshotApplySemBusyMsg,
-			IntersectingSnapshotMsg,
-		}
-		errStr := err.Error()
-		for _, substr := range allowlist {
-			if strings.Contains(errStr, substr) {
-				return true
-			}
-		}
-		return false
-	}
 	transferLease := func(target roachpb.ReplicationTarget) error {
 		// TODO(tbg): we ignore errors here, but it seems that in practice these
 		// transfers "always work". Some of them are essential (we can't remove
@@ -2783,7 +2769,7 @@ func (s *Store) relocateReplicas(
 				newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
 				if err != nil {
 					returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
-					if !canRetry(err) {
+					if !isSnapshotError(err) {
 						return rangeDesc, returnErr
 					}
 					if every.ShouldLog() {
