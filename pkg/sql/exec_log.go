@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -105,6 +107,12 @@ var adminAuditLogEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+var telemetryLoggingEnabled = settings.RegisterBoolSetting(
+	"sql.telemetry.query_sampling.enabled",
+	"when set to true, executed queries will emit an event on the telemetry logging channel",
+	false,
+).WithPublic()
+
 type executorType int
 
 const (
@@ -133,8 +141,10 @@ func (p *planner) maybeLogStatement(
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryLoggingMetrics *TelemetryLoggingMetrics,
+	rng *rand.Rand,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, rng)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -144,6 +154,8 @@ func (p *planner) maybeLogStatementInternal(
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryMetrics *TelemetryLoggingMetrics,
+	rng *rand.Rand,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -157,6 +169,9 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
+	sampleRate := telemetrySampleRate.Get(&p.execCfg.Settings.SV)
+	qpsThreshold := telemetryQPSThreshold.Get(&p.execCfg.Settings.SV)
+	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV)
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -166,7 +181,7 @@ func (p *planner) maybeLogStatementInternal(
 	// member of the admin role).
 
 	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled &&
-		!shouldLogToAdminAuditLog {
+		!shouldLogToAdminAuditLog && !telemetryLoggingEnabled {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -346,6 +361,26 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+	}
+
+	if telemetryLoggingEnabled {
+		smoothQPS := telemetryMetrics.expSmoothQPS()
+		shouldSampleEventToTelemetry := p.stmt.AST.StatementType() == tree.TypeDML && smoothQPS > qpsThreshold
+		// If we DO NOT need to sample the event, log immediately to the telemetry
+		// channel with a full sampling rate (1.0). If we DO need to sample the
+		// event, log to the telemetry channel with the configured probabilistic
+		// sampling rate.
+		if !shouldSampleEventToTelemetry {
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails, EffectiveSampleRate: 1.0}})
+		} else if shouldSampleEventToTelemetry {
+			// The effective sample rate is the representativity of the query (i.e.
+			// how often it is represented in the logs). Effective sample rate is
+			// measured as the ratio of: (QPS threshold / Smoothed QPS approximation).
+			effectiveSampleRate := float64(qpsThreshold) / float64(smoothQPS)
+			if rng.Float64() < effectiveSampleRate*sampleRate {
+				p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails, EffectiveSampleRate: effectiveSampleRate}})
+			}
+		}
 	}
 }
 
