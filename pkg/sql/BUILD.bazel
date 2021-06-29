@@ -269,6 +269,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/authentication",
         "//pkg/sql/backfill",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
