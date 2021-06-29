@@ -17,13 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -79,7 +79,7 @@ func GetUserHashedPassword(
 		// necessary.
 		rootFn := func(ctx context.Context) ([]byte, error) {
 			authInfo, err := retrieveUserAndPasswordWithCache(ctx, execCfg, ie, isRoot, username)
-			return authInfo.hashedPassword, err
+			return authInfo.HashedPassword, err
 		}
 
 		// Root user cannot have password expiry and must have login.
@@ -94,27 +94,10 @@ func GetUserHashedPassword(
 	authInfo, err := retrieveUserAndPasswordWithCache(
 		ctx, execCfg, ie, isRoot, username,
 	)
-	return authInfo.userExists, authInfo.canLogin,
-		func(ctx context.Context) ([]byte, error) { return authInfo.hashedPassword, nil },
-		func(ctx context.Context) (*tree.DTimestamp, error) { return authInfo.validUntil, nil },
+	return authInfo.UserExists, authInfo.CanLogin,
+		func(ctx context.Context) ([]byte, error) { return authInfo.HashedPassword, nil },
+		func(ctx context.Context) (*tree.DTimestamp, error) { return authInfo.ValidUntil, nil },
 		err
-}
-
-// AuthenticationInfoCache is a shared cache for hashed passwords and other
-// information used during user authentication.
-type AuthenticationInfoCache struct {
-	syncutil.Mutex
-	usersTableVersion       descpb.DescriptorVersion
-	roleOptionsTableVersion descpb.DescriptorVersion
-	// cache is a mapping from username to authInfo.
-	cache map[security.SQLUsername]authInfo
-}
-
-type authInfo struct {
-	userExists     bool
-	canLogin       bool
-	hashedPassword []byte
-	validUntil     *tree.DTimestamp
 }
 
 func retrieveUserAndPasswordWithCache(
@@ -123,7 +106,7 @@ func retrieveUserAndPasswordWithCache(
 	ie *InternalExecutor,
 	isRoot bool,
 	normalizedUsername security.SQLUsername,
-) (aInfo authInfo, err error) {
+) (aInfo authentication.AuthInfo, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	// We don't like long timeouts for root.
@@ -140,90 +123,16 @@ func retrieveUserAndPasswordWithCache(
 		}
 	}
 	err = runFn(func(ctx context.Context) (retErr error) {
-		return descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, ie, execCfg.DB,
-			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
-				_, usersTableDesc, err := descriptors.GetImmutableTableByName(
-					ctx,
-					txn,
-					userTableName,
-					tree.ObjectLookupFlagsWithRequired(),
-				)
-				if err != nil {
-					return err
-				}
-				_, roleOptionsTableDesc, err := descriptors.GetImmutableTableByName(
-					ctx,
-					txn,
-					RoleOptionsTableName,
-					tree.ObjectLookupFlagsWithRequired(),
-				)
-				if err != nil {
-					return err
-				}
-				if usersTableDesc.IsUncommittedVersion() || roleOptionsTableDesc.IsUncommittedVersion() {
-					aInfo, err = retrieveUserAndPassword(ctx, txn, ie, normalizedUsername)
-					if err != nil {
-						return err
-					}
-				}
-				authInfoCache := execCfg.AuthenticationInfoCache
-				usersTableVersion := usersTableDesc.GetVersion()
-				roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
-				// We loop in case the table version changes while looking up
-				// password or role options.
-
-				for {
-					// Check version and maybe clear cache while holding the mutex.
-					var found bool
-					aInfo, found = func() (authInfo, bool) {
-						authInfoCache.Lock()
-						defer authInfoCache.Unlock()
-						if authInfoCache.usersTableVersion != usersTableVersion {
-							// Update users table version and drop the map.
-							authInfoCache.usersTableVersion = usersTableVersion
-							authInfoCache.cache = make(map[security.SQLUsername]authInfo)
-						}
-						if authInfoCache.roleOptionsTableVersion != roleOptionsTableVersion {
-							// Update role_optiosn table version and drop the map.
-							authInfoCache.roleOptionsTableVersion = roleOptionsTableVersion
-							authInfoCache.cache = make(map[security.SQLUsername]authInfo)
-						}
-						aInfo, found = authInfoCache.cache[normalizedUsername]
-						return aInfo, found
-					}()
-
-					if found {
-						return nil
-					}
-
-					// Lookup memberships outside the lock.
-					aInfo, err = retrieveUserAndPassword(ctx, txn, ie, normalizedUsername)
-					if err != nil {
-						return err
-					}
-
-					updatedCache := func() bool {
-						// Update membership.
-						authInfoCache.Lock()
-						defer authInfoCache.Unlock()
-						// Table version has changed while we were looking: unlock and start over.
-						if authInfoCache.usersTableVersion != usersTableVersion {
-							usersTableVersion = authInfoCache.usersTableVersion
-							return false
-						}
-						if authInfoCache.roleOptionsTableVersion != roleOptionsTableVersion {
-							roleOptionsTableVersion = authInfoCache.roleOptionsTableVersion
-							return false
-						}
-						// Table version remains the same: update map, unlock, return.
-						authInfoCache.cache[normalizedUsername] = aInfo
-						return true
-					}()
-					if updatedCache {
-						return nil
-					}
-				}
-			})
+		aInfo, retErr = execCfg.AuthenticationInfoCache.Get(
+			ctx,
+			execCfg.Settings,
+			execCfg.LeaseManager,
+			ie,
+			execCfg.DB,
+			normalizedUsername,
+			retrieveUserAndPassword,
+		)
+		return retErr
 	})
 
 	if err != nil {
@@ -235,8 +144,11 @@ func retrieveUserAndPasswordWithCache(
 }
 
 func retrieveUserAndPassword(
-	ctx context.Context, txn *kv.Txn, ie *InternalExecutor, normalizedUsername security.SQLUsername,
-) (aInfo authInfo, retErr error) {
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	normalizedUsername security.SQLUsername,
+) (aInfo authentication.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
@@ -245,17 +157,17 @@ func retrieveUserAndPassword(
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getHashedPassword, normalizedUsername)
 	if err != nil {
-		return authInfo{}, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		return authentication.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
 	}
 	if values != nil {
-		aInfo.userExists = true
+		aInfo.UserExists = true
 		if v := values[0]; v != tree.DNull {
-			aInfo.hashedPassword = []byte(*(v.(*tree.DBytes)))
+			aInfo.HashedPassword = []byte(*(v.(*tree.DBytes)))
 		}
 	}
 
-	if !aInfo.userExists {
-		return authInfo{}, nil
+	if !aInfo.UserExists {
+		return authentication.AuthInfo{}, nil
 	}
 
 	// Use fully qualified table name to avoid looking up "".system.role_options.
@@ -269,7 +181,7 @@ func retrieveUserAndPassword(
 		normalizedUsername,
 	)
 	if err != nil {
-		return authInfo{}, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		return authentication.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
 	}
 	// We have to make sure to close the iterator since we might return from
 	// the for loop early (before Next() returns false).
@@ -277,14 +189,14 @@ func retrieveUserAndPassword(
 
 	// To support users created before 20.1, allow all USERS/ROLES to login
 	// if NOLOGIN is not found.
-	aInfo.canLogin = true
+	aInfo.CanLogin = true
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		option := string(tree.MustBeDString(row[0]))
 
 		if option == "NOLOGIN" {
-			aInfo.canLogin = false
+			aInfo.CanLogin = false
 		}
 
 		if option == "VALID UNTIL" {
@@ -294,9 +206,9 @@ func retrieveUserAndPassword(
 				// representation of a TimestampTZ which has the same underlying
 				// representation in the table as a Timestamp (UTC time).
 				timeCtx := tree.NewParseTimeContext(timeutil.Now())
-				aInfo.validUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
+				aInfo.ValidUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 				if err != nil {
-					return authInfo{}, errors.Wrap(err,
+					return authentication.AuthInfo{}, errors.Wrap(err,
 						"error trying to parse timestamp while retrieving password valid until value")
 				}
 			}
@@ -372,7 +284,7 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 // BumpUsersTableVersion increases the table version for the
 // users table.
 func (p *planner) BumpUsersTableVersion(ctx context.Context) error {
-	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, userTableName, true, tree.ResolveAnyTableKind)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, authentication.UsersTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
@@ -385,7 +297,7 @@ func (p *planner) BumpUsersTableVersion(ctx context.Context) error {
 // BumpRoleOptionsTableVersion increases the table version for the
 // role_options table.
 func (p *planner) BumpRoleOptionsTableVersion(ctx context.Context) error {
-	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, RoleOptionsTableName, true, tree.ResolveAnyTableKind)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, authentication.RoleOptionsTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
