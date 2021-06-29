@@ -277,6 +277,9 @@ type Server struct {
 
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
+
+	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
+	TelemetryLoggingMetrics TelemetryLoggingMetrics
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -297,6 +300,105 @@ type Metrics struct {
 
 	// StatsMetrics contains metrics for SQL statistics collection.
 	StatsMetrics StatsMetrics
+}
+
+// TelemetryLoggingMetrics keeps track of a rolling interval of previous query counts
+// with timestamps. The rolling interval of query counts + timestamps is used in combination
+// with the smoothing alpha value in an exponential smoothing function to approximate cluster
+// QPS.
+type TelemetryLoggingMetrics struct {
+	syncutil.Mutex
+	smoothingAlpha     float64
+	rollingInterval    int
+	RollingQueryCounts []QueryCountAndTime
+}
+
+// newTelemetryLoggingMetrics returns a new TelemetryLoggingMetrics object
+func NewTelemetryLoggingMetrics(alpha float64, interval int) TelemetryLoggingMetrics {
+	return TelemetryLoggingMetrics{
+		smoothingAlpha:  alpha,
+		rollingInterval: interval,
+	}
+}
+
+// UpdateRollingQueryCounts appends a new QueryCountAndTime to the
+// list of query counts in the telemetry logging metrics. Old
+// QueryCountAndTime values are removed from the slice once the size
+// of the slice has exceeded the rollingInterval.
+func (t *TelemetryLoggingMetrics) UpdateRollingQueryCounts() {
+	t.Lock()
+	defer t.Unlock()
+
+	var newLatest QueryCountAndTime
+	if len(t.RollingQueryCounts) == 0 {
+		newLatest = QueryCountAndTime{timeutil.Now().Unix(), 1}
+	} else {
+		latest := t.RollingQueryCounts[len(t.RollingQueryCounts)-1]
+		newLatest = QueryCountAndTime{timeutil.Now().Unix(), latest.Count() + 1}
+	}
+
+	t.RollingQueryCounts = append(t.RollingQueryCounts, newLatest)
+
+	if len(t.RollingQueryCounts) > t.rollingInterval {
+		diff := len(t.RollingQueryCounts) - t.rollingInterval
+		t.RollingQueryCounts = t.RollingQueryCounts[diff:]
+	}
+}
+
+func (t *TelemetryLoggingMetrics) ExpSmoothQPS() int64 {
+	t.Lock()
+	defer t.Unlock()
+
+	// If the number of query counts is less than the interval provided, default to 0.
+	if len(t.RollingQueryCounts) < t.rollingInterval {
+		return 0
+	}
+
+	var movingQPS []int64
+	var smoothQPS float64
+
+	for i := 1; i < len(t.RollingQueryCounts); i++ {
+		curr := t.RollingQueryCounts[i]
+		prev := t.RollingQueryCounts[i-1]
+		movingQPS = append(movingQPS, calcAvgQPS(curr, &prev))
+	}
+
+	// Iterate backwards through movingQPS, most recent to least recent.
+	last := len(movingQPS) - 1
+	for i := last; i >= 0; i-- {
+		qpsVal := float64(movingQPS[i])
+		if i == last {
+			smoothQPS += t.smoothingAlpha * qpsVal
+		} else {
+			exp := float64(last - i)
+			smoothQPS += t.smoothingAlpha * math.Pow(1-t.smoothingAlpha, exp) * qpsVal
+		}
+	}
+	return int64(smoothQPS)
+}
+
+// QueryCountAndTime keeps a count of user initiated statements,
+// and the timestamp at the latest count change.
+type QueryCountAndTime struct {
+	timestamp int64
+	count     int64
+}
+
+func NewQueryCountAndTime(timestamp int64, count int64) QueryCountAndTime {
+	return QueryCountAndTime{
+		timestamp,
+		count,
+	}
+}
+
+// Count atomically returns the query count of a QueryCountAndTime object
+func (q *QueryCountAndTime) Count() int64 {
+	return atomic.LoadInt64(&q.count)
+}
+
+// Timestamp atomically returns the timestamp of a QueryCountAndTime object
+func (q *QueryCountAndTime) Timestamp() time.Time {
+	return timeutil.Unix(atomic.LoadInt64(&q.timestamp), 0)
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -336,6 +438,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			Setting:     cfg.Settings,
 			Knobs:       cfg.IndexUsageStatsTestingKnobs,
 		}),
+		TelemetryLoggingMetrics: NewTelemetryLoggingMetrics(0.8, 10),
 	}
 
 	return s

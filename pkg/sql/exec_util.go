@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/url"
 	"reflect"
@@ -2702,4 +2703,37 @@ func DescsTxn(
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
 	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+}
+
+// calcAvgQPS gets the average cluster QPS between two timestamps. The difference in the number of queries executed
+// between the timestamps is divided by the number of seconds between the timestamps.
+func calcAvgQPS(currQueryCount QueryCountAndTime, prevQueryCount *QueryCountAndTime) int64 {
+
+	// If the previous query count has not been tracked, return 0.
+	if prevQueryCount == (&QueryCountAndTime{}) {
+		*prevQueryCount = currQueryCount
+		return 0
+	}
+
+	// Determine the time since the previous query count in number of seconds.
+	timeSincePrev := currQueryCount.Timestamp().Sub(prevQueryCount.Timestamp()).Seconds()
+
+	// If number of seconds since previous query count is less than 1, set to 1.
+	// Avoid divide by 0.
+	if timeSincePrev == 0 {
+		timeSincePrev = 1
+	}
+
+	// Calculate the average cluster QPS since the previous query count.
+	clusterQPS := (currQueryCount.Count() - prevQueryCount.Count()) / int64(timeSincePrev)
+	*prevQueryCount = currQueryCount
+	return clusterQPS
+}
+
+// sampleRatePass is a sampling function. It generates a random float between 0 and 1 and
+// compares it to the given samplingRate. If the random number less than the given
+// samplingRate, the item should be sampled.
+func sampleRatePass(samplingRate float64) bool {
+	randNum := rand.Float64()
+	return randNum < samplingRate
 }
