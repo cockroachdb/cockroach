@@ -214,7 +214,8 @@ func (b *Builder) buildScalar(
 
 		left := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
 		right := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
-		out = b.constructBinary(t.Operator,
+		out = b.constructBinary(
+			tree.MakeBinaryOperator(t.Operator.Symbol),
 			b.buildScalar(left, inScope, nil, nil, colRefs),
 			b.buildScalar(right, inScope, nil, nil, colRefs),
 			t.ResolvedType(),
@@ -724,7 +725,7 @@ func (b *Builder) constructComparison(
 func (b *Builder) constructBinary(
 	bin tree.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
-	switch bin {
+	switch bin.Symbol {
 	case tree.Bitand:
 		return b.factory.ConstructBitand(left, right)
 	case tree.Bitor:

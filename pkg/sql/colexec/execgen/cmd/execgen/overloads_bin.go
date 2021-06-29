@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var binaryOpDecMethod = map[tree.BinaryOperator]string{
+var binaryOpDecMethod = map[tree.BinaryOperatorSymbol]string{
 	tree.Plus:     "Add",
 	tree.Minus:    "Sub",
 	tree.Mult:     "Mul",
@@ -35,13 +35,13 @@ var binaryOpDecMethod = map[tree.BinaryOperator]string{
 	tree.Pow:      "Pow",
 }
 
-var binaryOpFloatMethod = map[tree.BinaryOperator]string{
+var binaryOpFloatMethod = map[tree.BinaryOperatorSymbol]string{
 	tree.FloorDiv: "math.Trunc",
 	tree.Mod:      "math.Mod",
 	tree.Pow:      "math.Pow",
 }
 
-var binaryOpDecCtx = map[tree.BinaryOperator]string{
+var binaryOpDecCtx = map[tree.BinaryOperatorSymbol]string{
 	tree.Plus:     "ExactCtx",
 	tree.Minus:    "ExactCtx",
 	tree.Mult:     "ExactCtx",
@@ -103,12 +103,12 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 // sameTypeBinaryOpToOverloads maps a binary operator to all of the overloads
 // that implement that comparison between two values of the same type (meaning
 // they have the same family and width).
-var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*oneArgOverload, len(execgen.BinaryOpName))
+var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperatorSymbol][]*oneArgOverload, len(execgen.BinaryOpName))
 
-var binOpOutputTypes = make(map[tree.BinaryOperator]map[typePair]*types.T)
+var binOpOutputTypes = make(map[tree.BinaryOperatorSymbol]map[typePair]*types.T)
 
 func registerBinOpOutputTypes() {
-	populateBinOpIntOutputTypeOnIntArgs := func(binOp tree.BinaryOperator) {
+	populateBinOpIntOutputTypeOnIntArgs := func(binOp tree.BinaryOperatorSymbol) {
 		for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 				binOpOutputTypes[binOp][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Int
@@ -117,14 +117,14 @@ func registerBinOpOutputTypes() {
 	}
 
 	// Bit binary operators.
-	for _, binOp := range []tree.BinaryOperator{tree.Bitand, tree.Bitor, tree.Bitxor} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Bitand, tree.Bitor, tree.Bitxor} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
 	}
 
 	// Simple arithmetic binary operators.
-	for _, binOp := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
@@ -178,7 +178,7 @@ func registerBinOpOutputTypes() {
 	}
 
 	// Other arithmetic binary operators.
-	for _, binOp := range []tree.BinaryOperator{tree.FloorDiv, tree.Mod, tree.Pow} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.FloorDiv, tree.Mod, tree.Pow} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
@@ -195,7 +195,7 @@ func registerBinOpOutputTypes() {
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
 	}
 
-	for _, binOp := range []tree.BinaryOperator{tree.LShift, tree.RShift} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.LShift, tree.RShift} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -230,7 +230,7 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[tree.Concat][typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}] = types.Jsonb
 }
 
-func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
+func newBinaryOverloadBase(op tree.BinaryOperatorSymbol) *overloadBase {
 	opStr := op.String()
 	switch op {
 	case tree.Bitxor:
@@ -260,7 +260,7 @@ func populateBinOpOverloads() {
 	// Also note that we're sorting all operators in order to have the
 	// generated code not change when the order of iteration over map
 	// tree.BinOps changes.
-	var allBinaryOperators []tree.BinaryOperator
+	var allBinaryOperators []tree.BinaryOperatorSymbol
 	for binOp := range tree.BinOps {
 		allBinaryOperators = append(allBinaryOperators, binOp)
 	}
@@ -310,7 +310,7 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
-func checkRightIsZero(binOp tree.BinaryOperator) bool {
+func checkRightIsZero(binOp tree.BinaryOperatorSymbol) bool {
 	// TODO(yuzefovich): introduce a new operator that would check whether a
 	// vector contains a zero value so that the division didn't have to do the
 	// check. This is likely to be more performant.
@@ -977,7 +977,9 @@ func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 // convertNativeToDatum returns a string that converts nativeElem to a
 // tree.Datum that is stored in local variable named datumElemVarName.
 func convertNativeToDatum(
-	op tree.BinaryOperator, canonicalTypeFamily types.Family, nativeElem, datumElemVarName string,
+	op tree.BinaryOperatorSymbol,
+	canonicalTypeFamily types.Family,
+	nativeElem, datumElemVarName string,
 ) string {
 	var runtimeConversion string
 	switch canonicalTypeFamily {

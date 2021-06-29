@@ -105,7 +105,7 @@ type overloadBase struct {
 	// overload is a binary operator or a comparison operator. Neither of the
 	// fields will be set when it is a hash or cast overload.
 	CmpOp tree.ComparisonOperator
-	BinOp tree.BinaryOperator
+	BinOp tree.BinaryOperatorSymbol
 }
 
 // overloadKind describes the type of an overload. The word "kind" was chosen

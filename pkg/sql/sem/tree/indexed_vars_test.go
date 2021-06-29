@@ -60,7 +60,7 @@ func TestIndexedVars(t *testing.T) {
 	binary := func(op BinaryOperator, left, right Expr) Expr {
 		return &BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	expr := binary(Plus, v0, binary(Mult, v1, v2))
+	expr := binary(MakeBinaryOperator(Plus), v0, binary(MakeBinaryOperator(Mult), v1, v2))
 
 	// Verify the expression evaluates correctly.
 	ctx := context.Background()

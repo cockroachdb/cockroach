@@ -299,7 +299,7 @@ func (expr *AndExpr) TypeCheck(
 func (expr *BinaryExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	ops := BinOps[expr.Operator]
+	ops := BinOps[expr.Operator.Symbol]
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, ops, true, expr.Left, expr.Right)
 	if err != nil {
