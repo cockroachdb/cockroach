@@ -277,6 +277,9 @@ type Server struct {
 
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
+
+	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
+	TelemetryLoggingMetrics TelemetryLoggingMetrics
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -297,6 +300,62 @@ type Metrics struct {
 
 	// StatsMetrics contains metrics for SQL statistics collection.
 	StatsMetrics StatsMetrics
+}
+
+type TelemetryLoggingMetrics struct {
+	syncutil.Mutex
+	smoothingAlpha     float64
+	rollingInterval    int
+	RollingQueryCounts []QueryCountAndTime
+}
+
+// UpdateRollingQueryCounts appends a new QueryCountAndTime to the
+// list of query counts in the telemetry logging metrics. Old
+// QueryCountAndTime values are removed from the slice once the size
+// of the slice has exceeded the rollingInterval.
+func (t *TelemetryLoggingMetrics) UpdateRollingQueryCounts() {
+	t.Lock()
+	defer t.Unlock()
+
+	var newLatest QueryCountAndTime
+	if len(t.RollingQueryCounts) == 0 {
+		newLatest = QueryCountAndTime{timeutil.Now().Unix(), 1}
+	} else {
+		latest := t.RollingQueryCounts[len(t.RollingQueryCounts)-1]
+		newLatest = QueryCountAndTime{timeutil.Now().Unix(), latest.Count() + 1}
+	}
+
+	t.RollingQueryCounts = append(t.RollingQueryCounts, newLatest)
+
+	if len(t.RollingQueryCounts) > t.rollingInterval {
+		diff := len(t.RollingQueryCounts) - t.rollingInterval
+		t.RollingQueryCounts = t.RollingQueryCounts[diff:]
+	}
+}
+
+// newTelemetryLoggingMetrics returns a new TelemetryLoggingMetrics object
+func newTelemetryLoggingMetrics() TelemetryLoggingMetrics {
+	return TelemetryLoggingMetrics{
+		smoothingAlpha:  0.8,
+		rollingInterval: 10,
+	}
+}
+
+// QueryCountAndTime keeps a count of user initiated statements,
+// and the timestamp at the latest count change.
+type QueryCountAndTime struct {
+	timestamp int64
+	count     int64
+}
+
+// Count atomically returns the query count of a QueryCountAndTime object
+func (q *QueryCountAndTime) Count() int64 {
+	return atomic.LoadInt64(&q.count)
+}
+
+// Timestamp atomically returns the timestamp of a QueryCountAndTime object
+func (q *QueryCountAndTime) Timestamp() time.Time {
+	return timeutil.Unix(atomic.LoadInt64(&q.timestamp), 0)
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -336,6 +395,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			Setting:     cfg.Settings,
 			Knobs:       cfg.IndexUsageStatsTestingKnobs,
 		}),
+		TelemetryLoggingMetrics: newTelemetryLoggingMetrics(),
 	}
 
 	return s
