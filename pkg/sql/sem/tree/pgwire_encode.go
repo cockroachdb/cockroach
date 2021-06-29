@@ -64,7 +64,7 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 			dv.JSON.Format(&buf)
 			pgwireFormatStringInTuple(&ctx.Buffer, buf.String())
 		default:
-			s := AsStringWithFlags(v, ctx.flags)
+			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
 			pgwireFormatStringInTuple(&ctx.Buffer, s)
 		}
 		comma = ","
@@ -137,7 +137,7 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		case *DBytes:
 			ctx.FormatNode(dv)
 		default:
-			s := AsStringWithFlags(v, ctx.flags)
+			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
 			pgwireFormatStringInArray(ctx, s)
 		}
 		comma = ","
