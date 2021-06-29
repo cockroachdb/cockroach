@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	humanize "github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
 	"github.com/spf13/pflag"
 )
 
@@ -423,15 +423,15 @@ func memoryPercentResolver(percent int) (int64, error) {
 //
 // An error is returned if dir does not exist.
 func diskPercentResolverFactory(dir string) (percentResolverFunc, error) {
-	fileSystemUsage := gosigar.FileSystemUsage{}
-	if err := fileSystemUsage.Get(dir); err != nil {
+	du, err := vfs.Default.GetDiskUsage(dir)
+	if err != nil {
 		return nil, err
 	}
-	if fileSystemUsage.Total > math.MaxInt64 {
+	if du.TotalBytes > math.MaxInt64 {
 		return nil, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
+			humanize.IBytes(du.TotalBytes), humanizeutil.IBytes(math.MaxInt64))
 	}
-	deviceCapacity := int64(fileSystemUsage.Total)
+	deviceCapacity := int64(du.TotalBytes)
 
 	return func(percent int) (int64, error) {
 		return (deviceCapacity * int64(percent)) / 100, nil
