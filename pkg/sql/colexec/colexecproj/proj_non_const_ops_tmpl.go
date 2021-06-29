@@ -266,7 +266,7 @@ func GetProjectionOperator(
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	switch op.(type) {
 	case tree.BinaryOperator:
-		switch op {
+		switch op.(tree.BinaryOperator).Symbol {
 		// {{range .BinOps}}
 		case tree._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {

@@ -2709,7 +2709,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 		} else {
 			expr = &tree.BinaryExpr{
 				Left:     hashedColumnExpr(c),
-				Operator: tree.Plus,
+				Operator: tree.MakeBinaryOperator(tree.Plus),
 				Right:    expr,
 			}
 		}
