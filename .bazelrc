@@ -22,3 +22,5 @@ build:crosswindows --platforms=//build/toolchains:cross_windows
 build:crosswindows --crosstool_top=@toolchain_cross_x86_64-w64-mingw32//:suite
 build:crossmacos --platforms=//build/toolchains:cross_macos
 build:crossmacos --crosstool_top=@toolchain_cross_x86_64-apple-darwin19//:suite
+build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
+build:crosslinuxarm --crosstool_top=@toolchain_cross_aarch64-unknown-linux-gnu//:suite
