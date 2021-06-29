@@ -42,7 +42,7 @@ export function* refreshStatementsDiagnosticsSaga() {
   yield put(actions.request());
 }
 
-export function* requestStatementsDiagnosticsSaga() {
+export function* requestStatementsDiagnosticsSaga(): any {
   try {
     const response = yield call(getStatementDiagnosticsReports);
     yield put(actions.received(response));

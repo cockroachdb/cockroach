@@ -19,7 +19,7 @@ export function* refreshTransactionsSaga() {
   yield put(actions.request());
 }
 
-export function* requestTransactionsSaga() {
+export function* requestTransactionsSaga(): any {
   try {
     const result = yield call(getStatements);
     yield put(actions.received(result));

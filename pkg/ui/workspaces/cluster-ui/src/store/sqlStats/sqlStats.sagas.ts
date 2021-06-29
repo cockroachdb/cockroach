@@ -13,7 +13,7 @@ import { resetSQLStats } from "src/api/sqlStatsApi";
 import { actions as statementActions } from "src/store/statements";
 import { actions as sqlStatsActions } from "./sqlStats.reducer";
 
-export function* resetSQLStatsSaga() {
+export function* resetSQLStatsSaga(): any {
   try {
     const response = yield call(resetSQLStats);
     yield put(sqlStatsActions.received(response));

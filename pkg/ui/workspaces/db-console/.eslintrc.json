@@ -1,5 +1,5 @@
 {
-  "extends": "@cockroachlabs",
+  "extends": "@cockroachlabs/eslint-config",
   "ignorePatterns": ["protos.d.ts", "protos.js"],
   "rules": {
     "@typescript-eslint/no-inferrable-types": "off",

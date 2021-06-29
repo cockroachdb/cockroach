@@ -36,10 +36,7 @@ import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
 
-const mapStateToProps = (
-  state: AppState,
-  props: StatementDetailsProps,
-): StatementDetailsStateProps => {
+const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
   const statement = selectStatement(state, props);
   const statementFingerprint = statement?.statement;
   return {
@@ -114,6 +111,6 @@ const mapDispatchToProps = (
     ),
 });
 
-export const ConnectedStatementDetailsPage = withRouter(
+export const ConnectedStatementDetailsPage = withRouter<any, any>(
   connect(mapStateToProps, mapDispatchToProps)(StatementDetails),
 );

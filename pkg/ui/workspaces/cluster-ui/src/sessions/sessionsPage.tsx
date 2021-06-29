@@ -51,7 +51,7 @@ const sortableTableCx = classNames.bind(sortedTableStyles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
 const sessionsPageCx = classNames.bind(sessionPageStyles);
 
-interface OwnProps {
+export interface OwnProps {
   sessions: SessionInfo[];
   sessionsError: Error | Error[];
   refreshSessions: () => void;

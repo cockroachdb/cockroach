@@ -61,10 +61,13 @@ export const throttleWithReset = <A extends Action>(
     // `actionChannel` creates a queue of the actions to process them sequentially.
     // Using `buffers.none()` allows to handle only single action and discard any actions
     // that arrive while current action is processed.
+    // @ts-ignore
     const throttleChannel = yield actionChannel(pattern, buffers.none());
+    // @ts-ignore
     const resetChannel = yield actionChannel(resetPattern, buffers.none());
     let t: Task;
     while (true) {
+      // @ts-ignore
       const action = yield take(throttleChannel);
       // cancel previous task in order to handle only the most recent one.
       // it implements the behavior of `takeLatest` effect

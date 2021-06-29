@@ -3,9 +3,18 @@ load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 load("@npm//@bazel/typescript:index.bzl", "ts_project")
 
 ts_project(
-    name = "cluster_ui_ts_project",
+    name = "db_console_ts_project",
     srcs = glob(
-        ["src/**"],
+        include = [
+            "src/**",
+            "assets/**",
+            "bin/**",
+            "ccl/**",
+            "cypress/**",
+            "fonts/**",
+            "scripts/**",
+            "styl/**"
+        ],
         exclude = [
             "src/**/*.stories.tsx",
             "src/**/*.spec.tsx",
@@ -15,32 +24,35 @@ ts_project(
     tsconfig = "tsconfig.json",
     emit_declaration_only = True,
     declaration = True,
+    preserve_jsx = True,
+    source_map = True,
     out_dir = "dist/types",
     deps = [
         "@npm//@types",
-        "@npm//@babel/parser",
-        "@npm//@babel/types",
-        "@npm//classnames",
-        "@npm//@cockroachlabs/ui-components",
-        "@npm//@cockroachlabs/icons",
-        "@npm//antd",
-        "@npm//protobufjs",
-        "@npm//redux-saga",
-        "@npm//connected-react-router",
-        "@npm//redux",
-        "@npm//reselect",
-        "@npm//moment",
-        "@npm//redux-saga-test-plan",
-        "@npm//@reduxjs/toolkit",
-        "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+    #    "@npm//@babel/parser",
+    #    "@npm//@babel/types",
+    #    "@npm//classnames",
+    #    "@npm//@cockroachlabs/ui-components",
+    #    "@npm//@cockroachlabs/icons",
+    #    "@npm//antd",
+    #    "@npm//protobufjs",
+    #    "@npm//redux-saga",
+    #    "@npm//connected-react-router",
+    #    "@npm//redux",
+    #    "@npm//reselect",
+    #    "@npm//moment",
+    #    "@npm//redux-saga-test-plan",
+    #    "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+    #    "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
     ],
 )
 
 webpack(
-    name = "cluster_ui_webpack",
+    name = "db_console_webpack",
     outs = ["dist/js/main.js"],
     args = [
-        "--config $(execpath webpack.config.js)",
+        "--config $(execpath webpack.app.js)",
+        "--env.dist=ccl",
         "--mode",
         "production",
         "-o $@",
@@ -48,15 +60,19 @@ webpack(
     data = [
         "src",
         ".babelrc",
-        "webpack.config.js",
+        "webpack.app.js",
         "tsconfig.json",
         "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+        "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
         "@npm//babel-loader",
         "@npm//url-loader",
         "@npm//style-loader",
         "@npm//css-loader",
         "@npm//sass-loader",
+        "@npm//stylus-loader",
+        "@npm//ts-loader",
         "@npm//source-map-loader",
+        "@npm//cache-loader",
         "@npm//astroturf",
         "@npm//@types",
         "@npm//@babel/parser",
@@ -79,7 +95,7 @@ webpack(
 )
 
 js_library(
-    name = "cluster_ui_package",
+    name = "db_console_package",
     package_name = "@cockroachlabs/cluster-ui",
     srcs = [
       "package.json"
@@ -87,7 +103,6 @@ js_library(
     deps = [
         ":cluster_ui_ts_project",
         ":cluster_ui_webpack",
-        "//pkg/ui/workspaces/db-console/src/js:ui_protos_oss_package",
+        "//pkg/ui/workspaces/cluster-ui:cluster_ui_package",
     ],
-    visibility = ["//visibility:public"],
 )

@@ -19,7 +19,7 @@ export function* refreshLivenessSaga() {
   yield put(actions.request());
 }
 
-export function* requestLivenessSaga() {
+export function* requestLivenessSaga(): any {
   try {
     const result = yield call(getLiveness);
     yield put(actions.received(result));

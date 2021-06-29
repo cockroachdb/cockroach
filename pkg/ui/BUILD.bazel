@@ -1,8 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("@npm//@bazel/typescript:index.bzl", "ts_project")
-load("@npm//webpack-cli:index.bzl", webpack = "webpack_cli")
-load("@npm//webpack-dev-server:index.bzl", webpack_dev_server = "webpack_dev_server")
-load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 
 go_library(
     name = "ui",
@@ -18,79 +14,16 @@ go_library(
     ],
 )
 
-ts_project(
-    # Experimental: Start a tsc daemon to watch for changes to make recompiles faster.
-    supports_workers = True,
-    deps = [
-        "@npm//@types",
-        "@npm//csstype",
-    ],
-)
-
-# js_library(
-#     name = "cluster_ui_library",
-#     package_name = "@cockroachlabs/cluster-ui",
-#     srcs = [
-#       "//@cockroachlabs/cluster-ui:cluster-ui__files",
-#       "//@cockroachlabs/cluster-ui:cluster-ui__contents",
-#       "//@cockroachlabs/cluster-ui:cluster-ui__nested_node_modules",
-#     ],
-# )
-
-webpack(
-    name = "ui_bundle",
-    args = [
-        "--config",
-        "$(execpath webpack.app.js)",
-        "--env.dist",
-        "ccl" # use select()
-    ],
-    data = [
-        "src",
-        "styl",
-        "fonts",
-        "assets",
-        "ccl",
-        ".babelrc",
-        "webpack.app.js",
-        "tsconfig.json",
-        "protos.ccl.manifest.json",
-        "vendor.oss.manifest.json",
-        "distccl/vendor.dll.js",
-        "distccl/protos.dll.js",
-        "favicon.ico",
-        "@npm//:node_modules"
-    ],
-)
-
-webpack_dev_server(
-    name = "ui_watch",
-    args = [
-        "--config",
-        "$(execpath webpack.app.js)",
-        "--env.dist",
-        "ccl",
-        "--port",
-        "3000",
-        "--mode",
-        "development",
-        "--env.target",
-        "http://localhost:8080",
-    ],
-    data = [
-        "src",
-        "styl",
-        "fonts",
-        "assets",
-        "ccl",
-        ".babelrc",
-        "webpack.app.js",
-        "tsconfig.json",
-        "protos.ccl.manifest.json",
-        "vendor.oss.manifest.json",
-        "distccl/vendor.dll.js",
-        "distccl/protos.dll.js",
-        "favicon.ico",
-        "@npm//:node_modules"
-    ],
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        include = [
+            "node_modules/**",
+        ],
+        exclude = [
+            "node_modules/db-console",
+            "node_modules/@cockroachlabs/cluster-ui",
+        ],
+    ),
+    visibility = ["//pkg/ui:__subpackages__"],
 )

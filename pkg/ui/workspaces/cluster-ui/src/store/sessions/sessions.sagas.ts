@@ -19,7 +19,7 @@ export function* refreshSessionsSaga() {
   yield put(actions.request());
 }
 
-export function* requestSessionsSaga() {
+export function* requestSessionsSaga(): any {
   try {
     const result = yield call(getSessions);
     yield put(actions.received(result));

@@ -52,7 +52,7 @@ import classNames from "classnames/bind";
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
 
-interface OwnProps {
+export interface OwnProps {
   id?: string;
   nodeNames: { [nodeId: string]: string };
   session: SessionInfo;

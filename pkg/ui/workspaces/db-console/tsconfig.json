@@ -13,10 +13,12 @@
     "noImplicitThis": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "outDir": "./dist/",
     "skipLibCheck": true,
     "sourceMap": true,
     "strictNullChecks": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "./dist/types",
     "target": "es6",
     "baseUrl": ".",
     "paths": {

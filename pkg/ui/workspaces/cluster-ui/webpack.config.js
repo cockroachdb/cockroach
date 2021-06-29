@@ -17,7 +17,7 @@ module.exports = {
   entry: path.resolve(__dirname, "./src/index.ts"),
 
   output: {
-    path: path.resolve(__dirname, "dist"),
+    path: path.resolve(__dirname, "dist/js"),
     filename: "main.js",
     library: "adminUI",
     libraryTarget: "umd",
