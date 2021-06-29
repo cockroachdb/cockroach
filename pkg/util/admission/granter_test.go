@@ -124,6 +124,7 @@ func TestGranterBasic(t *testing.T) {
 				requesters[workKind] = req
 				return req
 			}
+			delayForGrantChainTermination = 0
 			coord, _ = NewGrantCoordinator(opts)
 			return flushAndReset()
 
