@@ -182,14 +182,14 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 	})
 }
 
-func TestFormatCrdbV2Decode(t *testing.T) {
+func TestCrdbV2Decode(t *testing.T) {
 	datadriven.RunTest(t, "testdata/parse",
 		func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "log":
 				var out strings.Builder
 
-				d, err := NewEntryDecoderf(strings.NewReader(td.Input), WithMarkedSensitiveData, "crdb-v2")
+				d, err := NewEntryDecoderWithFormat(strings.NewReader(td.Input), WithMarkedSensitiveData, "crdb-v2")
 				if err != nil {
 					td.Fatalf(t, "error while constructing decoder: %v", err)
 				}

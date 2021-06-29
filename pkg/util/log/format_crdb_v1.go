@@ -12,6 +12,7 @@ package log
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"regexp"
 	"strconv"
@@ -436,7 +437,7 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 
 		// Process the remainder of the log message.
 		r := redactablePackage{
-			msg:        trimFinalNewLines(msg),
+			msg:        bytes.TrimRight(msg, "\n"),
 			redactable: redactable,
 		}
 		r = d.sensitiveEditor(r)
@@ -463,4 +464,49 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 
 		return nil
 	}
+}
+
+// split function for the crdb-v1 entry decoder scanner.
+func (d *entryDecoderV1) split(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if d.truncatedLastEntry {
+		i := entryREV1.FindIndex(data)
+		if i == nil {
+			// If there's no entry that starts in this chunk, advance past it, since
+			// we've truncated the entry it was originally part of.
+			return len(data), nil, nil
+		}
+		d.truncatedLastEntry = false
+		if i[0] > 0 {
+			// If an entry starts anywhere other than the first index, advance to it
+			// to maintain the invariant that entries start at the beginning of data.
+			// This isn't necessary, but simplifies the code below.
+			return i[0], nil, nil
+		}
+		// If i[0] == 0, then a new entry starts at the beginning of data, so fall
+		// through to the normal logic.
+	}
+	// From this point on, we assume we're currently positioned at a log entry.
+	// We want to find the next one so we start our search at data[1].
+	i := entryREV1.FindIndex(data[1:])
+	if i == nil {
+		if atEOF {
+			return len(data), data, nil
+		}
+		if len(data) >= bufio.MaxScanTokenSize {
+			// If there's no room left in the buffer, return the current truncated
+			// entry.
+			d.truncatedLastEntry = true
+			return len(data), data, nil
+		}
+		// If there is still room to read more, ask for more before deciding whether
+		// to truncate the entry.
+		return 0, nil, nil
+	}
+	// i[0] is the start of the next log entry, but we need to adjust the value
+	// to account for using data[1:] above.
+	i[0]++
+	return i[0], data[:i[0]], nil
 }
