@@ -2917,13 +2917,13 @@ may increase either contention or retry errors, or both.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
 				arr := tree.MustBeDArray(args[0])
 				delim := string(tree.MustBeDString(args[1]))
-				return arrayToString(arr, delim, nil)
+				return arrayToString(evalCtx, arr, delim, nil)
 			},
 			Info:       "Join an array into a string with a delimiter.",
 			Volatility: tree.VolatilityStable,
@@ -2931,14 +2931,14 @@ may increase either contention or retry errors, or both.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
 				arr := tree.MustBeDArray(args[0])
 				delim := string(tree.MustBeDString(args[1]))
 				nullStr := stringOrNil(args[2])
-				return arrayToString(arr, delim, nullStr)
+				return arrayToString(evalCtx, arr, delim, nullStr)
 			},
 			Info:       "Join an array into a string with a delimiter, replacing NULLs with a null string.",
 			Volatility: tree.VolatilityStable,
@@ -7110,8 +7110,10 @@ func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, e
 // arrayToString implements the array_to_string builtin - arr is joined using
 // delim. If nullStr is non-nil, NULL values in the array will be replaced by
 // it.
-func arrayToString(arr *tree.DArray, delim string, nullStr *string) (tree.Datum, error) {
-	f := tree.NewFmtCtx(tree.FmtArrayToString)
+func arrayToString(
+	evalCtx *tree.EvalContext, arr *tree.DArray, delim string, nullStr *string,
+) (tree.Datum, error) {
+	f := evalCtx.FmtCtx(tree.FmtArrayToString)
 
 	for i := range arr.Array {
 		if arr.Array[i] == tree.DNull {

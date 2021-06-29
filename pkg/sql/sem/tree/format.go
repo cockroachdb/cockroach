@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -217,6 +218,8 @@ type FmtCtx struct {
 
 	bytes.Buffer
 
+	dataConversionConfig sessiondatapb.DataConversionConfig
+
 	// NOTE: if you add more flags to this structure, make sure to add
 	// corresponding cleanup code in FmtCtx.Close().
 
@@ -278,6 +281,14 @@ func FmtReformatTableNames(tableNameFmt func(*FmtCtx, *TableName)) FmtCtxOption 
 func FmtIndexedTypeFormat(fn func(*FmtCtx, *OIDTypeReference)) FmtCtxOption {
 	return func(ctx *FmtCtx) {
 		ctx.indexedTypeFormatter = fn
+	}
+}
+
+// FmtDataConversionConfig modifies FmtCtx to contain items relevant for the
+// given DataConversionConfig.
+func FmtDataConversionConfig(dcc sessiondatapb.DataConversionConfig) FmtCtxOption {
+	return func(ctx *FmtCtx) {
+		ctx.dataConversionConfig = dcc
 	}
 }
 
@@ -471,6 +482,7 @@ func (ctx *FmtCtx) Close() {
 	ctx.indexedVarFormat = nil
 	ctx.tableNameFormatter = nil
 	ctx.placeholderFormat = nil
+	ctx.dataConversionConfig = sessiondatapb.DataConversionConfig{}
 	fmtCtxPool.Put(ctx)
 }
 

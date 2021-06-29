@@ -100,7 +100,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 	params runParams,
 ) error {
 	if !n.tableDesc.IsLocalityGlobal() {
-		f := tree.NewFmtCtx(tree.FmtSimple)
+		f := params.p.EvalContext().FmtCtx(tree.FmtSimple)
 		if err := tabledesc.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
 			// While we're in an error path and generally it's bad to return a
 			// different error in an error path, we will only get an error here if the
