@@ -192,6 +192,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.SqllivenessID, systemschema.SqllivenessTableSchema, systemschema.SqllivenessTable},
 		{keys.MigrationsID, systemschema.MigrationsTableSchema, systemschema.MigrationsTable},
 		{keys.JoinTokensTableID, systemschema.JoinTokensTableSchema, systemschema.JoinTokensTable},
+		{keys.TenantUsageTableID, systemschema.TenantUsageTableSchema, systemschema.TenantUsageTable},
 	} {
 		privs := *test.pkg.GetPrivileges()
 		gen, err := sql.CreateTestTableDescriptor(
