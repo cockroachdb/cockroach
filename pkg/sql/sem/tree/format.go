@@ -439,8 +439,8 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 
 // AsStringWithFlags pretty prints a node to a string given specific flags; only
 // flags that don't require Annotations can be used.
-func AsStringWithFlags(n NodeFormatter, fl FmtFlags) string {
-	ctx := NewFmtCtx(fl)
+func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) string {
+	ctx := NewFmtCtx(fl, opts...)
 	ctx.FormatNode(n)
 	return ctx.CloseAndGetString()
 }
