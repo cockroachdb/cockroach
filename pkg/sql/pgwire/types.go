@@ -130,6 +130,89 @@ func writeTextTimestampTZ(b *writeBuffer, v time.Time, sessionLoc *time.Location
 	b.write(s)
 }
 
+func writeTuple(
+	ctx context.Context, b *writeBuffer, v *tree.DTuple, sessionLoc *time.Location, t *types.T,
+) {
+	// initialState will be used to decide whether to swap the wrapped and the scratch buffer.
+	initialState := b.usingScratch
+	if !b.usingScratch {
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.usingScratch = true
+	}
+
+	// Put the number of datums.
+	b.putInt32(int32(len(v.D)))
+	tupleTypes := t.TupleContents()
+	for i, elem := range v.D {
+		oid := tupleTypes[i].Oid()
+		b.putInt32(int32(oid))
+		b.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
+	}
+
+	if !initialState {
+
+		// We are done with recursive calls, copy scratch buffer to wrapped buffer and reset it.
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.writeLengthPrefixedBuffer(&b.scratch)
+		b.scratch.Reset()
+		b.usingScratch = false
+	}
+}
+
+func writeArray(
+	ctx context.Context, b *writeBuffer, v *tree.DArray, sessionLoc *time.Location, t *types.T,
+) {
+	if v.ParamTyp.Family() == types.ArrayFamily {
+		b.setError(unimplemented.NewWithIssueDetail(32552,
+			"binenc", "unsupported binary serialization of multidimensional arrays"))
+		return
+	}
+
+	// Look at writeTuple for more info on initialState.
+	initialState := b.usingScratch
+	if !b.usingScratch {
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.usingScratch = true
+	}
+
+	// Put the number of dimensions. We currently support 1d arrays only.
+	var ndims int32 = 1
+	if v.Len() == 0 {
+		ndims = 0
+	}
+	b.putInt32(ndims)
+	hasNulls := 0
+	if v.HasNulls {
+		hasNulls = 1
+	}
+	oid := v.ParamTyp.Oid()
+	b.putInt32(int32(hasNulls))
+	b.putInt32(int32(oid))
+	if v.Len() > 0 {
+		b.putInt32(int32(v.Len()))
+		// Lower bound, we only support a lower bound of 1.
+		b.putInt32(1)
+		for _, elem := range v.Array {
+			b.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
+		}
+	}
+
+	if !initialState {
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.writeLengthPrefixedBuffer(&b.scratch)
+		b.scratch.Reset()
+		b.usingScratch = false
+	}
+}
+
 // writeTextDatum writes d to the buffer. Type t must be specified for types
 // that have various width encodings and therefore need padding (chars).
 // It is ignored (and can be nil) for types which do not need padding.
@@ -649,16 +732,7 @@ func writeBinaryDatumNotNull(
 
 	case *tree.DTuple:
 		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
-		// Put the number of datums.
-		subWriter.putInt32(int32(len(v.D)))
-		tupleTypes := t.TupleContents()
-		for i, elem := range v.D {
-			oid := tupleTypes[i].Oid()
-			subWriter.putInt32(int32(oid))
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
-		}
-		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+		writeTuple(ctx, b, v, sessionLoc, t)
 
 	case *tree.DBox2D:
 		b.putInt32(32)
@@ -676,35 +750,7 @@ func writeBinaryDatumNotNull(
 		b.write(v.EWKB())
 
 	case *tree.DArray:
-		if v.ParamTyp.Family() == types.ArrayFamily {
-			b.setError(unimplemented.NewWithIssueDetail(32552,
-				"binenc", "unsupported binary serialization of multidimensional arrays"))
-			return
-		}
-		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
-		subWriter := newWriteBuffer(nil /* bytecount */)
-		// Put the number of dimensions. We currently support 1d arrays only.
-		var ndims int32 = 1
-		if v.Len() == 0 {
-			ndims = 0
-		}
-		subWriter.putInt32(ndims)
-		hasNulls := 0
-		if v.HasNulls {
-			hasNulls = 1
-		}
-		oid := v.ParamTyp.Oid()
-		subWriter.putInt32(int32(hasNulls))
-		subWriter.putInt32(int32(oid))
-		if v.Len() > 0 {
-			subWriter.putInt32(int32(v.Len()))
-			// Lower bound, we only support a lower bound of 1.
-			subWriter.putInt32(1)
-			for _, elem := range v.Array {
-				subWriter.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
-			}
-		}
-		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+		writeArray(ctx, b, v, sessionLoc, t)
 
 	case *tree.DJSON:
 		writeBinaryJSON(b, v.JSON)

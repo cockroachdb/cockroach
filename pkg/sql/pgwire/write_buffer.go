@@ -28,7 +28,15 @@ type writeBuffer struct {
 	_ util.NoCopy
 
 	wrapped bytes.Buffer
-	err     error
+
+	// scratch will be used to store temporary data when serializing array/tuple.
+	scratch bytes.Buffer
+
+	// usingScratch will be used to keep track of which buffer we are currently using
+	// i.e either wrapped or scratch.
+	usingScratch bool
+
+	err error
 
 	// Buffer used for temporary storage.
 	putbuf [64]byte
@@ -53,6 +61,7 @@ func (b *writeBuffer) init(bytecount *metric.Counter) {
 	b.bytecount = bytecount
 	b.textFormatter = tree.NewFmtCtx(tree.FmtPgwireText)
 	b.simpleFormatter = tree.NewFmtCtx(tree.FmtSimple)
+	b.usingScratch = false
 }
 
 // Write implements the io.Write interface.
