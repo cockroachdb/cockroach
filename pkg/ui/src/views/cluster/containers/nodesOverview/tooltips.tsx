@@ -123,7 +123,7 @@ export const NodeCountTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 
@@ -137,7 +137,7 @@ export const UptimeTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 
@@ -151,7 +151,7 @@ export const ReplicasTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 
@@ -173,7 +173,7 @@ export const NodelistCapacityUsageTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 
@@ -190,7 +190,7 @@ export const MemoryUseTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 
@@ -204,7 +204,7 @@ export const CPUsTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 
@@ -218,7 +218,7 @@ export const VersionTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 
@@ -235,7 +235,7 @@ export const StatusTooltip: PlainTooltip = (props) => (
       </div>
     }
   >
-    {props.children}
+    <span className={"column-title"}>{props.children}</span>
   </Tooltip>
 );
 

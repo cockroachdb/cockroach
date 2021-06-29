@@ -42,6 +42,9 @@ $viz-sides = 62px
     font-family $font-family--bold
     color $body-color
 
+  &__underline
+    border-bottom 1px dashed $colors--neutral-5;
+
   &__subtitle
     color $tooltip-color
     margin-left 5px
@@ -54,6 +57,13 @@ $viz-sides = 62px
 
   .icon-warning
     color $warning-color
+
+.anchor-light
+  color white
+  text-decoration underline
+  &:hover
+    color gray
+    text-decoration underline
 
 .linegraph
   height 100%

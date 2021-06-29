@@ -69,6 +69,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
             !sortSetting.ascending && picked && "sorted__cell--descending",
             firstCellBordered && idx === 0 && "cell-header",
           );
+          const titleClasses = cx("column-title");
 
           return (
             <th
@@ -78,7 +79,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
               style={style}
             >
               <div className={cellContentWrapper}>
-                {c.title}
+                <span className={titleClasses}>{c.title} </span>
                 {sortable && <span className={arrowsClass} />}
               </div>
             </th>

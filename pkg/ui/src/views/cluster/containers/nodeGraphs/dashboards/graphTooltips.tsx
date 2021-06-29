@@ -25,8 +25,11 @@ export const CapacityGraphTooltip: React.FC<{ tooltipSelection?: string }> = ({
           Maximum store size{" "}
           {tooltipSelection || "across all nodes / on node <node>"}. This value
           may be explicitly set per node using&nbsp;
-          <Anchor href={docsURL.clusterStore}>--store</Anchor>. If a store size
-          has not been set, this metric displays the actual disk capacity.
+          <Anchor href={docsURL.clusterStore} className={"anchor-light"}>
+            --store
+          </Anchor>
+          . If a store size has not been set, this metric displays the actual
+          disk capacity.
         </p>
         <p>
           <strong>Available: </strong>
@@ -41,7 +44,10 @@ export const CapacityGraphTooltip: React.FC<{ tooltipSelection?: string }> = ({
           files.
         </p>
         <p>
-          <Anchor href={docsURL.howAreCapacityMetricsCalculated}>
+          <Anchor
+            href={docsURL.howAreCapacityMetricsCalculated}
+            className={"anchor-light"}
+          >
             How are these metrics calculated?
           </Anchor>
         </p>
@@ -56,7 +62,10 @@ export const AvailableDiscCapacityGraphTooltip: React.FC<{}> = () => (
       <dd>
         <p>Free disk space available to CockroachDB data on each node.</p>
         <p>
-          <Anchor href={docsURL.howAreCapacityMetricsCalculated}>
+          <Anchor
+            href={docsURL.howAreCapacityMetricsCalculated}
+            className={"anchor-light"}
+          >
             How is this metric calculated?
           </Anchor>
         </p>
@@ -71,7 +80,9 @@ export const LogicalBytesGraphTooltip: React.FC = () => (
       <dd>
         <p>
           {"Number of logical bytes stored in "}
-          <Anchor href={docsURL.keyValuePairs}>key-value pairs</Anchor>
+          <Anchor href={docsURL.keyValuePairs} className={"anchor-light"}>
+            key-value pairs
+          </Anchor>
           {" on each node."}
         </p>
         <p>This includes historical and deleted data.</p>
@@ -93,14 +104,16 @@ export const LiveBytesGraphTooltip: React.FC<{ tooltipSelection?: string }> = ({
         <p>
           <strong>Live: </strong>
           Number of logical bytes stored in live&nbsp;
-          <Anchor href={docsURL.keyValuePairs}>key-value pairs&nbsp;</Anchor>
+          <Anchor href={docsURL.keyValuePairs} className={"anchor-light"}>
+            key-value pairs&nbsp;
+          </Anchor>
           {tooltipSelection || "across all nodes / on node <node>"}. Live data
           excludes historical and deleted data.
         </p>
         <p>
           <strong>System: </strong>
           Number of physical bytes stored in&nbsp;
-          <Anchor href={docsURL.keyValuePairs}>
+          <Anchor href={docsURL.keyValuePairs} className={"anchor-light"}>
             system key-value pairs&nbsp;
           </Anchor>
           {tooltipSelection || "across all nodes / on node <node>"}.
@@ -115,7 +128,10 @@ export const StatementDenialsClusterSettingsTooltip: React.FC<{
 }> = ({ tooltipSelection }) => (
   <div>
     The total number of statements denied per second {tooltipSelection} due to a
-    <Anchor href={docsURL.clusterSettings}> cluster setting </Anchor>
+    <Anchor href={docsURL.clusterSettings} className={"anchor-light"}>
+      {" "}
+      cluster setting{" "}
+    </Anchor>
     in the format feature.statement_type.enabled = FALSE.
   </div>
 );

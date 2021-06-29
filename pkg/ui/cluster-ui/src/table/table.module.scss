@@ -32,6 +32,10 @@
   .column--align-right {
     text-align: end;
   }
+
+  :global(.column-title) {
+    border-bottom: 1px dashed $colors--neutral-5;
+  }
   // END: Table Column
 
   // Expand/Collapse icon
