@@ -12,12 +12,16 @@ package pgwire
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -28,6 +32,14 @@ type writeBuffer struct {
 	_ util.NoCopy
 
 	wrapped bytes.Buffer
+
+	// scratch will be used to store temporary data when serializing array/tuple
+	scratch bytes.Buffer
+
+	// usingScratch will be used to keep track of which buffer we are currently using
+	// i.e either wrapped or scratch
+	usingScratch bool
+
 	err     error
 
 	// Buffer used for temporary storage.
@@ -53,6 +65,7 @@ func (b *writeBuffer) init(bytecount *metric.Counter) {
 	b.bytecount = bytecount
 	b.textFormatter = tree.NewFmtCtx(tree.FmtPgwireText)
 	b.simpleFormatter = tree.NewFmtCtx(tree.FmtSimple)
+	b.usingScratch = false
 }
 
 // Write implements the io.Write interface.
@@ -152,6 +165,85 @@ func (b *writeBuffer) putInt64(v int64) {
 func (b *writeBuffer) putErrFieldMsg(field pgwirebase.ServerErrFieldType) {
 	if b.err == nil {
 		b.err = b.wrapped.WriteByte(byte(field))
+	}
+}
+
+func (b *writeBuffer) writeTuple(ctx context.Context, v *tree.DTuple, sessionLoc *time.Location, t *types.T){
+	// initialState will be used to decide whether to swap the wrapped and the scratch buffer
+	initialState := b.usingScratch
+	if b.usingScratch == false{
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.usingScratch = true
+	}
+
+	// Put the number of datums.
+	b.putInt32(int32(len(v.D)))
+	tupleTypes := t.TupleContents()
+	for i, elem := range v.D {
+		oid := tupleTypes[i].Oid()
+		b.putInt32(int32(oid))
+		b.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
+	}
+
+	if initialState == false{
+
+		// We are done with recursive calls, copy scratch buffer to wrapped buffer and reset it
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.writeLengthPrefixedBuffer(&b.scratch)
+		b.scratch.Reset()
+		b.usingScratch = false
+	}
+}
+
+func (b *writeBuffer) writeArray(ctx context.Context, v *tree.DArray, sessionLoc *time.Location, t *types.T){
+	if v.ParamTyp.Family() == types.ArrayFamily {
+		b.setError(unimplemented.NewWithIssueDetail(32552,
+		"binenc", "unsupported binary serialization of multidimensional arrays"))
+		return
+	}
+
+	// Look at writeTuple for more info on initialState
+	initialState := b.usingScratch
+	if b.usingScratch == false{
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.usingScratch = true
+	}
+
+	// Put the number of dimensions. We currently support 1d arrays only.
+	var ndims int32 = 1
+	if v.Len() == 0 {
+		ndims = 0
+	}
+	b.putInt32(ndims)
+	hasNulls := 0
+	if v.HasNulls {
+		hasNulls = 1
+	}
+	oid := v.ParamTyp.Oid()
+	b.putInt32(int32(hasNulls))
+	b.putInt32(int32(oid))
+	if v.Len() > 0 {
+		b.putInt32(int32(v.Len()))
+		// Lower bound, we only support a lower bound of 1.
+		b.putInt32(1)
+		for _, elem := range v.Array {
+			b.writeBinaryDatum(ctx, elem, sessionLoc, v.ParamTyp)
+		}
+	}
+
+	if initialState == false{
+		temp := b.wrapped
+		b.wrapped = b.scratch
+		b.scratch = temp
+		b.writeLengthPrefixedBuffer(&b.scratch)
+		b.scratch.Reset()
+		b.usingScratch = false
 	}
 }
 
