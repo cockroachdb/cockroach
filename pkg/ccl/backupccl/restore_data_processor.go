@@ -53,6 +53,8 @@ type restoreDataProcessor struct {
 	// progress updates are accumulated on this channel. It is populated by the
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan RestoreProgress
+
+	batcher *bulk.SSTBatcher
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -215,10 +217,24 @@ func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.Resto
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	entry execinfrapb.RestoreSpanEntry,
 ) (roachpb.BulkOpSummary, error) {
-	db := rd.flowCtx.Cfg.DB
 	ctx := rd.Ctx
-	evalCtx := rd.EvalCtx
+	// entryCounter keeps track of the BulkOpSummary for this particular entry.
+	var entryCounter storage.RowCounter
 	var summary roachpb.BulkOpSummary
+
+	if rd.batcher == nil {
+		db := rd.flowCtx.Cfg.DB
+		evalCtx := rd.EvalCtx
+		batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
+			func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
+		if err != nil {
+			return summary, err
+		}
+		rd.batcher = batcher
+	}
+	if err := rd.batcher.Reset(ctx); err != nil {
+		return summary, err
+	}
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
@@ -245,13 +261,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		defer iter.Close()
 		iters = append(iters, iter)
 	}
-
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
-	if err != nil {
-		return summary, err
-	}
-	defer batcher.Close()
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
@@ -312,12 +321,16 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if log.V(5) {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
-		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
+		if err := entryCounter.Count(key.Key); err != nil {
+			return summary, err
+		}
+		entryCounter.DataSize += int64(len(key.Key) + len(value.RawBytes))
+		if err := rd.batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 	}
 	// Flush out the last batch.
-	if err := batcher.Flush(ctx); err != nil {
+	if err := rd.batcher.Flush(ctx); err != nil {
 		return summary, err
 	}
 
@@ -327,7 +340,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		}
 	}
 
-	return batcher.GetSummary(), nil
+	return entryCounter.BulkOpSummary, nil
 }
 
 func makeProgressUpdate(
@@ -377,6 +390,9 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	if rd.InternalClose() {
 		if rd.metaCh != nil {
 			close(rd.metaCh)
+		}
+		if rd.batcher != nil {
+			rd.batcher.Close()
 		}
 	}
 }
