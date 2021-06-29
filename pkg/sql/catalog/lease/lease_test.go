@@ -66,6 +66,8 @@ import (
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 type leaseTest struct {
@@ -2406,7 +2408,8 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 			) (stream grpc.ClientStream, err error) {
 				if strings.Contains(method, "RangeFeed") &&
 					atomic.AddInt64(&called, 1) <= timesToFail {
-					return nil, errors.Errorf("boom")
+					// Return Unauthenticated to get past internal DistSender retries.
+					return nil, grpcstatus.Error(codes.Unauthenticated, "boom")
 				}
 				return streamer(ctx, desc, cc, method, opts...)
 			}

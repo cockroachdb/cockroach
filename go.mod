@@ -71,6 +71,7 @@ require (
 	github.com/golang-commonmark/mdurl v0.0.0-20180910110917-8d018c6567d6 // indirect
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
+	github.com/golang/mock v1.5.0
 	github.com/golang/protobuf v1.4.2
 	github.com/golang/snappy v0.0.2-0.20190904063534-ff6b7dc882cf
 	github.com/google/btree v1.0.0
@@ -149,7 +150,6 @@ require (
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/exp v0.0.0-20200901203048-c4f52b2c50aa
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
-	golang.org/x/mod v0.3.0 // indirect
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852

@@ -389,6 +389,7 @@ bin/.bootstrap: $(GITHOOKS) | bin/.submodules-initialized
 		github.com/cockroachdb/crlfmt \
 		github.com/cockroachdb/gostdlib/cmd/gofmt \
 		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		github.com/golang/mock/mockgen \
 		github.com/cockroachdb/stress \
 		github.com/goware/modvendor \
 		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \

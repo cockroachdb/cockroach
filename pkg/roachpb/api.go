@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+//go:generate mockgen -package=roachpb -destination=mocks_generated.go . InternalClient,Internal_RangeFeedClient
+
 // UserPriority is a custom type for transaction's user priority.
 type UserPriority float64
 
