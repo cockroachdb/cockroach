@@ -2788,7 +2788,7 @@ func FormatDuration(d duration.Duration, ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Format(&ctx.Buffer)
+	d.FormatWithStyle(&ctx.Buffer, ctx.dataConversionConfig.IntervalStyle)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
