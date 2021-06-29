@@ -13,8 +13,8 @@ set -euo pipefail
 # These values are substituted in the Go code that uses this.
 SOURCE_URL="%s"
 CACHE_URL="%s"
-OUTPUT_FILE="%s"
 SHA256="%s"
+OUTPUT_FILE="%s"
 
 checkFile() {
   local file_name="${1}"

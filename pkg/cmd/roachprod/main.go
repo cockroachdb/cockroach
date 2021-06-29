@@ -1327,11 +1327,8 @@ var installCmd = &cobra.Command{
 var downloadCmd = &cobra.Command{
 	Use:   "download <cluster> <url> <sha256> [DESTINATION]",
 	Short: "download 3rd party tools",
-	Long: `Downloads 3rd party tools, using an on-disk and GCS cache
-if possible.
-
-`,
-	Args: cobra.RangeArgs(3, 4),
+	Long:  "Downloads 3rd party tools, using a GCS cache if possible.",
+	Args:  cobra.RangeArgs(3, 4),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		c, err := newCluster(args[0])
 		if err != nil {
