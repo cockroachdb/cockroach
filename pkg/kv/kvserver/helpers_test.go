@@ -95,12 +95,12 @@ func ConsistencyQueueShouldQueue(
 	now hlc.Timestamp,
 	desc *roachpb.RangeDescriptor,
 	getQueueLastProcessed func(ctx context.Context) (hlc.Timestamp, error),
-	isNodeLive func(nodeID roachpb.NodeID) (bool, error),
+	isNodeAvailable func(nodeID roachpb.NodeID) bool,
 	disableLastProcessedCheck bool,
 	interval time.Duration,
 ) (bool, float64) {
 	return consistencyQueueShouldQueueImpl(ctx, now, consistencyShouldQueueData{
-		desc, getQueueLastProcessed, isNodeLive,
+		desc, getQueueLastProcessed, isNodeAvailable,
 		disableLastProcessedCheck, interval})
 }
 
