@@ -41,14 +41,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errutil"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 var (
@@ -972,6 +976,101 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 
 	require.Greater(t, callsToNode2, 0)
 	require.LessOrEqual(t, callsToNode2, 11)
+}
+
+func TestDistSenderRetryOnTransportErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	for _, spec := range []struct {
+		errorCode   codes.Code
+		shouldRetry bool
+	}{
+		{codes.FailedPrecondition, true},
+		{codes.PermissionDenied, false},
+		{codes.Unauthenticated, false},
+	} {
+		t.Run(fmt.Sprintf("retry_after_%v", spec.errorCode), func(t *testing.T) {
+			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+			g := makeGossip(t, stopper, rpcContext)
+			for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
+				require.NoError(t, g.AddInfoProto(
+					gossip.MakeNodeIDKey(n.NodeID),
+					newNodeDesc(n.NodeID),
+					gossip.NodeDescriptorTTL,
+				))
+			}
+
+			desc := roachpb.RangeDescriptor{
+				RangeID:    1,
+				Generation: 1,
+				StartKey:   roachpb.RKeyMin,
+				EndKey:     roachpb.RKeyMax,
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{NodeID: 1, StoreID: 1, ReplicaID: 1},
+					{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				},
+			}
+			cachedLease := roachpb.Lease{
+				Replica:  desc.InternalReplicas[1],
+				Sequence: 2,
+			}
+
+			// The cache starts with a lease on node 2, so the first request will be
+			// routed there. That replica mock will return grpc error code to test
+			// how transport errors are retried by dist sender.
+
+			secondReplicaTried := false
+			sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+				if ba.Replica.NodeID == 2 {
+					return nil, errutil.WithMessage(
+						netutil.NewInitialHeartBeatFailedError(
+							grpcstatus.Errorf(spec.errorCode,
+								"n%d was permanently removed from the cluster; it is not allowed to rejoin the cluster",
+								ba.Replica.NodeID,
+							)), "failed to connect")
+				}
+				secondReplicaTried = true
+				require.Equal(t, ba.Replica.NodeID, roachpb.NodeID(1))
+				return ba.CreateReply(), nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+				Clock:      clock,
+				NodeDescs:  g,
+				RPCContext: rpcContext,
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory: adaptSimpleTransport(sendFn),
+				},
+				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+				NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+				Settings:          cluster.MakeTestingClusterSettings(),
+			}
+			ds := NewDistSender(cfg)
+
+			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+				Desc:  desc,
+				Lease: cachedLease,
+			})
+
+			get := roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+			_, pErr := kv.SendWrapped(ctx, ds, get)
+			if spec.shouldRetry {
+				require.True(t, secondReplicaTried, "Second replica was not retried")
+				require.Nil(t, pErr, "Call should not fail")
+			} else {
+				require.False(t, secondReplicaTried, "DistSender did not abort retry loop")
+				require.NotNil(t, pErr, "Call should fail")
+			}
+		})
+	}
 }
 
 // This test verifies that when we have a cached leaseholder that is down

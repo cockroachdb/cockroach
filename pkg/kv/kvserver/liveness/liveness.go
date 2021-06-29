@@ -335,7 +335,7 @@ func (nl *NodeLiveness) SetDraining(
 			if log.V(1) {
 				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
 			}
-			if grpcutil.IsAuthError(err) {
+			if grpcutil.IsConnectionRejected(err) {
 				return err
 			}
 			continue
@@ -725,7 +725,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 							liveness, err := nl.getLivenessFromKV(ctx, nodeID)
 							if err != nil {
 								log.Infof(ctx, "unable to get liveness record from KV: %s", err)
-								if grpcutil.IsAuthError(err) {
+								if grpcutil.IsConnectionRejected(err) {
 									return err
 								}
 								continue
