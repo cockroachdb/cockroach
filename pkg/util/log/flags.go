@@ -72,6 +72,14 @@ func IsActive() (active bool, firstUse string) {
 	return logging.mu.active, logging.mu.firstUseStack
 }
 
+// TelemetryConfigured is used to determine whether the Telemetry channel has
+// been configured for a file, fluent server, or http server log sink.
+func TelemetryConfigured() bool {
+	logging.rmu.Lock()
+	defer logging.rmu.Unlock()
+	return logging.rmu.channels[channel.TELEMETRY].hasFileOrFluentOrHTTPSink()
+}
+
 // ApplyConfig applies the given configuration.
 //
 // The returned cleanup fn can be invoked by the caller to close

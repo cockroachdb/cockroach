@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -124,6 +125,9 @@ func (s executorType) logLabel() string { return logLabels[s] }
 var sqlPerfLogger log.ChannelLogger = log.SqlPerf
 var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
 
+// Set telemetryEnabled as *bool to have initial nil value.
+var telemetryEnabled *bool = nil
+
 // maybeLogStatement conditionally records the current statement
 // (p.curPlan) to the exec / audit logs.
 func (p *planner) maybeLogStatement(
@@ -133,8 +137,9 @@ func (p *planner) maybeLogStatement(
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryLoggingMetrics *TelemetryLoggingMetrics,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache)
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics)
 }
 
 func (p *planner) maybeLogStatementInternal(
@@ -144,6 +149,7 @@ func (p *planner) maybeLogStatementInternal(
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
+	telemetryMetrics *TelemetryLoggingMetrics,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -157,6 +163,8 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
+	sampleRate := telemetrySampleRate.Get(&p.execCfg.Settings.SV)
+	qpsThreshold := telemetryQPSThreshold.Get(&p.execCfg.Settings.SV)
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -346,6 +354,28 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+	}
+
+	// Check if telemetryEnabled still nil (not assigned).
+	// If so, get the telemetry configure once and assign.
+	if telemetryEnabled == nil {
+		tc := log.TelemetryConfigured()
+		telemetryEnabled = &tc
+	}
+
+	if *telemetryEnabled {
+		smoothQPS := telemetryMetrics.ExpSmoothQPS()
+		shouldSampleEventToTelemetry := p.stmt.AST.StatementType() == tree.TypeDML && smoothQPS > qpsThreshold
+		// If we DO NOT need to sample the event, log immediately to the telemetry channel with a full sampling rate (1.0).
+		// If we DO need to sample the event, log to the telemetry channel with the configured probabilistic sampling rate.
+		if !shouldSampleEventToTelemetry {
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.TelemetryEvent{CommonSQLExecDetails: execDetails, EffectiveSampleRate: 1.0}})
+		} else if shouldSampleEventToTelemetry && sampleRatePass(sampleRate) {
+			// The effective sample rate is the representativity of the query (i.e. how often it is represented in the logs).
+			// Effective sample rate is measured as the ratio of: (QPS threshold / Smoothed QPS approximation)
+			effectiveSampleRate := float64(qpsThreshold) / float64(smoothQPS)
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.TelemetryEvent{CommonSQLExecDetails: execDetails, EffectiveSampleRate: effectiveSampleRate}})
+		}
 	}
 }
 
