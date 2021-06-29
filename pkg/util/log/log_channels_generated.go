@@ -5271,3 +5271,293 @@ func (loggerSqlInternalPerf) Shout(ctx context.Context, sev Severity, msg string
 func (loggerSqlInternalPerf) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_INTERNAL_PERF, format, args...)
 }
+
+// loggerTelemetry is the logger type for the TELEMETRY channel.
+type loggerTelemetry struct{}
+
+// Telemetry is a logger that logs to the TELEMETRY channel.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+var Telemetry loggerTelemetry
+
+// Telemetry and loggerTelemetry implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = Telemetry
+
+// Infof logs to the TELEMETRY channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerTelemetry) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.TELEMETRY, format, args...)
+}
+
+// VInfof logs to the TELEMETRY channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerTelemetry) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.TELEMETRY, format, args...)
+	}
+}
+
+// Info logs to the TELEMETRY channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerTelemetry) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.TELEMETRY, msg)
+}
+
+// InfofDepth logs to the TELEMETRY channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerTelemetry) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.TELEMETRY, format, args...)
+}
+
+// Warningf logs to the TELEMETRY channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerTelemetry) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.TELEMETRY, format, args...)
+}
+
+// VWarningf logs to the TELEMETRY channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerTelemetry) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.TELEMETRY, format, args...)
+	}
+}
+
+// Warning logs to the TELEMETRY channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerTelemetry) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.TELEMETRY, msg)
+}
+
+// WarningfDepth logs to the TELEMETRY channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerTelemetry) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.TELEMETRY, format, args...)
+}
+
+// Errorf logs to the TELEMETRY channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerTelemetry) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.TELEMETRY, format, args...)
+}
+
+// VErrorf logs to the TELEMETRY channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerTelemetry) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.TELEMETRY, format, args...)
+	}
+}
+
+// Error logs to the TELEMETRY channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerTelemetry) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.TELEMETRY, msg)
+}
+
+// ErrorfDepth logs to the TELEMETRY channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerTelemetry) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.TELEMETRY, format, args...)
+}
+
+// Fatalf logs to the TELEMETRY channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerTelemetry) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.TELEMETRY, format, args...)
+}
+
+// VFatalf logs to the TELEMETRY channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerTelemetry) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.TELEMETRY, format, args...)
+	}
+}
+
+// Fatal logs to the TELEMETRY channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerTelemetry) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.TELEMETRY, msg)
+}
+
+// FatalfDepth logs to the TELEMETRY channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerTelemetry) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.TELEMETRY, format, args...)
+}
+
+// Shout logs to channel TELEMETRY, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, msg)
+}
+
+// Shoutf logs to channel TELEMETRY, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `TELEMETRY` channel reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, format, args...)
+}
