@@ -332,6 +332,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.TransactionStatisticsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.TenantUsageTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that
