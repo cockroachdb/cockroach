@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Divider, Icon, Tooltip } from "antd";
+import { Divider, Tooltip } from "antd";
 import { Chip } from "src/views/app/components/chip";
 import Modal from "src/views/app/components/modal";
 import { getDisplayName } from "src/redux/nodes";
@@ -37,12 +37,11 @@ export const Legend: React.SFC<ILegendProps> = ({
   <div key="legend" className="Legend">
     <div className="Legend--container">
       <div className="Legend--container__head">
-        <h3 className="Legend--container__head--title">Standard Deviation</h3>
         <Tooltip
           placement="bottom"
           title="This legend represents the standard deviation of network latencies across all nodes in your cluster. It will help you understand if there are high latencies across nodes or regions."
         >
-          <Icon type="info-circle" className="info-icon" />
+          <h3 className="Legend--container__head--title">Standard Deviation</h3>
         </Tooltip>
       </div>
       <div className="Legend--container__body">
@@ -112,7 +111,14 @@ export const Legend: React.SFC<ILegendProps> = ({
           title={`No Connections (${noConnections.length})`}
           trigger={
             noConnections.length === 0 && (
-              <span>{`No Connections (${noConnections.length})`}</span>
+              <Tooltip
+                placement="bottom"
+                title="This legend represents the loss of a connection between nodes and will help you understand if there is a one-way partition in your cluster."
+              >
+                <span
+                  className={"underline"}
+                >{`No Connections (${noConnections.length})`}</span>
+              </Tooltip>
             )
           }
           triggerStyle="Legend--container__head--title color--link"
@@ -157,12 +163,6 @@ export const Legend: React.SFC<ILegendProps> = ({
             ))}
           </table>
         </Modal>
-        <Tooltip
-          placement="bottom"
-          title="This legend represents the loss of a connection between nodes and will help you understand if there is a one-way partition in your cluster."
-        >
-          <Icon type="info-circle" className="info-icon" />
-        </Tooltip>
       </div>
       <div className="Legend--container__body">
         <Chip title="--" type="yellow" />
