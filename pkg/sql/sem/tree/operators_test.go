@@ -147,7 +147,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check binary ops.
-	for op := BinaryOperator(0); op < NumBinaryOperators; op++ {
+	for op := BinaryOperatorSymbol(0); op < NumBinaryOperatorSymbols; op++ {
 		for _, impl := range BinOps[op] {
 			o := impl.(*BinOp)
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)

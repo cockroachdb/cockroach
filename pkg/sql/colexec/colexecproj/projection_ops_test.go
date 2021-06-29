@@ -104,7 +104,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	binOp := tree.Mult
+	binOp := tree.MakeBinaryOperator(tree.Mult)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -264,7 +264,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typ := types.Int2
-	binOp := tree.Mult
+	binOp := tree.MakeBinaryOperator(tree.Mult)
 	var input colexecop.Operator
 	col1Idx := 5
 	col2Idx := 7
@@ -360,7 +360,7 @@ func BenchmarkProjOp(b *testing.B) {
 		opNames []string
 		opInfix []string
 	)
-	for _, binOp := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
 		opNames = append(opNames, execgen.BinaryOpName[binOp])
 		opInfix = append(opInfix, binOp.String())
 	}

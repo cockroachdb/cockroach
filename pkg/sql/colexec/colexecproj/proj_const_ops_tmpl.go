@@ -276,7 +276,7 @@ func GetProjection_CONST_SIDEConstOperator(
 	// {{end}}
 	switch op.(type) {
 	case tree.BinaryOperator:
-		switch op {
+		switch op.(tree.BinaryOperator).Symbol {
 		// {{range .BinOps}}
 		case tree._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {

@@ -270,7 +270,7 @@ func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool
 	return typedParen(tree.NewTypedComparisonExpr(op, left, right), typ), true
 }
 
-var vecBinOps = map[tree.BinaryOperator]bool{
+var vecBinOps = map[tree.BinaryOperatorSymbol]bool{
 	tree.Plus:  true,
 	tree.Minus: true,
 	tree.Mult:  true,
@@ -285,13 +285,13 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 	n := s.rnd.Intn(len(ops))
 	op := ops[n]
-	if s.vectorizable && !vecBinOps[op.Operator] {
+	if s.vectorizable && !vecBinOps[op.Operator.Symbol] {
 		return nil, false
 	}
 	if s.postgres {
 		if ignorePostgresBinOps[binOpTriple{
 			op.LeftType.Family(),
-			op.Operator,
+			op.Operator.Symbol,
 			op.RightType.Family(),
 		}] {
 			return nil, false
@@ -300,7 +300,7 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if s.postgres {
 		if transform, needTransform := postgresBinOpTransformations[binOpTriple{
 			op.LeftType.Family(),
-			op.Operator,
+			op.Operator.Symbol,
 			op.RightType.Family(),
 		}]; needTransform {
 			op.LeftType = transform.leftType
@@ -320,7 +320,7 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 type binOpTriple struct {
 	left  types.Family
-	op    tree.BinaryOperator
+	op    tree.BinaryOperatorSymbol
 	right types.Family
 }
 
