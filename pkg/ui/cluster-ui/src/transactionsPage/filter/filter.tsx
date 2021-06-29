@@ -172,7 +172,7 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
             <Select
               options={appNames}
               onChange={e => this.handleChange(e, "app")}
-              value={appNames.filter(app => app.label == filters.app)}
+              value={appNames.filter(app => app.label === filters.app)}
               placeholder="All"
               styles={customStyles}
               {...defaultSelectProps}
@@ -189,7 +189,7 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
               />
               <Select
                 options={timeUnit}
-                value={timeUnit.filter(unit => unit.label == filters.timeUnit)}
+                value={timeUnit.filter(unit => unit.label === filters.timeUnit)}
                 onChange={e => this.handleChange(e, "timeUnit")}
                 className={timePair.timeUnit}
                 styles={customStylesSmall}
