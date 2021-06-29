@@ -12,13 +12,13 @@ package log
 
 import (
 	"bufio"
-	"errors"
+	"bytes"
 	"io"
 	"regexp"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/errors"
 )
 
 type EntryDecoder interface {
@@ -28,9 +28,11 @@ type EntryDecoder interface {
 // NewEntryDecoder creates a new instance of EntryDecoder.
 // The format of the log file determines how the decoder is constructed.
 func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) (EntryDecoder, error) {
-	return NewEntryDecoderf(in, editMode, ""/*format*/)
+	return NewEntryDecoderf(in, editMode, "" /*format*/)
 }
-func NewEntryDecoderf(in io.Reader, editMode EditSensitiveData, logFormat string) (EntryDecoder, error) {
+func NewEntryDecoderf(
+	in io.Reader, editMode EditSensitiveData, logFormat string,
+) (EntryDecoder, error) {
 	var d EntryDecoder
 	var format string
 
@@ -50,21 +52,35 @@ func NewEntryDecoderf(in io.Reader, editMode EditSensitiveData, logFormat string
 	}
 
 	// If the log format has been specified, use the corresponding parser.
-	if logFormat != "" {
-		f, ok := formats[logFormat]
-		if !ok {
-			return nil, errors.New("unknown log file format")
+	if logFormat == "" {
+		var buf bytes.Buffer
+		rest := bufio.NewReader(in)
+		r := io.TeeReader(rest, &buf)
+		{
+			const headerBytes = 8096
+			header := make([]byte, headerBytes)
+			n, err := r.Read(header)
+			if err != nil {
+				return nil, err
+			}
+			header = header[:n]
+			logFormat, err = getLogFormat(header)
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding format")
+			}
 		}
-		format = f
-	} else { // otherwise, get the log format from the top of the log
-		/*TODO*/
-		return nil, errors.New("failed to get log format")
+		in = io.MultiReader(&buf, rest)
 	}
+	f, ok := formats[logFormat]
+	if !ok {
+		return nil, errors.New("unknown log file format")
+	}
+	format = f
 
 	switch format {
 	case "v2":
 		d = &entryDecoderV2{
-			reader:          bufio.NewReader(io.MultiReader(in, strings.NewReader("\n"))),
+			reader:          bufio.NewReader(in),
 			sensitiveEditor: getEditor(editMode),
 		}
 	case "v1":
