@@ -1,5 +1,6 @@
 # gazelle:exclude string_test.go
 
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -24,6 +25,7 @@ go_library(
         ":gen-batch-generated",  # keep
         ":gen-errordetailtype-stringer",  # keep
         ":gen-method-stringer",  # keep
+        ":mocks_api",  # keep
     ],
     embed = [":roachpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
@@ -49,7 +51,9 @@ go_library(
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_errors//extgrpc",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_golang_mock//gomock",  # keep
         "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@org_golang_google_grpc//metadata",  # keep
     ],
 )
 
@@ -100,6 +104,18 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
+)
+
+gomock(
+    name = "mocks_api",
+    out = "mocks_generated.go",
+    interfaces = [
+        "Internal_RangeFeedClient",
+        "InternalClient",
+    ],
+    library = ":bootstrap",
+    package = "roachpb",
+    self_package = "github.com/cockroachdb/cockroach/pkg/roachpb",
 )
 
 go_test(
