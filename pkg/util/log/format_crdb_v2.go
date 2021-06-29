@@ -456,101 +456,78 @@ var startRedactionMarker = string(redact.StartMarker())
 var endRedactionMarker = string(redact.EndMarker())
 var markersStartWithMultiByteRune = startRedactionMarker[0] >= utf8.RuneSelf && endRedactionMarker[0] >= utf8.RuneSelf
 
-var entryREV2 = regexp.MustCompile(
-	`(?m)^` +
-		/* Severity                 */ `([` + severityChar + `])` +
-		/* Date and time            */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
-		/* Goroutine ID             */ `(?:(\d+) )` +
-		/* Go standard library flag */ `(\(gostd\) )?` +
-		/* Channel                  */ `(?:(\d+)@)?` +
-		/* File                     */ `([^:]+):` +
-		/* Line                     */ `(?:(\d+) )` +
-		/* Redactable flag          */ `((?:` + redactableIndicator + `)?) ` +
-		/* Context tags             */ `(?:\[((?:[^]]|\][^ ])+)\] )` +
-		/* Counter                  */ `((?:\d+)?) ` +
-		/* Continuation marker      */ `([ =!+|])` +
-		/* Message                  */ `(.*)$`,
+var (
+	entryREV2 = regexp.MustCompile(
+		`(?m)^` +
+			/* Severity                 */ `(?P<severity>[` + severityChar + `])` +
+			/* Date and time            */ `(?P<datetime>\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
+			/* Goroutine ID             */ `(?:(?P<goroutine>\d+) )` +
+			/* Go standard library flag */ `(\(gostd\) )?` +
+			/* Channel                  */ `(?:(?P<channel>\d+)@)?` +
+			/* File                     */ `(?P<file>[^:]+):` +
+			/* Line                     */ `(?:(?P<line>\d+) )` +
+			/* Redactable flag          */ `(?P<redactable>(?:` + redactableIndicator + `)?) ` +
+			/* Context tags             */ `(?:\[(?P<tags>(?:[^]]|\][^ ])+)\] )` +
+			/* Counter                  */ `(?P<counter>(?:\d+)?) ` +
+			/* Continuation marker      */ `(?P<continuation>[ =!+|])` +
+			/* Message                  */ `(?P<msg>.*)$`,
+	)
+	v2SeverityIdx     = entryREV2.SubexpIndex("severity")
+	v2DateTimeIdx     = entryREV2.SubexpIndex("datetime")
+	v2GoroutineIdx    = entryREV2.SubexpIndex("goroutine")
+	v2ChannelIdx      = entryREV2.SubexpIndex("channel")
+	v2FileIdx         = entryREV2.SubexpIndex("file")
+	v2LineIdx         = entryREV2.SubexpIndex("line")
+	v2RedactableIdx   = entryREV2.SubexpIndex("redactable")
+	v2TagsIdx         = entryREV2.SubexpIndex("tags")
+	v2CounterIdx      = entryREV2.SubexpIndex("counter")
+	v2ContinuationIdx = entryREV2.SubexpIndex("continuation")
+	v2MsgIdx          = entryREV2.SubexpIndex("msg")
 )
 
 type entryDecoderV2 struct {
+	lines           int // number of lines read from reader
 	reader          *bufio.Reader
-	nextLine        []byte // nextLine stores already read data from the reader to be considered as the first line.
+	nextFragment    entryDecoderV2Fragment
 	sensitiveEditor redactEditor
 }
 
-var whitespaceRegexp = regexp.MustCompile(`^\s*$`)
-
 // Decode decodes the next log entry into the provided protobuf message.
-func (d *entryDecoderV2) Decode(entry *logpb.Entry) error {
-
-	// TODO(ajwerner): We will want to support starting in the middle of a log
-	// file at an arbitrary character and continuing on to the next full line.
-	// To do that, we'll involve the regexp in the line reading protocol and
-	// allow for lines which are not valid.
-	if err := d.populateNextLine(); err != nil {
-		return err
+func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
+	defer func() {
+		switch r := recover().(type) {
+		case nil: // do nothing
+		case error:
+			err = errors.Wrapf(r, "decoding on line %d", d.lines)
+		default:
+			err = errors.AssertionFailedf("panic decoding on line %d: %v", d.lines, r)
+		}
+	}()
+	frag, atEOF := d.peekNextFragment()
+	if atEOF {
+		return io.EOF
 	}
-
-	m := entryREV2.FindSubmatch(d.nextLine)
-	if m == nil {
-		return errors.Errorf("failed while decoding due to corrupted log file: %q", d.nextLine)
-	}
-	d.nextLine = nil
-
-	if err := d.initEntryFromFirstLine(entry, m); err != nil {
+	d.popFragment()
+	if err := d.initEntryFromFirstLine(entry, frag); err != nil {
 		return err
 	}
 
 	// Process the message.
 	var entryMsg bytes.Buffer
-	entryMsg.Write(m[12])
+	entryMsg.Write(frag.getMsg())
 
 	// While the entry has additional lines, collect the full message.
-linesLoop:
 	for {
-		err := d.populateNextLine()
-		switch {
-		case errors.Is(err, io.EOF):
-			break linesLoop
-		case err != nil:
-			return err
+		frag, atEOF := d.peekNextFragment()
+		if atEOF || !frag.isContinuation() {
+			break
 		}
-
-		// Match the next line in the log data.
-		m = entryREV2.FindSubmatch(d.nextLine)
-		if m == nil {
-			break linesLoop
-		}
-
-		// Determine whether this line is a continuation of the entry and append
-		// the message accordingly.
-		msg := trimFinalNewLines(m[12])
-		switch cont := m[11][0]; cont {
-		case '+':
-			entryMsg.WriteByte('\n')
-			entryMsg.Write(msg)
-		case '|':
-			entryMsg.Write(msg)
-			if entry.StructuredEnd != 0 {
-				entry.StructuredEnd = uint32(entryMsg.Len())
-			}
-		case '!':
-			if entry.StackTraceStart == 0 {
-				entry.StackTraceStart = uint32(entryMsg.Len()) + 1
-				entryMsg.WriteString("\nstack trace:\n")
-				entryMsg.Write(msg)
-			} else {
-				entryMsg.WriteString("\n")
-				entryMsg.Write(msg)
-			}
-		default:
-			break linesLoop
-		}
-		d.nextLine = nil // consume the line
+		d.popFragment()
+		d.addContinuationFragmentToEntry(entry, &entryMsg, frag)
 	}
 
 	r := redactablePackage{
-		msg:        trimFinalNewLines(entryMsg.Bytes()),
+		msg:        entryMsg.Bytes(),
 		redactable: entry.Redactable,
 	}
 	r = d.sensitiveEditor(r)
@@ -560,94 +537,174 @@ linesLoop:
 	return nil
 }
 
-// populateNextLine populates the nextLine buffer by reading
-// from the underlying reader a line at a time until a line which
-// contains anything other than whitespace is returned.
-func (d *entryDecoderV2) populateNextLine() error {
-	for d.nextLine == nil {
-		var err error
+func (d *entryDecoderV2) addContinuationFragmentToEntry(
+	entry *logpb.Entry, entryMsg *bytes.Buffer, frag entryDecoderV2Fragment,
+) {
+	switch frag.getContinuation() {
+	case '+':
+		entryMsg.WriteByte('\n')
+		entryMsg.Write(frag.getMsg())
+	case '|':
+		entryMsg.Write(frag.getMsg())
+		if entry.StructuredEnd != 0 {
+			entry.StructuredEnd = uint32(entryMsg.Len())
+		}
+	case '!':
+		if entry.StackTraceStart == 0 {
+			entry.StackTraceStart = uint32(entryMsg.Len()) + 1
+			entryMsg.WriteString("\nstack trace:\n")
+			entryMsg.Write(frag.getMsg())
+		} else {
+			entryMsg.WriteString("\n")
+			entryMsg.Write(frag.getMsg())
+		}
+	default:
+		panic(errors.Errorf("unexpected continuation character %c", frag.getContinuation()))
+	}
+}
+
+// peekNextFragment populates the nextFragment buffer by reading from the
+// underlying reader a line at a time until a valid line is reached.
+// It will panic if a malformed log line is discovered. It permits the first
+// line in the decoder to be malformed and it will skip that line. Upon EOF,
+// if there is no text left to consume, the atEOF return value will be true.
+func (d *entryDecoderV2) peekNextFragment() (_ entryDecoderV2Fragment, atEOF bool) {
+	for d.nextFragment == nil {
+		d.lines++
 		nextLine, err := d.reader.ReadBytes('\n')
-		if err != nil && !(errors.Is(err, io.EOF) && len(nextLine) > 0) {
-			return err
+		if isEOF := errors.Is(err, io.EOF); isEOF {
+			if len(nextLine) == 0 {
+				return nil, true
+			}
+		} else if err != nil {
+			panic(err)
 		}
-		if whitespaceRegexp.Match(nextLine) {
-			continue
+		nextLine = bytes.TrimSuffix(nextLine, []byte{'\n'})
+		m := entryREV2.FindSubmatch(nextLine)
+		if m == nil {
+			if d.lines == 1 { // allow non-matching lines if we've never seen a line
+				continue
+			}
+			panic(errors.New("malformed log entry"))
 		}
-		d.nextLine = nextLine
+		d.nextFragment = m
+	}
+	return d.nextFragment, false
+}
+
+func (d *entryDecoderV2) popFragment() {
+	if d.nextFragment == nil {
+		panic("cannot pop unpopulated fragment")
+	}
+	d.nextFragment = nil
+}
+
+func (d *entryDecoderV2) initEntryFromFirstLine(
+	entry *logpb.Entry, m entryDecoderV2Fragment,
+) (err error) {
+	// Erase all the fields, to be sure.
+	*entry = logpb.Entry{
+		Severity:   m.getSeverity(),
+		Time:       m.getTimestamp(),
+		Goroutine:  m.getGoroutine(),
+		Channel:    m.getChannel(),
+		File:       m.getFile(),
+		Line:       m.getLine(),
+		Redactable: m.isRedactable(),
+		Tags:       m.getTags(d.sensitiveEditor),
+		Counter:    m.getCounter(),
+	}
+	if m.isStructured() {
+		entry.StructuredStart = 0
+		entry.StructuredEnd = uint32(len(m.getMsg()))
 	}
 	return nil
 }
 
-func (d *entryDecoderV2) initEntryFromFirstLine(entry *logpb.Entry, m [][]byte) error {
-	// Erase all the fields, to be sure.
-	*entry = logpb.Entry{}
+// entryDecoderV2Fragment is a line which is part of a v2 log entry.
+// It is the output of entryV2RE.FindSubmatch.
+type entryDecoderV2Fragment [][]byte
 
-	// Process the severity.
-	entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
+func (f entryDecoderV2Fragment) getSeverity() logpb.Severity {
+	return Severity(strings.IndexByte(severityChar, f[v2SeverityIdx][0]) + 1)
+}
 
-	// Process the timestamp.
-	t, err := time.Parse(MessageTimeFormat, string(m[2]))
+func (f entryDecoderV2Fragment) getMsg() []byte {
+	return f[v2MsgIdx]
+}
+
+func (f entryDecoderV2Fragment) getContinuation() byte {
+	return f[v2ContinuationIdx][0]
+}
+
+func (f entryDecoderV2Fragment) isContinuation() bool {
+	switch f.getContinuation() {
+	case '|', '+', '!':
+		return true
+	default:
+		return false
+	}
+}
+
+func (f entryDecoderV2Fragment) getGoroutine() int64 {
+	return parseInt(f[v2GoroutineIdx], "goroutine")
+}
+
+func (f entryDecoderV2Fragment) getTimestamp() (unixNano int64) {
+	t, err := time.Parse(MessageTimeFormat, string(f[v2DateTimeIdx]))
 	if err != nil {
-		return err
+		panic(err)
 	}
-	entry.Time = t.UnixNano()
+	return t.UnixNano()
+}
 
-	// Process the goroutine ID.
-	goroutine, err := strconv.Atoi(string(m[3]))
+func (f entryDecoderV2Fragment) getChannel() logpb.Channel {
+	if len(f[v2ChannelIdx]) == 0 {
+		return Channel(0)
+	}
+	return Channel(parseInt(f[v2ChannelIdx], "channel"))
+}
+
+func (f entryDecoderV2Fragment) getFile() string {
+	return string(f[v2FileIdx])
+}
+
+func (f entryDecoderV2Fragment) getLine() int64 {
+	return parseInt(f[v2LineIdx], "line")
+}
+
+func (f entryDecoderV2Fragment) isRedactable() bool {
+	return len(f[v2RedactableIdx]) > 0
+}
+
+func (f entryDecoderV2Fragment) getTags(editor redactEditor) string {
+	switch tagsStr := string(f[v2TagsIdx]); tagsStr {
+	case "-":
+		return tagsStr
+	default:
+		r := editor(redactablePackage{
+			msg:        f[v2TagsIdx],
+			redactable: f.isRedactable(),
+		})
+		return string(r.msg)
+	}
+}
+
+func (f entryDecoderV2Fragment) getCounter() uint64 {
+	if len(f[v2CounterIdx]) == 0 {
+		return 0
+	}
+	return uint64(parseInt(f[v2CounterIdx], "counter"))
+}
+
+func (f entryDecoderV2Fragment) isStructured() bool {
+	return f.getContinuation() == '='
+}
+
+func parseInt(data []byte, name string) int64 {
+	i, err := strconv.ParseInt(string(data), 10, 64)
 	if err != nil {
-		return err
+		panic(errors.Wrapf(err, "parsing %s", name))
 	}
-	entry.Goroutine = int64(goroutine)
-
-	// Process the channel.
-	if len(string(m[5])) != 0 {
-		ch, err := strconv.Atoi(string(m[5]))
-		if err != nil {
-			return err
-		}
-		entry.Channel = Channel(ch)
-	}
-
-	// Process the file.
-	entry.File = string(m[6])
-
-	// Process the line.
-	line, err := strconv.Atoi(string(m[7]))
-	if err != nil {
-		return err
-	}
-	entry.Line = int64(line)
-
-	// Process the redactable marker.
-	entry.Redactable = len(m[8]) != 0
-
-	// Process the context tags.
-	if string(m[9]) != "-" {
-		r := redactablePackage{
-			msg:        m[9],
-			redactable: entry.Redactable,
-		}
-		r = d.sensitiveEditor(r)
-		entry.Tags = string(r.msg)
-	} else {
-		entry.Tags = "-"
-	}
-
-	// Process the counter.
-	if len(m[10]) != 0 {
-		counter, err := strconv.Atoi(string(m[10]))
-		if err != nil {
-			return err
-		}
-		entry.Counter = uint64(counter)
-	}
-
-	// Check if the entry is structured by processing the continuation mark.
-	msg := string(trimFinalNewLines(m[12]))
-	if string(m[11]) == "=" {
-		entry.StructuredStart = 0
-		entry.StructuredEnd = uint32(len(msg))
-	}
-
-	return nil
+	return i
 }
