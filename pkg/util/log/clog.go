@@ -168,6 +168,18 @@ type loggerT struct {
 	outputMu syncutil.Mutex
 }
 
+func (l *loggerT) hasFileOrFluentOrHTTPSink() bool {
+	for _, s := range l.sinkInfos {
+		_, file := s.sink.(*fileSink)
+		_, fluent := s.sink.(*fluentSink)
+		_, http := s.sink.(*httpSink)
+		if file || fluent || http {
+			return true
+		}
+	}
+	return false
+}
+
 // getFileSinkIndex retrieves the index of the fileSink, if defined,
 // in the sinkInfos. Returns -1 if there is no file sink.
 func (l *loggerT) getFileSinkIndex() int {
@@ -349,7 +361,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		// the formatter.
 		editedEntry.counter = atomic.AddUint64(&s.msgCount, 1)
 
-		// Process the redation spec.
+		// Process the redaction spec.
 		editedEntry.payload = maybeRedactEntry(editedEntry.payload, s.editor)
 
 		// Format the entry for this sink.
