@@ -10,11 +10,9 @@
 
 import React from "react";
 import classNames from "classnames";
-
-import { InfoTooltip } from "src/components/infoTooltip";
-
 import "./visualizations.styl";
 import spinner from "assets/spinner.gif";
+import { Tooltip } from "antd";
 
 interface VisualizationProps {
   title: string;
@@ -46,22 +44,33 @@ export default class extends React.Component<VisualizationProps, {}> {
       "visualization--loading": this.props.loading,
     });
 
-    let tooltipNode: React.ReactNode = "";
+    let titleClass = "visualization__title";
     if (tooltip) {
-      tooltipNode = <InfoTooltip text={tooltip} />;
+      titleClass += " visualization__underline";
+    }
+
+    let chartTitle: React.ReactNode = (
+      <span className={titleClass}>{title}</span>
+    );
+    if (this.props.subtitle) {
+      chartTitle = chartTitle && (
+        <span className="visualization__subtitle">{this.props.subtitle}</span>
+      );
+    }
+
+    let tooltipNode: React.ReactNode = chartTitle;
+
+    if (tooltip) {
+      tooltipNode = (
+        <Tooltip placement="bottom" title={tooltip}>
+          {chartTitle}
+        </Tooltip>
+      );
     }
 
     return (
       <div className={vizClasses}>
-        <div className="visualization__header">
-          <span className="visualization__title">{title}</span>
-          {this.props.subtitle ? (
-            <span className="visualization__subtitle">
-              {this.props.subtitle}
-            </span>
-          ) : null}
-          {tooltipNode}
-        </div>
+        <div className="visualization__header">{tooltipNode}</div>
         <div className={contentClasses}>
           {this.props.loading ? (
             <img className="visualization__spinner" src={spinner} />
