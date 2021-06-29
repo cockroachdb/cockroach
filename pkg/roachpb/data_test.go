@@ -1115,6 +1115,59 @@ func TestSpanOverlaps(t *testing.T) {
 	}
 }
 
+func TestSpanIntersect(t *testing.T) {
+	sA := Span{Key: []byte("a")}
+	sD := Span{Key: []byte("d")}
+	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
+	sAtoD := Span{Key: []byte("a"), EndKey: []byte("d")}
+	sBtoC := Span{Key: []byte("b"), EndKey: []byte("c")}
+	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+	sCtoD := Span{Key: []byte("c"), EndKey: []byte("d")}
+	// Invalid spans.
+	sCtoA := Span{Key: []byte("c"), EndKey: []byte("a")}
+	sDtoB := Span{Key: []byte("d"), EndKey: []byte("b")}
+
+	testData := []struct {
+		s1, s2 Span
+		expect Span
+	}{
+		{sA, sA, sA},
+		{sA, sAtoC, sA},
+		{sAtoC, sA, sA},
+		{sAtoC, sAtoC, sAtoC},
+		{sAtoC, sAtoD, sAtoC},
+		{sAtoD, sAtoC, sAtoC},
+		{sAtoC, sBtoC, sBtoC},
+		{sBtoC, sAtoC, sBtoC},
+		{sAtoC, sBtoD, sBtoC},
+		{sBtoD, sAtoC, sBtoC},
+		{sAtoD, sBtoC, sBtoC},
+		{sBtoC, sAtoD, sBtoC},
+		// Empty intersections.
+		{sA, sD, Span{}},
+		{sA, sBtoD, Span{}},
+		{sBtoD, sA, Span{}},
+		{sD, sBtoD, Span{}},
+		{sBtoD, sD, Span{}},
+		{sAtoC, sCtoD, Span{}},
+		{sCtoD, sAtoC, Span{}},
+		// Invalid spans.
+		{sAtoC, sDtoB, Span{}},
+		{sDtoB, sAtoC, Span{}},
+		{sBtoD, sCtoA, Span{}},
+		{sCtoA, sBtoD, Span{}},
+	}
+	for _, test := range testData {
+		in := test.s1.Intersect(test.s2)
+		if test.expect.Valid() {
+			require.True(t, in.Valid())
+			require.Equal(t, test.expect, in)
+		} else {
+			require.False(t, in.Valid())
+		}
+	}
+}
+
 func TestSpanCombine(t *testing.T) {
 	sA := Span{Key: []byte("a")}
 	sD := Span{Key: []byte("d")}
