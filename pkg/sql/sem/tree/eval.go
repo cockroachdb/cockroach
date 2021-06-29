@@ -3561,6 +3561,20 @@ func (ctx *EvalContext) Stop(c context.Context) {
 	ctx.Mon.Stop(c)
 }
 
+// FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
+func (ctx *EvalContext) FmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
+	if ctx.SessionData != nil {
+		opts = append(
+			[]FmtCtxOption{FmtDataConversionConfig(ctx.SessionData.DataConversionConfig)},
+			opts...,
+		)
+	}
+	return NewFmtCtx(
+		f,
+		opts...,
+	)
+}
+
 // GetStmtTimestamp retrieves the current statement timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetStmtTimestamp() time.Time {

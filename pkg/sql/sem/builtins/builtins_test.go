@@ -125,7 +125,7 @@ func TestStringToArrayAndBack(t *testing.T) {
 				return
 			}
 
-			s, err := arrayToString(result.(*tree.DArray), *tc.sep, tc.nullStr)
+			s, err := arrayToString(evalContext, result.(*tree.DArray), *tc.sep, tc.nullStr)
 			if err != nil {
 				t.Fatal(err)
 			}
