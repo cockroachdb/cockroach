@@ -63,3 +63,25 @@ platform(
         "@platforms//cpu:x86_64",
     ],
 )
+
+toolchain(
+    name = "cross_linux_arm_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    toolchain = "@toolchain_cross_aarch64-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_linux_arm",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
