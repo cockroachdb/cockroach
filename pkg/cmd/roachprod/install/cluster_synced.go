@@ -343,53 +343,77 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 				return
 			}
 
-			// On each monitored node, we loop looking for a cockroach process. In
-			// order to avoid polling with lsof, if we find a live process we use nc
-			// (netcat) to connect to the rpc port which will block until the server
-			// either decides to kill the connection or the process is killed.
-			// In one-shot we don't use nc and return after the first assessment
-			// of the process' health.
+			// On each monitored node, we loop looking for a cockroach process.
 			data := struct {
 				OneShot     bool
 				IgnoreEmpty bool
 				Store       string
 				Port        int
+				Local       bool
 			}{
 				OneShot:     oneShot,
 				IgnoreEmpty: ignoreEmptyNodes,
 				Store:       Cockroach{}.NodeDir(c, nodes[i], 1 /* storeIndex */),
 				Port:        Cockroach{}.NodePort(c, nodes[i]),
+				Local:       c.IsLocal(),
 			}
 
 			snippet := `
-lastpid=0
-{{ if .IgnoreEmpty}}
+{{ if .IgnoreEmpty }}
 if [ ! -f "{{.Store}}/CURRENT" ]; then
   echo "skipped"
   exit 0
 fi
 {{- end}}
+
+# Init with -1 so that when cockroach is initially dead, we print
+# a dead event for it.
+lastpid=-1
 while :; do
+{{ if .Local }}
   pid=$(lsof -i :{{.Port}} -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
+	pid=${pid:-0} # default to 0
+	status="unknown"
+{{- else }}
+  # When CRDB is not running, this is zero.
+	pid=$(systemctl show cockroach --property MainPID --value)
+	status=$(systemctl show cockroach --property ExecMainStatus --value)
+{{- end }}
+
+  if [[ "${lastpid}" == -1 && "${pid}" != 0 ]]; then
+    # On the first iteration through the loop, if the process is running,
+    # don't register a PID change (which would trigger an erroneous dead
+    # event).
+    lastpid=0
+  fi
+  # Output a dead event whenever the PID changes from a nonzero value to
+  # any other value. In particular, we emit a dead event when the node stops
+  # (lastpid is nonzero, pid is zero), but not when the process then starts
+  # again (lastpid is zero, pid is nonzero).
   if [ "${pid}" != "${lastpid}" ]; then
-    if [ -n "${lastpid}" -a -z "${pid}" ]; then
-      echo dead
+    if [ "${lastpid}" != 0 ]; then
+      if [ "${pid}" != 0 ]; then
+        # If the PID changed but neither is zero, then the status refers to
+        # the new incarnation. We lost the actual exit status of the old PID.
+        status="unknown"
+      fi
+    	echo "dead (exit status ${status})"
+    fi
+		if [ "${pid}" != 0 ]; then
+			echo "${pid}"
     fi
     lastpid=${pid}
-    if [ -n "${pid}" ]; then
-      echo ${pid}
-    fi
   fi
-{{if .OneShot }}
+
+{{ if .OneShot }}
   exit 0
-{{- end}}
-  if [ -n "${lastpid}" ]; then
-    while kill -0 "${lastpid}"; do
+{{- end }}
+
+  sleep 1
+  if [ "${pid}" != 0 ]; then
+    while kill -0 "${pid}"; do
       sleep 1
     done
-    echo "kill exited nonzero"
-  else
-    sleep 1
   fi
 done
 `
@@ -401,22 +425,12 @@ done
 				return
 			}
 
-			// Request a PTY so that the script will receive will receive a SIGPIPE
-			// when the session is closed.
+			// Request a PTY so that the script will receive a SIGPIPE when the
+			// session is closed.
 			if err := sess.RequestPty(); err != nil {
 				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
-			// Give the session a valid stdin pipe so that nc won't exit immediately.
-			// When nc does exit, we write to stdout, which has a side effect of
-			// checking whether the stdout pipe has broken. This allows us to detect
-			// when the roachprod process is killed.
-			inPipe, err := sess.StdinPipe()
-			if err != nil {
-				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
-				return
-			}
-			defer inPipe.Close()
 
 			var readerWg sync.WaitGroup
 			readerWg.Add(1)
