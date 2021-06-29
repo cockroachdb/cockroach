@@ -405,6 +405,13 @@ INSERT INTO intervals VALUES
   (3, '2 years 11 mons -2 days +03:25:45.678')
 
 query T
+SELECT i FROM intervals ORDER BY pk
+----
+-2 years -11 mons 1 day +04:05:06.123
+1 day 04:06:08.123
+2 years 11 mons -2 days +03:25:45.678
+
+query T
 SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
 ----
 -2 years -11 mons 1 day +04:05:06.123
@@ -415,12 +422,26 @@ statement ok
 SET intervalstyle = 'iso_8601'
 
 query T
+SELECT i FROM intervals ORDER BY pk
+----
+P-2Y-11M1DT4H5M6.123S
+P1DT4H6M8.123S
+P2Y11M-2DT3H25M45.678S
+
+query T
 SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
 ----
 P-2Y-11M1DT4H5M6.123S P1DT4H6M8.123S P2Y11M-2DT3H25M45.678S
 
 statement ok
 SET intervalstyle = 'sql_standard'
+
+query T
+SELECT i FROM intervals ORDER BY pk
+----
+-2-11 +1 +4:05:06.123
+1 4:06:08.123
++2-11 -2 +3:25:45.678
 
 query T
 SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
