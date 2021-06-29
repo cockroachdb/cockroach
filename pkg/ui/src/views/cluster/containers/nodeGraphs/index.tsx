@@ -52,7 +52,6 @@ import {
   TimeWindow,
   TimeScale,
 } from "src/redux/timewindow";
-
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -217,8 +216,17 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       );
     });
 
+    // add padding to have last chart tooltip visible
+    // tooltip layout with header and paddings take up
+    // somewhere around 50px, after it have more than
+    // 9 nodes it switch to multi-column layout that take
+    // somewhere around 90px height + 10px for per node
+    // as we have 3 columns, we divide node amount on 3
+    const paddingBottom =
+      nodeIDs.length > 8 ? 90 + Math.ceil(nodeIDs.length / 3) * 10 : 50;
+
     return (
-      <div>
+      <div style={{ paddingBottom }}>
         <Helmet title={title} />
         <section className="section"><h1 className="base-heading">{ title }</h1></section>
         <PageConfig>
