@@ -309,6 +309,8 @@ const (
 	// SQLStatsTable adds the system tables for storing persisted SQL statistics
 	// for statements and transactions.
 	SQLStatsTable
+	// TenantUsageTable adds the system table for tracking tenant usage.
+	TenantUsageTable
 
 	// Step (1): Add new versions here.
 )
@@ -529,6 +531,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SQLStatsTable,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 116},
+	},
+	{
+		Key:     TenantUsageTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 118},
 	},
 	// Step (2): Add new versions here.
 }
