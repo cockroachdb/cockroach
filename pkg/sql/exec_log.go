@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -111,6 +112,10 @@ const (
 	executorTypeExec executorType = iota
 	executorTypeInternal
 )
+
+// sampleRate is the rate of queries at which we sample queries for telemetry.
+// The probability of a sampled query event being logged for a query is 1/sampleRate.
+const sampleRate = 5
 
 // vLevel returns the vmodule log level at which logs from the given executor
 // should be written to the logs.
@@ -346,6 +351,16 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+	}
+
+	// Generate random number between 1 and sampleRate.
+	rand.Seed(timeutil.Now().UnixNano())
+	randNum := rand.Intn(sampleRate-1) + 1
+
+	// If the random number equals 1, we log a sampled query event. There is a 1/sampleRate probability that a query
+	// is sampled for telemetry.
+	if randNum == 1 {
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SampledQuery{CommonSQLExecDetails: execDetails}})
 	}
 }
 

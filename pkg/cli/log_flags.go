@@ -455,6 +455,7 @@ var predefinedLogFiles = map[logpb.Channel]string{
 	channel.SQL_EXEC:          "sql-exec",
 	channel.SQL_PERF:          "sql-slow",
 	channel.SQL_INTERNAL_PERF: "sql-slow-internal-only",
+	channel.TELEMETRY:         "telemetry",
 }
 
 // predefinedAuditFiles indicate which channel-specific files are
