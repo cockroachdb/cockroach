@@ -704,7 +704,6 @@ func (ds *DistSender) Send(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer sp.Finish()
 
-	var rplChunks []*roachpb.BatchResponse
 	splitET := false
 	var require1PC bool
 	lastReq := ba.Requests[len(ba.Requests)-1].GetInner()
@@ -724,6 +723,8 @@ func (ds *DistSender) Send(
 		log.Fatalf(ctx, "batch with MaxSpanRequestKeys=%d, TargetBytes=%d needs splitting",
 			log.Safe(ba.MaxSpanRequestKeys), log.Safe(ba.TargetBytes))
 	}
+	var singleRplChunk [1]*roachpb.BatchResponse
+	rplChunks := singleRplChunk[:0:1]
 
 	errIdxOffset := 0
 	for len(parts) > 0 {
