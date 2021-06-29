@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
+//go:generate mockgen -package=rangefeed -source rangefeed.go -destination=mocks_generated.go .
+
 // TODO(ajwerner): Expose hooks for metrics.
 // TODO(ajwerner): Expose access to checkpoints and the frontier.
 // TODO(ajwerner): Expose better control over how the exponential backoff gets

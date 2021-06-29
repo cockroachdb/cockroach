@@ -1,8 +1,9 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
-    name = "kvcoord",
+    name = "kvcoord_base",
     srcs = [
         "batch.go",
         "condensable_span_set.go",
@@ -31,7 +32,7 @@ go_library(
         ":gen-txnstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
-    visibility = ["//visibility:public"],
+    visibility = ["//visibility:private"],
     deps = [
         "//pkg/base",
         "//pkg/gossip",
@@ -69,12 +70,36 @@ go_library(
     ],
 )
 
+# keep
+go_library(
+    name = "kvcoord",
+    srcs = [":mocks_transport"],
+    embed = [":kvcoord_base"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@org_golang_google_grpc//metadata",
+    ],
+)
+
+gomock(
+    name = "mocks_transport",
+    out = "mocks_generated.go",
+    interfaces = [
+        "Transport",
+    ],
+    library = ":kvcoord_base",
+    package = "kvcoord",
+    self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+)
+
 go_test(
     name = "kvcoord_test",
     size = "medium",
     srcs = [
         "batch_test.go",
         "condensable_span_set_test.go",
+        "dist_sender_rangefeed_test.go",
         "dist_sender_server_test.go",
         "dist_sender_test.go",
         "integration_test.go",
@@ -146,6 +171,7 @@ go_test(
         "@com_github_cockroachdb_errors//errutil",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
