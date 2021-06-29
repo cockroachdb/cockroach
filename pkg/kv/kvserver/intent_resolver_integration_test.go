@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -181,39 +180,6 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	if err := <-readCh2; err != nil {
 		t.Fatal(err)
 	}
-}
-
-// Regression test for https://github.com/cockroachdb/cockroach/issues/64092
-// which makes sure that synchronous ranged intent resolution during rollback
-// completes in a reasonable time.
-func TestRollbackSyncRangedIntentResolution(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "timing-sensitive test")
-
-	ctx := context.Background()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &StoreTestingKnobs{
-				DisableLoadBasedSplitting: true,
-				IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
-					ForceSyncIntentResolution: true,
-				},
-			},
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-
-	txn := srv.DB().NewTxn(ctx, "test")
-	batch := txn.NewBatch()
-	for i := 0; i < 100000; i++ {
-		batch.Put([]byte(fmt.Sprintf("key%v", i)), []byte("value"))
-	}
-	require.NoError(t, txn.Run(ctx, batch))
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	require.NoError(t, txn.Rollback(ctx))
-	require.NoError(t, ctx.Err())
 }
 
 // Tests that intents and transaction records are cleaned up within a reasonable
