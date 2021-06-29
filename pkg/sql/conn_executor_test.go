@@ -1124,3 +1124,214 @@ func (f *dynamicRequestFilter) filter(
 func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 	return nil
 }
+
+// TestUpdateRollingQueryCounts
+func TestUpdateRollingQueryCounts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defaultAlpha := 0.8
+	defaultIntervalLength := 10
+
+	testData := []struct {
+		intervalLength int
+		numUpdates                int
+		expectedQueryCountLength  int
+		expectedLargestQueryCount int64
+	}{
+		// Test case for no updates.
+		{
+			defaultIntervalLength,
+			0,
+			0,
+			0,
+		},
+		// Test case for interval size of 1.
+		{
+			1,
+			1,
+			1,
+			1,
+		},
+		// Test case for single update.
+		{
+			defaultIntervalLength,
+			1,
+			1,
+			1,
+		},
+		// Test case for number of updates less than size of interval.
+		{
+			defaultIntervalLength,
+			5,
+			5,
+			5,
+		},
+		// Test case for number of updates 1 more than size of interval
+		{
+			defaultIntervalLength,
+			11,
+			defaultIntervalLength,
+			11,
+		},
+		{
+			defaultIntervalLength,
+			20,
+			defaultIntervalLength,
+			20,
+		},
+	}
+
+	for _, tc := range testData {
+		freshMetrics := sql.NewTelemetryLoggingMetrics(defaultAlpha, int64(tc.intervalLength))
+
+		for i := 0; i < tc.numUpdates; i++ {
+			freshMetrics.UpdateRollingQueryCounts()
+		}
+
+		queryCountLength := len(freshMetrics.RollingQueryCounts.QueryCounts)
+
+		if tc.numUpdates <= tc.intervalLength {
+			require.Equal(t, queryCountLength, tc.numUpdates)
+		} else {
+			require.Equal(t, queryCountLength, tc.intervalLength)
+		}
+
+		// Check if the number of updates to the rolling query count interval for
+		// this test case is greater than 0. If so, there should be query counts to
+		// iterate through.
+		if tc.numUpdates > 0 {
+
+			// Iterate backwards through the query counts. The most recent query count value
+			// is expected to be identical to the number of updates.
+			expectedQueryCount := tc.expectedLargestQueryCount
+			idx := freshMetrics.RollingQueryCounts.End
+			for {
+				currQC := freshMetrics.RollingQueryCounts.QueryCounts[idx]
+				require.Equal(t, currQC.Count(), expectedQueryCount)
+				expectedQueryCount--
+
+				// Check if the current index is greater than 0.
+				// If so, there is a previous entry to compare timestamps.
+				if idx != freshMetrics.RollingQueryCounts.Start {
+					prevIndex := freshMetrics.RollingQueryCounts.PrevIndex(idx)
+					prevQC := freshMetrics.RollingQueryCounts.QueryCounts[prevIndex]
+					currentIsNotBeforePrevious := !(currQC.Timestamp().Before(prevQC.Timestamp()))
+					require.Equal(t, true, currentIsNotBeforePrevious)
+				}
+
+				// At start pointer, no further assertions needed, break from loop.
+				if idx == freshMetrics.RollingQueryCounts.Start {
+					break
+				}
+				idx = freshMetrics.RollingQueryCounts.PrevIndex(idx)
+			}
+		}
+	}
+}
+
+// TestExpSmoothQPS
+func TestExpSmoothQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defaultAlpha := 0.8
+	defaultIntervalLength := 6
+
+	startTime := timeutil.Now()
+	startCount := int64(0)
+
+	testData := []struct {
+		intervalLength int
+		testQueryCounts   []sql.QueryCountAndTime
+		expectedSmoothQPS int64
+	}{
+		// Test case for when number of recorded query counts is less
+		// than the designated interval length.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount),
+			},
+			0,
+		},
+		// Test case for interval length of 1.
+		{
+			1,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount),
+			},
+			startCount,
+		},
+		// Test case for linearly increasing query count and timestamp.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second).Unix(), startCount+1),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*2).Unix(), startCount+2),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*3).Unix(), startCount+3),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*4).Unix(), startCount+4),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*5).Unix(), startCount+5),
+			},
+			1,
+		},
+		// Test case for more erratic increases in query count and timestamp.
+		// Also testing truncation of final smoothed value due to int64 type casting.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount),
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount+1),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*10).Unix(), startCount+5),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*12).Unix(), startCount+9),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*15).Unix(), startCount+30),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*16).Unix(), startCount+100),
+			},
+			// Result is 57.1 truncated to 57
+			57,
+		},
+		// Test case for truncation of the initial smoothed value (average QPS)
+		// and final smoothed value due to int64 type casting.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount),
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount+1),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*2).Unix(), startCount+3),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*3).Unix(), startCount+7),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*4).Unix(), startCount+12),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*5).Unix(), startCount+18),
+			},
+			// Average QPS is 3.4 truncated to 3.
+			// Result is 5.7 truncated to 5.
+			5,
+		},
+		// Test case for truncation of individual QPS values (i.e. between each query count)
+		// due to int64 type casting. Consequently impacts the initial smoothed value (average QPS)
+		// and final smoothed value.
+		{
+			defaultIntervalLength,
+			[]sql.QueryCountAndTime{
+				sql.NewQueryCountAndTime(startTime.Unix(), startCount),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*2).Unix(), startCount+1),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*3).Unix(), startCount+10),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*6).Unix(), startCount+2),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*10).Unix(), startCount+2),
+				sql.NewQueryCountAndTime(startTime.Add(time.Second*12).Unix(), startCount+1),
+			},
+			// Average QPS is 2.
+			// Result is 0.06 truncated to 0.
+			0,
+		},
+	}
+
+	for _, tc := range testData {
+		freshMetrics := sql.NewTelemetryLoggingMetrics(defaultAlpha, int64(tc.intervalLength))
+		for _, tcQc := range tc.testQueryCounts {
+			freshMetrics.RollingQueryCounts.Insert(tcQc)
+		}
+		//freshMetrics.RollingQueryCounts.Value = tc.testQueryCounts
+		require.Equal(t, tc.expectedSmoothQPS, freshMetrics.ExpSmoothQPS())
+	}
+}

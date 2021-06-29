@@ -269,6 +269,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	ex.incrementStartedStmtCounter(ast)
+	ex.incrementStartedQueryCounter()
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(ast)
@@ -925,6 +926,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			res.Err(),
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
+			&ex.server.TelemetryLoggingMetrics,
 		)
 	}()
 
@@ -1225,6 +1227,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
 		ex.incrementStartedStmtCounter(ast)
+		ex.incrementStartedQueryCounter()
 		defer func() {
 			if !payloadHasError(payload) {
 				ex.incrementExecutedStmtCounter(ast)
@@ -1273,6 +1276,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) (_ fsm.Event, payload fsm.EventPayload) {
 	ex.incrementStartedStmtCounter(ast)
+	ex.incrementStartedQueryCounter()
 	defer func() {
 		if !payloadHasError(payload) {
 			ex.incrementExecutedStmtCounter(ast)
@@ -1327,6 +1331,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 	ast tree.Statement, res RestrictedCommandResult,
 ) (ev fsm.Event, payload fsm.EventPayload) {
 	ex.incrementStartedStmtCounter(ast)
+	ex.incrementStartedQueryCounter()
 	defer func() {
 		if !payloadHasError(payload) {
 			ex.incrementExecutedStmtCounter(ast)
@@ -1601,6 +1606,11 @@ func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
 // statement counter for stmt's type.
 func (ex *connExecutor) incrementExecutedStmtCounter(ast tree.Statement) {
 	ex.metrics.ExecutedStatementCounters.incrementCount(ex, ast)
+}
+
+// incrementStartedQueryCounter
+func (ex *connExecutor) incrementStartedQueryCounter() {
+	ex.server.TelemetryLoggingMetrics.UpdateRollingQueryCounts()
 }
 
 // payloadHasError returns true if the passed payload implements
