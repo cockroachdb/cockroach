@@ -985,6 +985,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			res.Err(),
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
+			ex.server.TelemetryLoggingMetrics,
+			ex.rng,
 		)
 	}()
 
@@ -1785,6 +1787,8 @@ func (ex *connExecutor) handleAutoCommit(
 // statement counter for stmt's type.
 func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
 	ex.metrics.StartedStatementCounters.incrementCount(ex, ast)
+	ex.server.TelemetryLoggingMetrics.updateRollingQueryCounts()
+
 }
 
 // incrementExecutedStmtCounter increments the appropriate executed
