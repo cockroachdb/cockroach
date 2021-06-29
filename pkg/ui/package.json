@@ -148,6 +148,7 @@
     "world-atlas": "^1.1.4"
   },
   "resolutions": {
+    "**/es-abstract": "1.18.0-next.1",
     "**/chokidar": "^2.0.0",
     "**/deep-extend": "^0.5.1",
     "**/extend": "^3.0.2",
