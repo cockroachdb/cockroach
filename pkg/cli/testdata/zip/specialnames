@@ -23,7 +23,7 @@ zip
 [cluster] [database: postgres] requesting database details... received response... converting to JSON... writing binary output: debug/schema/postgres@details.json... done
 [cluster] [database: postgres] 0 tables found
 [cluster] [database: system] requesting database details... received response... converting to JSON... writing binary output: debug/schema/system-1@details.json... done
-[cluster] [database: system] 30 tables found
+[cluster] [database: system] 31 tables found
 [cluster] [database: system] [table: public.comments] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_comments.json... done
 [cluster] [database: system] [table: public.descriptor] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_descriptor.json... done
 [cluster] [database: system] [table: public.eventlog] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_eventlog.json... done
@@ -49,6 +49,7 @@ zip
 [cluster] [database: system] [table: public.statement_diagnostics] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_statement_diagnostics.json... done
 [cluster] [database: system] [table: public.statement_diagnostics_requests] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_statement_diagnostics_requests.json... done
 [cluster] [database: system] [table: public.table_statistics] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_table_statistics.json... done
+[cluster] [database: system] [table: public.tenant_usage] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_tenant_usage.json... done
 [cluster] [database: system] [table: public.tenants] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_tenants.json... done
 [cluster] [database: system] [table: public.ui] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_ui.json... done
 [cluster] [database: system] [table: public.users] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_users.json... done

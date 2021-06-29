@@ -19,8 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 )
 
-func joinTokensTableMigration(
+func tenantUsageTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
-	return sqlmigrations.CreateSystemTable(ctx, d.DB, d.Codec, systemschema.JoinTokensTable)
+	// Only create the table on the system tenant.
+	if !d.Codec.ForSystemTenant() {
+		return nil
+	}
+	return sqlmigrations.CreateSystemTable(ctx, d.DB, d.Codec, systemschema.TenantUsageTable)
 }
