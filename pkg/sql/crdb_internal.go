@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -851,28 +852,6 @@ func getSQLStats(p *planner, virtualTableName string) (sqlstats.Storage, error) 
 	return p.extendedEvalCtx.statsStorage, nil
 }
 
-// ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
-func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
-
-	// Create a new json.ObjectBuilder with key-value pairs for the node's name (1),
-	// node's attributes (len(node.Attrs)), and the node's children (1).
-	nodePlan := json.NewObjectBuilder(len(node.Attrs) + 2 /* numAddsHint */)
-	nodeChildren := json.NewArrayBuilder(len(node.Children))
-
-	nodePlan.Add("Name", json.FromString(node.Name))
-
-	for _, attr := range node.Attrs {
-		nodePlan.Add(strings.Title(attr.Key), json.FromString(attr.Value))
-	}
-
-	for _, childNode := range node.Children {
-		nodeChildren.Add(ExplainTreePlanNodeToJSON(childNode))
-	}
-
-	nodePlan.Add("Children", nodeChildren.Build())
-	return nodePlan.Build()
-}
-
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -956,7 +935,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				flags = "!" + flags
 			}
 
-			samplePlan := ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription)
+			samplePlan := sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription)
 
 			execNodeIDs := tree.NewDArray(types.Int)
 			for _, nodeID := range stats.Stats.Nodes {
