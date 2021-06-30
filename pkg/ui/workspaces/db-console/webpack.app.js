@@ -36,7 +36,7 @@ function shouldProxy(reqPath) {
   if (reqPath === "/") {
     return true;
   }
-  return proxyPrefixes.some((prefix) => reqPath.startsWith(prefix));
+  return proxyPrefixes.some(prefix => reqPath.startsWith(prefix));
 }
 
 // tslint:disable:object-literal-sort-keys
@@ -50,8 +50,8 @@ module.exports = (env, argv) => {
   const config = {
     entry: [path.resolve(__dirname, "./src/index.tsx")],
     output: {
-      filename: "distccl/bundle.js",
-      //path: path.resolve(__dirname, `dist${env.dist}`),
+      filename: "bundle.js",
+      path: path.resolve(__dirname, `dist${env.dist}`),
     },
 
     mode: argv.mode || "production",
@@ -67,8 +67,11 @@ module.exports = (env, argv) => {
       // Relative paths would trigger the resolution behavior used by Node.js
       // for "node_modules", i.e., checking for a "node_modules" directory in
       // the current directory *or any parent directory*.
-      modules: [...localRoots, path.resolve(__dirname, "node_modules")],
-      alias: { oss: path.resolve(__dirname) },
+      modules: [...localRoots, "node_modules"],
+      alias: {
+        oss: path.resolve(__dirname),
+        "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
+      },
     },
 
     module: {
@@ -208,13 +211,13 @@ module.exports = (env, argv) => {
         replacements: [
           {
             pattern: /import rootSaga from ".\/sagas";/gi, // match last 'import' expression in module.
-            replacement: function (match, p) {
+            replacement: function(match, p) {
               return `${match}\nimport { fakeMetricsDataGenerationMiddleware } from "src/test-utils/fakeMetricsDataGenerationMiddleware";`;
             },
           },
           {
             pattern: /(?<=applyMiddleware\((.*))\),$/gm,
-            replacement: function (match) {
+            replacement: function(match) {
               return `, fakeMetricsDataGenerationMiddleware${match}`;
             },
           },

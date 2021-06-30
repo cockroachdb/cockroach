@@ -143,7 +143,9 @@ module.exports = {
       amd: "react-dom",
       root: "ReactDom",
     },
-    "react-router-dom": "react-router-dom",
+    // TODO (koorosh): commented out to make bazel build pass
+    // TODO (koorosh): commented out to make bazel build pass
+    //"react-router-dom": "react-router-dom",
     "react-redux": "react-redux",
     "redux-saga": "redux-saga",
     "redux": "redux",

@@ -1,4 +1,4 @@
-load("//pkg/ui/src/js:defs.bzl", "protobufjs_library")
+load("//pkg/ui/workspaces/db-console/src/js:defs.bzl", "protobufjs_library")
 load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 
 package(default_visibility = ["//visibility:public"])
