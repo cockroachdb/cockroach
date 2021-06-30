@@ -75,6 +75,7 @@ crdb_internal  partitions                   table  NULL  NULL  NULL
 crdb_internal  predefined_comments          table  NULL  NULL  NULL
 crdb_internal  ranges                       view   NULL  NULL  NULL
 crdb_internal  ranges_no_leases             table  NULL  NULL  NULL
+crdb_internal  regions                      table  NULL  NULL  NULL
 crdb_internal  schema_changes               table  NULL  NULL  NULL
 crdb_internal  session_trace                table  NULL  NULL  NULL
 crdb_internal  session_variables            table  NULL  NULL  NULL

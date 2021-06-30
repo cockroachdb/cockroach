@@ -2285,6 +2285,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
 		Tracing:              &ex.sessionTracing,
 		NodesStatusServer:    ex.server.cfg.NodesStatusServer,
+		RegionsServer:        ex.server.cfg.RegionsServer,
 		SQLStatusServer:      ex.server.cfg.SQLStatusServer,
 		MemMetrics:           &ex.memMetrics,
 		Descs:                &ex.extraTxnState.descCollection,

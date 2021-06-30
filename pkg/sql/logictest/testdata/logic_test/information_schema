@@ -402,6 +402,7 @@ crdb_internal       partitions
 crdb_internal       predefined_comments
 crdb_internal       ranges
 crdb_internal       ranges_no_leases
+crdb_internal       regions
 crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
@@ -651,6 +652,7 @@ partitions
 predefined_comments
 ranges
 ranges_no_leases
+regions
 schema_changes
 session_trace
 session_variables
@@ -930,6 +932,7 @@ system         crdb_internal       partitions                             SYSTEM
 system         crdb_internal       predefined_comments                    SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges_no_leases                       SYSTEM VIEW  NO                  1
+system         crdb_internal       regions                                SYSTEM VIEW  NO                  1
 system         crdb_internal       schema_changes                         SYSTEM VIEW  NO                  1
 system         crdb_internal       session_trace                          SYSTEM VIEW  NO                  1
 system         crdb_internal       session_variables                      SYSTEM VIEW  NO                  1
@@ -2360,6 +2363,7 @@ NULL     public   system         crdb_internal       partitions                 
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NULL          YES
+NULL     public   system         crdb_internal       regions                                SELECT          NULL          YES
 NULL     public   system         crdb_internal       schema_changes                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       session_trace                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NULL          YES
@@ -2858,6 +2862,7 @@ NULL     public   system         crdb_internal       partitions                 
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NULL          YES
+NULL     public   system         crdb_internal       regions                                SELECT          NULL          YES
 NULL     public   system         crdb_internal       schema_changes                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       session_trace                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NULL          YES

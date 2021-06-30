@@ -74,6 +74,7 @@ test           crdb_internal       partitions                             public
 test           crdb_internal       predefined_comments                    public   SELECT
 test           crdb_internal       ranges                                 public   SELECT
 test           crdb_internal       ranges_no_leases                       public   SELECT
+test           crdb_internal       regions                                public   SELECT
 test           crdb_internal       schema_changes                         public   SELECT
 test           crdb_internal       session_trace                          public   SELECT
 test           crdb_internal       session_variables                      public   SELECT
