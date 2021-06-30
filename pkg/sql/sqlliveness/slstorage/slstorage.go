@@ -168,6 +168,20 @@ func (s *Storage) Start(ctx context.Context) {
 // true, the session may no longer be alive, but if it returns false, the
 // session definitely is not alive.
 func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive bool, err error) {
+	return s.isAlive(ctx, sid, sync)
+}
+
+type readType byte
+
+const (
+	_ readType = iota
+	sync
+	async
+)
+
+func (s *Storage) isAlive(
+	ctx context.Context, sid sqlliveness.SessionID, syncOrAsync readType,
+) (alive bool, err error) {
 	s.mu.Lock()
 	if !s.mu.started {
 		s.mu.Unlock()
@@ -218,6 +232,12 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 		return live, nil
 	})
 	s.mu.Unlock()
+
+	// If we do not want to wait for the result, assume that the session is
+	// indeed alive.
+	if syncOrAsync == async {
+		return true, nil
+	}
 	res := <-resChan
 	if res.Err != nil {
 		return false, err
@@ -378,6 +398,24 @@ func (s *Storage) Update(
 	}
 	s.metrics.WriteSuccesses.Inc(1)
 	return sessionExists, nil
+}
+
+// CachedReader returns an implementation of sqlliveness.Reader which does
+// not synchronously read from the store. Calls to IsAlive will return the
+// currently known state of the session, but will trigger an asynchronous
+// refresh of the state of the session if it is not known.
+func (s *Storage) CachedReader() sqlliveness.Reader {
+	return (*cachedStorage)(s)
+}
+
+// cachedStorage implements sqlliveness.Storage but does not read from the
+// underlying store synchronously during IsAlive.
+type cachedStorage Storage
+
+func (s *cachedStorage) IsAlive(
+	ctx context.Context, sid sqlliveness.SessionID,
+) (alive bool, err error) {
+	return (*Storage)(s).isAlive(ctx, sid, async)
 }
 
 func (s *Storage) makeTablePrefix() roachpb.Key {
