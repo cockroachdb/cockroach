@@ -7,7 +7,6 @@ go_library(
         "foreign_key_representation_upgrade.go",
         "join_tokens.go",
         "migrations.go",
-        "migrations_table.go",
         "protected_ts_meta_migration.go",
         "truncated_state.go",
     ],

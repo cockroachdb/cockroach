@@ -243,19 +243,6 @@ func (m *Manager) runMigration(
 	if !exists {
 		return nil
 	}
-	// The migration which introduces the infrastructure for running other long
-	// running migrations in jobs. It needs to be special-cased and run without
-	// a job or leasing for bootstrapping purposes. Fortunately it has been
-	// designed to be idempotent and cheap.
-	//
-	// TODO(ajwerner): Remove in 21.2.
-	if version.Version == clusterversion.ByKey(clusterversion.LongRunningMigrations) {
-		return mig.(*migration.TenantMigration).Run(ctx, version, migration.TenantDeps{
-			DB:       m.c.DB(),
-			Codec:    m.codec,
-			Settings: m.settings,
-		})
-	}
 	_, isSystemMigration := mig.(*migration.SystemMigration)
 	if isSystemMigration && !m.codec.ForSystemTenant() {
 		return nil
