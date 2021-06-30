@@ -346,6 +346,8 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		atomic.AddInt64(&i.statsAtomics.bytesRead, int64(len(m.Data.RawBytes)))
 		i.scratch.data = i.scratch.data[:0]
 		batchLength, err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes)
+		// Eagerly throw away the RawBytes memory.
+		m.Data.RawBytes = nil
 		if err != nil {
 			colexecerror.InternalError(err)
 		}

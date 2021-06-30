@@ -262,7 +262,8 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	// Run Serialize/Deserialize in a loop to test reuse.
 	for i := 0; i < 2; i++ {
 		buf.Reset()
-		_, _, err := s.Serialize(&buf, data, dataLen)
+		dataCopy := append([]*array.Data{}, data...)
+		_, _, err := s.Serialize(&buf, dataCopy, dataLen)
 		require.NoError(t, err)
 		if buf.Len()%8 != 0 {
 			t.Fatal("message length must align to 8 byte boundary")

@@ -299,6 +299,11 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		vec := b.ColVec(i)
 		d := data[i]
 
+		// Eagerly release our data references to make sure they can be collected
+		// as quickly as possible as we copy each (or simply reference each) by
+		// coldata.Vecs below.
+		data[i] = nil
+
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BoolFamily:
 			boolArr := array.NewBooleanData(d)
