@@ -84,6 +84,18 @@ func Validate(steps []Step, kvs *Engine) []error {
 		}
 		extraKVs = append(extraKVs, kv)
 	}
+	for _, tombstones := range v.deletesForKey {
+		for _, kv := range tombstones {
+			op := &observedWrite{
+				Key:          kv.Key.Key,
+				Value:        roachpb.Value{},
+				Timestamp:    kv.Key.Timestamp,
+				Materialized: true,
+				Delete:       true,
+			}
+			extraKVs = append(extraKVs, op)
+		}
+	}
 	if len(extraKVs) > 0 {
 		err := errors.Errorf(`extra writes: %s`, printObserved(extraKVs...))
 		v.failures = append(v.failures, err)
@@ -171,6 +183,7 @@ type observedWrite struct {
 	// Timestamp will only be filled if Materialized is true.
 	Timestamp    hlc.Timestamp
 	Materialized bool
+	Delete       bool
 }
 
 func (*observedWrite) observedMarker() {}
@@ -192,6 +205,8 @@ type observedScan struct {
 
 func (*observedScan) observedMarker() {}
 
+type mvccKeyValues []storage.MVCCKeyValue
+
 type validator struct {
 	kvs              *Engine
 	observedOpsByTxn map[string][]observedOp
@@ -201,11 +216,19 @@ type validator struct {
 	// written and the operation that wrote it.
 	kvByValue map[string]storage.MVCCKeyValue
 
+	// Unfortunately, with tombstones there is no 1:1 relationship between the nil
+	// value and the delete operation that wrote it, so we must store all deletes
+	// for a given key. When validating committed deletes, we assume that the next
+	// tombstone seen for a key is the delete operation we're validating.
+	// If this is incorrect, we'll end up with "missing" or "extra" writes at the end.
+	deletesForKey map[string]mvccKeyValues
+
 	failures []error
 }
 
 func makeValidator(kvs *Engine) (*validator, error) {
 	kvByValue := make(map[string]storage.MVCCKeyValue)
+	deletesForKey := make(map[string]mvccKeyValues)
 	var err error
 	kvs.Iterate(func(key storage.MVCCKey, value []byte, iterErr error) {
 		if iterErr != nil {
@@ -226,6 +249,9 @@ func makeValidator(kvs *Engine) (*validator, error) {
 			// globally over a run, so there's a 1:1 relationship between a value that
 			// was written and the operation that wrote it.
 			kvByValue[valueStr] = storage.MVCCKeyValue{Key: key, Value: value}
+		} else if len(value) == 0 {
+			rawKey := string(key.Key)
+			deletesForKey[rawKey] = append(deletesForKey[rawKey], storage.MVCCKeyValue{Key: key, Value: []byte(``)})
 		}
 	})
 	if err != nil {
@@ -235,8 +261,22 @@ func makeValidator(kvs *Engine) (*validator, error) {
 	return &validator{
 		kvs:              kvs,
 		kvByValue:        kvByValue,
+		deletesForKey:    deletesForKey,
 		observedOpsByTxn: make(map[string][]observedOp),
 	}, nil
+}
+
+func (v *validator) getAndRemoveNextDeleteForKey(key string) (storage.MVCCKeyValue, error) {
+	if deletesForKey, ok := v.deletesForKey[key]; !ok || len(deletesForKey) == 0 {
+		return storage.MVCCKeyValue{}, errors.Errorf(`expected deletes for key %s`, key)
+	}
+
+	// as deletes for a key are appended in the order they are stored in Pebble,
+	// they will be in reverse chronological order, so pop the next delete off the end
+	deletesForKey := v.deletesForKey[key]
+	nextDelete := deletesForKey[len(deletesForKey)-1]
+	v.deletesForKey[key] = deletesForKey[:len(deletesForKey)-1]
+	return nextDelete, nil
 }
 
 func (v *validator) processOp(txnID *string, op Operation) {
@@ -266,6 +306,17 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			}
 			if write.Materialized {
 				write.Timestamp = kv.Key.Timestamp
+			}
+			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+		}
+	case *DeleteOperation:
+		if txnID == nil {
+			v.checkAtomic(`delete`, t.Result, op)
+		} else {
+			// NB: checking of if deletes materialized or not has to happen at the end of the transaction
+			write := &observedWrite{
+				Key:    t.Key,
+				Delete: true,
 			}
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
 		}
@@ -402,6 +453,7 @@ func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operati
 	}
 	txnObservations := v.observedOpsByTxn[fakeTxnID]
 	delete(v.observedOpsByTxn, fakeTxnID)
+
 	if result.Type != ResultType_Error {
 		v.checkCommittedTxn(`committed `+atomicType, txnObservations)
 	} else if resultIsAmbiguous(result) {
@@ -448,6 +500,7 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 	// will see the overwritten values. This means that each transaction needs its
 	// own view of KV when determining what is and is not valid.
 	//
+	// TODO(sarkesian): include explanation about deletes here if necessary?
 	// Concretely:
 	// - Read k -> <nil>
 	// - Write k -> v1
@@ -479,6 +532,15 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 		case *observedWrite:
 			if _, ok := lastWriteIdxByKey[string(o.Key)]; !ok {
 				lastWriteIdxByKey[string(o.Key)] = idx
+
+				// mark which deletes are materialized and match them with a stored
+				// delete, as this cannot be done before the end of the txn
+				if o.Delete {
+					if storedDelete, err := v.getAndRemoveNextDeleteForKey(string(o.Key)); err == nil {
+						o.Materialized = true
+						o.Timestamp = storedDelete.Key.Timestamp
+					}
+				}
 			}
 			mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
 			if err := batch.Delete(storage.EncodeKey(mvccKey), nil); err != nil {
@@ -590,6 +652,13 @@ func (v *validator) checkAmbiguousTxn(atomicType string, txnObservations []obser
 				somethingCommitted = true
 				break
 			}
+			if o.Delete && len(v.deletesForKey[string(o.Key)]) > 0 {
+				// this one is hard as we don't know for sure if this delete committed,
+				// but we know we still have deletes on this key, so let's assume it
+				// committed.  If incorrect, we'll have a "missing delete" error later.
+				somethingCommitted = true
+				break
+			}
 		}
 	}
 	if !hadWrite {
@@ -615,6 +684,8 @@ func (v *validator) checkUncommittedTxn(atomicType string, txnObservations []obs
 			if o.Materialized {
 				failure = atomicType + ` had writes`
 			}
+			// NB: we aren't checking deletes here.  If an uncommitted delete
+			// materialized, we should have an "extra write" later.
 		case *observedRead:
 			// TODO(dan): Figure out what we can assert about reads in an uncommitted
 			// transaction.
@@ -718,6 +789,7 @@ func validReadTime(b *pebble.Batch, key roachpb.Key, value []byte) timeSpan {
 	} else if len(validTime) == 1 {
 		return validTime[0]
 	} else {
+		// TODO(sarkesian): ensure correct support for reading deleted values & update here
 		// TODO(aayush): Until we add deletes, the "only write each value once"
 		// property of the generator means that we have a 1:1 mapping between some
 		// `(key, possibly-nil-value)` observation and a time span in which it was

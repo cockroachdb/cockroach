@@ -74,7 +74,7 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
-	case *GetOperation, *PutOperation, *ScanOperation, *BatchOperation:
+	case *GetOperation, *PutOperation, *ScanOperation, *BatchOperation, *DeleteOperation, *DeleteRangeOperation:
 		applyClientOp(ctx, db, op)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
@@ -150,6 +150,8 @@ type clientI interface {
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	Del(context.Context, ...interface{}) error
+	DelRange(context.Context, interface{}, interface{}) error
 	Run(context.Context, *kv.Batch) error
 }
 
@@ -194,6 +196,12 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 				}
 			}
 		}
+	case *DeleteOperation:
+		err := db.Del(ctx, o.Key)
+		o.Result = resultError(ctx, err)
+	case *DeleteRangeOperation:
+		err := db.DelRange(ctx, o.Key, o.EndKey)
+		o.Result = resultError(ctx, err)
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
@@ -225,6 +233,11 @@ func applyBatchOp(
 			} else {
 				b.Scan(subO.Key, subO.EndKey)
 			}
+		case *DeleteOperation:
+			b.Del(subO.Key)
+		case *DeleteRangeOperation:
+			// since db.DelRange() doesn't return keys, don't request them here in the batch operation
+			b.DelRange(subO.Key, subO.EndKey, false /* returnKeys */)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -260,6 +273,12 @@ func applyBatchOp(
 					}
 				}
 			}
+		case *DeleteOperation:
+			err := b.Results[i].Err
+			subO.Result = resultError(ctx, err)
+		case *DeleteRangeOperation:
+			err := b.Results[i].Err
+			subO.Result = resultError(ctx, err)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

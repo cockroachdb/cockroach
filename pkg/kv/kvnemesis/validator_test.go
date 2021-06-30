@@ -66,6 +66,15 @@ func TestValidate(t *testing.T) {
 			Value: roachpb.MakeValueFromString(value).RawBytes,
 		}
 	}
+	tombstone := func(key string, ts int) storage.MVCCKeyValue {
+		return storage.MVCCKeyValue{
+			Key: storage.MVCCKey{
+				Key:       []byte(key),
+				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
+			},
+			Value: nil,
+		}
+	}
 	kvs := func(kvs ...storage.MVCCKeyValue) []storage.MVCCKeyValue {
 		return kvs
 	}
@@ -95,9 +104,21 @@ func TestValidate(t *testing.T) {
 			expected: []string{`extra writes: [w]"a":0.000000001,0->v1`},
 		},
 		{
+			name:     "no ops with unexpected delete",
+			steps:    nil,
+			kvs:      kvs(tombstone(`a`, 1)),
+			expected: []string{`extra writes: [w]"a":0.000000001,0-><nil>`},
+		},
+		{
 			name:     "one put with expected write",
 			steps:    []Step{step(withResult(put(`a`, `v1`), nil))},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
+			expected: nil,
+		},
+		{
+			name:     "one delete with expected write",
+			steps:    []Step{step(withResult(del(`a`), nil))},
+			kvs:      kvs(tombstone(`a`, 1)),
 			expected: nil,
 		},
 		{
@@ -107,9 +128,21 @@ func TestValidate(t *testing.T) {
 			expected: []string{`committed put missing write: [w]"a":missing->v1`},
 		},
 		{
+			name:     "one delete with missing write",
+			steps:    []Step{step(withResult(del(`a`), nil))},
+			kvs:      nil,
+			expected: []string{`committed delete missing write: [w]"a":missing-><nil>`},
+		},
+		{
 			name:     "one ambiguous put with successful write",
 			steps:    []Step{step(withResult(put(`a`, `v1`), roachpb.NewAmbiguousResultError(``)))},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
+			expected: nil,
+		},
+		{
+			name:     "one ambiguous delete with successful write",
+			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``)))},
+			kvs:      kvs(tombstone(`a`, 1)),
 			expected: nil,
 		},
 		{
@@ -119,8 +152,29 @@ func TestValidate(t *testing.T) {
 			expected: nil,
 		},
 		{
+			name:     "one ambiguous delete with failed write",
+			steps:    []Step{step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``)))},
+			kvs:      nil,
+			expected: nil,
+		},
+		{
+			name: "one ambiguous delete with failed write before a later committed delete",
+			steps: []Step{
+				step(withResult(del(`a`), roachpb.NewAmbiguousResultError(``))),
+				step(withResult(del(`a`), nil)),
+			},
+			kvs:      kvs(tombstone(`a`, 1)),
+			expected: []string{`committed delete missing write: [w]"a":missing-><nil>`},
+		},
+		{
 			name:     "one retryable put with write (correctly) missing",
 			steps:    []Step{step(withResult(put(`a`, `v1`), retryableError))},
+			kvs:      nil,
+			expected: nil,
+		},
+		{
+			name:     "one retryable delete with write (correctly) missing",
+			steps:    []Step{step(withResult(del(`a`), retryableError))},
 			kvs:      nil,
 			expected: nil,
 		},
@@ -129,6 +183,29 @@ func TestValidate(t *testing.T) {
 			steps:    []Step{step(withResult(put(`a`, `v1`), retryableError))},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: []string{`uncommitted put had writes: [w]"a":0.000000001,0->v1`},
+		},
+		{
+			name:  "one retryable delete with write (incorrectly) present",
+			steps: []Step{step(withResult(del(`a`), retryableError))},
+			kvs:   kvs(tombstone(`a`, 1)),
+			// NB: we can't match an uncommitted delete op to a stored kv like above
+			expected: []string{`extra writes: [w]"a":0.000000001,0-><nil>`},
+		},
+		// TODO(sarkesian): move and/or rename
+		{
+			name: "one delete with expected write after shadowed delete",
+			steps: []Step{
+				step(withResult(del(`a`), nil)),
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withResult(put(`a`, `v0`), nil),
+					withResult(del(`a`), nil),
+					withResult(put(`a`, `v2`), nil),
+				), nil)),
+				step(withResult(del(`a`), nil)),
+			},
+			kvs:      kvs(tombstone(`a`, 1), kv(`a`, 2, `v1`), kv(`a`, 3, `v2`), tombstone(`a`, 4)),
+			expected: nil,
 		},
 		{
 			name:     "one batch put with successful write",

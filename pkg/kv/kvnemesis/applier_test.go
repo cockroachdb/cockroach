@@ -76,6 +76,15 @@ func TestApplier(t *testing.T) {
 	check(t, step(reverseScan(`a`, `c`)), `db0.ReverseScan(ctx, "a", "c", 0) // (["b":"2", "a":"1"], nil)`)
 	check(t, step(reverseScanForUpdate(`a`, `b`)), `db1.ReverseScanForUpdate(ctx, "a", "b", 0) // (["a":"1"], nil)`)
 
+	check(t, step(del(`b`)), `db0.Delete(ctx, "b") // nil`)
+	check(t, step(get(`b`)), `db1.Get(ctx, "b") // (nil, nil)`)
+
+	check(t, step(put(`c`, `3`)), `db0.Put(ctx, "c", 3) // nil`)
+	check(t, step(put(`d`, `4`)), `db1.Put(ctx, "d", 4) // nil`)
+
+	check(t, step(delRange(`b`, `d`)), `db0.DeleteRange(ctx, "b", "d") // nil`)
+	check(t, step(scan(`a`, `e`)), `db1.Scan(ctx, "a", "e", 0) // (["a":"1", "d":"4"], nil)`)
+
 	checkErr(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, context canceled)`)
 	checkErr(t, step(put(`a`, `1`)), `db1.Put(ctx, "a", 1) // context canceled`)
 	checkErr(t, step(scanForUpdate(`a`, `c`)), `db0.ScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
@@ -84,13 +93,14 @@ func TestApplier(t *testing.T) {
 	checkErr(t, step(reverseScanForUpdate(`a`, `c`)), `db0.ReverseScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
 
 	// Batch
-	check(t, step(batch(put(`b`, `2`), get(`a`), scan(`a`, `c`), reverseScanForUpdate(`a`, `c`))), `
+	check(t, step(batch(put(`b`, `2`), get(`a`), delRange(`b`, `d`), scan(`a`, `c`), reverseScanForUpdate(`a`, `e`))), `
 {
   b := &Batch{}
   b.Put(ctx, "b", 2) // nil
   b.Get(ctx, "a") // ("1", nil)
-  b.Scan(ctx, "a", "c") // (["a":"1", "b":"2"], nil)
-  b.ReverseScanForUpdate(ctx, "a", "c") // (["b":"2", "a":"1"], nil)
+  b.DeleteRange(ctx, "b", "d") // nil
+  b.Scan(ctx, "a", "c") // (["a":"1"], nil)
+  b.ReverseScanForUpdate(ctx, "a", "e") // (["d":"4", "a":"1"], nil)
   db1.Run(ctx, b) // nil
 }
 `)
