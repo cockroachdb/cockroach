@@ -620,8 +620,8 @@ def go_deps():
         name = "com_github_cockroachdb_redact",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/redact",
-        sum = "h1:sjlUvGorKMIVQfo+w2RqDi5eewCHn453C/vdIXMzjzI=",
-        version = "v1.0.9",
+        sum = "h1:AKZds10rFSIj7qADf0g46UixK8NNLwWTNdCIGS5wfSQ=",
+        version = "v1.1.3",
     )
     go_repository(
         name = "com_github_cockroachdb_returncheck",
