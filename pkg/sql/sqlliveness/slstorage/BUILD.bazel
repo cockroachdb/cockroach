@@ -44,6 +44,8 @@ go_test(
         ":slstorage",
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -66,5 +68,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
     ],
 )
