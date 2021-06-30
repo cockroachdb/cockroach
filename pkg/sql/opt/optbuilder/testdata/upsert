@@ -1689,71 +1689,61 @@ UPSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95])
 upsert decimals
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: decimals.a:15
- ├── fetch columns: decimals.a:15 decimals.b:16 c:17 d:18
+ ├── canary column: a:11
+ ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
- │    ├── a:10 => decimals.a:1
- │    ├── b:11 => decimals.b:2
- │    ├── c_default:12 => c:3
- │    └── d_comp:14 => d:4
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── d_comp:10 => d:4
  ├── update-mapping:
- │    └── b:11 => decimals.b:2
- ├── check columns: check1:25 check2:26
+ │    └── column2:8 => b:2
+ ├── check columns: check1:21 check2:22
  └── project
-      ├── columns: check1:25 check2:26 a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20 d_comp:21 upsert_a:22 upsert_c:23 upsert_d:24
+      ├── columns: check1:21 check2:22 column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 d_comp:17 upsert_a:18 upsert_c:19 upsert_d:20
       ├── project
-      │    ├── columns: upsert_a:22 upsert_c:23 upsert_d:24 a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20 d_comp:21
+      │    ├── columns: upsert_a:18 upsert_c:19 upsert_d:20 column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 d_comp:17
       │    ├── project
-      │    │    ├── columns: d_comp:21 a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
+      │    │    ├── columns: d_comp:17 column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
+      │    │    │    ├── columns: column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: a:10 b:11 c_default:12 d_comp:14
-      │    │    │    │    ├── grouping columns: a:10
+      │    │    │    │    ├── columns: column1:7!null column2:8 c_default:9!null d_comp:10!null
+      │    │    │    │    ├── grouping columns: column1:7!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: d_comp:14 a:10 b:11 c_default:12
+      │    │    │    │    │    ├── columns: d_comp:10!null column1:7!null column2:8 c_default:9!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: d_comp:13 a:10 b:11 c_default:12
-      │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: a:10 b:11 c_default:12
-      │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: c_default:9!null column1:7!null column2:8
-      │    │    │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8
-      │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
-      │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
-      │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
-      │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
-      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
+      │    │    │    │    │    │    ├── columns: c_default:9!null column1:7!null column2:8
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8
+      │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
+      │    │    │    │    │         └── (column1:7 + c_default:9::DECIMAL)::DECIMAL(10,1) [as=d_comp:10]
       │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=b:11]
-      │    │    │    │         │    └── b:11
-      │    │    │    │         ├── first-agg [as=c_default:12]
-      │    │    │    │         │    └── c_default:12
-      │    │    │    │         └── first-agg [as=d_comp:14]
-      │    │    │    │              └── d_comp:14
+      │    │    │    │         ├── first-agg [as=column2:8]
+      │    │    │    │         │    └── column2:8
+      │    │    │    │         ├── first-agg [as=c_default:9]
+      │    │    │    │         │    └── c_default:9
+      │    │    │    │         └── first-agg [as=d_comp:10]
+      │    │    │    │              └── d_comp:10
       │    │    │    ├── scan decimals
-      │    │    │    │    ├── columns: decimals.a:15!null decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
+      │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── d:18
-      │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
+      │    │    │    │         └── d:14
+      │    │    │    │              └── (a:11::DECIMAL + c:13::DECIMAL)::DECIMAL(10,1)
       │    │    │    └── filters
-      │    │    │         └── a:10 = decimals.a:15
+      │    │    │         └── column1:7 = a:11
       │    │    └── projections
-      │    │         └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1) [as=d_comp:21]
+      │    │         └── (a:11::DECIMAL + c:13::DECIMAL)::DECIMAL(10,1) [as=d_comp:17]
       │    └── projections
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN a:10 ELSE decimals.a:15 END [as=upsert_a:22]
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN c_default:12 ELSE c:17 END [as=upsert_c:23]
-      │         └── CASE WHEN decimals.a:15 IS NULL THEN d_comp:14 ELSE d:18 END [as=upsert_d:24]
+      │         ├── CASE WHEN a:11 IS NULL THEN column1:7 ELSE a:11 END [as=upsert_a:18]
+      │         ├── CASE WHEN a:11 IS NULL THEN c_default:9 ELSE c:13 END [as=upsert_c:19]
+      │         └── CASE WHEN a:11 IS NULL THEN d_comp:10 ELSE d:14 END [as=upsert_d:20]
       └── projections
-           ├── round(upsert_a:22) = upsert_a:22 [as=check1:25]
-           └── b:11[0] > 1 [as=check2:26]
+           ├── round(upsert_a:18) = upsert_a:18 [as=check1:21]
+           └── column2:8[0] > 1 [as=check2:22]
 
 # Regular UPSERT case.
 build
@@ -1762,71 +1752,61 @@ UPSERT INTO decimals (a) VALUES (1.1)
 upsert decimals
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: decimals.a:15
- ├── fetch columns: decimals.a:15 b:16 c:17 d:18
+ ├── canary column: a:11
+ ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
- │    ├── a:10 => decimals.a:1
- │    ├── b_default:11 => b:2
- │    ├── c_default:12 => c:3
- │    └── d_comp:14 => d:4
- ├── check columns: check1:26 check2:27
+ │    ├── column1:7 => a:1
+ │    ├── b_default:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── d_comp:10 => d:4
+ ├── check columns: check1:22 check2:23
  └── project
-      ├── columns: check1:26 check2:27 a:10 b_default:11 c_default:12 d_comp:14 decimals.a:15 b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20 d_comp:21 upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25
+      ├── columns: check1:22 check2:23 column1:7!null b_default:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 d_comp:17 upsert_a:18 upsert_b:19 upsert_c:20 upsert_d:21
       ├── project
-      │    ├── columns: upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25 a:10 b_default:11 c_default:12 d_comp:14 decimals.a:15 b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20 d_comp:21
+      │    ├── columns: upsert_a:18 upsert_b:19 upsert_c:20 upsert_d:21 column1:7!null b_default:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 d_comp:17
       │    ├── project
-      │    │    ├── columns: d_comp:21 a:10 b_default:11 c_default:12 d_comp:14 decimals.a:15 b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
+      │    │    ├── columns: d_comp:17 column1:7!null b_default:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: a:10 b_default:11 c_default:12 d_comp:14 decimals.a:15 b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
+      │    │    │    ├── columns: column1:7!null b_default:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: a:10 b_default:11 c_default:12 d_comp:14
-      │    │    │    │    ├── grouping columns: a:10
+      │    │    │    │    ├── columns: column1:7!null b_default:8 c_default:9!null d_comp:10!null
+      │    │    │    │    ├── grouping columns: column1:7!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: d_comp:14 a:10 b_default:11 c_default:12
+      │    │    │    │    │    ├── columns: d_comp:10!null column1:7!null b_default:8 c_default:9!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: d_comp:13 a:10 b_default:11 c_default:12
-      │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: a:10 b_default:11 c_default:12
-      │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: b_default:8 c_default:9!null column1:7!null
-      │    │    │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    │    │    ├── columns: column1:7!null
-      │    │    │    │    │    │    │    │    │    └── (1.1,)
-      │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         ├── NULL::DECIMAL(5,1)[] [as=b_default:8]
-      │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
-      │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
-      │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(b_default:8, 1) [as=b_default:11]
-      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
+      │    │    │    │    │    │    ├── columns: b_default:8 c_default:9!null column1:7!null
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: column1:7!null
+      │    │    │    │    │    │    │    └── (1.1,)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │    │    │    │    │         ├── NULL::DECIMAL(5,1)[] [as=b_default:8]
+      │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
+      │    │    │    │    │         └── (column1:7 + c_default:9::DECIMAL)::DECIMAL(10,1) [as=d_comp:10]
       │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=b_default:11]
-      │    │    │    │         │    └── b_default:11
-      │    │    │    │         ├── first-agg [as=c_default:12]
-      │    │    │    │         │    └── c_default:12
-      │    │    │    │         └── first-agg [as=d_comp:14]
-      │    │    │    │              └── d_comp:14
+      │    │    │    │         ├── first-agg [as=b_default:8]
+      │    │    │    │         │    └── b_default:8
+      │    │    │    │         ├── first-agg [as=c_default:9]
+      │    │    │    │         │    └── c_default:9
+      │    │    │    │         └── first-agg [as=d_comp:10]
+      │    │    │    │              └── d_comp:10
       │    │    │    ├── scan decimals
-      │    │    │    │    ├── columns: decimals.a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
+      │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── d:18
-      │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
+      │    │    │    │         └── d:14
+      │    │    │    │              └── (a:11::DECIMAL + c:13::DECIMAL)::DECIMAL(10,1)
       │    │    │    └── filters
-      │    │    │         └── a:10 = decimals.a:15
+      │    │    │         └── column1:7 = a:11
       │    │    └── projections
-      │    │         └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1) [as=d_comp:21]
+      │    │         └── (a:11::DECIMAL + c:13::DECIMAL)::DECIMAL(10,1) [as=d_comp:17]
       │    └── projections
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN a:10 ELSE decimals.a:15 END [as=upsert_a:22]
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN b_default:11 ELSE b:16 END [as=upsert_b:23]
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN c_default:12 ELSE c:17 END [as=upsert_c:24]
-      │         └── CASE WHEN decimals.a:15 IS NULL THEN d_comp:14 ELSE d:18 END [as=upsert_d:25]
+      │         ├── CASE WHEN a:11 IS NULL THEN column1:7 ELSE a:11 END [as=upsert_a:18]
+      │         ├── CASE WHEN a:11 IS NULL THEN b_default:8 ELSE b:12 END [as=upsert_b:19]
+      │         ├── CASE WHEN a:11 IS NULL THEN c_default:9 ELSE c:13 END [as=upsert_c:20]
+      │         └── CASE WHEN a:11 IS NULL THEN d_comp:10 ELSE d:14 END [as=upsert_d:21]
       └── projections
-           ├── round(upsert_a:22) = upsert_a:22 [as=check1:26]
-           └── upsert_b:23[0] > 1 [as=check2:27]
+           ├── round(upsert_a:18) = upsert_a:18 [as=check1:22]
+           └── upsert_b:19[0] > 1 [as=check2:23]
 
 # INSERT...ON CONFLICT case.
 build
@@ -1837,77 +1817,63 @@ DO UPDATE SET b=ARRAY[0.99]
 upsert decimals
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: decimals.a:15
- ├── fetch columns: decimals.a:15 decimals.b:16 c:17 d:18
+ ├── canary column: a:11
+ ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
- │    ├── a:10 => decimals.a:1
- │    ├── b:11 => decimals.b:2
- │    ├── c_default:12 => c:3
- │    └── d_comp:14 => d:4
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── d_comp:10 => d:4
  ├── update-mapping:
- │    └── upsert_b:25 => decimals.b:2
- ├── check columns: check1:28 check2:29
+ │    └── upsert_b:20 => b:2
+ ├── check columns: check1:23 check2:24
  └── project
-      ├── columns: check1:28 check2:29 a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20 b_new:22 d_comp:23 upsert_a:24 upsert_b:25 upsert_c:26 upsert_d:27
+      ├── columns: check1:23 check2:24 column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 b_new:17!null d_comp:18 upsert_a:19 upsert_b:20 upsert_c:21 upsert_d:22
       ├── project
-      │    ├── columns: upsert_a:24 upsert_b:25 upsert_c:26 upsert_d:27 a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20 b_new:22 d_comp:23
+      │    ├── columns: upsert_a:19 upsert_b:20 upsert_c:21 upsert_d:22 column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 b_new:17!null d_comp:18
       │    ├── project
-      │    │    ├── columns: d_comp:23 a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20 b_new:22
+      │    │    ├── columns: d_comp:18 column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 b_new:17!null
       │    │    ├── project
-      │    │    │    ├── columns: b_new:22 a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: b_new:21!null a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
-      │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: a:10 b:11 c_default:12 d_comp:14 decimals.a:15 decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
-      │    │    │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    │    │    ├── columns: a:10 b:11 c_default:12 d_comp:14
-      │    │    │    │    │    │    ├── grouping columns: a:10
+      │    │    │    ├── columns: b_new:17!null column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    ├── left-join (hash)
+      │    │    │    │    ├── columns: column1:7!null column2:8 c_default:9!null d_comp:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    │    ├── columns: column1:7!null column2:8 c_default:9!null d_comp:10!null
+      │    │    │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: d_comp:10!null column1:7!null column2:8 c_default:9!null
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: d_comp:14 a:10 b:11 c_default:12
-      │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: d_comp:13 a:10 b:11 c_default:12
-      │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    ├── columns: a:10 b:11 c_default:12
-      │    │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    │    ├── columns: c_default:9!null column1:7!null column2:8
-      │    │    │    │    │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8
-      │    │    │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
-      │    │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
-      │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
-      │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
-      │    │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
-      │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │    │    │    │    │    │    ├── columns: c_default:9!null column1:7!null column2:8
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8
+      │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
-      │    │    │    │    │    │    └── aggregations
-      │    │    │    │    │    │         ├── first-agg [as=b:11]
-      │    │    │    │    │    │         │    └── b:11
-      │    │    │    │    │    │         ├── first-agg [as=c_default:12]
-      │    │    │    │    │    │         │    └── c_default:12
-      │    │    │    │    │    │         └── first-agg [as=d_comp:14]
-      │    │    │    │    │    │              └── d_comp:14
-      │    │    │    │    │    ├── scan decimals
-      │    │    │    │    │    │    ├── columns: decimals.a:15!null decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
-      │    │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │    │         └── d:18
-      │    │    │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── a:10 = decimals.a:15
-      │    │    │    │    └── projections
-      │    │    │    │         └── ARRAY[0.99] [as=b_new:21]
+      │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── (column1:7 + c_default:9::DECIMAL)::DECIMAL(10,1) [as=d_comp:10]
+      │    │    │    │    │    └── aggregations
+      │    │    │    │    │         ├── first-agg [as=column2:8]
+      │    │    │    │    │         │    └── column2:8
+      │    │    │    │    │         ├── first-agg [as=c_default:9]
+      │    │    │    │    │         │    └── c_default:9
+      │    │    │    │    │         └── first-agg [as=d_comp:10]
+      │    │    │    │    │              └── d_comp:10
+      │    │    │    │    ├── scan decimals
+      │    │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:14
+      │    │    │    │    │              └── (a:11::DECIMAL + c:13::DECIMAL)::DECIMAL(10,1)
+      │    │    │    │    └── filters
+      │    │    │    │         └── column1:7 = a:11
       │    │    │    └── projections
-      │    │    │         └── crdb_internal.round_decimal_values(b_new:21, 1) [as=b_new:22]
+      │    │    │         └── ARRAY[0.99] [as=b_new:17]
       │    │    └── projections
-      │    │         └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1) [as=d_comp:23]
+      │    │         └── (a:11::DECIMAL + c:13::DECIMAL)::DECIMAL(10,1) [as=d_comp:18]
       │    └── projections
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN a:10 ELSE decimals.a:15 END [as=upsert_a:24]
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN b:11 ELSE b_new:22 END [as=upsert_b:25]
-      │         ├── CASE WHEN decimals.a:15 IS NULL THEN c_default:12 ELSE c:17 END [as=upsert_c:26]
-      │         └── CASE WHEN decimals.a:15 IS NULL THEN d_comp:14 ELSE d:18 END [as=upsert_d:27]
+      │         ├── CASE WHEN a:11 IS NULL THEN column1:7 ELSE a:11 END [as=upsert_a:19]
+      │         ├── CASE WHEN a:11 IS NULL THEN column2:8 ELSE b_new:17 END [as=upsert_b:20]
+      │         ├── CASE WHEN a:11 IS NULL THEN c_default:9 ELSE c:13 END [as=upsert_c:21]
+      │         └── CASE WHEN a:11 IS NULL THEN d_comp:10 ELSE d:14 END [as=upsert_d:22]
       └── projections
-           ├── round(upsert_a:24) = upsert_a:24 [as=check1:28]
-           └── upsert_b:25[0] > 1 [as=check2:29]
+           ├── round(upsert_a:19) = upsert_a:19 [as=check1:23]
+           └── upsert_b:20[0] > 1 [as=check2:24]

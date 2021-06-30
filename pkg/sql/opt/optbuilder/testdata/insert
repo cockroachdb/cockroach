@@ -1149,37 +1149,27 @@ INSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95, NULL, 15])
 insert decimals
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── a:10 => decimals.a:1
- │    ├── b:11 => decimals.b:2
- │    ├── c_default:12 => c:3
- │    └── d_comp:14 => d:4
- ├── check columns: check1:15 check2:16
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── d_comp:10 => d:4
+ ├── check columns: check1:11 check2:12
  └── project
-      ├── columns: check1:15 check2:16 a:10 b:11 c_default:12 d_comp:14
+      ├── columns: check1:11 check2:12 column1:7!null column2:8 c_default:9!null d_comp:10!null
       ├── project
-      │    ├── columns: d_comp:14 a:10 b:11 c_default:12
+      │    ├── columns: d_comp:10!null column1:7!null column2:8 c_default:9!null
       │    ├── project
-      │    │    ├── columns: d_comp:13 a:10 b:11 c_default:12
-      │    │    ├── project
-      │    │    │    ├── columns: a:10 b:11 c_default:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: c_default:9!null column1:7!null column2:8
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:7!null column2:8
-      │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
-      │    │    │    │    └── projections
-      │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
-      │    │    │    └── projections
-      │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
-      │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
-      │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
+      │    │    ├── columns: c_default:9!null column1:7!null column2:8
+      │    │    ├── values
+      │    │    │    ├── columns: column1:7!null column2:8
+      │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
       │    │    └── projections
-      │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
       │    └── projections
-      │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
+      │         └── (column1:7 + c_default:9::DECIMAL)::DECIMAL(10,1) [as=d_comp:10]
       └── projections
-           ├── round(a:10) = a:10 [as=check1:15]
-           └── b:11[0] > 1 [as=check2:16]
+           ├── round(column1:7) = column1:7 [as=check1:11]
+           └── column2:8[0] > 1 [as=check2:12]
 
 # Regression test for #38293; the default values should be separate projections.
 exec-ddl

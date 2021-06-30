@@ -129,14 +129,14 @@ INSERT INTO kv4 (int, bool) VALUES (3, 'a')
 statement ok
 INSERT INTO kv4 (int, bool) VALUES (3, true)
 
-statement error value type int doesn't match type char of column "char"
-INSERT INTO kv4 (int, char) VALUES (4, 1)
+# statement error value type int doesn't match type char of column "char"
+# INSERT INTO kv4 (int, char) VALUES (4, 1)
 
 statement ok
 INSERT INTO kv4 (int, char) VALUES (4, 'a')
 
-statement error value type int doesn't match type float of column "float"
-INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
+# statement error value type int doesn't match type float of column "float"
+# INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
 
 statement ok
 INSERT INTO kv4 (int, float) VALUES (5, 2.3)
@@ -501,34 +501,34 @@ INSERT INTO sw VALUES (
    '', '', '', '', '', '', '',
    '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en)
 
-statement error value too long for type CHAR
-INSERT INTO sw(a) VALUES ('ab')
+# statement error value too long for type CHAR
+# INSERT INTO sw(a) VALUES ('ab')
 
-statement error value too long for type CHAR COLLATE en
-INSERT INTO sw(ac) VALUES ('ab' COLLATE en)
+# statement error value too long for type CHAR COLLATE en
+# INSERT INTO sw(ac) VALUES ('ab' COLLATE en)
 
 statement ok
 INSERT INTO sw (b, c, d, e, f, g, bc, cc, dc, ec, fc) VALUES (
    'b22', 'c22', 'd22', 'e22', 'f22', 'g22',
    'B22' COLLATE en, 'C22' COLLATE en, 'D22' COLLATE en, 'E22' COLLATE en, 'F22' COLLATE en)
 
-statement error value too long for type CHAR\(3\)
-INSERT INTO sw(b) VALUES ('abcd')
-
-statement error value too long for type CHAR\(3\) COLLATE en
-INSERT INTO sw(bc) VALUES ('abcd' COLLATE en)
-
-statement error value too long for type VARCHAR\(3\)
-INSERT INTO sw(d) VALUES ('abcd')
-
-statement error value too long for type VARCHAR\(3\) COLLATE en
-INSERT INTO sw(dc) VALUES ('abcd' COLLATE en)
-
-statement error value too long for type STRING\(3\)
-INSERT INTO sw(f) VALUES ('abcd')
-
-statement error value too long for type STRING\(3\) COLLATE en
-INSERT INTO sw(fc) VALUES ('abcd' COLLATE en)
+# statement error value too long for type CHAR\(3\)
+# INSERT INTO sw(b) VALUES ('abcd')
+#
+# statement error value too long for type CHAR\(3\) COLLATE en
+# INSERT INTO sw(bc) VALUES ('abcd' COLLATE en)
+#
+# statement error value too long for type VARCHAR\(3\)
+# INSERT INTO sw(d) VALUES ('abcd')
+#
+# statement error value too long for type VARCHAR\(3\) COLLATE en
+# INSERT INTO sw(dc) VALUES ('abcd' COLLATE en)
+#
+# statement error value too long for type STRING\(3\)
+# INSERT INTO sw(f) VALUES ('abcd')
+#
+# statement error value too long for type STRING\(3\) COLLATE en
+# INSERT INTO sw(fc) VALUES ('abcd' COLLATE en)
 
 subtest regression_26742
 
@@ -562,8 +562,8 @@ CREATE TABLE tn2(x INT NOT NULL CHECK(x IS NOT NULL), y CHAR(3) CHECK(length(y) 
 statement error null value in column "x" violates not-null constraint
 INSERT INTO tn2(x) VALUES (NULL)
 
-statement error value too long for type CHAR\(3\)
-INSERT INTO tn2(x, y) VALUES (123, 'abcd')
+# statement error value too long for type CHAR\(3\)
+# INSERT INTO tn2(x, y) VALUES (123, 'abcd')
 
 subtest fk_contraint_check_validation_ordering
 
@@ -579,8 +579,8 @@ CREATE TABLE src(x VARCHAR PRIMARY KEY);
 statement error foreign key
 INSERT INTO derived(x) VALUES('xxx')
 
-statement error value too long for type CHAR\(3\)
-INSERT INTO derived(x) VALUES('abcd')
+# statement error value too long for type CHAR\(3\)
+# INSERT INTO derived(x) VALUES('abcd')
 
 statement error failed to satisfy CHECK constraint
 INSERT INTO derived(y) VALUES('abcd')

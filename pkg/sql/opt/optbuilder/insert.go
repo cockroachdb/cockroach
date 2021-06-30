@@ -636,13 +636,13 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 
 	// Possibly round DECIMAL-related columns containing insertion values (whether
 	// synthesized or not).
-	mb.roundDecimalValues(mb.insertColIDs, false /* roundComputedCols */)
+	// mb.roundDecimalValues(mb.insertColIDs, false /* roundComputedCols */)
 
 	// Now add all computed columns.
 	mb.addSynthesizedComputedCols(mb.insertColIDs, false /* restrict */)
 
 	// Possibly round DECIMAL-related computed columns.
-	mb.roundDecimalValues(mb.insertColIDs, true /* roundComputedCols */)
+	// mb.roundDecimalValues(mb.insertColIDs, true /* roundComputedCols */)
 }
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project

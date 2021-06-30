@@ -311,7 +311,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// Possibly round DECIMAL-related columns containing update values. Do
 	// this before evaluating computed expressions, since those may depend on
 	// the inserted columns.
-	mb.roundDecimalValues(mb.updateColIDs, false /* roundComputedCols */)
+	// mb.roundDecimalValues(mb.updateColIDs, false /* roundComputedCols */)
 
 	// Disambiguate names so that references in the computed expression refer to
 	// the correct columns.
@@ -321,7 +321,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	mb.addSynthesizedComputedCols(mb.updateColIDs, true /* restrict */)
 
 	// Possibly round DECIMAL-related computed columns.
-	mb.roundDecimalValues(mb.updateColIDs, true /* roundComputedCols */)
+	// mb.roundDecimalValues(mb.updateColIDs, true /* roundComputedCols */)
 }
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project

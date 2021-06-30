@@ -71,10 +71,11 @@ func (b *Builder) buildValuesClause(
 			}
 
 			expr := inScope.walkExprTree(tuple[colIdx])
-			texpr, err := tree.TypeCheck(b.ctx, expr, b.semaCtx, desired)
-			if err != nil {
-				panic(err)
-			}
+			texpr := inScope.resolveAndRequireType(expr, desired)
+			// texpr, err := tree.TypeCheck(b.ctx, expr, b.semaCtx, desired)
+			// if err != nil {
+			// 	panic(err)
+			// }
 			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
 				if colTypes[colIdx].Family() == types.UnknownFamily {
 					colTypes[colIdx] = typ
