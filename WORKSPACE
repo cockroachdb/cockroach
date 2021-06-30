@@ -181,6 +181,7 @@ toolchain_dependencies()
 
 register_toolchains(
     "//build/toolchains:cross_linux_toolchain",
+    "//build/toolchains:cross_linux_arm_toolchain",
     "//build/toolchains:cross_macos_toolchain",
     "//build/toolchains:cross_windows_toolchain",
 )

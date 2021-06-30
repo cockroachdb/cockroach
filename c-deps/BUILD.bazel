@@ -12,6 +12,7 @@ configure_make(
     ] + select({
         "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
         "@io_bazel_rules_go//go/platform:darwin": ["--host=x86_64-apple-darwin19"],
+        "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
         "//conditions:default": [],
     }),
     lib_source = "@jemalloc//:all",
