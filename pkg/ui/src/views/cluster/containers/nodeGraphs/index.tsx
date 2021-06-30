@@ -57,6 +57,7 @@ import queuesDashboard from "./dashboards/queues";
 import requestsDashboard from "./dashboards/requests";
 import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
+import overloadDashboard from "./dashboards/overload";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -81,6 +82,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   queues: { label: "Queues", component: queuesDashboard },
   requests: { label: "Slow Requests", component: requestsDashboard },
   changefeeds: { label: "Changefeeds", component: changefeedsDashboard },
+  overload: { label: "Overload", component: overloadDashboard },
 };
 
 const defaultDashboard = "overview";

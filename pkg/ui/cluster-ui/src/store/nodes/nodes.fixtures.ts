@@ -895,6 +895,8 @@ export const getNodeStatus = () => {
           "rocksdb.memtable.total-size": 67108864,
           "rocksdb.num-sstables": 4,
           "rocksdb.read-amplification": 1,
+          "storage.l0-sublevels": 1,
+          "storage.l0-num-files": 1,
           "rocksdb.table-readers-mem-estimate": 1848,
           "storage.disk-slow": 0,
           "storage.disk-stalled": 0,
