@@ -270,10 +270,6 @@ func (b *nTileBase) startNewPartition() {
 	b.hasArg = false
 }
 
-func (b *nTileBase) Init(ctx context.Context) {
+func (b *nTileBase) Init(ctx context.Context) {}
 
-}
-
-func (b *nTileBase) Close() error {
-	return nil
-}
+func (b *nTileBase) Close() {}
