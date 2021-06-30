@@ -405,11 +405,10 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 // If there are no draining names, this call will not update any descriptors.
 func drainNamesForDescriptor(
 	ctx context.Context,
-	settings *cluster.Settings,
 	descID descpb.ID,
+	cf *descs.CollectionFactory,
 	db *kv.DB,
 	ie sqlutil.InternalExecutor,
-	leaseMgr *lease.Manager,
 	codec keys.SQLCodec,
 	beforeDrainNames func(),
 ) error {
@@ -463,7 +462,7 @@ func drainNamesForDescriptor(
 		}
 		return txn.Run(ctx, b)
 	}
-	return descs.Txn(ctx, settings, leaseMgr, ie, db, run)
+	return cf.Txn(ctx, ie, db, run)
 }
 
 func startGCJob(
@@ -577,7 +576,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// If there are any names to drain, then drain them.
 	if len(desc.GetDrainingNames()) > 0 {
 		if err := drainNamesForDescriptor(
-			ctx, sc.settings, desc.GetID(), sc.db, sc.execCfg.InternalExecutor, sc.leaseMgr,
+			ctx, desc.GetID(), sc.execCfg.CollectionFactory, sc.db, sc.execCfg.InternalExecutor,
 			sc.execCfg.Codec, sc.testingKnobs.OldNamesDrainedNotification,
 		); err != nil {
 			return err
@@ -1021,7 +1020,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// descriptor updates are published.
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
-	err := descs.Txn(ctx, sc.settings, sc.leaseMgr, sc.execCfg.InternalExecutor, sc.db, func(
+	err := sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
@@ -1951,8 +1950,7 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
-	err := descs.Txn(ctx, sc.settings, sc.leaseMgr, sc.execCfg.InternalExecutor, sc.db, f)
-	return err
+	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.

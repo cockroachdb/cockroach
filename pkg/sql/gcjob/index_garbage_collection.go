@@ -86,10 +86,7 @@ func gcIndexes(
 				ctx, txn, execCfg, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
-		lm, ie, db := execCfg.LeaseManager, execCfg.InternalExecutor, execCfg.DB
-		if err := descs.Txn(
-			ctx, execCfg.Settings, lm, ie, db, removeIndexZoneConfigs,
-		); err != nil {
+		if err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs); err != nil {
 			return errors.Wrapf(err, "removing index %d zone configs", index.IndexID)
 		}
 

@@ -288,10 +288,7 @@ func createPostgresSchemas(
 		}
 		return nil
 	}
-	if err := descs.Txn(
-		ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
-		execCfg.DB, createSchemaDescs,
-	); err != nil {
+	if err := sql.DescsTxn(ctx, execCfg, createSchemaDescs); err != nil {
 		return nil, err
 	}
 	return schemaDescs, nil
