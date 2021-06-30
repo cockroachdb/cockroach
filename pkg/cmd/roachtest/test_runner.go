@@ -888,7 +888,15 @@ func (r *testRunner) maybePostGithubIssue(
 	if err != nil {
 		t.Fatalf("could not load teams: %v", err)
 	}
-	team := teams[ownerToAlias(t.Spec().(*TestSpec).Owner)]
+
+	var mention []string
+	var projColID int
+	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*TestSpec).Owner), team.PurposeRoachtest); ok {
+		for _, alias := range sl {
+			mention = append(mention, "@"+string(alias))
+		}
+		projColID = teams[sl[0]].TriageColumnID
+	}
 
 	branch := "<unknown branch>"
 	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
@@ -908,8 +916,8 @@ func (r *testRunner) maybePostGithubIssue(
 
 	req := issues.PostRequest{
 		AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
-		Mention:         []string{"@" + string(team.Name())},
-		ProjectColumnID: team.TriageColumnID,
+		Mention:         mention,
+		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        t.Name(),
 		Message:         msg,
