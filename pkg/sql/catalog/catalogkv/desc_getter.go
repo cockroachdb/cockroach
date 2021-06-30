@@ -54,6 +54,7 @@ func (t *oneLevelUncachedDescGetter) fromKeyValue(
 		// 3. it's not used by validation at this level anyway.
 		nil, /* dg */
 		catalog.ValidationLevelSelfOnly,
+		true, /* shouldRunPostDeserializationChanges */
 	)
 }
 
