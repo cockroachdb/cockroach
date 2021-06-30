@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // Dependencies contains all the dependencies required by the executor.
@@ -27,6 +28,7 @@ type Dependencies interface {
 	Catalog() Catalog
 	TransactionalJobCreator() TransactionalJobCreator
 	IndexBackfiller() IndexBackfiller
+	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	JobProgressTracker() JobProgressTracker
 
@@ -89,6 +91,26 @@ type IndexBackfiller interface {
 		_ catalog.TableDescriptor,
 		source descpb.IndexID,
 		destinations ...descpb.IndexID,
+	) error
+}
+
+// IndexValidator provides interfaces that allow indexes to be validated.
+type IndexValidator interface {
+	ValidateForwardIndexes(
+		ctx context.Context,
+		tableDesc catalog.TableDescriptor,
+		indexes []catalog.Index,
+		withFirstMutationPublic bool,
+		gatherAllInvalid bool,
+		override sessiondata.InternalExecutorOverride,
+	) error
+
+	ValidateInvertedIndexes(
+		ctx context.Context,
+		tableDesc catalog.TableDescriptor,
+		indexes []catalog.Index,
+		gatherAllInvalid bool,
+		override sessiondata.InternalExecutorOverride,
 	) error
 }
 

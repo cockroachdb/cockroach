@@ -228,10 +228,10 @@ func TestPlanGraphSort(t *testing.T) {
 		},
 	}
 	ops := []scop.Op{
-		&scop.AddTypeBackRef{},
-		&scop.AddTypeBackRef{},
-		&scop.AddTypeBackRef{},
-		&scop.AddTypeBackRef{},
+		&scop.NoOpInfo{},
+		&scop.NoOpInfo{},
+		&scop.NoOpInfo{},
+		&scop.NoOpInfo{},
 	}
 	opsToSort := make([]scop.Op, len(ops))
 	copy(opsToSort, ops)

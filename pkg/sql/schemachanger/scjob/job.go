@@ -18,9 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func init() {
@@ -66,6 +70,10 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		n.job,
 		execCfg.Codec,
 		execCfg.Settings,
+		sql.MakeIndexValidator(execCfg.DB, execCfg.Codec, execCfg.InternalExecutor),
+		func(ctx context.Context, tableDesc *tabledesc.Mutable, indexDesc descpb.IndexDescriptor, partBy *tree.PartitionBy, allowedNewColumnNames []tree.Name, allowImplicitPartitioning bool) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
+			panic("not implemented for jobs")
+		},
 		execCfg.NewSchemaChangerTestingKnobs,
 		payload.Statement,
 	)

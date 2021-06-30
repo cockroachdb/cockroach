@@ -19,20 +19,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
+
+// CreatePartitioningFn callback function for creating a partitioning
+// descriptor.
+type CreatePartitioningFn func(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	indexDesc descpb.IndexDescriptor,
+	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
+) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error)
 
 // NewExecutorDependencies returns an scexec.Dependencies implementation built
 // from the given arguments.
@@ -42,16 +51,20 @@ func NewExecutorDependencies(
 	descsCollection *descs.Collection,
 	jobRegistry *jobs.Registry,
 	indexBackfiller scexec.IndexBackfiller,
+	indexValidator scexec.IndexValidator,
+	createPartitioningFn CreatePartitioningFn,
 	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
 	statements []string,
 	phase scop.Phase,
 ) scexec.Dependencies {
 	return &execDeps{
 		txnDeps: txnDeps{
-			txn:             txn,
-			codec:           codec,
-			descsCollection: descsCollection,
-			jobRegistry:     jobRegistry,
+			txn:                  txn,
+			codec:                codec,
+			descsCollection:      descsCollection,
+			jobRegistry:          jobRegistry,
+			indexValidator:       indexValidator,
+			createPartitioningFn: createPartitioningFn,
 		},
 		indexBackfiller: indexBackfiller,
 		testingKnobs:    testingKnobs,
@@ -61,12 +74,12 @@ func NewExecutorDependencies(
 }
 
 type txnDeps struct {
-	txn             *kv.Txn
-	codec           keys.SQLCodec
-	descsCollection *descs.Collection
-	jobRegistry     *jobs.Registry
-	st              *cluster.Settings
-	evalCtx         *tree.EvalContext
+	txn                  *kv.Txn
+	codec                keys.SQLCodec
+	descsCollection      *descs.Collection
+	jobRegistry          *jobs.Registry
+	indexValidator       scexec.IndexValidator
+	createPartitioningFn CreatePartitioningFn
 }
 
 var _ scexec.Catalog = (*txnDeps)(nil)
@@ -142,7 +155,7 @@ func (d *txnDeps) AddPartitioning(
 		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
 	}
 	// Create the paritioning
-	newImplicitCols, newPartitioning, err := scbuild.CreatePartitioningCCL(ctx, d.st, d.evalCtx, tableDesc, *indexDesc, partitionBy, allowedNewColumnNames, allowImplicitPartitioning)
+	newImplicitCols, newPartitioning, err := d.createPartitioningFn(ctx, tableDesc, *indexDesc, partitionBy, allowedNewColumnNames, allowImplicitPartitioning)
 	if err != nil {
 		return err
 	}
@@ -272,6 +285,10 @@ func (d *execDeps) Catalog() scexec.Catalog {
 // IndexBackfiller implements the scexec.Dependencies interface.
 func (d *execDeps) IndexBackfiller() scexec.IndexBackfiller {
 	return d.indexBackfiller
+}
+
+func (d *execDeps) IndexValidator() scexec.IndexValidator {
+	return d.indexValidator
 }
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.

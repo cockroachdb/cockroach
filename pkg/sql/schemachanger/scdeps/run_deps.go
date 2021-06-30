@@ -76,20 +76,24 @@ func NewJobExecutionDependencies(
 	job *jobs.Job,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
+	indexValidator scexec.IndexValidator,
+	createPartitioningFn CreatePartitioningFn,
 	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
 	statements []string,
 ) scrun.SchemaChangeJobExecutionDependencies {
 	return &jobExecutionDeps{
-		collectionFactory: collectionFactory,
-		db:                db,
-		internalExecutor:  internalExecutor,
-		indexBackfiller:   indexBackfiller,
-		jobRegistry:       jobRegistry,
-		job:               job,
-		codec:             codec,
-		settings:          settings,
-		testingKnobs:      testingKnobs,
-		statements:        statements,
+		collectionFactory:    collectionFactory,
+		db:                   db,
+		internalExecutor:     internalExecutor,
+		indexBackfiller:      indexBackfiller,
+		jobRegistry:          jobRegistry,
+		job:                  job,
+		codec:                codec,
+		settings:             settings,
+		testingKnobs:         testingKnobs,
+		statements:           statements,
+		indexValidator:       indexValidator,
+		createPartitioningFn: createPartitioningFn,
 	}
 }
 
@@ -100,6 +104,9 @@ type jobExecutionDeps struct {
 	indexBackfiller   scexec.IndexBackfiller
 	jobRegistry       *jobs.Registry
 	job               *jobs.Job
+
+	indexValidator       scexec.IndexValidator
+	createPartitioningFn CreatePartitioningFn
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
@@ -125,10 +132,12 @@ func (d *jobExecutionDeps) WithTxnInJob(
 		return fn(ctx, &jobExecutionTxnDeps{
 			jobExecutionDeps: *d,
 			txnDeps: txnDeps{
-				txn:             txn,
-				codec:           d.codec,
-				descsCollection: descriptors,
-				jobRegistry:     d.jobRegistry,
+				txn:                  txn,
+				codec:                d.codec,
+				descsCollection:      descriptors,
+				jobRegistry:          d.jobRegistry,
+				indexValidator:       d.indexValidator,
+				createPartitioningFn: d.createPartitioningFn,
 			},
 		})
 	})
@@ -162,6 +171,7 @@ func (d *jobExecutionTxnDeps) ExecutorDependencies() scexec.Dependencies {
 		indexBackfiller: d.indexBackfiller,
 		testingKnobs:    d.testingKnobs,
 		statements:      d.statements,
-		phase:           scop.PostCommitPhase,
+
+		phase: scop.PostCommitPhase,
 	}
 }
