@@ -13,6 +13,7 @@ package keys
 import (
 	"bytes"
 	"fmt"
+	"github.com/cockroachdb/redact"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -697,8 +698,58 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return prettyPrintInternal(valDirs, key, true /* quoteRawKeys */)
 }
 
+func formatTableKey(w redact.SafeWriter, dirs []encoding.Direction, key roachpb.Key) {
+	w.SafeString("/Table")
+	if key.Equal(SystemConfigSpan.Key) {
+		w.SafeString("/SystemConfigSpan/Start")
+		return
+	}
+
+	vals, types := encoding.PrettyPrintValuesWithTypes(dirs, key)
+	prefixLength := 2
+	if len(vals) < 2 {
+		prefixLength = len(vals)
+	}
+	for i := 0; i < prefixLength; i++ {
+		if types[i] != encoding.Int {
+			prefixLength -= (prefixLength - i)
+			break
+		}
+		w.Printf("/%v", redact.Safe(vals[i]))
+	}
+	for _, val := range vals[prefixLength:] {
+		w.Printf("/%s", val)
+	}
+}
+
+func formatTenantKey(w redact.SafeWriter, dirs []encoding.Direction, key roachpb.Key) {
+	w.SafeString("/Tenant")
+	key, tID, err := DecodeTenantPrefix(key)
+	if err != nil {
+		w.Printf("/err:%v", redact.SafeString(err.Error()))
+		return
+	}
+
+	w.Printf("/%s", redact.Safe(tID))
+	if len(key) != 0 {
+		SafeFormat(w, dirs, key)
+	}
+}
+
+func SafeFormat(w redact.SafeWriter, dirs []encoding.Direction, key roachpb.Key) {
+	switch {
+	case key.Compare(TenantTableDataMin) >= 0 && key.Compare(TenantTableDataMax) <= 0:
+		formatTenantKey(w, dirs, key)
+	case key.Compare(TableDataMin) >= 0 && key.Compare(TableDataMax) <= 0:
+		formatTableKey(w, dirs, key)
+	default:
+		w.Print(prettyPrintInternal(dirs, key, true /* quoteRawKeys */))
+	}
+}
+
 func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
+	roachpb.SafeFormatKey = SafeFormat
 	roachpb.PrettyPrintRange = PrettyPrintRange
 	lockTablePrintLockedKey = prettyPrintInternal
 }

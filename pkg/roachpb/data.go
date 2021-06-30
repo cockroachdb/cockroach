@@ -75,6 +75,8 @@ var (
 	// encoding.go:prettyPrintFirstValue).
 	PrettyPrintKey func(valDirs []encoding.Direction, key Key) string
 
+	SafeFormatKey func(w redact.SafeWriter, dirs []encoding.Direction, key Key)
+
 	// PrettyPrintRange prints a key range in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
 	// package circle import.
@@ -86,6 +88,10 @@ var (
 //
 // RKey stands for "resolved key," as in a key whose address has been resolved.
 type RKey Key
+
+func (rk RKey) SafeFormat(w redact.SafePrinter, r rune) {
+	rk.AsRawKey().SafeFormat(w, r)
+}
 
 // AsRawKey returns the RKey as a Key. This is to be used only in select
 // situations in which an RKey is known to not contain a wrapped locally-
@@ -133,7 +139,7 @@ func (rk RKey) String() string {
 	return Key(rk).String()
 }
 
-// StringWithDirs - see Key.String.WithDirs.
+// StringWithDirs - see Key.StringWithDirs.
 func (rk RKey) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
 	return Key(rk).StringWithDirs(valDirs, maxLen)
 }
@@ -141,6 +147,11 @@ func (rk RKey) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
 // Key is a custom type for a byte string in proto
 // messages which refer to Cockroach keys.
 type Key []byte
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (k Key) SafeFormat(w redact.SafePrinter, _ rune) {
+	SafeFormatKey(w, nil, k)
+}
 
 // BytesNext returns the next possible byte slice, using the extra capacity
 // of the provided slice if possible, and if not, appending an \x00.
@@ -210,7 +221,7 @@ func (k Key) Compare(b Key) int {
 
 // String returns a string-formatted version of the key.
 func (k Key) String() string {
-	return k.StringWithDirs(nil /* valDirs */, 0 /* maxLen */)
+	return redact.StringWithoutMarkers(k)
 }
 
 // StringWithDirs is the value encoding direction-aware version of String.
