@@ -166,7 +166,11 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 				// but it means that we'll won't catch it if we violate those semantics.
 				// Consider first doing a Get and somehow failing if this exact key+ts
 				// has previously been put with a different value.
-				w.mu.kvs.Put(storage.MVCCKey{Key: e.Key, Timestamp: e.Value.Timestamp}, e.Value.RawBytes)
+				if len(e.Value.RawBytes) == 0 {
+					w.mu.kvs.Delete(storage.MVCCKey{Key: e.Key, Timestamp: e.Value.Timestamp})
+				} else {
+					w.mu.kvs.Put(storage.MVCCKey{Key: e.Key, Timestamp: e.Value.Timestamp}, e.Value.RawBytes)
+				}
 				prevTs := e.Value.Timestamp.Prev()
 				prevValue := w.mu.kvs.Get(e.Key, prevTs)
 
@@ -176,6 +180,12 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 				// which don't need them. This means we'd want to make it an option in
 				// the request, which seems silly to do for only this test.
 				prevValue.Timestamp = hlc.Timestamp{}
+				// Additionally, ensure that deletion tombstones and missing keys are
+				// normalized as the nil slice, so that they can be matched properly
+				// between the RangeFeed and the Engine.
+				if len(e.PrevValue.RawBytes) == 0 {
+					e.PrevValue.RawBytes = nil
+				}
 				prevValueMismatch := !reflect.DeepEqual(prevValue, e.PrevValue)
 				var engineContents string
 				if prevValueMismatch {
