@@ -130,6 +130,17 @@ message NodesResponse {
   ];
 }
 
+// RegionsRequest requests all available regions.
+message RegionsRequest {}
+
+// RegionsResponse describes the available regions.
+message RegionsResponse {
+  message Region {
+    repeated string zones = 1;
+  }
+  map<string, Region> regions = 1;
+}
+
 message NodeRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -1095,6 +1106,9 @@ service Status {
       get : "/_status/details/{node_id}"
     };
   }
+
+  // RegionsRequest retrieves all available regions.
+  rpc Regions(RegionsRequest) returns (RegionsResponse) {}
 
   // Nodes returns status info for all commissioned nodes. Decommissioned nodes
   // are not included, except in rare cases where the node doing the
