@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -28,24 +29,51 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
+// ValidateForwardIndexesFn call back function used to validate
+// a set of forward indexes.
+type ValidateForwardIndexesFn func(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	withFirstMutationPublic bool,
+	gatherAllInvalid bool,
+	execOverride sessiondata.InternalExecutorOverride,
+) error
+
+// ValidateInvertedIndexesFn call back function used to validate
+// a set of inverted indexes.
+type ValidateInvertedIndexesFn func(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	gatherAllInvalid bool,
+	execOverride sessiondata.InternalExecutorOverride,
+) error
+
 // An Executor executes ops generated during planning. It mostly holds
 // dependencies for execution and has little additional logic of its own.
 type Executor struct {
-	txn             *kv.Txn
-	descsCollection *descs.Collection
-	codec           keys.SQLCodec
-	indexBackfiller IndexBackfiller
-	jobTracker      JobProgressTracker
-	testingKnobs    *NewSchemaChangerTestingKnobs
-	jobRegistry     *jobs.Registry
-	executor        sqlutil.InternalExecutor
-	settings        *cluster.Settings
-	evalCtx         *tree.EvalContext
+	txn                     *kv.Txn
+	descsCollection         *descs.Collection
+	codec                   keys.SQLCodec
+	indexBackfiller         IndexBackfiller
+	jobTracker              JobProgressTracker
+	testingKnobs            *NewSchemaChangerTestingKnobs
+	jobRegistry             *jobs.Registry
+	executor                sqlutil.InternalExecutor
+	settings                *cluster.Settings
+	evalCtx                 *tree.EvalContext
+	validateForwardIndexes  ValidateForwardIndexesFn
+	validateInvertedIndexes ValidateInvertedIndexesFn
 }
 
 // NewExecutor creates a new Executor.
@@ -60,18 +88,22 @@ func NewExecutor(
 	executor sqlutil.InternalExecutor,
 	settings *cluster.Settings,
 	evalCtx *tree.EvalContext,
+	validateForwardIndexes ValidateForwardIndexesFn,
+	validateInvertedIndexes ValidateInvertedIndexesFn,
 ) *Executor {
 	return &Executor{
-		txn:             txn,
-		descsCollection: descsCollection,
-		codec:           codec,
-		indexBackfiller: backfiller,
-		jobTracker:      tracker,
-		testingKnobs:    testingKnobs,
-		jobRegistry:     jobRegistry,
-		executor:        executor,
-		settings:        settings,
-		evalCtx:         evalCtx,
+		txn:                     txn,
+		descsCollection:         descsCollection,
+		codec:                   codec,
+		indexBackfiller:         backfiller,
+		jobTracker:              tracker,
+		testingKnobs:            testingKnobs,
+		jobRegistry:             jobRegistry,
+		executor:                executor,
+		settings:                settings,
+		evalCtx:                 evalCtx,
+		validateForwardIndexes:  validateForwardIndexes,
+		validateInvertedIndexes: validateInvertedIndexes,
 	}
 }
 
@@ -119,7 +151,42 @@ func (ex *Executor) ExecuteOps(
 }
 
 func (ex *Executor) executeValidationOps(ctx context.Context, execute []scop.Op) error {
-	log.Errorf(ctx, "not implemented")
+	for _, op := range execute {
+		switch op := op.(type) {
+		case *scop.ValidateUniqueIndex:
+			table, err := ex.descsCollection.GetImmutableTableByID(ctx, ex.txn, op.TableID, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+			if err != nil {
+				return err
+			}
+			index, err := table.FindIndexWithID(op.IndexID)
+			if err != nil {
+				return err
+			}
+			// Set up a new transaction with the current timestamp.
+			txnRunner := func(ctx context.Context, fn sqlutil.InternalExecFn) error {
+				validationTxn := ex.txn.DB().NewTxn(ctx, "validation")
+				err := validationTxn.SetFixedTimestamp(ctx, ex.txn.DB().Clock().Now())
+				if err != nil {
+					return err
+				}
+				return fn(ctx, validationTxn, ex.executor)
+			}
+			// Execute the validation operation as a root user.
+			execOverride := sessiondata.InternalExecutorOverride{
+				User: security.RootUserName(),
+			}
+			if index.GetType() == descpb.IndexDescriptor_FORWARD {
+				err = ex.validateForwardIndexes(ctx, table, []catalog.Index{index}, txnRunner, true, false, execOverride)
+			} else {
+				err = ex.validateInvertedIndexes(ctx, ex.codec, table, []catalog.Index{index}, txnRunner, false, execOverride)
+			}
+			return err
+		case *scop.ValidateCheckConstraint:
+			log.Errorf(ctx, "not implemented")
+		default:
+			panic("unimplemented")
+		}
+	}
 	return nil
 }
 
@@ -283,9 +350,6 @@ func UpdateDescriptorJobIDs(
 		}
 		if desc.DescriptorType() != catalog.Table {
 			continue
-		}
-		if err != nil {
-			return err
 		}
 		// Currently all "locking" schema changes are on tables. This will probably
 		// need to be expanded at least to types.
