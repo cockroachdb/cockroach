@@ -66,6 +66,8 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		n.job,
 		execCfg.Codec,
 		execCfg.Settings,
+		execCfg.IndexValidator,
+		sql.MakeCCLCallbacks(execCfg.Settings, nil),
 		execCfg.NewSchemaChangerTestingKnobs,
 		payload.Statement,
 	)
