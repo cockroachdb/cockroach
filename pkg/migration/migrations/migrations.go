@@ -32,11 +32,6 @@ func GetMigration(key clusterversion.ClusterVersion) (migration.Migration, bool)
 var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
-	migration.NewTenantMigration(
-		"add the system.migrations table",
-		toCV(clusterversion.LongRunningMigrations),
-		migrationsTableMigration,
-	),
 	migration.NewSystemMigration(
 		"use unreplicated TruncatedState and RangeAppliedState for all ranges",
 		toCV(clusterversion.TruncatedAndRangeAppliedStateMigration),
