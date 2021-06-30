@@ -2194,6 +2194,93 @@ func TestJobStatusResponse(t *testing.T) {
 	require.Equal(t, job.Progress(), *response.Job.Progress)
 }
 
+func TestRegionsResponseFromNodesResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeNodeResponseWithLocalities := func(tiers [][]roachpb.Tier) *serverpb.NodesResponse {
+		ret := &serverpb.NodesResponse{}
+		for _, l := range tiers {
+			ret.Nodes = append(
+				ret.Nodes,
+				statuspb.NodeStatus{
+					Desc: roachpb.NodeDescriptor{
+						Locality: roachpb.Locality{Tiers: l},
+					},
+				},
+			)
+		}
+		return ret
+	}
+
+	makeTiers := func(region, zone string) []roachpb.Tier {
+		return []roachpb.Tier{
+			{Key: "region", Value: region},
+			{Key: "zone", Value: zone},
+		}
+	}
+
+	testCases := []struct {
+		desc     string
+		resp     *serverpb.NodesResponse
+		expected *serverpb.RegionsResponse
+	}{
+		{
+			desc: "no nodes with regions",
+			resp: makeNodeResponseWithLocalities([][]roachpb.Tier{
+				{{Key: "a", Value: "a"}},
+				{},
+			}),
+			expected: &serverpb.RegionsResponse{
+				Regions: map[string]*serverpb.RegionsResponse_Region{},
+			},
+		},
+		{
+			desc: "nodes, some with AZs",
+			resp: makeNodeResponseWithLocalities([][]roachpb.Tier{
+				makeTiers("us-east1", "us-east1-a"),
+				makeTiers("us-east1", "us-east1-a"),
+				makeTiers("us-east1", "us-east1-a"),
+				makeTiers("us-east1", "us-east1-b"),
+
+				makeTiers("us-east2", "us-east2-a"),
+				makeTiers("us-east2", "us-east2-a"),
+				makeTiers("us-east2", "us-east2-a"),
+
+				makeTiers("us-east3", "us-east3-a"),
+				makeTiers("us-east3", "us-east3-b"),
+				makeTiers("us-east3", "us-east3-b"),
+				{{Key: "region", Value: "us-east3"}},
+
+				{{Key: "region", Value: "us-east4"}},
+			}),
+			expected: &serverpb.RegionsResponse{
+				Regions: map[string]*serverpb.RegionsResponse_Region{
+					"us-east1": {
+						Zones: []string{"us-east1-a", "us-east1-b"},
+					},
+					"us-east2": {
+						Zones: []string{"us-east2-a"},
+					},
+					"us-east3": {
+						Zones: []string{"us-east3-a", "us-east3-b"},
+					},
+					"us-east4": {
+						Zones: []string{},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			ret := regionsResponseFromNodesResponse(tc.resp)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+}
+
 func TestLicenseExpiryMetricNoLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
