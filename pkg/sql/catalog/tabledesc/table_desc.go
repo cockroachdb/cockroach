@@ -53,9 +53,9 @@ func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDes
 	return desc.postDeserializationChanges
 }
 
-// GetChanged returns if the MutableDescriptor was changed after running
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
-func (desc *wrapper) GetChanged() bool {
+func (desc *wrapper) HasPostDeserializationChanges() bool {
 	return desc.postDeserializationChanges.UpgradedForeignKeyRepresentation ||
 		desc.postDeserializationChanges.UpgradedFormatVersion ||
 		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
