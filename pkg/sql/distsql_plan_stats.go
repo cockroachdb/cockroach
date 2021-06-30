@@ -33,7 +33,7 @@ import (
 type requestedStat struct {
 	columns             []descpb.ColumnID
 	histogram           bool
-	histogramMaxBuckets int
+	histogramMaxBuckets uint32
 	name                string
 	inverted            bool
 }
@@ -110,7 +110,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		spec := execinfrapb.SketchSpec{
 			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
-			HistogramMaxBuckets: uint32(s.histogramMaxBuckets),
+			HistogramMaxBuckets: s.histogramMaxBuckets,
 			Columns:             make([]uint32, len(s.columns)),
 			StatName:            s.name,
 		}
@@ -236,9 +236,9 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
 		histogram := details.ColumnStats[i].HasHistogram && histogramCollectionEnabled
-		histogramMaxBuckets := defaultHistogramBuckets
+		var histogramMaxBuckets uint32 = defaultHistogramBuckets
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
-			histogramMaxBuckets = int(details.ColumnStats[i].HistogramMaxBuckets)
+			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}
 		reqStats[i] = requestedStat{
 			columns:             details.ColumnStats[i].ColumnIDs,
