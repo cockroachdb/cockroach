@@ -210,6 +210,7 @@ type observedWrite struct {
 	// Timestamp will only be filled if Materialized is true.
 	Timestamp    hlc.Timestamp
 	Materialized bool
+	DelRangeSpan *roachpb.Span
 }
 
 func (*observedWrite) observedMarker() {}
@@ -371,6 +372,27 @@ func (v *validator) processOp(txnID *string, op Operation) {
 				Value: roachpb.Value{},
 			}
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+		}
+	case *DeleteRangeOperation:
+		if txnID == nil {
+			v.checkAtomic(`deleteRange`, t.Result, nil, op)
+		} else {
+			delRangeSpan := &roachpb.Span{
+				Key:    t.Key,
+				EndKey: t.EndKey,
+			}
+			// For the purposes of validation, DelRange operations decompose into
+			// writes for each key, with a span to validate that the keys we are
+			// deleting are within the proper bounds.  See above comment for how
+			// the individual deletion tombstones for each key are validated.
+			for _, kv := range t.Result.Values {
+				write := &observedWrite{
+					Key:          kv.Key,
+					Value:        roachpb.Value{},
+					DelRangeSpan: delRangeSpan,
+				}
+				v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+			}
 		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
@@ -656,6 +678,11 @@ func (v *validator) checkCommittedTxn(
 					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
 				}
 			}
+			// Writes in a DelRange operation should be within span boundary.
+			if o.DelRangeSpan != nil && !o.DelRangeSpan.ContainsKey(o.Key) {
+				failure = fmt.Sprintf(`key %s outside delete range bounds %s`, o.Key, o.DelRangeSpan)
+			}
+
 			if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
 				panic(err)
 			}
@@ -984,6 +1011,10 @@ func printObserved(observedOps ...observedOp) string {
 		}
 		switch o := observed.(type) {
 		case *observedWrite:
+			opCode := "w"
+			if o.isDelete() && o.DelRangeSpan != nil {
+				opCode = "dr"
+			}
 			ts := `missing`
 			if o.Materialized {
 				if o.isDelete() && o.Timestamp.IsEmpty() {
@@ -992,8 +1023,8 @@ func printObserved(observedOps ...observedOp) string {
 					ts = o.Timestamp.String()
 				}
 			}
-			fmt.Fprintf(&buf, "[w]%s:%s->%s",
-				o.Key, ts, mustGetStringValue(o.Value.RawBytes))
+			fmt.Fprintf(&buf, "[%s]%s:%s->%s",
+				opCode, o.Key, ts, mustGetStringValue(o.Value.RawBytes))
 		case *observedRead:
 			fmt.Fprintf(&buf, "[r]%s:", o.Key)
 			validTimes := o.ValidTimes
