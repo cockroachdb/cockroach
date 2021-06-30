@@ -41,7 +41,7 @@ func TestOperationsFormat(t *testing.T) {
 		{
 			step: step(
 				closureTxn(ClosureTxnType_Commit,
-					batch(get(`g`), get(`h`), del(`i`)),
+					batch(get(`g`), get(`h`), delRange(`i`, `j`)),
 					put(`k`, `l`),
 				)),
 			expected: `
@@ -50,7 +50,7 @@ func TestOperationsFormat(t *testing.T) {
 			    b := &Batch{}
 			    b.Get(ctx, "g")
 			    b.Get(ctx, "h")
-			    b.Del(ctx, "i")
+			    b.DelRange(ctx, "i", "j")
 			    txn.Run(ctx, b)
 			  }
 			  txn.Put(ctx, "k", l)

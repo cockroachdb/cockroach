@@ -141,6 +141,8 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		if txnErr == nil {
 			o.Txn = savedTxn.TestingCloneTxn()
 		}
+	case *DeleteRangeOperation:
+		panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, o, o))
 	}
@@ -155,6 +157,7 @@ type clientI interface {
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	Del(context.Context, ...interface{}) error
+	DelRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
 	Run(context.Context, *kv.Batch) error
 }
 
@@ -204,6 +207,19 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 	case *DeleteOperation:
 		err := db.Del(ctx, o.Key)
 		o.Result = resultError(ctx, err)
+	case *DeleteRangeOperation:
+		deletedKeys, err := db.DelRange(ctx, o.Key, o.EndKey, true)
+		if err != nil {
+			o.Result = resultError(ctx, err)
+		} else {
+			o.Result.Type = ResultType_Values
+			o.Result.Values = make([]KeyValue, len(deletedKeys))
+			for i, deletedKey := range deletedKeys {
+				o.Result.Values[i] = KeyValue{
+					Key: []byte(deletedKey),
+				}
+			}
+		}
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
@@ -237,6 +253,8 @@ func applyBatchOp(
 			}
 		case *DeleteOperation:
 			b.Del(subO.Key)
+		case *DeleteRangeOperation:
+			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -277,6 +295,19 @@ func applyBatchOp(
 		case *DeleteOperation:
 			err := b.Results[i].Err
 			subO.Result = resultError(ctx, err)
+		case *DeleteRangeOperation:
+			keys, err := b.Results[i].Keys, b.Results[i].Err
+			if err != nil {
+				subO.Result = resultError(ctx, err)
+			} else {
+				subO.Result.Type = ResultType_Values
+				subO.Result.Values = make([]KeyValue, len(keys))
+				for j, key := range keys {
+					subO.Result.Values[j] = KeyValue{
+						Key: []byte(key),
+					}
+				}
+			}
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

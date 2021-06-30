@@ -210,6 +210,7 @@ type observedWrite struct {
 	// Timestamp will only be filled if Materialized is true.
 	Timestamp    hlc.Timestamp
 	Materialized bool
+	DelRangeSpan *roachpb.Span
 }
 
 func (*observedWrite) observedMarker() {}
@@ -371,6 +372,23 @@ func (v *validator) processOp(txnID *string, op Operation) {
 				Value: roachpb.Value{},
 			}
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+		}
+	case *DeleteRangeOperation:
+		if txnID == nil {
+			v.checkAtomic(`deleteRange`, t.Result, t.Txn, op)
+		} else {
+			delRangeSpan := &roachpb.Span{
+				Key:    t.Key,
+				EndKey: t.EndKey,
+			}
+			for _, kv := range t.Result.Values {
+				write := &observedWrite{
+					Key:          kv.Key,
+					Value:        roachpb.Value{},
+					DelRangeSpan: delRangeSpan,
+				}
+				v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+			}
 		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
@@ -656,6 +674,11 @@ func (v *validator) checkCommittedTxn(
 					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
 				}
 			}
+			// Writes in a delRange operation should be within span boundary.
+			if o.DelRangeSpan != nil && !o.DelRangeSpan.ContainsKey(o.Key) {
+				failure = fmt.Sprintf(`key %s outside delete range bounds %s`, o.Key, o.DelRangeSpan)
+			}
+
 			if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
 				panic(err)
 			}

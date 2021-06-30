@@ -82,7 +82,12 @@ func TestApplier(t *testing.T) {
 	check(t, step(put(`c`, `3`)), `db0.Put(ctx, "c", 3) // nil`)
 	check(t, step(put(`d`, `4`)), `db1.Put(ctx, "d", 4) // nil`)
 
-	check(t, step(del(`c`)), `db0.Del(ctx, "c") // nil`)
+	check(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.DelRange(ctx, "b", "d") // (["c"], nil)
+  return nil
+}) // nil txnpb:(...)
+		`)
 	check(t, step(scan(`a`, `e`)), `db1.Scan(ctx, "a", "e", 0) // (["a":"1", "d":"4"], nil)`)
 
 	checkErr(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, context canceled)`)
@@ -93,16 +98,20 @@ func TestApplier(t *testing.T) {
 	checkErr(t, step(reverseScanForUpdate(`a`, `c`)), `db0.ReverseScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
 
 	checkErr(t, step(del(`b`)), `db1.Del(ctx, "b") // context canceled`)
-	checkErr(t, step(del(`c`)), `db0.Del(ctx, "c") // context canceled`)
+	checkErr(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.DelRange(ctx, "b", "d")
+  return nil
+}) // context canceled
+		`)
 
 	// Batch
-	check(t, step(batch(put(`b`, `2`), get(`a`), del(`b`), del(`c`), scan(`a`, `c`), reverseScanForUpdate(`a`, `e`))), `
+	check(t, step(batch(put(`b`, `2`), get(`a`), delRange(`b`, `d`), scan(`a`, `c`), reverseScanForUpdate(`a`, `e`))), `
 {
   b := &Batch{}
   b.Put(ctx, "b", 2) // nil
   b.Get(ctx, "a") // ("1", nil)
-  b.Del(ctx, "b") // nil
-  b.Del(ctx, "c") // nil
+  b.DelRange(ctx, "b", "d") // (["b"], nil)
   b.Scan(ctx, "a", "c") // (["a":"1"], nil)
   b.ReverseScanForUpdate(ctx, "a", "e") // (["d":"4", "a":"1"], nil)
   db1.Run(ctx, b) // nil
