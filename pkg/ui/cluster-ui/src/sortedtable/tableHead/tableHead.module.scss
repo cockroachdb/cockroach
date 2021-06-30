@@ -16,6 +16,9 @@
   &__row--header {
     border-bottom: 1px solid $colors--neutral-3;
     height: $line-height--x-large;
+    .column-title {
+      border-bottom: 1px dashed $colors--neutral-5;
+    }
     // Display the sort direction arrow in header cells.
     .sorted__cell {
       padding: $spacing-base $spacing-base $spacing-base $spacing-small;
