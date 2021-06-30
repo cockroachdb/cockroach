@@ -265,6 +265,8 @@ func (overload windowFrameOrderWidthOverload) BinOpIsPlus() bool {
 	return overload.valueByOffsetOp == tree.Plus
 }
 
+var _ = windowFrameOrderWidthOverload{}.BinOpIsPlus()
+
 func getTypeWidths(family types.Family) []int32 {
 	if family == types.IntFamily {
 		return []int32{16, 32, anyWidth}

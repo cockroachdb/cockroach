@@ -34,14 +34,16 @@ func windowFramerGenerator(inputFileContents string, wr io.Writer) error {
 		"_FRAME_MODE", "{{modeToExecinfrapb .ModeType}}",
 		"_START_BOUND", "{{boundToExecinfrapb .BoundType}}",
 		"_END_BOUND", "{{boundToExecinfrapb .BoundType}}",
+		"_EXCLUDES_ROWS", "{{.Exclude}}",
 	)
 	s := r.Replace(inputFileContents)
 
 	tmpl, err := template.New("window_framer").Funcs(
 		template.FuncMap{
-			"buildDict":          buildDict,
-			"modeToExecinfrapb":  modeToExecinfrapb,
-			"boundToExecinfrapb": boundToExecinfrapb,
+			"buildDict":            buildDict,
+			"modeToExecinfrapb":    modeToExecinfrapb,
+			"boundToExecinfrapb":   boundToExecinfrapb,
+			"excludeToExecinfrapb": excludeToExecinfrapb,
 		}).Parse(s)
 	if err != nil {
 		return err
@@ -61,15 +63,24 @@ func windowFramerGenerator(inputFileContents string, wr io.Writer) error {
 					// This pair of bounds would entail a syntax error.
 					continue
 				}
-				opString := "windowFramer" + modeType.Name() + startBoundType.Name() + endBoundType.Name()
 				endBoundInfo := windowFramerEndBoundInfo{
-					windowFramerTmplInfo: windowFramerTmplInfo{
-						OpString:       opString,
-						ModeType:       modeType,
-						StartBoundType: startBoundType,
-						EndBoundType:   endBoundType,
-					},
 					BoundType: endBoundType,
+				}
+				for _, exclude := range []bool{false, true} {
+					opString := "windowFramer" + modeType.Name() + startBoundType.Name() + endBoundType.Name()
+					if exclude {
+						opString += "Exclude"
+					}
+					excludeInfo := windowFramerExcludeInfo{
+						windowFramerTmplInfo: windowFramerTmplInfo{
+							OpString:       opString,
+							ModeType:       modeType,
+							StartBoundType: startBoundType,
+							EndBoundType:   endBoundType,
+						},
+						Exclude: exclude,
+					}
+					endBoundInfo.ExcludeInfos = append(endBoundInfo.ExcludeInfos, excludeInfo)
 				}
 				startBoundInfo.EndBoundTypes = append(startBoundInfo.EndBoundTypes, endBoundInfo)
 			}
@@ -96,8 +107,13 @@ type windowFramerStartBoundInfo struct {
 }
 
 type windowFramerEndBoundInfo struct {
+	BoundType    tree.WindowFrameBoundType
+	ExcludeInfos []windowFramerExcludeInfo
+}
+
+type windowFramerExcludeInfo struct {
 	windowFramerTmplInfo
-	BoundType tree.WindowFrameBoundType
+	Exclude bool
 }
 
 type windowFramerTmplInfo struct {
@@ -105,56 +121,81 @@ type windowFramerTmplInfo struct {
 	ModeType       tree.WindowFrameMode
 	StartBoundType tree.WindowFrameBoundType
 	EndBoundType   tree.WindowFrameBoundType
+	Exclude        bool
 }
 
 func (overload windowFramerTmplInfo) GroupsMode() bool {
 	return overload.ModeType == tree.GROUPS
 }
 
+var _ = windowFramerTmplInfo{}.GroupsMode()
+
 func (overload windowFramerTmplInfo) RowsMode() bool {
 	return overload.ModeType == tree.ROWS
 }
+
+var _ = windowFramerTmplInfo{}.RowsMode()
 
 func (overload windowFramerTmplInfo) RangeMode() bool {
 	return overload.ModeType == tree.RANGE
 }
 
+var _ = windowFramerTmplInfo{}.RangeMode()
+
 func (overload windowFramerTmplInfo) StartUnboundedPreceding() bool {
 	return overload.StartBoundType == tree.UnboundedPreceding
 }
+
+var _ = windowFramerTmplInfo{}.StartUnboundedPreceding()
 
 func (overload windowFramerTmplInfo) StartOffsetPreceding() bool {
 	return overload.StartBoundType == tree.OffsetPreceding
 }
 
+var _ = windowFramerTmplInfo{}.StartOffsetPreceding()
+
 func (overload windowFramerTmplInfo) StartCurrentRow() bool {
 	return overload.StartBoundType == tree.CurrentRow
 }
+
+var _ = windowFramerTmplInfo{}.StartCurrentRow()
 
 func (overload windowFramerTmplInfo) StartOffsetFollowing() bool {
 	return overload.StartBoundType == tree.OffsetFollowing
 }
 
+var _ = windowFramerTmplInfo{}.StartOffsetFollowing()
+
 func (overload windowFramerTmplInfo) EndOffsetPreceding() bool {
 	return overload.EndBoundType == tree.OffsetPreceding
 }
+
+var _ = windowFramerTmplInfo{}.EndOffsetPreceding()
 
 func (overload windowFramerTmplInfo) EndCurrentRow() bool {
 	return overload.EndBoundType == tree.CurrentRow
 }
 
+var _ = windowFramerTmplInfo{}.EndCurrentRow()
+
 func (overload windowFramerTmplInfo) EndOffsetFollowing() bool {
 	return overload.EndBoundType == tree.OffsetFollowing
 }
+
+var _ = windowFramerTmplInfo{}.EndOffsetFollowing()
 
 func (overload windowFramerTmplInfo) EndUnboundedFollowing() bool {
 	return overload.EndBoundType == tree.UnboundedFollowing
 }
 
+var _ = windowFramerTmplInfo{}.EndUnboundedFollowing()
+
 func (overload windowFramerTmplInfo) OffsetPreceding() bool {
 	return overload.StartBoundType == tree.OffsetPreceding ||
 		overload.EndBoundType == tree.OffsetPreceding
 }
+
+var _ = windowFramerTmplInfo{}.OffsetPreceding()
 
 func (overload windowFramerTmplInfo) StartHasOffset() bool {
 	return overload.StartBoundType == tree.OffsetPreceding ||
@@ -170,10 +211,14 @@ func (overload windowFramerTmplInfo) HasOffset() bool {
 	return overload.StartHasOffset() || overload.EndHasOffset()
 }
 
+var _ = windowFramerTmplInfo{}.HasOffset()
+
 func (overload windowFramerTmplInfo) BothUnbounded() bool {
 	return overload.StartBoundType == tree.UnboundedPreceding &&
 		overload.EndBoundType == tree.UnboundedFollowing
 }
+
+var _ = windowFramerTmplInfo{}.BothUnbounded()
 
 func modeToExecinfrapb(mode tree.WindowFrameMode) string {
 	switch mode {
@@ -199,6 +244,20 @@ func boundToExecinfrapb(bound tree.WindowFrameBoundType) string {
 		return "execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING"
 	case tree.UnboundedFollowing:
 		return "execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING"
+	}
+	return ""
+}
+
+func excludeToExecinfrapb(exclude tree.WindowFrameExclusion) string {
+	switch exclude {
+	case tree.NoExclusion:
+		return "execinfrapb.WindowerSpec_Frame_NO_EXCLUSION"
+	case tree.ExcludeCurrentRow:
+		return "execinfrapb.WindowerSpec_Frame_EXCLUDE_CURRENT_ROW"
+	case tree.ExcludeGroup:
+		return "execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP"
+	case tree.ExcludeTies:
+		return "execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES"
 	}
 	return ""
 }
