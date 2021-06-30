@@ -115,7 +115,7 @@ const (
 // buffer all tuples from each partition.
 type bufferedWindower interface {
 	Init(ctx context.Context)
-	Close() error
+	Close()
 
 	// seekNextPartition is called during the windowSeeking state on the current
 	// batch. It gives windowers a chance to perform any necessary pre-processing,
@@ -354,9 +354,9 @@ func (b *bufferedWindowOp) Close() error {
 		// both cases there is nothing to do.
 		return nil
 	}
-	var err error
-	if err = b.bufferQueue.Close(b.EnsureCtx()); err != nil {
+	if err := b.bufferQueue.Close(b.EnsureCtx()); err != nil {
 		return err
 	}
-	return b.windower.Close()
+	b.windower.Close()
+	return nil
 }

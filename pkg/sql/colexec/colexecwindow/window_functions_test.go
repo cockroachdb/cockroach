@@ -613,18 +613,20 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
-	const memLimit = 64 << 20
-	const fdLimit = 3
-	const partitionSize = 5
-	const peerGroupSize = 3
-	const arg1ColIdx = 0
-	const arg2ColIdx = 1
-	const arg3ColIdx = 2
-	const partitionColIdx = 3
-	const orderColIdx = 4
-	const peersColIdx = 5
-	const numIntCols = 4
-	const numBoolCols = 2
+	const (
+		memLimit        = 64 << 20
+		fdLimit         = 3
+		partitionSize   = 5
+		peerGroupSize   = 3
+		arg1ColIdx      = 0
+		arg2ColIdx      = 1
+		arg3ColIdx      = 2
+		partitionColIdx = 3
+		orderColIdx     = 4
+		peersColIdx     = 5
+		numIntCols      = 4
+		numBoolCols     = 2
+	)
 
 	sourceTypes := []*types.T{
 		types.Int, types.Int, types.Int, // Window function arguments
@@ -731,19 +733,15 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		execinfrapb.WindowerSpec_LEAD,
 	}
 
+	// The number of rows should be a multiple of coldata.BatchSize().
 	rowsOptions := []int{4 * coldata.BatchSize(), 32 * coldata.BatchSize()}
 
 	for _, windowFn := range windowFns {
 		b.Run(fmt.Sprintf("%v", windowFn), func(b *testing.B) {
 			for _, nRows := range rowsOptions {
 				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {
-					batchLength := nRows
-					nBatches := 1
-					if nRows >= coldata.BatchSize() {
-						batchLength = coldata.BatchSize()
-						nBatches = nRows / coldata.BatchSize()
-					}
-					batch := batchCreator(batchLength)
+					nBatches := nRows / coldata.BatchSize()
+					batch := batchCreator(coldata.BatchSize())
 					b.SetBytes(int64(nRows * (8*numIntCols + numBoolCols)))
 					for _, partitionInput := range []bool{true, false} {
 						b.Run(fmt.Sprintf("partition=%v", partitionInput), func(b *testing.B) {
