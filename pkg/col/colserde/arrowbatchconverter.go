@@ -493,6 +493,10 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 			vec.SetCol(col)
 		}
+
+		// Eagerly release our data references, now that the data has either been
+		// copied out into, or simply referenced by, coldata.Vecs.
+		data[i] = nil
 	}
 	b.SetSelection(false)
 	b.SetLength(batchLength)
