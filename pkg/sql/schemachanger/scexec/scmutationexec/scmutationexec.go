@@ -531,21 +531,13 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 		table.NextIndexID = op.IndexID + 1
 	}
 	// Resolve column names
-	colNames := make([]string, 0, len(op.KeyColumnIDs))
-	for _, colID := range op.KeyColumnIDs {
-		column, err := table.FindColumnWithID(colID)
-		if err != nil {
-			return err
-		}
-		colNames = append(colNames, column.GetName())
+	colNames, err := columnNamesFromIDs(table, op.KeyColumnIDs)
+	if err != nil {
+		return err
 	}
-	storeColNames := make([]string, 0, len(op.StoreColumnIDs))
-	for _, colID := range op.StoreColumnIDs {
-		column, err := table.FindColumnWithID(colID)
-		if err != nil {
-			return err
-		}
-		storeColNames = append(storeColNames, column.GetName())
+	storeColNames, err := columnNamesFromIDs(table, op.StoreColumnIDs)
+	if err != nil {
+		return err
 	}
 	// Setup the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD

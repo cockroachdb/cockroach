@@ -30,7 +30,8 @@ type MakeAddedIndexDeleteOnly struct {
 	mutationOp
 	TableID descpb.ID
 
-	// Index represents the index as it should appear in the mutation.
+	// Various components needed to build an
+	// index descriptor.
 	PrimaryIndex        descpb.IndexID
 	IndexID             descpb.IndexID
 	IndexName           string
@@ -75,11 +76,6 @@ type MakeAddedPrimaryIndexPublic struct {
 type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 	mutationOp
 	TableID descpb.ID
-
-	// IndexID is the descriptor as it should be added as part of the mutation. The
-	// primary index of a table has a slightly different encoding than that of
-	// a secondary index. The value here sets it as it should be when adding
-	// the mutation, including the stored columns.
 	IndexID descpb.IndexID
 }
 
@@ -141,8 +137,6 @@ type RemoveTypeBackRef struct {
 	DescID descpb.ID
 	TypeID descpb.ID
 }
-
-// FIXME: Check create index first
 
 // MakeAddedColumnDeleteAndWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
