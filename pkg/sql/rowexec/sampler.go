@@ -20,10 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+const defaultMinSampleSize = 200
 
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
@@ -102,6 +103,7 @@ func newSamplerProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.SamplerSpec,
+	minSampleSize int,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -146,7 +148,7 @@ func newSamplerProcessor(
 		// sent as single DBytes column.
 		var srCols util.FastIntSet
 		srCols.Add(0)
-		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		sr.Init(int(spec.SampleSize), minSampleSize, bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]
 		s.invSr[col] = &sr
 		sketchSpec := spec.InvertedSketches[i]
@@ -160,7 +162,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), inTypes, &s.memAcc, sampleCols)
+	s.sr.Init(int(spec.SampleSize), minSampleSize, inTypes, &s.memAcc, sampleCols)
 
 	outTypes := make([]*types.T, 0, len(inTypes)+7)
 
@@ -366,6 +368,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for i := range outRow {
 		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
+	// Reuse the numRows column for the capacity of the sample reservoir.
+	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(s.sr.Cap()))}
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
@@ -378,6 +382,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 	for col, invSr := range s.invSr {
+		// Reuse the numRows column for the capacity of the sample reservoir.
+		outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(invSr.Cap()))}
 		outRow[s.invColIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}
 		for _, sample := range invSr.Get() {
 			// Reuse the rank column for inverted index keys.
@@ -447,8 +453,9 @@ func (s *samplerProcessor) sampleRow(
 ) (earlyExit bool, err error) {
 	// Use Int63 so we don't have headaches converting to DInt.
 	rank := uint64(rng.Int63())
+	prevCapacity := sr.Cap()
 	if err := sr.SampleRow(ctx, s.EvalCtx, row, rank); err != nil {
-		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+		if !sqlerrors.IsOutOfMemoryError(err) {
 			return false, err
 		}
 		// We hit an out of memory error. Clear the sample reservoir and
@@ -465,6 +472,11 @@ func (s *samplerProcessor) sampleRow(
 		if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
+	} else if sr.Cap() != prevCapacity {
+		log.Infof(
+			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
+			prevCapacity, sr.Cap(),
+		)
 	}
 	return false, nil
 }

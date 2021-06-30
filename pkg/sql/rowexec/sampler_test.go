@@ -26,9 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// runSampler runs the sampler aggregator on numRows and returns numSamples rows.
+// runSampler runs the samplerProcessor on numRows and returns numSamples rows.
 func runSampler(
-	t *testing.T, numRows, numSamples int, memLimitBytes int64, expectOutOfMemory bool,
+	t *testing.T,
+	numRows, numSamples, minNumSamples, expectedSamples int,
+	memLimitBytes int64,
+	expectOutOfMemory bool,
 ) []int {
 	rows := make([]rowenc.EncDatumRow, numRows)
 	for i := range rows {
@@ -43,7 +46,14 @@ func runSampler(
 		types.Int, // null vals
 		types.Bytes,
 	}
-
+	const (
+		valCol = iota
+		rankCol
+		sketchIndexCol
+		numRowsCol
+		numNullsCol
+		sketchDataCol
+	)
 	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
@@ -68,18 +78,17 @@ func runSampler(
 		SampleSize: uint32(numSamples),
 	}
 	p, err := newSamplerProcessor(
-		&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, out,
+		&flowCtx, 0 /* processorID */, spec, minNumSamples, in, &execinfrapb.PostProcessSpec{}, out,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	p.Run(context.Background())
 
-	// Verify we have numSamples distinct rows.
+	// Verify we have expectedSamples distinct rows.
 	res := make([]int, 0, numSamples)
 	seen := make(map[tree.DInt]bool)
 	histogramDisabled := false
-	n := 0
 	for {
 		row, meta := out.Next()
 		if meta != nil {
@@ -93,58 +102,65 @@ func runSampler(
 		} else if row == nil {
 			break
 		}
-		if row[0].IsNull() {
+
+		if row[valCol].IsNull() {
 			// This is a sketch row.
 			continue
 		}
-		for i := 2; i < len(outTypes); i++ {
-			if !row[i].IsNull() {
+		for i := sketchIndexCol; i < len(outTypes); i++ {
+			if i != numRowsCol && !row[i].IsNull() {
 				t.Fatalf("expected NULL on column %d, got %s", i, row[i].Datum)
 			}
 		}
-		v := *row[0].Datum.(*tree.DInt)
+		v := *row[valCol].Datum.(*tree.DInt)
 		if seen[v] {
 			t.Fatalf("duplicate row %d", v)
 		}
 		seen[v] = true
 		res = append(res, int(v))
-		n++
 	}
 	if expectOutOfMemory {
 		if !histogramDisabled {
 			t.Fatal("expected processor to disable histogram collection")
 		}
-	} else if n != numSamples {
-		t.Fatalf("expected %d rows, got %d", numSamples, n)
+	} else if histogramDisabled {
+		t.Fatal("processor unexpectedly disabled histogram collection")
+	} else if len(res) != expectedSamples {
+		t.Fatalf("expected %d rows, got %d", expectedSamples, len(res))
 	}
 	return res
 }
 
-func TestSampler(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// We run many samplings and record the frequencies.
-	numRows := 100
-	numSamples := 20
+// checkSamplerDistribution runs the sampler many times over the same input and
+// verifies that the distribution of samples approaches a uniform distribution.
+func checkSamplerDistribution(
+	t *testing.T,
+	numRows, numSamples, minNumSamples, expectedSamples int,
+	memLimitBytes int64,
+	expectOutOfMemory bool,
+) {
 	minRuns := 200
 	maxRuns := 5000
 	delta := 0.5
+	totalSamples := 0
 
 	freq := make([]int, numRows)
 	var err error
 	// Instead of doing maxRuns and checking at the end, we do minRuns at a time
-	// and exit early. This speeds up the test.
+	// and exit as soon as the distribution is uniform enough. This speeds up the
+	// test.
 	for r := 0; r < maxRuns; r += minRuns {
 		for i := 0; i < minRuns; i++ {
 			for _, v := range runSampler(
-				t, numRows, numSamples, 0 /* memLimitBytes */, false, /* expectOutOfMemory */
+				t, numRows, numSamples, minNumSamples, expectedSamples, memLimitBytes, expectOutOfMemory,
 			) {
 				freq[v]++
+				totalSamples++
 			}
 		}
 
-		// The expected frequency of each row is f = numRuns * (numSamples / numRows).
-		f := float64(r) * float64(numSamples) / float64(numRows)
+		// The expected frequency of each row is totalSamples / numRows.
+		f := float64(totalSamples) / float64(numRows)
 
 		// Verify that no frequency is outside of the range (f / (1+delta), f * (1+delta));
 		// the probability of a given row violating this is subject to the Chernoff
@@ -160,18 +176,61 @@ func TestSampler(t *testing.T) {
 			return
 		}
 	}
+	// The distribution failed to become uniform enough after maxRuns.
 	t.Error(err)
+}
+
+type testCase struct {
+	numRows, numSamples, minNumSamples, expectedSamples int
+	memLimit                                            int64
+	expectOutOfMemory                                   bool
+}
+
+func TestSampler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []testCase{
+		// Check distribution when capacity is held steady.
+		{100, 20, 20, 20, 0, false},
+		// Check distribution when capacity shrinks due to hitting memory limit.
+		{1000, 200, 20, 64, 1 << 14, false},
+	} {
+		checkSamplerDistribution(
+			t, tc.numRows, tc.numSamples, tc.minNumSamples, tc.expectedSamples, tc.memLimit,
+			tc.expectOutOfMemory,
+		)
+	}
 }
 
 func TestSamplerMemoryLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	numRows := 100
-	numSamples := 20
 
-	runSampler(t, numRows, numSamples, 0 /* memLimitBytes */, false /* expectOutOfMemory */)
-	runSampler(t, numRows, numSamples, 1 /* memLimitBytes */, true /* expectOutOfMemory */)
-	runSampler(t, numRows, numSamples, 20 /* memLimitBytes */, true /* expectOutOfMemory */)
-	runSampler(t, numRows, numSamples, 20*1024 /* memLimitBytes */, false /* expectOutOfMemory */)
+	for _, tc := range []testCase{
+		// While holding numSamples and minNumSamples fixed, increase the memory
+		// limit until we no longer hit it.
+		{100, 20, 2, 20, 0, false},
+		{100, 20, 2, 0, 1 << 0, true},
+		{100, 20, 2, 0, 1 << 1, true},
+		{100, 20, 2, 0, 1 << 4, true},
+		{100, 20, 2, 0, 1 << 8, true},
+		{100, 20, 2, 20, 1 << 14, false},
+
+		// Same as above, but 10x larger population to check dynamic shrinking.
+		{1000, 200, 20, 0, 1 << 13, true},
+		{1000, 200, 20, 64, 1 << 14, false},
+		{1000, 200, 20, 200, 1 << 15, false},
+
+		// While holding the memory limit fixed, decrease minNumSamples until we no
+		// longer hit the memory limit.
+		{1000, 200, 100, 0, 1 << 14, true},
+		{1000, 200, 75, 0, 1 << 14, true},
+		{1000, 200, 50, 64, 1 << 14, false},
+	} {
+		runSampler(
+			t, tc.numRows, tc.numSamples, tc.minNumSamples, tc.expectedSamples, tc.memLimit,
+			tc.expectOutOfMemory,
+		)
+	}
 }
 
 func TestSamplerSketch(t *testing.T) {
@@ -207,7 +266,15 @@ func TestSamplerSketch(t *testing.T) {
 		types.Int,   // null vals
 		types.Bytes, // sketch data
 	}
-
+	const (
+		valCol0 = iota
+		valCol1
+		rankCol
+		sketchIndexCol
+		numRowsCol
+		numNullsCol
+		sketchDataCol
+	)
 	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
@@ -235,7 +302,10 @@ func TestSamplerSketch(t *testing.T) {
 			},
 		},
 	}
-	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, out)
+	p, err := newSamplerProcessor(
+		&flowCtx, 0 /* processorID */, spec, defaultMinSampleSize, in, &execinfrapb.PostProcessSpec{},
+		out,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,21 +334,21 @@ func TestSamplerSketch(t *testing.T) {
 
 	for sketchIdx, r := range rows {
 		// First three columns are for sampled rows.
-		for i := 0; i < 3; i++ {
+		for i := valCol0; i < sketchIndexCol; i++ {
 			if !r[i].IsNull() {
 				t.Errorf("expected NULL on column %d, got %s", i, r[i].Datum)
 			}
 		}
-		if v := int(*r[3].Datum.(*tree.DInt)); v != sketchIdx {
+		if v := int(*r[sketchIndexCol].Datum.(*tree.DInt)); v != sketchIdx {
 			t.Errorf("expected sketch index %d, got %d", sketchIdx, v)
 		}
-		if v := int(*r[4].Datum.(*tree.DInt)); v != len(inputRows) {
+		if v := int(*r[numRowsCol].Datum.(*tree.DInt)); v != len(inputRows) {
 			t.Errorf("expected numRows %d, got %d", len(inputRows), v)
 		}
-		if v := int(*r[5].Datum.(*tree.DInt)); v != numNulls[sketchIdx] {
+		if v := int(*r[numNullsCol].Datum.(*tree.DInt)); v != numNulls[sketchIdx] {
 			t.Errorf("expected numNulls %d, got %d", numNulls[sketchIdx], v)
 		}
-		data := []byte(*r[6].Datum.(*tree.DBytes))
+		data := []byte(*r[sketchDataCol].Datum.(*tree.DBytes))
 		var s hyperloglog.Sketch
 		if err := s.UnmarshalBinary(data); err != nil {
 			t.Fatal(err)
