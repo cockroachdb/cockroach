@@ -142,6 +142,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
 		catconstants.CrdbInternalLostTableDescriptors:             crdbLostTableDescriptors,
 		catconstants.CrdbInternalClusterInflightTracesTable:       crdbInternalClusterInflightTracesTable,
+		catconstants.CrdbInternalRegionsTable:                     crdbInternalRegionsTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -4005,6 +4006,38 @@ CREATE TABLE crdb_internal.partitions (
 				})
 		}
 		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+// crdbInternalRegionsTable exposes available regions in the cluster.
+var crdbInternalRegionsTable = virtualSchemaTable{
+	comment: "available regions for the cluster",
+	schema: `
+CREATE TABLE crdb_internal.regions (
+	region STRING NOT NULL,
+	zones STRING[] NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		resp, err := p.extendedEvalCtx.RegionsServer.Regions(ctx, &serverpb.RegionsRequest{})
+		if err != nil {
+			return err
+		}
+		for regionName, regionMeta := range resp.Regions {
+			zones := tree.NewDArray(types.String)
+			for _, zone := range regionMeta.Zones {
+				if err := zones.Append(tree.NewDString(zone)); err != nil {
+					return err
+				}
+			}
+			if err := addRow(
+				tree.NewDString(regionName),
+				zones,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 

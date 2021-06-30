@@ -90,6 +90,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.kv_node_status",
 	"crdb_internal.kv_store_status",
 
+	"crdb_internal.regions",
 	"crdb_internal.schema_changes",
 	"crdb_internal.partitions",
 	"crdb_internal.zones",
