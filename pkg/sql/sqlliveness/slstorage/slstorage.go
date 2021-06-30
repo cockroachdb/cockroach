@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -215,9 +216,19 @@ func (s *Storage) isAlive(
 	// cache. If it isn't found, we know it's dead and we can add that to the
 	// deadSessions cache.
 	resChan, _ := s.g.DoChan(string(sid), func() (interface{}, error) {
+
+		// Note that we use a new `context` here to avoid a situation where a cancellation
+		// of the first context cancels other callers to the `acquireNodeLease()` method,
+		// because of its use of `singleflight.Group`. See issue #41780 for how this has
+		// happened.
+		newCtx, cancel := s.stopper.WithCancelOnQuiesce(
+			logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
+		)
+		defer cancel()
+
 		// store the result underneath the singleflight to avoid the need
 		// for additional synchronization.
-		live, expiration, err := s.deleteOrFetchSession(ctx, sid, prevExpiration)
+		live, expiration, err := s.deleteOrFetchSession(newCtx, sid, prevExpiration)
 		if err != nil {
 			return nil, err
 		}
@@ -232,6 +243,7 @@ func (s *Storage) isAlive(
 		return live, nil
 	})
 	s.mu.Unlock()
+	s.metrics.IsAliveCacheMisses.Inc(1)
 
 	// If we do not want to wait for the result, assume that the session is
 	// indeed alive.
@@ -240,9 +252,8 @@ func (s *Storage) isAlive(
 	}
 	res := <-resChan
 	if res.Err != nil {
-		return false, err
+		return false, res.Err
 	}
-	s.metrics.IsAliveCacheMisses.Inc(1)
 	return res.Val.(bool), nil
 }
 
