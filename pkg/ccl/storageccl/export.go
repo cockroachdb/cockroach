@@ -69,7 +69,7 @@ func declareKeysExport(
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
-	ctx context.Context, batch storage.Reader, cArgs batcheval.CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs batcheval.CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ExportRequest)
 	h := cArgs.Header
@@ -147,7 +147,6 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 	targetSize := uint64(args.TargetFileSize)
 	// TODO(adityamaru): Remove this once we are able to set tenant specific
 	// cluster settings. This takes the minimum of the system tenant's cluster
@@ -169,7 +168,7 @@ func evalExport(
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, err := e.ExportMVCCToSst(start, args.EndKey, args.StartTime,
+		summary, resume, err := reader.ExportMVCCToSst(start, args.EndKey, args.StartTime,
 			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI, destFile)
 		if err != nil {
 			return result.Result{}, err

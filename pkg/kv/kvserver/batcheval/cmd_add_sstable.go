@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -219,27 +218,20 @@ func EvalAddSSTable(
 
 func checkForKeyCollisions(
 	_ context.Context,
-	readWriter storage.ReadWriter,
+	reader storage.Reader,
 	mvccStartKey storage.MVCCKey,
 	mvccEndKey storage.MVCCKey,
 	data []byte,
 ) (enginepb.MVCCStats, error) {
-	// We could get a spansetBatch so fetch the underlying db engine as
-	// we need access to the underlying C.DBIterator later, and the
-	// dbIteratorGetter is not implemented by a spansetBatch.
-	dbEngine := spanset.GetDBEngine(readWriter, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
-
-	emptyMVCCStats := enginepb.MVCCStats{}
-
 	// Create iterator over the existing data.
-	existingDataIter := dbEngine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: mvccEndKey.Key})
 	defer existingDataIter.Close()
 	existingDataIter.SeekGE(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {
-		return emptyMVCCStats, errors.Wrap(err, "checking for key collisions")
+		return enginepb.MVCCStats{}, errors.Wrap(err, "checking for key collisions")
 	} else if !ok {
 		// Target key range is empty, so it is safe to ingest.
-		return emptyMVCCStats, nil
+		return enginepb.MVCCStats{}, nil
 	}
 
 	return existingDataIter.CheckForKeyCollisions(data, mvccStartKey.Key, mvccEndKey.Key)
