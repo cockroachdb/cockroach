@@ -13,6 +13,7 @@ package opt_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -117,8 +118,20 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("expected constraints to be copied")
 	}
 
+	compColsPtr := reflect.ValueOf(tabMeta.ComputedCols).Pointer()
+	newCompColsPtr := reflect.ValueOf(tabMetaNew.ComputedCols).Pointer()
+	if newCompColsPtr == compColsPtr {
+		t.Fatalf("expected computed columns map to be copied, not shared")
+	}
+
 	if tabMetaNew.ComputedCols[cmpID] == scalar {
 		t.Fatalf("expected computed column expression to be copied")
+	}
+
+	partialIdxPredPtr := reflect.ValueOf(tabMeta.PartialIndexPredicatesUnsafe()).Pointer()
+	newPartialIdxPredPtr := reflect.ValueOf(tabMetaNew.PartialIndexPredicatesUnsafe()).Pointer()
+	if newPartialIdxPredPtr == partialIdxPredPtr {
+		t.Fatalf("expected partial index predicates map to be copied, not shared")
 	}
 
 	if tabMetaNew.PartialIndexPredicatesUnsafe()[0] == scalar {
