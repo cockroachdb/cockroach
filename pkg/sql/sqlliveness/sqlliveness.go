@@ -37,6 +37,10 @@ type Provider interface {
 	Metrics() metric.Struct
 	Reader
 	Instance
+
+	// CachedReader returns a reader which only consults its local cache and
+	// does not perform any RPCs in the IsAlive call.
+	CachedReader() Reader
 }
 
 // String returns a hex-encoded version of the SessionID.
