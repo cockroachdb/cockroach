@@ -47,18 +47,32 @@ func TestEngine(t *testing.T) {
 	e.Put(k(`a`, ts(1)), roachpb.MakeValueFromString(`a-1`).RawBytes)
 	e.Put(k(`a`, ts(2)), roachpb.MakeValueFromString(`a-2`).RawBytes)
 	e.Put(k(`b`, ts(2)), roachpb.MakeValueFromString(`b-2`).RawBytes)
+	e.Delete(k(`b`, ts(3)))
+	e.Delete(k(`c`, ts(4)))
+	e.Put(k(`d`, ts(4)), roachpb.MakeValueFromString(`d-4`).RawBytes)
+	e.Put(k(`e`, ts(4)), roachpb.MakeValueFromString(`e-4`).RawBytes)
+	e.Delete(k(`d`, ts(5)))
 	assert.Equal(t, v(`a-2`, ts(2)), e.Get(roachpb.Key(`a`), ts(3)))
 	assert.Equal(t, v(`a-2`, ts(2)), e.Get(roachpb.Key(`a`), ts(2)))
 	assert.Equal(t, v(`a-1`, ts(1)), e.Get(roachpb.Key(`a`), ts(2).Prev()))
 	assert.Equal(t, v(`a-1`, ts(1)), e.Get(roachpb.Key(`a`), ts(1)))
 	assert.Equal(t, missing, e.Get(roachpb.Key(`a`), ts(1).Prev()))
-	assert.Equal(t, v(`b-2`, ts(2)), e.Get(roachpb.Key(`b`), ts(3)))
+	assert.Equal(t, v(`b-2`, ts(2)), e.Get(roachpb.Key(`b`), ts(3).Prev()))
 	assert.Equal(t, v(`b-2`, ts(2)), e.Get(roachpb.Key(`b`), ts(2)))
 	assert.Equal(t, missing, e.Get(roachpb.Key(`b`), ts(1)))
+	assert.Equal(t, missing, e.Get(roachpb.Key(`b`), ts(4)))
+	assert.Equal(t, v(`d-4`, ts(4)), e.Get(roachpb.Key(`d`), ts(4)))
+	assert.Equal(t, missing, e.Get(roachpb.Key(`d`), ts(5)))
+	assert.Equal(t, v(`e-4`, ts(4)), e.Get(roachpb.Key(`e`), ts(5)))
 
 	assert.Equal(t, strings.TrimSpace(`
 "a" 0.000000002,0 -> /BYTES/a-2
 "a" 0.000000001,0 -> /BYTES/a-1
+"b" 0.000000003,0 -> /<empty>
 "b" 0.000000002,0 -> /BYTES/b-2
+"c" 0.000000004,0 -> /<empty>
+"d" 0.000000005,0 -> /<empty>
+"d" 0.000000004,0 -> /BYTES/d-4
+"e" 0.000000004,0 -> /BYTES/e-4
 	`), e.DebugPrint(""))
 }
