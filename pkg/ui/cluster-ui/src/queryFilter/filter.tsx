@@ -395,6 +395,14 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     );
     // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
 
+    // Some app names could be empty strings, so we're adding " " to those names,
+    // this way it's easier for the user to recognize the blank name.
+    const apps = appNames.map(app => {
+      const label =
+        app.label.trim().length === 0 ? '"' + app.label + '"' : app.label;
+      return { label: label, value: app.value };
+    });
+
     return (
       <div onClick={this.insideClick} ref={this.dropdownRef}>
         <div className={dropdownButton} onClick={this.toggleFilters}>
@@ -405,9 +413,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           <div className={dropdownContentWrapper}>
             <div className={filterLabel.top}>App</div>
             <Select
-              options={appNames}
+              options={apps}
               onChange={e => this.handleChange(e, "app")}
-              value={appNames.filter(app => app.label == filters.app)}
+              value={apps.filter(app => app.value === filters.app)}
               placeholder="All"
               styles={customStyles}
             />
