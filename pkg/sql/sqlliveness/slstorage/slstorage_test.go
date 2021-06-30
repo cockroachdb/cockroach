@@ -510,34 +510,81 @@ func TestCachedReader(t *testing.T) {
 		unblock := make(chan struct{})
 		blocked <- unblock
 		<-unblock
-		return nil
+		return roachpb.NewError(ctx.Err())
 	})
 
-	// Perform a read from the CachedReader and ensure that it does not block.
-	cached := storage.CachedReader()
-	var alive bool
-	var g errgroup.Group
-	sid := sqlliveness.SessionID("foo")
-	g.Go(func() (err error) {
-		alive, err = cached.IsAlive(ctx, sid)
-		return err
+	t.Run("CachedReader does not block", func(t *testing.T) {
+		// Perform a read from the CachedReader and ensure that it does not block.
+		cached := storage.CachedReader()
+		var alive bool
+		var g errgroup.Group
+		sid := sqlliveness.SessionID(t.Name())
+		g.Go(func() (err error) {
+			alive, err = cached.IsAlive(ctx, sid)
+			return err
+		})
+		// Make sure that an asynchronous read was started.
+		unblock := <-blocked
+		// Make sure that the cached read did not block.
+		require.NoError(t, g.Wait())
+		// The storage layer has never read this session so it should be assumed to
+		// be alive.
+		require.True(t, alive)
+		// Unblock the reader and make sure it eventually populates the cache.
+		close(unblock)
+		testutils.SucceedsSoon(t, func() error {
+			alive, err := cached.IsAlive(ctx, sid)
+			require.NoError(t, err)
+			if alive {
+				return errors.New("expected not alive")
+			}
+			return nil
+		})
 	})
-	// Make sure that an asynchronous read was started.
-	unblock := <-blocked
-	// Make sure that the cached read did not block.
-	require.NoError(t, g.Wait())
-	// The storage layer has never read this session so it should be assumed to
-	// be alive.
-	require.True(t, alive)
-	// Unblock the reader and make sure it eventually populates the cache.
-	close(unblock)
-	testutils.SucceedsSoon(t, func() error {
-		alive, err := cached.IsAlive(ctx, sid)
-		require.NoError(t, err)
-		if alive {
-			return errors.New("expected not alive")
-		}
-		return nil
+	t.Run("canceled context does not interrupt read", func(t *testing.T) {
+		// Perform a read from the CachedReader and ensure that it does not block.
+		cached := storage.CachedReader()
+		var alive bool
+		var g errgroup.Group
+		sid := sqlliveness.SessionID(t.Name())
+		toCancel, cancel := context.WithCancel(ctx)
+
+		before := storage.Metrics().IsAliveCacheMisses.Count()
+
+		g.Go(func() (err error) {
+			alive, err = cached.IsAlive(toCancel, sid)
+			return err
+		})
+		// Make sure that an asynchronous read was started.
+		unblock := <-blocked
+		g.Wait() // make sure that the cached read did not block
+		// The storage layer has never read this session so it should be assumed to
+		// be alive.
+		require.True(t, alive)
+		cur := storage.Metrics().IsAliveCacheMisses.Count()
+		require.Equal(t, int64(1), cur-before)
+		// Now launch another, synchronous reader, which will join
+		// the single-flight.
+		g.Go(func() (err error) {
+			alive, err = storage.IsAlive(ctx, sid)
+			return err
+		})
+		// Sleep some tiny amount of time to hopefully allow the other
+		// goroutine to make it to the group.
+		testutils.SucceedsSoon(t, func() error {
+			if storage.Metrics().IsAliveCacheMisses.Count()-before != 2 {
+				return errors.New("not seen cache miss yet")
+			}
+			return nil
+		})
+		// Cancel the context of the original, async call.
+		cancel()
+		// Unblock the reader.
+		close(unblock)
+		// Ensure that no error makes it to the synchronous call.
+		require.NoError(t, g.Wait())
+		// Ensure that the synchronous reader sees the session as not alive.
+		require.False(t, alive)
 	})
 }
 
