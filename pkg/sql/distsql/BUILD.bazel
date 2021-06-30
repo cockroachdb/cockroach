@@ -11,7 +11,6 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/descs",
-        "//pkg/sql/catalog/lease",
         "//pkg/sql/colexec",
         "//pkg/sql/colflow",
         "//pkg/sql/execinfra",

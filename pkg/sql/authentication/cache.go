@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -78,9 +77,9 @@ func NewCache(account mon.BoundAccount) *AuthInfoCache {
 func (a *AuthInfoCache) Get(
 	ctx context.Context,
 	settings *cluster.Settings,
-	leaseMgr *lease.Manager,
 	ie sqlutil.InternalExecutor,
 	db *kv.DB,
+	f *descs.CollectionFactory,
 	normalizedUsername security.SQLUsername,
 	readFromStore func(
 		ctx context.Context,
@@ -92,102 +91,103 @@ func (a *AuthInfoCache) Get(
 	if !CacheEnabled.Get(&settings.SV) {
 		return readFromStore(ctx, nil /* txn */, ie, normalizedUsername)
 	}
-	err = descs.Txn(ctx, settings, leaseMgr, ie, db,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
-			var usersTableDesc, roleOptionsTableDesc catalog.TableDescriptor
-			_, usersTableDesc, err = descriptors.GetImmutableTableByName(
-				ctx,
-				txn,
-				UsersTableName,
-				tree.ObjectLookupFlagsWithRequired(),
-			)
+	err = f.Txn(ctx, ie, db, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) (err error) {
+		var usersTableDesc, roleOptionsTableDesc catalog.TableDescriptor
+		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
+			ctx,
+			txn,
+			UsersTableName,
+			tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		_, roleOptionsTableDesc, err = descriptors.GetImmutableTableByName(
+			ctx,
+			txn,
+			RoleOptionsTableName,
+			tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		if usersTableDesc.IsUncommittedVersion() || roleOptionsTableDesc.IsUncommittedVersion() {
+			aInfo, err = readFromStore(ctx, txn, ie, normalizedUsername)
 			if err != nil {
 				return err
 			}
-			_, roleOptionsTableDesc, err = descriptors.GetImmutableTableByName(
-				ctx,
-				txn,
-				RoleOptionsTableName,
-				tree.ObjectLookupFlagsWithRequired(),
-			)
+		}
+		usersTableVersion := usersTableDesc.GetVersion()
+		roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
+
+		// We loop in case the table version changes while looking up
+		// password or role options.
+		for {
+			// Check version and maybe clear cache while holding the mutex.
+			var found bool
+			aInfo, found = func() (AuthInfo, bool) {
+				a.Lock()
+				defer a.Unlock()
+				if a.usersTableVersion != usersTableVersion {
+					// Update users table version and drop the map.
+					a.usersTableVersion = usersTableVersion
+					a.cache = make(map[security.SQLUsername]AuthInfo)
+					a.boundAccount.Empty(ctx)
+				}
+				if a.roleOptionsTableVersion != roleOptionsTableVersion {
+					// Update role_optiosn table version and drop the map.
+					a.roleOptionsTableVersion = roleOptionsTableVersion
+					a.cache = make(map[security.SQLUsername]AuthInfo)
+					a.boundAccount.Empty(ctx)
+				}
+				aInfo, found = a.cache[normalizedUsername]
+				return aInfo, found
+			}()
+
+			if found {
+				return nil
+			}
+
+			// Lookup memberships outside the lock.
+			aInfo, err = readFromStore(ctx, txn, ie, normalizedUsername)
 			if err != nil {
 				return err
 			}
-			if usersTableDesc.IsUncommittedVersion() || roleOptionsTableDesc.IsUncommittedVersion() {
-				aInfo, err = readFromStore(ctx, txn, ie, normalizedUsername)
-				if err != nil {
-					return err
+
+			finishedLoop := func() bool {
+				// Update membership.
+				a.Lock()
+				defer a.Unlock()
+				// Table version has changed while we were looking: unlock and start over.
+				if a.usersTableVersion != usersTableVersion {
+					usersTableVersion = a.usersTableVersion
+					return false
 				}
+				if a.roleOptionsTableVersion != roleOptionsTableVersion {
+					roleOptionsTableVersion = a.roleOptionsTableVersion
+					return false
+				}
+				// Table version remains the same: update map, unlock, return.
+				const sizeOfAuthInfo = int(unsafe.Sizeof(AuthInfo{}))
+				const sizeOfTimestamp = int(unsafe.Sizeof(tree.DTimestamp{}))
+				sizeOfEntry := len(normalizedUsername.Normalized()) +
+					sizeOfAuthInfo + len(aInfo.HashedPassword) + sizeOfTimestamp
+				if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
+					// If there is no memory available to cache the entry, we can still
+					// proceed with authentication so that users are not locked out of
+					// the database.
+					log.Ops.Warningf(ctx, "no memory available to cache authentication info: %v", err)
+				} else {
+					a.cache[normalizedUsername] = aInfo
+				}
+				return true
+			}()
+			if finishedLoop {
+				return nil
 			}
-			usersTableVersion := usersTableDesc.GetVersion()
-			roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
-
-			// We loop in case the table version changes while looking up
-			// password or role options.
-			for {
-				// Check version and maybe clear cache while holding the mutex.
-				var found bool
-				aInfo, found = func() (AuthInfo, bool) {
-					a.Lock()
-					defer a.Unlock()
-					if a.usersTableVersion != usersTableVersion {
-						// Update users table version and drop the map.
-						a.usersTableVersion = usersTableVersion
-						a.cache = make(map[security.SQLUsername]AuthInfo)
-						a.boundAccount.Empty(ctx)
-					}
-					if a.roleOptionsTableVersion != roleOptionsTableVersion {
-						// Update role_optiosn table version and drop the map.
-						a.roleOptionsTableVersion = roleOptionsTableVersion
-						a.cache = make(map[security.SQLUsername]AuthInfo)
-						a.boundAccount.Empty(ctx)
-					}
-					aInfo, found = a.cache[normalizedUsername]
-					return aInfo, found
-				}()
-
-				if found {
-					return nil
-				}
-
-				// Lookup memberships outside the lock.
-				aInfo, err = readFromStore(ctx, txn, ie, normalizedUsername)
-				if err != nil {
-					return err
-				}
-
-				finishedLoop := func() bool {
-					// Update membership.
-					a.Lock()
-					defer a.Unlock()
-					// Table version has changed while we were looking: unlock and start over.
-					if a.usersTableVersion != usersTableVersion {
-						usersTableVersion = a.usersTableVersion
-						return false
-					}
-					if a.roleOptionsTableVersion != roleOptionsTableVersion {
-						roleOptionsTableVersion = a.roleOptionsTableVersion
-						return false
-					}
-					// Table version remains the same: update map, unlock, return.
-					const sizeOfAuthInfo = int(unsafe.Sizeof(AuthInfo{}))
-					const sizeOfTimestamp = int(unsafe.Sizeof(tree.DTimestamp{}))
-					sizeOfEntry := len(normalizedUsername.Normalized()) +
-						sizeOfAuthInfo + len(aInfo.HashedPassword) + sizeOfTimestamp
-					if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
-						// If there is no memory available to cache the entry, we can still
-						// proceed with authentication so that users are not locked out of
-						// the database.
-						log.Ops.Warningf(ctx, "no memory available to cache authentication info: %v", err)
-					} else {
-						a.cache[normalizedUsername] = aInfo
-					}
-					return true
-				}()
-				if finishedLoop {
-					return nil
-				}
-			}
-		})
+		}
+	})
 	return aInfo, err
 }

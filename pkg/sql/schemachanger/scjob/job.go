@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 )
 
@@ -92,9 +91,6 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	states := progress.GetNewSchemaChange().States
 
 	settings := execCtx.ExtendedEvalContext().Settings
-	lm := execCtx.LeaseMgr()
-	db := lm.DB()
-	ie := execCtx.ExtendedEvalContext().InternalExecutor.(sqlutil.InternalExecutor)
 	sc, err := scplan.MakePlan(makeState(ctx, settings, n.targets, states), scplan.Params{
 		ExecutionPhase: scplan.PostCommitPhase,
 	})
@@ -108,7 +104,9 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	}
 
 	for i, s := range sc.Stages {
-		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		if err := sql.DescsTxn(ctx, execCtx.ExecCfg(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			jt := badJobTracker{
 				txn:         txn,
 				descriptors: descriptors,
@@ -148,7 +146,9 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	// If no stages exist, then execute a singe transaction
 	// within this job to allow schema changes again.
 	if len(sc.Stages) == 0 {
-		err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		err := sql.DescsTxn(ctx, execCtx.ExecCfg(), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			err := restoreTableIDs(txn, descriptors)
 			if err != nil {
 				return err

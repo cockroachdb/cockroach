@@ -82,11 +82,12 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		err = m.Run(ctx, cv, mc.Cluster())
 	case *migration.TenantMigration:
 		err = m.Run(ctx, cv, migration.TenantDeps{
-			DB:               execCtx.ExecCfg().DB,
-			Codec:            execCtx.ExecCfg().Codec,
-			Settings:         execCtx.ExecCfg().Settings,
-			InternalExecutor: execCtx.ExecCfg().InternalExecutor,
-			LeaseManager:     execCtx.ExecCfg().LeaseManager,
+			DB:                execCtx.ExecCfg().DB,
+			Codec:             execCtx.ExecCfg().Codec,
+			Settings:          execCtx.ExecCfg().Settings,
+			CollectionFactory: execCtx.ExecCfg().CollectionFactory,
+			LeaseManager:      execCtx.ExecCfg().LeaseManager,
+			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
 		})
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)

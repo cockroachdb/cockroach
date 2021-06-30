@@ -88,10 +88,8 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 
 	require.NoError(
 		t,
-		descs.Txn(
+		s.ExecutorConfig().(ExecutorConfig).CollectionFactory.Txn(
 			ctx,
-			s.ClusterSettings(),
-			s.LeaseManager().(*lease.Manager),
 			s.InternalExecutor().(*InternalExecutor),
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {

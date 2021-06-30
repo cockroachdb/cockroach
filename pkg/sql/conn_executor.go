@@ -784,8 +784,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = descs.MakeCollection(
-		s.cfg.LeaseManager, s.cfg.Settings, sd, s.cfg.HydratedTables, s.cfg.VirtualSchemas)
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(sd)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -958,7 +957,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
-			ex.server.cfg.LeaseManager,
+			ex.server.cfg.CollectionFactory,
 			ex.server.cfg.DB,
 			ex.server.cfg.Codec,
 			&ie,

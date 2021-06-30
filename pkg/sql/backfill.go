@@ -746,15 +746,6 @@ func (sc *SchemaChanger) validateConstraints(
 	return nil
 }
 
-func (sc *SchemaChanger) newCollection() *descs.Collection {
-	return descs.NewCollection(
-		sc.settings,
-		sc.leaseMgr,
-		nil, // leaseManager
-		nil, // virtualSchemas
-	)
-}
-
 // getTableVersion retrieves the descriptor for the table being
 // targeted by the schema changer using the provided txn, and asserts
 // that the retrieved descriptor is at the given version. An error is
@@ -868,7 +859,9 @@ func (sc *SchemaChanger) truncateIndexes(
 			}
 
 			// Make a new txn just to drop this chunk.
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := sc.txn(ctx, func(
+				ctx context.Context, txn *kv.Txn, tc *descs.Collection,
+			) error {
 				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
 					if err := fn(resume); err != nil {
 						return err
@@ -879,8 +872,6 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := sc.newCollection()
-				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
 					return err

@@ -237,6 +237,9 @@ type TestServerInterface interface {
 	// MetricsRecorder periodically records node-level and store-level metrics.
 	MetricsRecorder() *status.MetricsRecorder
 
+	// CollectionFactory returns a *descs.CollectionFactory.
+	CollectionFactory() interface{}
+
 	// TestingKnobs returns the TestingKnobs in use by the test
 	// server.
 	TestingKnobs() *base.TestingKnobs

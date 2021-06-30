@@ -287,16 +287,6 @@ func newInternalPlanner(
 		opt(params)
 	}
 	callerSuppliedDescsCollection := params.collection != nil
-	// We're not concerned about the efficiency of querying tables
-	// with user-defined types, hence the nil hydratedTables.
-	if !callerSuppliedDescsCollection {
-		params.collection = descs.NewCollection(
-			execCfg.Settings,
-			execCfg.LeaseManager,
-			nil, // hydratedTables
-			execCfg.VirtualSchemas,
-		)
-	}
 
 	// We need a context that outlives all the uses of the planner (since the
 	// planner captures it in the EvalCtx, and so does the cleanup function that
@@ -324,6 +314,10 @@ func newInternalPlanner(
 		settings:           execCfg.Settings,
 		paramStatusUpdater: &noopParamStatusUpdater{},
 		setCurTxnReadOnly:  func(bool) {},
+	}
+
+	if params.collection == nil {
+		params.collection = execCfg.CollectionFactory.NewCollection(sd)
 	}
 
 	var ts time.Time

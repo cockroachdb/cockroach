@@ -82,8 +82,9 @@ func fixDescriptorMigration(
 func fixDescriptors(
 	ctx context.Context, d migration.TenantDeps, descriptorIDAndVersions []descIDAndVersion,
 ) error {
-	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
 		batch := txn.NewBatch()
 		var fixedIDs []descpb.ID
 		for _, idAndVersion := range descriptorIDAndVersions {

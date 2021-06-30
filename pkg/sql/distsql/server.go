@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -452,12 +451,7 @@ func (ds *ServerImpl) newFlowContext(
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		collection := descs.NewCollection(
-			ds.ServerConfig.Settings,
-			ds.ServerConfig.LeaseManager.(*lease.Manager),
-			ds.ServerConfig.HydratedTables,
-			ds.ServerConfig.VirtualSchemas,
-		)
+		collection := ds.CollectionFactory.NewCollection(evalCtx.SessionData)
 		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
 			Descriptors: collection,
 			CleanupFunc: func(ctx context.Context) {
