@@ -109,7 +109,8 @@ type txnKVFetcher struct {
 
 var _ kvBatchFetcher = &txnKVFetcher{}
 
-// getBatchSize returns the max size of the next batch.
+// getBatchSize returns the max size of the next batch. The size is expressed in
+// number of result keys (i.e. this size will be used for MaxSpanRequestKeys).
 func (f *txnKVFetcher) getBatchSize() int64 {
 	return f.getBatchSizeForIdx(f.batchIdx)
 }
@@ -203,11 +204,10 @@ func (f *txnKVFetcher) getWaitPolicy() lock.WaitPolicy {
 	}
 }
 
-// makeKVBatchFetcher initializes a kvBatchFetcher for the given spans.
-//
-// If useBatchLimit is true, batches are limited to kvBatchSize. If
-// firstBatchLimit is also set, the first batch is limited to that value.
-// Subsequent batches are larger, up to kvBatchSize.
+// makeKVBatchFetcher initializes a kvBatchFetcher for the given spans. If
+// useBatchLimit is true, the number of result keys per batch is limited; the
+// limit grows between subsequent batches, starting at firstBatchLimit (if not
+// 0) to productionKVBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
 func makeKVBatchFetcher(
@@ -324,7 +324,7 @@ func makeKVBatchFetcherWithSendFunc(
 
 // maxScanResponseBytes is the maximum number of bytes a scan request can
 // return.
-const maxScanResponseBytes = 10 * (1 << 20)
+const maxScanResponseBytes = 10 * (1 << 20) // 10MB
 
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {

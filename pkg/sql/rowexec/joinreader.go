@@ -73,9 +73,15 @@ type joinReader struct {
 
 	diskMonitor *mon.BytesMonitor
 
-	desc             catalog.TableDescriptor
-	index            catalog.Index
-	colIdxMap        catalog.TableColMap
+	desc      catalog.TableDescriptor
+	index     catalog.Index
+	colIdxMap catalog.TableColMap
+	// Indicates that the join reader should maintain the ordering of the input
+	// stream. This is applicable to both lookup joins and index joins. For lookup
+	// joins, maintaining order is expensive because it requires buffering. For
+	// index joins buffering is not required, but still, if ordering is not
+	// required, we'll change the output order to allow for some Pebble
+	// optimizations.
 	maintainOrdering bool
 
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
@@ -222,9 +228,14 @@ func newJoinReader(
 		input:                             input,
 		lookupCols:                        lookupCols,
 		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
-		// If the lookup columns form a key, there is only one result per
-		// lookup, so the fetcher should parallelize the key lookups it
-		// performs.
+		// The joiner has a choice to make between getting DistSender-level
+		// parallelism for its lookup batches and setting row and memory limits (due
+		// to implementation limitations, you can't have both at the same time). We
+		// choose parallelism when we know that each lookup returns at most one row:
+		// in case of indexJoinReaderType, we know that there's exactly one lookup
+		// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
+		// we know that there's at most one lookup row per input row. In other
+		// cases, we use limits.
 		shouldLimitBatches: !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType,
 		readerType:         readerType,
 	}
@@ -642,6 +653,7 @@ func (jr *joinReader) readInput() (
 		jr.updateGroupingStateForNonEmptyBatch()
 	}
 
+	// Figure out what key spans we need to lookup.
 	spans, err := jr.strategy.processLookupRows(jr.scratchInputRows)
 	if err != nil {
 		jr.MoveToDraining(err)
@@ -656,18 +668,28 @@ func (jr *joinReader) readInput() (
 		return jrEmittingRows, outRow, nil
 	}
 
-	// Sort the spans for the following cases:
-	// - For lookupJoinReaderType: this is so that we can rely upon the fetcher
-	//   to limit the number of results per batch. It's safe to reorder the
-	//   spans here because we already restore the original order of the output
-	//   during the output collection phase.
-	// - For indexJoinReaderType when !maintainOrdering: this allows lower
-	//   layers to optimize iteration over the data. Note that the looked up
-	//   rows are output unchanged, in the retrieval order, so it is not safe to
-	//   do this when maintainOrdering is true (the ordering to be maintained
-	//   may be different than the ordering in the index).
-	if jr.readerType == lookupJoinReaderType ||
-		(jr.readerType == indexJoinReaderType && !jr.maintainOrdering) {
+	// Sort the spans by key order, except for a special case: an index-join with
+	// maintainOrdering. That case can be executed efficiently if we don't sort:
+	// we know that, for an index-join, each input row corresponds to exactly one
+	// lookup row, and vice-versa. So, `spans` has one span per input/lookup-row,
+	// in the right order. joinReaderIndexJoinStrategy.processLookedUpRow()
+	// immediately emits each looked up row (it never buffers or reorders rows)
+	// so, if ordering matters, we cannot sort the spans here.
+	//
+	// In every other case than the one discussed above, we sort the spans because
+	// a) if we sort, we can then configure the fetcher below with a limit (the
+	//    fetcher only accepts a limit if the spans are sorted), and
+	// b) Pebble has various optimizations for Seeks in sorted order.
+	if jr.readerType == indexJoinReaderType && jr.maintainOrdering {
+		// Assert that the index join doesn't have shouldLimitBatches set. Since we
+		// didn't sort above, the fetcher doesn't support a limit.
+		if jr.shouldLimitBatches {
+			err := errors.AssertionFailedf("index join configured with both maintainOrdering and " +
+				"shouldLimitBatched; this shouldn't have happened as the implementation doesn't support it")
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+	} else {
 		sort.Sort(spans)
 	}
 
