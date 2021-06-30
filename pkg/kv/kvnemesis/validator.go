@@ -372,6 +372,18 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			}
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
 		}
+	case *DeleteRangeOperation:
+		if txnID == nil {
+			v.checkAtomic(`deleteRange`, t.Result, t.Txn, op)
+		} else {
+			for _, kv := range t.Result.Values {
+				write := &observedWrite{
+					Key:   kv.Key,
+					Value: roachpb.Value{},
+				}
+				v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+			}
+		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
 		if txnID == nil {
