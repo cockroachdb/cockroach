@@ -5,7 +5,7 @@ CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
 build
 CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
 ----
-- ADD SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 2}
+- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -23,7 +23,7 @@ CREATE INDEX id1 on defaultdb.t1(id, name) storing (money)
 build
 CREATE INVERTED INDEX concurrently id1 on defaultdb.t1(id, name) storing (money)
 ----
-- ADD SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 2}
+- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}
   state: ABSENT
   details:
     concurrently: true
@@ -57,7 +57,7 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
       name: p1
     rangePartitions: []
     tableId: 52
-- ADD SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 2}
+- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -75,12 +75,11 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
 build
 CREATE INDEX id1 on  defaultdb.t1(id, name) USING HASH WITH BUCKET_COUNT=8  storing (money);
 ----
-- ADD Column:{DescID: 52, ColumnID: 4, ElementName: "crdb_internal_id_name_shard_8"}
+- ADD Column:{DescID: 52, ColumnID: 4, Name: crdb_internal_id_name_shard_8}
   state: ABSENT
   details:
     column:
-      computeExpr: mod(fnv32(COALESCE(CAST(id AS STRING), '':::STRING)) + fnv32(COALESCE(CAST(name
-        AS STRING), '':::STRING)), 8:::INT8)
+      computeExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
       hidden: true
       id: 4
       name: crdb_internal_id_name_shard_8
@@ -90,7 +89,7 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) USING HASH WITH BUCKET_COUNT=8  stor
         width: 32
     familyName: primary
     tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
+- ADD PrimaryIndex:{DescID: 52, Name: new_primary_key, IndexID: 2}
   state: ABSENT
   details:
     indexId: 2
@@ -106,7 +105,7 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) USING HASH WITH BUCKET_COUNT=8  stor
     - 4
     tableId: 52
     unique: true
-- ADD SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 3}
+- ADD SecondaryIndex:{DescID: 52, Name: id1, IndexID: 3}
   state: ABSENT
   details:
     indexId: 3
@@ -127,11 +126,11 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) USING HASH WITH BUCKET_COUNT=8  stor
     storingColumnIds:
     - 3
     tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
+- DROP PrimaryIndex:{DescID: 52, Name: t1_pkey, IndexID: 1}
   state: PUBLIC
   details:
     indexId: 1
-    indexName: primary
+    indexName: t1_pkey
     keyColumnDirection:
     - ASC
     keyColumnIds:

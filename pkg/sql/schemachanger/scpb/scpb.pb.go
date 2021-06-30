@@ -913,7 +913,6 @@ func (m *Database) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Database proto.InternalMessageInfo
 
-// FIXME: Dead code
 type ListPartition struct {
 	Name string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Expr []string `protobuf:"bytes,2,rep,name=expr,proto3" json:"expr,omitempty"`

@@ -85,7 +85,7 @@ func init() {
 			})),
 		to(scpb.Status_PUBLIC,
 			emit(func(this *scpb.SecondaryIndex) scop.Op {
-				return &scop.MakeAddedPrimaryIndexPublic{
+				return &scop.MakeAddedSecondaryIndexPublic{
 					TableID: this.TableID,
 					IndexID: this.IndexId,
 				}

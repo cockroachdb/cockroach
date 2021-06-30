@@ -102,3 +102,15 @@ func removeColumnFromFamily(table *tabledesc.Mutable, colID descpb.ColumnID) err
 
 // Suppress the linter.
 var _ = removeColumnFromFamily
+
+func columnNamesFromIDs(table *tabledesc.Mutable, columnIDs descpb.ColumnIDs) ([]string, error) {
+	storeColNames := make([]string, 0, len(columnIDs))
+	for _, colID := range columnIDs {
+		column, err := table.FindColumnWithID(colID)
+		if err != nil {
+			return nil, err
+		}
+		storeColNames = append(storeColNames, column.GetName())
+	}
+	return storeColNames, nil
+}

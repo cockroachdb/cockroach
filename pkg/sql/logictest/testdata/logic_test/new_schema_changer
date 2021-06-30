@@ -706,35 +706,46 @@ CREATE INDEX bar ON tIndex (c)
 statement error index \"bar\" contains duplicate column \"b\"
 CREATE INDEX bar ON tIndex (b, b);
 
-statement error pgcode 0A000 only simple columns are supported as index elements
+statement ok
 CREATE INDEX bar ON tIndex ((a+b))
 
-statement error pgcode 0A000 only simple columns are supported as index elements
-CREATE INDEX bar ON tIndex (abs(b))
+statement ok
+CREATE INDEX bar2 ON tIndex (abs(b))
 
-statement error pgcode 0A000 only simple columns are supported as index elements
-CREATE UNIQUE INDEX bar ON tIndex (abs(b))
+statement ok
+CREATE UNIQUE INDEX bar3 ON tIndex (abs(b))
 
-statement error pgcode 0A000 only simple columns are supported as index elements
-CREATE INVERTED INDEX bar ON tIndex ((ARRAY[a,b]))
+statement ok
+CREATE INVERTED INDEX bar4 ON tIndex ((ARRAY[a,b]))
 
-statement error pgcode 0A000 only simple columns are supported as index elements
+statement ok
 CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
 
-statement error pgcode 0A000 only simple columns are supported as index elements
-CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
+statement ok
+CREATE TABLE tIndx3 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
 
 query TTBITTBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-tindex      foo         true        1             b            ASC        false    false
-tindex      foo         true        2             a            ASC        false    true
-tindex      primary     false       1             a            ASC        false    false
-tindex      primary     false       2             b            N/A        true     false
+table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit
+tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
+tindex      bar          true        2             a                ASC        false    true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
+tindex      bar2         true        2             a                ASC        false    true
+tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
+tindex      bar3         false       2             a                ASC        false    true
+tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
+tindex      bar4         true        2             a                ASC        false    true
+tindex      foo          true        1             b                ASC        false    false
+tindex      foo          true        2             a                ASC        false    true
+tindex      tindex_pkey  false       1             a                ASC        false    false
+tindex      tindex_pkey  false       2             b                N/A        true     false
+
+statement error  duplicate key value violates unique constraint "bar3"
+INSERT INTO tIndex VALUES (2,1)
 
 statement ok
-INSERT INTO tIndex VALUES (2,1)
+INSERT INTO tIndex VALUES (20000,10000)
 
 # FIXME: Disabled until rollback is supported
 #statement error pgcode 23505 violates unique constraint "bar"
@@ -743,11 +754,19 @@ INSERT INTO tIndex VALUES (2,1)
 query TTBITTBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-tindex      foo         true        1             b            ASC        false    false
-tindex      foo         true        2             a            ASC        false    true
-tindex      primary     false       1             a            ASC        false    false
-tindex      primary     false       2             b            N/A        true     false
+table_name  index_name   non_unique  seq_in_index  column_name      direction  storing  implicit
+tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
+tindex      bar          true        2             a                ASC        false    true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
+tindex      bar2         true        2             a                ASC        false    true
+tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
+tindex      bar3         false       2             a                ASC        false    true
+tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
+tindex      bar4         true        2             a                ASC        false    true
+tindex      foo          true        1             b                ASC        false    false
+tindex      foo          true        2             a                ASC        false    true
+tindex      tindex_pkey  false       1             a                ASC        false    false
+tindex      tindex_pkey  false       2             b                N/A        true     false
 
 # test for DESC index
 
@@ -779,9 +798,9 @@ tindx       b_asc       true        2             c            DESC       false 
 tindx       b_asc       true        3             a            ASC        false    true
 tindx       b_desc      true        1             b            DESC       false    false
 tindx       b_desc      true        2             a            ASC        false    true
-tindx       primary     false       1             a            ASC        false    false
-tindx       primary     false       2             b            N/A        true     false
-tindx       primary     false       3             c            N/A        true     false
+tindx       tindx_pkey  false       1             a            ASC        false    false
+tindx       tindx_pkey  false       2             b            N/A        true     false
+tindx       tindx_pkey  false       3             c            N/A        true     false
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -806,8 +825,8 @@ query TTBITTBB colnames
 SHOW INDEXES FROM privs
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-privs       primary     false       1             a            ASC        false    false
-privs       primary     false       2             b            N/A        true     false
+privs       privs_pkey  false       1             a            ASC        false    false
+privs       privs_pkey  false       2             b            N/A        true     false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -823,8 +842,8 @@ SHOW INDEXES FROM privs
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 privs       foo         true        1             b            ASC        false    false
 privs       foo         true        2             a            ASC        false    true
-privs       primary     false       1             a            ASC        false    false
-privs       primary     false       2             b            N/A        true     false
+privs       privs_pkey  false       1             a            ASC        false    false
+privs       privs_pkey  false       2             b            N/A        true     false
 
 
 user root

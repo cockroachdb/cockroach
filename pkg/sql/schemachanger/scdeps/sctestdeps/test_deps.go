@@ -24,12 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -446,6 +449,59 @@ func (s *TestState) RemoveSyntheticDescriptor(id descpb.ID) {
 	s.syntheticDescriptors.Remove(id)
 }
 
+// AddPartitioning implements the scmutationexec.CatalogReader interface.
+func (s *TestState) AddPartitioning(
+	tableDesc *tabledesc.Mutable,
+	_ *descpb.IndexDescriptor,
+	partitionFields []string,
+	listPartition []*scpb.ListPartition,
+	rangePartition []*scpb.RangePartitions,
+	_ []tree.Name,
+	_ bool,
+) error {
+	// Deserialize back into tree based types.
+	partitionBy := &tree.PartitionBy{}
+	partitionBy.List = make([]tree.ListPartition, 0, len(listPartition))
+	partitionBy.Range = make([]tree.RangePartition, 0, len(rangePartition))
+	for _, partition := range listPartition {
+		exprs, err := parser.ParseExprs(partition.Expr)
+		if err != nil {
+			return err
+		}
+		partitionBy.List = append(partitionBy.List,
+			tree.ListPartition{
+				Name:  tree.UnrestrictedName(partition.Name),
+				Exprs: exprs,
+			})
+	}
+	for _, partition := range rangePartition {
+		toExpr, err := parser.ParseExprs(partition.To)
+		if err != nil {
+			return err
+		}
+		fromExpr, err := parser.ParseExprs(partition.From)
+		if err != nil {
+			return err
+		}
+		partitionBy.Range = append(partitionBy.Range,
+			tree.RangePartition{
+				Name: tree.UnrestrictedName(partition.Name),
+				To:   toExpr,
+				From: fromExpr,
+			})
+	}
+	partitionBy.Fields = make(tree.NameList, 0, len(partitionFields))
+	for _, field := range partitionFields {
+		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
+	}
+	// For the purpose of testing we will only track
+	// these values.
+	s.partitioningInfo[tableDesc.GetID()] = &testPartitionInfo{
+		PartitionBy: *partitionBy,
+	}
+	return nil
+}
+
 var _ scexec.Catalog = (*TestState)(nil)
 
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
@@ -701,5 +757,33 @@ func (ju *testJobUpdater) UpdateProgress(progress *jobspb.Progress) {
 
 // ExecutorDependencies implements the scrun.SchemaChangeJobTxnDependencies interface.
 func (s *TestState) ExecutorDependencies() scexec.Dependencies {
+	return s
+}
+
+// ValidateForwardIndexes implements the index validator interface.
+func (s *TestState) ValidateForwardIndexes(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	withFirstMutationPublic bool,
+	gatherAllInvalid bool,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return nil
+}
+
+// ValidateInvertedIndexes implements the index validator interface.
+func (s *TestState) ValidateInvertedIndexes(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	gatherAllInvalid bool,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return nil
+}
+
+// IndexValidator implements the scexec.Dependencies interface.
+func (s *TestState) IndexValidator() scexec.IndexValidator {
 	return s
 }
