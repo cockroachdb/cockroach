@@ -14,5 +14,6 @@ go_library(
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/schemachanger/scsqldeps",
     ],
 )
