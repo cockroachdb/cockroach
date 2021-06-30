@@ -335,11 +335,13 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 	// Bump role-related table versions to force a refresh of membership/password
 	// caches.
-	if err := params.p.BumpUsersTableVersion(params.ctx); err != nil {
-		return err
-	}
-	if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
-		return err
+	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if err := params.p.BumpUsersTableVersion(params.ctx); err != nil {
+			return err
+		}
+		if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
+			return err
+		}
 	}
 	if numRoleMembershipsDeleted > 0 {
 		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
