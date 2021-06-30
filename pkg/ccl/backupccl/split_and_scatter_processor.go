@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -180,9 +182,18 @@ type splitAndScatterProcessor struct {
 	stopScattering context.CancelFunc
 
 	doneScatterCh chan entryNode
-	// A cache for routing datums, so only 1 is allocated per node.
-	routingDatumCache map[roachpb.NodeID]rowenc.EncDatum
+	// A cache for routing datums, so only 1 is allocated per restore processor.
+	routingDatumCache map[restoreProcAddress]rowenc.EncDatum
 	scatterErr        error
+
+	mu struct {
+		syncutil.Mutex
+
+		// nodeToWorkerIdx keeps track of how many entries we've sent to each node
+		// so that entries can be directed to the appropriate restore data worker
+		// on each node.
+		nodeToWorkerIdx map[roachpb.NodeID]int
+	}
 }
 
 var _ execinfra.Processor = &splitAndScatterProcessor{}
@@ -209,6 +220,7 @@ func newSplitAndScatterProcessor(
 	if !flowCtx.Cfg.Codec.ForSystemTenant() {
 		scatterer = noopSplitAndScatterer{}
 	}
+
 	ssp := &splitAndScatterProcessor{
 		flowCtx:   flowCtx,
 		spec:      spec,
@@ -216,8 +228,12 @@ func newSplitAndScatterProcessor(
 		scatterer: scatterer,
 		// Large enough so that it never blocks.
 		doneScatterCh:     make(chan entryNode, numEntries),
-		routingDatumCache: make(map[roachpb.NodeID]rowenc.EncDatum),
+		routingDatumCache: make(map[restoreProcAddress]rowenc.EncDatum),
 	}
+	ssp.mu.Lock() // not required, but doesn't hurt
+	ssp.mu.nodeToWorkerIdx = make(map[roachpb.NodeID]int)
+	ssp.mu.Unlock()
+
 	if err := ssp.Init(ssp, post, splitAndScatterOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: nil, // there are no inputs to drain
@@ -247,8 +263,8 @@ func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
 }
 
 type entryNode struct {
-	entry execinfrapb.RestoreSpanEntry
-	node  roachpb.NodeID
+	entry       execinfrapb.RestoreSpanEntry
+	destination restoreProcAddress
 }
 
 // Next implements the execinfra.RowSource interface.
@@ -267,10 +283,11 @@ func (ssp *splitAndScatterProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		}
 
 		// The routing datums informs the router which output stream should be used.
-		routingDatum, ok := ssp.routingDatumCache[scatteredEntry.node]
+		restoreProcAddr := scatteredEntry.destination
+		routingDatum, ok := ssp.routingDatumCache[restoreProcAddress{}]
 		if !ok {
-			routingDatum, _ = routingDatumsForNode(scatteredEntry.node)
-			ssp.routingDatumCache[scatteredEntry.node] = routingDatum
+			routingDatum, _ = routingDatumForRestoreProc(restoreProcAddr)
+			ssp.routingDatumCache[restoreProcAddr] = routingDatum
 		}
 
 		row := rowenc.EncDatumRow{
@@ -309,7 +326,7 @@ func (ssp *splitAndScatterProcessor) close() {
 // scatteredChunk is the entries of a chunk of entries to process along with the
 // node the chunk was scattered to.
 type scatteredChunk struct {
-	destination roachpb.NodeID
+	destination restoreProcAddress
 	entries     []execinfrapb.RestoreSpanEntry
 }
 
@@ -336,9 +353,31 @@ func (ssp *splitAndScatterProcessor) runSplitAndScatter(
 					return err
 				}
 			}
-			chunkDestination, err := scatterer.scatter(ctx, flowCtx.Codec(), scatterKey)
+			chunkDestinationNode, err := scatterer.scatter(ctx, flowCtx.Codec(), scatterKey)
 			if err != nil {
 				return err
+			}
+
+			ssp.mu.Lock()
+			currentWorkerIdx, ok := ssp.mu.nodeToWorkerIdx[chunkDestinationNode]
+			if !ok {
+				currentWorkerIdx = 0
+				ssp.mu.nodeToWorkerIdx[chunkDestinationNode] = currentWorkerIdx
+			}
+			numRestoreWorkers := int(ssp.spec.NumRestoreWorkers)
+			if numRestoreWorkers == 0 {
+				if !build.IsRelease() {
+					log.Error(ctx, "number of restore workers unexpectedly 0")
+				}
+				numRestoreWorkers = 1
+			}
+			nextWorkerIdx := (currentWorkerIdx + 1) % numRestoreWorkers
+			ssp.mu.nodeToWorkerIdx[chunkDestinationNode] = nextWorkerIdx
+			ssp.mu.Unlock()
+
+			chunkDestination := restoreProcAddress{
+				nodeID:    chunkDestinationNode,
+				workerIdx: currentWorkerIdx,
 			}
 
 			sc := scatteredChunk{
@@ -376,8 +415,8 @@ func (ssp *splitAndScatterProcessor) runSplitAndScatter(
 					}
 
 					scatteredEntry := entryNode{
-						entry: importEntry,
-						node:  chunkDestination,
+						entry:       importEntry,
+						destination: chunkDestination,
 					}
 
 					select {
@@ -394,8 +433,8 @@ func (ssp *splitAndScatterProcessor) runSplitAndScatter(
 	return g.Wait()
 }
 
-func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDatum) {
-	routingBytes := roachpb.Key(fmt.Sprintf("node%d", nodeID))
+func routingDatumForRestoreProc(address restoreProcAddress) (rowenc.EncDatum, rowenc.EncDatum) {
+	routingBytes := roachpb.Key(fmt.Sprintf("node%d-worker%d", address.nodeID, address.workerIdx))
 	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
 	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
 	return startDatum, endDatum
@@ -403,9 +442,9 @@ func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDat
 
 // routingSpanForNode provides the mapping to be used during distsql planning
 // when setting up the output router.
-func routingSpanForNode(nodeID roachpb.NodeID) ([]byte, []byte, error) {
+func routingSpanForNode(restoreAddr restoreProcAddress) ([]byte, []byte, error) {
 	var alloc rowenc.DatumAlloc
-	startDatum, endDatum := routingDatumsForNode(nodeID)
+	startDatum, endDatum := routingDatumForRestoreProc(restoreAddr)
 
 	startBytes, endBytes := make([]byte, 0), make([]byte, 0)
 	startBytes, err := startDatum.Encode(splitAndScatterOutputTypes[0], &alloc, descpb.DatumEncoding_ASCENDING_KEY, startBytes)

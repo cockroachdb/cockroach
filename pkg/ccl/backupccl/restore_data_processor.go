@@ -10,12 +10,10 @@ package backupccl
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -24,10 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -44,10 +43,6 @@ type restoreDataProcessor struct {
 	output  execinfra.RowReceiver
 
 	kr *KeyRewriter
-
-	// concurrentWorkerLimit is a semaphore that can change capacity, which controls
-	// the number of active restore worker threads.
-	concurrentWorkerLimit *quotapool.IntPool
 
 	// phaseGroup manages the phases of the restore:
 	// 1) reading entries from the input
@@ -67,22 +62,6 @@ var _ execinfra.RowSource = &restoreDataProcessor{}
 
 const restoreDataProcName = "restoreDataProcessor"
 
-const maxConcurrentRestoreWorkers = 32
-
-// TODO(pbardea): It may be worthwhile to combine this setting with the one that
-// controls the number of concurrent AddSSTable requests if each restore worker
-// spends all if its time sending AddSSTable requests.
-//
-// The maximum is not enforced since if the maximum is reduced in the future that
-// may cause the cluster setting to fail.
-var numRestoreWorkers = settings.RegisterIntSetting(
-	"kv.bulk_io_write.restore_node_concurrency",
-	fmt.Sprintf("the number of workers processing a restore per job per node; maximum %d",
-		maxConcurrentRestoreWorkers),
-	1, /* default */
-	settings.PositiveInt,
-)
-
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -91,24 +70,14 @@ func newRestoreDataProcessor(
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	sv := &flowCtx.EvalCtx.Settings.SV
-
 	rd := &restoreDataProcessor{
 		flowCtx: flowCtx,
 		input:   input,
 		spec:    spec,
 		output:  output,
-		progCh:  make(chan RestoreProgress, maxConcurrentRestoreWorkers),
+		progCh:  make(chan RestoreProgress, 1),
 		metaCh:  make(chan *execinfrapb.ProducerMetadata, 1),
-		concurrentWorkerLimit: quotapool.NewIntPool(
-			"restore worker concurrency",
-			uint64(numRestoreWorkers.Get(sv)),
-		),
 	}
-
-	numRestoreWorkers.SetOnChange(sv, func(_ context.Context) {
-		rd.concurrentWorkerLimit.UpdateCapacity(uint64(numRestoreWorkers.Get(sv)))
-	})
 
 	var err error
 	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
@@ -135,7 +104,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.input.Start(ctx)
 
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
-	entries := make(chan execinfrapb.RestoreSpanEntry, maxConcurrentRestoreWorkers)
+	entries := make(chan execinfrapb.RestoreSpanEntry, 1)
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(entries)
 		return inputReader(ctx, rd.input, entries, rd.metaCh)
@@ -211,57 +180,58 @@ func inputReader(
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.RestoreSpanEntry) error {
-	return ctxgroup.GroupWorkers(rd.Ctx, maxConcurrentRestoreWorkers, func(ctx context.Context, n int) error {
-		for {
-			done, err := func() (done bool, _ error) {
-				workerAlloc, err := rd.concurrentWorkerLimit.Acquire(ctx, 1)
-				if err != nil {
-					return done, err
-				}
-				defer rd.concurrentWorkerLimit.Release(workerAlloc)
+	loadedEntries := make(chan entryIterator, 1)
+	doneCh := rd.Ctx.Done()
 
-				entry, ok := <-entries
-				if !ok {
-					done = true
-					return done, nil
-				}
-
-				summary, err := rd.processRestoreSpanEntry(entry)
-				if err != nil {
-					return done, err
-				}
-
-				select {
-				case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs):
-				case <-ctx.Done():
-					return done, ctx.Err()
-				}
-
-				return done, nil
-			}()
-
+	g := ctxgroup.WithContext(rd.Ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(loadedEntries)
+		for entry := range entries {
+			if err := rd.openIterators(entry, loadedEntries); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		for le := range loadedEntries {
+			entry := le.entry
+			summary, err := rd.processRestoreSpanEntry(le)
 			if err != nil {
 				return err
 			}
 
-			if done {
-				return nil
+			select {
+			case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs):
+			case <-doneCh:
+				return ctx.Err()
 			}
 		}
+		return nil
 	})
+
+	return g.Wait()
 }
 
-func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	entry execinfrapb.RestoreSpanEntry,
-) (roachpb.BulkOpSummary, error) {
-	db := rd.flowCtx.Cfg.DB
+// entryIterator groups a RestoreSpanEntry along with the iterator that reads
+// the data for that entry.
+type entryIterator struct {
+	entry   execinfrapb.RestoreSpanEntry
+	iter    storage.SimpleMVCCIterator
+	cleanup func()
+}
+
+func (rd *restoreDataProcessor) openIterators(
+	entry execinfrapb.RestoreSpanEntry, entryIters chan entryIterator,
+) error {
 	ctx := rd.Ctx
-	evalCtx := rd.EvalCtx
-	var summary roachpb.BulkOpSummary
+	ctx, itersSpan := tracing.ChildSpan(ctx, "opening iterators")
+	defer itersSpan.Finish()
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
 	var iters []storage.SimpleMVCCIterator
+	var dirs []cloud.ExternalStorage
 
 	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
 
@@ -270,21 +240,55 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
 		if err != nil {
-			return summary, err
+			return err
 		}
-		defer func() {
+		dirs = append(dirs, dir)
+		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
+		if err != nil {
+			return err
+		}
+		iters = append(iters, iter)
+	}
+	iter := storage.MakeMultiIterator(iters)
+	cleanup := func() {
+		for _, dir := range dirs {
 			if err := dir.Close(); err != nil {
 				log.Warningf(ctx, "close export storage failed %v", err)
 			}
-		}()
-		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
-		if err != nil {
-			return summary, err
 		}
-		defer iter.Close()
-		iters = append(iters, iter)
+		for _, iter := range iters {
+			iter.Close()
+		}
+		iter.Close()
 	}
 
+	log.VEvent(ctx, 2, "done opening iterators, sending on ch")
+
+	entryIter := entryIterator{
+		entry:   entry,
+		iter:    iter,
+		cleanup: cleanup,
+	}
+
+	select {
+	case entryIters <- entryIter:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return nil
+}
+
+func (rd *restoreDataProcessor) processRestoreSpanEntry(
+	entryIter entryIterator,
+) (roachpb.BulkOpSummary, error) {
+	ctx, entrySpan := tracing.ChildSpan(rd.Ctx, "ingesting restore entry")
+	defer entrySpan.Finish()
+
+	var summary roachpb.BulkOpSummary
+
+	db := rd.flowCtx.Cfg.DB
+	evalCtx := rd.EvalCtx
 	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
 		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
 	if err != nil {
@@ -292,11 +296,15 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 	defer batcher.Close()
 
+	entry := entryIter.entry
+
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
-	iter := storage.MakeMultiIterator(iters)
-	defer iter.Close()
+
 	var keyScratch, valueScratch []byte
+
+	iter := entryIter.iter
+	defer entryIter.cleanup()
 
 	for iter.SeekGE(startKeyMVCC); ; {
 		ok, err := iter.Valid()
@@ -355,6 +363,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 	}
+	log.VEvent(ctx, 2, "done adding, flushing")
 	// Flush out the last batch.
 	if err := batcher.Flush(ctx); err != nil {
 		return summary, err

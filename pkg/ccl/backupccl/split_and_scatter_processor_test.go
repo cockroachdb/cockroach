@@ -196,7 +196,11 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			}
 			for stream := 0; stream < c.numStreams; stream++ {
 				// In this test, nodes are 1 indexed.
-				startBytes, endBytes, err := routingSpanForNode(roachpb.NodeID(stream + 1))
+				restoreAddr := restoreProcAddress{
+					nodeID:    roachpb.NodeID(stream + 1),
+					workerIdx: 0,
+				}
+				startBytes, endBytes, err := routingSpanForNode(restoreAddr)
 				require.NoError(t, err)
 
 				span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
