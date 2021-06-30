@@ -25,6 +25,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
+//go:generate mockgen -package=kvcoord -destination=mocks_generated.go -mock_names=RangeDescriptorDB=MockGenRangeDescriptorDB . Transport,RangeDescriptorDB
+
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful
 // responses are required.
