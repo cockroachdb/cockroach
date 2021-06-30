@@ -53,7 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -937,10 +937,6 @@ type ExecutorConfig struct {
 
 	ExternalIODirConfig base.ExternalIODirConfig
 
-	// HydratedTables is a node-level cache of table descriptors which utilize
-	// user-defined types.
-	HydratedTables *hydratedtables.Cache
-
 	GCJobNotifier *gcjobnotifier.Notifier
 
 	RangeFeedFactory *rangefeed.Factory
@@ -977,6 +973,9 @@ type ExecutorConfig struct {
 	// TenantUsageServer is used to implement configuration APIs for tenant cost
 	// control.
 	TenantUsageServer multitenant.TenantUsageServer
+
+	// CollectionFactory is used to construct a descs.Collection.
+	CollectionFactory *descs.CollectionFactory
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.
@@ -2671,4 +2670,14 @@ func anonymizeStmt(ast tree.Statement) string {
 		return ""
 	}
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
+}
+
+// DescsTxn is a convenient method for running a transaction on descriptors
+// when you have an ExecutorConfig.
+func DescsTxn(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
+) error {
+	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
 }

@@ -142,9 +142,8 @@ func fetchSpansForTargets(
 		}
 		return nil
 	}
-	err := descs.Txn(
-		ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
-		execCfg.DB, fetchSpans,
-	)
-	return spans, err
+	if err := sql.DescsTxn(ctx, execCfg, fetchSpans); err != nil {
+		return nil, err
+	}
+	return spans, nil
 }
