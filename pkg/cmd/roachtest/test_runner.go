@@ -829,8 +829,14 @@ func (r *testRunner) runTest(
 			// We really shouldn't get here unless the test code somehow managed
 			// to deadlock without blocking on anything remote - since we killed
 			// everything.
-			const msg = "test timed out and afterwards failed to respond to cancelation"
+			const msg = "test timed out and afterwards failed to respond to cancellation"
 			t.L().PrintfCtx(ctx, msg)
+
+			const stacksFile = "__stacks_after_cancellation"
+			if cl, err := t.L().ChildLogger(stacksFile, logger.QuietStderr, logger.QuietStdout); err == nil {
+				cl.PrintfCtx(ctx, "all stacks:\n\n%s\n", allStacks())
+				t.L().PrintfCtx(ctx, "dumped stacks (after cancellation) to %s", stacksFile)
+			}
 			r.collectClusterLogs(ctx, c, t)
 			// We already marked the test as failing, so don't return an error here.
 			// Doing so would shut down the entire roachtest run.
