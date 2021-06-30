@@ -183,6 +183,7 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 				}
 				w.mu.Unlock()
 
+				// TODO(sarkesian): looks like support for deletes needs to be added here
 				if prevValueMismatch {
 					log.Infof(ctx, "rangefeed mismatch\n%s", engineContents)
 					panic(errors.Errorf(
