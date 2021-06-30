@@ -50,6 +50,7 @@ message ScheduleDetails {
 // ExecutionArguments describes data needed to execute scheduled jobs.
 message ExecutionArguments {
   google.protobuf.Any args = 1;
+  string create_statement = 2;
 }
 
 // Message representing sql statement to execute.
