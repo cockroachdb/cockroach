@@ -123,15 +123,7 @@ func retrieveUserAndPasswordWithCache(
 		}
 	}
 	err = runFn(func(ctx context.Context) (retErr error) {
-		aInfo, retErr = execCfg.AuthenticationInfoCache.Get(
-			ctx,
-			execCfg.Settings,
-			execCfg.LeaseManager,
-			ie,
-			execCfg.DB,
-			normalizedUsername,
-			retrieveUserAndPassword,
-		)
+		aInfo, retErr = execCfg.AuthenticationInfoCache.Get(ctx, execCfg.Settings, ie, execCfg.DB, execCfg.CollectionFactory, normalizedUsername, retrieveUserAndPassword)
 		return retErr
 	})
 

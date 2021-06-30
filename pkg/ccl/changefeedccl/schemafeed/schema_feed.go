@@ -83,14 +83,15 @@ func New(
 	metrics *Metrics,
 ) SchemaFeed {
 	m := &schemaFeed{
-		filter:   schemaChangeEventFilters[events],
-		db:       cfg.DB,
-		clock:    cfg.DB.Clock(),
-		settings: cfg.Settings,
-		targets:  targets,
-		leaseMgr: cfg.LeaseManager.(*lease.Manager),
-		ie:       cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
-		metrics:  metrics,
+		filter:            schemaChangeEventFilters[events],
+		db:                cfg.DB,
+		clock:             cfg.DB.Clock(),
+		settings:          cfg.Settings,
+		targets:           targets,
+		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
+		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
+		collectionFactory: cfg.CollectionFactory,
+		metrics:           metrics,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
@@ -120,7 +121,8 @@ type schemaFeed struct {
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
 	// lease manager?
-	leaseMgr *lease.Manager
+	leaseMgr          *lease.Manager
+	collectionFactory *descs.CollectionFactory
 
 	mu struct {
 		syncutil.Mutex
@@ -145,7 +147,7 @@ type schemaFeed struct {
 
 		// previousTableVersion is a map from tableID to the most recent version
 		// of the table descriptor seen by the poller. This is needed to determine
-		// when a backilling mutation has successfully completed - this can only
+		// when a backfilling mutation has successfully completed - this can only
 		// be determining by comparing a version to the previous version.
 		previousTableVersion map[descpb.ID]catalog.TableDescriptor
 
@@ -285,8 +287,9 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := descs.Txn(
-		ctx, tf.settings, tf.leaseMgr, tf.ie, tf.db, initialTableDescsFn,
+
+	if err := tf.collectionFactory.Txn(
+		ctx, tf.ie, tf.db, initialTableDescsFn,
 	); err != nil {
 		return err
 	}

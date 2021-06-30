@@ -282,19 +282,7 @@ func newInternalPlanner(
 	opts ...InternalPlannerParamsOption,
 ) (*planner, func()) {
 	// Default parameters which may be override by the supplied options.
-	params := &internalPlannerParams{
-		// The table collection used by the internal planner does not rely on the
-		// deprecatedDatabaseCache and there are no subscribers to the
-		// deprecatedDatabaseCache, so we can leave it uninitialized.
-		// Furthermore, we're not concerned about the efficiency of querying tables
-		// with user-defined types, hence the nil hydratedTables.
-		collection: descs.NewCollection(
-			execCfg.Settings,
-			execCfg.LeaseManager,
-			nil, // hydratedTables
-			execCfg.VirtualSchemas,
-		),
-	}
+	params := &internalPlannerParams{}
 	for _, opt := range opts {
 		opt(params)
 	}
@@ -325,6 +313,10 @@ func newInternalPlanner(
 		settings:           execCfg.Settings,
 		paramStatusUpdater: &noopParamStatusUpdater{},
 		setCurTxnReadOnly:  func(bool) {},
+	}
+
+	if params.collection == nil {
+		params.collection = execCfg.CollectionFactory.NewCollection(sd)
 	}
 
 	var ts time.Time

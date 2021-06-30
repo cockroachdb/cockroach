@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -240,9 +240,9 @@ func TestCacheBasic(t *testing.T) {
 		db,
 		ex,
 		keys.SystemSQLCodec,
-		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
 		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
 	)
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -350,9 +350,9 @@ CREATE STATISTICS s FROM tt;
 		kvDB,
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		keys.SystemSQLCodec,
-		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
 		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
 	)
 	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
@@ -411,9 +411,9 @@ func TestCacheWait(t *testing.T) {
 		db,
 		ex,
 		keys.SystemSQLCodec,
-		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
 		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
 	)
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -468,9 +468,9 @@ func TestCacheAutoRefresh(t *testing.T) {
 		s.DB(),
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		keys.SystemSQLCodec,
-		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
 		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
 	)
 
 	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
