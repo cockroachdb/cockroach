@@ -31,6 +31,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *DeleteOperation:
 		return &o.Result
+	case *DeleteRangeOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -107,6 +109,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *ScanOperation:
 		o.format(w, fctx)
 	case *DeleteOperation:
+		o.format(w, fctx)
+	case *DeleteRangeOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -233,6 +237,26 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.Del(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
 	op.Result.format(w)
+}
+
+func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
+	switch op.Result.Type {
+	case ResultType_Error:
+		err := errors.DecodeError(context.TODO(), *op.Result.Err)
+		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
+	case ResultType_Values:
+		var kvs strings.Builder
+		for i, kv := range op.Result.Values {
+			if i > 0 {
+				kvs.WriteString(`, `)
+			}
+			kvs.WriteByte('"')
+			kvs.WriteString(string(kv.Key))
+			kvs.WriteString(`"`)
+		}
+		fmt.Fprintf(w, ` // ([%s], nil)`, kvs.String())
+	}
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
