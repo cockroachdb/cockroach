@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,22 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
-
-// CreatePartitioningCCL is the public hook point for the CCL-licensed
-// partitioning creation code.
-var CreatePartitioningCCL = func(
-	ctx context.Context,
-	st *cluster.Settings,
-	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Mutable,
-	indexDesc descpb.IndexDescriptor,
-	partBy *tree.PartitionBy,
-	allowedNewColumnNames []tree.Name,
-	allowImplicitPartitioning bool,
-) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
-	return nil, descpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
-		"creating or manipulating partitions requires a CCL binary"))
-}
 
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
 // based on all the `colNames`.
@@ -184,21 +168,16 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 		panic(sqlerrors.NewRelationAlreadyExistsError(n.Name.String()))
 	}
 
-	if table.IsView() && !table.MaterializedView() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table or materialized view", &n.Table))
+	if !table.IsPhysicalTable() || table.IsSequence() {
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", &n.Table))
 	}
 
 	if table.MaterializedView() {
-		if n.Interleave != nil {
-			panic(pgerror.New(pgcode.InvalidObjectDefinition,
-				"cannot create interleaved index on materialized view"))
-		}
 		if n.Sharded != nil {
 			panic(pgerror.New(pgcode.InvalidObjectDefinition,
 				"cannot create hash sharded index on materialized view"))
 		}
 	}
-
 	if n.PartitionByIndex != nil && table.GetLocalityConfig() != nil {
 		panic(pgerror.New(
 			pgcode.FeatureNotSupported,
@@ -233,7 +212,9 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 					"version %v must be finalized to use expression indexes",
 					clusterversion.ExpressionIndexes))
 			}
-			_, typ, _, err := b.DescUtils().DequalifyAndValidateExpr(
+			// TODO(fqazi): We need to deal with columns added in the same
+			// transaction here as well.
+			_, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
 				ctx,
 				table,
 				columnNode.Expr,
@@ -248,7 +229,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 			}
 			// Create a new virtual column and add it to the table
 			// descriptor.
-			colName := tabledesc.GenerateUniqueName("crdb_idx_expr", func(name string) bool {
+			colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) bool {
 				_, err := table.FindColumnWithName(tree.Name(name))
 				return err == nil
 			})
@@ -275,11 +256,9 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 				}
 			}
 
-			// Set up the index based on the new column
+			// Set up the index based on the new column.
 			colNames = append(colNames, colName)
 			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, addColumn.Column.ID)
-			continue
-
 		}
 		if columnNode.Expr == nil {
 			column, err := table.FindColumnWithName(columnNode.Column)
@@ -299,7 +278,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 			panic(errors.AssertionFailedf("Unknown direction type %s", columnNode.Direction))
 		}
 	}
-	// Setup the storing columns
+	// Setup the storing columns.
 	for _, storingNode := range n.Storing {
 		column, err := table.FindColumnWithName(storingNode)
 		if err != nil {
@@ -314,10 +293,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 		if table.IsLocalityRegionalByRow() {
 			panic(pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables"))
 		}
-		if n.Interleave != nil {
-			panic(pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded"))
-		}
-		buckets, err := b.DescUtils().EvalShardBucketCount(ctx, semaCtx(b), evalCtx(ctx, b), n.Sharded.ShardBuckets)
+		buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx(b), evalCtx(ctx, b), n.Sharded.ShardBuckets)
 		if err != nil {
 			panic(err)
 		}
