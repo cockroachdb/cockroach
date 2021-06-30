@@ -42,6 +42,8 @@ import (
 	"github.com/petermattis/goid"
 )
 
+var errTestsFailed = fmt.Errorf("some tests failed")
+
 // testRunner runs tests.
 type testRunner struct {
 	// buildVersion is the version of the Cockroach binary that tests will run against.
@@ -315,7 +317,7 @@ func (r *testRunner) Run(
 	passFailLine := r.generateReport()
 	shout(ctx, l, lopt.stdout, passFailLine)
 	if len(r.status.fail) > 0 {
-		return fmt.Errorf("some tests failed")
+		return errTestsFailed
 	}
 	return nil
 }
