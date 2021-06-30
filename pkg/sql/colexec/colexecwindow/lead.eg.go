@@ -42,7 +42,6 @@ func NewLeadOperator(
 	offsetIdx int,
 	defaultIdx int,
 ) (colexecop.Operator, error) {
-	argType := inputTypes[argIdx]
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to
@@ -50,7 +49,7 @@ func NewLeadOperator(
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(memoryLimit) * 0.10)
 	buffer := colexecutils.NewSpillingBuffer(
-		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, []*types.T{argType}, diskAcc, argIdx)
+		bufferAllocator, bufferMemLimit, diskQueueCfg, fdSemaphore, inputTypes, diskAcc, argIdx)
 	base := leadBase{
 		buffer:          buffer,
 		outputColIdx:    outputColIdx,
@@ -59,6 +58,7 @@ func NewLeadOperator(
 		offsetIdx:       offsetIdx,
 		defaultIdx:      defaultIdx,
 	}
+	argType := inputTypes[argIdx]
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(argType.Family()) {
 	case types.BoolFamily:
 		switch argType.Width() {
@@ -264,9 +264,8 @@ func (w *leadBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -291,9 +290,8 @@ func (w *leadBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -317,9 +315,8 @@ func (w *leadBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -338,9 +335,8 @@ func (w *leadBoolWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -431,9 +427,8 @@ func (w *leadBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 					leadLagCol.CopySlice(defaultCol, i, i, i+1)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -458,9 +453,8 @@ func (w *leadBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.CopySlice(defaultCol, i, i, i+1)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -484,9 +478,8 @@ func (w *leadBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.CopySlice(defaultCol, i, i, i+1)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -505,9 +498,8 @@ func (w *leadBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 			leadLagCol.CopySlice(defaultCol, i, i, i+1)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -604,9 +596,8 @@ func (w *leadDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -631,9 +622,8 @@ func (w *leadDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -657,9 +647,8 @@ func (w *leadDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -678,9 +667,8 @@ func (w *leadDecimalWindow) processBatch(batch coldata.Batch, startIdx, endIdx i
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -776,9 +764,8 @@ func (w *leadInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -803,9 +790,8 @@ func (w *leadInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -829,9 +815,8 @@ func (w *leadInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -850,9 +835,8 @@ func (w *leadInt16Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -948,9 +932,8 @@ func (w *leadInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -975,9 +958,8 @@ func (w *leadInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1001,9 +983,8 @@ func (w *leadInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1022,9 +1003,8 @@ func (w *leadInt32Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -1120,9 +1100,8 @@ func (w *leadInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -1147,9 +1126,8 @@ func (w *leadInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1173,9 +1151,8 @@ func (w *leadInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1194,9 +1171,8 @@ func (w *leadInt64Window) processBatch(batch coldata.Batch, startIdx, endIdx int
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -1292,9 +1268,8 @@ func (w *leadFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx i
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -1319,9 +1294,8 @@ func (w *leadFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx i
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1345,9 +1319,8 @@ func (w *leadFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx i
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1366,9 +1339,8 @@ func (w *leadFloat64Window) processBatch(batch coldata.Batch, startIdx, endIdx i
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -1464,9 +1436,8 @@ func (w *leadTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -1491,9 +1462,8 @@ func (w *leadTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1517,9 +1487,8 @@ func (w *leadTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1538,9 +1507,8 @@ func (w *leadTimestampWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -1636,9 +1604,8 @@ func (w *leadIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -1663,9 +1630,8 @@ func (w *leadIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1689,9 +1655,8 @@ func (w *leadIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1710,9 +1675,8 @@ func (w *leadIntervalWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -1803,9 +1767,8 @@ func (w *leadJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 					leadLagCol.CopySlice(defaultCol, i, i, i+1)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -1830,9 +1793,8 @@ func (w *leadJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				leadLagCol.CopySlice(defaultCol, i, i, i+1)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1856,9 +1818,8 @@ func (w *leadJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 				leadLagCol.CopySlice(defaultCol, i, i, i+1)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -1877,9 +1838,8 @@ func (w *leadJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			leadLagCol.CopySlice(defaultCol, i, i, i+1)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -1972,9 +1932,8 @@ func (w *leadDatumWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 					leadLagCol.Set(i, val)
 					continue
 				}
-				b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-				vec := b.ColVec(0)
-				if vec.Nulls().NullAt(idx) {
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 					leadLagNulls.SetNull(i)
 					continue
 				}
@@ -1999,9 +1958,8 @@ func (w *leadDatumWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -2025,9 +1983,8 @@ func (w *leadDatumWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 				leadLagCol.Set(i, val)
 				continue
 			}
-			b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-			vec := b.ColVec(0)
-			if vec.Nulls().NullAt(idx) {
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 				leadLagNulls.SetNull(i)
 				continue
 			}
@@ -2046,9 +2003,8 @@ func (w *leadDatumWindow) processBatch(batch coldata.Batch, startIdx, endIdx int
 			leadLagCol.Set(i, val)
 			continue
 		}
-		b, idx := w.buffer.GetBatchWithTuple(w.Ctx, requestedIdx)
-		vec := b.ColVec(0)
-		if vec.Nulls().NullAt(idx) {
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
 			leadLagNulls.SetNull(i)
 			continue
 		}
@@ -2074,9 +2030,9 @@ func (b *leadBase) Init(ctx context.Context) {
 	}
 }
 
-func (b *leadBase) Close() error {
+func (b *leadBase) Close() {
 	if !b.CloserHelper.Close() {
-		return nil
+		return
 	}
-	return b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(b.EnsureCtx())
 }

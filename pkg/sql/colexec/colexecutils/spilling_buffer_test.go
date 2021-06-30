@@ -61,18 +61,18 @@ func TestSpillingBuffer(t *testing.T) {
 		}
 		const storeColProbability = 0.75
 		colsToStore := make([]int, 0, len(typs))
-		spillingBufferTypes := make([]*types.T, 0, len(typs))
+		typesToStore := make([]*types.T, 0, len(typs))
 		for i := range typs {
 			if rng.Float64() < storeColProbability {
 				colsToStore = append(colsToStore, i)
-				spillingBufferTypes = append(spillingBufferTypes, typs[i])
+				typesToStore = append(typesToStore, typs[i])
 			}
 		}
 		if len(colsToStore) == 0 {
 			// Always store at least one column.
 			idx := rng.Intn(len(typs))
 			colsToStore = append(colsToStore, idx)
-			spillingBufferTypes = append(spillingBufferTypes, typs[idx])
+			typesToStore = append(typesToStore, typs[idx])
 		}
 
 		// Add a limit on the number of batches added to the in-memory
@@ -121,29 +121,34 @@ func TestSpillingBuffer(t *testing.T) {
 		// Create buffer.
 		buf := NewSpillingBuffer(
 			spillingQueueUnlimitedAllocator, memoryLimit, queueCfg,
-			colexecop.NewTestingSemaphore(2), spillingBufferTypes, testDiskAcc, colsToStore...,
+			colexecop.NewTestingSemaphore(2), typs, testDiskAcc, colsToStore...,
 		)
 		if setInMemTuplesLimit {
 			buf.testingKnobs.maxTuplesStoredInMemory = numBatches * inputBatchSize / 2
 		}
 
 		// Run verification.
-		var b coldata.Batch
-		var idx int
-		windowedBatch := coldata.NewMemBatchNoCols(spillingBufferTypes, coldata.BatchSize())
-		checkWindowAtIndex := func(startIdx int) {
-			b, idx = buf.GetBatchWithTuple(ctx, startIdx)
-			if b.Length() == 0 {
-				t.Fatalf("buffer failed to return batch starting at index %d", startIdx)
+		testBatch := coldata.NewMemBatchNoCols(typesToStore, 0 /* capacity */)
+		oracleBatch := coldata.NewMemBatchNoCols(typesToStore, 0 /* capacity */)
+		checkWindowAtIndex := func(startIdx int) (nextIdx int) {
+			var vec coldata.Vec
+			var idx, length int
+			for i, colIdx := range colsToStore {
+				vec, idx, length = buf.GetVecWithTuple(ctx, i, startIdx)
+				if vec.Length() == 0 {
+					t.Fatalf("buffer failed to return vector containing index %d", startIdx)
+				}
+				testBatch.ReplaceCol(vec, i)
+				window := tuples.ColVec(colIdx).Window(startIdx-idx, startIdx-idx+length)
+				oracleBatch.ReplaceCol(window, i)
 			}
-			for i := range spillingBufferTypes {
-				colIdx := colsToStore[i]
-				window := tuples.ColVec(colIdx).Window(startIdx-idx, startIdx-idx+b.Length())
-				windowedBatch.ReplaceCol(window, i)
-			}
-			windowedBatch.SetSelection(false)
-			windowedBatch.SetLength(b.Length())
-			coldata.AssertEquivalentBatches(t, windowedBatch, b)
+			testBatch.SetSelection(false)
+			testBatch.SetLength(length)
+			oracleBatch.SetSelection(false)
+			oracleBatch.SetLength(length)
+			coldata.AssertEquivalentBatches(t, oracleBatch, testBatch)
+
+			return startIdx + (length - idx)
 		}
 
 		// Until the input is consumed, perform all appends and then verify that the
@@ -154,6 +159,7 @@ func TestSpillingBuffer(t *testing.T) {
 			const resetProbability = 0.2
 			reset := false
 			// Append input tuples.
+			var b coldata.Batch
 			for {
 				b = op.Next()
 				if b.Length() == 0 {
@@ -177,8 +183,7 @@ func TestSpillingBuffer(t *testing.T) {
 					// We have verified that all stored tuples are correct.
 					break
 				}
-				checkWindowAtIndex(startIdx)
-				startIdx += b.Length()
+				startIdx = checkWindowAtIndex(startIdx)
 			}
 			if reset {
 				// The input has not been fully consumed, but we need to reset the
