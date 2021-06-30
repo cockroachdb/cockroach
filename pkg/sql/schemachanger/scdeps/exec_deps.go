@@ -19,14 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -42,6 +40,8 @@ func NewExecutorDependencies(
 	descsCollection *descs.Collection,
 	jobRegistry *jobs.Registry,
 	indexBackfiller scexec.IndexBackfiller,
+	indexValidator scexec.IndexValidator,
+	cclCallbacks scexec.CCLCallbacks,
 	testingKnobs *scexec.NewSchemaChangerTestingKnobs,
 	statements []string,
 	phase scop.Phase,
@@ -52,6 +52,8 @@ func NewExecutorDependencies(
 			codec:           codec,
 			descsCollection: descsCollection,
 			jobRegistry:     jobRegistry,
+			indexValidator:  indexValidator,
+			cclCallbacks:    cclCallbacks,
 		},
 		indexBackfiller: indexBackfiller,
 		testingKnobs:    testingKnobs,
@@ -65,8 +67,8 @@ type txnDeps struct {
 	codec           keys.SQLCodec
 	descsCollection *descs.Collection
 	jobRegistry     *jobs.Registry
-	st              *cluster.Settings
-	evalCtx         *tree.EvalContext
+	indexValidator  scexec.IndexValidator
+	cclCallbacks    scexec.CCLCallbacks
 }
 
 var _ scexec.Catalog = (*txnDeps)(nil)
@@ -142,7 +144,7 @@ func (d *txnDeps) AddPartitioning(
 		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
 	}
 	// Create the paritioning
-	newImplicitCols, newPartitioning, err := scbuild.CreatePartitioningCCL(ctx, d.st, d.evalCtx, tableDesc, *indexDesc, partitionBy, allowedNewColumnNames, allowImplicitPartitioning)
+	newImplicitCols, newPartitioning, err := d.cclCallbacks.CreatePartitioning(ctx, tableDesc, *indexDesc, partitionBy, allowedNewColumnNames, allowImplicitPartitioning)
 	if err != nil {
 		return err
 	}
@@ -272,6 +274,10 @@ func (d *execDeps) Catalog() scexec.Catalog {
 // IndexBackfiller implements the scexec.Dependencies interface.
 func (d *execDeps) IndexBackfiller() scexec.IndexBackfiller {
 	return d.indexBackfiller
+}
+
+func (d *execDeps) IndexValidator() scexec.IndexValidator {
+	return d.indexValidator
 }
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.

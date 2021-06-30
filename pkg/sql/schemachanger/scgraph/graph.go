@@ -266,7 +266,7 @@ func (de *DepEdge) To() *scpb.Node { return de.to }
 // Name returns the name of the rule which generated this edge.
 func (de *DepEdge) Name() string { return de.rule }
 
-// GetNodeRanks fetches ranks of nodes in topological order
+// GetNodeRanks fetches ranks of nodes in topological order.
 func (g *Graph) GetNodeRanks() map[*scpb.Node]int {
 	backCycleExists := func(n *scpb.Node, de *DepEdge) bool {
 		var foundBack bool

@@ -78,14 +78,17 @@ func init() {
 		// TODO(ajwerner): Rationalize this and hook up the optimization.
 		to(scpb.Status_VALIDATED,
 			emit(func(this *scpb.SecondaryIndex) scop.Op {
-				return &scop.ValidateUniqueIndex{
-					TableID: this.TableID,
-					IndexID: this.IndexId,
+				if this.Unique {
+					return &scop.ValidateUniqueIndex{
+						TableID: this.TableID,
+						IndexID: this.IndexId,
+					}
 				}
+				return &scop.NoOpInfo{}
 			})),
 		to(scpb.Status_PUBLIC,
 			emit(func(this *scpb.SecondaryIndex) scop.Op {
-				return &scop.MakeAddedPrimaryIndexPublic{
+				return &scop.MakeAddedSecondaryIndexPublic{
 					TableID: this.TableID,
 					IndexID: this.IndexId,
 				}
