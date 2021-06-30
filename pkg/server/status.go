@@ -68,7 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -1311,6 +1311,13 @@ func (s *statusServer) nodesHelper(
 ) (*serverpb.NodesResponse, int, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
+
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, 0, err
+	}
+
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -1383,6 +1390,13 @@ func (s *statusServer) Node(
 ) (*statuspb.NodeStatus, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
+
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
