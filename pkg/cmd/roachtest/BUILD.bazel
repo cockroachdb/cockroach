@@ -4,6 +4,7 @@ go_library(
     name = "roachtest_lib",
     srcs = [
         "main.go",
+        "privilege_version_upgrade.go",
         "z_cluster.go",
         "z_monitor.go",
         "z_slack.go",
@@ -24,7 +25,9 @@ go_library(
         "//pkg/cmd/roachtest/test",
         "//pkg/cmd/roachtest/tests",
         "//pkg/internal/team",
+        "//pkg/sql/privilege",
         "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
@@ -41,6 +44,7 @@ go_library(
         "@com_github_nlopes_slack//:slack",
         "@com_github_petermattis_goid//:goid",
         "@com_github_spf13_cobra//:cobra",
+        "@com_github_stretchr_testify//require",
         "@org_golang_x_sync//errgroup",
     ],
 )
@@ -53,14 +57,12 @@ go_binary(
 
 go_test(
     name = "roachtest_test",
-    size = "small",
     srcs = [
         "z_cluster_test.go",
         "z_test_registry_test.go",
         "z_test_test.go",
     ],
     embed = [":roachtest_lib"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/logger",
