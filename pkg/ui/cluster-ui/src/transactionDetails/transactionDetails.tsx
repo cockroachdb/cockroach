@@ -251,6 +251,7 @@ export class TransactionDetails extends React.Component<
                         "",
                         totalWorkload,
                         nodeRegions,
+                        "transactionDetails",
                       )}
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
