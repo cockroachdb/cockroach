@@ -287,9 +287,9 @@ func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
-// GetChanged returns if the MutableDescriptor was changed after running
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
-func (desc *Mutable) GetChanged() bool {
+func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
 }
 

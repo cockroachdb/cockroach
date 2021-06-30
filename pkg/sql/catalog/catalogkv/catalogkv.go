@@ -150,14 +150,17 @@ func descriptorFromKeyValue(
 	required required,
 	dg catalog.DescGetter,
 	validationLevel catalog.ValidationLevel,
+	shouldRunPostDeserializationChanges bool,
 ) (catalog.Descriptor, error) {
 	id, b, err := builderFromKeyValue(codec, kv, expectedType, required)
 	if err != nil || b == nil {
 		return nil, err
 	}
-	err = b.RunPostDeserializationChanges(ctx, dg)
-	if err != nil {
-		return nil, err
+	if shouldRunPostDeserializationChanges {
+		err = b.RunPostDeserializationChanges(ctx, dg)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var desc catalog.Descriptor
 	if mutable {
@@ -236,7 +239,7 @@ func requiredError(expectedObjectType catalog.DescriptorType, id descpb.ID) erro
 // CountUserDescriptors returns the number of descriptors present that were
 // created by the user (i.e. not present when the cluster started).
 func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
-	allDescs, err := GetAllDescriptors(ctx, txn, codec)
+	allDescs, err := GetAllDescriptors(ctx, txn, codec, true /* shouldRunPostDeserializationChanges */)
 	if err != nil {
 		return 0, err
 	}
@@ -252,7 +255,11 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 }
 
 func getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, withNamespace bool,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	withNamespace bool,
+	shouldRunPostDeserializationChanges bool,
 ) (m catalog.MapDescGetter, err error) {
 	if withNamespace {
 		log.Eventf(ctx, "fetching all descriptors and namespace entries")
@@ -292,7 +299,10 @@ func getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(
 			switch queryIndex {
 			case 0:
 				var desc catalog.Descriptor
-				desc, err = descriptorFromKeyValue(ctx, codec, row, immutable, catalog.Any, bestEffort, dg, catalog.NoValidation)
+				desc, err = descriptorFromKeyValue(
+					ctx, codec, row, immutable, catalog.Any,
+					bestEffort, dg, catalog.NoValidation, shouldRunPostDeserializationChanges,
+				)
 				if desc != nil {
 					m.Descriptors[desc.GetID()] = desc
 				}
@@ -317,14 +327,26 @@ func getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(
 func GetAllDescriptorsAndNamespaceEntriesUnvalidated(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) (m catalog.MapDescGetter, err error) {
-	return getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(ctx, txn, codec, true /* withNamespace */)
+	return getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(
+		ctx,
+		txn,
+		codec,
+		true, /* withNamespace */
+		true, /* shouldRunPostDeserializationChanges */
+	)
 }
 
 // GetAllDescriptors looks up and returns all available descriptors.
 func GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, shouldRunPostDeserializationChanges bool,
 ) ([]catalog.Descriptor, error) {
-	m, err := getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(ctx, txn, codec, false /* withNamespace */)
+	m, err := getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(
+		ctx,
+		txn,
+		codec,
+		false,                               /* withNamespace */
+		shouldRunPostDeserializationChanges, /* shouldRunPostDeserializationChanges */
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +461,9 @@ func getDescriptorByID(
 	}
 	dg := NewOneLevelUncachedDescGetter(txn, codec)
 	const level = catalog.ValidationLevelCrossReferences
-	return descriptorFromKeyValue(ctx, codec, r, mutable, expectedType, required, dg, level)
+	return descriptorFromKeyValue(
+		ctx, codec, r, mutable, expectedType, required, dg, level, true, /* shouldRunPostDeserializationChanges */
+	)
 }
 
 // GetDatabaseDescByID looks up the database descriptor given its ID,
@@ -595,6 +619,7 @@ func getDescriptorsFromIDs(
 			bestEffort,
 			dg,
 			catalog.ValidationLevelCrossReferences,
+			true, /* shouldRunPostDeserializationChanges */
 		)
 		if err != nil {
 			return nil, err

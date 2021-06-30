@@ -172,7 +172,7 @@ func TestFixPrivilegesMigration(t *testing.T) {
 		err = kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// GetAllDescriptors calls PrivilegeDescriptor.Validate, all the invalid
 			// descriptors should be updated.
-			descs, err := catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec)
+			descs, err := catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec, false /* shouldRunPostDeserializationChanges */)
 			if err != nil {
 				return err
 			}
