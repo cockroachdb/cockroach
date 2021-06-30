@@ -367,7 +367,7 @@ func registerRestore(r *testRegistry) {
 	}{
 		{dataSet: dataBank2TB{}, nodes: 10, timeout: 6 * time.Hour},
 		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
-		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 16, largeVolumes: true},
+		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, largeVolumes: true},
 		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
 	} {
 		item := item
@@ -421,15 +421,15 @@ func registerRestore(r *testRegistry) {
 					// capture the total elapsed time. This is used by
 					// roachperf to compute and display the average MB/sec per
 					// node.
-					if item.cpus >= 16 {
+					if item.cpus >= 8 {
 						// If the nodes are large enough (specifically, if they
 						// have enough memory we can increase the parallelism
 						// of restore). Machines with 16 vCPUs typically have
 						// enough memory to supoprt 3 concurrent workers.
 						c.Run(ctx, c.Node(1),
-							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency = 3"`)
+							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency = 5"`)
 						c.Run(ctx, c.Node(1),
-							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 3"`)
+							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5"`)
 					}
 					tick()
 					item.dataSet.runRestore(ctx, c)
