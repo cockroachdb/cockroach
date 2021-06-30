@@ -214,8 +214,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		Sketches:         sketchSpecs,
 		InvertedSketches: invSketchSpecs,
 		SampleSize:       sampler.SampleSize,
-		// This could be anything >= 2 to produce a histogram.
-		MinSampleSize:    defaultHistogramBuckets,
+		MinSampleSize:    sampler.MinSampleSize,
 		SampledColumnIDs: sampledColumnIDs,
 		TableID:          desc.GetID(),
 		JobID:            jobID,
