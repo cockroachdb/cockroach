@@ -29,7 +29,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	if err != nil {
 		return nil, nil, err
 	}
-	resp, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
+	resp, err := ss.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return nil, nil, err
 	}
