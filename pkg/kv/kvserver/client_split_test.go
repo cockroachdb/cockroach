@@ -2010,6 +2010,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 // and the uninitialized replica reacting to messages.
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 66480, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
