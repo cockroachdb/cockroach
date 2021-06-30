@@ -134,6 +134,8 @@ func TestRandStep(t *testing.T) {
 				} else {
 					client.DeleteMissing++
 				}
+			case *DeleteRangeOperation:
+				client.DeleteRange++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
@@ -149,7 +151,8 @@ func TestRandStep(t *testing.T) {
 			*PutOperation,
 			*ScanOperation,
 			*BatchOperation,
-			*DeleteOperation:
+			*DeleteOperation,
+			*DeleteRangeOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)

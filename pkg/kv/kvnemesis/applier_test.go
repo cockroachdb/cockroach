@@ -13,6 +13,7 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -61,6 +62,11 @@ func TestApplier(t *testing.T) {
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(actual))
 	}
 
+	checkPanics := func(t *testing.T, s Step, expectedPanic string) {
+		t.Helper()
+		require.EqualError(t, a.Apply(ctx, &s), fmt.Sprintf("panic applying step %s: %v", s, expectedPanic))
+	}
+
 	// Basic operations
 	check(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, nil)`)
 	check(t, step(scan(`a`, `c`)), `db1.Scan(ctx, "a", "c", 0) // ([], nil)`)
@@ -85,15 +91,32 @@ func TestApplier(t *testing.T) {
 	check(t, step(del(`c`)), `db0.Del(ctx, "c") // nil`)
 	check(t, step(scan(`a`, `e`)), `db1.Scan(ctx, "a", "e", 0) // (["a":"1", "d":"4"], nil)`)
 
+	check(t, step(put(`c`, `5`)), `db0.Put(ctx, "c", 5) // nil`)
+	check(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
+db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.DelRange(ctx, "b", "d", true) // (["c"], nil)
+  return nil
+}) // nil txnpb:(...)
+		`)
+
 	checkErr(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, context canceled)`)
 	checkErr(t, step(put(`a`, `1`)), `db1.Put(ctx, "a", 1) // context canceled`)
+
 	checkErr(t, step(scanForUpdate(`a`, `c`)), `db0.ScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
-
 	checkErr(t, step(reverseScan(`a`, `c`)), `db1.ReverseScan(ctx, "a", "c", 0) // (nil, context canceled)`)
-	checkErr(t, step(reverseScanForUpdate(`a`, `c`)), `db0.ReverseScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
 
+	checkErr(t, step(reverseScanForUpdate(`a`, `c`)), `db0.ReverseScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
 	checkErr(t, step(del(`b`)), `db1.Del(ctx, "b") // context canceled`)
-	checkErr(t, step(del(`c`)), `db0.Del(ctx, "c") // context canceled`)
+
+	checkErr(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.DelRange(ctx, "b", "d", true)
+  return nil
+}) // context canceled
+		`)
+
+	checkPanics(t, step(delRange(`b`, `d`)), `non-transactional DelRange operations currently unsupported`)
+	checkPanics(t, step(batch(delRange(`b`, `d`))), `non-transactional batch DelRange operations currently unsupported`)
 
 	// Batch
 	check(t, step(batch(put(`b`, `2`), get(`a`), del(`b`), del(`c`), scan(`a`, `c`), reverseScanForUpdate(`a`, `e`))), `
@@ -120,12 +143,13 @@ func TestApplier(t *testing.T) {
 `)
 
 	// Txn commit
-	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`), batch(put(`f`, `6`)))), `
+	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`), batch(put(`f`, `6`), delRange(`c`, `e`)))), `
 db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   {
     b := &Batch{}
     b.Put(ctx, "f", 6) // nil
+    b.DelRange(ctx, "c", "e", true) // (["d"], nil)
     txn.Run(ctx, b) // nil
   }
   return nil
