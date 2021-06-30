@@ -212,14 +212,14 @@ spec:
           name: grpc
         - containerPort: 8080
           name: http
-# We recommend that users don't configure liveness probes for production environments as it can impact availability of production databases.
-#        livenessProbe:
-#          httpGet:
-#            path: "/health"
-#            port: http
-#            scheme: HTTPS
-#          initialDelaySeconds: 30
-#          periodSeconds: 5
+# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+#       livenessProbe:
+#         httpGet:
+#           path: "/health"
+#           port: http
+#           scheme: HTTPS
+#         initialDelaySeconds: 30
+#         periodSeconds: 5
         readinessProbe:
           httpGet:
             path: "/health?ready=1"
