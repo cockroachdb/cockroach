@@ -4378,6 +4378,7 @@ func TestMergeQueue(t *testing.T) {
 	})
 
 	t.Run("sticky-bit-expiration", func(t *testing.T) {
+		skip.WithIssue(t, 66942, "flakey test")
 		manualSplitTTL := time.Millisecond * 200
 		reset(t)
 		store.MustForceMergeScanAndProcess()
