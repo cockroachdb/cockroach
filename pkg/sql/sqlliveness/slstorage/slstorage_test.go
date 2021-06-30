@@ -600,6 +600,50 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 		// Ensure that the synchronous reader sees the session as not alive.
 		require.False(t, alive)
 	})
+	// Test that canceling the context of a synchronous reader
+	// results in the call returning promptly.
+	t.Run("context cancellation returns", func(t *testing.T) {
+		resetBlockedChannel()
+		// Perform a read from the CachedReader and ensure that it does not block.
+		cached := storage.CachedReader()
+		var alive bool
+		var g errgroup.Group
+		sid := sqlliveness.SessionID(t.Name())
+		g.Go(func() (err error) {
+			alive, err = cached.IsAlive(ctx, sid)
+			return err
+		})
+		// Make sure that an asynchronous read was started.
+		waitForBlocked(t)
+		require.NoError(t, g.Wait()) // make sure that the cached read did not block
+		// The storage layer has never read this session so it should be assumed to
+		// be alive.
+		require.True(t, alive)
+
+		toCancel, cancel := context.WithCancel(ctx)
+		// Now launch another, synchronous reader, which will join
+		// the single-flight.
+		g.Go(func() (err error) {
+			alive, err = storage.IsAlive(toCancel, sid)
+			return err
+		})
+
+		// Cancel the context and ensure that the reader
+		// returns early.
+		cancel()
+		require.Regexp(t, "context canceled", g.Wait())
+		unblock()
+
+		// Ensure that the cache still gets populated.
+		testutils.SucceedsSoon(t, func() error {
+			alive, err := cached.IsAlive(ctx, sid)
+			require.NoError(t, err)
+			if alive {
+				return errors.New("expected not alive")
+			}
+			return nil
+		})
+	})
 }
 
 func getTableID(
