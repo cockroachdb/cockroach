@@ -208,9 +208,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		// Bump user table versions to force a refresh of password cache.
-		if err := params.p.BumpUsersTableVersion(params.ctx); err != nil {
-			return err
+		if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+			// Bump user table versions to force a refresh of AuthInfo cache.
+			if err := params.p.BumpUsersTableVersion(params.ctx); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -256,9 +258,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		optStrs[i] = n.roleOptions[i].String()
 	}
 
-	// Bump role_options table versions to force a refresh of password cache.
-	if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
-		return err
+	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		// Bump role_options table versions to force a refresh of AuthInfo cache.
+		if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
+			return err
+		}
 	}
 
 	return params.p.logEvent(params.ctx,
