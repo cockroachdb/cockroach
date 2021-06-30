@@ -182,7 +182,7 @@ const (
 
 func (s *Storage) isAlive(
 	ctx context.Context, sid sqlliveness.SessionID, syncOrAsync readType,
-) (alive bool, err error) {
+) (alive bool, _ error) {
 	s.mu.Lock()
 	if !s.mu.started {
 		s.mu.Unlock()
@@ -250,11 +250,15 @@ func (s *Storage) isAlive(
 	if syncOrAsync == async {
 		return true, nil
 	}
-	res := <-resChan
-	if res.Err != nil {
-		return false, res.Err
+	select {
+	case res := <-resChan:
+		if res.Err != nil {
+			return false, res.Err
+		}
+		return res.Val.(bool), nil
+	case <-ctx.Done():
+		return false, ctx.Err()
 	}
-	return res.Val.(bool), nil
 }
 
 // deleteOrFetchSession returns whether the query session currently exists by
