@@ -472,12 +472,6 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 	var err error = nil
 	txnID := meta.Txn.ID
 	if _, ok := b.pendingTxns[txnID]; !ok {
-		// Check if we reached max txn batch size that intent
-		// resolver can accept without splitting and push if
-		// needed.
-		if int64(len(b.pendingTxns)) >= b.options.maxTxnsPerIntentCleanupBatch {
-			err = b.maybeFlushPendingIntents(ctx)
-		}
 		b.pendingTxns[txnID] = true
 	}
 
@@ -496,11 +490,13 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 	// Intents count limit reached, send request out to reduce
 	// transient memory usage.
 	if int64(len(b.pendingIntents)) >= b.options.maxIntentsPerIntentCleanupBatch ||
-		b.collectedIntentBytes >= b.options.maxIntentKeyBytesPerIntentCleanupBatch {
+		b.collectedIntentBytes >= b.options.maxIntentKeyBytesPerIntentCleanupBatch ||
+		int64(len(b.pendingTxns)) >= b.options.maxTxnsPerIntentCleanupBatch {
 		if err = b.maybeFlushPendingIntents(ctx); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
