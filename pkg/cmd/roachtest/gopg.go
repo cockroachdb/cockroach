@@ -98,7 +98,9 @@ func registerGopg(r *testRegistry) {
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, blocklistName, ignorelistName)
 
-		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath))
+		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath)); err != nil {
+			t.Fatal(err)
+		}
 		t.Status("running gopg test suite")
 
 		// go test provides colorful output which - when redirected - interferes

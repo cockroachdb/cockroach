@@ -83,7 +83,9 @@ func registerLibPQ(r *testRegistry) {
 			node,
 		)
 		require.NoError(t, err)
-		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir))
+		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
+			t.Fatal(err)
+		}
 
 		blocklistName, expectedFailures, ignorelistName, ignoreList := libPQBlocklists.getLists(version)
 		if expectedFailures == nil {
