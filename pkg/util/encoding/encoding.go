@@ -70,7 +70,7 @@ const (
 	decimalPosMedium        = decimalPosSmall + 1
 	decimalPosLarge         = decimalPosMedium + 11
 	decimalInfinity         = decimalPosLarge + 1
-	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
+	decimalNaNDesc          = decimalInfinity + 1      // NaN encoded descendingly
 	decimalTerminator       = 0x00
 
 	jsonInvertedIndex = decimalNaNDesc + 1
@@ -115,7 +115,7 @@ const (
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
-	IntMin      = 0x80 // 128
+	IntMin      = 0x80                           // 128
 	intMaxWidth = 8
 	intZero     = IntMin + intMaxWidth           // 136
 	intSmall    = IntMax - intZero - intMaxWidth // 109
@@ -1850,6 +1850,29 @@ func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
 		}
 	}
 	return s1
+}
+
+// PrettyPrintValuesWithTypes returns a slice containing each contiguous decodable value
+// in the provided byte slice along with a slice containing the type of each value.
+func PrettyPrintValuesWithTypes(valDirs []Direction, b []byte) (vals []string, types []Type) {
+	for len(b) > 0 {
+		var valDir Direction
+		if len(valDirs) > 0 {
+			valDir = valDirs[0]
+			valDirs = valDirs[1:]
+		}
+
+		bb, s, err := prettyPrintFirstValue(valDir, b)
+		if err != nil {
+			vals = append(vals, "???")
+			types = append(types, Unknown)
+		} else {
+			vals = append(vals, s)
+			types = append(types, PeekType(b))
+		}
+		b = bb
+	}
+	return
 }
 
 func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bool) {
