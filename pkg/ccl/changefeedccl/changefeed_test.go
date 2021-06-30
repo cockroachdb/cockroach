@@ -2332,7 +2332,10 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 	t.Run("enterprise", enterpriseTest(testFn))
 	t.Run("cloudstorage", cloudStorageTest(testFn))
 	t.Run("kafka", kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`webhook`, func(t *testing.T) {
+		skip.WithIssue(t, 66991, "flaky test")
+		webhookTest(testFn)(t)
+	})
 }
 
 func TestChangefeedErrors(t *testing.T) {
@@ -3221,7 +3224,10 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`webhook`, func(t *testing.T) {
+		skip.WithIssue(t, 67034, "flakey test")
+		webhookTest(testFn)(t)
+	})
 }
 
 func TestUnspecifiedPrimaryKey(t *testing.T) {

@@ -5606,6 +5606,7 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 // test cases, the priorities are set such that the push will succeed.
 func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 64313, "flaky test")
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
