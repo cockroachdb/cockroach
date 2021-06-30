@@ -2655,7 +2655,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// ATTENTION: The contents of this table should only access gossip data
 		// which is highly available. DO NOT CALL functions which require the
-		// cluster to be healthy, such as StatusServer.Nodes().
+		// cluster to be healthy, such as NodesStatusServer.ListNodesInternal().
 
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_liveness"); err != nil {
 			return err
@@ -3024,7 +3024,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 			return err
 		}
 
-		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		response, err := p.ExecCfg().StatusServer.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}
@@ -3127,7 +3127,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 			return err
 		}
 
-		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		response, err := p.ExecCfg().StatusServer.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}

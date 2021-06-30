@@ -1628,7 +1628,7 @@ func (s *adminServer) DecommissionStatus(
 ) (*serverpb.DecommissionStatusResponse, error) {
 	// Get the number of replicas on each node. We *may* not need all of them,
 	// but that would be more complicated than seems worth it right now.
-	ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
+	ns, err := s.server.status.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return nil, errors.Wrap(err, "loading node statuses")
 	}
