@@ -592,6 +592,7 @@ partitions                             NULL
 predefined_comments                    NULL
 ranges                                 NULL
 ranges_no_leases                       NULL
+regions                                NULL
 schema_changes                         NULL
 session_trace                          NULL
 session_variables                      NULL
