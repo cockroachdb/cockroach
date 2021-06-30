@@ -75,6 +75,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude c-deps/protobuf
 # gazelle:exclude artifacts
 # gazelle:exclude vendor
+# gazelle:exclude .vendor.tmp.*
 # gazelle:exclude **/zcgo_flags.go
 # gazelle:exclude **/zcgo_flags_*.go
 # gazelle:exclude **/*.og.go
