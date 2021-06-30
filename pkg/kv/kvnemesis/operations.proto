@@ -63,6 +63,12 @@ message DeleteOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message DeleteRangeOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -110,19 +116,21 @@ message Operation {
   PutOperation put = 8;
   ScanOperation scan = 9;
   DeleteOperation delete = 10;
-  SplitOperation split = 11;
-  MergeOperation merge = 12;
-  ChangeReplicasOperation change_replicas = 13;
-  TransferLeaseOperation transfer_lease = 14;
-  ChangeZoneOperation change_zone = 15;
+  DeleteRangeOperation delete_range = 11;
+  SplitOperation split = 12;
+  MergeOperation merge = 13;
+  ChangeReplicasOperation change_replicas = 14;
+  TransferLeaseOperation transfer_lease = 15;
+  ChangeZoneOperation change_zone = 16;
 }
 
 enum ResultType {
   Unknown = 0;
   NoError = 1;
   Error = 2;
-  Value = 3;
-  Values = 4;
+  Keys = 3;
+  Value = 4;
+  Values = 5;
 }
 
 message KeyValue {
@@ -135,10 +143,12 @@ message Result {
   ResultType type = 1;
   // Only set if Type is ResultType_Error.
   errorspb.EncodedError err = 2;
+  // Only set if Type is ResultType_Keys.  Each element is a roachpb.Key.
+  repeated bytes keys = 3;
   // Only set if Type is ResultType_Value. The RawBytes of a roachpb.Value.
-  bytes value = 3;
+  bytes value = 4;
   // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
-  repeated KeyValue values = 4 [(gogoproto.nullable) = false];
+  repeated KeyValue values = 5 [(gogoproto.nullable) = false];
 }
 
 message Step {
