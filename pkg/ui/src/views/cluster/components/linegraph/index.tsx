@@ -404,6 +404,9 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // TODO(davidh): figure out why the timescale doesn't get more granular
   // automatically when a narrower time frame is selected.
   setNewTimeRange(startMillis: number, endMillis: number) {
+    if (startMillis === endMillis) {
+      return;
+    }
     const start = MilliToSeconds(startMillis);
     const end = MilliToSeconds(endMillis);
     this.props.setTimeRange({
