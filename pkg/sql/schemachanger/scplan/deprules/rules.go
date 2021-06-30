@@ -147,7 +147,7 @@ func init() {
 		columnNode, indexNode,
 		screl.MustQuery(
 
-			status.In(deleteOnly, public),
+			status.In(deleteAndWriteOnly, public),
 			direction.Eq(add),
 
 			column.Type((*scpb.Column)(nil)),
@@ -178,10 +178,47 @@ func init() {
 			}),
 
 			direction.Entities(screl.Direction, columnTarget, indexTarget),
-			status.Entities(screl.Status, indexNode),
+			status.Entities(screl.Status, columnNode, indexNode),
 
 			screl.JoinTargetNode(column, columnTarget, columnNode),
 			screl.JoinTargetNode(index, indexTarget, indexNode),
+		),
+	)
+
+	register(
+		"index depends on column",
+		indexNode, columnNode,
+		screl.MustQuery(
+
+			column.Type((*scpb.Column)(nil)),
+			index.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+
+			id.Entities(screl.DescID, column, index),
+
+			rel.Filter(
+				"columnInIndex", column, index,
+			)(func(from *scpb.Column, to scpb.Element) bool {
+				switch to := to.(type) {
+				case *scpb.PrimaryIndex:
+					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
+						columnInList(from.Column.ID, to.StoringColumnIDs) ||
+						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
+						return true
+					}
+				case *scpb.SecondaryIndex:
+					if columnInList(from.Column.ID, to.KeyColumnIDs) ||
+						columnInList(from.Column.ID, to.StoringColumnIDs) ||
+						columnInList(from.Column.ID, to.KeySuffixColumnIDs) {
+						return true
+					}
+				default:
+					panic(errors.AssertionFailedf("unexpected type %T", to))
+				}
+				return false
+			}),
+
+			joinTargetNode(column, columnTarget, columnNode, add, deleteOnly),
+			joinTargetNode(index, indexTarget, indexNode, add, deleteOnly),
 		),
 	)
 }
@@ -204,7 +241,7 @@ func init() {
 		joinTargetNode(addIdx, addTarget, addNode,
 			add, public),
 		joinTargetNode(dropIdx, dropTarget, dropNode,
-			drop, deleteOnly),
+			drop, deleteAndWriteOnly),
 	)
 
 	register(
