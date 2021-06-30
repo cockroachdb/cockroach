@@ -807,11 +807,6 @@ func (r *Replica) Clock() *hlc.Clock {
 	return r.store.Clock()
 }
 
-// DB returns the Replica's client DB.
-func (r *Replica) DB() *kv.DB {
-	return r.store.DB()
-}
-
 // Engine returns the Replica's underlying Engine. In most cases the
 // evaluation Batch should be used instead.
 func (r *Replica) Engine() storage.Engine {
@@ -1647,7 +1642,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				PusheeTxn: intent.Txn,
 				PushType:  roachpb.PUSH_ABORT,
 			})
-			if err := r.DB().Run(ctx, b); err != nil {
+			if err := r.store.DB().Run(ctx, b); err != nil {
 				select {
 				case <-r.store.stopper.ShouldQuiesce():
 					// The server is shutting down. The error while pushing the
@@ -1682,7 +1677,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			var getRes *roachpb.GetResponse
 			for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
 				metaKey := keys.RangeMetaKey(desc.EndKey)
-				res, pErr := kv.SendWrappedWith(ctx, r.DB().NonTransactionalSender(), roachpb.Header{
+				res, pErr := kv.SendWrappedWith(ctx, r.store.DB().NonTransactionalSender(), roachpb.Header{
 					// Use READ_UNCOMMITTED to avoid trying to resolve intents, since
 					// resolving those intents might involve sending requests to this
 					// range, and that could deadlock. See the comment on

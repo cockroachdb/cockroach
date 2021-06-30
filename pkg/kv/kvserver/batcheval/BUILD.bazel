@@ -50,7 +50,6 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/kv",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/closedts",
