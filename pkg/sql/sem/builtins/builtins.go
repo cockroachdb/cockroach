@@ -2715,7 +2715,11 @@ may increase either contention or retry errors, or both.`,
 					if label == "" {
 						label = fmt.Sprintf("f%d", i+1)
 					}
-					val, err := tree.AsJSON(d, ctx.GetLocation())
+					val, err := tree.AsJSON(
+						d,
+						ctx.SessionData.DataConversionConfig,
+						ctx.GetLocation(),
+					)
 					if err != nil {
 						return nil, err
 					}
@@ -6010,12 +6014,20 @@ var jsonBuildObjectImpl = tree.Overload{
 					"argument %d cannot be null", i+1)
 			}
 
-			key, err := asJSONBuildObjectKey(args[i], ctx.GetLocation())
+			key, err := asJSONBuildObjectKey(
+				args[i],
+				ctx.SessionData.DataConversionConfig,
+				ctx.GetLocation(),
+			)
 			if err != nil {
 				return nil, err
 			}
 
-			val, err := tree.AsJSON(args[i+1], ctx.GetLocation())
+			val, err := tree.AsJSON(
+				args[i+1],
+				ctx.SessionData.DataConversionConfig,
+				ctx.GetLocation(),
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -6033,7 +6045,7 @@ var toJSONImpl = tree.Overload{
 	Types:      tree.ArgTypes{{"val", types.Any}},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		return toJSONObject(args[0], ctx.GetLocation())
+		return toJSONObject(ctx, args[0])
 	},
 	Info:       "Returns the value as JSON or JSONB.",
 	Volatility: tree.VolatilityStable,
@@ -6057,7 +6069,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 			if prettyPrint {
 				return nil, prettyPrintNotSupportedError
 			}
-			return toJSONObject(args[0], ctx.GetLocation())
+			return toJSONObject(ctx, args[0])
 		},
 		Info:       "Returns the array as JSON or JSONB.",
 		Volatility: tree.VolatilityStable,
@@ -6070,7 +6082,11 @@ var jsonBuildArrayImpl = tree.Overload{
 	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
 		for _, arg := range args {
-			j, err := tree.AsJSON(arg, ctx.GetLocation())
+			j, err := tree.AsJSON(
+				arg,
+				ctx.SessionData.DataConversionConfig,
+				ctx.GetLocation(),
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -6100,7 +6116,11 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				if err != nil {
 					return nil, err
 				}
-				val, err := tree.AsJSON(arr.Array[i+1], ctx.GetLocation())
+				val, err := tree.AsJSON(
+					arr.Array[i+1],
+					ctx.SessionData.DataConversionConfig,
+					ctx.GetLocation(),
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -6132,7 +6152,11 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 				if err != nil {
 					return nil, err
 				}
-				val, err := tree.AsJSON(values.Array[i], ctx.GetLocation())
+				val, err := tree.AsJSON(
+					values.Array[i],
+					ctx.SessionData.DataConversionConfig,
+					ctx.GetLocation(),
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -7301,7 +7325,9 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 }
 
 // Converts a scalar Datum to its string representation
-func asJSONBuildObjectKey(d tree.Datum, loc *time.Location) (string, error) {
+func asJSONBuildObjectKey(
+	d tree.Datum, dcc sessiondatapb.DataConversionConfig, loc *time.Location,
+) (string, error) {
 	switch t := d.(type) {
 	case *tree.DJSON, *tree.DArray, *tree.DTuple:
 		return "", pgerror.New(pgcode.InvalidParameterValue,
@@ -7318,6 +7344,7 @@ func asJSONBuildObjectKey(d tree.Datum, loc *time.Location) (string, error) {
 		return tree.AsStringWithFlags(
 			ts,
 			tree.FmtBareStrings,
+			tree.FmtDataConversionConfig(dcc),
 		), nil
 	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp,
 		*tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid,
@@ -7337,8 +7364,8 @@ func asJSONObjectKey(d tree.Datum) (string, error) {
 	}
 }
 
-func toJSONObject(d tree.Datum, loc *time.Location) (tree.Datum, error) {
-	j, err := tree.AsJSON(d, loc)
+func toJSONObject(ctx *tree.EvalContext, d tree.Datum) (tree.Datum, error) {
+	j, err := tree.AsJSON(d, ctx.SessionData.DataConversionConfig, ctx.GetLocation())
 	if err != nil {
 		return nil, err
 	}

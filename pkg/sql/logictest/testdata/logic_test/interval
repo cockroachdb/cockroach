@@ -437,6 +437,13 @@ SELECT (i,) FROM intervals ORDER BY pk
 ("1 day 04:06:08.123")
 ("2 years 11 mons -2 days +03:25:45.678")
 
+query T
+SELECT row_to_json(intervals) FROM intervals ORDER BY pk
+----
+{"i": "-2 years -11 mons 1 day +04:05:06.123", "pk": 1}
+{"i": "1 day 04:06:08.123", "pk": 2}
+{"i": "2 years 11 mons -2 days +03:25:45.678", "pk": 3}
+
 statement ok
 SET intervalstyle = 'iso_8601'
 
@@ -471,6 +478,13 @@ SELECT (i,) FROM intervals ORDER BY pk
 (P1DT4H6M8.123S)
 (P2Y11M-2DT3H25M45.678S)
 
+query T
+SELECT row_to_json(intervals) FROM intervals ORDER BY pk
+----
+{"i": "P-2Y-11M1DT4H5M6.123S", "pk": 1}
+{"i": "P1DT4H6M8.123S", "pk": 2}
+{"i": "P2Y11M-2DT3H25M45.678S", "pk": 3}
+
 statement ok
 SET intervalstyle = 'sql_standard'
 
@@ -504,3 +518,10 @@ SELECT (i,) FROM intervals ORDER BY pk
 ("-2-11 +1 +4:05:06.123")
 ("1 4:06:08.123")
 ("+2-11 -2 +3:25:45.678")
+
+query T
+SELECT row_to_json(intervals) FROM intervals ORDER BY pk
+----
+{"i": "-2-11 +1 +4:05:06.123", "pk": 1}
+{"i": "1 4:06:08.123", "pk": 2}
+{"i": "+2-11 -2 +3:25:45.678", "pk": 3}

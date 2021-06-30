@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -2773,11 +2774,6 @@ func (d *DInterval) Min(_ *EvalContext) (Datum, bool) {
 	return dMinInterval, true
 }
 
-// ValueAsString returns the interval as a string (e.g. "1h2m").
-func (d *DInterval) ValueAsString() string {
-	return d.Duration.String()
-}
-
 // AmbiguousFormat implements the Datum interface.
 func (*DInterval) AmbiguousFormat() bool { return true }
 
@@ -3189,7 +3185,9 @@ func MustBeDJSON(e Expr) DJSON {
 }
 
 // AsJSON converts a datum into our standard json representation.
-func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
+func AsJSON(
+	d Datum, dcc sessiondatapb.DataConversionConfig, loc *time.Location,
+) (json.JSON, error) {
 	d = UnwrapDatum(nil /* evalCtx */, d)
 	switch t := d.(type) {
 	case *DBool:
@@ -3211,7 +3209,7 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 	case *DArray:
 		builder := json.NewArrayBuilder(t.Len())
 		for _, e := range t.Array {
-			j, err := AsJSON(e, loc)
+			j, err := AsJSON(e, dcc, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -3226,7 +3224,7 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 		t.maybePopulateType()
 		labels := t.typ.TupleLabels()
 		for i, e := range t.D {
-			j, err := AsJSON(e, loc)
+			j, err := AsJSON(e, dcc, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -3249,7 +3247,7 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D:
-		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
+		return json.FromString(AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc))), nil
 	case *DGeometry:
 		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 	case *DGeography:
