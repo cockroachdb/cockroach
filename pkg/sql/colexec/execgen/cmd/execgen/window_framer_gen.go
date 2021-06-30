@@ -35,14 +35,16 @@ func windowFramerGenerator(inputFileContents string, wr io.Writer) error {
 		"_FRAME_MODE", "{{modeToExecinfrapb .ModeType}}",
 		"_START_BOUND", "{{boundToExecinfrapb .BoundType}}",
 		"_END_BOUND", "{{boundToExecinfrapb .BoundType}}",
+		"_EXCLUDES_ROWS", "{{.Exclude}}",
 	)
 	s := r.Replace(inputFileContents)
 
 	tmpl, err := template.New("window_framer").Funcs(
 		template.FuncMap{
-			"buildDict":          buildDict,
-			"modeToExecinfrapb":  modeToExecinfrapb,
-			"boundToExecinfrapb": boundToExecinfrapb,
+			"buildDict":            buildDict,
+			"modeToExecinfrapb":    modeToExecinfrapb,
+			"boundToExecinfrapb":   boundToExecinfrapb,
+			"excludeToExecinfrapb": excludeToExecinfrapb,
 		}).Parse(s)
 	if err != nil {
 		return err
@@ -61,15 +63,24 @@ func windowFramerGenerator(inputFileContents string, wr io.Writer) error {
 				if endBoundType < startBoundType {
 					continue
 				}
-				opString := "windowFramer" + modeType.Name() + startBoundType.Name() + endBoundType.Name()
 				endBoundInfo := windowFramerEndBoundInfo{
-					windowFramerTmplInfo: windowFramerTmplInfo{
-						OpString:       opString,
-						ModeType:       modeType,
-						StartBoundType: startBoundType,
-						EndBoundType:   endBoundType,
-					},
 					BoundType: endBoundType,
+				}
+				for _, exclude := range []bool{false, true} {
+					opString := "windowFramer" + modeType.Name() + startBoundType.Name() + endBoundType.Name()
+					if exclude {
+						opString += "Exclude"
+					}
+					excludeInfo := windowFramerExcludeInfo{
+						windowFramerTmplInfo: windowFramerTmplInfo{
+							OpString:       opString,
+							ModeType:       modeType,
+							StartBoundType: startBoundType,
+							EndBoundType:   endBoundType,
+						},
+						Exclude: exclude,
+					}
+					endBoundInfo.ExcludeInfos = append(endBoundInfo.ExcludeInfos, excludeInfo)
 				}
 				startBoundInfo.EndBoundTypes = append(startBoundInfo.EndBoundTypes, endBoundInfo)
 			}
@@ -96,8 +107,13 @@ type windowFramerStartBoundInfo struct {
 }
 
 type windowFramerEndBoundInfo struct {
+	BoundType    tree.WindowFrameBoundType
+	ExcludeInfos []windowFramerExcludeInfo
+}
+
+type windowFramerExcludeInfo struct {
 	windowFramerTmplInfo
-	BoundType tree.WindowFrameBoundType
+	Exclude bool
 }
 
 type windowFramerTmplInfo struct {
@@ -105,6 +121,7 @@ type windowFramerTmplInfo struct {
 	ModeType       tree.WindowFrameMode
 	StartBoundType tree.WindowFrameBoundType
 	EndBoundType   tree.WindowFrameBoundType
+	Exclude        bool
 }
 
 func (overload windowFramerTmplInfo) GroupsMode() bool {
@@ -184,7 +201,7 @@ func modeToExecinfrapb(mode tree.WindowFrameMode) string {
 	case tree.GROUPS:
 		return "execinfrapb.WindowerSpec_Frame_GROUPS"
 	}
-	panic(errors.AssertionFailedf("boundType out of range"))
+	panic(errors.AssertionFailedf("mode out of range"))
 }
 
 func boundToExecinfrapb(bound tree.WindowFrameBoundType) string {
@@ -201,4 +218,18 @@ func boundToExecinfrapb(bound tree.WindowFrameBoundType) string {
 		return "execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING"
 	}
 	panic(errors.AssertionFailedf("boundType out of range"))
+}
+
+func excludeToExecinfrapb(exclude tree.WindowFrameExclusion) string {
+	switch exclude {
+	case tree.NoExclusion:
+		return "execinfrapb.WindowerSpec_Frame_NO_EXCLUSION"
+	case tree.ExcludeCurrentRow:
+		return "execinfrapb.WindowerSpec_Frame_EXCLUDE_CURRENT_ROW"
+	case tree.ExcludeGroup:
+		return "execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP"
+	case tree.ExcludeTies:
+		return "execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES"
+	}
+	panic(errors.AssertionFailedf("exclusion type out of range"))
 }

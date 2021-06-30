@@ -74,137 +74,320 @@ func newWindowFramer(
 ) windowFramer {
 	startBound := frame.Bounds.Start
 	endBound := frame.Bounds.End
+	exclude := frame.Exclusion != execinfrapb.WindowerSpec_Frame_NO_EXCLUSION
 	switch frame.Mode {
 	case execinfrapb.WindowerSpec_Frame_ROWS:
 		switch startBound.BoundType {
 		case execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
-				op := &windowFramerRowsUnboundedPrecedingOffsetPreceding{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsUnboundedPrecedingOffsetPreceding{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerRowsUnboundedPrecedingCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsUnboundedPrecedingCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsUnboundedPrecedingCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRowsUnboundedPrecedingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsUnboundedPrecedingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsUnboundedPrecedingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRowsUnboundedPrecedingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsUnboundedPrecedingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
-				op := &windowFramerRowsOffsetPrecedingOffsetPreceding{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsOffsetPrecedingOffsetPreceding{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsOffsetPrecedingOffsetPrecedingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerRowsOffsetPrecedingCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsOffsetPrecedingCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsOffsetPrecedingCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRowsOffsetPrecedingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsOffsetPrecedingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsOffsetPrecedingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRowsOffsetPrecedingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsOffsetPrecedingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsOffsetPrecedingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerRowsCurrentRowCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsCurrentRowCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsCurrentRowCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRowsCurrentRowOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsCurrentRowOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsCurrentRowOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRowsCurrentRowUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsCurrentRowUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsCurrentRowUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRowsOffsetFollowingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsOffsetFollowingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsOffsetFollowingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRowsOffsetFollowingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRowsOffsetFollowingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRowsOffsetFollowingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		}
 	case execinfrapb.WindowerSpec_Frame_GROUPS:
@@ -212,131 +395,313 @@ func newWindowFramer(
 		case execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
-				op := &windowFramerGroupsUnboundedPrecedingOffsetPreceding{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsUnboundedPrecedingOffsetPreceding{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerGroupsUnboundedPrecedingCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsUnboundedPrecedingCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsUnboundedPrecedingCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerGroupsUnboundedPrecedingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsUnboundedPrecedingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerGroupsUnboundedPrecedingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsUnboundedPrecedingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
-				op := &windowFramerGroupsOffsetPrecedingOffsetPreceding{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsOffsetPrecedingOffsetPreceding{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerGroupsOffsetPrecedingCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsOffsetPrecedingCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsOffsetPrecedingCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerGroupsOffsetPrecedingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsOffsetPrecedingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsOffsetPrecedingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerGroupsOffsetPrecedingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsOffsetPrecedingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerGroupsCurrentRowCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsCurrentRowCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsCurrentRowCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerGroupsCurrentRowOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsCurrentRowOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsCurrentRowOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerGroupsCurrentRowUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsCurrentRowUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsCurrentRowUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerGroupsOffsetFollowingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsOffsetFollowingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsOffsetFollowingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerGroupsOffsetFollowingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerGroupsOffsetFollowingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerGroupsOffsetFollowingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		}
 	case execinfrapb.WindowerSpec_Frame_RANGE:
@@ -344,131 +709,313 @@ func newWindowFramer(
 		case execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
-				op := &windowFramerRangeUnboundedPrecedingOffsetPreceding{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeUnboundedPrecedingOffsetPreceding{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerRangeUnboundedPrecedingCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeUnboundedPrecedingCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeUnboundedPrecedingCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRangeUnboundedPrecedingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeUnboundedPrecedingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeUnboundedPrecedingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRangeUnboundedPrecedingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeUnboundedPrecedingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_PRECEDING:
-				op := &windowFramerRangeOffsetPrecedingOffsetPreceding{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeOffsetPrecedingOffsetPreceding{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeOffsetPrecedingOffsetPrecedingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerRangeOffsetPrecedingCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeOffsetPrecedingCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeOffsetPrecedingCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRangeOffsetPrecedingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeOffsetPrecedingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeOffsetPrecedingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRangeOffsetPrecedingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeOffsetPrecedingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeOffsetPrecedingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_CURRENT_ROW:
-				op := &windowFramerRangeCurrentRowCurrentRow{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeCurrentRowCurrentRow{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeCurrentRowCurrentRowExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRangeCurrentRowOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeCurrentRowOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeCurrentRowOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRangeCurrentRowUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeCurrentRowUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeCurrentRowUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
 			switch endBound.BoundType {
 			case execinfrapb.WindowerSpec_Frame_OFFSET_FOLLOWING:
-				op := &windowFramerRangeOffsetFollowingOffsetFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeOffsetFollowingOffsetFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeOffsetFollowingOffsetFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			case execinfrapb.WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
-				op := &windowFramerRangeOffsetFollowingUnboundedFollowing{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				case false:
+					op := &windowFramerRangeOffsetFollowingUnboundedFollowing{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+				case true:
+					op := &windowFramerRangeOffsetFollowingUnboundedFollowingExclude{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 			}
 		}
 	}
@@ -513,6 +1060,8 @@ type windowFramerBase struct {
 	// datumAlloc is used to decode the offsets in RANGE mode. It is initialized
 	// lazily.
 	datumAlloc *rowenc.DatumAlloc
+
+	exclusion execinfrapb.WindowerSpec_Frame_Exclusion
 }
 
 type windowFramerRowsUnboundedPrecedingOffsetPreceding struct {
@@ -522,7 +1071,7 @@ type windowFramerRowsUnboundedPrecedingOffsetPreceding struct {
 var _ windowFramer = &windowFramerRowsUnboundedPrecedingOffsetPreceding{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -547,6 +1096,65 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) close() {
 	*f = windowFramerRowsUnboundedPrecedingOffsetPreceding{}
 }
 
+type windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	f.endIdx = f.currentRow - f.endOffset + 1
+	if f.endIdx < 0 {
+		f.endIdx = 0
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) close() {
+	*f = windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsUnboundedPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -554,7 +1162,7 @@ type windowFramerRowsUnboundedPrecedingCurrentRow struct {
 var _ windowFramer = &windowFramerRowsUnboundedPrecedingCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsUnboundedPrecedingCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -576,6 +1184,62 @@ func (f *windowFramerRowsUnboundedPrecedingCurrentRow) close() {
 	*f = windowFramerRowsUnboundedPrecedingCurrentRow{}
 }
 
+type windowFramerRowsUnboundedPrecedingCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsUnboundedPrecedingCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	f.endIdx = f.currentRow + 1
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) close() {
+	*f = windowFramerRowsUnboundedPrecedingCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsUnboundedPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -583,7 +1247,7 @@ type windowFramerRowsUnboundedPrecedingOffsetFollowing struct {
 var _ windowFramer = &windowFramerRowsUnboundedPrecedingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -608,6 +1272,65 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) close() {
 	*f = windowFramerRowsUnboundedPrecedingOffsetFollowing{}
 }
 
+type windowFramerRowsUnboundedPrecedingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsUnboundedPrecedingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	f.endIdx = f.currentRow + f.endOffset + 1
+	if f.endIdx > f.partitionSize {
+		f.endIdx = f.partitionSize
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) close() {
+	*f = windowFramerRowsUnboundedPrecedingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsUnboundedPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -615,7 +1338,7 @@ type windowFramerRowsUnboundedPrecedingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRowsUnboundedPrecedingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -637,6 +1360,62 @@ func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) close() {
 	*f = windowFramerRowsUnboundedPrecedingUnboundedFollowing{}
 }
 
+type windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) close() {
+	*f = windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsOffsetPrecedingOffsetPreceding struct {
 	windowFramerBase
 }
@@ -644,7 +1423,7 @@ type windowFramerRowsOffsetPrecedingOffsetPreceding struct {
 var _ windowFramer = &windowFramerRowsOffsetPrecedingOffsetPreceding{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -672,6 +1451,68 @@ func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) close() {
 	*f = windowFramerRowsOffsetPrecedingOffsetPreceding{}
 }
 
+type windowFramerRowsOffsetPrecedingOffsetPrecedingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsOffsetPrecedingOffsetPrecedingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow - f.startOffset
+	if f.startIdx < 0 {
+		f.startIdx = 0
+	}
+	// Handle the end bound.
+	f.endIdx = f.currentRow - f.endOffset + 1
+	if f.endIdx < 0 {
+		f.endIdx = 0
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) close() {
+	*f = windowFramerRowsOffsetPrecedingOffsetPrecedingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsOffsetPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -679,7 +1520,7 @@ type windowFramerRowsOffsetPrecedingCurrentRow struct {
 var _ windowFramer = &windowFramerRowsOffsetPrecedingCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsOffsetPrecedingCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -704,6 +1545,65 @@ func (f *windowFramerRowsOffsetPrecedingCurrentRow) close() {
 	*f = windowFramerRowsOffsetPrecedingCurrentRow{}
 }
 
+type windowFramerRowsOffsetPrecedingCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsOffsetPrecedingCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow - f.startOffset
+	if f.startIdx < 0 {
+		f.startIdx = 0
+	}
+	// Handle the end bound.
+	f.endIdx = f.currentRow + 1
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) close() {
+	*f = windowFramerRowsOffsetPrecedingCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsOffsetPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -711,7 +1611,7 @@ type windowFramerRowsOffsetPrecedingOffsetFollowing struct {
 var _ windowFramer = &windowFramerRowsOffsetPrecedingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -739,6 +1639,68 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) close() {
 	*f = windowFramerRowsOffsetPrecedingOffsetFollowing{}
 }
 
+type windowFramerRowsOffsetPrecedingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsOffsetPrecedingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow - f.startOffset
+	if f.startIdx < 0 {
+		f.startIdx = 0
+	}
+	// Handle the end bound.
+	f.endIdx = f.currentRow + f.endOffset + 1
+	if f.endIdx > f.partitionSize {
+		f.endIdx = f.partitionSize
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) close() {
+	*f = windowFramerRowsOffsetPrecedingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsOffsetPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -746,7 +1708,7 @@ type windowFramerRowsOffsetPrecedingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRowsOffsetPrecedingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -771,6 +1733,65 @@ func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) close() {
 	*f = windowFramerRowsOffsetPrecedingUnboundedFollowing{}
 }
 
+type windowFramerRowsOffsetPrecedingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsOffsetPrecedingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow - f.startOffset
+	if f.startIdx < 0 {
+		f.startIdx = 0
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) close() {
+	*f = windowFramerRowsOffsetPrecedingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsCurrentRowCurrentRow struct {
 	windowFramerBase
 }
@@ -778,7 +1799,7 @@ type windowFramerRowsCurrentRowCurrentRow struct {
 var _ windowFramer = &windowFramerRowsCurrentRowCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsCurrentRowCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -800,6 +1821,62 @@ func (f *windowFramerRowsCurrentRowCurrentRow) close() {
 	*f = windowFramerRowsCurrentRowCurrentRow{}
 }
 
+type windowFramerRowsCurrentRowCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsCurrentRowCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow
+	// Handle the end bound.
+	f.endIdx = f.currentRow + 1
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) close() {
+	*f = windowFramerRowsCurrentRowCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsCurrentRowOffsetFollowing struct {
 	windowFramerBase
 }
@@ -807,7 +1884,7 @@ type windowFramerRowsCurrentRowOffsetFollowing struct {
 var _ windowFramer = &windowFramerRowsCurrentRowOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsCurrentRowOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -832,6 +1909,65 @@ func (f *windowFramerRowsCurrentRowOffsetFollowing) close() {
 	*f = windowFramerRowsCurrentRowOffsetFollowing{}
 }
 
+type windowFramerRowsCurrentRowOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsCurrentRowOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow
+	// Handle the end bound.
+	f.endIdx = f.currentRow + f.endOffset + 1
+	if f.endIdx > f.partitionSize {
+		f.endIdx = f.partitionSize
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) close() {
+	*f = windowFramerRowsCurrentRowOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsCurrentRowUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -839,7 +1975,7 @@ type windowFramerRowsCurrentRowUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRowsCurrentRowUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsCurrentRowUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -861,6 +1997,62 @@ func (f *windowFramerRowsCurrentRowUnboundedFollowing) close() {
 	*f = windowFramerRowsCurrentRowUnboundedFollowing{}
 }
 
+type windowFramerRowsCurrentRowUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsCurrentRowUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) close() {
+	*f = windowFramerRowsCurrentRowUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsOffsetFollowingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -868,7 +2060,7 @@ type windowFramerRowsOffsetFollowingOffsetFollowing struct {
 var _ windowFramer = &windowFramerRowsOffsetFollowingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsOffsetFollowingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -896,6 +2088,68 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowing) close() {
 	*f = windowFramerRowsOffsetFollowingOffsetFollowing{}
 }
 
+type windowFramerRowsOffsetFollowingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsOffsetFollowingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow + f.startOffset
+	if f.startIdx > f.partitionSize {
+		f.startIdx = f.partitionSize
+	}
+	// Handle the end bound.
+	f.endIdx = f.currentRow + f.endOffset + 1
+	if f.endIdx > f.partitionSize {
+		f.endIdx = f.partitionSize
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) close() {
+	*f = windowFramerRowsOffsetFollowingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRowsOffsetFollowingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -903,7 +2157,7 @@ type windowFramerRowsOffsetFollowingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRowsOffsetFollowingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -928,6 +2182,65 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) close() {
 	*f = windowFramerRowsOffsetFollowingUnboundedFollowing{}
 }
 
+type windowFramerRowsOffsetFollowingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRowsOffsetFollowingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = f.currentRow + f.startOffset
+	if f.startIdx > f.partitionSize {
+		f.startIdx = f.partitionSize
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) close() {
+	*f = windowFramerRowsOffsetFollowingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsUnboundedPrecedingOffsetPreceding struct {
 	windowFramerBase
 }
@@ -935,7 +2248,7 @@ type windowFramerGroupsUnboundedPrecedingOffsetPreceding struct {
 var _ windowFramer = &windowFramerGroupsUnboundedPrecedingOffsetPreceding{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -965,6 +2278,69 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) close() {
 	*f = windowFramerGroupsUnboundedPrecedingOffsetPreceding{}
 }
 
+type windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.currentGroup = 0
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	if currRowIsGroupStart && f.currentGroup >= f.endOffset {
+		// Advance the end index to the end of the next peer group.
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	if currRowIsGroupStart {
+		f.currentGroup++
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) close() {
+	*f = windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsUnboundedPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -972,7 +2348,7 @@ type windowFramerGroupsUnboundedPrecedingCurrentRow struct {
 var _ windowFramer = &windowFramerGroupsUnboundedPrecedingCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -997,6 +2373,64 @@ func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) close() {
 	*f = windowFramerGroupsUnboundedPrecedingCurrentRow{}
 }
 
+type windowFramerGroupsUnboundedPrecedingCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsUnboundedPrecedingCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) close() {
+	*f = windowFramerGroupsUnboundedPrecedingCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsUnboundedPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1004,7 +2438,7 @@ type windowFramerGroupsUnboundedPrecedingOffsetFollowing struct {
 var _ windowFramer = &windowFramerGroupsUnboundedPrecedingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1034,6 +2468,69 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) close() {
 	*f = windowFramerGroupsUnboundedPrecedingOffsetFollowing{}
 }
 
+type windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	// f.endIdx must be advanced by 'endOffset' peer groups.
+	f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, f.endOffset)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		// The end index will already have been advanced by f.startOffset rows, so
+		// we only need to advance to the next adjacent peers group whenever the
+		// currentRow pointer enters a new peers group.
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) close() {
+	*f = windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsUnboundedPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1041,7 +2538,7 @@ type windowFramerGroupsUnboundedPrecedingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerGroupsUnboundedPrecedingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1063,6 +2560,62 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) close() {
 	*f = windowFramerGroupsUnboundedPrecedingUnboundedFollowing{}
 }
 
+type windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) close() {
+	*f = windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsOffsetPrecedingOffsetPreceding struct {
 	windowFramerBase
 }
@@ -1070,7 +2623,7 @@ type windowFramerGroupsOffsetPrecedingOffsetPreceding struct {
 var _ windowFramer = &windowFramerGroupsOffsetPrecedingOffsetPreceding{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1103,6 +2656,72 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) close() {
 	*f = windowFramerGroupsOffsetPrecedingOffsetPreceding{}
 }
 
+type windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.currentGroup = 0
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart && f.currentGroup > f.startOffset {
+		// Advance the start index to the start of the next peer group.
+		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart && f.currentGroup >= f.endOffset {
+		// Advance the end index to the end of the next peer group.
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	if currRowIsGroupStart {
+		f.currentGroup++
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) close() {
+	*f = windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsOffsetPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -1110,7 +2729,7 @@ type windowFramerGroupsOffsetPrecedingCurrentRow struct {
 var _ windowFramer = &windowFramerGroupsOffsetPrecedingCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsOffsetPrecedingCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1142,6 +2761,71 @@ func (f *windowFramerGroupsOffsetPrecedingCurrentRow) close() {
 	*f = windowFramerGroupsOffsetPrecedingCurrentRow{}
 }
 
+type windowFramerGroupsOffsetPrecedingCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsOffsetPrecedingCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.currentGroup = 0
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart && f.currentGroup > f.startOffset {
+		// Advance the start index to the start of the next peer group.
+		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	if currRowIsGroupStart {
+		f.currentGroup++
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) close() {
+	*f = windowFramerGroupsOffsetPrecedingCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsOffsetPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1149,7 +2833,7 @@ type windowFramerGroupsOffsetPrecedingOffsetFollowing struct {
 var _ windowFramer = &windowFramerGroupsOffsetPrecedingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1186,6 +2870,76 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) close() {
 	*f = windowFramerGroupsOffsetPrecedingOffsetFollowing{}
 }
 
+type windowFramerGroupsOffsetPrecedingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsOffsetPrecedingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.currentGroup = 0
+	// f.endIdx must be advanced by 'endOffset' peer groups.
+	f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, f.endOffset)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart && f.currentGroup > f.startOffset {
+		// Advance the start index to the start of the next peer group.
+		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		// The end index will already have been advanced by f.startOffset rows, so
+		// we only need to advance to the next adjacent peers group whenever the
+		// currentRow pointer enters a new peers group.
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	if currRowIsGroupStart {
+		f.currentGroup++
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) close() {
+	*f = windowFramerGroupsOffsetPrecedingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsOffsetPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1193,7 +2947,7 @@ type windowFramerGroupsOffsetPrecedingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerGroupsOffsetPrecedingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1223,6 +2977,69 @@ func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) close() {
 	*f = windowFramerGroupsOffsetPrecedingUnboundedFollowing{}
 }
 
+type windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.currentGroup = 0
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart && f.currentGroup > f.startOffset {
+		// Advance the start index to the start of the next peer group.
+		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	if currRowIsGroupStart {
+		f.currentGroup++
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) close() {
+	*f = windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsCurrentRowCurrentRow struct {
 	windowFramerBase
 }
@@ -1230,7 +3047,7 @@ type windowFramerGroupsCurrentRowCurrentRow struct {
 var _ windowFramer = &windowFramerGroupsCurrentRowCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsCurrentRowCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1257,6 +3074,66 @@ func (f *windowFramerGroupsCurrentRowCurrentRow) close() {
 	*f = windowFramerGroupsCurrentRowCurrentRow{}
 }
 
+type windowFramerGroupsCurrentRowCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsCurrentRowCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) close() {
+	*f = windowFramerGroupsCurrentRowCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsCurrentRowOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1264,7 +3141,7 @@ type windowFramerGroupsCurrentRowOffsetFollowing struct {
 var _ windowFramer = &windowFramerGroupsCurrentRowOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsCurrentRowOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1296,6 +3173,71 @@ func (f *windowFramerGroupsCurrentRowOffsetFollowing) close() {
 	*f = windowFramerGroupsCurrentRowOffsetFollowing{}
 }
 
+type windowFramerGroupsCurrentRowOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsCurrentRowOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	// f.endIdx must be advanced by 'endOffset' peer groups.
+	f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, f.endOffset)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		// The end index will already have been advanced by f.startOffset rows, so
+		// we only need to advance to the next adjacent peers group whenever the
+		// currentRow pointer enters a new peers group.
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) close() {
+	*f = windowFramerGroupsCurrentRowOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsCurrentRowUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1303,7 +3245,7 @@ type windowFramerGroupsCurrentRowUnboundedFollowing struct {
 var _ windowFramer = &windowFramerGroupsCurrentRowUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsCurrentRowUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1328,6 +3270,64 @@ func (f *windowFramerGroupsCurrentRowUnboundedFollowing) close() {
 	*f = windowFramerGroupsCurrentRowUnboundedFollowing{}
 }
 
+type windowFramerGroupsCurrentRowUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsCurrentRowUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) close() {
+	*f = windowFramerGroupsCurrentRowUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsOffsetFollowingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1335,7 +3335,7 @@ type windowFramerGroupsOffsetFollowingOffsetFollowing struct {
 var _ windowFramer = &windowFramerGroupsOffsetFollowingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1372,6 +3372,76 @@ func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) close() {
 	*f = windowFramerGroupsOffsetFollowingOffsetFollowing{}
 }
 
+type windowFramerGroupsOffsetFollowingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsOffsetFollowingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	// f.startIdx must be advanced by 'startOffset' peer groups.
+	f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, f.startOffset)
+	// f.endIdx must be advanced by 'endOffset' peer groups.
+	f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, f.endOffset)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart && f.currentRow > 0 {
+		// The start index will already have been advanced by f.startOffset rows, so
+		// we only need to advance to the next adjacent peers group whenever the
+		// currentRow pointer enters a new peers group.
+		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		// The end index will already have been advanced by f.startOffset rows, so
+		// we only need to advance to the next adjacent peers group whenever the
+		// currentRow pointer enters a new peers group.
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) close() {
+	*f = windowFramerGroupsOffsetFollowingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerGroupsOffsetFollowingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1379,7 +3449,7 @@ type windowFramerGroupsOffsetFollowingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerGroupsOffsetFollowingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1409,6 +3479,69 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) close() {
 	*f = windowFramerGroupsOffsetFollowingUnboundedFollowing{}
 }
 
+type windowFramerGroupsOffsetFollowingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerGroupsOffsetFollowingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	// f.startIdx must be advanced by 'startOffset' peer groups.
+	f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, f.startOffset)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart && f.currentRow > 0 {
+		// The start index will already have been advanced by f.startOffset rows, so
+		// we only need to advance to the next adjacent peers group whenever the
+		// currentRow pointer enters a new peers group.
+		f.startIdx = f.incrementPeerGroup(ctx, f.startIdx, 1 /* groups */)
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) close() {
+	*f = windowFramerGroupsOffsetFollowingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeUnboundedPrecedingOffsetPreceding struct {
 	windowFramerBase
 }
@@ -1416,7 +3549,7 @@ type windowFramerRangeUnboundedPrecedingOffsetPreceding struct {
 var _ windowFramer = &windowFramerRangeUnboundedPrecedingOffsetPreceding{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1443,6 +3576,66 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) close() {
 	*f = windowFramerRangeUnboundedPrecedingOffsetPreceding{}
 }
 
+type windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) close() {
+	f.endHandler.close()
+	*f = windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeUnboundedPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -1450,7 +3643,7 @@ type windowFramerRangeUnboundedPrecedingCurrentRow struct {
 var _ windowFramer = &windowFramerRangeUnboundedPrecedingCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeUnboundedPrecedingCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1475,6 +3668,64 @@ func (f *windowFramerRangeUnboundedPrecedingCurrentRow) close() {
 	*f = windowFramerRangeUnboundedPrecedingCurrentRow{}
 }
 
+type windowFramerRangeUnboundedPrecedingCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) close() {
+	*f = windowFramerRangeUnboundedPrecedingCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeUnboundedPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1482,7 +3733,7 @@ type windowFramerRangeUnboundedPrecedingOffsetFollowing struct {
 var _ windowFramer = &windowFramerRangeUnboundedPrecedingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1509,6 +3760,66 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) close() {
 	*f = windowFramerRangeUnboundedPrecedingOffsetFollowing{}
 }
 
+type windowFramerRangeUnboundedPrecedingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) close() {
+	f.endHandler.close()
+	*f = windowFramerRangeUnboundedPrecedingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeUnboundedPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1516,7 +3827,7 @@ type windowFramerRangeUnboundedPrecedingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRangeUnboundedPrecedingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1538,6 +3849,62 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) close() {
 	*f = windowFramerRangeUnboundedPrecedingUnboundedFollowing{}
 }
 
+type windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	f.startIdx = 0
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) close() {
+	*f = windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeOffsetPrecedingOffsetPreceding struct {
 	windowFramerBase
 }
@@ -1545,7 +3912,7 @@ type windowFramerRangeOffsetPrecedingOffsetPreceding struct {
 var _ windowFramer = &windowFramerRangeOffsetPrecedingOffsetPreceding{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1576,6 +3943,70 @@ func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) close() {
 	*f = windowFramerRangeOffsetPrecedingOffsetPreceding{}
 }
 
+type windowFramerRangeOffsetPrecedingOffsetPrecedingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingOffsetPrecedingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) close() {
+	f.startHandler.close()
+	f.endHandler.close()
+	*f = windowFramerRangeOffsetPrecedingOffsetPrecedingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeOffsetPrecedingCurrentRow struct {
 	windowFramerBase
 }
@@ -1583,7 +4014,7 @@ type windowFramerRangeOffsetPrecedingCurrentRow struct {
 var _ windowFramer = &windowFramerRangeOffsetPrecedingCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeOffsetPrecedingCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1612,6 +4043,68 @@ func (f *windowFramerRangeOffsetPrecedingCurrentRow) close() {
 	*f = windowFramerRangeOffsetPrecedingCurrentRow{}
 }
 
+type windowFramerRangeOffsetPrecedingCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) close() {
+	f.startHandler.close()
+	*f = windowFramerRangeOffsetPrecedingCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeOffsetPrecedingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1619,7 +4112,7 @@ type windowFramerRangeOffsetPrecedingOffsetFollowing struct {
 var _ windowFramer = &windowFramerRangeOffsetPrecedingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1650,6 +4143,70 @@ func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) close() {
 	*f = windowFramerRangeOffsetPrecedingOffsetFollowing{}
 }
 
+type windowFramerRangeOffsetPrecedingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) close() {
+	f.startHandler.close()
+	f.endHandler.close()
+	*f = windowFramerRangeOffsetPrecedingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeOffsetPrecedingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1657,7 +4214,7 @@ type windowFramerRangeOffsetPrecedingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRangeOffsetPrecedingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1684,6 +4241,66 @@ func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) close() {
 	*f = windowFramerRangeOffsetPrecedingUnboundedFollowing{}
 }
 
+type windowFramerRangeOffsetPrecedingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetPrecedingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) close() {
+	f.startHandler.close()
+	*f = windowFramerRangeOffsetPrecedingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeCurrentRowCurrentRow struct {
 	windowFramerBase
 }
@@ -1691,7 +4308,7 @@ type windowFramerRangeCurrentRowCurrentRow struct {
 var _ windowFramer = &windowFramerRangeCurrentRowCurrentRow{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeCurrentRowCurrentRow) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1718,6 +4335,66 @@ func (f *windowFramerRangeCurrentRowCurrentRow) close() {
 	*f = windowFramerRangeCurrentRowCurrentRow{}
 }
 
+type windowFramerRangeCurrentRowCurrentRowExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeCurrentRowCurrentRowExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) close() {
+	*f = windowFramerRangeCurrentRowCurrentRowExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeCurrentRowOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1725,7 +4402,7 @@ type windowFramerRangeCurrentRowOffsetFollowing struct {
 var _ windowFramer = &windowFramerRangeCurrentRowOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeCurrentRowOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1754,6 +4431,68 @@ func (f *windowFramerRangeCurrentRowOffsetFollowing) close() {
 	*f = windowFramerRangeCurrentRowOffsetFollowing{}
 }
 
+type windowFramerRangeCurrentRowOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeCurrentRowOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) close() {
+	f.endHandler.close()
+	*f = windowFramerRangeCurrentRowOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeCurrentRowUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1761,7 +4500,7 @@ type windowFramerRangeCurrentRowUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRangeCurrentRowUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeCurrentRowUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1786,6 +4525,64 @@ func (f *windowFramerRangeCurrentRowUnboundedFollowing) close() {
 	*f = windowFramerRangeCurrentRowUnboundedFollowing{}
 }
 
+type windowFramerRangeCurrentRowUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeCurrentRowUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.currentRow
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) close() {
+	*f = windowFramerRangeCurrentRowUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeOffsetFollowingOffsetFollowing struct {
 	windowFramerBase
 }
@@ -1793,7 +4590,7 @@ type windowFramerRangeOffsetFollowingOffsetFollowing struct {
 var _ windowFramer = &windowFramerRangeOffsetFollowingOffsetFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeOffsetFollowingOffsetFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1824,6 +4621,70 @@ func (f *windowFramerRangeOffsetFollowingOffsetFollowing) close() {
 	*f = windowFramerRangeOffsetFollowingOffsetFollowing{}
 }
 
+type windowFramerRangeOffsetFollowingOffsetFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetFollowingOffsetFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+	// Handle the end bound.
+	if currRowIsGroupStart {
+		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
+	}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) close() {
+	f.startHandler.close()
+	f.endHandler.close()
+	*f = windowFramerRangeOffsetFollowingOffsetFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 type windowFramerRangeOffsetFollowingUnboundedFollowing struct {
 	windowFramerBase
 }
@@ -1831,7 +4692,7 @@ type windowFramerRangeOffsetFollowingUnboundedFollowing struct {
 var _ windowFramer = &windowFramerRangeOffsetFollowingUnboundedFollowing{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -1858,6 +4719,66 @@ func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) close() {
 	*f = windowFramerRangeOffsetFollowingUnboundedFollowing{}
 }
 
+type windowFramerRangeOffsetFollowingUnboundedFollowingExclude struct {
+	windowFramerBase
+}
+
+var _ windowFramer = &windowFramerRangeOffsetFollowingUnboundedFollowingExclude{}
+
+// startPartition prepares the window framer to begin iterating through a new
+// partition. It must be called before calling next.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) startPartition(
+	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
+) {
+	f.windowFramerBase.startPartition(partitionSize, storedCols)
+	f.startHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+}
+
+// next is called for each row in the partition. It advances to the next row and
+// then calculates the window frame for the current row. next should not be
+// called beyond the end of the partition, or undefined behavior may result.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) next(ctx context.Context) {
+	f.currentRow++
+	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
+	// Handle the start bound.
+	if currRowIsGroupStart {
+		f.startIdx = f.startHandler.getIdx(ctx, f.currentRow, f.startIdx)
+	}
+	// Handle the end bound.
+	f.endIdx = f.partitionSize
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+}
+
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) close() {
+	f.startHandler.close()
+	*f = windowFramerRangeOffsetFollowingUnboundedFollowingExclude{}
+}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
 // frameFirstIdx returns the index of the first row in the window frame for
 // the current row. If no such row exists, frameFirstIdx returns -1.
 func (b *windowFramerBase) frameFirstIdx() (idx int) {
@@ -1882,16 +4803,12 @@ func (b *windowFramerBase) frameLastIdx() (idx int) {
 // window frame for the current row. If no such row exists, frameNthIdx
 // returns -1.
 func (b *windowFramerBase) frameNthIdx(n int) (idx int) {
-	if b.startIdx >= b.endIdx {
-		// The window frame is empty, so there is no nth index.
-		return -1
-	}
 	// Subtract from n to make it a zero-based index.
 	n = n - 1
 	idx = b.startIdx + n
 	if idx < 0 || idx >= b.endIdx {
 		// The requested index is out of range for this window frame.
-		idx = -1
+		return -1
 	}
 	return idx
 }
@@ -2026,4 +4943,97 @@ func (b *windowFramerBase) handleOffsets(
 			evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
 		)
 	}
+}
+
+// handleExcludeForNext updates the start and end indices for rows excluded by
+// the window frame's exclusion clause.
+func (b *windowFramerBase) handleExcludeForNext(ctx context.Context, currRowIsGroupStart bool) {
+	if b.excludeCurrRow() {
+		b.excludeStartIdx = b.currentRow
+		b.excludeEndIdx = b.excludeStartIdx + 1
+	} else {
+		if currRowIsGroupStart {
+			// Only update the exclude indices upon entering a new peer group.
+			b.excludeStartIdx = b.excludeEndIdx
+			b.excludeEndIdx = b.incrementPeerGroup(ctx, b.excludeEndIdx, 1 /* groups */)
+		}
+	}
+}
+
+// handleExcludeForFirstIdx adjusts the given 'first index' to account for the
+// exclusion clause.
+func (b *windowFramerBase) handleExcludeForFirstIdx(idx int) int {
+	if idx == -1 {
+		return idx
+	}
+	if b.excludeStartIdx <= idx && b.excludeEndIdx > idx {
+		if b.excludeTies() && b.currentRow >= b.startIdx && b.currentRow < b.endIdx {
+			return b.currentRow
+		}
+		if b.excludeEndIdx >= b.endIdx {
+			// All rows are excluded.
+			return -1
+		}
+		return b.excludeEndIdx
+	}
+	return idx
+}
+
+// handleExcludeForLastIdx adjusts the given 'last index' to account for the
+// exclusion clause.
+func (b *windowFramerBase) handleExcludeForLastIdx(idx int) int {
+	if idx == -1 {
+		return idx
+	}
+	if b.excludeStartIdx <= idx && b.excludeEndIdx > idx {
+		if b.excludeTies() && b.currentRow >= b.startIdx && b.currentRow < b.endIdx {
+			return b.currentRow
+		}
+		if b.excludeStartIdx <= b.startIdx {
+			// All rows are excluded.
+			return -1
+		}
+		return b.excludeStartIdx - 1
+	}
+	return idx
+}
+
+// handleExcludeForNthIdx adjusts the given 'nth index' to account for the
+// exclusion clause.
+func (b *windowFramerBase) handleExcludeForNthIdx(idx int) int {
+	if idx == -1 {
+		return idx
+	}
+	// Retrieve the rows that are actually excluded - those that are within
+	// [startIdx, endIdx) in addition to being specified by the EXCLUDE clause.
+	excludedRowsStart := b.excludeStartIdx
+	if excludedRowsStart < b.startIdx {
+		excludedRowsStart = b.startIdx
+	}
+	excludedRowsEnd := b.excludeEndIdx
+	if excludedRowsEnd > b.endIdx {
+		excludedRowsEnd = b.endIdx
+	}
+	if excludedRowsStart < excludedRowsEnd && idx >= excludedRowsStart {
+		if b.excludeTies() && b.currentRow >= b.startIdx && b.currentRow < b.endIdx {
+			if idx == excludedRowsStart {
+				return b.currentRow
+			}
+			idx--
+		}
+		idx += excludedRowsEnd - excludedRowsStart
+		if idx >= b.endIdx {
+			// The nth index doesn't exist.
+			return -1
+		}
+	}
+	return idx
+}
+
+func (b *windowFramerBase) excludeCurrRow() bool {
+	return b.exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_CURRENT_ROW
+}
+
+func (b *windowFramerBase) excludeTies() bool {
+	return b.exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES
 }

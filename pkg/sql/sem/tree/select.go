@@ -956,6 +956,34 @@ const (
 	ExcludeTies
 )
 
+func (node WindowFrameExclusion) String() string {
+	switch node {
+	case NoExclusion:
+		return "EXCLUDE NO ROWS"
+	case ExcludeCurrentRow:
+		return "EXCLUDE CURRENT ROW"
+	case ExcludeGroup:
+		return "EXCLUDE GROUP"
+	case ExcludeTies:
+		return "EXCLUDE TIES"
+	}
+	return ""
+}
+
+func (node WindowFrameExclusion) Name() string {
+	switch node {
+	case NoExclusion:
+		return "NoExclusion"
+	case ExcludeCurrentRow:
+		return "ExcludeCurrentRow"
+	case ExcludeGroup:
+		return "ExcludeGroup"
+	case ExcludeTies:
+		return "ExcludeTies"
+	}
+	return ""
+}
+
 // WindowFrame represents static state of window frame over which calculations are made.
 type WindowFrame struct {
 	Mode      WindowFrameMode      // the mode of framing being used
