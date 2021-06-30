@@ -86,7 +86,9 @@ func registerGORM(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir))
+		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
+			t.Fatal(err)
+		}
 
 		blocklistName, expectedFailures, ignorelistName, ignoredFailures := gormBlocklists.getLists(version)
 		if expectedFailures == nil {
@@ -107,12 +109,15 @@ func registerGORM(r *testRegistry) {
 		t.Status("running gorm test suite and collecting results")
 
 		// Ignore the error as there will be failing tests.
-		_ = c.RunE(
+		err = c.RunE(
 			ctx,
 			node,
 			fmt.Sprintf(`cd %s && GORMDIALECT="postgres" 
 PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v 2>&1 | %s/bin/go-junit-report > %s`, gormTestPath, goPath, resultsPath),
 		)
+		if err != nil {
+			t.L().Printf("error whilst processing tests (may be expected): %#v", err)
+		}
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "gorm" /* ormName */, []byte(resultsPath),
