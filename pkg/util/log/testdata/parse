@@ -2,7 +2,6 @@ subtest single_line_unstructured_entry
 
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
-
 ----
 logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0}
 

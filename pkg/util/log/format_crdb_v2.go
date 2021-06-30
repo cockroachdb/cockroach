@@ -13,8 +13,6 @@ package log
 import (
 	"bufio"
 	"bytes"
-	"errors"
-	"fmt"
 	"io"
 	"regexp"
 	"strconv"
@@ -26,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/ttycolor"
 )
@@ -479,72 +478,75 @@ type entryDecoderV2 struct {
 	sensitiveEditor redactEditor
 }
 
+var whitespaceRegexp = regexp.MustCompile(`^\s*$`)
+
 // Decode decodes the next log entry into the provided protobuf message.
 func (d *entryDecoderV2) Decode(entry *logpb.Entry) error {
-	if d.nextLine == nil {
-		var err error
-		if d.nextLine, err = d.reader.ReadBytes('\n'); err != nil {
-			return err
-		}
+
+	// TODO(ajwerner): We will want to support starting in the middle of a log
+	// file at an arbitrary character and continuing on to the next full line.
+	// To do that, we'll involve the regexp in the line reading protocol and
+	// allow for lines which are not valid.
+	if err := d.populateNextLine(); err != nil {
+		return err
 	}
 
 	m := entryREV2.FindSubmatch(d.nextLine)
 	if m == nil {
-		return errors.New("failed while decoding due to corrupted log file")
+		return errors.Errorf("failed while decoding due to corrupted log file: %q", d.nextLine)
 	}
+	d.nextLine = nil
 
 	if err := d.initEntryFromFirstLine(entry, m); err != nil {
 		return err
 	}
 
-	msg := string(trimFinalNewLines(m[12]))
-
 	// Process the message.
-	// While the entry has additional lines, collect the full message.
 	var entryMsg bytes.Buffer
+	entryMsg.Write(m[12])
 
-	fmt.Fprint(&entryMsg, msg)
-
+	// While the entry has additional lines, collect the full message.
 linesLoop:
 	for {
-		nextLine, err := d.reader.ReadBytes('\n')
-
-		if err != nil {
-			if err == io.EOF {
-				d.nextLine = nextLine
-				break linesLoop
-			}
+		err := d.populateNextLine()
+		switch {
+		case errors.Is(err, io.EOF):
+			break linesLoop
+		case err != nil:
 			return err
 		}
 
 		// Match the next line in the log data.
-		m = entryREV2.FindSubmatch(nextLine)
+		m = entryREV2.FindSubmatch(d.nextLine)
 		if m == nil {
-			d.nextLine = nextLine
 			break linesLoop
 		}
 
-		// Determine whether this line is a continuation of the entry and append the message accordingly.
-		msg := string(trimFinalNewLines(m[12]))
-		switch cont := string(m[11]); cont {
-		case "+":
-			fmt.Fprintf(&entryMsg, "\n%s", msg)
-		case "|":
-			fmt.Fprint(&entryMsg, msg)
+		// Determine whether this line is a continuation of the entry and append
+		// the message accordingly.
+		msg := trimFinalNewLines(m[12])
+		switch cont := m[11][0]; cont {
+		case '+':
+			entryMsg.WriteByte('\n')
+			entryMsg.Write(msg)
+		case '|':
+			entryMsg.Write(msg)
 			if entry.StructuredEnd != 0 {
-				entry.StructuredEnd = uint32(len(entryMsg.String()))
+				entry.StructuredEnd = uint32(entryMsg.Len())
 			}
-		case "!":
+		case '!':
 			if entry.StackTraceStart == 0 {
-				entry.StackTraceStart = uint32(len(entryMsg.String())) + 1
-				fmt.Fprintf(&entryMsg, "\nstack trace:\n%s", msg)
+				entry.StackTraceStart = uint32(entryMsg.Len()) + 1
+				entryMsg.WriteString("\nstack trace:\n")
+				entryMsg.Write(msg)
 			} else {
-				fmt.Fprintf(&entryMsg, "\n%s", msg)
+				entryMsg.WriteString("\n")
+				entryMsg.Write(msg)
 			}
 		default:
-			d.nextLine = nextLine
 			break linesLoop
 		}
+		d.nextLine = nil // consume the line
 	}
 
 	r := redactablePackage{
@@ -555,6 +557,24 @@ linesLoop:
 	entry.Message = string(r.msg)
 	entry.Redactable = r.redactable
 
+	return nil
+}
+
+// populateNextLine populates the nextLine buffer by reading
+// from the underlying reader a line at a time until a line which
+// contains anything other than whitespace is returned.
+func (d *entryDecoderV2) populateNextLine() error {
+	for d.nextLine == nil {
+		var err error
+		nextLine, err := d.reader.ReadBytes('\n')
+		if err != nil && !(errors.Is(err, io.EOF) && len(nextLine) > 0) {
+			return err
+		}
+		if whitespaceRegexp.Match(nextLine) {
+			continue
+		}
+		d.nextLine = nextLine
+	}
 	return nil
 }
 
