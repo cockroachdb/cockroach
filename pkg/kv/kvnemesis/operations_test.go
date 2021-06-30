@@ -28,6 +28,7 @@ func TestOperationsFormat(t *testing.T) {
 		expected string
 	}{
 		{step: step(get(`a`)), expected: `db0.Get(ctx, "a")`},
+		{step: step(del(`a`)), expected: `db0.Delete(ctx, "a")`},
 		{step: step(batch(get(`b`), reverseScanForUpdate(`c`, `e`), get(`f`))), expected: `
 			{
 			  b := &Batch{}

@@ -58,6 +58,17 @@ message PutOperation {
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
+message DeleteOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message DeleteRangeOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -104,11 +115,13 @@ message Operation {
   GetOperation get = 7;
   PutOperation put = 8;
   ScanOperation scan = 9;
-  SplitOperation split = 10;
-  MergeOperation merge = 11;
-  ChangeReplicasOperation change_replicas = 12;
-  TransferLeaseOperation transfer_lease = 13;
-  ChangeZoneOperation change_zone = 14;
+  DeleteOperation delete = 10;
+  DeleteRangeOperation delete_range = 11;
+  SplitOperation split = 12;
+  MergeOperation merge = 13;
+  ChangeReplicasOperation change_replicas = 14;
+  TransferLeaseOperation transfer_lease = 15;
+  ChangeZoneOperation change_zone = 16;
 }
 
 enum ResultType {
