@@ -219,7 +219,6 @@ message Database {
   repeated uint32 dependentObjects = 2  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
-// FIXME: Dead code
 message ListPartition {
   option (gogoproto.equal) = true;
   string name = 1  [(gogoproto.customname) = "Name"];

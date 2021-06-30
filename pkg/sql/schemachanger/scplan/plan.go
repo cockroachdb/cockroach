@@ -233,7 +233,6 @@ func buildStages(init scpb.State, g *scgraph.Graph, params Params) []Stage {
 		if !didSomething {
 			break
 		}
-		// Sort ops based on graph dependencies.
 		stages = append(stages, s)
 		cur = s.After
 	}

@@ -719,4 +719,8 @@ func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPar
 	return m.cr.AddPartitioning(table, index.IndexDesc(), op.PartitionFields, op.ListPartitions, op.RangePartitions, nil, true)
 }
 
+func (m *visitor) NoOpInfo(_ context.Context, _ scop.NoOpInfo) error {
+	return nil
+}
+
 var _ scop.MutationVisitor = (*visitor)(nil)

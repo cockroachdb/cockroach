@@ -135,6 +135,8 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.Descriptors(),
 		p.ExecCfg().JobRegistry,
 		p.ExecCfg().IndexBackfiller,
+		MakeIndexValidator(p.Txn().DB(), p.EvalContext().Codec, p.ExecCfg().InternalExecutor),
+		MakeCCLCallbacks(p.ExecCfg().Settings, p.EvalContext()),
 		p.ExecCfg().NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.StatementPhase,

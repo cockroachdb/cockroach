@@ -169,6 +169,7 @@ go_library(
         "schema_change_cluster_setting.go",
         "schema_change_plan_node.go",
         "schema_changer.go",
+        "schema_changer_ccl.go",
         "schema_changer_metrics.go",
         "schema_changer_state.go",
         "scrub.go",

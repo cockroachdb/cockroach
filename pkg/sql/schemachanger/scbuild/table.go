@@ -241,12 +241,15 @@ func (b *buildContext) alterTableAddColumn(
 		FamilyID:   familyID,
 		FamilyName: familyName,
 	})
-	b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
-	if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
-		idxID := b.nextIndexID(table)
-		idx.ID = idxID
-		secondaryIndex := secondaryIndexElemFromDescriptor(idx, table)
-		b.addNode(scpb.Target_ADD, secondaryIndex)
+	// Computed columns do not exist inside the primary index,
+	if !col.Virtual {
+		b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
+		if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
+			idxID := b.nextIndexID(table)
+			idx.ID = idxID
+			secondaryIndex := secondaryIndexElemFromDescriptor(idx, table)
+			b.addNode(scpb.Target_ADD, secondaryIndex)
+		}
 	}
 }
 

@@ -142,8 +142,6 @@ type RemoveTypeBackRef struct {
 	TypeID descpb.ID
 }
 
-// FIXME: Check create index first
-
 // MakeAddedColumnDeleteAndWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
 type MakeAddedColumnDeleteAndWriteOnly struct {
@@ -262,4 +260,10 @@ type AddIndexPartitionInfo struct {
 	PartitionFields []string
 	ListPartitions  []*scpb.ListPartition
 	RangePartitions []*scpb.RangePartitions
+}
+
+// NoOpInfo a no-op mutation operation, which is allows
+// an emit function to conditionally generate operations.
+type NoOpInfo struct {
+	mutationOp
 }

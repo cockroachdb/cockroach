@@ -24,10 +24,13 @@ Stage 1
     IndexID: 2
     TableID: 52
 Stage 2
-  scop.BackfillIndex
+  *scop.BackfillIndex
     IndexID: 2
     TableID: 52
 Stage 3
+  *scop.NoOpInfo
+    {}
+Stage 4
   *scop.MakeAddedSecondaryIndexPublic
     IndexID: 2
     TableID: 52
@@ -60,10 +63,13 @@ Stage 1
     IndexID: 2
     TableID: 52
 Stage 2
-  scop.BackfillIndex
+  *scop.BackfillIndex
     IndexID: 2
     TableID: 52
 Stage 3
+  *scop.NoOpInfo
+    {}
+Stage 4
   *scop.MakeAddedSecondaryIndexPublic
     IndexID: 2
     TableID: 52
@@ -91,25 +97,18 @@ Stage 0
     StoreColumnIDs:
     - 3
     TableID: 52
-  *scop.AddIndexPartitionInfo
-    IndexID: 2
-    ListPartitions:
-    - name: p1
-      expr:
-      - "1"
-    PartitionFields:
-    - id
-    RangePartitions: []
-    TableID: 52
 Stage 1
   *scop.MakeAddedIndexDeleteAndWriteOnly
     IndexID: 2
     TableID: 52
 Stage 2
-  scop.BackfillIndex
+  *scop.BackfillIndex
     IndexID: 2
     TableID: 52
 Stage 3
+  *scop.NoOpInfo
+    {}
+Stage 4
   *scop.MakeAddedSecondaryIndexPublic
     IndexID: 2
     TableID: 52
@@ -119,7 +118,3 @@ CREATE INDEX id1 on  defaultdb.t1(id, name) storing (money) PARTITION BY LIST (i
                                                               PARTITION p1 VALUES IN (1)
                                                             )
 ----
-- from: [Partitioning:{DescID: 52, IndexID: 2}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 2}, DELETE_ONLY]
-- from: [SecondaryIndex:{DescID: 52, ElementName: "id1", IndexID: 2}, DELETE_AND_WRITE_ONLY]
-  to:   [Partitioning:{DescID: 52, IndexID: 2}, PUBLIC]
