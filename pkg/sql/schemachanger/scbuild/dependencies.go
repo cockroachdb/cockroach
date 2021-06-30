@@ -21,14 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Dependencies contains all the dependencies required by the builder.
 type Dependencies interface {
 	CatalogReader() CatalogReader
 	AuthorizationAccessor() AuthorizationAccessor
-	DescUtils() DescUtils
 
 	// Codec returns the current session data, as in execCfg.
 	// So far this is used only to build a tree.EvalContext.
@@ -42,21 +40,6 @@ type Dependencies interface {
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
-}
-
-// DescUtils utility functions for helping build different parts
-// of descriptors.
-type DescUtils interface {
-	EvalShardBucketCount(ctx context.Context, shardBuckets tree.Expr) (int32, error)
-	DequalifyAndValidateExpr(
-		ctx context.Context,
-		desc catalog.TableDescriptor,
-		expr tree.Expr,
-		typ *types.T,
-		context string,
-		maxVolatility tree.Volatility,
-		tn *tree.TableName,
-	) (string, *types.T, catalog.TableColSet, error)
 }
 
 // CatalogReader should implement descriptor resolution, namespace lookups, and
