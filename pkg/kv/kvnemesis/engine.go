@@ -67,6 +67,9 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	if !mvccKey.Key.Equal(key) {
 		return roachpb.Value{}
 	}
+	if len(iter.Value()) == 0 {
+		return roachpb.Value{}
+	}
 	var valCopy []byte
 	e.b, valCopy = e.b.Copy(iter.Value(), 0 /* extraCap */)
 	return roachpb.Value{RawBytes: valCopy, Timestamp: mvccKey.Timestamp}
@@ -77,6 +80,64 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 func (e *Engine) Put(key storage.MVCCKey, value []byte) {
 	if err := e.kvs.Set(storage.EncodeKey(key), value, nil); err != nil {
 		panic(err)
+	}
+}
+
+// Delete writes a tombstone value for a given key/timestamp. This is
+// equivalent to a Put with an empty value.
+func (e *Engine) Delete(key storage.MVCCKey) {
+	if err := e.kvs.Set(storage.EncodeKey(key), nil, nil); err != nil {
+		panic(err)
+	}
+}
+
+// DeleteRange writes tombstone values for all the keys in the [key, endKey)
+// span at the given timestamp.
+func (e *Engine) DeleteRange(key, endKey roachpb.Key, ts hlc.Timestamp) {
+	iter := e.kvs.NewIter(nil)
+	defer func() { _ = iter.Close() }()
+	seekKey := storage.EncodeKey(storage.MVCCKey{Key: key, Timestamp: ts})
+	keysToDelete := make(map[string]struct{})
+	var lastKey roachpb.Key
+
+	// Iterate through all the keys seen in the storage engine, collect the raw
+	// keys to be deleted at the timestamp given.
+	for iter.SeekGE(seekKey); iter.Valid(); iter.Next() {
+		if err := iter.Error(); err != nil {
+			panic(err)
+		}
+
+		if endKey.Compare(iter.Key()) <= 0 {
+			break
+		}
+
+		var keyCopy []byte
+		e.b, keyCopy = e.b.Copy(iter.Key(), 0 /* extraCap */)
+		mvccKey, err := storage.DecodeMVCCKey(keyCopy)
+		if err != nil {
+			panic(err)
+		}
+
+		if mvccKey.Key.Equal(lastKey) {
+			continue
+		}
+		lastKey = mvccKey.Key
+
+		// Don't re-delete keys if they already have a tombstone value.
+		// This is because deleted keys wouldn't be returned by MVCCScan().
+		if len(iter.Value()) == 0 {
+			continue
+		}
+
+		if _, ok := keysToDelete[string(mvccKey.Key)]; !ok {
+			keysToDelete[string(mvccKey.Key)] = struct{}{}
+		}
+	}
+
+	// Iterate through keys and write a tombstone for each (all at the given ts).
+	for keyToDelete := range keysToDelete {
+		mvccKeyToDelete := storage.MVCCKey{Key: roachpb.Key(keyToDelete), Timestamp: ts}
+		e.Delete(mvccKeyToDelete)
 	}
 }
 
