@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -23,6 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// CacheEnabled is a cluster setting that determines if the
+// AuthInfoCache and associated logic is enabled.
+var CacheEnabled = settings.RegisterBoolSetting(
+	"server.authentication_cache.enabled",
+	`enables a cache used during authentication to avoid lookups to system tables
+when retrieving per-user authentication-related information`,
+	true,
+).WithPublic()
 
 // AuthInfoCache is a shared cache for hashed passwords and other
 // information used during user authentication.
@@ -64,6 +74,9 @@ func (a *AuthInfoCache) Get(
 		normalizedUsername security.SQLUsername,
 	) (AuthInfo, error),
 ) (aInfo AuthInfo, err error) {
+	if !CacheEnabled.Get(&settings.SV) {
+		return readFromStore(ctx, nil /* txn */, ie, normalizedUsername)
+	}
 	err = descs.Txn(ctx, settings, leaseMgr, ie, db,
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
 			_, usersTableDesc, err := descriptors.GetImmutableTableByName(
