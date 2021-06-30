@@ -63,6 +63,13 @@ message DeleteOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message DeleteRangeOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+  roachpb.Transaction txn = 4;
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -110,11 +117,12 @@ message Operation {
   PutOperation put = 8;
   ScanOperation scan = 9;
   DeleteOperation delete = 10;
-  SplitOperation split = 11;
-  MergeOperation merge = 12;
-  ChangeReplicasOperation change_replicas = 13;
-  TransferLeaseOperation transfer_lease = 14;
-  ChangeZoneOperation change_zone = 15;
+  DeleteRangeOperation delete_range = 11;
+  SplitOperation split = 12;
+  MergeOperation merge = 13;
+  ChangeReplicasOperation change_replicas = 14;
+  TransferLeaseOperation transfer_lease = 15;
+  ChangeZoneOperation change_zone = 16;
 }
 
 enum ResultType {
