@@ -142,6 +142,73 @@ SystemInfo contains information about the host system.
 
 
 
+## Regions
+
+
+
+RegionsRequest retrieves all available regions.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+RegionsRequest requests all available regions.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+RegionsResponse describes the available regions.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| regions | [RegionsResponse.RegionsEntry](#cockroach.server.serverpb.RegionsResponse-cockroach.server.serverpb.RegionsResponse.RegionsEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.RegionsResponse-cockroach.server.serverpb.RegionsResponse.RegionsEntry"></a>
+#### RegionsResponse.RegionsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.RegionsResponse-string) |  |  |  |
+| value | [RegionsResponse.Region](#cockroach.server.serverpb.RegionsResponse-cockroach.server.serverpb.RegionsResponse.Region) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RegionsResponse-cockroach.server.serverpb.RegionsResponse.Region"></a>
+#### RegionsResponse.Region
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| zones | [string](#cockroach.server.serverpb.RegionsResponse-string) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## Nodes
 
 `GET /_status/nodes`

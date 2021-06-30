@@ -1292,6 +1292,56 @@ func (s *statusServer) Profile(
 	}
 }
 
+// Regions implements the serverpb.Status interface.
+func (s *statusServer) Regions(
+	ctx context.Context, req *serverpb.RegionsRequest,
+) (*serverpb.RegionsResponse, error) {
+	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	if err != nil {
+		return nil, err
+	}
+	return regionsResponseFromNodesResponse(resp), nil
+}
+
+func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.RegionsResponse {
+	regionsToZones := make(map[string]map[string]struct{})
+	for _, node := range nr.Nodes {
+		var region string
+		var zone string
+		for _, tier := range node.Desc.Locality.Tiers {
+			switch tier.Key {
+			case "region":
+				region = tier.Value
+			case "zone", "availability-zone", "az":
+				zone = tier.Value
+			}
+		}
+		if region == "" {
+			continue
+		}
+		if _, ok := regionsToZones[region]; !ok {
+			regionsToZones[region] = make(map[string]struct{})
+		}
+		if zone != "" {
+			regionsToZones[region][zone] = struct{}{}
+		}
+	}
+	ret := &serverpb.RegionsResponse{
+		Regions: make(map[string]*serverpb.RegionsResponse_Region, len(regionsToZones)),
+	}
+	for region, zones := range regionsToZones {
+		zonesArr := make([]string, 0, len(zones))
+		for z := range zones {
+			zonesArr = append(zonesArr, z)
+		}
+		sort.Strings(zonesArr)
+		ret.Regions[region] = &serverpb.RegionsResponse_Region{
+			Zones: zonesArr,
+		}
+	}
+	return ret
+}
+
 // Nodes returns all node statuses.
 //
 // The LivenessByNodeID in the response returns the known liveness
@@ -1302,7 +1352,7 @@ func (s *statusServer) Profile(
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
-	resp, _, err := s.nodesHelper(ctx, 0, 0)
+	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
 	return resp, err
 }
 
