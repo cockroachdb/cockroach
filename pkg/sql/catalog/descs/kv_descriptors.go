@@ -262,7 +262,7 @@ func (kd *kvDescriptors) getAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.Descriptor, error) {
 	if kd.allDescriptors.isEmpty() {
-		descs, err := catalogkv.GetAllDescriptors(ctx, txn, kd.codec)
+		descs, err := catalogkv.GetAllDescriptors(ctx, txn, kd.codec, true /* shouldRunPostDeserializationChanges */)
 		if err != nil {
 			return nil, err
 		}

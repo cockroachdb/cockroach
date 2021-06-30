@@ -978,8 +978,8 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	return ret, nil
 }
 
-// GetChanged returns if the MutableDescriptor was changed after running
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
-func (desc *Mutable) GetChanged() bool {
+func (desc *Mutable) HasPostDeserializationChanges() bool {
 	return desc.changed
 }

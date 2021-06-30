@@ -44,9 +44,9 @@ type MutableDescriptor interface {
 	SetDropped()
 	// SetOffline sets the descriptor's state to offline, with the provided reason.
 	SetOffline(reason string)
-	// GetChanged returns if the MutableDescriptor was changed after running
+	// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 	// RunPostDeserializationChanges.
-	GetChanged() bool
+	HasPostDeserializationChanges() bool
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.

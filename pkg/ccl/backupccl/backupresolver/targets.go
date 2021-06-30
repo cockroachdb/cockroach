@@ -528,7 +528,9 @@ func LoadAllDescs(
 		ctx,
 		func(ctx context.Context, txn *kv.Txn) (err error) {
 			txn.SetFixedTimestamp(ctx, asOf)
-			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, codec)
+			allDescs, err = catalogkv.GetAllDescriptors(
+				ctx, txn, codec, true, /* shouldRunPostDeserializationChanges */
+			)
 			return err
 		}); err != nil {
 		return nil, err
