@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,22 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
-
-// CreatePartitioningCCL is the public hook point for the CCL-licensed
-// partitioning creation code.
-var CreatePartitioningCCL = func(
-	ctx context.Context,
-	st *cluster.Settings,
-	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Mutable,
-	indexDesc descpb.IndexDescriptor,
-	partBy *tree.PartitionBy,
-	allowedNewColumnNames []tree.Name,
-	allowImplicitPartitioning bool,
-) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
-	return nil, descpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
-		"creating or manipulating partitions requires a CCL binary"))
-}
 
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
 // based on all the `colNames`.
@@ -233,7 +217,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 					"version %v must be finalized to use expression indexes",
 					clusterversion.ExpressionIndexes))
 			}
-			_, typ, _, err := b.DescUtils().DequalifyAndValidateExpr(
+			_, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
 				ctx,
 				table,
 				columnNode.Expr,
@@ -278,8 +262,6 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 			// Set up the index based on the new column
 			colNames = append(colNames, colName)
 			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, addColumn.Column.ID)
-			continue
-
 		}
 		if columnNode.Expr == nil {
 			column, err := table.FindColumnWithName(columnNode.Column)
@@ -317,7 +299,7 @@ func (b *buildContext) createIndex(ctx context.Context, n *tree.CreateIndex) {
 		if n.Interleave != nil {
 			panic(pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded"))
 		}
-		buckets, err := b.DescUtils().EvalShardBucketCount(ctx, semaCtx(b), evalCtx(ctx, b), n.Sharded.ShardBuckets)
+		buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx(b), evalCtx(ctx, b), n.Sharded.ShardBuckets)
 		if err != nil {
 			panic(err)
 		}

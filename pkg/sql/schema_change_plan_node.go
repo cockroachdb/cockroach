@@ -16,8 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -135,6 +137,10 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.Descriptors(),
 		p.ExecCfg().JobRegistry,
 		p.ExecCfg().IndexBackfiller,
+		MakeIndexValidator(p.Txn().DB(), p.EvalContext().Codec, p.ExecCfg().InternalExecutor),
+		func(ctx context.Context, tableDesc *tabledesc.Mutable, indexDesc descpb.IndexDescriptor, partBy *tree.PartitionBy, allowedNewColumnNames []tree.Name, allowImplicitPartitioning bool) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
+			return CreatePartitioningCCL(ctx, p.ExecCfg().Settings, p.EvalContext(), tableDesc, indexDesc, partBy, allowedNewColumnNames, allowImplicitPartitioning)
+		},
 		p.ExecCfg().NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.StatementPhase,

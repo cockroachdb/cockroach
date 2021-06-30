@@ -236,10 +236,10 @@ func TestPlanGraphSort(t *testing.T) {
 		require.EqualValues(t, expectedOrder, unsortedNodes, "ranks are not in expected order")
 	}
 	ops := []scop.Op{
-		&scop.AddTypeBackRef{},
-		&scop.AddTypeBackRef{},
-		&scop.AddTypeBackRef{},
-		&scop.AddTypeBackRef{},
+		&scop.NoOpInfo{},
+		&scop.NoOpInfo{},
+		&scop.NoOpInfo{},
+		&scop.NoOpInfo{},
 	}
 
 	// Start off with a graph with 4 nodes.

@@ -263,3 +263,8 @@ type AddIndexPartitionInfo struct {
 	ListPartitions  []*scpb.ListPartition
 	RangePartitions []*scpb.RangePartitions
 }
+
+// NoOpInfo a no-op mutation operation.
+type NoOpInfo struct {
+	mutationOp
+}

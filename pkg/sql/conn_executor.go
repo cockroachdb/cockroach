@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -2929,6 +2930,10 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		&ex.extraTxnState.descCollection,
 		ex.server.cfg.JobRegistry,
 		ex.server.cfg.IndexBackfiller,
+		MakeIndexValidator(ex.planner.Txn().DB(), ex.server.cfg.Codec, ex.planner.execCfg.InternalExecutor),
+		func(ctx context.Context, tableDesc *tabledesc.Mutable, indexDesc descpb.IndexDescriptor, partBy *tree.PartitionBy, allowedNewColumnNames []tree.Name, allowImplicitPartitioning bool) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
+			return CreatePartitioningCCL(ctx, ex.server.cfg.Settings, ex.planner.EvalContext(), tableDesc, indexDesc, partBy, allowedNewColumnNames, allowImplicitPartitioning)
+		},
 		ex.server.cfg.NewSchemaChangerTestingKnobs,
 		scs.stmts,
 		scop.PreCommitPhase,
