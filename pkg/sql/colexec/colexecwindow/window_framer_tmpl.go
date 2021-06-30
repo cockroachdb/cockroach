@@ -37,6 +37,7 @@ import (
 const _FRAME_MODE = execinfrapb.WindowerSpec_Frame_ROWS
 const _START_BOUND = execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING
 const _END_BOUND = execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING
+const _EXCLUDES_ROWS = false
 
 // */}}
 
@@ -94,6 +95,7 @@ func newWindowFramer(
 ) windowFramer {
 	startBound := frame.Bounds.Start
 	endBound := frame.Bounds.End
+	exclude := frame.Exclusion != execinfrapb.WindowerSpec_Frame_NO_EXCLUSION
 	switch frame.Mode {
 	// {{range .}}
 	case _FRAME_MODE:
@@ -103,14 +105,20 @@ func newWindowFramer(
 			switch endBound.BoundType {
 			// {{range .EndBoundTypes}}
 			case _END_BOUND:
-				op := &_OP_STRING{
-					windowFramerBase: windowFramerBase{
-						peersColIdx: peersColIdx,
-						ordColIdx:   tree.NoColumnIdx,
-					},
+				switch exclude {
+				// {{range .ExcludeInfos}}
+				case _EXCLUDES_ROWS:
+					op := &_OP_STRING{
+						windowFramerBase: windowFramerBase{
+							peersColIdx: peersColIdx,
+							ordColIdx:   tree.NoColumnIdx,
+							exclusion:   frame.Exclusion,
+						},
+					}
+					op.handleOffsets(evalCtx, frame, ordering, inputTypes)
+					return op
+					// {{end}}
 				}
-				op.handleOffsets(evalCtx, frame, ordering, inputTypes)
-				return op
 				// {{end}}
 			}
 			// {{end}}
@@ -132,6 +140,8 @@ func newWindowFramer(
 // start of the frame will always be the first row, and the end will be three
 // rows after the current one, which will always advance as the current row is
 // advanced. Similar logic holds for the other framing modes and bounds.
+// Excluded rows have the same non-decreasing property, and so are handled
+// similarly.
 type windowFramerBase struct {
 	// storedCols stores the columns for which any row in the partition may be
 	// accessed during evaluation of the window frame. The window framer operators
@@ -145,6 +155,9 @@ type windowFramerBase struct {
 
 	startIdx int // Inclusive start of the window frame ignoring exclusion.
 	endIdx   int // Exclusive end of the window frame ignoring exclusion.
+
+	excludeStartIdx int // Inclusive start of rows specified by EXCLUDE clause.
+	excludeEndIdx   int // Exclusive end of rows specified by EXCLUDE clause
 
 	peersColIdx int // Indicates the beginning of each peer group. Can be unset.
 	ordColIdx   int // The single ordering column for RANGE mode with offset.
@@ -160,11 +173,14 @@ type windowFramerBase struct {
 	// datumAlloc is used to decode the offsets in RANGE mode. It is initialized
 	// lazily.
 	datumAlloc *rowenc.DatumAlloc
+
+	exclusion execinfrapb.WindowerSpec_Frame_Exclusion
 }
 
 // {{range .}}
 // {{range .StartBoundTypes}}
 // {{range .EndBoundTypes}}
+// {{range .ExcludeInfos}}
 
 type _OP_STRING struct {
 	windowFramerBase
@@ -173,7 +189,7 @@ type _OP_STRING struct {
 var _ windowFramer = &_OP_STRING{}
 
 // startPartition prepares the window framer to begin iterating through a new
-// partition.
+// partition. It must be called before calling next.
 func (f *_OP_STRING) startPartition(
 	ctx context.Context, partitionSize int, storedCols *colexecutils.SpillingBuffer,
 ) {
@@ -195,6 +211,10 @@ func (f *_OP_STRING) startPartition(
 	// {{if and .RangeMode .EndHasOffset}}
 	f.endHandler.startPartition(storedCols, f.peersColIdx, f.ordColIdx)
 	// {{end}}
+	// {{if .Exclude}}
+	f.excludeStartIdx = 0
+	f.excludeEndIdx = 0
+	// {{end}}
 }
 
 // next is called for each row in the partition. It advances to the next row and
@@ -202,13 +222,14 @@ func (f *_OP_STRING) startPartition(
 // called beyond the end of the partition, or undefined behavior may result.
 func (f *_OP_STRING) next(ctx context.Context) {
 	f.currentRow++
-	// {{if and (or .GroupsMode .RangeMode) (not .BothUnbounded)}}
+	// {{if or (and (or .GroupsMode .RangeMode) (not .BothUnbounded)) .Exclude}}
 	// {{/*
 	// We need to keep track of whether the current row is the first of its peer
 	// group in GROUPS mode when one of the bounds is not a variant of UNBOUNDED
 	// or in RANGE mode when one of the bounds is CURRENT ROW. The information is
 	// used to trigger updates on the start and end indexes whenever the current
-	// row has advanced to a new peer group.
+	// row has advanced to a new peer group. EXCLUDE GROUP and EXCLUDE TIES also
+	// require this information.
 	// */}}
 	currRowIsGroupStart := f.isFirstPeer(ctx, f.currentRow)
 	// {{end}}
@@ -315,6 +336,10 @@ func (f *_OP_STRING) next(ctx context.Context) {
 		f.currentGroup++
 	}
 	// {{end}}
+	// {{if .Exclude}}
+	// Handle exclusion clause.
+	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	// {{end}}
 }
 
 func (f *_OP_STRING) close() {
@@ -327,6 +352,32 @@ func (f *_OP_STRING) close() {
 	*f = _OP_STRING{}
 }
 
+// {{if .Exclude}}
+
+// frameFirstIdx returns the index of the first row in the window frame for
+// the current row. If no such row exists, frameFirstIdx returns -1.
+func (f *_OP_STRING) frameFirstIdx() (idx int) {
+	idx = f.windowFramerBase.frameFirstIdx()
+	return f.handleExcludeForFirstIdx(idx)
+}
+
+// frameLastIdx returns the index of the last row in the window frame for
+// the current row. If no such row exists, frameLastIdx returns -1.
+func (f *_OP_STRING) frameLastIdx() (idx int) {
+	idx = f.windowFramerBase.frameLastIdx()
+	return f.handleExcludeForLastIdx(idx)
+}
+
+// frameNthIdx returns the index of the nth row (starting from one) in the
+// window frame for the current row. If no such row exists, frameNthIdx
+// returns -1.
+func (f *_OP_STRING) frameNthIdx(n int) (idx int) {
+	idx = f.windowFramerBase.frameNthIdx(n)
+	return f.handleExcludeForNthIdx(idx)
+}
+
+// {{end}}
+// {{end}}
 // {{end}}
 // {{end}}
 // {{end}}
@@ -364,7 +415,7 @@ func (b *windowFramerBase) frameNthIdx(n int) (idx int) {
 	idx = b.startIdx + n
 	if idx < 0 || idx >= b.endIdx {
 		// The requested index is out of range for this window frame.
-		idx = -1
+		return -1
 	}
 	return idx
 }
@@ -512,4 +563,97 @@ func (b *windowFramerBase) handleOffsets(
 			evalCtx, b.datumAlloc, endBound, ordColType, ordColAsc, false, /* isStart */
 		)
 	}
+}
+
+// handleExcludeForNext updates the start and end indices for rows excluded by
+// the window frame's exclusion clause.
+func (b *windowFramerBase) handleExcludeForNext(ctx context.Context, currRowIsGroupStart bool) {
+	if b.excludeCurrRow() {
+		b.excludeStartIdx = b.currentRow
+		b.excludeEndIdx = b.excludeStartIdx + 1
+	} else {
+		if currRowIsGroupStart {
+			// Only update the exclude indices upon entering a new peer group.
+			b.excludeStartIdx = b.excludeEndIdx
+			b.excludeEndIdx = b.incrementPeerGroup(ctx, b.excludeEndIdx, 1 /* groups */)
+		}
+	}
+}
+
+// handleExcludeForFirstIdx adjusts the given 'first index' to account for the
+// exclusion clause.
+func (b *windowFramerBase) handleExcludeForFirstIdx(idx int) int {
+	if idx == -1 {
+		return idx
+	}
+	if b.excludeStartIdx <= idx && b.excludeEndIdx > idx {
+		if b.excludeTies() && b.currentRow >= b.startIdx && b.currentRow < b.endIdx {
+			return b.currentRow
+		}
+		if b.excludeEndIdx >= b.endIdx {
+			// All rows are excluded.
+			return -1
+		}
+		return b.excludeEndIdx
+	}
+	return idx
+}
+
+// handleExcludeForLastIdx adjusts the given 'last index' to account for the
+// exclusion clause.
+func (b *windowFramerBase) handleExcludeForLastIdx(idx int) int {
+	if idx == -1 {
+		return idx
+	}
+	if b.excludeStartIdx <= idx && b.excludeEndIdx > idx {
+		if b.excludeTies() && b.currentRow >= b.startIdx && b.currentRow < b.endIdx {
+			return b.currentRow
+		}
+		if b.excludeStartIdx <= b.startIdx {
+			// All rows are excluded.
+			return -1
+		}
+		return b.excludeStartIdx - 1
+	}
+	return idx
+}
+
+// handleExcludeForNthIdx adjusts the given 'nth index' to account for the
+// exclusion clause.
+func (b *windowFramerBase) handleExcludeForNthIdx(idx int) int {
+	if idx == -1 {
+		return idx
+	}
+	// Retrieve the rows that are actually excluded - those that are within
+	// [startIdx, endIdx) in addition to being specified by the EXCLUDE clause.
+	excludedRowsStart := b.excludeStartIdx
+	if excludedRowsStart < b.startIdx {
+		excludedRowsStart = b.startIdx
+	}
+	excludedRowsEnd := b.excludeEndIdx
+	if excludedRowsEnd > b.endIdx {
+		excludedRowsEnd = b.endIdx
+	}
+	if excludedRowsStart < excludedRowsEnd && idx >= excludedRowsStart {
+		if b.excludeTies() && b.currentRow >= b.startIdx && b.currentRow < b.endIdx {
+			if idx == excludedRowsStart {
+				return b.currentRow
+			}
+			idx--
+		}
+		idx += excludedRowsEnd - excludedRowsStart
+		if idx >= b.endIdx {
+			// The nth index doesn't exist.
+			return -1
+		}
+	}
+	return idx
+}
+
+func (b *windowFramerBase) excludeCurrRow() bool {
+	return b.exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_CURRENT_ROW
+}
+
+func (b *windowFramerBase) excludeTies() bool {
+	return b.exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES
 }

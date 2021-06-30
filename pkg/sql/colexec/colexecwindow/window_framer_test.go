@@ -76,6 +76,12 @@ func TestWindowFramer(t *testing.T) {
 	var randTypes = []*types.T{
 		types.Float, types.Decimal, types.Interval, types.TimestampTZ, types.Date, types.TimeTZ,
 	}
+
+	const randExcludeProbability = 0.5
+	var randExclusions = []tree.WindowFrameExclusion{
+		tree.ExcludeCurrentRow, tree.ExcludeGroup, tree.ExcludeTies,
+	}
+
 	for _, count := range []int{1, 17, 42, 91} {
 		testCfg.count = count
 		for _, asc := range []bool{true, false} {
@@ -83,8 +89,13 @@ func TestWindowFramer(t *testing.T) {
 			if rng.Float64() < randTypeProbability {
 				typ = randTypes[rng.Intn(len(randTypes))]
 			}
+			exclusion := tree.NoExclusion
+			if rng.Float64() < randExcludeProbability {
+				exclusion = randExclusions[rng.Intn(len(randExclusions))]
+			}
 			testCfg.asc = asc
 			testCfg.typ = typ
+			testCfg.exclusion = exclusion
 			for _, mode := range []tree.WindowFrameMode{tree.ROWS, tree.GROUPS, tree.RANGE} {
 				testCfg.mode = mode
 				for _, bound := range []tree.WindowFrameBoundType{
@@ -119,14 +130,15 @@ type testConfig struct {
 	mode       tree.WindowFrameMode
 	startBound tree.WindowFrameBoundType
 	endBound   tree.WindowFrameBoundType
+	exclusion  tree.WindowFrameExclusion
 }
 
 func testWindowFramer(t *testing.T, testCfg *testConfig) {
 	errorMsg := func(assertion string) string {
 		return fmt.Sprintf("Assertion: %s\nOrder Column Type: %v\nRow Count: %d\n"+
-			"Ascending: %v\nMode: %s\nStart Bound: %s\nEnd Bound: %s\n",
-			assertion, testCfg.typ, testCfg.count, testCfg.asc,
-			testCfg.mode, testCfg.startBound, testCfg.endBound)
+			"Ascending: %v\nMode: %s\nStart Bound: %s\nEnd Bound: %s\nExclude: %s\n",
+			assertion, testCfg.typ, testCfg.count, testCfg.asc, testCfg.mode,
+			testCfg.startBound, testCfg.endBound, testCfg.exclusion)
 	}
 
 	colWindowFramer, rowWindowFramer, partition := initWindowFramers(t, testCfg)
@@ -156,8 +168,8 @@ func testWindowFramer(t *testing.T, testCfg *testConfig) {
 
 		// Validate that the columnar window framer describes the same window
 		// frame as the row-wise one.
-		var colFrameIdx int
-		frameIsEmpty := true
+		var colFrameIdx, firstIdx, lastIdx int
+		var foundRow bool
 		for j := rowStartIdx; j < rowEndIdx; j++ {
 			skipped, err := rowWindowFramer.IsRowSkipped(testCfg.evalCtx.Ctx(), j)
 			if err != nil {
@@ -166,20 +178,24 @@ func testWindowFramer(t *testing.T, testCfg *testConfig) {
 			if skipped {
 				continue
 			}
+			if !foundRow {
+				firstIdx = j
+				foundRow = true
+			}
+			lastIdx = j
 			colFrameIdx++
-			frameIsEmpty = false
 			require.Equal(t, j, colWindowFramer.frameNthIdx(colFrameIdx), errorMsg("NthIdx"))
 		}
-		if frameIsEmpty {
+		if !foundRow {
 			// The columnar window framer functions return -1 to signify an empty
 			// window frame.
-			require.Equal(t, -1, colWindowFramer.frameFirstIdx(), errorMsg("Empty FirstIdx"))
-			require.Equal(t, -1, colWindowFramer.frameLastIdx(), errorMsg("Empty LastIdx"))
-			require.Equal(t, -1, colWindowFramer.frameNthIdx(0 /* n */), errorMsg("Empty NthIdx"))
+			require.Equal(t, -1, colWindowFramer.frameFirstIdx(), errorMsg("No FirstIdx"))
+			require.Equal(t, -1, colWindowFramer.frameLastIdx(), errorMsg("No LastIdx"))
+			require.Equal(t, -1, colWindowFramer.frameNthIdx(1 /* n */), errorMsg("No NthIdx"))
 			continue
 		}
-		require.Equal(t, rowStartIdx, colWindowFramer.frameFirstIdx(), errorMsg("FirstIdx"))
-		require.Equal(t, rowEndIdx, colWindowFramer.frameLastIdx()+1, errorMsg("LastIdx"))
+		require.Equal(t, firstIdx, colWindowFramer.frameFirstIdx(), errorMsg("FirstIdx"))
+		require.Equal(t, lastIdx, colWindowFramer.frameLastIdx(), errorMsg("LastIdx"))
 	}
 
 	partition.Close(testCfg.evalCtx.Ctx())
@@ -312,8 +328,8 @@ func initWindowFramers(
 	if testCfg.mode == tree.RANGE {
 		offsetType = getOffsetType(testCfg.typ)
 	}
-	startOffset := makeRandOffset(testCfg.rng, offsetType)
-	endOffset := makeRandOffset(testCfg.rng, offsetType)
+	startOffset := makeRandOffset(t, testCfg.rng, offsetType)
+	endOffset := makeRandOffset(t, testCfg.rng, offsetType)
 
 	datums, colBuffer := makeSortedPartition(testCfg)
 
@@ -326,7 +342,7 @@ func initWindowFramers(
 		Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
 			Start: execinfrapb.WindowerSpec_Frame_Bound{
 				BoundType:   boundToExecinfrapb(testCfg.startBound),
-				TypedOffset: encodeOffset(startOffset),
+				TypedOffset: encodeOffset(t, startOffset),
 				OffsetType: execinfrapb.DatumInfo{
 					Type:     testCfg.typ,
 					Encoding: datumEncoding,
@@ -334,13 +350,14 @@ func initWindowFramers(
 			},
 			End: &execinfrapb.WindowerSpec_Frame_Bound{
 				BoundType:   boundToExecinfrapb(testCfg.endBound),
-				TypedOffset: encodeOffset(endOffset),
+				TypedOffset: encodeOffset(t, endOffset),
 				OffsetType: execinfrapb.DatumInfo{
 					Type:     testCfg.typ,
 					Encoding: datumEncoding,
 				},
 			},
 		},
+		Exclusion: exclusionToExecinfrapb(testCfg.exclusion),
 	}
 	if testCfg.mode != tree.RANGE {
 		frame.Bounds.Start.IntOffset = uint64(*(startOffset.(*tree.DInt)))
@@ -380,6 +397,7 @@ func initWindowFramers(
 					OffsetExpr: endOffset,
 				},
 			},
+			Exclusion: testCfg.exclusion,
 		},
 		StartBoundOffset: startOffset,
 		EndBoundOffset:   endOffset,
@@ -468,29 +486,45 @@ func boundToExecinfrapb(bound tree.WindowFrameBoundType) execinfrapb.WindowerSpe
 	return 0
 }
 
-func encodeOffset(offset tree.Datum) []byte {
+func exclusionToExecinfrapb(
+	exclusion tree.WindowFrameExclusion,
+) execinfrapb.WindowerSpec_Frame_Exclusion {
+	switch exclusion {
+	case tree.NoExclusion:
+		return execinfrapb.WindowerSpec_Frame_NO_EXCLUSION
+	case tree.ExcludeCurrentRow:
+		return execinfrapb.WindowerSpec_Frame_EXCLUDE_CURRENT_ROW
+	case tree.ExcludeGroup:
+		return execinfrapb.WindowerSpec_Frame_EXCLUDE_GROUP
+	case tree.ExcludeTies:
+		return execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES
+	}
+	return 0
+}
+
+func encodeOffset(t *testing.T, offset tree.Datum) []byte {
 	var encoded, scratch []byte
 	encoded, err := rowenc.EncodeTableValue(
 		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
 	if err != nil {
-		colexecerror.InternalError(err)
+		t.Errorf("unexpected error: %v", err)
 	}
 	return encoded
 }
 
-func makeRandOffset(rng *rand.Rand, typ *types.T) tree.Datum {
+func makeRandOffset(t *testing.T, rng *rand.Rand, typ *types.T) tree.Datum {
 	isNegative := func(val tree.Datum) bool {
-		switch t := val.(type) {
+		switch datumTyp := val.(type) {
 		case *tree.DInt:
-			return int64(*t) < 0
+			return int64(*datumTyp) < 0
 		case *tree.DFloat:
-			return float64(*t) < 0
+			return float64(*datumTyp) < 0
 		case *tree.DDecimal:
-			return t.Negative
+			return datumTyp.Negative
 		case *tree.DInterval, *tree.DTimestampTZ, *tree.DDate, *tree.DTimeTZ:
 			return false
 		default:
-			colexecerror.InternalError(errors.AssertionFailedf("unsupported datum: %v", t))
+			t.Errorf("unexpected error: %v", errors.AssertionFailedf("unsupported datum: %v", datumTyp))
 			return false
 		}
 	}

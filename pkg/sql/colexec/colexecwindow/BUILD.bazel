@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "buffered_window.go",
         "partitioner.go",
-        "window_agg.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
     ],
