@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type optionValue struct {
@@ -681,7 +681,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			// Validate that the result makes sense.
 			if err := validateZoneAttrsAndLocalities(
 				params.ctx,
-				ss.Nodes,
+				ss.ListNodesInternal,
 				&newZone,
 			); err != nil {
 				return err
