@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
@@ -59,6 +58,11 @@ func (p *Payload) Type() Type {
 	return DetailsType(p.Details)
 }
 
+// AutoStatsName is the name to use for statistics created automatically.
+// The name is chosen to be something that users are unlikely to choose when
+// running CREATE STATISTICS manually.
+const AutoStatsName = "__auto__"
+
 // DetailsType returns the type for a payload detail.
 func DetailsType(d isPayload_Details) Type {
 	switch d := d.(type) {
@@ -74,7 +78,7 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeChangefeed
 	case *Payload_CreateStats:
 		createStatsName := d.CreateStats.Name
-		if createStatsName == stats.AutoStatsName {
+		if createStatsName == AutoStatsName {
 			return TypeAutoCreateStats
 		}
 		return TypeCreateStats

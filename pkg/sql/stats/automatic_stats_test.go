@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -275,7 +276,7 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
+			if err := insertStat(txn, jobspb.AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}
 		}
@@ -326,7 +327,7 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
+			if err := insertStat(txn, jobspb.AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}
 		}
