@@ -55,7 +55,7 @@ func WriteCSVRows(
 			return 0, ctx.Err()
 		default:
 		}
-		a = a[:0]
+		a.B = a.B[:0]
 		table.InitialRows.FillBatch(rowBatchIdx, cb, &a)
 		if numCols := cb.Width(); cap(rowStrings) < numCols {
 			rowStrings = make([]string, numCols)
@@ -102,7 +102,7 @@ func (r *csvRowsReader) Read(p []byte) (n int, err error) {
 		if r.batchIdx == r.batchEnd {
 			return 0, io.EOF
 		}
-		r.a = r.a[:0]
+		r.a.B = r.a.B[:0]
 		r.t.InitialRows.FillBatch(r.batchIdx, r.cb, &r.a)
 		r.batchIdx++
 		if numCols := r.cb.Width(); cap(r.stringsBuf) < numCols {

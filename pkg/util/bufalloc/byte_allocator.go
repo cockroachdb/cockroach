@@ -17,13 +17,15 @@ package bufalloc
 // indicates the total amount of memory and len() is the amount already
 // allocated. The size of the buffer to allocate from is grown exponentially
 // when it runs out of room up to a maximum size (chunkAllocMaxSize).
-type ByteAllocator []byte
+type ByteAllocator struct {
+	B []byte
+}
 
 const chunkAllocMinSize = 512
 const chunkAllocMaxSize = 16384
 
 func (a ByteAllocator) reserve(n int) ByteAllocator {
-	allocSize := cap(a) * 2
+	allocSize := cap(a.B) * 2
 	if allocSize < chunkAllocMinSize {
 		allocSize = chunkAllocMinSize
 	} else if allocSize > chunkAllocMaxSize {
@@ -32,19 +34,20 @@ func (a ByteAllocator) reserve(n int) ByteAllocator {
 	if allocSize < n {
 		allocSize = n
 	}
-	return make([]byte, 0, allocSize)
+	a.B = make([]byte, 0, allocSize)
+	return a
 }
 
 // Alloc allocates a new chunk of memory with the specified length. extraCap
 // indicates additional zero bytes that will be present in the returned []byte,
 // but not part of the length.
 func (a ByteAllocator) Alloc(n int, extraCap int) (ByteAllocator, []byte) {
-	if cap(a)-len(a) < n+extraCap {
+	if cap(a.B)-len(a.B) < n+extraCap {
 		a = a.reserve(n + extraCap)
 	}
-	p := len(a)
-	r := a[p : p+n : p+n+extraCap]
-	a = a[:p+n+extraCap]
+	p := len(a.B)
+	r := a.B[p : p+n : p+n+extraCap]
+	a.B = a.B[:p+n+extraCap]
 	return a, r
 }
 
