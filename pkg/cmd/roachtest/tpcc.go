@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/lib/pq"
+	promapi "github.com/prometheus/client_golang/api"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
 type tpccSetupType int
@@ -60,6 +62,11 @@ type tpccOptions struct {
 	// If unset, it will run one workload which talks to
 	// all cluster nodes.
 	WorkloadInstances []workloadInstance
+	// tpccChaosEventProcessor processes chaos events if specified.
+	ChaosEventsProcessor func(
+		prometheusNode option.NodeListOption,
+		workloadInstances []workloadInstance,
+	) (tpccChaosEventProcessor, error)
 	// If specified, called to stage+start cockroach. If not
 	// specified, defaults to uploading the default binary to
 	// all nodes, and starting it on all but the last node.
@@ -171,6 +178,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		pgURLs = append(pgURLs, fmt.Sprintf("{pgurl%s}", workloadInstance.nodes.String()))
 	}
 
+	var ep *tpccChaosEventProcessor
 	if cfg := opts.PrometheusConfig; cfg != nil {
 		if c.IsLocal() {
 			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
@@ -204,6 +212,18 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 				shout(ctx, t.L(), os.Stderr, "failed to get prometheus snapshot: %v", err)
 			}
 		}()
+
+		if opts.ChaosEventsProcessor != nil {
+			cep, err := opts.ChaosEventsProcessor(
+				cfg.PrometheusNode,
+				workloadInstances,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cep.listen(ctx, t.L())
+			ep = &cep
+		}
 	}
 
 	rampDuration := 5 * time.Minute
@@ -248,6 +268,13 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 
 	c.Run(ctx, workloadNode, fmt.Sprintf(
 		"./cockroach workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
+
+	// Check no errors from metrics.
+	if ep != nil {
+		if err := ep.err(); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // tpccSupportedWarehouses returns our claim for the maximum number of tpcc
@@ -538,6 +565,7 @@ func registerTPCC(r *testRegistry) {
 
 		for i := range multiRegionTests {
 			tc := multiRegionTests[i]
+
 			r.Add(TestSpec{
 				Name:       tc.name,
 				Owner:      OwnerMultiRegion,
@@ -563,6 +591,7 @@ func registerTPCC(r *testRegistry) {
 					}
 
 					iter := 0
+					chaosEventCh := make(chan ChaosEvent)
 					runTPCC(ctx, t, c, tpccOptions{
 						Warehouses:     len(regions) * 5,
 						Duration:       duration,
@@ -581,7 +610,36 @@ func registerTPCC(r *testRegistry) {
 								},
 								Stopper:      time.After(duration),
 								DrainAndQuit: false,
+								ChaosEventCh: chaosEventCh,
 							}
+						},
+						ChaosEventsProcessor: func(
+							prometheusNode option.NodeListOption,
+							workloadInstances []workloadInstance,
+						) (tpccChaosEventProcessor, error) {
+							prometheusNodeIP, err := c.ExternalIP(ctx, prometheusNode)
+							if err != nil {
+								return tpccChaosEventProcessor{}, err
+							}
+							client, err := promapi.NewClient(promapi.Config{
+								Address: fmt.Sprintf("http://%s:9090", prometheusNodeIP[0]),
+							})
+							if err != nil {
+								return tpccChaosEventProcessor{}, err
+							}
+							return tpccChaosEventProcessor{
+								workloadInstances: workloadInstances,
+								workloadNodeIP:    prometheusNodeIP[0],
+								ops: []string{
+									"newOrder",
+									"delivery",
+									"payment",
+									"orderStatus",
+									"stockLevel",
+								},
+								ch:         chaosEventCh,
+								promClient: promv1.NewAPI(client),
+							}, nil
 						},
 						SetupType:         usingInit,
 						WorkloadInstances: tc.workloadInstances,

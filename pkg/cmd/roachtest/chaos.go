@@ -49,6 +49,46 @@ type Chaos struct {
 	// DrainAndQuit is used to determine if want to kill the node vs draining it
 	// first and shutting down gracefully.
 	DrainAndQuit bool
+	// ChaosEventCh is a channel that the chaos runner will send events when the
+	// runner performs an action.
+	// This is optional.
+	ChaosEventCh chan ChaosEvent
+}
+
+// ChaosEventType signifies an event that occurs during chaos.
+type ChaosEventType uint64
+
+const (
+	// ChaosEventTypePreShutdown signifies a shutdown on target(s) is about to happen.
+	ChaosEventTypePreShutdown ChaosEventType = iota
+	// ChaosEventTypeShutdownComplete signifies that the target(s) have shutdown.
+	ChaosEventTypeShutdownComplete
+	// ChaosEventTypePreStartup signifies the target(s) is about to be restarted.
+	ChaosEventTypePreStartup
+	// ChaosEventTypeStartupComplete signifies the target(s) have restarted.
+	ChaosEventTypeStartupComplete
+
+	// ChaosEventTypeStart signifies the chaos runner has started.
+	ChaosEventTypeStart
+	// ChaosEventTypeEnd signifies the chaos runner has ended.
+	ChaosEventTypeEnd
+)
+
+// ChaosEvent is an event which happens during chaos running.
+type ChaosEvent struct {
+	Type   ChaosEventType
+	Target option.NodeListOption
+	Time   time.Time
+}
+
+func (ch *Chaos) sendEvent(t ChaosEventType, target option.NodeListOption) {
+	if ch.ChaosEventCh != nil {
+		ch.ChaosEventCh <- ChaosEvent{
+			Type:   t,
+			Target: target,
+			Time:   timeutil.Now(),
+		}
+	}
 }
 
 // Runner returns a closure that runs chaos against the given cluster without
@@ -61,6 +101,10 @@ func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) err
 			return err
 		}
 		defer func() {
+			ch.sendEvent(ChaosEventTypeEnd, nil)
+			if ch.ChaosEventCh != nil {
+				close(ch.ChaosEventCh)
+			}
 			l.Printf("chaos stopping: %v", err)
 		}()
 		t := timeutil.Timer{}
@@ -68,6 +112,7 @@ func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) err
 			p, _ := ch.Timer.Timing()
 			t.Reset(p)
 		}
+		ch.sendEvent(ChaosEventTypeStart, nil)
 		for {
 			select {
 			case <-ch.Stopper:
@@ -83,6 +128,7 @@ func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) err
 			target := ch.Target()
 			m.ExpectDeaths(int32(len(target)))
 
+			ch.sendEvent(ChaosEventTypePreShutdown, target)
 			if ch.DrainAndQuit {
 				l.Printf("stopping and draining %v\n", target)
 				if err := c.StopE(ctx, target, stopArgs("--sig=15"), withWorkerAction()); err != nil {
@@ -94,6 +140,7 @@ func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) err
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			}
+			ch.sendEvent(ChaosEventTypeShutdownComplete, target)
 
 			select {
 			case <-ch.Stopper:
@@ -120,9 +167,11 @@ func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) err
 			}
 			l.Printf("restarting %v after %s of downtime\n", target, downTime)
 			t.Reset(period)
+			ch.sendEvent(ChaosEventTypePreStartup, target)
 			if err := c.StartE(ctx, target, withWorkerAction()); err != nil {
 				return errors.Wrapf(err, "could not restart node %s", target)
 			}
+			ch.sendEvent(ChaosEventTypeStartupComplete, target)
 		}
 	}
 }
