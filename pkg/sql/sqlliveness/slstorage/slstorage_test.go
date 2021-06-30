@@ -11,15 +11,19 @@
 package slstorage_test
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -38,6 +42,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestStorage(t *testing.T) {
@@ -439,6 +444,100 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		step(t)
 	}
 	wg.Wait()
+}
+
+// TestCachedReader tests that the CachedReader does not block but does lead
+// to an asynchronous read from the underlying store.
+func TestCachedReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	type filterFunc = func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error
+	var requestFilter atomic.Value
+	requestFilter.Store(filterFunc(nil))
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(
+					ctx context.Context, request roachpb.BatchRequest,
+				) *roachpb.Error {
+					if f := requestFilter.Load().(filterFunc); f != nil {
+						return f(ctx, request)
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	dbName := t.Name()
+	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
+	schema := strings.Replace(systemschema.SqllivenessTableSchema,
+		`CREATE TABLE system.sqlliveness`,
+		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
+	tDB.Exec(t, schema)
+	tableID := getTableID(t, tDB, dbName, "sqlliveness")
+
+	timeSource := timeutil.NewManualTime(t0)
+	clock := hlc.NewClock(func() int64 {
+		return timeSource.Now().UnixNano()
+	}, base.DefaultMaxClockOffset)
+	settings := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
+	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		tableID, timeSource.NewTimer)
+	storage.Start(ctx)
+
+	// Synchronize reading from the store with the blocked channel by detecting
+	// a Get to the table.
+	prefix := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
+	blocked := make(chan chan struct{})
+	requestFilter.Store(func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+		getRequest, ok := request.GetArg(roachpb.Get)
+		if !ok {
+			return nil
+		}
+		get := getRequest.(*roachpb.GetRequest)
+		if !bytes.HasPrefix(get.Key, prefix) {
+			return nil
+		}
+		unblock := make(chan struct{})
+		blocked <- unblock
+		<-unblock
+		return nil
+	})
+
+	// Perform a read from the CachedReader and ensure that it does not block.
+	cached := storage.CachedReader()
+	var alive bool
+	var g errgroup.Group
+	sid := sqlliveness.SessionID("foo")
+	g.Go(func() (err error) {
+		alive, err = cached.IsAlive(ctx, sid)
+		return err
+	})
+	// Make sure that an asynchronous read was started.
+	unblock := <-blocked
+	g.Wait() // make sure that the cached read did not block
+	// The storage layer has never read this session so it should be assumed to
+	// be alive.
+	require.True(t, alive)
+	// Unblock the reader and make sure it eventually populates the cache.
+	close(unblock)
+	testutils.SucceedsSoon(t, func() error {
+		alive, err := cached.IsAlive(ctx, sid)
+		require.NoError(t, err)
+		if alive {
+			return errors.New("expected not alive")
+		}
+		return nil
+	})
 }
 
 func getTableID(
