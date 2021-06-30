@@ -49,6 +49,7 @@ go_test(
     deps = [
         ":scexec",
         "//pkg/base",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -67,6 +68,7 @@ go_test(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",

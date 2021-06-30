@@ -2744,7 +2744,8 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	executor := scexec.NewExecutor(
 		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
 		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
-		ex.server.cfg.JobRegistry, ex.planner.execCfg.InternalExecutor,ex.server.cfg.Settings, ex.planner.EvalContext(),
+		ex.server.cfg.JobRegistry, ex.planner.execCfg.InternalExecutor, ex.server.cfg.Settings, ex.planner.EvalContext(),
+		ValidateForwardIndexes, ValidateInvertedIndexes,
 	)
 	after, err := runNewSchemaChanger(
 		ctx,

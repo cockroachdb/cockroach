@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -126,7 +128,7 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil, nil, nil, nil, nil)
+			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil, nil, nil, nil, nil, nil, nil)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
@@ -139,10 +141,13 @@ CREATE TABLE db.t (
 	}
 
 	indexToAdd := descpb.IndexDescriptor{
-		ID:             2,
-		Name:           "foo",
-		KeyColumnIDs:   []descpb.ColumnID{1},
-		KeyColumnNames: []string{"i"},
+		ID:                2,
+		Name:              "foo",
+		Version:           descpb.StrictIndexColumnIDGuaranteesVersion,
+		CreatedExplicitly: true,
+		KeyColumnIDs:      []descpb.ColumnID{1},
+		KeyColumnNames:    []string{"i"},
+		StoreColumnNames:  []string{},
 		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 			descpb.IndexDescriptor_ASC,
 		},
@@ -167,8 +172,12 @@ CREATE TABLE db.t (
 			ops: func() scop.Ops {
 				return scop.MakeOps(
 					&scop.MakeAddedIndexDeleteOnly{
-						TableID: table.ID,
-						Index:   indexToAdd,
+						TableID:             table.ID,
+						IndexID:             indexToAdd.ID,
+						IndexName:           indexToAdd.Name,
+						KeyColumnIDs:        indexToAdd.KeyColumnIDs,
+						KeyColumnDirections: indexToAdd.KeyColumnDirections,
+						SecondaryIndex:      true,
 					},
 				)
 			},
@@ -212,6 +221,29 @@ CREATE TABLE db.t (
 func TestSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Dummy functions for validating indexes / inverted indexes
+	dummyValidateIndexes := func(
+		ctx context.Context,
+		tableDesc catalog.TableDescriptor,
+		indexes []catalog.Index,
+		runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+		withFirstMutationPublic bool,
+		gatherAllInvalid bool,
+		execOverride sessiondata.InternalExecutorOverride,
+	) error {
+		return nil
+	}
+	dummyValidateInvertedIndexes := func(
+		ctx context.Context,
+		codec keys.SQLCodec,
+		tableDesc catalog.TableDescriptor,
+		indexes []catalog.Index,
+		runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+		gatherAllInvalid bool,
+		execOverride sessiondata.InternalExecutorOverride,
+	) error {
+		return nil
+	}
 	ctx := context.Background()
 	t.Run("add column", func(t *testing.T) {
 		ti := setupTestInfra(t)
@@ -234,21 +266,14 @@ func TestSchemaChanger(t *testing.T) {
 			//
 			targetSlice = []*scpb.Target{
 				scpb.NewTarget(scpb.Target_ADD, &scpb.PrimaryIndex{
-					TableID: fooTable.GetID(),
-					Index: descpb.IndexDescriptor{
-						Name:                "new_primary_key",
-						ID:                  2,
-						KeyColumnIDs:        []descpb.ColumnID{1},
-						KeyColumnNames:      []string{"i"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						StoreColumnIDs:      []descpb.ColumnID{2},
-						StoreColumnNames:    []string{"j"},
-						Unique:              true,
-						Type:                descpb.IndexDescriptor_FORWARD,
-						Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
-						EncodingType:        descpb.PrimaryIndexEncoding,
-					},
-					OtherPrimaryIndexID: fooTable.GetPrimaryIndexID(),
+					TableID:             fooTable.GetID(),
+					IndexName:           "new_primary_key",
+					IndexId:             2,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+					StoringColumnIDs:    []descpb.ColumnID{2},
+					Unique:              true,
+					Inverted:            false,
 				}),
 				scpb.NewTarget(scpb.Target_ADD, &scpb.Column{
 					TableID:    fooTable.GetID(),
@@ -263,17 +288,13 @@ func TestSchemaChanger(t *testing.T) {
 					},
 				}),
 				scpb.NewTarget(scpb.Target_DROP, &scpb.PrimaryIndex{
-					TableID: fooTable.GetID(),
-					Index: descpb.IndexDescriptor{
-						Name:                "primary",
-						ID:                  1,
-						KeyColumnIDs:        []descpb.ColumnID{1},
-						KeyColumnNames:      []string{"i"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						Unique:              true,
-						Type:                descpb.IndexDescriptor_FORWARD,
-					},
-					OtherPrimaryIndexID: 2,
+					TableID:             fooTable.GetID(),
+					IndexName:           "primary",
+					IndexId:             1,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+					Unique:              true,
+					Inverted:            false,
 				}),
 			}
 
@@ -313,6 +334,8 @@ func TestSchemaChanger(t *testing.T) {
 						nil,
 						nil,
 						nil,
+						nil,
+						nil,
 					)
 					require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
@@ -329,7 +352,12 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil)
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil,
+					func(ctx context.Context, tableDesc catalog.TableDescriptor, indexes []catalog.Index, runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner, withFirstMutationPublic bool, gatherAllInvalid bool, execOverride sessiondata.InternalExecutorOverride) error {
+						return nil
+					}, func(ctx context.Context, codec keys.SQLCodec, tableDesc catalog.TableDescriptor, indexes []catalog.Index, runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner, gatherAllInvalid bool, execOverride sessiondata.InternalExecutorOverride) error {
+						return nil
+					})
 				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 				after = s.After
 			}
@@ -389,7 +417,6 @@ func TestSchemaChanger(t *testing.T) {
 			require.Len(t, parsed, 1)
 			outputNodes, err := scbuild.Build(ctx, buildDeps, nil, parsed[0].AST.(*tree.AlterTable))
 			require.NoError(t, err)
-
 			for _, phase := range []scplan.Phase{
 				scplan.StatementPhase,
 				scplan.PreCommitPhase,
@@ -399,7 +426,7 @@ func TestSchemaChanger(t *testing.T) {
 				})
 				require.NoError(t, err)
 				for _, s := range sc.Stages {
-					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil).
+					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil, dummyValidateIndexes, dummyValidateInvertedIndexes).
 						ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
 				}
@@ -414,7 +441,7 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil)
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil, nil, nil, nil, dummyValidateIndexes, dummyValidateInvertedIndexes)
 				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 			}
 			return nil
