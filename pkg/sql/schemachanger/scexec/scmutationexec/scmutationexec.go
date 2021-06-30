@@ -531,21 +531,10 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 		table.NextIndexID = op.IndexID + 1
 	}
 	// Resolve column names
-	colNames := make([]string, 0, len(op.KeyColumnIDs))
-	for _, colID := range op.KeyColumnIDs {
-		column, err := table.FindColumnWithID(colID)
-		if err != nil {
-			return err
-		}
-		colNames = append(colNames, column.GetName())
-	}
-	storeColNames := make([]string, 0, len(op.StoreColumnIDs))
-	for _, colID := range op.StoreColumnIDs {
-		column, err := table.FindColumnWithID(colID)
-		if err != nil {
-			return err
-		}
-		storeColNames = append(storeColNames, column.GetName())
+	colNames, err := columnNamesFromIDs(table, op.KeyColumnIDs)
+	storeColNames, err := columnNamesFromIDs(table, op.StoreColumnIDs)
+	if err != nil {
+		return err
 	}
 	// Setup the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD
@@ -717,6 +706,10 @@ func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPar
 		return err
 	}
 	return m.cr.AddPartitioning(table, index.IndexDesc(), op.PartitionFields, op.ListPartitions, op.RangePartitions, nil, true)
+}
+
+func (m *visitor) NoOpInfo(_ context.Context, _ scop.NoOpInfo) error {
+	return nil
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)
