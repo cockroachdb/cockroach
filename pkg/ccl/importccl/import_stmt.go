@@ -1907,70 +1907,67 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
 			var schemaMetadata *preparedSchemaMetadata
-			if err := descs.Txn(
-				ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
-				p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
-				func(
-					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-				) error {
-					var preparedDetails jobspb.ImportDetails
-					schemaMetadata = &preparedSchemaMetadata{
-						newSchemaIDToName: make(map[descpb.ID]string),
-						oldSchemaIDToName: make(map[descpb.ID]string),
-					}
-					var err error
-					curDetails := details
-					if len(details.Schemas) != 0 {
-						schemaMetadata, err = r.prepareSchemasForIngestion(ctx, p, curDetails, txn, descsCol)
-						if err != nil {
-							return err
-						}
-						curDetails = schemaMetadata.schemaPreparedDetails
-					}
-
-					preparedDetails, err = r.prepareTableDescsForIngestion(ctx, p, curDetails, txn, descsCol,
-						schemaMetadata)
+			if err := p.ExecCfg().CollectionFactory.Txn(ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(
+				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			) error {
+				var preparedDetails jobspb.ImportDetails
+				schemaMetadata = &preparedSchemaMetadata{
+					newSchemaIDToName: make(map[descpb.ID]string),
+					oldSchemaIDToName: make(map[descpb.ID]string),
+				}
+				var err error
+				curDetails := details
+				if len(details.Schemas) != 0 {
+					schemaMetadata, err = r.prepareSchemasForIngestion(ctx, p, curDetails, txn, descsCol)
 					if err != nil {
 						return err
 					}
+					curDetails = schemaMetadata.schemaPreparedDetails
+				}
 
-					// Telemetry for multi-region.
-					for _, table := range preparedDetails.Tables {
-						_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-							ctx, txn, table.Desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
-						if err != nil {
-							return err
-						}
-						if dbDesc.IsMultiRegion() {
-							telemetry.Inc(sqltelemetry.ImportIntoMultiRegionDatabaseCounter)
-						}
+				preparedDetails, err = r.prepareTableDescsForIngestion(ctx, p, curDetails, txn, descsCol,
+					schemaMetadata)
+				if err != nil {
+					return err
+				}
+
+				// Telemetry for multi-region.
+				for _, table := range preparedDetails.Tables {
+					_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+						ctx, txn, table.Desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+					if err != nil {
+						return err
 					}
+					if dbDesc.IsMultiRegion() {
+						telemetry.Inc(sqltelemetry.ImportIntoMultiRegionDatabaseCounter)
+					}
+				}
 
-					// Update the job details now that the schemas and table descs have
-					// been "prepared".
-					return r.job.Update(ctx, txn, func(
-						txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-					) error {
-						pl := md.Payload
-						*pl.GetImport() = preparedDetails
+				// Update the job details now that the schemas and table descs have
+				// been "prepared".
+				return r.job.Update(ctx, txn, func(
+					txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+				) error {
+					pl := md.Payload
+					*pl.GetImport() = preparedDetails
 
-						// Update the set of descriptors for later observability.
-						// TODO(ajwerner): Do we need this idempotence test?
-						prev := md.Payload.DescriptorIDs
-						if prev == nil {
-							var descriptorIDs []descpb.ID
-							for _, schema := range preparedDetails.Schemas {
-								descriptorIDs = append(descriptorIDs, schema.Desc.GetID())
-							}
-							for _, table := range preparedDetails.Tables {
-								descriptorIDs = append(descriptorIDs, table.Desc.GetID())
-							}
-							pl.DescriptorIDs = descriptorIDs
+					// Update the set of descriptors for later observability.
+					// TODO(ajwerner): Do we need this idempotence test?
+					prev := md.Payload.DescriptorIDs
+					if prev == nil {
+						var descriptorIDs []descpb.ID
+						for _, schema := range preparedDetails.Schemas {
+							descriptorIDs = append(descriptorIDs, schema.Desc.GetID())
 						}
-						ju.UpdatePayload(pl)
-						return nil
-					})
-				}); err != nil {
+						for _, table := range preparedDetails.Tables {
+							descriptorIDs = append(descriptorIDs, table.Desc.GetID())
+						}
+						pl.DescriptorIDs = descriptorIDs
+					}
+					ju.UpdatePayload(pl)
+					return nil
+				})
+			}); err != nil {
 				return err
 			}
 
@@ -2168,8 +2165,8 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 	}
 	log.Event(ctx, "making schemas live")
 
-	lm, ie, db := execCfg.LeaseManager, execCfg.InternalExecutor, execCfg.DB
-	return descs.Txn(ctx, execCfg.Settings, lm, ie, db, func(
+	ie, db := execCfg.InternalExecutor, execCfg.DB
+	return execCfg.CollectionFactory.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		b := txn.NewBatch()
@@ -2213,8 +2210,8 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 	}
 	log.Event(ctx, "making tables live")
 
-	lm, ie, db := execCfg.LeaseManager, execCfg.InternalExecutor, execCfg.DB
-	err := descs.Txn(ctx, execCfg.Settings, lm, ie, db, func(
+	ie, db := execCfg.InternalExecutor, execCfg.DB
+	err := execCfg.CollectionFactory.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		b := txn.NewBatch()
@@ -2293,9 +2290,9 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	details := r.job.Details().(jobspb.ImportDetails)
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
-	lm, ie, db := cfg.LeaseManager, cfg.InternalExecutor, cfg.DB
+	ie, db := cfg.InternalExecutor, cfg.DB
 	var jobsToRunAfterTxnCommit []jobspb.JobID
-	if err := descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
+	if err := cfg.CollectionFactory.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {

@@ -51,7 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -887,10 +887,6 @@ type ExecutorConfig struct {
 
 	ExternalIODirConfig base.ExternalIODirConfig
 
-	// HydratedTables is a node-level cache of table descriptors which utilize
-	// user-defined types.
-	HydratedTables *hydratedtables.Cache
-
 	GCJobNotifier *gcjobnotifier.Notifier
 
 	RangeFeedFactory *rangefeed.Factory
@@ -923,6 +919,9 @@ type ExecutorConfig struct {
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector
+
+	// CollectionFactory is used to construct a descs.Collection.
+	CollectionFactory *descs.CollectionFactory
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.

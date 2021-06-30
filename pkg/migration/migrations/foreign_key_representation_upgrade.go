@@ -46,7 +46,7 @@ func foreignKeyRepresentationUpgrade(
 }
 
 func upgradeFKRepresentation(ctx context.Context, upgrade descpb.ID, d migration.TenantDeps) error {
-	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB, func(
+	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		t, err := descriptors.GetMutableTableByID(ctx, txn, upgrade, tree.ObjectLookupFlagsWithRequired())

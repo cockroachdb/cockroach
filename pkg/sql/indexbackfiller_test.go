@@ -478,7 +478,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		jr := s0.JobRegistry().(*jobs.Registry)
 		var j *jobs.Job
 		var table catalog.TableDescriptor
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, s0.DB(), func(
+		require.NoError(t, execCfg.CollectionFactory.Txn(ctx, ie, s0.DB(), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
 			mut, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
@@ -530,7 +530,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		// Make the mutation complete, then read the index and validate that it
 		// has the expected contents.
-		require.NoError(t, descs.Txn(ctx, settings, lm, ie, s0.DB(), func(
+		require.NoError(t, execCfg.CollectionFactory.Txn(ctx, ie, s0.DB(), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			table, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})

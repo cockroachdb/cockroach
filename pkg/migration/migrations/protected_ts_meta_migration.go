@@ -26,7 +26,7 @@ func protectedTsMetaPrivilegesMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	id := systemschema.ProtectedTimestampsMetaTable.GetID()
-	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB,
+	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB,
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			log.Infof(ctx, "%s", "updating privileges in system.protected_ts_meta descriptor")
 			mut, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
