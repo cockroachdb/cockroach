@@ -67,7 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -1344,6 +1344,10 @@ func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.Regi
 
 // Nodes returns all node statuses.
 //
+// Do not use this method inside the server code! Use
+// ListNodesInternal() instead.
+// This method here is the one exposed to network clients over HTTP.
+//
 // The LivenessByNodeID in the response returns the known liveness
 // information according to gossip. Nodes for which there is no gossip
 // information will not have an entry. Clients can exploit the fact
@@ -1352,7 +1356,22 @@ func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.Regi
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
-	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	resp, _, err := s.nodesHelper(ctx, 0, 0)
+	return resp, err
+}
+
+// ListNodesInternal is a helper function for the benefit of SQL exclusively.
+// It skips the privilege check, assuming that SQL is doing privilege checking already.
+func (s *statusServer) ListNodesInternal(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponse, error) {
+	resp, _, err := s.nodesHelper(ctx, 0, 0)
 	return resp, err
 }
 
@@ -1361,6 +1380,7 @@ func (s *statusServer) nodesHelper(
 ) (*serverpb.NodesResponse, int, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
+
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -1399,7 +1419,7 @@ func (s *statusServer) nodesHelper(
 func (s *statusServer) nodesStatusWithLiveness(
 	ctx context.Context,
 ) (map[roachpb.NodeID]nodeStatusWithLiveness, error) {
-	nodes, err := s.Nodes(ctx, nil)
+	nodes, err := s.ListNodesInternal(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1433,6 +1453,13 @@ func (s *statusServer) Node(
 ) (*statuspb.NodeStatus, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
+
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1487,7 +1514,7 @@ func (s *statusServer) RaftDebug(
 		return nil, err
 	}
 
-	nodes, err := s.Nodes(ctx, nil)
+	nodes, err := s.ListNodesInternal(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
