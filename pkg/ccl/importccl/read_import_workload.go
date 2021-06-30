@@ -235,7 +235,7 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 		if batchIdx >= w.batchEnd {
 			break
 		}
-		a = a[:0]
+		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
 			for colIdx, col := range cb.ColVecs() {
