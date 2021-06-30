@@ -15,6 +15,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -23,8 +24,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,6 +37,8 @@ const (
 	authorizationHeader = `Authorization`
 	defaultConnTimeout  = 3 * time.Second
 )
+
+var numWorkers = workerCount()
 
 func isWebhookSink(u *url.URL) bool {
 	switch u.Scheme {
@@ -63,11 +69,15 @@ func encodePayloadWebhook(value []byte) ([]byte, error) {
 }
 
 type webhookSink struct {
-	ctx        context.Context
-	url        sinkURL
-	authHeader string
-	client     *httputil.Client
-	cancelFunc func()
+	ctx         context.Context
+	url         sinkURL
+	authHeader  string
+	client      *httputil.Client
+	workerGroup ctxgroup.Group
+	cancelFunc  func()
+	eventsChans []chan []byte
+	flushChan   chan error
+	in          *inflightTracker
 }
 
 func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Sink, error) {
@@ -116,8 +126,9 @@ func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Si
 
 	sink := &webhookSink{
 		ctx:        ctx,
-		cancelFunc: cancel,
 		authHeader: opts[changefeedbase.OptWebhookAuthHeader],
+		in:         &inflightTracker{},
+		cancelFunc: cancel,
 	}
 
 	var err error
@@ -137,6 +148,7 @@ func makeWebhookSink(ctx context.Context, u sinkURL, opts map[string]string) (Si
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
+	sink.setupWorkers()
 	return sink, nil
 }
 
@@ -187,6 +199,46 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	return client, nil
 }
 
+func workerCount() int {
+	return system.NumCPU()
+}
+
+func (s *webhookSink) setupWorkers() {
+	s.eventsChans = make([]chan []byte, numWorkers)
+	s.flushChan = make(chan error, 1)
+	s.workerGroup = ctxgroup.WithContext(s.ctx)
+	for i := 0; i < numWorkers; i++ {
+		s.eventsChans[i] = make(chan []byte)
+		j := i
+		s.workerGroup.GoCtx(func(ctx context.Context) error {
+			s.workerLoop(s.eventsChans[j])
+			return nil
+		})
+	}
+}
+
+func (s *webhookSink) workerLoop(workerCh chan []byte) {
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case value := <-workerCh:
+			msg, err := encodePayloadWebhook(value)
+			if err == nil {
+				err = s.sendMessage(s.ctx, msg)
+			}
+			s.workerGroup.GoCtx(func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case s.flushChan <- err:
+				}
+				return nil
+			})
+		}
+	}
+}
+
 // Dial is a no-op for this sink since we don't necessarily have
 // a "health check" endpoint to use.
 func (s *webhookSink) Dial() error {
@@ -220,15 +272,73 @@ func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
 	return nil
 }
 
-func (s *webhookSink) EmitRow(
-	ctx context.Context, _ TopicDescriptor, _, value []byte, _ hlc.Timestamp,
-) error {
-	j, err := encodePayloadWebhook(value)
-	if err != nil {
-		return err
-	}
+func workerIndex(key []byte) uint32 {
+	return crc32.ChecksumIEEE(key) % uint32(numWorkers)
+}
 
-	return s.sendMessage(ctx, j)
+// inflightTracker wraps logic for counting number of inflight messages to
+// track when flushing sink
+type inflightTracker struct {
+	mu struct {
+		syncutil.Mutex
+		inflight int
+	}
+}
+
+// Add() increments inflight
+func (i *inflightTracker) Add() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.mu.inflight++
+}
+
+// Wait() spins until the inflight counter is zero. Custom behavior to
+// decrement inflight counter is specified by checkDone function. checkDone
+// should return 3 values: first whether or not to decrement inflight, second
+// errors that result from checking, and third whether or not to keep
+// decrementing inflight after detecting the error. This is because for some
+// errors (like HTTP errors), the sink should be flushed before the error is
+// returned, to avoid sending to closed channels.
+func (i *inflightTracker) Wait(checkDone func() (bool, bool, error)) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	var waitErr error
+	for i.mu.inflight > 0 {
+		done, cont, err := checkDone()
+		if err != nil {
+			// indicates non-fatal error, continue to wait for inflight counter to drop
+			if cont {
+				waitErr = err
+			} else {
+				return err
+			}
+		}
+		if done {
+			i.done()
+		}
+	}
+	return waitErr
+}
+
+// done() decrements inflight. Note: should only be called within Wait()
+func (i *inflightTracker) done() {
+	if i.mu.inflight > 0 {
+		i.mu.inflight--
+	}
+}
+
+func (s *webhookSink) EmitRow(
+	ctx context.Context, _ TopicDescriptor, key, value []byte, _ hlc.Timestamp,
+) error {
+	index := workerIndex(key)
+	s.in.Add()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.eventsChans[index] <- value:
+	}
+	return nil
 }
 
 func (s *webhookSink) EmitResolvedTimestamp(
@@ -238,17 +348,30 @@ func (s *webhookSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
-
 	return s.sendMessage(ctx, j)
 }
 
-// Flush() is a no-op for now since calls to EmitRow() are synchronous
 func (s *webhookSink) Flush(ctx context.Context) error {
-	return nil
+	err := s.in.Wait(func() (bool, bool, error) {
+		select {
+		case <-ctx.Done():
+			return false, false, ctx.Err()
+		case err := <-s.flushChan:
+			return true, true, err
+		}
+	})
+	return err
 }
 
 func (s *webhookSink) Close() error {
+	// ignore errors here since we're closing the sink anyway
+	_ = s.Flush(s.ctx)
 	s.cancelFunc()
+	_ = s.workerGroup.Wait()
+	for i := 0; i < len(s.eventsChans); i++ {
+		close(s.eventsChans[i])
+	}
+	close(s.flushChan)
 	s.client.CloseIdleConnections()
 	return nil
 }
