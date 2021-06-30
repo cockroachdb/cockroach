@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 )
 
 func init() {
@@ -66,6 +67,8 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		n.job,
 		execCfg.Codec,
 		execCfg.Settings,
+		execCfg.IndexValidator,
+		scsqldeps.NewCCLCallbacks(execCfg.Settings, nil),
 		execCfg.NewSchemaChangerTestingKnobs,
 		payload.Statement,
 	)

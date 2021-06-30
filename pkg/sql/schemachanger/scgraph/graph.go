@@ -183,6 +183,8 @@ func (g *Graph) GetNodeFromOp(op scop.Op) *scpb.Node {
 	return g.opToNode[op]
 }
 
+var _ = (*Graph)(nil).GetNodeFromOp
+
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
 func (g *Graph) AddDepEdge(
@@ -261,7 +263,7 @@ func (de *DepEdge) To() *scpb.Node { return de.to }
 // Name returns the name of the rule which generated this edge.
 func (de *DepEdge) Name() string { return de.rule }
 
-// GetNodeRanks fetches ranks of nodes in topological order
+// GetNodeRanks fetches ranks of nodes in topological order.
 func (g *Graph) GetNodeRanks() (nodeRanks map[*scpb.Node]int, err error) {
 	defer func() {
 		if r := recover(); r != nil {
