@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1893,7 +1894,7 @@ func (ot *OptTester) makeStat(
 	columns []string, rowCount, distinctCount, nullCount uint64,
 ) stats.JSONStatistic {
 	return stats.JSONStatistic{
-		Name: stats.AutoStatsName,
+		Name: jobspb.AutoStatsName,
 		CreatedAt: tree.AsStringWithFlags(
 			&tree.DTimestamp{Time: timeutil.Now()}, tree.FmtBareStrings,
 		),

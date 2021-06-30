@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -116,11 +117,6 @@ var bufferedChanFullLogLimiter = log.Every(time.Second)
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
-	// AutoStatsName is the name to use for statistics created automatically.
-	// The name is chosen to be something that users are unlikely to choose when
-	// running CREATE STATISTICS manually.
-	AutoStatsName = "__auto__"
-
 	// defaultAverageTimeBetweenRefreshes is the default time to use as the
 	// "average" time between refreshes when there is no information for a given
 	// table.
@@ -487,7 +483,7 @@ func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf ti
 		nil, /* txn */
 		fmt.Sprintf(
 			"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s'",
-			AutoStatsName,
+			jobspb.AutoStatsName,
 			tableID,
 			AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
 			asOf.String(),
@@ -501,7 +497,7 @@ func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf ti
 func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 	// Stats are sorted with the most recent first.
 	for _, stat := range tableStats {
-		if stat.Name == AutoStatsName {
+		if stat.Name == jobspb.AutoStatsName {
 			return stat
 		}
 	}
@@ -522,7 +518,7 @@ func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
 	var sum time.Duration
 	var count int
 	for _, stat := range tableStats {
-		if stat.Name != AutoStatsName {
+		if stat.Name != jobspb.AutoStatsName {
 			continue
 		}
 		if reference == nil {
