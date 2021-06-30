@@ -29,6 +29,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *ScanOperation:
 		return &o.Result
+	case *DeleteOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -103,6 +105,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *PutOperation:
 		o.format(w, fctx)
 	case *ScanOperation:
+		o.format(w, fctx)
+	case *DeleteOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -224,6 +228,11 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 		}
 		fmt.Fprintf(w, ` // ([%s], nil)`, kvs.String())
 	}
+}
+
+func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.Del(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	op.Result.format(w)
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {

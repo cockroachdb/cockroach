@@ -23,8 +23,8 @@
 // guarantees.
 //
 // TODO
-// - CPut/InitPut/Increment/Delete
-// - DeleteRange/ClearRange/RevertRange/ReverseScan
+// - CPut/InitPut/Increment
+// - DeleteRange/ClearRange/RevertRange
 // - AdminRelocateRange
 // - AdminUnsplit
 // - AdminScatter
