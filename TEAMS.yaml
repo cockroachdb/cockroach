@@ -20,17 +20,23 @@
 cockroachdb/docs:
   triage_column_id: 3971225
 cockroachdb/sql-experience:
-  aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sqlproxy-prs, cockroachdb/sql-api-prs]
+  aliases:
+    cockroachdb/sql-syntax-prs: other
+    cockroachdb/sqlproxy-prs: other
+    cockroachdb/sql-api-prs: other
   triage_column_id: 7259065
 cockroachdb/sql-schema:
   triage_column_id: 8946818
 cockroachdb/sql-queries:
-  aliases: [cockroachdb/sql-optimizer, cockroachdb/sql-opt-prs]
+  aliases:
+    cockroachdb/sql-optimizer: other
+    cockroachdb/sql-opt-prs: other
   triage_column_id: 13549252
 cockroachdb/sql-observability:
   triage_column_id: 12618343
 cockroachdb/kv:
-  aliases: [cockroachdb/kv-triage]
+  aliases:
+    cockroachdb/kv-triage: roachtest
   triage_column_id: 14242655
 cockroachdb/geospatial:
   triage_column_id: 9487269
@@ -45,20 +51,28 @@ cockroachdb/test-eng:
 cockroachdb/security:
   triage_column_id: 0 # TODO
 cockroachdb/bulk-io:
-  aliases: [cockroachdb/bulk-prs]
+  aliases:
+    cockroachdb/bulk-prs: other
   triage_column_id: 3097123
 cockroachdb/cdc:
-  aliases: [cockroachdb/cdc-prs]
+  aliases:
+    cockroachdb/cdc-prs: other
   triage_column_id: 3570120
 cockroachdb/server:
-  aliases: [cockroachdb/cli-prs, cockroachdb/server-prs, cockroachdb/http-api-prs]
+  aliases:
+    cockroachdb/cli-prs: other
+    cockroachdb/server-prs: other
+    cockroachdb/http-api-prs: other
   triage_column_id: 2521812
 cockroachdb/cluster-ui:
-  aliases: [cockroachdb/cluster-ui-prs]
+  aliases:
+    cockroachdb/cluster-ui-prs: other
   triage_column_id: 6598672
 cockroachdb/obs-inf:
-  aliases: [cockroachdb/obs-inf-prs]
+  aliases:
+    cockroachdb/obs-inf-prs: other
   triage_column_id: 14196277
 cockroachdb/unowned:
-  aliases: [cockroachdb/rfc-prs]
+  aliases:
+    cockroachdb/rfc-prs: other
   triage_column_id: 0 # TODO
