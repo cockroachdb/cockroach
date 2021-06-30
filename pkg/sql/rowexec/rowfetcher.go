@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// rowFetcher is an interface used to abstract a row fetcher so that a stat
+// rowFetcher is an interface used to abstract a row.Fetcher so that a stat
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
