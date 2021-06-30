@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
@@ -3630,7 +3629,7 @@ func (a *intXorAggregate) Size() int64 {
 type jsonAggregate struct {
 	singleDatumAggregateBase
 
-	loc        *time.Location
+	evalCtx    *tree.EvalContext
 	builder    *json.ArrayBuilderWithCounter
 	sawNonNull bool
 }
@@ -3638,7 +3637,7 @@ type jsonAggregate struct {
 func newJSONAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &jsonAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
-		loc:                      evalCtx.GetLocation(),
+		evalCtx:                  evalCtx,
 		builder:                  json.NewArrayBuilderWithCounter(),
 		sawNonNull:               false,
 	}
@@ -3646,7 +3645,11 @@ func newJSONAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tr
 
 // Add accumulates the transformed json into the JSON array.
 func (a *jsonAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
-	j, err := tree.AsJSON(datum, a.loc)
+	j, err := tree.AsJSON(
+		datum,
+		a.evalCtx.SessionData.DataConversionConfig,
+		a.evalCtx.GetLocation(),
+	)
 	if err != nil {
 		return err
 	}
@@ -3950,7 +3953,7 @@ func (a *percentileContAggregate) Size() int64 {
 type jsonObjectAggregate struct {
 	singleDatumAggregateBase
 
-	loc        *time.Location
+	evalCtx    *tree.EvalContext
 	builder    *json.ObjectBuilderWithCounter
 	sawNonNull bool
 }
@@ -3960,7 +3963,7 @@ func newJSONObjectAggregate(
 ) tree.AggregateFunc {
 	return &jsonObjectAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
-		loc:                      evalCtx.GetLocation(),
+		evalCtx:                  evalCtx,
 		builder:                  json.NewObjectBuilderWithCounter(),
 		sawNonNull:               false,
 	}
@@ -3980,11 +3983,19 @@ func (a *jsonObjectAggregate) Add(
 			"field name must not be null")
 	}
 
-	key, err := asJSONBuildObjectKey(datum, a.loc)
+	key, err := asJSONBuildObjectKey(
+		datum,
+		a.evalCtx.SessionData.DataConversionConfig,
+		a.evalCtx.GetLocation(),
+	)
 	if err != nil {
 		return err
 	}
-	val, err := tree.AsJSON(others[0], a.loc)
+	val, err := tree.AsJSON(
+		others[0],
+		a.evalCtx.SessionData.DataConversionConfig,
+		a.evalCtx.GetLocation(),
+	)
 	if err != nil {
 		return err
 	}
