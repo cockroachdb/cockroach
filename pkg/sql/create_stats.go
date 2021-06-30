@@ -124,7 +124,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		return err
 	}
 
-	if n.Name == stats.AutoStatsName {
+	if n.Name == jobspb.AutoStatsName {
 		// Don't start the job if there is already a CREATE STATISTICS job running.
 		// (To handle race conditions we check this again after the job starts,
 		// but this check is used to prevent creating a large number of jobs that
@@ -266,7 +266,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	statement := tree.AsStringWithFQNames(n, n.p.EvalContext().Annotations)
 	eventLogStatement := statement
 	var description string
-	if n.Name == stats.AutoStatsName {
+	if n.Name == jobspb.AutoStatsName {
 		// Use a user-friendly description for automatic statistics.
 		description = fmt.Sprintf("Table statistics refresh for %s", fqTableName)
 	} else {
@@ -495,7 +495,7 @@ var _ jobs.Resumer = &createStatsResumer{}
 func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
-	if details.Name == stats.AutoStatsName {
+	if details.Name == jobspb.AutoStatsName {
 		// We want to make sure that an automatic CREATE STATISTICS job only runs if
 		// there are no other CREATE STATISTICS jobs running, automatic or manual.
 		if err := checkRunningJobs(ctx, r.job, p); err != nil {
