@@ -489,28 +489,6 @@ func (s spanSetReader) PinEngineStateForIterators() error {
 	return s.r.PinEngineStateForIterators()
 }
 
-// GetDBEngine recursively searches for the underlying rocksDB engine.
-func GetDBEngine(reader storage.Reader, span roachpb.Span) storage.Reader {
-	switch v := reader.(type) {
-	case ReadWriter:
-		return GetDBEngine(getSpanReader(v, span), span)
-	case *spanSetBatch:
-		return GetDBEngine(getSpanReader(v.ReadWriter, span), span)
-	default:
-		return reader
-	}
-}
-
-// getSpanReader is a getter to access the storage.Reader field of the
-// spansetReader.
-func getSpanReader(r ReadWriter, span roachpb.Span) storage.Reader {
-	if err := r.spanSetReader.spans.CheckAllowed(SpanReadOnly, span); err != nil {
-		panic("Not in the span")
-	}
-
-	return r.spanSetReader.r
-}
-
 type spanSetWriter struct {
 	w     storage.Writer
 	spans *SpanSet
