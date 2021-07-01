@@ -33,8 +33,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
 # gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto
 # gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
-# gazelle:resolve proto client_model/metrics.proto @com_github_prometheus_client_model//:client_proto
-# gazelle:resolve proto go client_model/metrics.proto @com_github_prometheus_client_model//go
+# gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:client_proto
+# gazelle:resolve proto go io/prometheus/client/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test @cockroach//pkg/cli:cli_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @cockroach//pkg/sql/colflow:colflow_test
