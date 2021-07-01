@@ -949,11 +949,8 @@ func splitTriggerHelper(
 		// - node two becomes the lease holder for [c,e). Its timestamp cache does
 		//   not know about the read at 'd' which happened at the beginning.
 		// - node two can illegally propose a write to 'd' at a lower timestamp.
-		//
-		// TODO(tschottdorf): why would this use r.store.Engine() and not the
-		// batch? We do the same thing for other usages of the state loader.
 		sl := MakeStateLoader(rec)
-		leftLease, err := sl.LoadLease(ctx, rec.Engine())
+		leftLease, err := sl.LoadLease(ctx, batch)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -970,7 +967,7 @@ func splitTriggerHelper(
 		}
 		rightLease := leftLease
 		rightLease.Replica = replica
-		gcThreshold, err := sl.LoadGCThreshold(ctx, rec.Engine())
+		gcThreshold, err := sl.LoadGCThreshold(ctx, batch)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
@@ -1001,7 +998,7 @@ func splitTriggerHelper(
 			truncStateType = stateloader.TruncatedStateLegacyReplicated
 		}
 
-		replicaVersion, err := sl.LoadVersion(ctx, rec.Engine())
+		replicaVersion, err := sl.LoadVersion(ctx, batch)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
