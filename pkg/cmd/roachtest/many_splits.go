@@ -24,7 +24,7 @@ func runManySplits(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, args)
 
 	db := c.Conn(ctx, 1)

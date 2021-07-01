@@ -32,7 +32,7 @@ func registerDrop(r *testRegistry) {
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
 	runDrop := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses, nodes int) {
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
 

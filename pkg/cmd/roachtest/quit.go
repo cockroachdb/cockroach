@@ -54,7 +54,7 @@ func (q *quitTest) init(ctx context.Context) {
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",               // iterate fast for rebalancing
 		"-a", "--vmodule=store=1,replica=1,replica_proposal=1", // verbosity to troubleshoot drains
 	)
-	q.c.Put(ctx, cockroach, "./cockroach")
+	q.c.Put(ctx, q.t.Cockroach(), "./cockroach")
 	q.c.Start(ctx, q.args)
 }
 

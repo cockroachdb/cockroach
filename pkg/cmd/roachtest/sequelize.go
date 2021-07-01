@@ -33,7 +33,7 @@ func registerSequelize(r *testRegistry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}

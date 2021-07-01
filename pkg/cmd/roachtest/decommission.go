@@ -104,7 +104,7 @@ func runDecommission(
 	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
 	// through which we run the workload and other queries.
 	pinnedNode := 1
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
@@ -304,7 +304,7 @@ func runDecommission(
 // irreversible operation.
 func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, args)
 
 	h := newDecommTestHelper(t, c)

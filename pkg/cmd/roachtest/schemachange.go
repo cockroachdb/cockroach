@@ -32,7 +32,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
-			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, workload, "./workload")
 
 			c.Start(ctx, c.All())
@@ -353,7 +353,7 @@ func makeSchemaChangeBulkIngestTest(
 			crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Node(c.Spec().NodeCount)
 
-			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, workload, "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
 			c.Start(ctx, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))

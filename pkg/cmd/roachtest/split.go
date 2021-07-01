@@ -130,7 +130,7 @@ func registerLoadSplits(r *testRegistry) {
 // conditions defined by the params. It checks whether certain number of
 // splits occur in different workload scenarios.
 func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params splitParams) {
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.Node(1))
 	c.Start(ctx, c.All())
 
@@ -246,7 +246,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	// to produce a range of roughly the right size.
 	rows := size / rowEstimate
 
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.All())
 	c.Start(ctx, c.All())
 

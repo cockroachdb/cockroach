@@ -21,7 +21,7 @@ import (
 
 func registerRoachmart(r *testRegistry) {
 	runRoachmart := func(ctx context.Context, t test.Test, c cluster.Cluster, partition bool) {
-		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		c.Start(ctx)
 

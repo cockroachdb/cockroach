@@ -33,7 +33,7 @@ func registerLedger(r *testRegistry) {
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, cockroach, "./cockroach", roachNodes)
+			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, workload, "./workload", loadNode)
 			c.Start(ctx, roachNodes)
 

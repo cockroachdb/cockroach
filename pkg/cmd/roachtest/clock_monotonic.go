@@ -37,7 +37,7 @@ func runClockMonotonicity(
 	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
 	c.Start(ctx)

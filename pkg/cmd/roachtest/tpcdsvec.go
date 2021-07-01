@@ -54,7 +54,7 @@ func registerTPCDSVec(r *testRegistry) {
 	}
 
 	runTPCDSVec := func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx)
 
 		clusterConn := c.Conn(ctx, 1)
