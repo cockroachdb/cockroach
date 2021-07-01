@@ -74,6 +74,7 @@ go_library(
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/storage/cloud",
         "//pkg/util",

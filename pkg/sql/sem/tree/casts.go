@@ -889,14 +889,26 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 				FmtBareStrings,
 			)
 		case *DTuple:
-			s = AsStringWithFlags(d, FmtPgwireText)
+			s = AsStringWithFlags(
+				d,
+				FmtPgwireText,
+				FmtDataConversionConfig(ctx.SessionData.DataConversionConfig),
+			)
 		case *DArray:
-			s = AsStringWithFlags(d, FmtPgwireText)
+			s = AsStringWithFlags(
+				d,
+				FmtPgwireText,
+				FmtDataConversionConfig(ctx.SessionData.DataConversionConfig),
+			)
 		case *DInterval:
 			// When converting an interval to string, we need a string representation
 			// of the duration (e.g. "5s") and not of the interval itself (e.g.
 			// "INTERVAL '5s'").
-			s = t.ValueAsString()
+			s = AsStringWithFlags(
+				d,
+				FmtPgwireText,
+				FmtDataConversionConfig(ctx.SessionData.DataConversionConfig),
+			)
 		case *DUuid:
 			s = t.UUID.String()
 		case *DIPAddr:

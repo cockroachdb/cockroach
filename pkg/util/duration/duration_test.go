@@ -11,6 +11,7 @@
 package duration
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"testing"
@@ -18,6 +19,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 type durationTest struct {
@@ -61,6 +63,13 @@ var positiveDurationTests = []durationTest{
 	{1, Duration{Months: math.MaxInt64, Days: math.MaxInt64, nanos: math.MaxInt64}, true},
 }
 
+var mixedDurationTests = []durationTest{
+	{-1, Duration{Months: -1, Days: -2, nanos: 123}, false},
+	{1, Duration{Months: 0, Days: -1, nanos: 123}, false},
+	{1, Duration{Months: 0, Days: 0, nanos: -123}, false},
+	{1, Duration{Months: 0, Days: 1, nanos: -123456}, false},
+}
+
 func fullDurationTests() []durationTest {
 	var ret []durationTest
 	for _, test := range positiveDurationTests {
@@ -69,6 +78,7 @@ func fullDurationTests() []durationTest {
 		ret = append(ret, durationTest{cmpToPrev: -test.cmpToPrev, duration: negDuration, err: test.err})
 	}
 	ret = append(ret, positiveDurationTests...)
+	ret = append(ret, mixedDurationTests...)
 	return ret
 }
 
@@ -589,6 +599,212 @@ func TestNanos(t *testing.T) {
 	}
 	if expect, actual := "00:00:00.000001", d.StringNanos(); expect != actual {
 		t.Fatalf("expected %s, got %s", expect, actual)
+	}
+}
+
+func TestFormat(t *testing.T) {
+	tests := []struct {
+		duration    Duration
+		postgres    string
+		iso8601     string
+		sqlStandard string
+	}{
+		{
+			duration:    Duration{},
+			postgres:    "00:00:00",
+			iso8601:     "PT0S",
+			sqlStandard: "0",
+		},
+		// all negative
+		// plural
+		{
+			duration:    Duration{Months: -35, Days: -2, nanos: -12345678000000},
+			postgres:    "-2 years -11 mons -2 days -03:25:45.678",
+			iso8601:     "P-2Y-11M-2DT-3H-25M-45.678S",
+			sqlStandard: "-2-11 -2 -3:25:45.678",
+		},
+		// singular
+		{
+			duration:    Duration{Months: -13, Days: -1, nanos: -1000000},
+			postgres:    "-1 years -1 mons -1 days -00:00:00.001",
+			iso8601:     "P-1Y-1M-1DT-0.001S",
+			sqlStandard: "-1-1 -1 -0:00:00.001",
+		},
+		// years only
+		{
+			duration:    Duration{Months: -12},
+			postgres:    "-1 years",
+			iso8601:     "P-1Y",
+			sqlStandard: "-1-0",
+		},
+		// months only
+		{
+			duration:    Duration{Months: -1},
+			postgres:    "-1 mons",
+			iso8601:     "P-1M",
+			sqlStandard: "-0-1",
+		},
+		// days only
+		{
+			duration:    Duration{Days: -1},
+			postgres:    "-1 days",
+			iso8601:     "P-1D",
+			sqlStandard: "-1 0:00:00",
+		},
+		// hours only
+		{
+			duration:    Duration{nanos: -int64(time.Hour)},
+			postgres:    "-01:00:00",
+			iso8601:     "PT-1H",
+			sqlStandard: "-1:00:00",
+		},
+		// minutes only
+		{
+			duration:    Duration{nanos: -int64(time.Minute)},
+			postgres:    "-00:01:00",
+			iso8601:     "PT-1M",
+			sqlStandard: "-0:01:00",
+		},
+		// seconds only
+		{
+			duration:    Duration{nanos: -int64(time.Second)},
+			postgres:    "-00:00:01",
+			iso8601:     "PT-1S",
+			sqlStandard: "-0:00:01",
+		},
+		// milliseconds only
+		{
+			duration:    Duration{nanos: -int64(time.Millisecond)},
+			postgres:    "-00:00:00.001",
+			iso8601:     "PT-0.001S",
+			sqlStandard: "-0:00:00.001",
+		},
+		// without time
+		{
+			duration:    Duration{Months: -35, Days: -1, nanos: 0},
+			postgres:    "-2 years -11 mons -1 days",
+			iso8601:     "P-2Y-11M-1D",
+			sqlStandard: "-2-11 -1 +0:00:00",
+		},
+		// without years
+		{
+			duration:    Duration{Months: -11, Days: -1, nanos: -1000000},
+			postgres:    "-11 mons -1 days -00:00:00.001",
+			iso8601:     "P-11M-1DT-0.001S",
+			sqlStandard: "-0-11 -1 -0:00:00.001",
+		},
+		// without months
+		{
+			duration:    Duration{Months: -12, Days: -1, nanos: -1000000},
+			postgres:    "-1 years -1 days -00:00:00.001",
+			iso8601:     "P-1Y-1DT-0.001S",
+			sqlStandard: "-1-0 -1 -0:00:00.001",
+		},
+		// without years, months
+		{
+			duration:    Duration{Months: 0, Days: -1, nanos: -1000000},
+			postgres:    "-1 days -00:00:00.001",
+			iso8601:     "P-1DT-0.001S",
+			sqlStandard: "-1 0:00:00.001",
+		},
+		// without days
+		{
+			duration:    Duration{Months: -35, Days: 0, nanos: -1000000},
+			postgres:    "-2 years -11 mons -00:00:00.001",
+			iso8601:     "P-2Y-11MT-0.001S",
+			sqlStandard: "-2-11 +0 -0:00:00.001",
+		},
+		// all positive
+		// plural
+		{
+			duration:    Duration{Months: 35, Days: 2, nanos: 12345678000000},
+			postgres:    "2 years 11 mons 2 days 03:25:45.678",
+			iso8601:     "P2Y11M2DT3H25M45.678S",
+			sqlStandard: "+2-11 +2 +3:25:45.678",
+		},
+		// singular
+		{
+			duration:    Duration{Months: 13, Days: 1, nanos: 1000000},
+			postgres:    "1 year 1 mon 1 day 00:00:00.001",
+			iso8601:     "P1Y1M1DT0.001S",
+			sqlStandard: "+1-1 +1 +0:00:00.001",
+		},
+		// without time
+		{
+			duration:    Duration{Months: 35, Days: 1, nanos: 0},
+			postgres:    "2 years 11 mons 1 day",
+			iso8601:     "P2Y11M1D",
+			sqlStandard: "+2-11 +1 +0:00:00",
+		},
+		// without years
+		{
+			duration:    Duration{Months: 11, Days: 1, nanos: 1000000},
+			postgres:    "11 mons 1 day 00:00:00.001",
+			iso8601:     "P11M1DT0.001S",
+			sqlStandard: "+0-11 +1 +0:00:00.001",
+		},
+		// without months
+		{
+			duration:    Duration{Months: 12, Days: 1, nanos: 1000000},
+			postgres:    "1 year 1 day 00:00:00.001",
+			iso8601:     "P1Y1DT0.001S",
+			sqlStandard: "+1-0 +1 +0:00:00.001",
+		},
+		// without years, months
+		{
+			duration:    Duration{Months: 0, Days: 1, nanos: 1000000},
+			postgres:    "1 day 00:00:00.001",
+			iso8601:     "P1DT0.001S",
+			sqlStandard: "1 0:00:00.001",
+		},
+		// without days
+		{
+			duration:    Duration{Months: 35, Days: 0, nanos: 1000000},
+			postgres:    "2 years 11 mons 00:00:00.001",
+			iso8601:     "P2Y11MT0.001S",
+			sqlStandard: "+2-11 +0 +0:00:00.001",
+		},
+		// mixed positive and negative units
+		// PG prints '+' when a time unit changes the sign compared to the previous
+		// unit, i.e. below CRDB should print +2 days (in 'postgres' style).
+		{
+			duration:    Duration{Months: -35, Days: 2, nanos: -12345678000000},
+			postgres:    "-2 years -11 mons 2 days -03:25:45.678",
+			iso8601:     "P-2Y-11M2DT-3H-25M-45.678S",
+			sqlStandard: "-2-11 +2 -3:25:45.678",
+		},
+		{
+			duration:    Duration{Months: 35, Days: -2, nanos: 12345678000000},
+			postgres:    "2 years 11 mons -2 days +03:25:45.678",
+			iso8601:     "P2Y11M-2DT3H25M45.678S",
+			sqlStandard: "+2-11 -2 +3:25:45.678",
+		},
+		{
+			duration:    Duration{Days: -1, nanos: -123456789000000},
+			postgres:    "-1 days -34:17:36.789",
+			iso8601:     "P-1DT-34H-17M-36.789S",
+			sqlStandard: "-1 34:17:36.789",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.postgres, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			tt.duration.FormatWithStyle(buf, IntervalStyle_POSTGRES)
+			require.Equal(t, tt.postgres, buf.String())
+
+			buf.Reset()
+			tt.duration.Format(buf)
+			require.Equal(t, tt.postgres, buf.String())
+
+			buf.Reset()
+			tt.duration.FormatWithStyle(buf, IntervalStyle_ISO_8601)
+			require.Equal(t, tt.iso8601, buf.String())
+
+			buf.Reset()
+			tt.duration.FormatWithStyle(buf, IntervalStyle_SQL_STANDARD)
+			require.Equal(t, tt.sqlStandard, buf.String())
+		})
 	}
 }
 

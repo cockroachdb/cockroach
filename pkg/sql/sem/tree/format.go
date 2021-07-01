@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -217,6 +218,8 @@ type FmtCtx struct {
 
 	bytes.Buffer
 
+	dataConversionConfig sessiondatapb.DataConversionConfig
+
 	// NOTE: if you add more flags to this structure, make sure to add
 	// corresponding cleanup code in FmtCtx.Close().
 
@@ -281,6 +284,14 @@ func FmtIndexedTypeFormat(fn func(*FmtCtx, *OIDTypeReference)) FmtCtxOption {
 	}
 }
 
+// FmtDataConversionConfig modifies FmtCtx to contain items relevant for the
+// given DataConversionConfig.
+func FmtDataConversionConfig(dcc sessiondatapb.DataConversionConfig) FmtCtxOption {
+	return func(ctx *FmtCtx) {
+		ctx.dataConversionConfig = dcc
+	}
+}
+
 // NewFmtCtx creates a FmtCtx; only flags that don't require Annotations
 // can be used.
 func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
@@ -293,6 +304,15 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 		panic(errors.AssertionFailedf("no Annotations provided"))
 	}
 	return ctx
+}
+
+// WithDataConversionConfig modifies FmtCtx to substitute the DataConversionConfig,
+// calls fn, then restore the original session data.
+func (ctx *FmtCtx) WithDataConversionConfig(dcc sessiondatapb.DataConversionConfig, fn func()) {
+	old := ctx.dataConversionConfig
+	FmtDataConversionConfig(dcc)(ctx)
+	defer func() { ctx.dataConversionConfig = old }()
+	fn()
 }
 
 // WithReformatTableNames modifies FmtCtx to to substitute the printing of table
@@ -419,8 +439,8 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 
 // AsStringWithFlags pretty prints a node to a string given specific flags; only
 // flags that don't require Annotations can be used.
-func AsStringWithFlags(n NodeFormatter, fl FmtFlags) string {
-	ctx := NewFmtCtx(fl)
+func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) string {
+	ctx := NewFmtCtx(fl, opts...)
 	ctx.FormatNode(n)
 	return ctx.CloseAndGetString()
 }
@@ -471,6 +491,7 @@ func (ctx *FmtCtx) Close() {
 	ctx.indexedVarFormat = nil
 	ctx.tableNameFormatter = nil
 	ctx.placeholderFormat = nil
+	ctx.dataConversionConfig = sessiondatapb.DataConversionConfig{}
 	fmtCtxPool.Put(ctx)
 }
 
