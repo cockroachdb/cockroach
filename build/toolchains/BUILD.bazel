@@ -85,3 +85,10 @@ platform(
         "@platforms//cpu:arm64",
     ],
 )
+
+config_setting(
+    name = "dev",
+    define_values = {
+        "cockroach_bazel_dev": "y",
+    },
+)
