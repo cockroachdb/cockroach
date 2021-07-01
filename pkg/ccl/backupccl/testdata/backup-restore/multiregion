@@ -10,9 +10,9 @@ INSERT INTO d.t VALUES (1), (2), (3);
 query-sql
 SELECT region FROM [SHOW REGIONS FROM DATABASE d];
 ----
-eu-central-1
 us-east-1
 us-west-1
+eu-central-1
 
 exec-sql
 BACKUP DATABASE d TO 'nodelocal://1/database_backup/';
