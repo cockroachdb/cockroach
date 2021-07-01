@@ -732,7 +732,7 @@ func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) strin
 	fmtFlags := tree.FmtSimple
 
 	if evalCtx.HasPlaceholders() {
-		fmtCtx = tree.NewFmtCtx(
+		fmtCtx = evalCtx.FmtCtx(
 			fmtFlags,
 			tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 				d, err := placeholder.Eval(evalCtx)
@@ -745,7 +745,7 @@ func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) strin
 			}),
 		)
 	} else {
-		fmtCtx = tree.NewFmtCtx(fmtFlags)
+		fmtCtx = evalCtx.FmtCtx(fmtFlags)
 	}
 
 	fmtCtx.FormatNode(ast)

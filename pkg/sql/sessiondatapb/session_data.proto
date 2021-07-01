@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.sql.sessiondatapb;
 option go_package = "sessiondatapb";
 
+import "util/duration/duration.proto";
 import "gogoproto/gogo.proto";
 
 // SessionData contains session parameters that are easily serializable and are
@@ -61,8 +62,8 @@ message SessionData {
   int64 WorkMemLimit = 12;
 }
 
-// DataConversionConfig contains the parameters that influence the conversion
-// between SQL data types and strings/byte arrays.
+// DataConversionConfig contains the parameters that influence the output
+// of certain data types as strings or bytes.
 message DataConversionConfig {
   // BytesEncodeFormat indicates how to encode byte arrays when converting to
   // string.
@@ -71,6 +72,8 @@ message DataConversionConfig {
   // to use for float conversions.This must be set to a value between -15 and
   // 3, inclusive.
   int32 extra_float_digits = 2;
+  // IntervalStyle indicates the style to display intervals as.
+  util.duration.IntervalStyle interval_style = 3;
 }
 
 // BytesEncodeFormat is the configuration for bytes to string conversions.

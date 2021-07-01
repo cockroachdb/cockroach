@@ -162,102 +162,106 @@ func writeTextDatumNotNull(
 	sessionLoc *time.Location,
 	t *types.T,
 ) {
-	switch v := tree.UnwrapDatum(nil, d).(type) {
-	case *tree.DBitArray:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+	b.textFormatter.WithDataConversionConfig(
+		conv,
+		func() {
+			switch v := tree.UnwrapDatum(nil, d).(type) {
+			case *tree.DBitArray:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DBool:
-		writeTextBool(b, bool(*v))
+			case *tree.DBool:
+				writeTextBool(b, bool(*v))
 
-	case *tree.DInt:
-		writeTextInt64(b, int64(*v))
+			case *tree.DInt:
+				writeTextInt64(b, int64(*v))
 
-	case *tree.DFloat:
-		fl := float64(*v)
-		writeTextFloat64(b, fl, conv)
+			case *tree.DFloat:
+				fl := float64(*v)
+				writeTextFloat64(b, fl, conv)
 
-	case *tree.DDecimal:
-		b.writeLengthPrefixedDatum(v)
+			case *tree.DDecimal:
+				b.writeLengthPrefixedDatum(v)
 
-	case *tree.DBytes:
-		writeTextBytes(b, string(*v), conv)
+			case *tree.DBytes:
+				writeTextBytes(b, string(*v), conv)
 
-	case *tree.DUuid:
-		writeTextUUID(b, v.UUID)
+			case *tree.DUuid:
+				writeTextUUID(b, v.UUID)
 
-	case *tree.DIPAddr:
-		b.writeLengthPrefixedString(v.IPAddr.String())
+			case *tree.DIPAddr:
+				b.writeLengthPrefixedString(v.IPAddr.String())
 
-	case *tree.DString:
-		writeTextString(b, string(*v), t)
+			case *tree.DString:
+				writeTextString(b, string(*v), t)
 
-	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
+			case *tree.DCollatedString:
+				b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
 
-	case *tree.DDate:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DDate:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DTime:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DTime:
+				// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+				s := formatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
+				b.putInt32(int32(len(s)))
+				b.write(s)
 
-	case *tree.DTimeTZ:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTimeTZ(v.TimeTZ, b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
+			case *tree.DTimeTZ:
+				// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+				s := formatTimeTZ(v.TimeTZ, b.putbuf[4:4])
+				b.putInt32(int32(len(s)))
+				b.write(s)
 
-	case *tree.DBox2D:
-		s := v.Repr()
-		b.putInt32(int32(len(s)))
-		b.write([]byte(s))
+			case *tree.DBox2D:
+				s := v.Repr()
+				b.putInt32(int32(len(s)))
+				b.write([]byte(s))
 
-	case *tree.DGeography:
-		s := v.Geography.EWKBHex()
-		b.putInt32(int32(len(s)))
-		b.write([]byte(s))
+			case *tree.DGeography:
+				s := v.Geography.EWKBHex()
+				b.putInt32(int32(len(s)))
+				b.write([]byte(s))
 
-	case *tree.DGeometry:
-		s := v.Geometry.EWKBHex()
-		b.putInt32(int32(len(s)))
-		b.write([]byte(s))
+			case *tree.DGeometry:
+				s := v.Geometry.EWKBHex()
+				b.putInt32(int32(len(s)))
+				b.write([]byte(s))
 
-	case *tree.DTimestamp:
-		writeTextTimestamp(b, v.Time)
+			case *tree.DTimestamp:
+				writeTextTimestamp(b, v.Time)
 
-	case *tree.DTimestampTZ:
-		writeTextTimestampTZ(b, v.Time, sessionLoc)
+			case *tree.DTimestampTZ:
+				writeTextTimestampTZ(b, v.Time, sessionLoc)
 
-	case *tree.DInterval:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DInterval:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DJSON:
-		b.writeLengthPrefixedString(v.JSON.String())
+			case *tree.DJSON:
+				b.writeLengthPrefixedString(v.JSON.String())
 
-	case *tree.DTuple:
-		b.textFormatter.FormatNode(v)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DTuple:
+				b.textFormatter.FormatNode(v)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DArray:
-		// Arrays have custom formatting depending on their OID.
-		b.textFormatter.FormatNode(d)
-		b.writeFromFmtCtx(b.textFormatter)
+			case *tree.DArray:
+				// Arrays have custom formatting depending on their OID.
+				b.textFormatter.FormatNode(d)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case *tree.DOid:
-		b.writeLengthPrefixedDatum(v)
+			case *tree.DOid:
+				b.writeLengthPrefixedDatum(v)
 
-	case *tree.DEnum:
-		// Enums are serialized with their logical representation.
-		b.writeLengthPrefixedString(v.LogicalRep)
+			case *tree.DEnum:
+				// Enums are serialized with their logical representation.
+				b.writeLengthPrefixedString(v.LogicalRep)
 
-	default:
-		b.setError(errors.Errorf("unsupported type %T", d))
-	}
+			default:
+				b.setError(errors.Errorf("unsupported type %T", d))
+			}
+		})
 }
 
 // getInt64 returns an int64 from vectors of Int family.
@@ -281,64 +285,69 @@ func (b *writeBuffer) writeTextColumnarElement(
 	conv sessiondatapb.DataConversionConfig,
 	sessionLoc *time.Location,
 ) {
-	if log.V(2) {
-		log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", vec.Type())
-	}
-	if vec.MaybeHasNulls() && vec.Nulls().NullAt(idx) {
-		// NULL is encoded as -1; all other values have a length prefix.
-		b.putInt32(-1)
-		return
-	}
-	switch vec.Type().Family() {
-	case types.BoolFamily:
-		writeTextBool(b, vec.Bool().Get(idx))
+	b.textFormatter.WithDataConversionConfig(
+		conv,
+		func() {
+			if log.V(2) {
+				log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", vec.Type())
+			}
+			if vec.MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+				// NULL is encoded as -1; all other values have a length prefix.
+				b.putInt32(-1)
+				return
+			}
+			switch vec.Type().Family() {
+			case types.BoolFamily:
+				writeTextBool(b, vec.Bool().Get(idx))
 
-	case types.IntFamily:
-		writeTextInt64(b, getInt64(vec, idx))
+			case types.IntFamily:
+				writeTextInt64(b, getInt64(vec, idx))
 
-	case types.FloatFamily:
-		writeTextFloat64(b, vec.Float64().Get(idx), conv)
+			case types.FloatFamily:
+				writeTextFloat64(b, vec.Float64().Get(idx), conv)
 
-	case types.DecimalFamily:
-		d := vec.Decimal().Get(idx)
-		// The logic here is the simplification of tree.DDecimal.Format given
-		// that we use tree.FmtSimple.
-		b.writeLengthPrefixedString(d.String())
+			case types.DecimalFamily:
+				d := vec.Decimal().Get(idx)
+				// The logic here is the simplification of tree.DDecimal.Format given
+				// that we use tree.FmtSimple.
+				b.writeLengthPrefixedString(d.String())
 
-	case types.BytesFamily:
-		writeTextBytes(b, string(vec.Bytes().Get(idx)), conv)
+			case types.BytesFamily:
+				writeTextBytes(b, string(vec.Bytes().Get(idx)), conv)
 
-	case types.UuidFamily:
-		id, err := uuid.FromBytes(vec.Bytes().Get(idx))
-		if err != nil {
-			panic(errors.Wrap(err, "unexpectedly couldn't retrieve UUID object"))
-		}
-		writeTextUUID(b, id)
+			case types.UuidFamily:
+				id, err := uuid.FromBytes(vec.Bytes().Get(idx))
+				if err != nil {
+					panic(errors.Wrap(err, "unexpectedly couldn't retrieve UUID object"))
+				}
+				writeTextUUID(b, id)
 
-	case types.StringFamily:
-		writeTextString(b, string(vec.Bytes().Get(idx)), vec.Type())
+			case types.StringFamily:
+				writeTextString(b, string(vec.Bytes().Get(idx)), vec.Type())
 
-	case types.DateFamily:
-		tree.FormatDate(pgdate.MakeCompatibleDateFromDisk(vec.Int64().Get(idx)), b.textFormatter)
-		b.writeFromFmtCtx(b.textFormatter)
+			case types.DateFamily:
+				tree.FormatDate(pgdate.MakeCompatibleDateFromDisk(vec.Int64().Get(idx)), b.textFormatter)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case types.TimestampFamily:
-		writeTextTimestamp(b, vec.Timestamp().Get(idx))
+			case types.TimestampFamily:
+				writeTextTimestamp(b, vec.Timestamp().Get(idx))
 
-	case types.TimestampTZFamily:
-		writeTextTimestampTZ(b, vec.Timestamp().Get(idx), sessionLoc)
+			case types.TimestampTZFamily:
+				writeTextTimestampTZ(b, vec.Timestamp().Get(idx), sessionLoc)
 
-	case types.IntervalFamily:
-		tree.FormatDuration(vec.Interval().Get(idx), b.textFormatter)
-		b.writeFromFmtCtx(b.textFormatter)
+			case types.IntervalFamily:
+				tree.FormatDuration(vec.Interval().Get(idx), b.textFormatter)
+				b.writeFromFmtCtx(b.textFormatter)
 
-	case types.JsonFamily:
-		b.writeLengthPrefixedString(vec.JSON().Get(idx).String())
+			case types.JsonFamily:
+				b.writeLengthPrefixedString(vec.JSON().Get(idx).String())
 
-	default:
-		// All other types are represented via the datum-backed vector.
-		writeTextDatumNotNull(b, vec.Datum().Get(idx).(*coldataext.Datum).Datum, conv, sessionLoc, vec.Type())
-	}
+			default:
+				// All other types are represented via the datum-backed vector.
+				writeTextDatumNotNull(b, vec.Datum().Get(idx).(*coldataext.Datum).Datum, conv, sessionLoc, vec.Type())
+			}
+		},
+	)
 }
 
 func writeBinaryBool(b *writeBuffer, v bool) {

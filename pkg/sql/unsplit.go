@@ -51,7 +51,7 @@ func (n *unsplitNode) Next(params runParams) (bool, error) {
 	}
 
 	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
-		ctx := tree.NewFmtCtx(tree.FmtSimple)
+		ctx := params.p.EvalContext().FmtCtx(tree.FmtSimple)
 		row.Format(ctx)
 		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", ctx)
 	}

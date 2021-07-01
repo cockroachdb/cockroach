@@ -74,7 +74,7 @@ func ShowCreateTable(
 ) (string, error) {
 	a := &rowenc.DatumAlloc{}
 
-	f := tree.NewFmtCtx(tree.FmtSimple)
+	f := p.ExtendedEvalContext().FmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
 	if desc.IsTemporary() {
 		f.WriteString("TEMP ")

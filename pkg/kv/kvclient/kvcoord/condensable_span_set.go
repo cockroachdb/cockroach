@@ -75,6 +75,8 @@ func (s *condensableSpanSet) mergeAndSort() {
 // limit. Condensing is only performed at the level of individual ranges, not
 // across ranges, so it's possible to not be able to condense as much as
 // desired.
+//
+// maxBytes <= 0 means that each range will be maximally condensed.
 func (s *condensableSpanSet) maybeCondense(
 	ctx context.Context, riGen rangeIteratorFactory, maxBytes int64,
 ) bool {

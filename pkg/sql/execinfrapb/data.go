@@ -75,7 +75,7 @@ func ConvertToMappedSpecOrdering(
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
 func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
-	fmtCtx := tree.NewFmtCtx(
+	fmtCtx := evalCtx.FmtCtx(
 		tree.FmtCheckEquivalence,
 		tree.FmtPlaceholderFormat(
 			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {

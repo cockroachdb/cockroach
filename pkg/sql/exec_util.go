@@ -482,6 +482,20 @@ var disallowFullTableScans = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+// intervalStyle controls intervals representation.
+var intervalStyle = settings.RegisterEnumSetting(
+	"sql.defaults.intervalstyle",
+	"default value for IntervalStyle session setting",
+	strings.ToLower(duration.IntervalStyle_POSTGRES.String()),
+	func() map[int64]string {
+		ret := make(map[int64]string, len(duration.IntervalStyle_name))
+		for k, v := range duration.IntervalStyle_name {
+			ret[int64(k)] = strings.ToLower(v)
+		}
+		return ret
+	}(),
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -2473,6 +2487,11 @@ func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplayS
 // initSequenceCache creates an empty sequence cache instance for the session.
 func (m *sessionDataMutator) initSequenceCache() {
 	m.data.SequenceCache = sessiondata.SequenceCache{}
+}
+
+// SetIntervalStyle sets the IntervalStyle for the given session.
+func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
+	m.data.DataConversionConfig.IntervalStyle = style
 }
 
 // SetStubCatalogTableEnabled sets default value for stub_catalog_tables.

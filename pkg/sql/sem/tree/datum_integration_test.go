@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1104,7 +1105,11 @@ func TestAllTypesAsJSON(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		d := tree.SampleDatum(typ)
-		_, err := tree.AsJSON(d, time.UTC)
+		_, err := tree.AsJSON(
+			d,
+			sessiondatapb.DataConversionConfig{},
+			time.UTC,
+		)
 		if err != nil {
 			t.Errorf("couldn't convert %s to JSON: %s", d, err)
 		}

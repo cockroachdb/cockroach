@@ -1311,7 +1311,7 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	// We use tree.FormatNode merely as a traversal method; its output buffer is
 	// discarded immediately after the traversal because it is not needed
 	// further.
-	f := tree.NewFmtCtx(
+	f := evalCtx.FmtCtx(
 		tree.FmtSerializable,
 		tree.FmtReformatTableNames(
 			func(_ *tree.FmtCtx, tn *tree.TableName) {
@@ -1328,7 +1328,7 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 	f.Close()
 
 	// Substitute placeholders with their values.
-	ctx := tree.NewFmtCtx(
+	ctx := evalCtx.FmtCtx(
 		tree.FmtSerializable,
 		tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 			d, err := placeholder.Eval(evalCtx)

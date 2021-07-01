@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -168,7 +169,11 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 			return nil, err
 		}
 		var err error
-		jsonEntries[i], err = tree.AsJSON(datum.Datum, time.UTC)
+		jsonEntries[i], err = tree.AsJSON(
+			datum.Datum,
+			sessiondatapb.DataConversionConfig{},
+			time.UTC,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +208,11 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 				return nil, err
 			}
 			var err error
-			after[col.GetName()], err = tree.AsJSON(datum.Datum, time.UTC)
+			after[col.GetName()], err = tree.AsJSON(
+				datum.Datum,
+				sessiondatapb.DataConversionConfig{},
+				time.UTC,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -220,7 +229,11 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 				return nil, err
 			}
 			var err error
-			before[col.GetName()], err = tree.AsJSON(datum.Datum, time.UTC)
+			before[col.GetName()], err = tree.AsJSON(
+				datum.Datum,
+				sessiondatapb.DataConversionConfig{},
+				time.UTC,
+			)
 			if err != nil {
 				return nil, err
 			}
