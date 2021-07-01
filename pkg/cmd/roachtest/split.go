@@ -131,7 +131,7 @@ func registerLoadSplits(r *testRegistry) {
 // splits occur in different workload scenarios.
 func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params splitParams) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Put(ctx, workload, "./workload", c.Node(1))
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	c.Start(ctx, c.All())
 
 	m := newMonitor(ctx, c, c.All())
@@ -247,7 +247,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	rows := size / rowEstimate
 
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Put(ctx, workload, "./workload", c.All())
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	c.Start(ctx, c.All())
 
 	m := newMonitor(ctx, c, c.All())

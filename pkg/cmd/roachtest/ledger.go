@@ -34,7 +34,7 @@ func registerLedger(r *testRegistry) {
 			loadNode := c.Node(nodes + 1)
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-			c.Put(ctx, workload, "./workload", loadNode)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 			c.Start(ctx, roachNodes)
 
 			t.Status("running workload")

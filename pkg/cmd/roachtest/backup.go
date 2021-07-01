@@ -62,7 +62,7 @@ func importBankDataSplit(
 		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
 
-	c.Put(ctx, workload, "./workload")
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// NB: starting the cluster creates the logs dir as a side effect,
@@ -347,7 +347,7 @@ func registerBackup(r *testRegistry) {
 			// Randomize starting with encryption-at-rest enabled.
 			c.EncryptAtRandom(true)
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Put(ctx, workload, "./workload")
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 			c.Start(ctx)
 			conn := c.Conn(ctx, 1)
 

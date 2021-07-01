@@ -56,7 +56,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 
 	t.Status("copying binaries")
 	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-	c.Put(ctx, workload, "./workload", loadNode)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	filename := b.benchType
 	t.Status(fmt.Sprintf("downloading %s query file from %s", filename, b.url))

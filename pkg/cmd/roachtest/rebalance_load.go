@@ -59,7 +59,7 @@ func registerRebalanceLoad(r *testRegistry) {
 			"--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, roachNodes, args)
 
-		c.Put(ctx, workload, "./workload", appNode)
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
 
 		var m *errgroup.Group // see comment in version.go

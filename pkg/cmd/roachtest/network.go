@@ -101,7 +101,7 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	n := origC.Spec().NodeCount
 	serverNodes, workerNode := origC.Range(1, n-1), origC.Node(n)
 	origC.Put(ctx, t.Cockroach(), "./cockroach", origC.All())
-	origC.Put(ctx, workload, "./workload", origC.All())
+	origC.Put(ctx, t.DeprecatedWorkload(), "./workload", origC.All())
 
 	c, err := Toxify(ctx, t, origC, serverNodes)
 	if err != nil {

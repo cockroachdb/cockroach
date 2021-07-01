@@ -120,7 +120,7 @@ func setupTPCC(
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			// We still use bare workload, though we could likely replace
 			// those with ./cockroach workload as well.
-			c.Put(ctx, workload, "./workload", workloadNode)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			c.Start(ctx, crdbNodes)
 		}
 	}

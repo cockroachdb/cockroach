@@ -45,7 +45,7 @@ func registerYCSB(r *testRegistry) {
 		}
 
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 		waitForFullReplication(t, c.Conn(ctx, 1))
 

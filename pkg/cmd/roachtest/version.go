@@ -33,7 +33,7 @@ func registerVersion(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.

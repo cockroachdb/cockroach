@@ -35,7 +35,7 @@ func registerHotSpotSplits(r *testRegistry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 		c.Start(ctx, roachNodes)
 
-		c.Put(ctx, workload, "./workload", appNode)
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
 
 		var m *errgroup.Group // see comment in version.go

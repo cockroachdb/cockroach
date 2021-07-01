@@ -44,7 +44,7 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Stage workload on all nodes as the load node to run workload is chosen
 		// randomly.
-		u.c.Put(ctx, workload, "./workload", u.c.All())
+		u.c.Put(ctx, t.DeprecatedWorkload(), "./workload", u.c.All())
 		u.c.Run(ctx, u.c.All(), "./workload init schemachange")
 	}
 }
