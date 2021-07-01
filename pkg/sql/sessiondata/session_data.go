@@ -152,6 +152,12 @@ type SessionData struct {
 	SynchronousCommit bool
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
+
+	// ExperimentalComputedColumnRewrites allows automatic rewriting of computed
+	// column expressions in CREATE TABLE and ALTER TABLE statements. See the
+	// experimentalComputedColumnRewrites cluster setting for a description of the
+	// format.
+	ExperimentalComputedColumnRewrites string
 }
 
 // IsTemporarySchemaID returns true if the given ID refers to any of the temp
