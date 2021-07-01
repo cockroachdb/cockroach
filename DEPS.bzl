@@ -4235,6 +4235,7 @@ def go_deps():
         sum = "h1:a9tsXlIDD9SKxotJMK3niV7rPZAJeX2aD/0yg3qlIrg=",
         version = "v7.5.0",
     )
+
     go_repository(
         name = "in_gopkg_jcmturner_rpc_v1",
         build_file_proto_mode = "disable_global",
