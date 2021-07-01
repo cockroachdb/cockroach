@@ -72,7 +72,6 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #
 # gazelle:exclude _bazel
 # gazelle:exclude c-deps/krb5
-# gazelle:exclude c-deps/protobuf
 # gazelle:exclude artifacts
 # gazelle:exclude vendor
 # gazelle:exclude .vendor.tmp.*

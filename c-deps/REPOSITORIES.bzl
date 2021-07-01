@@ -11,11 +11,6 @@ BUILD_ALL_CONTENT = """filegroup(name = "all", srcs = glob(["**"]), visibility =
 # building those libraries require certain checked out repositories being
 # placed relative to the source tree of the library itself.
 
-# For c-deps/protobuf, we elide a checked in generated file. Already generated
-# files are read-only in the bazel sandbox, so bazel is unable to regenerate
-# the same files, which the build process requires it to do so.
-BUILD_PROTOBUF_CONTENT = """filegroup(name = "all", srcs = glob(["**"], exclude=["src/google/protobuf/compiler/js/well_known_types_embed.cc"]), visibility = ["//visibility:public"])"""
-
 # This is essentially the same above, we elide a generated file to avoid
 # permission issues when building jemalloc within the bazel sandbox.
 BUILD_JEMALLOC_CONTENT = """filegroup(name = "all", srcs = glob(["**"], exclude=["configure"]), visibility = ["//visibility:public"])"""
@@ -36,11 +31,6 @@ def c_deps():
         name = "geos",
         path = "c-deps/geos",
         build_file_content = BUILD_ALL_CONTENT,
-    )
-    native.new_local_repository(
-        name = "protobuf",
-        path = "c-deps/protobuf",
-        build_file_content = BUILD_PROTOBUF_CONTENT,
     )
     native.new_local_repository(
         name = "jemalloc",
