@@ -125,6 +125,11 @@ func MakeSimpleTableDescriptor(
 			*tree.UniqueConstraintTableDef:
 			// ignore
 		case *tree.ColumnTableDef:
+			if def.IsComputed() && def.IsVirtual() {
+				return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
+					"to import into a table with virtual computed columns, use IMPORT INTO")
+			}
+
 			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, &create.Table); err != nil {
 				return nil, err
 			}

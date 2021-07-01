@@ -4504,12 +4504,28 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 			expectedError: "to use computed columns, use IMPORT INTO",
 		},
 		{
+			into:          false,
+			name:          "import-table-csv-virtual",
+			data:          "35,23\n67,10",
+			create:        "a INT, c INT AS (a + b) VIRTUAL, b INT",
+			format:        "CSV",
+			expectedError: "to import into a table with virtual computed columns, use IMPORT INTO",
+		},
+		{
 			into:            false,
 			name:            "import-table-avro",
 			data:            avroData,
 			create:          "a INT, c INT AS (a + b) STORED, b INT",
 			format:          "AVRO",
 			expectedResults: [][]string{{"1", "3", "2"}, {"3", "7", "4"}},
+		},
+		{
+			into:          false,
+			name:          "import-table-avro-virtual",
+			data:          avroData,
+			create:        "a INT, c INT AS (a + b) VIRTUAL, b INT",
+			format:        "AVRO",
+			expectedError: "to import into a table with virtual computed columns, use IMPORT INTO",
 		},
 		{
 			into:            false,
