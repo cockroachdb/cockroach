@@ -369,5 +369,6 @@ func makeTenantSQLServerArgs(
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
+		regionsServer:            tenantConnect,
 	}, nil
 }

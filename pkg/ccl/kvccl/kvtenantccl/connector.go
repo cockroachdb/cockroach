@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -64,11 +65,17 @@ type Connector struct {
 
 	mu struct {
 		syncutil.RWMutex
-		client               roachpb.InternalClient
+		client               *client
 		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
 		systemConfig         *config.SystemConfig
 		systemConfigChannels []chan<- struct{}
 	}
+}
+
+// client represents an RPC client that proxies to a KV instance.
+type client struct {
+	roachpb.InternalClient
+	serverpb.StatusClient
 }
 
 // Connector is capable of providing information on each of the KV nodes in the
@@ -89,6 +96,11 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // the need for SQL-only tenant processes to join the cluster-wide gossip
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
+
+// Connector is capable of find the region of every node in the cluster.
+// This is necessary for region validation for zone configurations and
+// multi-region primitives.
+var _ serverpb.RegionsServer = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -346,6 +358,21 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
+// Regions implements the serverpb.RegionsServer interface.
+func (c *Connector) Regions(
+	ctx context.Context, req *serverpb.RegionsRequest,
+) (*serverpb.RegionsResponse, error) {
+	ctx = c.AnnotateCtx(ctx)
+	for ctx.Err() == nil {
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		return client.Regions(ctx, req)
+	}
+	return nil, ctx.Err()
+}
+
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
 func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
@@ -355,7 +382,7 @@ func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 // not, the method attempts to dial one of the configured addresses. The method
 // blocks until either a connection is successfully established or the provided
 // context is canceled.
-func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, error) {
+func (c *Connector) getClient(ctx context.Context) (*client, error) {
 	c.mu.RLock()
 	if client := c.mu.client; client != nil {
 		c.mu.RUnlock()
@@ -365,7 +392,7 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 		dialCtx := c.AnnotateCtx(context.Background())
 		dialCtx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(dialCtx)
 		defer cancel()
-		var client roachpb.InternalClient
+		var client *client
 		err := c.rpcContext.Stopper.RunTaskWithErr(dialCtx, "kvtenant.Connector: dial",
 			func(ctx context.Context) error {
 				var err error
@@ -387,7 +414,7 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 		if res.Err != nil {
 			return nil, res.Err
 		}
-		return res.Val.(roachpb.InternalClient), nil
+		return res.Val.(*client), nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -395,7 +422,7 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 
 // dialAddrs attempts to dial each of the configured addresses in a retry loop.
 // The method will only return a non-nil error on context cancellation.
-func (c *Connector) dialAddrs(ctx context.Context) (roachpb.InternalClient, error) {
+func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 	for r := retry.StartWithCtx(ctx, c.rpcRetryOptions); r.Next(); {
 		// Try each address on each retry iteration.
 		randStart := rand.Intn(len(c.addrs))
@@ -406,7 +433,10 @@ func (c *Connector) dialAddrs(ctx context.Context) (roachpb.InternalClient, erro
 				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
 				continue
 			}
-			return roachpb.NewInternalClient(conn), nil
+			return &client{
+				InternalClient: roachpb.NewInternalClient(conn),
+				StatusClient:   serverpb.NewStatusClient(conn),
+			}, nil
 		}
 	}
 	return nil, ctx.Err()
