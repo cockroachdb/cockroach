@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -38,8 +40,15 @@ import (
 type MembershipCache struct {
 	syncutil.Mutex
 	tableVersion descpb.DescriptorVersion
+	boundAccount mon.BoundAccount
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[security.SQLUsername]userRoleMembership
+}
+
+func NewMembershipCache(account mon.BoundAccount) *MembershipCache {
+	return &MembershipCache{
+		boundAccount: account,
+	}
 }
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
@@ -334,6 +343,7 @@ func (p *planner) MemberOfWithAdminOption(
 			// Update version and drop the map.
 			roleMembersCache.tableVersion = tableVersion
 			roleMembersCache.userCache = make(map[security.SQLUsername]userRoleMembership)
+			roleMembersCache.boundAccount.Empty(ctx)
 		}
 
 		userMapping, ok := roleMembersCache.userCache[member]
@@ -361,6 +371,14 @@ func (p *planner) MemberOfWithAdminOption(
 
 		// Table version remains the same: update map, unlock, return.
 		roleMembersCache.userCache[member] = memberships
+
+		const sizeOfBool = int64(unsafe.Sizeof(true))
+		sizeOfEntry := int64(len(member.Normalized()))
+		for m := range memberships {
+			sizeOfEntry += int64(len(m.Normalized()))
+			sizeOfEntry += sizeOfBool
+		}
+		roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry)
 		roleMembersCache.Unlock()
 		return memberships, nil
 	}

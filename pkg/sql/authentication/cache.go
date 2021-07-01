@@ -12,6 +12,7 @@ package authentication
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -42,6 +44,7 @@ type AuthInfoCache struct {
 	syncutil.Mutex
 	usersTableVersion       descpb.DescriptorVersion
 	roleOptionsTableVersion descpb.DescriptorVersion
+	boundAccount            mon.BoundAccount
 	// cache is a mapping from username to AuthInfo.
 	cache map[security.SQLUsername]AuthInfo
 }
@@ -56,6 +59,12 @@ type AuthInfo struct {
 	HashedPassword []byte
 	// ValidUntil is the VALID UNTIL role option.
 	ValidUntil *tree.DTimestamp
+}
+
+func New(account mon.BoundAccount) *AuthInfoCache {
+	return &AuthInfoCache{
+		boundAccount: account,
+	}
 }
 
 // Get consults the AuthInfoCache and returns the AuthInfo for the provided
@@ -120,11 +129,13 @@ func (a *AuthInfoCache) Get(
 						// Update users table version and drop the map.
 						a.usersTableVersion = usersTableVersion
 						a.cache = make(map[security.SQLUsername]AuthInfo)
+						a.boundAccount.Empty(ctx)
 					}
 					if a.roleOptionsTableVersion != roleOptionsTableVersion {
 						// Update role_optiosn table version and drop the map.
 						a.roleOptionsTableVersion = roleOptionsTableVersion
 						a.cache = make(map[security.SQLUsername]AuthInfo)
+						a.boundAccount.Empty(ctx)
 					}
 					aInfo, found = a.cache[normalizedUsername]
 					return aInfo, found
@@ -155,6 +166,11 @@ func (a *AuthInfoCache) Get(
 					}
 					// Table version remains the same: update map, unlock, return.
 					a.cache[normalizedUsername] = aInfo
+					const sizeOfAuthInfo = int(unsafe.Sizeof(AuthInfo{}))
+					const sizeOfTimestamp = int(unsafe.Sizeof(tree.DTimestamp{}))
+					sizeOfEntry := len(normalizedUsername.Normalized()) +
+						sizeOfAuthInfo + len(aInfo.HashedPassword) + sizeOfTimestamp
+					a.boundAccount.Grow(ctx, int64(sizeOfEntry))
 					return true
 				}()
 				if updatedCache {
