@@ -8,7 +8,7 @@ INSERT INTO d.t VALUES (1), (2), (3);
 ----
 
 query-sql
-SELECT region FROM [SHOW REGIONS FROM DATABASE d];
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
 ----
 eu-central-1
 us-east-1
