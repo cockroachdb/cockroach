@@ -162,6 +162,45 @@ func FormatExprForDisplay(
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (string, error) {
+	return formatExprForDisplayImpl(
+		ctx,
+		desc,
+		exprStr,
+		semaCtx,
+		fmtFlags,
+		false, /* wrapNonFuncExprs */
+	)
+}
+
+// FormatExprForExpressionIndexDisplay formats an expression index's expression
+// element string for display. It is similar to FormatExprForDisplay. The only
+// difference is that non-function expressions will be wrapped in parentheses to
+// match the parsing requirements for expression indexes.
+func FormatExprForExpressionIndexDisplay(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	exprStr string,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
+) (string, error) {
+	return formatExprForDisplayImpl(
+		ctx,
+		desc,
+		exprStr,
+		semaCtx,
+		fmtFlags,
+		true, /* wrapNonFuncExprs */
+	)
+}
+
+func formatExprForDisplayImpl(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	exprStr string,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
+	wrapNonFuncExprs bool,
+) (string, error) {
 	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx, fmtFlags)
 	if err != nil {
 		return "", err
@@ -171,7 +210,16 @@ func FormatExprForDisplay(
 	if err != nil {
 		return "", err
 	}
-	return tree.AsStringWithFlags(replacedExpr, fmtFlags), nil
+	f := tree.NewFmtCtx(fmtFlags)
+	_, isFunc := expr.(*tree.FuncExpr)
+	if wrapNonFuncExprs && !isFunc {
+		f.WriteByte('(')
+	}
+	f.FormatNode(replacedExpr)
+	if wrapNonFuncExprs && !isFunc {
+		f.WriteByte(')')
+	}
+	return f.CloseAndGetString(), nil
 }
 
 func deserializeExprForFormatting(

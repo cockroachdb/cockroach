@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -817,7 +818,9 @@ func populateTableConstraints(
 					return err
 				}
 				f.WriteString("UNIQUE (")
-				con.Index.ColNamesFormat(f)
+				if err := catformat.FormatIndexElements(ctx, table, con.Index, f, p.SemaCtx()); err != nil {
+					return err
+				}
 				f.WriteByte(')')
 				if con.Index.IsPartial() {
 					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
@@ -1592,6 +1595,17 @@ func indexDefFromDescriptor(
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
 		}
+		col, err := table.FindColumnWithName(tree.Name(name))
+		if err != nil {
+			return "", err
+		}
+		if col.IsExpressionIndexColumn() {
+			expr, err := parser.ParseExpr(col.GetComputeExpr())
+			if err != nil {
+				return "", err
+			}
+			elem.Expr = expr
+		}
 		if index.GetKeyColumnDirection(index.ExplicitColumnStartIdx()+i) == descpb.IndexDescriptor_DESC {
 			elem.Direction = tree.Descending
 		}
@@ -1632,9 +1646,6 @@ func indexDefFromDescriptor(
 	if index.IsPartial() {
 		// Format the raw predicate for display in order to resolve user-defined
 		// types to a human readable form.
-		//
-		// TODO(mgartner): Avoid parsing the predicate expression twice. It is
-		// parsed in schemaexpr.FormatExprForDisplay and again here.
 		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.GetPredicate(), p.SemaCtx(), tree.FmtPGCatalog)
 		if err != nil {
 			return "", err

@@ -18,13 +18,9 @@ go_library(
 go_test(
     name = "catformat_test",
     size = "small",
-    srcs = [
-        "index_test.go",
-        "testutils_test.go",
-    ],
+    srcs = ["index_test.go"],
     embed = [":catformat"],
     deps = [
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/sem/tree",

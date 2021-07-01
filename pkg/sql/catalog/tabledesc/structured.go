@@ -142,20 +142,60 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 	return len(desc.Families), nil
 }
 
-// buildIndexName sets desc.Name to a value that is not EqualName to any
-// of tableDesc's indexes. allocateName roughly follows PostgreSQL's
-// convention for automatically-named indexes.
-func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
+// buildIndexName returns an index name that is not equal to any
+// of tableDesc's indexes, roughly following Postgres's conventions for naming
+// anonymous indexes. For example:
+//
+//   CREATE INDEX ON t (a)
+//   => t_a_idx
+//
+//   CREATE UNIQUE INDEX ON t (a, b)
+//   => t_a_b_key
+//
+//   CREATE INDEX ON t ((a + b), c, lower(d))
+//   => t_expr_c_expr1_idx
+//
+func buildIndexName(tableDesc *Mutable, index catalog.Index) (string, error) {
 	idx := index.IndexDesc()
+
+	// An index name has a segment for the table name, each key column, and a
+	// final word (either "idx" or "key").
 	segments := make([]string, 0, len(idx.KeyColumnNames)+2)
+
+	// Add the table name segment.
 	segments = append(segments, tableDesc.Name)
-	segments = append(segments, idx.KeyColumnNames[idx.ExplicitColumnStartIdx():]...)
+
+	// Add the key column segments. For inaccessible columns, use "expr" as the
+	// segment. If there are multiple inaccessible columns, add an incrementing
+	// integer suffix.
+	exprCount := 0
+	for i, n := idx.ExplicitColumnStartIdx(), len(idx.KeyColumnNames); i < n; i++ {
+		var segmentName string
+		col, err := tableDesc.FindColumnWithName(tree.Name(idx.KeyColumnNames[i]))
+		if err != nil {
+			return "", err
+		}
+		if col.IsExpressionIndexColumn() {
+			if exprCount == 0 {
+				segmentName = "expr"
+			} else {
+				segmentName = fmt.Sprintf("expr%d", exprCount)
+			}
+			exprCount++
+		} else {
+			segmentName = idx.KeyColumnNames[i]
+		}
+		segments = append(segments, segmentName)
+	}
+
+	// Add the final segment.
 	if idx.Unique {
 		segments = append(segments, "key")
 	} else {
 		segments = append(segments, "idx")
 	}
 
+	// Append digits to the index name to make it unique, if necessary.
 	baseName := strings.Join(segments, "_")
 	name := baseName
 	for i := 1; ; i++ {
@@ -166,7 +206,7 @@ func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
 		name = fmt.Sprintf("%s%d", baseName, i)
 	}
 
-	return name
+	return name, nil
 }
 
 // AllActiveAndInactiveChecks returns all check constraints, including both
@@ -636,12 +676,19 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	}
 
 	// Assign names to unnamed indexes.
-	_ = catalog.ForEachDeletableNonPrimaryIndex(desc, func(idx catalog.Index) error {
+	err := catalog.ForEachDeletableNonPrimaryIndex(desc, func(idx catalog.Index) error {
 		if len(idx.GetName()) == 0 {
-			idx.IndexDesc().Name = buildIndexName(desc, idx)
+			name, err := buildIndexName(desc, idx)
+			if err != nil {
+				return err
+			}
+			idx.IndexDesc().Name = name
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	var compositeColIDs catalog.TableColSet
 	for i := range desc.Columns {
@@ -973,15 +1020,29 @@ func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
 // PrimaryKeyString returns the pretty-printed primary key declaration for a
 // table descriptor.
 func (desc *wrapper) PrimaryKeyString() string {
-	var primaryKeyString strings.Builder
-	primaryKeyString.WriteString("PRIMARY KEY (%s)")
-	if desc.PrimaryIndex.IsSharded() {
-		fmt.Fprintf(&primaryKeyString, " USING HASH WITH BUCKET_COUNT = %v",
-			desc.PrimaryIndex.Sharded.ShardBuckets)
+	primaryIdx := &desc.PrimaryIndex
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.WriteString("PRIMARY KEY (")
+	startIdx := primaryIdx.ExplicitColumnStartIdx()
+	for i, n := startIdx, len(primaryIdx.KeyColumnNames); i < n; i++ {
+		if i > startIdx {
+			f.WriteString(", ")
+		}
+		// Primary key columns cannot be inaccessible computed columns, so it is
+		// safe to always print the column name. For secondary indexes, we have
+		// to print inaccessible computed column expressions. See
+		// catformat.FormatIndexElements.
+		f.FormatNameP(&primaryIdx.KeyColumnNames[i])
+		f.WriteByte(' ')
+		f.WriteString(primaryIdx.KeyColumnDirections[i].String())
 	}
-	return fmt.Sprintf(primaryKeyString.String(),
-		desc.PrimaryIndex.ColNamesString(),
-	)
+	f.WriteByte(')')
+	if desc.PrimaryIndex.IsSharded() {
+		f.WriteString(
+			fmt.Sprintf(" USING HASH WITH BUCKET_COUNT = %v", primaryIdx.Sharded.ShardBuckets),
+		)
+	}
+	return f.CloseAndGetString()
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
