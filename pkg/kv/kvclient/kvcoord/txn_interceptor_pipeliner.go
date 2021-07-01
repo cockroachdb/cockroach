@@ -344,6 +344,15 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 // canUseAsyncConsensus checks the conditions necessary for this batch to be
 // allowed to set the AsyncConsensus flag.
 func (tp *txnPipeliner) canUseAsyncConsensus(ba roachpb.BatchRequest) bool {
+	// Short-circuit for EndTransactions; it's common enough to have batches
+	// containing a prefix of writes (which, by themselves, are all eligible for
+	// async consensus) and then an EndTxn (which is not eligible). Note that
+	// ba.GetArg() is efficient for EndTransactions, having its own internal
+	// optimization.
+	if _, hasET := ba.GetArg(roachpb.EndTxn); hasET {
+		return false
+	}
+
 	if !pipelinedWritesEnabled.Get(&tp.st.SV) || tp.disabled {
 		return false
 	}
