@@ -221,7 +221,7 @@ func (s *Storage) isAlive(
 		// of the first context cancels other callers to the `acquireNodeLease()` method,
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
 		// happened.
-		newCtx, cancel := s.stopper.WithCancelOnQuiesce(
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(
 			logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
 		)
 		defer cancel()
