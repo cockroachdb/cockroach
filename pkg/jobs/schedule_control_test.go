@@ -12,7 +12,9 @@ package jobs
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -116,6 +119,23 @@ func TestScheduleControl(t *testing.T) {
 
 		th.sqlDB.Exec(t, "DROP SCHEDULES "+querySchedules)
 		require.Equal(t, 0, len(th.sqlDB.QueryStr(t, querySchedules)))
+	})
+
+	t.Run("pause-non-privileged-user", func(t *testing.T) {
+		scheduleID := makeSchedule("one-schedule", "@daily")
+
+		th.sqlDB.Exec(t, `CREATE USER testuser`)
+		pgURL, cleanupFunc := sqlutils.PGUrl(
+			t, th.server.ServingSQLAddr(), "NonPrivileged-testuser",
+			url.User("testuser"),
+		)
+		defer cleanupFunc()
+		testuser, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		defer testuser.Close()
+
+		_, err = testuser.Exec("PAUSE SCHEDULE $1", scheduleID)
+		require.EqualError(t, err, "pq: only users with the admin role are allowed to PAUSE SCHEDULES")
 	})
 }
 
