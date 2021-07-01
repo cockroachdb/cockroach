@@ -1260,7 +1260,7 @@ GOGO_PROTOBUF_PATH := ./vendor/github.com/gogo/protobuf
 
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
-PROMETHEUS_PATH := ./vendor/github.com/prometheus
+PROMETHEUS_PATH := ./vendor/github.com/prometheus/client_model
 
 ERRORS_PATH := ./vendor/github.com/cockroachdb/errors
 ERRORS_PROTO := $(ERRORS_PATH)/errorspb/errors.proto

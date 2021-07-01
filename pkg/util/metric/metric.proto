@@ -14,13 +14,13 @@ package cockroach.util.metric;
 option go_package = "metric";
 
 import "gogoproto/gogo.proto";
-import "client_model/metrics.proto";
+import "io/prometheus/client/metrics.proto";
 
 // metric.LabelPair is a proxy for io.prometheus.client.LabelPair.
 // io.prometheus.client.LabelPair doesn't support gogoproto.marshaler
 // and gogoproto.unmarshaler which are required by gRPC. metric.LabelPair
 // stores information that is similarly structured, supports the requisite
-// gogoproto options, and is convertible to io.prometheus.client.LabelPair 
+// gogoproto options, and is convertible to io.prometheus.client.LabelPair
 // to satisfy PrometheusExportable's GetLabels method.
 message LabelPair {
   optional string name  = 1;
@@ -43,10 +43,10 @@ enum Unit {
   PERCENT = 5;
   // SECONDS expresses that the metric's measurement is in seconds.
   SECONDS = 6;
-  // TIMESTAMP_NS expresses that the metric's measurement is a time since the 
+  // TIMESTAMP_NS expresses that the metric's measurement is a time since the
   // Unix epoch in nanoseconds.
   TIMESTAMP_NS = 7;
-  // TIMESTAMP_SEC expresses that the metric's measurement is a time since the 
+  // TIMESTAMP_SEC expresses that the metric's measurement is a time since the
   // Unix epoch in seconds.
   TIMESTAMP_SEC = 8;
 }

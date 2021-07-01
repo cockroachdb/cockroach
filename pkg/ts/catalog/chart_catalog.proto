@@ -15,7 +15,7 @@ option go_package = "catalog";
 import "ts/tspb/timeseries.proto";
 
 import "gogoproto/gogo.proto";
-import "client_model/metrics.proto";
+import "io/prometheus/client/metrics.proto";
 
 // AxisUnits describes the Unit options available in the Admin UI. It is defined here
 // as opposed to importing the value from the Admin UI because the existing pb doesn't
@@ -109,7 +109,7 @@ message IndividualChart {
   repeated ChartMetric metrics = 10 [(gogoproto.nullable) = false];
 }
 
-// ChartSections organize charts into groups that contain slices or charts and 
+// ChartSections organize charts into groups that contain slices or charts and
 // other subsections.
 message ChartSection {
   // title is the title of the section.
