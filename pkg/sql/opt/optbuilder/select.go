@@ -522,9 +522,11 @@ func (b *Builder) buildScan(
 			if idx == -1 {
 				var err error
 				if indexFlags.Index != "" {
-					err = errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
+					err = pgerror.Newf(pgcode.UndefinedObject,
+						"index %q not found", tree.ErrString(&indexFlags.Index))
 				} else {
-					err = errors.Errorf("index [%d] not found", indexFlags.IndexID)
+					err = pgerror.Newf(pgcode.UndefinedObject,
+						"index [%d] not found", indexFlags.IndexID)
 				}
 				panic(err)
 			}
