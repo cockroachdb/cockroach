@@ -11,12 +11,14 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/security",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
+        "//pkg/util/mon",
         "//pkg/util/syncutil",
     ],
 )
