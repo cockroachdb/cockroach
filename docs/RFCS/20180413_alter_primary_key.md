@@ -103,7 +103,7 @@ ALTER TABLE users ALTER PRIMARY KEY (region, id);
 ```
 
 The old primary index has been rewritten as a secondary index named
-`user_id_idx`. It can be dropped it if no longer needed.
+`users_id_idx`. It can be dropped it if no longer needed.
 ```sql
 DROP INDEX users@users_id_idx;
 ```
