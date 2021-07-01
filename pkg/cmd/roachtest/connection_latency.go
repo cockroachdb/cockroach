@@ -34,7 +34,7 @@ func runConnectionLatencyTest(
 	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach")
 	require.NoError(t, err)
 
-	err = c.PutE(ctx, t.L(), workload, "./workload")
+	err = c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
 	require.NoError(t, err)
 
 	err = c.StartE(ctx, startArgs("--secure"))

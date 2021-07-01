@@ -235,7 +235,7 @@ func runJobsMixedVersions(
 	roachNodes := c.All()
 	backgroundTPCC := backgroundJobsTestTPCCImport(t, warehouses)
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
-	c.Put(ctx, workload, "./workload", c.Node(1))
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 
 	u := newVersionUpgradeTest(c,
 		uploadAndStartFromCheckpointFixture(roachNodes, predecessorVersion),

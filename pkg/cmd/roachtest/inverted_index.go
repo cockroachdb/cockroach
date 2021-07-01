@@ -38,7 +38,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 	workloadNode := c.Node(c.Spec().NodeCount)
 
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	c.Start(ctx, crdbNodes)
 
 	cmdInit := "./workload init json {pgurl:1}"

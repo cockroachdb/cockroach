@@ -81,7 +81,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	c.Start(ctx, crdbNodes)
 
 	db := c.Conn(ctx, 1)
@@ -275,7 +275,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	c.Start(ctx, crdbNodes)
 	kafka := kafkaManager{
 		t:     t,

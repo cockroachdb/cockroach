@@ -95,7 +95,7 @@ func registerImportTPCC(r *testRegistry) {
 		// Randomize starting with encryption-at-rest enabled.
 		c.EncryptAtRandom(true)
 		c.Put(ctx, t.Cockroach(), "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
@@ -330,7 +330,7 @@ func registerImportDecommissioned(r *testRegistry) {
 		}
 
 		c.Put(ctx, t.Cockroach(), "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)

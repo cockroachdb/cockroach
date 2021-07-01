@@ -202,7 +202,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 	if err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", roachNodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.PutE(ctx, t.L(), workload, "./workload", loadNodes); err != nil {
+	if err := c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload", loadNodes); err != nil {
 		t.Fatal(err)
 	}
 

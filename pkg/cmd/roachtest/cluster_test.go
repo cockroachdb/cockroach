@@ -71,6 +71,10 @@ func (t testWrapper) Cockroach() string {
 	return "./dummy-path/to/cockroach"
 }
 
+func (t testWrapper) DeprecatedWorkload() string {
+	return "./dummy-path/to/workload"
+}
+
 func (t testWrapper) IsBuildVersion(s string) bool {
 	panic("implement me")
 }

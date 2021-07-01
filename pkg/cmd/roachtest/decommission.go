@@ -105,7 +105,7 @@ func runDecommission(
 	// through which we run the workload and other queries.
 	pinnedNode := 1
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Put(ctx, workload, "./workload", c.Node(pinnedNode))
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
 		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))

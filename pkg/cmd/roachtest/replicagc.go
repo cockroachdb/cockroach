@@ -58,7 +58,7 @@ func runReplicaGCChangedPeers(
 
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Put(ctx, workload, "./workload", c.Node(1))
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	c.Start(ctx, args, c.Range(1, 3))
 
 	h := &replicagcTestHelper{c: c, t: t}

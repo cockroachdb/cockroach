@@ -133,7 +133,7 @@ func runSchemaChangeRandomLoad(
 	roachNodes := c.Range(1, c.Spec().NodeCount)
 	t.Status("copying binaries")
 	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-	c.Put(ctx, workload, "./workload", loadNode)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")
 	c.Start(ctx, roachNodes)
