@@ -44,7 +44,7 @@ func registerClearRange(r *testRegistry) {
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	// Randomize starting with encryption-at-rest enabled.
 	c.EncryptAtRandom(true)
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.Status("restoring fixture")
 	c.Start(ctx)

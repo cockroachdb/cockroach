@@ -125,6 +125,7 @@ type testStatus struct {
 type testImpl struct {
 	spec *TestSpec
 
+	cockroach string
 	// buildVersion is the version of the Cockroach binary that the test will run
 	// against.
 	buildVersion version.Version
@@ -179,6 +180,10 @@ type testImpl struct {
 // in this test.
 func (t *testImpl) BuildVersion() *version.Version {
 	return &t.buildVersion
+}
+
+func (t *testImpl) Cockroach() string {
+	return t.cockroach
 }
 
 func (t *testImpl) VersionsBinaryOverride() map[string]string {

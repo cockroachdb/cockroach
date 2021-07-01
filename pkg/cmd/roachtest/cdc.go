@@ -80,7 +80,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, crdbNodes)
 
@@ -274,7 +274,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, crdbNodes)
 	kafka := kafkaManager{
@@ -427,7 +427,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
@@ -558,7 +558,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, crdbNodes)
 
 	kafka := kafkaManager{

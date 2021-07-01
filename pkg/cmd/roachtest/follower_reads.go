@@ -47,7 +47,7 @@ func registerFollowerReads(r *testRegistry) {
 			Owner:   OwnerKV,
 			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				c.Put(ctx, cockroach, "./cockroach")
+				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Wipe(ctx)
 				c.Start(ctx)
 				topology := topologySpec{multiRegion: true, locality: locality, survival: survival}

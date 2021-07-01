@@ -30,7 +30,7 @@ func registerEngineSwitch(r *testRegistry) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
 		c.Put(ctx, workload, "./workload", loadNode)
-		c.Put(ctx, cockroach, "./cockroach", roachNodes)
+		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 		pebbleArgs := startArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
 		rocksdbArgs := startArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
 		c.Start(ctx, roachNodes, rocksdbArgs)

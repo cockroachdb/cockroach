@@ -53,7 +53,7 @@ fi
 				t.Fatal(err)
 			}
 
-			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, nemesis, "./nemesis")
 			c.Run(ctx, n, "chmod +x nemesis")
 			c.Run(ctx, n, "sudo umount {store-dir}/faulty || true")

@@ -137,7 +137,7 @@ func registerVersion(r *testRegistry) {
 				if err := stop(i); err != nil {
 					return err
 				}
-				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
+				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
 				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err
@@ -161,7 +161,7 @@ func registerVersion(r *testRegistry) {
 
 			// Do upgrade for the last node.
 			l.Printf("upgrading last node\n")
-			c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
 			c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 			if err := sleepAndCheck(); err != nil {
 				return err
@@ -190,7 +190,7 @@ func registerVersion(r *testRegistry) {
 				if err := stop(i); err != nil {
 					return err
 				}
-				c.Put(ctx, cockroach, "./cockroach", c.Node(i))
+				c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
 				c.Start(ctx, c.Node(i), startArgsDontEncrypt)
 				if err := sleepAndCheck(); err != nil {
 					return err

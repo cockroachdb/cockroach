@@ -55,7 +55,7 @@ func runDiskStalledDetection(
 
 	n := c.Node(1)
 
-	c.Put(ctx, cockroach, "./cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Run(ctx, n, "sudo umount -f {store-dir}/faulty || true")
 	c.Run(ctx, n, "mkdir -p {store-dir}/{real,faulty} || true")
 	// Make sure the actual logs are downloaded as artifacts.

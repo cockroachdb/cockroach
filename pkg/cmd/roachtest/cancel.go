@@ -40,7 +40,7 @@ import (
 // replaced with unit tests.
 func registerCancel(r *testRegistry) {
 	runCancel := func(ctx context.Context, t test.Test, c cluster.Cluster, tpchQueriesToRun []int, useDistsql bool) {
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, c.All())
 
 		m := newMonitor(ctx, c, c.All())

@@ -67,6 +67,10 @@ func (t testWrapper) BuildVersion() *version.Version {
 	panic("implement me")
 }
 
+func (t testWrapper) Cockroach() string {
+	return "./dummy-path/to/cockroach"
+}
+
 func (t testWrapper) IsBuildVersion(s string) bool {
 	panic("implement me")
 }

@@ -53,7 +53,7 @@ func registerInterleaved(r *testRegistry) {
 		t.L().Printf("cockroach nodes: %s", cockroachNodes.String()[1:])
 		t.L().Printf("workload nodes: %s", workloadNodes.String()[1:])
 
-		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
 		c.Start(ctx, cockroachNodes)
 
