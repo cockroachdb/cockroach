@@ -107,13 +107,14 @@ spec:
         - containerPort: 8080
           hostPort: 8080
           name: http
-        livenessProbe:
-          httpGet:
-            path: "/health"
-            port: http
-            scheme: HTTP
-          initialDelaySeconds: 30
-          periodSeconds: 5
+# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+#       livenessProbe:
+#         httpGet:
+#           path: "/health"
+#           port: http
+#           scheme: HTTP
+#         initialDelaySeconds: 30
+#         periodSeconds: 5
         readinessProbe:
           httpGet:
             path: "/health?ready=1"
