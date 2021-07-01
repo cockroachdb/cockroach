@@ -578,9 +578,17 @@ message Session {
   string last_active_query = 8;
   // ID of the session (uint128 represented as raw bytes).
   bytes id = 9 [ (gogoproto.customname) = "ID" ];
-  // Number of currently allocated bytes in the session memory monitor.
+  // Number of currently allocated bytes in the session memory monitor
+  // on the gateway.
+  // TODO(knz): Collect this across all nodes currently executing
+  // queries on behalf of the session.
+  // https://github.com/cockroachdb/cockroach/issues/60586
   int64 alloc_bytes = 10;
-  // High water mark of allocated bytes in the session memory monitor.
+  // High water mark of allocated bytes in the session memory monitor,
+  // on the gateway.
+  // TODO(knz): Collect this across all nodes currently executing
+  // queries on behalf of the session.
+  // https://github.com/cockroachdb/cockroach/issues/60586
   int64 max_alloc_bytes = 11;
   // Information about the txn in progress on this session. Nil if the
   // session doesn't currently have a transaction.
@@ -588,6 +596,22 @@ message Session {
   // The SQL statement fingerprint of the last query executed on this session,
   // compatible with StatementStatisticsKey.
   string last_active_query_anon = 13;
+  // EXPERIMENTAL: The number of scheduling ticks on the gateway for all goroutines
+  // marked as associated to that session.
+  // TODO(knz): Collect this across all nodes currently executing
+  // queries on behalf of the session.
+  uint64 sched_ticks = 14;
+  // EXPERIMENTAL: The number of CPU nanoseconds on the gateway for all goroutines
+  // marked as associated to that session.
+  // TODO(knz): Collect this across all nodes currently executing
+  // queries on behalf of the session.
+  uint64 nanos = 15;
+  // EXPERIMENTAL: The number of bytes allocated in the Go large heap
+  // for all goroutines
+  // marked as associated to that session.
+  // TODO(knz): Collect this across all nodes currently executing
+  // queries on behalf of the session.
+  uint64 large_bytes = 16;
 }
 
 // An error wrapper object for ListSessionsResponse.

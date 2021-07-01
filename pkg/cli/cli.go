@@ -217,7 +217,8 @@ func fullVersionString() string {
 	fmt.Fprintf(tw, "Go Version:       %s\n", info.GoVersion)
 	fmt.Fprintf(tw, "C Compiler:       %s\n", info.CgoCompiler)
 	fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
-	fmt.Fprintf(tw, "Build Type:       %s", info.Type) // No final newline: cobra prints one for us.
+	fmt.Fprintf(tw, "Build Type:       %s\n", info.Type)
+	fmt.Fprintf(tw, "Go+ Enabled:      %v", info.GoPlus) // No final newline: cobra prints one for us.
 	_ = tw.Flush()
 	return buf.String()
 }

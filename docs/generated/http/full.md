@@ -1161,10 +1161,13 @@ Session represents one SQL session.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Timestamp of session's start. | [reserved](#support-status) |
 | last_active_query | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | SQL string of the last query executed on this session. | [reserved](#support-status) |
 | id | [bytes](#cockroach.server.serverpb.ListSessionsResponse-bytes) |  | ID of the session (uint128 represented as raw bytes). | [reserved](#support-status) |
-| alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the session memory monitor. | [reserved](#support-status) |
-| max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the session memory monitor. | [reserved](#support-status) |
+| alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the session memory monitor on the gateway. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. https://github.com/cockroachdb/cockroach/issues/60586 | [reserved](#support-status) |
+| max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the session memory monitor, on the gateway. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. https://github.com/cockroachdb/cockroach/issues/60586 | [reserved](#support-status) |
 | active_txn | [TxnInfo](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.TxnInfo) |  | Information about the txn in progress on this session. Nil if the session doesn't currently have a transaction. | [reserved](#support-status) |
 | last_active_query_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint of the last query executed on this session, compatible with StatementStatisticsKey. | [reserved](#support-status) |
+| sched_ticks | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | EXPERIMENTAL: The number of scheduling ticks on the gateway for all goroutines marked as associated to that session. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. | [reserved](#support-status) |
+| nanos | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | EXPERIMENTAL: The number of CPU nanoseconds on the gateway for all goroutines marked as associated to that session. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. | [reserved](#support-status) |
+| large_bytes | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | EXPERIMENTAL: The number of bytes allocated in the Go large heap for all goroutines marked as associated to that session. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. | [reserved](#support-status) |
 
 
 
@@ -1289,10 +1292,13 @@ Session represents one SQL session.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Timestamp of session's start. | [reserved](#support-status) |
 | last_active_query | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | SQL string of the last query executed on this session. | [reserved](#support-status) |
 | id | [bytes](#cockroach.server.serverpb.ListSessionsResponse-bytes) |  | ID of the session (uint128 represented as raw bytes). | [reserved](#support-status) |
-| alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the session memory monitor. | [reserved](#support-status) |
-| max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the session memory monitor. | [reserved](#support-status) |
+| alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the session memory monitor on the gateway. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. https://github.com/cockroachdb/cockroach/issues/60586 | [reserved](#support-status) |
+| max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the session memory monitor, on the gateway. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. https://github.com/cockroachdb/cockroach/issues/60586 | [reserved](#support-status) |
 | active_txn | [TxnInfo](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.TxnInfo) |  | Information about the txn in progress on this session. Nil if the session doesn't currently have a transaction. | [reserved](#support-status) |
 | last_active_query_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint of the last query executed on this session, compatible with StatementStatisticsKey. | [reserved](#support-status) |
+| sched_ticks | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | EXPERIMENTAL: The number of scheduling ticks on the gateway for all goroutines marked as associated to that session. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. | [reserved](#support-status) |
+| nanos | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | EXPERIMENTAL: The number of CPU nanoseconds on the gateway for all goroutines marked as associated to that session. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. | [reserved](#support-status) |
+| large_bytes | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | EXPERIMENTAL: The number of bytes allocated in the Go large heap for all goroutines marked as associated to that session. TODO(knz): Collect this across all nodes currently executing queries on behalf of the session. | [reserved](#support-status) |
 
 
 

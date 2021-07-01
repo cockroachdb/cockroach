@@ -588,6 +588,14 @@ def go_deps():
         version = "v1.8.4",
     )
     go_repository(
+        name = "com_github_cockroachdb_go_plus",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/go-plus",
+        sum = "h1:/66AzDolBIyaZBxGzhvq5FjG/feV1UGpzmRqiyDWzK4=",
+        version = "v0.0.0-20210628140920-73a12fb4fb95",
+    )
+
+    go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/go-test-teamcity",

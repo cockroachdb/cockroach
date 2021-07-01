@@ -38,6 +38,9 @@ message Info {
   optional string channel = 9 [(gogoproto.nullable) = false];
   // env_channel identifies the product channel as overridden by the COCKROACH_CHANNEL environment variable.
   optional string env_channel = 11 [(gogoproto.nullable) = false];
+  // go_plus identifies whether the binary was produced against a customized go runtime.
+  // See: github.com/cockroachdb/go-plus.
+  optional bool go_plus = 12 [(gogoproto.nullable) = false];
 
   // dependencies exists to allow tests that run against old clusters
   // to unmarshal JSON containing this field. The tag is unimportant,
