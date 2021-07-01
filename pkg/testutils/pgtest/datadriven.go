@@ -114,23 +114,23 @@ func RunTest(t *testing.T, path, addr, user string) {
 				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
 				return d.Expected
 			}
-			until := parseMessages(d.Input)
+			until := ParseMessages(d.Input)
 			msgs, err := p.Receive(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
-			return msgsToJSONWithIgnore(msgs, d)
+			return MsgsToJSONWithIgnore(msgs, d)
 		case "until":
 			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
 				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
 				return d.Expected
 			}
-			until := parseMessages(d.Input)
+			until := ParseMessages(d.Input)
 			msgs, err := p.Until(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
-			return msgsToJSONWithIgnore(msgs, d)
+			return MsgsToJSONWithIgnore(msgs, d)
 		default:
 			t.Fatalf("unknown command %s", d.Cmd)
 			return ""
@@ -141,7 +141,7 @@ func RunTest(t *testing.T, path, addr, user string) {
 	}
 }
 
-func parseMessages(s string) []pgproto3.BackendMessage {
+func ParseMessages(s string) []pgproto3.BackendMessage {
 	var msgs []pgproto3.BackendMessage
 	for _, typ := range strings.Split(s, "\n") {
 		msgs = append(msgs, toMessage(typ).(pgproto3.BackendMessage))
@@ -158,7 +158,7 @@ func hasKeepErrMsg(d *datadriven.TestData) bool {
 	return false
 }
 
-func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
+func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
 	ignore := map[string]bool{}
 	errs := map[string]string{}
 	for _, arg := range args.CmdArgs {
