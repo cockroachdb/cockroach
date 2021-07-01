@@ -71,6 +71,10 @@ var _ base.SQLInstanceID
 // running CREATE STATISTICS manually.
 const AutoStatsName = "__auto__"
 
+// ImportStatsName is the name to use for statistics created automatically
+// during import.
+const ImportStatsName = "__import__"
+
 // AutomaticJobTypes is a list of automatic job types that currently exist.
 var AutomaticJobTypes = [...]Type{
 	TypeAutoCreateStats,

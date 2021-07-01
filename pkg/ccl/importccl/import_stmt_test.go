@@ -1113,6 +1113,54 @@ CREATE TABLE t (a duration);
 			typ:    "CSV",
 			err:    `"s" not found`,
 		},
+		{
+			name:   "statistics collection",
+			create: "a INT",
+			typ:    "CSV",
+			data: "0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n" +
+				"10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n" +
+				"20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n" +
+				"30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n" +
+				"40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n" +
+				"50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n" +
+				"60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n" +
+				"70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n" +
+				"80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n" +
+				"90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n",
+			query: map[string][][]string{
+				"SELECT column_names, row_count, distinct_count, null_count " +
+					"FROM [SHOW STATISTICS FOR TABLE t] " +
+					"WHERE statistics_name = '__import__' " +
+					"ORDER BY column_names": {
+					{"{a}", "100", "10", "1"},
+					{"{rowid}", "100", "10", "1"},
+				},
+			},
+		},
+		{
+			name:   "statistics collection multi",
+			create: "a INT PRIMARY KEY, b INT, INDEX (b, a)",
+			typ:    "CSV",
+			data: "0,0\n1,1\n2,2\n3,3\n4,4\n5,5\n6,6\n7,7\n8,8\n9,9\n" +
+				"10,10\n11,11\n12,12\n13,13\n14,14\n15,15\n16,16\n17,17\n18,18\n19,19\n" +
+				"20,20\n21,21\n22,22\n23,23\n24,24\n25,25\n26,26\n27,27\n28,28\n29,29\n" +
+				"30,30\n31,31\n32,32\n33,33\n34,34\n35,35\n36,36\n37,37\n38,38\n39,39\n" +
+				"40,40\n41,41\n42,42\n43,43\n44,44\n45,45\n46,46\n47,47\n48,48\n49,49\n" +
+				"50,50\n51,51\n52,52\n53,53\n54,54\n55,55\n56,56\n57,57\n58,58\n59,59\n" +
+				"60,60\n61,61\n62,62\n63,63\n64,64\n65,65\n66,66\n67,67\n68,68\n69,69\n" +
+				"70,70\n71,71\n72,72\n73,73\n74,74\n75,75\n76,76\n77,77\n78,78\n79,79\n" +
+				"80,80\n81,81\n82,82\n83,83\n84,84\n85,85\n86,86\n87,87\n88,88\n89,89\n" +
+				"90,90\n91,91\n92,92\n93,93\n94,94\n95,95\n96,96\n97,97\n98,98\n99,99",
+			query: map[string][][]string{
+				"SELECT column_names, row_count, distinct_count, null_count " +
+					"FROM [SHOW STATISTICS FOR TABLE t] " +
+					"WHERE statistics_name = '__import__' " +
+					"ORDER BY column_names": {
+					{"{a}", "100", "10", "1"},
+					{"{b}", "100", "10", "1"},
+				},
+			},
+		},
 	}
 
 	var mockRecorder struct {

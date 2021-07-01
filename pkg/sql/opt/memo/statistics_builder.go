@@ -445,7 +445,7 @@ func (sb *statisticsBuilder) colStatLeaf(
 			if nullableCols.Equals(colSet) {
 				// No column statistics on this colSet - use the unknown
 				// null count ratio.
-				colStat.NullCount = s.RowCount * unknownNullCountRatio
+				colStat.NullCount = s.RowCount * UnknownNullCountRatio
 			} else {
 				colStatLeaf := sb.colStatLeaf(nullableCols, s, fd, notNullCols)
 				// Fetch the colStat again since it may now have a different address.
@@ -460,8 +460,8 @@ func (sb *statisticsBuilder) colStatLeaf(
 
 	if colSet.Len() == 1 {
 		col, _ := colSet.Next(0)
-		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
-		colStat.NullCount = unknownNullCountRatio * s.RowCount
+		colStat.DistinctCount = UnknownDistinctCountRatio * s.RowCount
+		colStat.NullCount = UnknownNullCountRatio * s.RowCount
 		if notNullCols.Contains(col) {
 			colStat.NullCount = 0
 		}
@@ -2121,7 +2121,7 @@ func (sb *statisticsBuilder) colStatMax1Row(
 	s := &max1Row.Relational().Stats
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
-	colStat.NullCount = s.RowCount * unknownNullCountRatio
+	colStat.NullCount = s.RowCount * UnknownNullCountRatio
 	if colSet.Intersects(max1Row.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
@@ -2319,7 +2319,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 					// requested columns correspond to, and estimate the distinct count and
 					// null count based on the type of generator function and its parameters.
 					zipColsDistinctCount *= unknownGeneratorRowCount * unknownGeneratorDistinctCountRatio
-					zipColsNullCount *= unknownNullCountRatio
+					zipColsNullCount *= UnknownNullCountRatio
 				} else {
 					// The columns(s) contain a scalar function or expression.
 					// These columns can contain many null values if the zip also
@@ -2346,7 +2346,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 				if item.ScalarProps().OuterCols.Intersects(inputProps.OutputCols) {
 					// The column(s) are correlated with the input, so they may have a
 					// distinct value for each distinct row of the input.
-					zipColsDistinctCount *= inputStats.RowCount * unknownDistinctCountRatio
+					zipColsDistinctCount *= inputStats.RowCount * UnknownDistinctCountRatio
 				}
 			}
 		}
@@ -2788,14 +2788,15 @@ const (
 	// This is an arbitrary row count used in the absence of any real statistics.
 	unknownRowCount = 1000
 
-	// This is the ratio of distinct column values to number of rows, which is
-	// used in the absence of any real statistics for non-key columns.
-	// TODO(rytaft): See if there is an industry standard value for this.
-	unknownDistinctCountRatio = 0.1
+	// UnknownDistinctCountRatio is the ratio of distinct column values to number
+	// of rows, which is used in the absence of any real statistics for non-key
+	// columns.  TODO(rytaft): See if there is an industry standard value for
+	// this.
+	UnknownDistinctCountRatio = 0.1
 
-	// This is the ratio of null column values to number of rows for nullable
-	// columns, which is used in the absence of any real statistics.
-	unknownNullCountRatio = 0.01
+	// UnknownNullCountRatio is the ratio of null column values to number of rows
+	// for nullable columns, which is used in the absence of any real statistics.
+	UnknownNullCountRatio = 0.01
 
 	// Use a small row count for generator functions; this allows use of lookup
 	// join in cases like using json_array_elements with a small constant array.
@@ -3198,7 +3199,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		numConjuncts := sb.numConjunctsInConstraint(c, i)
 
 		// Set the distinct count for the current column of the constraint
-		// according to unknownDistinctCountRatio.
+		// according to UnknownDistinctCountRatio.
 		var lowerBound float64
 		if i == applied {
 			lowerBound = lastColMinDistinct
@@ -3250,7 +3251,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			numConjuncts := sb.numConjunctsInConstraint(c, 0 /* nth */)
 
 			// Set the distinct count for the first column of the constraint
-			// according to unknownDistinctCountRatio.
+			// according to UnknownDistinctCountRatio.
 			sb.updateDistinctCountFromUnappliedConjuncts(col, e, s, numConjuncts, lastColMinDistinct)
 		}
 
