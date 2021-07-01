@@ -131,6 +131,7 @@ func (dsp *DistSQLPlanner) Exec(
 			execCfg.Clock.Update(ts)
 		},
 		p.ExtendedEvalContext().Tracing,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

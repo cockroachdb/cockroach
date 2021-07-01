@@ -132,6 +132,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				execCfg.Clock.Update(ts)
 			},
 			params.extendedEvalCtx.Tracing,
+			nil, /* testingPushCallback */
 		)
 		if !distSQLPlanner.PlanAndRunSubqueries(
 			planCtx.ctx,
@@ -204,6 +205,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				execCfg.Clock.Update(ts)
 			},
 			newParams.extendedEvalCtx.Tracing,
+			nil, /* testingPushCallback */
 		)
 		defer recv.Release()
 
@@ -256,6 +258,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				execCfg.Clock.Update(ts)
 			},
 			params.extendedEvalCtx.Tracing,
+			nil, /* testingPushCallback */
 		)
 		if !distSQLPlanner.PlanAndRunCascadesAndChecks(
 			planCtx.ctx,

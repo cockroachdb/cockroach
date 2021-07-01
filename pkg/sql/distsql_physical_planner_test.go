@@ -272,8 +272,15 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stop.NewStopper())
 	r := MakeDistSQLReceiver(
-		ctx, nil /* resultWriter */, tree.Rows,
-		rangeCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
+		ctx,
+		&errOnlyResultWriter{}, /* resultWriter */
+		tree.Rows,
+		rangeCache,
+		nil, /* txn */
+		nil, /* clockUpdater */
+		&SessionTracing{},
+		nil, /* testingPushCallback */
+	)
 
 	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
 

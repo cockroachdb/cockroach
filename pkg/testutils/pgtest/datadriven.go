@@ -86,25 +86,7 @@ func RunTest(t *testing.T, path, addr, user string) {
 				return d.Expected
 			}
 			for _, line := range strings.Split(d.Input, "\n") {
-				sp := strings.SplitN(line, " ", 2)
-				msg := toMessage(sp[0])
-				if len(sp) == 2 {
-					msgBytes := []byte(sp[1])
-					switch msg := msg.(type) {
-					case *pgproto3.CopyData:
-						var data struct{ Data string }
-						if err := json.Unmarshal(msgBytes, &data); err != nil {
-							t.Fatal(err)
-						}
-						msg.Data = []byte(data.Data)
-					default:
-						if err := json.Unmarshal(msgBytes, msg); err != nil {
-							t.Log(sp[1])
-							t.Fatal(err)
-						}
-					}
-				}
-				if err := p.Send(msg.(pgproto3.FrontendMessage)); err != nil {
+				if err := p.SendOneLine(line); err != nil {
 					t.Fatalf("%s: send %s: %v", d.Pos, line, err)
 				}
 			}
@@ -114,23 +96,23 @@ func RunTest(t *testing.T, path, addr, user string) {
 				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
 				return d.Expected
 			}
-			until := parseMessages(d.Input)
+			until := ParseMessages(d.Input)
 			msgs, err := p.Receive(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
-			return msgsToJSONWithIgnore(msgs, d)
+			return MsgsToJSONWithIgnore(msgs, d)
 		case "until":
 			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
 				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
 				return d.Expected
 			}
-			until := parseMessages(d.Input)
+			until := ParseMessages(d.Input)
 			msgs, err := p.Until(hasKeepErrMsg(d), until...)
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
-			return msgsToJSONWithIgnore(msgs, d)
+			return MsgsToJSONWithIgnore(msgs, d)
 		default:
 			t.Fatalf("unknown command %s", d.Cmd)
 			return ""
@@ -141,7 +123,10 @@ func RunTest(t *testing.T, path, addr, user string) {
 	}
 }
 
-func parseMessages(s string) []pgproto3.BackendMessage {
+// ParseMessages parses a string containing multiple pgproto3 messages separated
+// by the newline symbol. See testdata for examples ("until" or "receive"
+// commands).
+func ParseMessages(s string) []pgproto3.BackendMessage {
 	var msgs []pgproto3.BackendMessage
 	for _, typ := range strings.Split(s, "\n") {
 		msgs = append(msgs, toMessage(typ).(pgproto3.BackendMessage))
@@ -158,7 +143,10 @@ func hasKeepErrMsg(d *datadriven.TestData) bool {
 	return false
 }
 
-func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
+// MsgsToJSONWithIgnore converts the pgproto3 messages to JSON format. The
+// second argument can specify how to adjust the messages (e.g. to make them
+// more deterministic) if needed, see testdata for examples.
+func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
 	ignore := map[string]bool{}
 	errs := map[string]string{}
 	for _, arg := range args.CmdArgs {

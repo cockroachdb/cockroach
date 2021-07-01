@@ -282,6 +282,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 			evalCtx.ExecCfg.Clock.Update(ts)
 		},
 		evalCtx.Tracing,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

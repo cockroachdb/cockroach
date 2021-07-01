@@ -483,6 +483,7 @@ func scrubRunDistSQL(
 			p.ExecCfg().Clock.Update(ts)
 		},
 		p.extendedEvalCtx.Tracing,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 
