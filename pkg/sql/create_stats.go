@@ -62,6 +62,26 @@ var featureStatsEnabled = settings.RegisterBoolSetting(
 const defaultHistogramBuckets = 200
 const nonIndexColHistogramBuckets = 2
 
+// StubTableStats generates "stub" statistics for a table which are missing
+// histograms and have 0 for all values.
+func StubTableStats(
+	st *cluster.Settings, desc catalog.TableDescriptor, name string,
+) ([]*stats.TableStatisticProto, error) {
+	colStats, err := createStatsDefaultColumns(st, desc)
+	if err != nil {
+		return nil, err
+	}
+	statistics := make([]*stats.TableStatisticProto, len(colStats))
+	for i, colStat := range colStats {
+		statistics[i] = &stats.TableStatisticProto{
+			TableID:   desc.GetID(),
+			Name:      name,
+			ColumnIDs: colStat.ColumnIDs,
+		}
+	}
+	return statistics, nil
+}
+
 // createStatsNode is a planNode implemented in terms of a function. The
 // startJob function starts a Job during Start, and the remainder of the
 // CREATE STATISTICS planning and execution is performed within the jobs
@@ -215,8 +235,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	// Identify which columns we should create statistics for.
 	var colStats []jobspb.CreateStatsDetails_ColStat
 	if len(n.ColumnNames) == 0 {
-		multiColEnabled := stats.MultiColumnStatisticsClusterMode.Get(&n.p.ExecCfg().Settings.SV)
-		if colStats, err = createStatsDefaultColumns(tableDesc, multiColEnabled); err != nil {
+		if colStats, err = createStatsDefaultColumns(n.p.ExecCfg().Settings, tableDesc); err != nil {
 			return nil, err
 		}
 	} else {
@@ -314,8 +333,9 @@ const maxNonIndexCols = 100
 // other columns from the table. We only collect histograms for index columns,
 // plus any other boolean or enum columns (where the "histogram" is tiny).
 func createStatsDefaultColumns(
-	desc catalog.TableDescriptor, multiColEnabled bool,
+	st *cluster.Settings, desc catalog.TableDescriptor,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
+	multiColEnabled := stats.MultiColumnStatisticsClusterMode.Get(&st.SV)
 	colStats := make([]jobspb.CreateStatsDetails_ColStat, 0, len(desc.ActiveIndexes()))
 
 	requestedStats := make(map[string]struct{})

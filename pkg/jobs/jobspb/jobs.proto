@@ -18,6 +18,7 @@ import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/tenant.proto";
+import "sql/stats/table_statistic.proto";
 import "util/hlc/timestamp.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "clusterversion/cluster_version.proto";
@@ -213,6 +214,7 @@ message ImportDetails {
     bool is_new = 20;
     bool was_empty = 22;
     repeated string target_cols = 21;
+    repeated sql.stats.TableStatisticProto statistics = 23;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
   }
   message Schema {

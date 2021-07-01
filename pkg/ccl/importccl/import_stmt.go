@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -1554,17 +1555,27 @@ func (r *importResumer) prepareTableDescsForIngestion(
 		}
 
 		for _, desc := range res {
+			tableDesc := tabledesc.NewUnsafeImmutable(desc)
+			stats, err := sql.StubTableStats(p.ExecCfg().Settings, tableDesc, "__import__")
+			if err != nil {
+				return importDetails, err
+			}
+
 			key, err := constructSchemaAndTableKey(desc, schemaMetadata.newSchemaIDToName)
 			if err != nil {
 				return importDetails, err
 			}
 			i := newSchemaAndTableNameToIdx[key.String()]
 			table := details.Tables[i]
-			importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc,
+
+			importDetails.Tables[i] = jobspb.ImportDetails_Table{
+				Desc:       desc,
 				Name:       table.Name,
 				SeqVal:     table.SeqVal,
 				IsNew:      table.IsNew,
-				TargetCols: table.TargetCols}
+				TargetCols: table.TargetCols,
+				Statistics: stats,
+			}
 		}
 	}
 
@@ -2058,18 +2069,26 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	pkIDs := make(map[uint64]struct{}, len(details.Tables))
-	for _, t := range details.Tables {
-		pkIDs[roachpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
+	pkIDs := make(map[uint64]int, len(details.Tables))
+	for i, t := range details.Tables {
+		pkIDs[roachpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = i
 	}
 	r.res.DataSize = res.DataSize
 	for id, count := range res.EntryCounts {
-		if _, ok := pkIDs[id]; ok {
+		if i, ok := pkIDs[id]; ok {
 			r.res.Rows += count
+			for _, stat := range details.Tables[i].Statistics {
+				stat.RowCount += uint64(count)
+				stat.DistinctCount += uint64(count)
+			}
 		} else {
 			r.res.IndexEntries += count
 		}
 	}
+	if err := r.job.SetDetails(ctx, nil /* txn */, details); err != nil {
+		return err
+	}
+
 	if r.testingKnobs.afterImport != nil {
 		if err := r.testingKnobs.afterImport(r.res); err != nil {
 			return err
@@ -2256,6 +2275,18 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
+		}
+
+		// Write "stub" statistics for new tables, which should be good enough to use
+		// until the full CREATE STATISTICS run finishes.
+		for _, tbl := range details.Tables {
+			if tbl.IsNew {
+				err := stats.InsertNewStats(ctx, execCfg.InternalExecutor, txn, tbl.Statistics)
+				if err != nil {
+					// maybe we should not return the error?
+					return errors.Wrap(err, "inserting stub stats after publishing tables")
+				}
+			}
 		}
 
 		// Update job record to mark tables published state as complete.
