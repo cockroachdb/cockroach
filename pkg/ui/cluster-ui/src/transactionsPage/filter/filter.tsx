@@ -66,10 +66,10 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
 
   componentDidMount() {
-    document.addEventListener("click", this.outsideClick, false);
+    window.addEventListener("click", this.outsideClick, false);
   }
   componentWillUnmount() {
-    document.removeEventListener("click", this.outsideClick, false);
+    window.removeEventListener("click", this.outsideClick, false);
   }
   componentDidUpdate(prevProps: TransactionsFilter) {
     if (prevProps.filters !== this.props.filters) {
@@ -81,10 +81,11 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
     }
   }
   outsideClick = (event: any) => {
-    if (this.dropdownRef.current.contains(event.target)) {
-      return;
-    }
     this.setState({ hide: true });
+  };
+
+  insideClick = (event: any) => {
+    event.stopPropagation();
   };
 
   toggleFilters = () => {
@@ -131,9 +132,36 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
     const { appNames, activeFilters } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
+    const customStyles = {
+      container: (provided: any) => ({
+        ...provided,
+        border: "none",
+      }),
+      option: (provided: any, state: any) => ({
+        ...provided,
+        backgroundColor: state.isSelected
+          ? "#DEEBFF"
+          : provided.backgroundColor,
+        color: "#394455",
+      }),
+      control: (provided: any) => ({
+        ...provided,
+        width: "100%",
+      }),
+      singleValue: (provided: any) => ({
+        ...provided,
+        color: "hsl(0, 0%, 50%)",
+      }),
+    };
+    const customStylesSmall = { ...customStyles };
+    customStylesSmall.container = (provided: any) => ({
+      ...provided,
+      width: "141px",
+      border: "none",
+    });
 
     return (
-      <div onClick={this.outsideClick} ref={this.dropdownRef}>
+      <div onClick={this.insideClick} ref={this.dropdownRef}>
         <div className={dropdownButton} onClick={this.toggleFilters}>
           Filters ({activeFilters})&nbsp;
           <CaretDown className={caretDown} />
@@ -144,8 +172,9 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
             <Select
               options={appNames}
               onChange={e => this.handleChange(e, "app")}
-              value={filters.app}
+              value={appNames.filter(app => app.label === filters.app)}
               placeholder="All"
+              styles={customStyles}
               {...defaultSelectProps}
             />
             <div className={filterLabel.query}>
@@ -160,9 +189,10 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
               />
               <Select
                 options={timeUnit}
-                value={filters.timeUnit}
+                value={timeUnit.filter(unit => unit.label === filters.timeUnit)}
                 onChange={e => this.handleChange(e, "timeUnit")}
                 className={timePair.timeUnit}
+                styles={customStylesSmall}
                 {...defaultSelectProps}
               />
             </section>

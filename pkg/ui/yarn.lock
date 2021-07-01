@@ -2740,8 +2740,9 @@
     "@types/react" "*"
 
 "@types/react-select@^1.2.6":
-  version "1.2.6"
-  resolved "https://registry.yarnpkg.com/@types/react-select/-/react-select-1.2.6.tgz#8a9579705e04b2c15ce529379402980d80e9d243"
+  version "1.3.5"
+  resolved "https://registry.yarnpkg.com/@types/react-select/-/react-select-1.3.5.tgz#e62c69074803ed01978e8efd53bb109397dc2a77"
+  integrity sha512-gndA7PBYN2j+DtOtHeODH/p1b6YPgGSmVkr1sBQcorosqp4G6Eq+fcJ0EBjYZoML+WxziyzHdbhbP2ycs7UO4g==
   dependencies:
     "@types/react" "*"
 

@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "20.2.0",
+  "version": "20.2.1",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
@@ -64,7 +64,7 @@
     "@types/react-redux": "7.1.6",
     "@types/react-router": "^5.1.8",
     "@types/react-router-dom": "^5.1.5",
-    "@types/react-select": "^1.2.6",
+    "@types/react-select": "^4.0.15",
     "@types/redux-saga": "0.10.5",
     "@types/reselect": "^2.2.0",
     "@types/sinon": "^9.0.4",
@@ -113,7 +113,7 @@
     "react-popper": "^2.2.3",
     "react-redux": "7.1.3",
     "react-router-dom": "^5.1.2",
-    "react-select": "^1.2.1",
+    "react-select": "4.0.1",
     "react-test-renderer": "^16.13.1",
     "redux": "4.0.5",
     "redux-saga": "1.1.3",
