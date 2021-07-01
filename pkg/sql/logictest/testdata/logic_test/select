@@ -315,8 +315,11 @@ SELECT xyzw.y FROM test.xyzw@foo WHERE z = 3
 query error pgcode 42P01 relation "test.unknown" does not exist
 SELECT z FROM test.unknown@foo WHERE y = 5
 
-query error index "unknown" not found
+query error pgcode 42704 index "unknown" not found
 SELECT z FROM test.xyzw@unknown WHERE y = 5
+
+query error pgcode 42704 index \[42\] not found
+SELECT z FROM test.xyzw@[42] WHERE y = 5
 
 query I
 SELECT w FROM test.xyzw@foo WHERE y = 5
