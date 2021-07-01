@@ -41,15 +41,17 @@ func registerKV(r *testRegistry) {
 		// If true, the reads are limited reads over the full span of the table.
 		// Currently this also enables SFU writes on the workload since this is
 		// geared towards testing optimistic locking and latching.
-		spanReads      bool
-		batchSize      int
-		blockSize      int
-		splits         int // 0 implies default, negative implies 0
-		encryption     bool
-		sequential     bool
-		concMultiplier int
-		duration       time.Duration
-		tags           []string
+		spanReads bool
+		batchSize int
+		blockSize int
+		splits    int // 0 implies default, negative implies 0
+		// If true, load-based splitting will be disabled.
+		disableLoadSplits bool
+		encryption        bool
+		sequential        bool
+		concMultiplier    int
+		duration          time.Duration
+		tags              []string
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -70,9 +72,7 @@ func registerKV(r *testRegistry) {
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
-		if opts.splits < 0 {
-			// In addition to telling the workload to not split, disable load-based
-			// splitting.
+		if opts.disableLoadSplits {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
@@ -181,8 +181,8 @@ func registerKV(r *testRegistry) {
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
 
 		// Configs with reads, that are of limited spans, along with SFU writes.
-		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true, splits: -1 /* no splits */, sequential: true},
-		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, sequential: true},
+		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
+		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
 
 		// Weekly larger scale configurations.
 		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
@@ -218,6 +218,9 @@ func registerKV(r *testRegistry) {
 		}
 		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
+		}
+		if opts.disableLoadSplits {
+			nameParts = append(nameParts, "no-load-splitting")
 		}
 
 		minVersion := "v2.0.0"
