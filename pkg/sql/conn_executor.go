@@ -1810,7 +1810,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 
 	if rewindCapability, canRewind := ex.getRewindTxnCapability(); !canRewind {
 		// Trim statements that cannot be retried to reclaim memory.
-		ex.stmtBuf.ltrim(ctx, pos)
+		ex.stmtBuf.Ltrim(ctx, pos)
 	} else {
 		rewindCapability.close()
 	}
@@ -1936,7 +1936,7 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 			"Was: %d; new value: %d", ex.extraTxnState.txnRewindPos, pos))
 	}
 	ex.extraTxnState.txnRewindPos = pos
-	ex.stmtBuf.ltrim(ctx, pos)
+	ex.stmtBuf.Ltrim(ctx, pos)
 	ex.commitPrepStmtNamespace(ctx)
 	ex.extraTxnState.savepointsAtTxnRewindPos = ex.extraTxnState.savepoints.clone()
 }
