@@ -392,7 +392,7 @@ update xyzw
 build
 UPDATE xyzw@bad_idx SET x=2 WHERE z=1
 ----
-error: index "bad_idx" not found
+error (42704): index "bad_idx" not found
 
 
 # Infer types.
