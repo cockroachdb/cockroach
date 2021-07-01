@@ -6,6 +6,10 @@ load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 configure_make(
     name = "libjemalloc",
     autoconf = True,
+    configure_env_vars = select({
+        "//build/toolchains:dev": {"AR": ""},
+        "//conditions:default": {},
+    }),
     configure_in_place = True,
     configure_options = [
         "--enable-prof",
