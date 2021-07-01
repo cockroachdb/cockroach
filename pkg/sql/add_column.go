@@ -34,6 +34,11 @@ func (p *planner) addColumnImpl(
 	sessionData *sessiondata.SessionData,
 ) error {
 	d := t.ColumnDef
+
+	if d.IsComputed() {
+		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, params.SessionData())
+	}
+
 	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
 	toType, err := tree.ResolveType(params.ctx, d.Type, params.p.semaCtx.GetTypeResolver())
 	if err != nil {

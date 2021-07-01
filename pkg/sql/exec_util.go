@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -395,6 +396,17 @@ var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
 	`sql.defaults.stub_catalog_tables.enabled`,
 	`default value for stub_catalog_tables session setting`,
 	true,
+)
+
+var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting(
+	"sql.defaults.experimental_computed_column_rewrites",
+	"allows rewriting computed column expressions in CREATE TABLE and ALTER TABLE statements; "+
+		"the format is: '(before expression) -> (after expression) [, (before expression) -> (after expression) ...]'",
+	"", /* defaultValue */
+	func(_ *settings.Values, val string) error {
+		_, err := schemaexpr.ParseComputedColumnRewrites(val)
+		return err
+	},
 )
 
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
@@ -2418,6 +2430,10 @@ func (m *sessionDataMutator) initSequenceCache() {
 // SetStubCatalogTableEnabled sets default value for stub_catalog_tables.
 func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
 	m.data.StubCatalogTablesEnabled = enabled
+}
+
+func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
+	m.data.ExperimentalComputedColumnRewrites = val
 }
 
 type sqlStatsCollector struct {

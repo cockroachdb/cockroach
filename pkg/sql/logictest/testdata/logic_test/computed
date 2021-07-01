@@ -906,3 +906,73 @@ t42418  CREATE TABLE public.t42418 (
         CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
         FAMILY "primary" (x, rowid, y)
 )
+
+# Tests for computed column rewrites.
+statement error context-dependent operators are not allowed in computed column
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
+
+statement ok
+SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
+
+statement ok
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts_c (k, ts, c)
+)
+
+statement ok
+DROP TABLE trewrite
+
+statement ok
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
+
+statement ok
+ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
+----
+CREATE TABLE public.trewrite (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY fam_0_k_ts (k, ts, c)
+)
+
+statement error invalid column rewrites expression
+SET experimental_computed_column_rewrites = "bad"
+
+statement error invalid column rewrites expression
+SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"
+
+statement ok
+SET experimental_computed_column_rewrites = ""
+
+statement ok
+CREATE TABLE trewrite_copy (LIKE trewrite INCLUDING ALL)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
+----
+CREATE TABLE public.trewrite_copy (
+   k INT8 NOT NULL,
+   ts TIMESTAMPTZ NULL,
+   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   FAMILY "primary" (k, ts, c)
+)
+
+statement ok
+DROP TABLE trewrite
+
+statement ok
+DROP TABLE trewrite_copy

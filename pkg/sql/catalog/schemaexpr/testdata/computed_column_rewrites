@@ -1,0 +1,47 @@
+parse
+foo
+----
+error: invalid column rewrites expression (expected -> operator)
+
+parse
+1 + 2
+----
+error: invalid column rewrites expression (expected -> operator)
+
+parse
+a -> b
+----
+error: missing parens around "before" expression
+
+parse
+(a) -> b
+----
+error: missing parens around "after" expression
+
+parse
+(a) -> (b), (c) -> (d)
+----
+(a) -> (b)
+(c) -> (d)
+
+parse
+(a) -> (b), (c) -> (d)
+----
+(a) -> (b)
+(c) -> (d)
+
+parse
+(a+1) -> (b+2), (c+10) -> (d+20)
+----
+(a + 1) -> (b + 2)
+(c + 10) -> (d + 20)
+
+parse
+(ts::STRING) -> ((ts AT TIME ZONE 'utc')::STRING)
+----
+(ts::STRING) -> ((timezone('utc', ts))::STRING)
+
+parse
+(mod(fnv32(ts::STRING),4)) -> (mod(fnv32((ts AT TIME ZONE 'utc')::STRING), 4))
+----
+(mod(fnv32(ts::STRING), 4)) -> (mod(fnv32((timezone('utc', ts))::STRING), 4))
