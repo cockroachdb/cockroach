@@ -281,9 +281,9 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 	)
 }
 
-// BumpUsersTableVersion increases the table version for the
+// bumpUsersTableVersion increases the table version for the
 // users table.
-func (p *planner) BumpUsersTableVersion(ctx context.Context) error {
+func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
 	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, authentication.UsersTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
@@ -294,9 +294,9 @@ func (p *planner) BumpUsersTableVersion(ctx context.Context) error {
 	)
 }
 
-// BumpRoleOptionsTableVersion increases the table version for the
+// bumpRoleOptionsTableVersion increases the table version for the
 // role_options table.
-func (p *planner) BumpRoleOptionsTableVersion(ctx context.Context) error {
+func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
 	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, authentication.RoleOptionsTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
