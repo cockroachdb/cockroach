@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -298,6 +299,17 @@ var clusterIdleInTransactionSessionTimeout = settings.RegisterPublicNonNegativeD
 		"duration a session is permitted to idle in a transaction before the "+
 		"session is terminated; if set to 0, there is no timeout",
 	0,
+)
+
+var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting(
+	"sql.defaults.experimental_computed_column_rewrites",
+	"allows rewriting computed column expressions in CREATE TABLE and ALTER TABLE statements; "+
+		"the format is: '(before expression) -> (after expression) [, (before expression) -> (after expression) ...]'",
+	"", /* defaultValue */
+	func(_ *settings.Values, val string) error {
+		_, err := schemaexpr.ParseComputedColumnRewrites(val)
+		return err
+	},
 )
 
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
@@ -2276,6 +2288,10 @@ func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 // SetNoticeDisplaySeverity sets the NoticeDisplaySeverity for the given session.
 func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplaySeverity) {
 	m.data.NoticeDisplaySeverity = severity
+}
+
+func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
+	m.data.ExperimentalComputedColumnRewrites = val
 }
 
 type sqlStatsCollector struct {
