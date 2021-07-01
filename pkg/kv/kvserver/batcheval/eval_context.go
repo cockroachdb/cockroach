@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -53,7 +52,6 @@ type EvalContext interface {
 
 	Engine() storage.Engine
 	Clock() *hlc.Clock
-	DB() *kv.DB
 	AbortSpan() *abortspan.AbortSpan
 	GetConcurrencyManager() concurrency.Manager
 
@@ -177,9 +175,6 @@ func (m *mockEvalCtxImpl) Engine() storage.Engine {
 }
 func (m *mockEvalCtxImpl) Clock() *hlc.Clock {
 	return m.MockEvalCtx.Clock
-}
-func (m *mockEvalCtxImpl) DB() *kv.DB {
-	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) AbortSpan() *abortspan.AbortSpan {
 	return m.MockEvalCtx.AbortSpan
