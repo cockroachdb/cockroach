@@ -49,12 +49,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2139,7 +2141,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.publishTables(ctx, p.ExecCfg()); err != nil {
+	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
 		return err
 	}
 
@@ -2326,7 +2328,9 @@ func (r *importResumer) checkForUDTModification(
 }
 
 // publishTables updates the status of imported tables from OFFLINE to PUBLIC.
-func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.ExecutorConfig) error {
+func (r *importResumer) publishTables(
+	ctx context.Context, execCfg *sql.ExecutorConfig, res roachpb.BulkOpSummary,
+) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	// Tables should only be published once.
 	if details.TablesPublished {
@@ -2376,6 +2380,34 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
+		}
+
+		// Write "stub" statistics for new tables, which should be good enough to use
+		// until the full CREATE STATISTICS run finishes.
+		for _, tbl := range details.Tables {
+			if tbl.IsNew {
+				desc := tabledesc.NewUnsafeImmutable(tbl.Desc)
+				id := roachpb.BulkOpSummaryID(uint64(desc.GetID()), uint64(desc.GetPrimaryIndexID()))
+				rowCount := uint64(res.EntryCounts[id])
+				distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
+				nullCount := uint64(float64(rowCount) * memo.UnknownNullCountRatio)
+				statistics, err := sql.StubTableStats(execCfg.Settings, desc, jobspb.ImportStatsName)
+				if err == nil {
+					for _, statistic := range statistics {
+						statistic.RowCount = rowCount
+						statistic.DistinctCount = distinctCount
+						statistic.NullCount = nullCount
+					}
+					err = stats.InsertNewStats(ctx, execCfg.InternalExecutor, txn, statistics)
+				}
+				if err != nil {
+					// Failure to create statistics should not fail the entire import.
+					log.Warningf(
+						ctx, "error while creating stub statistics during import of %q: %v",
+						desc.GetName(), err,
+					)
+				}
+			}
 		}
 
 		// Update job record to mark tables published state as complete.
