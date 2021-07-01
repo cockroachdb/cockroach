@@ -372,6 +372,11 @@ statement error unsupported in multi-tenancy mode
 SELECT node_id, store_id, attrs, used
 FROM crdb_internal.kv_store_status WHERE node_id = 1
 
+query TT
+SELECT * FROM crdb_internal.regions ORDER BY 1
+----
+test  {}
+
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
 
