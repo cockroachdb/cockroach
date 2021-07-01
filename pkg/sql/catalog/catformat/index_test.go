@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -28,33 +29,77 @@ func TestIndexForDisplay(t *testing.T) {
 	table := tree.Name("bar")
 	tableName := tree.MakeTableNameWithSchema(database, tree.PublicSchemaName, table)
 
-	colNames := []string{"a", "b"}
-	tableDesc := testTableDesc(
-		string(table),
-		[]testCol{{colNames[0], types.Int}, {colNames[1], types.Int}},
-		nil,
-	)
+	compExpr := "a + b"
+	cols := []descpb.ColumnDescriptor{
+		// a INT
+		{
+			ID:   1,
+			Name: "a",
+			Type: types.Int,
+		},
+		// b INT
+		{
+			ID:   2,
+			Name: "b",
+			Type: types.Int,
+		},
+		// c INT
+		{
+			ID:   3,
+			Name: "c",
+			Type: types.Int,
+		},
+		// d INT AS (a + b) VIRTUAL [INACCESSIBLE]
+		{
+			ID:           4,
+			Name:         "d",
+			Type:         types.Int,
+			ComputeExpr:  &compExpr,
+			Virtual:      true,
+			Inaccessible: true,
+		},
+	}
 
-	indexName := "baz"
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		Name:    string(table),
+		ID:      1,
+		Columns: cols,
+	}).BuildImmutableTable()
+
+	// INDEX baz (a ASC, b DESC)
 	baseIndex := descpb.IndexDescriptor{
-		Name:                indexName,
+		Name:                "baz",
 		ID:                  0x0,
-		KeyColumnNames:      colNames,
+		KeyColumnNames:      []string{"a", "b"},
+		KeyColumnIDs:        descpb.ColumnIDs{1, 2},
 		KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC},
 	}
 
+	// UNIQUE INDEX baz (a ASC, b DESC)
 	uniqueIndex := baseIndex
 	uniqueIndex.Unique = true
 
+	// INVERTED INDEX baz (a)
 	invertedIndex := baseIndex
 	invertedIndex.Type = descpb.IndexDescriptor_INVERTED
 	invertedIndex.KeyColumnNames = []string{"a"}
+	invertedIndex.KeyColumnIDs = descpb.ColumnIDs{1}
 
+	// INDEX baz (a ASC, b DESC) STORING (c)
 	storingIndex := baseIndex
 	storingIndex.StoreColumnNames = []string{"c"}
 
+	// INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8
 	partialIndex := baseIndex
 	partialIndex.Predicate = "a > 1:::INT8"
+
+	// INDEX baz (a ASC, (a + b) DESC, b ASC)
+	expressionIndex := baseIndex
+	expressionIndex.KeyColumnNames = []string{"a", "d", "b"}
+	expressionIndex.KeyColumnIDs = descpb.ColumnIDs{1, 4, 2}
+	expressionIndex.KeyColumnDirections = []descpb.IndexDescriptor_Direction{
+		descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC, descpb.IndexDescriptor_ASC,
+	}
 
 	testData := []struct {
 		index      descpb.IndexDescriptor
@@ -69,6 +114,7 @@ func TestIndexForDisplay(t *testing.T) {
 		{invertedIndex, descpb.AnonymousTable, "", "", "INVERTED INDEX baz (a)"},
 		{storingIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, b DESC) STORING (c)"},
 		{partialIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, b DESC) WHERE a > 1:::INT8"},
+		{expressionIndex, descpb.AnonymousTable, "", "", "INDEX baz (a ASC, (a + b) DESC, b ASC)"},
 		{
 			partialIndex,
 			descpb.AnonymousTable,

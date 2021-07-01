@@ -27,8 +27,6 @@ CREATE INDEX t_lower_c_a_plus_b_idx ON t (lower(c), (a + b))
 statement ok
 CREATE INDEX t_a_plus_ten_idx ON t ((a + 10))
 
-# TODO(mgartner): The expression should be printed in expression indexes instead
-# of the virtual column name.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -40,10 +38,10 @@ CREATE TABLE public.t (
    j JSONB NULL,
    comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
    CONSTRAINT "primary" PRIMARY KEY (k ASC),
-   INDEX t_a_plus_b_idx (crdb_internal_idx_expr ASC),
-   INDEX t_lower_c_idx (crdb_internal_idx_expr_1 ASC),
-   INDEX t_lower_c_a_plus_b_idx (crdb_internal_idx_expr_2 ASC, crdb_internal_idx_expr_3 ASC),
-   INDEX t_a_plus_ten_idx (crdb_internal_idx_expr_4 ASC),
+   INDEX t_a_plus_b_idx ((a + b) ASC),
+   INDEX t_lower_c_idx (lower(c) ASC),
+   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
+   INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
    FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
 )
 
@@ -90,6 +88,39 @@ CREATE INDEX err ON other ((t.a + 10))
 # queries.
 statement error column \"crdb_internal_idx_expr\" does not exist
 SELECT * FROM t WHERE crdb_internal_idx_expr > 0
+
+# Test anonymous index name generation.
+
+statement ok
+CREATE TABLE anon (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c STRING,
+  FAMILY (k, a, b, c)
+);
+CREATE INDEX ON anon ((a + b));
+CREATE INDEX ON anon ((a + 10), b);
+CREATE UNIQUE INDEX ON anon (lower(c), b);
+CREATE INDEX ON anon ((a + 10), b, lower(c));
+CREATE INDEX ON anon ((a + 10), (b + 100), lower(c));
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE anon]
+----
+CREATE TABLE public.anon (
+   k INT8 NOT NULL,
+   a INT8 NULL,
+   b INT8 NULL,
+   c STRING NULL,
+   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   INDEX anon_expr_idx ((a + b) ASC),
+   INDEX anon_expr_b_idx ((a + 10:::INT8) ASC, b ASC),
+   UNIQUE INDEX anon_expr_b_key (lower(c) ASC, b ASC),
+   INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
+   INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
+   FAMILY fam_0_k_a_b_c (k, a, b, c)
+)
 
 # Querying expression indexes.
 
