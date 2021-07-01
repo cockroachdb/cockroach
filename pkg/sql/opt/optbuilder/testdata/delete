@@ -169,7 +169,7 @@ delete xyzw
 build
 DELETE FROM xyzw@bad_idx
 ----
-error: index "bad_idx" not found
+error (42704): index "bad_idx" not found
 
 # Use placeholders.
 build
