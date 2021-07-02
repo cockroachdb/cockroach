@@ -58,7 +58,7 @@ func registerImportNodeShutdown(r *testRegistryImpl) {
 		return startImport
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "import/nodeShutdown/worker",
 		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
@@ -72,7 +72,7 @@ func registerImportNodeShutdown(r *testRegistryImpl) {
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "import/nodeShutdown/coordinator",
 		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
@@ -133,7 +133,7 @@ func registerImportTPCC(r *testRegistryImpl) {
 	for _, numNodes := range []int{4, 32} {
 		testName := fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes)
 		timeout := 5 * time.Hour
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    testName,
 			Owner:   registry.OwnerBulkIO,
 			Cluster: r.MakeClusterSpec(numNodes),
@@ -145,7 +145,7 @@ func registerImportTPCC(r *testRegistryImpl) {
 	}
 	const geoWarehouses = 4000
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
@@ -174,7 +174,7 @@ func registerImportTPCH(r *testRegistryImpl) {
 		{8, 8 * time.Hour},
 	} {
 		item := item
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
 			Owner:   registry.OwnerBulkIO,
 			Cluster: r.MakeClusterSpec(item.nodes),
@@ -301,7 +301,7 @@ func runImportMixedVersion(
 }
 
 func registerImportMixedVersion(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "import/mixed-versions",
 		Owner: registry.OwnerBulkIO,
 		// Mixed-version support was added in 21.1.
@@ -345,7 +345,7 @@ func registerImportDecommissioned(r *testRegistryImpl) {
 		c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "import/decommissioned",
 		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),

@@ -35,7 +35,7 @@ func registerSchemaChangeRandomLoad(r *testRegistryImpl) {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "schemachange/random-load",
 		Owner: registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(
@@ -81,7 +81,7 @@ func registerRandomLoadBenchSpec(r *testRegistryImpl, b randomLoadBenchSpec) {
 	}
 	name := strings.Join(nameParts, "/")
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    name,
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(b.Nodes),

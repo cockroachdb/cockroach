@@ -66,8 +66,8 @@ func TestMatchOrSkip(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			f := registry.NewTestFilter(c.filter)
-			spec := &TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
-			if value := spec.matchOrSkip(f); c.expected != value {
+			spec := &registry.TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
+			if value := spec.MatchOrSkip(f); c.expected != value {
 				t.Fatalf("expected %t, but found %t", c.expected, value)
 			} else if value && c.expectedSkip != spec.Skip {
 				t.Fatalf("expected %s, but found %s", c.expectedSkip, spec.Skip)
@@ -91,13 +91,13 @@ func nilLogger() *logger.Logger {
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
 	r := mkReg(t)
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
 		Run:     func(ctx context.Context, t test.Test, c cluster.Cluster) {},
 		Cluster: r.MakeClusterSpec(0),
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "fail",
 		Owner: OwnerUnitTest,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -183,7 +183,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		cpuQuota:                  1000,
 		keepClustersOnTestFailure: false,
 	}
-	test := TestSpec{
+	test := registry.TestSpec{
 		Name:    `timeout`,
 		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
@@ -192,7 +192,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 			<-ctx.Done()
 		},
 	}
-	err := runner.Run(ctx, []TestSpec{test}, 1, /* count */
+	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
 		defaultParallelism, copt, testOpts{}, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
@@ -208,17 +208,17 @@ func TestRunnerTestTimeout(t *testing.T) {
 func TestRegistryPrepareSpec(t *testing.T) {
 	dummyRun := func(context.Context, test.Test, cluster.Cluster) {}
 
-	var listTests = func(t *TestSpec) []string {
+	var listTests = func(t *registry.TestSpec) []string {
 		return []string{t.Name}
 	}
 
 	testCases := []struct {
-		spec          TestSpec
+		spec          registry.TestSpec
 		expectedErr   string
 		expectedTests []string
 	}{
 		{
-			TestSpec{
+			registry.TestSpec{
 				Name:    "a",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
@@ -228,7 +228,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			[]string{"a"},
 		},
 		{
-			TestSpec{
+			registry.TestSpec{
 				Name:    "illegal *[]",
 				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
@@ -265,7 +265,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, version.Version{})
 	r := mkReg(t)
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "boom",
 		Owner:   OwnerUnitTest,
 		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),

@@ -30,7 +30,7 @@ import (
 )
 
 func registerMultiTenantUpgrade(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:              "multitenant-upgrade",
 		Cluster:           r.MakeClusterSpec(2),
 		Owner:             registry.OwnerKV,

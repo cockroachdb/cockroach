@@ -38,7 +38,7 @@ func makeScrubTPCCTest(
 	length time.Duration,
 	optionName string,
 	numScrubRuns int,
-) TestSpec {
+) registry.TestSpec {
 	var stmtOptions string
 	// SCRUB checks are run at -1m to avoid contention with TPCC traffic.
 	// By the time the SCRUB queries start, the tables will have been loaded for
@@ -53,7 +53,7 @@ func makeScrubTPCCTest(
 		panic(fmt.Sprintf("Not a valid option: %s", optionName))
 	}
 
-	return TestSpec{
+	return registry.TestSpec{
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),

@@ -16,6 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -36,7 +37,7 @@ type workPool struct {
 	}
 }
 
-func newWorkPool(tests []TestSpec, count int) *workPool {
+func newWorkPool(tests []registry.TestSpec, count int) *workPool {
 	p := &workPool{count: count}
 	for _, spec := range tests {
 		p.mu.tests = append(p.mu.tests, testWithCount{spec: spec, count: count})
@@ -51,7 +52,7 @@ type testToRunRes struct {
 	// other fields are set.
 	noWork bool
 	// spec is the selected test.
-	spec TestSpec
+	spec registry.TestSpec
 	// runNum is run number. 1 if --count was not used.
 	runNum int
 

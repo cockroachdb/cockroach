@@ -68,7 +68,7 @@ func registerRoachmart(r *testRegistryImpl) {
 
 	for _, v := range []bool{true, false} {
 		v := v
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("roachmart/partition=%v", v),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),

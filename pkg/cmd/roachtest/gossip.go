@@ -152,7 +152,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 		}
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(9),

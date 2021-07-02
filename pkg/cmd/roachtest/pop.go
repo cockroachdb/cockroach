@@ -96,7 +96,7 @@ func registerPop(r *testRegistryImpl) {
 		require.NoError(t, err, "error while running pop tests")
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "pop",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

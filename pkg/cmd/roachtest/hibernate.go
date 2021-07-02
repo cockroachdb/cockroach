@@ -235,7 +235,7 @@ func registerHibernate(r *testRegistryImpl, opt hibernateOptions) {
 		)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    opt.testName,
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),
