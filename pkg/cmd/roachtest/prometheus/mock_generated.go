@@ -53,7 +53,9 @@ func (mr *MockclusterMockRecorder) ExternalIP(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // Get mocks base method.
-func (m *Mockcluster) Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error {
+func (m *Mockcluster) Get(
+	ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option,
+) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, l, src, dest}
 	for _, a := range opts {
@@ -65,14 +67,18 @@ func (m *Mockcluster) Get(ctx context.Context, l *logger.Logger, src, dest strin
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockclusterMockRecorder) Get(ctx, l, src, dest interface{}, opts ...interface{}) *gomock.Call {
+func (mr *MockclusterMockRecorder) Get(
+	ctx, l, src, dest interface{}, opts ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, l, src, dest}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*Mockcluster)(nil).Get), varargs...)
 }
 
 // PutString mocks base method.
-func (m *Mockcluster) PutString(ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option) error {
+func (m *Mockcluster) PutString(
+	ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
+) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, content, dest, mode}
 	for _, a := range opts {
@@ -84,7 +90,9 @@ func (m *Mockcluster) PutString(ctx context.Context, content, dest string, mode 
 }
 
 // PutString indicates an expected call of PutString.
-func (mr *MockclusterMockRecorder) PutString(ctx, content, dest, mode interface{}, opts ...interface{}) *gomock.Call {
+func (mr *MockclusterMockRecorder) PutString(
+	ctx, content, dest, mode interface{}, opts ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, content, dest, mode}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutString", reflect.TypeOf((*Mockcluster)(nil).PutString), varargs...)

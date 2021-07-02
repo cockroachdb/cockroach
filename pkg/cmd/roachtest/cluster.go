@@ -1737,35 +1737,10 @@ fi
 		branch))
 }
 
-// startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
-func startArgs(extraArgs ...string) option.Option {
-	return roachprodArgOption(extraArgs)
-}
-
-// startArgsDontEncrypt will pass '--encrypt=false' to roachprod regardless of the
-// --encrypt flag on roachtest. This is useful for tests that cannot pass with
-// encryption enabled.
-var startArgsDontEncrypt = startArgs("--encrypt=false")
-
-// racks is an option which specifies the number of racks to partition the nodes
-// into.
-func racks(n int) option.Option {
-	return startArgs(fmt.Sprintf("--racks=%d", n))
-}
-
-// stopArgs specifies extra arguments that are passed to `roachprod` during `c.Stop`.
-func stopArgs(extraArgs ...string) option.Option {
-	return roachprodArgOption(extraArgs)
-}
-
-type roachprodArgOption []string
-
-func (o roachprodArgOption) Option() {}
-
 func roachprodArgs(opts []option.Option) []string {
 	var args []string
 	for _, opt := range opts {
-		a, ok := opt.(roachprodArgOption)
+		a, ok := opt.(option.RoachprodArgOption)
 		if !ok {
 			continue
 		}
