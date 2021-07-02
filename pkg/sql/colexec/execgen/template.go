@@ -174,11 +174,15 @@ func foldConditionals(
 				c := item.(*dst.CaseClause)
 				for _, e := range c.List {
 					if prettyPrintExprs(e) == t {
-						body := &dst.BlockStmt{List: c.Body}
-						newBody := foldConditionals(body, info, templateSwitches).(*dst.BlockStmt)
-						for _, stmt := range newBody.List {
-							cursor.InsertBefore(stmt)
+						body := &dst.BlockStmt{
+							List: c.Body,
+							Decs: dst.BlockStmtDecorations{
+								NodeDecs: c.Decs.NodeDecs,
+								Lbrace:   c.Decs.Colon,
+							},
 						}
+						newBody := foldConditionals(body, info, templateSwitches).(*dst.BlockStmt)
+						insertBlockStmt(cursor, newBody)
 						cursor.Delete()
 						return true
 					}
@@ -208,9 +212,7 @@ func foldConditionals(
 			if ret {
 				// Replace with the if side.
 				newBody := foldConditionals(n.Body, info, templateSwitches).(*dst.BlockStmt)
-				for _, stmt := range newBody.List {
-					cursor.InsertBefore(stmt)
-				}
+				insertBlockStmt(cursor, newBody)
 				cursor.Delete()
 				return true
 			}
@@ -219,9 +221,7 @@ func foldConditionals(
 				newElse := foldConditionals(n.Else, info, templateSwitches)
 				switch e := newElse.(type) {
 				case *dst.BlockStmt:
-					for _, stmt := range e.List {
-						cursor.InsertBefore(stmt)
-					}
+					insertBlockStmt(cursor, e)
 					cursor.Delete()
 				default:
 					cursor.Replace(newElse)
@@ -279,6 +279,23 @@ func tryEvalBool(n dst.Expr) (ret bool, ok bool) {
 		return false, false
 	}
 	return false, false
+}
+
+func insertBlockStmt(cursor *dstutil.Cursor, block *dst.BlockStmt) {
+	// Make sure to preserve comments.
+	cursor.InsertBefore(&dst.EmptyStmt{
+		Implicit: true,
+		Decs: dst.EmptyStmtDecorations{
+			NodeDecs: dst.NodeDecs{
+				Before: dst.NewLine,
+				Start:  trimLeadingNewLines(append(block.Decs.Lbrace, block.Decs.NodeDecs.Start...)),
+				End:    block.Decs.End,
+				After:  dst.NewLine,
+			}},
+	})
+	for _, stmt := range block.List {
+		cursor.InsertBefore(stmt)
+	}
 }
 
 // findTemplateFuncs, given an AST, finds all functions annotated with
@@ -369,6 +386,7 @@ func findTemplateFuncs(f *dst.File) map[string]*funcInfo {
 				},
 			})
 			n.Type.Params.List = newParamList
+			n.Decs.Start = trimStartDecs(n)
 			info.decl = n
 			ret[info.decl.Name.Name] = info
 			cursor.Delete()
@@ -391,6 +409,30 @@ func getTemplateVariantName(info *funcInfo, args []dst.Expr) *dst.Ident {
 	s := newName.String()
 	s = nameMangler.Replace(s)
 	return dst.NewIdent(s)
+}
+
+func trimStartDecs(n *dst.FuncDecl) []string {
+	// The function declaration node can accidentally capture extra comments that
+	// we want to leave in their original position, and not duplicate. So, remove
+	// any decorations that are separated from the function declaration by one or
+	// more newlines.
+	startDecs := n.Decs.Start.All()
+	for i := len(startDecs) - 1; i >= 0; i-- {
+		if strings.TrimSpace(startDecs[i]) == "" {
+			return startDecs[i+1:]
+		}
+	}
+	return startDecs
+}
+
+func trimLeadingNewLines(decs []string) []string {
+	var i int
+	for ; i < len(decs); i++ {
+		if strings.TrimSpace(decs[i]) != "" {
+			break
+		}
+	}
+	return decs[i:]
 }
 
 // replaceAndExpandTemplates finds all CallExprs in the input AST that are calling
