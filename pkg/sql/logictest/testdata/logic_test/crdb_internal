@@ -276,7 +276,7 @@ raw_config_yaml  raw_config_sql  raw_config_protobuf full_config_yaml full_confi
 query IITTT colnames
 SELECT * FROM crdb_internal.cluster_inflight_traces WHERE trace_id=123
 ----
-trace_id  node_id  trace_json  trace_str  jaeger_json
+trace_id  node_id  root_op_name  trace_str  jaeger_json
 
 query IIIIBTIT colnames
 SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
