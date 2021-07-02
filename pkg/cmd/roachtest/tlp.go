@@ -28,7 +28,7 @@ import (
 
 const statementTimeout = time.Minute
 
-func registerTLP(r *testRegistryImpl) {
+func registerTLP(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "tlp",
 		Owner:   registry.OwnerSQLQueries,

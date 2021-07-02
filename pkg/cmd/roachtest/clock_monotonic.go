@@ -122,7 +122,7 @@ type clockMonotonicityTestCase struct {
 	expectIncreasingWallTime bool
 }
 
-func registerClockMonotonicTests(r *testRegistryImpl) {
+func registerClockMonotonicTests(r registry.Registry) {
 	testCases := []clockMonotonicityTestCase{
 		{
 			name:                     "persistent",

@@ -327,7 +327,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	}
 }
 
-func registerJepsen(r *testRegistryImpl) {
+func registerJepsen(r registry.Registry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{

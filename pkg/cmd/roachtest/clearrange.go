@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
-func registerClearRange(r *testRegistryImpl) {
+func registerClearRange(r registry.Registry) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
 		r.Add(registry.TestSpec{

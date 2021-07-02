@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerInterleaved(r *testRegistryImpl) {
+func registerInterleaved(r registry.Registry) {
 	type config struct {
 		eastName        string
 		westName        string

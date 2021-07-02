@@ -26,7 +26,7 @@ import (
 
 // TODO(tbg): remove this test. Use the harness in versionupgrade.go
 // to make a much better one, much more easily.
-func registerVersion(r *testRegistryImpl) {
+func registerVersion(r registry.Registry) {
 	runVersion := func(ctx context.Context, t test.Test, c cluster.Cluster, binaryVersion string) {
 		nodes := c.Spec().NodeCount - 1
 

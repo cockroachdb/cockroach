@@ -21,7 +21,7 @@ import (
 var supportedLiquibaseHarnessTag = "liquibase-test-harness-1.0.1"
 
 // This test runs the Liquibase test harness against a single cockroach node.
-func registerLiquibase(r *testRegistryImpl) {
+func registerLiquibase(r registry.Registry) {
 	runLiquibase := func(
 		ctx context.Context,
 		t test.Test,

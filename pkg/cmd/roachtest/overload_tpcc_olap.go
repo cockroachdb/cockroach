@@ -121,7 +121,7 @@ func verifyNodeLiveness(
 	}
 }
 
-func registerTPCCOverloadSpec(r *testRegistryImpl, s tpccOLAPSpec) {
+func registerTPCCOverloadSpec(r registry.Registry, s tpccOLAPSpec) {
 	name := fmt.Sprintf("overload/tpcc_olap/nodes=%d/cpu=%d/w=%d/c=%d",
 		s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
 	r.Add(registry.TestSpec{
@@ -133,7 +133,7 @@ func registerTPCCOverloadSpec(r *testRegistryImpl, s tpccOLAPSpec) {
 	})
 }
 
-func registerOverload(r *testRegistryImpl) {
+func registerOverload(r registry.Registry) {
 	specs := []tpccOLAPSpec{
 		{
 			CPUs:        8,

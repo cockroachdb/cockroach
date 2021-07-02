@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func registerMultiTenantUpgrade(r *testRegistryImpl) {
+func registerMultiTenantUpgrade(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "multitenant-upgrade",
 		Cluster:           r.MakeClusterSpec(2),

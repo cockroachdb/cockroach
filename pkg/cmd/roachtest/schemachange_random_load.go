@@ -29,7 +29,7 @@ type randomLoadBenchSpec struct {
 	Concurrency int
 }
 
-func registerSchemaChangeRandomLoad(r *testRegistryImpl) {
+func registerSchemaChangeRandomLoad(r registry.Registry) {
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	if cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
@@ -71,7 +71,7 @@ func registerSchemaChangeRandomLoad(r *testRegistryImpl) {
 	})
 }
 
-func registerRandomLoadBenchSpec(r *testRegistryImpl, b randomLoadBenchSpec) {
+func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
 	nameParts := []string{
 		"scbench",
 		"randomload",

@@ -25,7 +25,7 @@ var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)
 var supportedTypeORMRelease = "0.2.32"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
-func registerTypeORM(r *testRegistryImpl) {
+func registerTypeORM(r registry.Registry) {
 	runTypeORM := func(
 		ctx context.Context,
 		t test.Test,

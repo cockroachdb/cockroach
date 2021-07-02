@@ -32,7 +32,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerDecommission(r *testRegistryImpl) {
+func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		duration := time.Hour

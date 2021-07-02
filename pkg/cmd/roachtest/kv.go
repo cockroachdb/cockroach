@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerKV(r *testRegistryImpl) {
+func registerKV(r registry.Registry) {
 	type kvOptions struct {
 		nodes       int
 		cpus        int
@@ -233,7 +233,7 @@ func registerKV(r *testRegistryImpl) {
 	}
 }
 
-func registerKVContention(r *testRegistryImpl) {
+func registerKVContention(r registry.Registry) {
 	const nodes = 4
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
@@ -302,7 +302,7 @@ func registerKVContention(r *testRegistryImpl) {
 	})
 }
 
-func registerKVQuiescenceDead(r *testRegistryImpl) {
+func registerKVQuiescenceDead(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "kv/quiescence/nodes=3",
 		Owner:   registry.OwnerKV,
@@ -383,7 +383,7 @@ func registerKVQuiescenceDead(r *testRegistryImpl) {
 	})
 }
 
-func registerKVGracefulDraining(r *testRegistryImpl) {
+func registerKVGracefulDraining(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   registry.OwnerKV,
@@ -582,7 +582,7 @@ func registerKVGracefulDraining(r *testRegistryImpl) {
 	})
 }
 
-func registerKVSplits(r *testRegistryImpl) {
+func registerKVSplits(r registry.Registry) {
 	for _, item := range []struct {
 		quiesce bool
 		splits  int
@@ -635,7 +635,7 @@ func registerKVSplits(r *testRegistryImpl) {
 	}
 }
 
-func registerKVScalability(r *testRegistryImpl) {
+func registerKVScalability(r registry.Registry) {
 	runScalability := func(ctx context.Context, t test.Test, c cluster.Cluster, percent int) {
 		nodes := c.Spec().NodeCount - 1
 
@@ -677,7 +677,7 @@ func registerKVScalability(r *testRegistryImpl) {
 	}
 }
 
-func registerKVRangeLookups(r *testRegistryImpl) {
+func registerKVRangeLookups(r registry.Registry) {
 	type rangeLookupWorkloadType int
 	const (
 		splitWorkload rangeLookupWorkloadType = iota

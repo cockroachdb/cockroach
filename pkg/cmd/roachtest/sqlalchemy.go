@@ -40,7 +40,7 @@ var alembicReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
 
-func registerSQLAlchemy(r *testRegistryImpl) {
+func registerSQLAlchemy(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "sqlalchemy",
 		Owner:   registry.OwnerSQLExperience,

@@ -41,7 +41,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerFollowerReads(r *testRegistryImpl) {
+func registerFollowerReads(r registry.Registry) {
 	register := func(survival survivalGoal, locality localitySetting) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),

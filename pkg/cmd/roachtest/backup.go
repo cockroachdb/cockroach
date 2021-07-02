@@ -86,7 +86,7 @@ func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluste
 	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
 }
 
-func registerBackupNodeShutdown(r *testRegistryImpl) {
+func registerBackupNodeShutdown(r registry.Registry) {
 	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
 	// the backup.
 	backupNodeRestartSpec := r.MakeClusterSpec(4)
@@ -179,7 +179,7 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 	return tick
 }
 
-func registerBackup(r *testRegistryImpl) {
+func registerBackup(r registry.Registry) {
 
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(registry.TestSpec{

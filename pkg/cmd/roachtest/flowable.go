@@ -23,7 +23,7 @@ var flowableReleaseTagRegex = regexp.MustCompile(`^flowable-(?P<major>\d+)\.(?P<
 
 // This test runs Flowable test suite against a single cockroach node.
 
-func registerFlowable(r *testRegistryImpl) {
+func registerFlowable(r registry.Registry) {
 	runFlowable := func(
 		ctx context.Context,
 		t test.Test,
