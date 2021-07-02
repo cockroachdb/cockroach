@@ -244,7 +244,7 @@ func registerAutoUpgrade(r *testRegistryImpl) {
 		c.Start(ctx, c.Node(nodeDecommissioned))
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `autoupgrade`,
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(5),

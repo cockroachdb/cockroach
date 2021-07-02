@@ -41,7 +41,7 @@ var alembicReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\
 // node.
 
 func registerSQLAlchemy(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "sqlalchemy",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

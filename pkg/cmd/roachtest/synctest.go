@@ -32,7 +32,7 @@ else
 fi
 `
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Skip:  "#48603: broken on Pebble",
 		Name:  "synctest",
 		Owner: registry.OwnerStorage,

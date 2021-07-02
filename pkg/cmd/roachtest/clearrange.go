@@ -27,7 +27,7 @@ import (
 func registerClearRange(r *testRegistryImpl) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:  fmt.Sprintf(`clearrange/checks=%t`, checks),
 			Owner: registry.OwnerStorage,
 			// 5h for import, 90 for the test. The import should take closer

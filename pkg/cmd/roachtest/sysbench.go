@@ -142,7 +142,7 @@ func registerSysbench(r *testRegistryImpl) {
 			rowsPerTable: 10000000,
 		}
 
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(n+1, spec.CPU(cpus)),

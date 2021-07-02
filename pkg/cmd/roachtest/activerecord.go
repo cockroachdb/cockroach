@@ -239,7 +239,7 @@ func registerActiveRecord(r *testRegistryImpl) {
 		)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "activerecord",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

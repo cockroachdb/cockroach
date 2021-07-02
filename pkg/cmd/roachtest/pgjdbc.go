@@ -190,7 +190,7 @@ func registerPgjdbc(r *testRegistryImpl) {
 		)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "pgjdbc",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

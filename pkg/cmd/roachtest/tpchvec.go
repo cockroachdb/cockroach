@@ -565,7 +565,7 @@ func runTPCHVec(
 const tpchVecNodeCount = 3
 
 func registerTPCHVec(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpchvec/perf",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
@@ -574,7 +574,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 		},
 	})
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpchvec/disk",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
@@ -585,7 +585,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 		},
 	})
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpchvec/smithcmp",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
@@ -594,7 +594,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 		},
 	})
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpchvec/perf_no_stats",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
@@ -603,7 +603,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 		},
 	})
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpchvec/bench",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),

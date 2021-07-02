@@ -132,7 +132,7 @@ func registerPsycopg(r *testRegistryImpl) {
 		)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "psycopg",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

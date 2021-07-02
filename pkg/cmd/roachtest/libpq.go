@@ -139,7 +139,7 @@ func registerLibPQ(r *testRegistryImpl) {
 		)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "lib/pq",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

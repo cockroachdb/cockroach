@@ -173,7 +173,7 @@ func registerTypeORM(r *testRegistryImpl) {
 		}
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "typeorm",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

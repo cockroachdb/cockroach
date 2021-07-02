@@ -20,7 +20,7 @@ import (
 )
 
 func registerSequenceUpgrade(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "version/sequence-upgrade",
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(1),

@@ -29,7 +29,7 @@ import (
 const statementTimeout = time.Minute
 
 func registerTLP(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tlp",
 		Owner:   registry.OwnerSQLQueries,
 		Timeout: time.Minute * 5,
@@ -100,7 +100,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	defer smither.Close()
 
 	t.Status("running TLP")
-	until := time.After(t.Spec().(*TestSpec).Timeout / 2)
+	until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
 	done := ctx.Done()
 	for i := 1; ; i++ {
 		select {

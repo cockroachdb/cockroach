@@ -25,7 +25,7 @@ func registerLedger(r *testRegistryImpl) {
 	// NB: us-central1-a has been causing issues, see:
 	// https://github.com/cockroachdb/cockroach/issues/66184
 	const azs = "us-central1-f,us-central1-b,us-central1-c"
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(azs)),

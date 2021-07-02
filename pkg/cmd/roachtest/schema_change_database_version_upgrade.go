@@ -33,7 +33,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistryImpl) {
 	// 2. Ability to use ALTER DATABASE ... CONVERT TO SCHEMA WITH PARENT on
 	//    databases created in 20.1.
 	// TODO (lucy): Remove this test in 21.1.
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "schemachange/database-version-upgrade",
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(3),
