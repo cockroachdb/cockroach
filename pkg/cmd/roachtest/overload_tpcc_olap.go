@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -125,7 +126,7 @@ func registerTPCCOverloadSpec(r *testRegistryImpl, s tpccOLAPSpec) {
 		s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
 	r.Add(TestSpec{
 		Name:    name,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
 		Run:     s.run,
 		Timeout: 20 * time.Minute,

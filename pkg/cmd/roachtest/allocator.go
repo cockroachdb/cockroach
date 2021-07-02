@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -76,7 +77,7 @@ func registerAllocator(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    `replicate/up/1to3`,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
@@ -84,7 +85,7 @@ func registerAllocator(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    `replicate/rebalance/3to5`,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
@@ -92,7 +93,7 @@ func registerAllocator(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    `replicate/wide`,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Timeout: 10 * time.Minute,
 		Cluster: r.MakeClusterSpec(9, spec.CPU(1)),
 		Run:     runWideReplication,

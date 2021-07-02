@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -566,7 +567,7 @@ const tpchVecNodeCount = 3
 func registerTPCHVec(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    "tpchvec/perf",
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(false /* disableStatsCreation */), baseTestRun)
@@ -575,7 +576,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "tpchvec/disk",
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		// 19.2 version doesn't have disk spilling nor memory monitoring, so
 		// there is no point in running this config on that version.
@@ -586,7 +587,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "tpchvec/smithcmp",
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
@@ -595,7 +596,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "tpchvec/perf_no_stats",
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(true /* disableStatsCreation */), baseTestRun)
@@ -604,7 +605,7 @@ func registerTPCHVec(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "tpchvec/bench",
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Skip: "This config can be used to perform some benchmarking and is not " +
 			"meant to be run on a nightly basis",

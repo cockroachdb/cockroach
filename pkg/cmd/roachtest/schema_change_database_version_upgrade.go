@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -34,7 +35,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistryImpl) {
 	// TODO (lucy): Remove this test in 21.1.
 	r.Add(TestSpec{
 		Name:    "schemachange/database-version-upgrade",
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, *t.BuildVersion())

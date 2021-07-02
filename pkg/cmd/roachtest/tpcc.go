@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -302,7 +303,7 @@ func registerTPCC(r *testRegistryImpl) {
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
 		Name:    "tpcc/headroom/" + headroomSpec.String(),
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Tags:    []string{`default`, `release_qualification`},
 		Cluster: headroomSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -324,7 +325,7 @@ func registerTPCC(r *testRegistryImpl) {
 		// migrations while TPCC runs. It simulates a real production
 		// deployment in the middle of the migration into a new cluster version.
 		Name:  "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
-		Owner: OwnerKV,
+		Owner: registry.OwnerKV,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
 		Tags:    []string{`default`},
@@ -406,7 +407,7 @@ func registerTPCC(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    "tpcc-nowait/nodes=3/w=1",
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
@@ -419,7 +420,7 @@ func registerTPCC(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    "weekly/tpcc/headroom",
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Tags:    []string{`weekly`},
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		// Give the test a generous extra 10 hours to load the dataset and
@@ -537,7 +538,7 @@ func registerTPCC(r *testRegistryImpl) {
 			tc := multiRegionTests[i]
 			r.Add(TestSpec{
 				Name:  tc.name,
-				Owner: OwnerMultiRegion,
+				Owner: registry.OwnerMultiRegion,
 				// Add an extra node which serves as the workload nodes.
 				Cluster: r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -599,7 +600,7 @@ func registerTPCC(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "tpcc/w=100/nodes=3/chaos=true",
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			duration := 30 * time.Minute
@@ -626,7 +627,7 @@ func registerTPCC(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		Timeout: 6 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -853,7 +854,7 @@ func registerTPCCBenchSpec(r *testRegistryImpl, b tpccBenchSpec) {
 
 	r.Add(TestSpec{
 		Name:    name,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: nodes,
 		Tags:    b.Tags,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

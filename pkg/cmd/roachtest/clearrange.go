@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -28,7 +29,7 @@ func registerClearRange(r *testRegistryImpl) {
 		checks := checks
 		r.Add(TestSpec{
 			Name:  fmt.Sprintf(`clearrange/checks=%t`, checks),
-			Owner: OwnerStorage,
+			Owner: registry.OwnerStorage,
 			// 5h for import, 90 for the test. The import should take closer
 			// to <3:30h but it varies.
 			Timeout: 5*time.Hour + 90*time.Minute,

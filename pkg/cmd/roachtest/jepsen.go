@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -346,7 +347,7 @@ func registerJepsen(r *testRegistryImpl) {
 			s := TestSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
-				Owner: OwnerKV,
+				Owner: registry.OwnerKV,
 				// The Jepsen tests do funky things to machines, like muck with the
 				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when

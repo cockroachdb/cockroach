@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -36,7 +37,7 @@ func registerSchemaChangeRandomLoad(r *testRegistryImpl) {
 	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(TestSpec{
 		Name:  "schemachange/random-load",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
@@ -82,7 +83,7 @@ func registerRandomLoadBenchSpec(r *testRegistryImpl, b randomLoadBenchSpec) {
 
 	r.Add(TestSpec{
 		Name:    name,
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(b.Nodes),
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.

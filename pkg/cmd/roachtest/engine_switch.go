@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -142,7 +143,7 @@ func registerEngineSwitch(r *testRegistryImpl) {
 	n := 3
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("engine/switch/nodes=%d", n),
-		Owner:   OwnerStorage,
+		Owner:   registry.OwnerStorage,
 		Skip:    "rocksdb removed in 21.1",
 		Cluster: r.MakeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -151,7 +152,7 @@ func registerEngineSwitch(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("engine/switch/encrypted/nodes=%d", n),
-		Owner:   OwnerStorage,
+		Owner:   registry.OwnerStorage,
 		Skip:    "rocksdb removed in 21.1",
 		Cluster: r.MakeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

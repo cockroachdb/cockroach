@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -69,7 +70,7 @@ func registerRoachmart(r *testRegistryImpl) {
 		v := v
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("roachmart/partition=%v", v),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)

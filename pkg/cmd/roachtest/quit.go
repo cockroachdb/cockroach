@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -340,7 +341,7 @@ func registerQuitTransfersLeases(r *testRegistryImpl) {
 	registerTest := func(name, minver string, method func(context.Context, test.Test, cluster.Cluster, int)) {
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("transfer-leases/%s", name),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(3),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
@@ -421,7 +422,7 @@ func registerQuitAllNodes(r *testRegistryImpl) {
 	// short --drain-wait for the remaining nodes under quorum.
 	r.Add(TestSpec{
 		Name:    "quit-all-nodes",
-		Owner:   OwnerServer,
+		Owner:   registry.OwnerServer,
 		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			q := quitTest{t: t, c: c}

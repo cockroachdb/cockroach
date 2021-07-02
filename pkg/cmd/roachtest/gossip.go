@@ -24,6 +24,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -153,7 +154,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 
 	r.Add(TestSpec{
 		Name:    "gossip/chaos/nodes=9",
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(9),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGossipChaos(ctx, t, c)

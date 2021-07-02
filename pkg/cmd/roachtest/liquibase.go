@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -107,7 +108,7 @@ func registerLiquibase(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "liquibase",
-		Owner:   OwnerSQLExperience,
+		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `tool`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -213,7 +214,7 @@ func registerVersion(r *testRegistryImpl) {
 	for _, n := range []int{3, 5} {
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("version/mixed/nodes=%d", n),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				pred, err := PredecessorVersion(*t.BuildVersion())
