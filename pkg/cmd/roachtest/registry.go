@@ -57,7 +57,7 @@ func registerTests(r registry.Registry) {
 	registerInconsistency(r)
 	registerIndexes(r)
 	registerInterleaved(r)
-	registerJepsen(r)
+	tests.RegisterJepsen(r)
 	registerJobsMixedVersions(r)
 	registerKV(r)
 	registerKVContention(r)

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package tests
 
 import (
 	"context"
@@ -191,7 +191,7 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 			// Ignore an error like the following.
 			// Could not transfer artifact org.clojure:clojure:jar:1.9.0 from/to central (https://repo1.maven.org/maven2/): GET request of: org/clojure/clojure/1.9.0/clojure-1.9.0.jar from central failed
 			r := regexp.MustCompile("Could not transfer artifact|Failed to read artifact descriptor for")
-			match := r.FindStringSubmatch(GetStderr(err))
+			match := r.FindStringSubmatch(fmt.Sprintf("%+v", err))
 			if match != nil {
 				t.L().PrintfCtx(ctx, "failure installing deps (\"%s\")\nfull err: %+v",
 					match, err)
@@ -308,6 +308,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				filepath.Join(outputDir, file),
 				controller,
 			); err != nil {
+				anyFailed = true
 				t.L().Printf("failed to retrieve %s: %s", file, err)
 			}
 		}
@@ -324,7 +325,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	}
 }
 
-func registerJepsen(r registry.Registry) {
+// RegisterJepsen registers the Jepsen test suite, which primarily checks for
+// transaction anomalies.
+func RegisterJepsen(r registry.Registry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{
