@@ -212,6 +212,15 @@ ALTER TABLE child ADD CONSTRAINT err FOREIGN KEY (a) REFERENCES t(crdb_internal_
 statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot reference a foreign key
 ALTER TABLE t ADD CONSTRAINT err FOREIGN KEY (crdb_internal_idx_expr_4) REFERENCES child(a)
 
+# Renaming a column to the same name as one of the inaccessible expression index
+# columns is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" of relation \"t\" already exists
+ALTER TABLE t RENAME COLUMN a TO crdb_internal_idx_expr_4
+
+# Renaming an inaccessible expression index column is not allowed.
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be renamed
+ALTER TABLE t RENAME COLUMN crdb_internal_idx_expr_4 TO err
+
 # Adding a column with the same name as one of the inaccessible columns created
 # for an expression index is not allowed.
 statement error column \"crdb_internal_idx_expr_4\" of relation \"t\" already exists

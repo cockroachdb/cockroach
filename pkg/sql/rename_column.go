@@ -126,6 +126,13 @@ func (p *planner) renameColumn(
 	if isShardColumn && !allowRenameOfShardColumn {
 		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
 	}
+	if col.IsInaccessible() {
+		return false, pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot be renamed",
+			col.GetName(),
+		)
+	}
 	// Understand if the active column already exists before checking for column
 	// mutations to detect assertion failure of empty mutation and no column.
 	// Otherwise we would have to make the above call twice.
