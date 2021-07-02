@@ -255,6 +255,12 @@ type LocalOnlySessionData struct {
 	// tables that are not yet implemented.
 	StubCatalogTablesEnabled bool
 
+	// ExperimentalComputedColumnRewrites allows automatic rewriting of computed
+	// column expressions in CREATE TABLE and ALTER TABLE statements. See the
+	// experimentalComputedColumnRewrites cluster setting for a description of the
+	// format.
+	ExperimentalComputedColumnRewrites string
+
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //

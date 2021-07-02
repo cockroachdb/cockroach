@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -406,6 +407,17 @@ var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
 	`default value for stub_catalog_tables session setting`,
 	true,
 ).WithPublic()
+
+var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting(
+	"sql.defaults.experimental_computed_column_rewrites",
+	"allows rewriting computed column expressions in CREATE TABLE and ALTER TABLE statements; "+
+		"the format is: '(before expression) -> (after expression) [, (before expression) -> (after expression) ...]'",
+	"", /* defaultValue */
+	func(_ *settings.Values, val string) error {
+		_, err := schemaexpr.ParseComputedColumnRewrites(val)
+		return err
+	},
+)
 
 // settingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
@@ -2497,6 +2509,10 @@ func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 // SetStubCatalogTableEnabled sets default value for stub_catalog_tables.
 func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
 	m.data.StubCatalogTablesEnabled = enabled
+}
+
+func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
+	m.data.ExperimentalComputedColumnRewrites = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
