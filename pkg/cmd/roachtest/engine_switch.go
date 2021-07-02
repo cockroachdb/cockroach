@@ -25,7 +25,7 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func registerEngineSwitch(r *testRegistry) {
+func registerEngineSwitch(r *testRegistryImpl) {
 	runEngineSwitch := func(ctx context.Context, t test.Test, c cluster.Cluster, additionalArgs ...string) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)
@@ -145,7 +145,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(n + 1),
+		Cluster:    r.MakeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runEngineSwitch(ctx, t, c)
 		},
@@ -155,7 +155,7 @@ func registerEngineSwitch(r *testRegistry) {
 		Owner:      OwnerStorage,
 		Skip:       "rocksdb removed in 21.1",
 		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(n + 1),
+		Cluster:    r.MakeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runEngineSwitch(ctx, t, c, "--encrypt=true")
 		},

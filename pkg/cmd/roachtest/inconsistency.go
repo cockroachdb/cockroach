@@ -19,12 +19,12 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func registerInconsistency(r *testRegistry) {
+func registerInconsistency(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:       "inconsistency",
 		Owner:      OwnerKV,
 		MinVersion: "v19.2.2", // https://github.com/cockroachdb/cockroach/pull/42149 is new in 19.2.2
-		Cluster:    r.makeClusterSpec(3),
+		Cluster:    r.MakeClusterSpec(3),
 		Run:        runInconsistency,
 	})
 }

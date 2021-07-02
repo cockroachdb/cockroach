@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerInterleaved(r *testRegistry) {
+func registerInterleaved(r *testRegistryImpl) {
 	type config struct {
 		eastName        string
 		westName        string
@@ -125,7 +125,7 @@ func registerInterleaved(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:    "interleavedpartitioned",
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(12, spec.Geo(), spec.Zones("us-east1-b,us-west1-b,europe-west2-b")),
+		Cluster: r.MakeClusterSpec(12, spec.Geo(), spec.Zones("us-east1-b,us-west1-b,europe-west2-b")),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runInterleaved(ctx, t, c,
 				config{

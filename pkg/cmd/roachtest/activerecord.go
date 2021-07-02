@@ -28,7 +28,7 @@ var activerecordAdapterVersion = "v6.1.2"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
-func registerActiveRecord(r *testRegistry) {
+func registerActiveRecord(r *testRegistryImpl) {
 	runActiveRecord := func(
 		ctx context.Context,
 		t test.Test,
@@ -242,7 +242,7 @@ func registerActiveRecord(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "activerecord",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run:        runActiveRecord,
 	})

@@ -26,7 +26,7 @@ var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<
 var djangoSupportedTag = "cockroach-3.2.x"
 var djangoCockroachDBSupportedTag = "3.2.1"
 
-func registerDjango(r *testRegistry) {
+func registerDjango(r *testRegistryImpl) {
 	runDjango := func(
 		ctx context.Context,
 		t test.Test,
@@ -218,7 +218,7 @@ func registerDjango(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "django",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1, spec.CPU(16)),
+		Cluster:    r.MakeClusterSpec(1, spec.CPU(16)),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDjango(ctx, t, c)

@@ -22,7 +22,7 @@ var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d
 var supportedPsycopgTag = "2_8_6"
 
 // This test runs psycopg full test suite against a single cockroach node.
-func registerPsycopg(r *testRegistry) {
+func registerPsycopg(r *testRegistryImpl) {
 	runPsycopg := func(
 		ctx context.Context,
 		t test.Test,
@@ -134,7 +134,7 @@ func registerPsycopg(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "psycopg",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

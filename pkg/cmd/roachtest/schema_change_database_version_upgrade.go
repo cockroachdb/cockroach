@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
+func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistryImpl) {
 	// This test tests 2 loosely related things:
 	// 1. Correctness of database schema changes during the 20.1/20.2 mixed-
 	//    version state, in which 20.2 nodes still use the deprecated database
@@ -36,7 +36,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 		Name:       "schemachange/database-version-upgrade",
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(3),
+		Cluster:    r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, *t.BuildVersion())
 		},

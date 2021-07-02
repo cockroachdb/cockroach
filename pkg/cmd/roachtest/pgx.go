@@ -24,7 +24,7 @@ var supportedPGXTag = "v4.11.0"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
-func registerPgx(r *testRegistry) {
+func registerPgx(r *testRegistryImpl) {
 	runPgx := func(
 		ctx context.Context,
 		t test.Test,
@@ -129,7 +129,7 @@ func registerPgx(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "pgx",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

@@ -38,14 +38,14 @@ type splitParams struct {
 	waitDuration  time.Duration // Duration the workload should run for.
 }
 
-func registerLoadSplits(r *testRegistry) {
+func registerLoadSplits(r *testRegistryImpl) {
 	const numNodes = 3
 
 	r.Add(TestSpec{
 		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    r.makeClusterSpec(numNodes),
+		Cluster:    r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// This number was determined experimentally. Often, but not always,
 			// more splits will happen.
@@ -89,7 +89,7 @@ func registerLoadSplits(r *testRegistry) {
 		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    r.makeClusterSpec(numNodes),
+		Cluster:    r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
@@ -110,7 +110,7 @@ func registerLoadSplits(r *testRegistry) {
 		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
-		Cluster:    r.makeClusterSpec(numNodes),
+		Cluster:    r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
@@ -210,13 +210,13 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	m.Wait()
 }
 
-func registerLargeRange(r *testRegistry) {
+func registerLargeRange(r *testRegistryImpl) {
 	const size = 32 << 30 // 32 GB
 	const numNodes = 6
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(numNodes),
+		Cluster: r.MakeClusterSpec(numNodes),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLargeRangeSplits(ctx, t, c, size)

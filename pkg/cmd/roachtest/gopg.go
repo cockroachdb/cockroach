@@ -29,7 +29,7 @@ var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+
 var gopgSupportedTag = "v10.9.0"
 
 // This test runs gopg full test suite against a single cockroach node.
-func registerGopg(r *testRegistry) {
+func registerGopg(r *testRegistryImpl) {
 	const (
 		destPath        = `/mnt/data1/go-pg/pg`
 		resultsDirPath  = `~/logs/report/gopg-results`
@@ -151,7 +151,7 @@ func registerGopg(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "gopg",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

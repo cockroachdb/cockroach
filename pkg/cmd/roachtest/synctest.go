@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerSyncTest(r *testRegistry) {
+func registerSyncTest(r *testRegistryImpl) {
 	const nemesisScript = `#!/usr/bin/env bash
 
 if [[ $1 == "on" ]]; then
@@ -37,7 +37,7 @@ fi
 		Owner:      OwnerStorage,
 		MinVersion: "v19.1.0",
 		// This test sets up a custom file system; we don't want the cluster reused.
-		Cluster: r.makeClusterSpec(1, spec.ReuseNone()),
+		Cluster: r.MakeClusterSpec(1, spec.ReuseNone()),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")

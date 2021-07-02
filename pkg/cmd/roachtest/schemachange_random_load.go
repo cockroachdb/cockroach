@@ -28,7 +28,7 @@ type randomLoadBenchSpec struct {
 	Concurrency int
 }
 
-func registerSchemaChangeRandomLoad(r *testRegistry) {
+func registerSchemaChangeRandomLoad(r *testRegistryImpl) {
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	if cloud == spec.AWS {
 		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
@@ -37,7 +37,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:  "schemachange/random-load",
 		Owner: OwnerSQLSchema,
-		Cluster: r.makeClusterSpec(
+		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
 			spec.Zones(geoZonesStr),
@@ -71,7 +71,7 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 	})
 }
 
-func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
+func registerRandomLoadBenchSpec(r *testRegistryImpl, b randomLoadBenchSpec) {
 	nameParts := []string{
 		"scbench",
 		"randomload",
@@ -84,7 +84,7 @@ func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
 	r.Add(TestSpec{
 		Name:       name,
 		Owner:      OwnerSQLSchema,
-		Cluster:    r.makeClusterSpec(b.Nodes),
+		Cluster:    r.MakeClusterSpec(b.Nodes),
 		MinVersion: "v20.1.0",
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.

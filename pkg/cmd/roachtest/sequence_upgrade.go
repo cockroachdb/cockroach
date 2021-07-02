@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerSequenceUpgrade(r *testRegistry) {
+func registerSequenceUpgrade(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:       "version/sequence-upgrade",
 		Owner:      OwnerSQLSchema,
 		MinVersion: "v21.1.0",
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequenceUpgradeMigration(ctx, t, c)
 		},

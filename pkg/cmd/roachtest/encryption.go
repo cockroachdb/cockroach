@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerEncryption(r *testRegistry) {
+func registerEncryption(r *testRegistryImpl) {
 	// Note that no workload is run in this roachtest because kv roachtest
 	// ideally runs with encryption turned on to see the performance impact and
 	// to test the correctness of encryption at rest.
@@ -84,7 +84,7 @@ func registerEncryption(r *testRegistry) {
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
 			Owner:      OwnerStorage,
 			MinVersion: "v2.1.0",
-			Cluster:    r.makeClusterSpec(n),
+			Cluster:    r.MakeClusterSpec(n),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEncryption(ctx, t, c)
 			},

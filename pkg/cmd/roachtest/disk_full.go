@@ -21,12 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskFull(r *testRegistry) {
+func registerDiskFull(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:       "disk-full",
 		Owner:      OwnerStorage,
 		MinVersion: `v20.2.0`,
-		Cluster:    r.makeClusterSpec(5),
+		Cluster:    r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("you probably don't want to fill your local disk")
