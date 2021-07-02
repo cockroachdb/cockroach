@@ -47,7 +47,7 @@ type backgroundStepper struct {
 	nodes  option.NodeListOption // nodes to monitor, defaults to c.All()
 
 	// Internal.
-	m *monitor
+	m *monitorImpl
 }
 
 // launch spawns the function the background step was initialized with.
