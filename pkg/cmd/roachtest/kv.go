@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerKV(r *testRegistry) {
+func registerKV(r *testRegistryImpl) {
 	type kvOptions struct {
 		nodes       int
 		cpus        int
@@ -229,7 +229,7 @@ func registerKV(r *testRegistry) {
 			Name:       strings.Join(nameParts, "/"),
 			Owner:      OwnerKV,
 			MinVersion: minVersion,
-			Cluster:    r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
+			Cluster:    r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
@@ -238,13 +238,13 @@ func registerKV(r *testRegistry) {
 	}
 }
 
-func registerKVContention(r *testRegistry) {
+func registerKVContention(r *testRegistryImpl) {
 	const nodes = 4
 	r.Add(TestSpec{
 		Name:       fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Owner:      OwnerKV,
 		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(nodes + 1),
+		Cluster:    r.MakeClusterSpec(nodes + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
@@ -308,11 +308,11 @@ func registerKVContention(r *testRegistry) {
 	})
 }
 
-func registerKVQuiescenceDead(r *testRegistry) {
+func registerKVQuiescenceDead(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:       "kv/quiescence/nodes=3",
 		Owner:      OwnerKV,
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
@@ -390,11 +390,11 @@ func registerKVQuiescenceDead(r *testRegistry) {
 	})
 }
 
-func registerKVGracefulDraining(r *testRegistry) {
+func registerKVGracefulDraining(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(4),
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -589,7 +589,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 	})
 }
 
-func registerKVSplits(r *testRegistry) {
+func registerKVSplits(r *testRegistryImpl) {
 	for _, item := range []struct {
 		quiesce bool
 		splits  int
@@ -611,7 +611,7 @@ func registerKVSplits(r *testRegistry) {
 			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
 			Owner:   OwnerKV,
 			Timeout: item.timeout,
-			Cluster: r.makeClusterSpec(4),
+			Cluster: r.MakeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -642,7 +642,7 @@ func registerKVSplits(r *testRegistry) {
 	}
 }
 
-func registerKVScalability(r *testRegistry) {
+func registerKVScalability(r *testRegistryImpl) {
 	runScalability := func(ctx context.Context, t test.Test, c cluster.Cluster, percent int) {
 		nodes := c.Spec().NodeCount - 1
 
@@ -675,7 +675,7 @@ func registerKVScalability(r *testRegistry) {
 			r.Add(TestSpec{
 				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Owner:   OwnerKV,
-				Cluster: r.makeClusterSpec(7, spec.CPU(8)),
+				Cluster: r.MakeClusterSpec(7, spec.CPU(8)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runScalability(ctx, t, c, p)
 				},
@@ -684,7 +684,7 @@ func registerKVScalability(r *testRegistry) {
 	}
 }
 
-func registerKVRangeLookups(r *testRegistry) {
+func registerKVRangeLookups(r *testRegistryImpl) {
 	type rangeLookupWorkloadType int
 	const (
 		splitWorkload rangeLookupWorkloadType = iota
@@ -810,7 +810,7 @@ func registerKVRangeLookups(r *testRegistry) {
 			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
 			Owner:      OwnerKV,
 			MinVersion: "v19.2.0",
-			Cluster:    r.makeClusterSpec(nodes+1, spec.CPU(cpus)),
+			Cluster:    r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},

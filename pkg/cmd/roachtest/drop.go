@@ -23,7 +23,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func registerDrop(r *testRegistry) {
+func registerDrop(r *testRegistryImpl) {
 	// TODO(tschottdorf): rearrange all tests so that their synopses are available
 	// via godoc and (some variation on) `roachtest run <testname> --help`.
 
@@ -160,7 +160,7 @@ func registerDrop(r *testRegistry) {
 		Name:       fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
 		Owner:      OwnerKV,
 		MinVersion: `v2.1.0`,
-		Cluster:    r.makeClusterSpec(numNodes),
+		Cluster:    r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.

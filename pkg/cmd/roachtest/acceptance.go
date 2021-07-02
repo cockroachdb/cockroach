@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerAcceptance(r *testRegistry) {
+func registerAcceptance(r *testRegistryImpl) {
 	testCases := map[Owner][]struct {
 		name       string
 		fn         func(ctx context.Context, t test.Test, c cluster.Cluster)
@@ -93,7 +93,7 @@ func registerAcceptance(r *testRegistry) {
 
 			spec := specTemplate
 			spec.Owner = owner
-			spec.Cluster = r.makeClusterSpec(numNodes)
+			spec.Cluster = r.MakeClusterSpec(numNodes)
 			spec.Skip = tc.skip
 			spec.Name = specTemplate.Name + "/" + tc.name
 			spec.MinVersion = tc.minVersion

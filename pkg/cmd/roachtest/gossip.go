@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerGossip(r *testRegistry) {
+func registerGossip(r *testRegistryImpl) {
 	runGossipChaos := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		args := startArgs("--args=--vmodule=*=1")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
@@ -154,7 +154,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 	r.Add(TestSpec{
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(9),
+		Cluster: r.MakeClusterSpec(9),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGossipChaos(ctx, t, c)
 		},

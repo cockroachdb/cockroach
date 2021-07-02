@@ -92,7 +92,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func registerClockJumpTests(r *testRegistry) {
+func registerClockJumpTests(r *testRegistryImpl) {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",
@@ -136,7 +136,7 @@ func registerClockJumpTests(r *testRegistry) {
 			Owner: OwnerKV,
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
-			Cluster: r.makeClusterSpec(1, spec.ReuseTagged("offset-injector")),
+			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClockJump(ctx, t, c, tc)
 			},

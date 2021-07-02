@@ -277,7 +277,7 @@ type cliCfg struct {
 	versionsBinaryOverride map[string]string
 }
 
-func runTests(register func(*testRegistry), cfg cliCfg) error {
+func runTests(register func(*testRegistryImpl), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
@@ -441,7 +441,7 @@ func testRunnerLogger(
 	return l, teeOpt
 }
 
-func testsToRun(ctx context.Context, r testRegistry, filter *testFilter) []TestSpec {
+func testsToRun(ctx context.Context, r testRegistryImpl, filter *testFilter) []TestSpec {
 	tests := r.GetTests(ctx, filter)
 
 	var notSkipped []TestSpec

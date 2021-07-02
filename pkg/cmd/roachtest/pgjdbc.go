@@ -24,7 +24,7 @@ var supportedPGJDBCTag = "REL42.2.19"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
 
-func registerPgjdbc(r *testRegistry) {
+func registerPgjdbc(r *testRegistryImpl) {
 	runPgjdbc := func(
 		ctx context.Context,
 		t test.Test,
@@ -193,7 +193,7 @@ func registerPgjdbc(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "pgjdbc",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgjdbc(ctx, t, c)

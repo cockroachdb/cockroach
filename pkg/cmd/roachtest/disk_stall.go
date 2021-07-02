@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskStalledDetection(r *testRegistry) {
+func registerDiskStalledDetection(r *testRegistryImpl) {
 	for _, affectsLogDir := range []bool{false, true} {
 		for _, affectsDataDir := range []bool{false, true} {
 			// Grab copies of the args because we'll pass them into a closure.
@@ -37,7 +37,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 				),
 				Owner:      OwnerStorage,
 				MinVersion: "v19.2.0",
-				Cluster:    r.makeClusterSpec(1),
+				Cluster:    r.MakeClusterSpec(1),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)
 				},

@@ -28,7 +28,7 @@ import (
 var repoOwner = "richardjcai"
 var supportedBranch = "allowing_passing_certs_through_pg_env"
 
-func registerNodeJSPostgres(r *testRegistry) {
+func registerNodeJSPostgres(r *testRegistryImpl) {
 	runNodeJSPostgres := func(
 		ctx context.Context,
 		t test.Test,
@@ -183,7 +183,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 	r.Add(TestSpec{
 		Name:       "node-postgres",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		MinVersion: "v20.1.0",
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

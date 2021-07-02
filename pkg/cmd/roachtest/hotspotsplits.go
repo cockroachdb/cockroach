@@ -24,7 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerHotSpotSplits(r *testRegistry) {
+func registerHotSpotSplits(r *testRegistryImpl) {
 	// This test sets up a cluster and runs kv on it with high concurrency and a large block size
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.
@@ -97,7 +97,7 @@ func registerHotSpotSplits(r *testRegistry) {
 		// No problem in 20.1 thanks to:
 		// https://github.com/cockroachdb/cockroach/pull/45323.
 		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(numNodes),
+		Cluster:    r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
 				concurrency = 32

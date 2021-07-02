@@ -326,7 +326,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	}
 }
 
-func registerJepsen(r *testRegistry) {
+func registerJepsen(r *testRegistryImpl) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{
@@ -355,7 +355,7 @@ func registerJepsen(r *testRegistry) {
 				// clusters because they have a lengthy setup step, but avoid doing it
 				// if they detect that the machines have already been properly
 				// initialized.
-				Cluster: r.makeClusterSpec(6, spec.ReuseTagged("jepsen")),
+				Cluster: r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},

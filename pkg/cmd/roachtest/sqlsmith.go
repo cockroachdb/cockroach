@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerSQLSmith(r *testRegistry) {
+func registerSQLSmith(r *testRegistryImpl) {
 	setups := map[string]sqlsmith.Setup{
 		"empty":       sqlsmith.Setups["empty"],
 		"seed":        sqlsmith.Setups["seed"],
@@ -245,7 +245,7 @@ func registerSQLSmith(r *testRegistry) {
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:      OwnerSQLQueries,
-			Cluster:    r.makeClusterSpec(4),
+			Cluster:    r.MakeClusterSpec(4),
 			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

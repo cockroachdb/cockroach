@@ -25,7 +25,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func registerCopy(r *testRegistry) {
+func registerCopy(r *testRegistryImpl) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
@@ -175,7 +175,7 @@ func registerCopy(r *testRegistry) {
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
 			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(tc.nodes),
+			Cluster: r.MakeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},

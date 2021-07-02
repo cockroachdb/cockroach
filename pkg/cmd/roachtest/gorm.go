@@ -23,7 +23,7 @@ import (
 var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 var gormSupportedTag = "v1.21.8"
 
-func registerGORM(r *testRegistry) {
+func registerGORM(r *testRegistryImpl) {
 	runGORM := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -129,7 +129,7 @@ PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v 2>&1 | %s/bin/go-junit-rep
 		Name:       "gorm",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run:        runGORM,
 	})

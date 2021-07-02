@@ -27,14 +27,14 @@ import (
 
 const statementTimeout = time.Minute
 
-func registerTLP(r *testRegistry) {
+func registerTLP(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:       "tlp",
 		Owner:      OwnerSQLQueries,
 		Timeout:    time.Minute * 5,
 		MinVersion: "v20.2.0",
 		Tags:       nil,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Run:        runTLP,
 	})
 }
