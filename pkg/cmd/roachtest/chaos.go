@@ -85,7 +85,7 @@ func (ch *Chaos) Runner(c cluster.Cluster, m *monitor) func(context.Context) err
 
 			if ch.DrainAndQuit {
 				l.Printf("stopping and draining %v\n", target)
-				if err := c.StopE(ctx, target, stopArgs("--sig=15"), withWorkerAction()); err != nil {
+				if err := c.StopE(ctx, target, option.StopArgs("--sig=15"), withWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			} else {

@@ -800,9 +800,9 @@ func (s tpccBenchSpec) partitions() int {
 
 // startOpts returns any extra start options that the spec requires.
 func (s tpccBenchSpec) startOpts() []option.Option {
-	opts := []option.Option{startArgsDontEncrypt}
+	opts := []option.Option{option.StartArgsDontEncrypt}
 	if s.LoadConfig == singlePartitionedLoadgen {
-		opts = append(opts, racks(s.partitions()))
+		opts = append(opts, option.Racks(s.partitions()))
 	}
 	return opts
 }
