@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -124,8 +123,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
-	if err := cmd.Run(); err != nil {
+	if err := c.Get(ctx, t.L(), ".ssh/id_rsa.pub", pubSSHKey, controller); err != nil {
 		t.Fatal(err)
 	}
 	// TODO(bdarnell): make this idempotent instead of filling up .ssh configs.
@@ -161,21 +159,20 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	run := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
-		if !c.IsLocal() {
-			c.Run(ctx, node, args...)
-			return
-		}
-		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
-		t.L().Printf("> %s\n", strings.Join(args, " "))
-	}
 	runE := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) error {
-		if !c.IsLocal() {
-			return c.RunE(ctx, node, args...)
+		if c.IsLocal() {
+			// For local development.
+			t.L().Printf("> %s\n", strings.Join(args, " "))
+			return nil
 		}
-		args = append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)
-		t.L().Printf("> %s\n", strings.Join(args, " "))
-		return nil
+		return c.RunE(ctx, node, args...)
+	}
+
+	run := func(c cluster.Cluster, ctx context.Context, node option.NodeListOption, args ...string) {
+		err := runE(c, ctx, node, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Reset the "latest" alias for the next run.
@@ -283,11 +280,12 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			ignoreErr = true
 		}
 
-		cmd := exec.CommandContext(ctx, roachprod, "run", c.MakeNodes(controller),
+		if output, err := c.RunWithBuffer(
+			ctx, t.L(), controller,
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
-			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log")
-		if output, err := cmd.Output(); err != nil {
+			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log",
+		); err != nil {
 			t.L().Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
 		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
@@ -304,23 +302,22 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		anyFailed := false
 		for _, file := range collectFiles {
-			cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller),
+			if err := c.Get(
+				ctx, t.L(),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
-				filepath.Join(outputDir, file))
-			cmd.Stdout = t.L().Stdout
-			cmd.Stderr = t.L().Stderr
-			if err := cmd.Run(); err != nil {
+				filepath.Join(outputDir, file),
+				controller,
+			); err != nil {
 				t.L().Printf("failed to retrieve %s: %s", file, err)
 			}
 		}
 		if anyFailed {
 			// Try to figure out why this is so common.
-			cmd := loggedCommand(ctx, t.L(), roachprod, "get", c.MakeNodes(controller),
+			if err := c.Get(ctx, t.L(),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
-				filepath.Join(outputDir, "invoke.log"))
-			cmd.Stdout = t.L().Stdout
-			cmd.Stderr = t.L().Stderr
-			if err := cmd.Run(); err != nil {
+				filepath.Join(outputDir, "invoke.log"),
+				controller,
+			); err != nil {
 				t.L().Printf("failed to retrieve invoke.log: %s", err)
 			}
 		}
