@@ -1340,22 +1340,6 @@ message RetryTracingEvent {
   string retry_error = 3;
 }
 
-// WriteBatchRequest is arguments to the WriteBatch() method, to apply the
-// operations encoded in a BatchRepr.
-message WriteBatchRequest {
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // The span of keys encoded in data, duplicated because the header span can
-  // be modified by DistSender and we use this one to fail fast.
-  Span data_span = 2 [(gogoproto.nullable) = false];
-  // A BatchRepr, the serialized form of a RocksDB Batch.
-  bytes data = 3;
-}
-
-// WriteBatchResponse is the response to a WriteBatch() operation.
-message WriteBatchResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
 enum MVCCFilter {
   Latest = 0;
   All = 1;
@@ -1781,7 +1765,6 @@ message RequestUnion {
     InitPutRequest init_put = 26;
     TransferLeaseRequest transfer_lease = 28;
     LeaseInfoRequest lease_info = 30;
-    WriteBatchRequest write_batch = 31;
     ExportRequest export = 32;
     QueryTxnRequest query_txn = 33;
     QueryIntentRequest query_intent = 42;
@@ -1795,7 +1778,7 @@ message RequestUnion {
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
   }
-  reserved 8, 15, 23, 25, 27, 34;
+  reserved 8, 15, 23, 25, 27, 31, 34;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1832,7 +1815,6 @@ message ResponseUnion {
     CheckConsistencyResponse check_consistency = 24;
     InitPutResponse init_put = 26;
     LeaseInfoResponse lease_info = 30;
-    WriteBatchResponse write_batch = 31;
     ExportResponse export = 32;
     QueryTxnResponse query_txn = 33;
     QueryIntentResponse query_intent = 42;
@@ -1846,7 +1828,7 @@ message ResponseUnion {
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
   }
-  reserved 8, 15, 23, 25, 27, 28, 34;
+  reserved 8, 15, 23, 25, 27, 28, 31, 34;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

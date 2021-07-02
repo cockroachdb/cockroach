@@ -677,15 +677,6 @@ func (db *DB) AdminRelocateRange(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// WriteBatch applies the operations encoded in a BatchRepr, which is the
-// serialized form of a RocksDB Batch. The command cannot span Ranges and must
-// be run on an empty keyrange.
-func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byte) error {
-	b := &Batch{}
-	b.writeBatch(begin, end, data)
-	return getOneErr(db.Run(ctx, b), b)
-}
-
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
 func (db *DB) AddSSTable(
