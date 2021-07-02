@@ -6,12 +6,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slstorage",
-        "//pkg/sql/sqlutil",
         "//pkg/util/hlc",
         "//pkg/util/metric",
         "//pkg/util/stop",

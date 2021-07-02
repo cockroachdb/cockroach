@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -105,7 +106,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		idContainer := base.NewSQLIDContainer(0, &c)
 		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
 		sqlStorage := slstorage.NewStorage(
-			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor), s.ClusterSettings(),
+			s.Stopper(), clock, db, keys.SystemSQLCodec, s.ClusterSettings(),
 		)
 		sqlInstance := slinstance.NewSQLInstance(s.Stopper(), clock, sqlStorage, s.ClusterSettings())
 		r := jobs.MakeRegistry(
