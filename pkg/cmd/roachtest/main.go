@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -289,7 +290,7 @@ func runTests(register func(*testRegistryImpl), cfg cliCfg) error {
 	cr := newClusterRegistry()
 	runner := newTestRunner(cr, r.buildVersion)
 
-	filter := newFilter(cfg.args)
+	filter := registry.NewTestFilter(cfg.args)
 	clusterType := roachprodCluster
 	if local {
 		clusterType = localCluster
@@ -441,7 +442,7 @@ func testRunnerLogger(
 	return l, teeOpt
 }
 
-func testsToRun(ctx context.Context, r testRegistryImpl, filter *testFilter) []TestSpec {
+func testsToRun(ctx context.Context, r testRegistryImpl, filter *registry.TestFilter) []TestSpec {
 	tests := r.GetTests(ctx, filter)
 
 	var notSkipped []TestSpec

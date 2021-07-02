@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,7 +65,7 @@ func TestMatchOrSkip(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			f := newFilter(c.filter)
+			f := registry.NewTestFilter(c.filter)
 			spec := &TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
 			if value := spec.matchOrSkip(f); c.expected != value {
 				t.Fatalf("expected %t, but found %t", c.expected, value)
@@ -118,7 +119,7 @@ func TestRunnerRun(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			tests := testsToRun(ctx, r, newFilter(c.filters))
+			tests := testsToRun(ctx, r, registry.NewTestFilter(c.filters))
 			cr := newClusterRegistry()
 			runner := newTestRunner(cr, r.buildVersion)
 
@@ -274,7 +275,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 			}
 		},
 	})
-	tests := testsToRun(ctx, r, newFilter(nil))
+	tests := testsToRun(ctx, r, registry.NewTestFilter(nil))
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,

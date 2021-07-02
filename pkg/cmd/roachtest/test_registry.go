@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -45,8 +46,6 @@ const (
 func ownerToAlias(o Owner) team.Alias {
 	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
 }
-
-const defaultTag = "default"
 
 type testRegistryImpl struct {
 	m            map[string]*TestSpec
@@ -141,7 +140,7 @@ func (r *testRegistryImpl) prepareSpec(spec *TestSpec) error {
 		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
 	}
 	if len(spec.Tags) == 0 {
-		spec.Tags = []string{defaultTag}
+		spec.Tags = []string{registry.DefaultTag}
 	}
 	spec.Tags = append(spec.Tags, "owner-"+string(spec.Owner))
 
@@ -151,7 +150,7 @@ func (r *testRegistryImpl) prepareSpec(spec *TestSpec) error {
 // GetTests returns all the tests that match the given regexp.
 // Skipped tests are included, and tests that don't match their minVersion spec
 // are also included but marked as skipped.
-func (r testRegistryImpl) GetTests(ctx context.Context, filter *testFilter) []TestSpec {
+func (r testRegistryImpl) GetTests(ctx context.Context, filter *registry.TestFilter) []TestSpec {
 	var tests []TestSpec
 	for _, t := range r.m {
 		if !t.matchOrSkip(filter) {
@@ -167,7 +166,7 @@ func (r testRegistryImpl) GetTests(ctx context.Context, filter *testFilter) []Te
 
 // List lists tests that match one of the filters.
 func (r testRegistryImpl) List(ctx context.Context, filters []string) []TestSpec {
-	filter := newFilter(filters)
+	filter := registry.NewTestFilter(filters)
 	tests := r.GetTests(ctx, filter)
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
@@ -192,51 +191,4 @@ func loadBuildVersion() (string, error) {
 			err, out)
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-// testFilter holds the name and tag filters for filtering tests.
-type testFilter struct {
-	name *regexp.Regexp
-	tag  *regexp.Regexp
-	// rawTag is the string representation of the regexps in tag
-	rawTag []string
-}
-
-func newFilter(filter []string) *testFilter {
-	var name []string
-	var tag []string
-	var rawTag []string
-	for _, v := range filter {
-		if strings.HasPrefix(v, "tag:") {
-			tag = append(tag, strings.TrimPrefix(v, "tag:"))
-			rawTag = append(rawTag, v)
-		} else {
-			name = append(name, v)
-		}
-	}
-
-	if len(tag) == 0 {
-		tag = []string{defaultTag}
-		rawTag = []string{"tag:" + defaultTag}
-	}
-
-	makeRE := func(strs []string) *regexp.Regexp {
-		switch len(strs) {
-		case 0:
-			return regexp.MustCompile(`.`)
-		case 1:
-			return regexp.MustCompile(strs[0])
-		default:
-			for i := range strs {
-				strs[i] = "(" + strs[i] + ")"
-			}
-			return regexp.MustCompile(strings.Join(strs, "|"))
-		}
-	}
-
-	return &testFilter{
-		name:   makeRE(name),
-		tag:    makeRE(tag),
-		rawTag: rawTag,
-	}
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -91,22 +92,22 @@ const perfArtifactsDir = "perf"
 // matchOrSkip returns true if the filter matches the test. If the filter does
 // not match the test because the tag filter does not match, the test is
 // matched, but marked as skipped.
-func (t *TestSpec) matchOrSkip(filter *testFilter) bool {
-	if !filter.name.MatchString(t.Name) {
+func (t *TestSpec) matchOrSkip(filter *registry.TestFilter) bool {
+	if !filter.Name.MatchString(t.Name) {
 		return false
 	}
 	if len(t.Tags) == 0 {
-		if !filter.tag.MatchString("default") {
-			t.Skip = fmt.Sprintf("%s does not match [default]", filter.rawTag)
+		if !filter.Tag.MatchString("default") {
+			t.Skip = fmt.Sprintf("%s does not match [default]", filter.RawTag)
 		}
 		return true
 	}
 	for _, t := range t.Tags {
-		if filter.tag.MatchString(t) {
+		if filter.Tag.MatchString(t) {
 			return true
 		}
 	}
-	t.Skip = fmt.Sprintf("%s does not match %s", filter.rawTag, t.Tags)
+	t.Skip = fmt.Sprintf("%s does not match %s", filter.RawTag, t.Tags)
 	return true
 }
 
