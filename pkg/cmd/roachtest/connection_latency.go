@@ -92,7 +92,7 @@ func runConnectionLatencyTest(
 	}
 }
 
-func registerConnectionLatencyTest(r *testRegistryImpl) {
+func registerConnectionLatencyTest(r registry.Registry) {
 	// Single region test.
 	numNodes := 3
 	r.Add(registry.TestSpec{

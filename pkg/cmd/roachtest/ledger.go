@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerLedger(r *testRegistryImpl) {
+func registerLedger(r registry.Registry) {
 	const nodes = 6
 	// NB: us-central1-a has been causing issues, see:
 	// https://github.com/cockroachdb/cockroach/issues/66184

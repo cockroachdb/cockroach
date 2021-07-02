@@ -25,7 +25,7 @@ import (
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 var libPQSupportedTag = "v1.10.0"
 
-func registerLibPQ(r *testRegistryImpl) {
+func registerLibPQ(r registry.Registry) {
 	runLibPQ := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")

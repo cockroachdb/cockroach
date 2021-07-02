@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistryImpl) {
+func registerSchemaChangeDatabaseVersionUpgrade(r registry.Registry) {
 	// This test tests 2 loosely related things:
 	// 1. Correctness of database schema changes during the 20.1/20.2 mixed-
 	//    version state, in which 20.2 nodes still use the deprecated database

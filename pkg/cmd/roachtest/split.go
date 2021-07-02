@@ -39,7 +39,7 @@ type splitParams struct {
 	waitDuration  time.Duration // Duration the workload should run for.
 }
 
-func registerLoadSplits(r *testRegistryImpl) {
+func registerLoadSplits(r registry.Registry) {
 	const numNodes = 3
 
 	r.Add(registry.TestSpec{
@@ -208,7 +208,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	m.Wait()
 }
 
-func registerLargeRange(r *testRegistryImpl) {
+func registerLargeRange(r registry.Registry) {
 	const size = 32 << 30 // 32 GB
 	const numNodes = 6
 	r.Add(registry.TestSpec{

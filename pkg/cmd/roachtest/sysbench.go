@@ -129,7 +129,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m.Wait()
 }
 
-func registerSysbench(r *testRegistryImpl) {
+func registerSysbench(r registry.Registry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 		const n = 3
 		const cpus = 32

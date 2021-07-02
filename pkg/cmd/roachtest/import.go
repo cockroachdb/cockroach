@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerImportNodeShutdown(r *testRegistryImpl) {
+func registerImportNodeShutdown(r registry.Registry) {
 	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
 		startImport := func(c cluster.Cluster) (jobID string, err error) {
 			// partsupp is 11.2 GiB.
@@ -88,7 +88,7 @@ func registerImportNodeShutdown(r *testRegistryImpl) {
 	})
 }
 
-func registerImportTPCC(r *testRegistryImpl) {
+func registerImportTPCC(r registry.Registry) {
 	runImportTPCC := func(ctx context.Context, t test.Test, c cluster.Cluster, testName string,
 		timeout time.Duration, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
@@ -157,7 +157,7 @@ func registerImportTPCC(r *testRegistryImpl) {
 	})
 }
 
-func registerImportTPCH(r *testRegistryImpl) {
+func registerImportTPCH(r registry.Registry) {
 	for _, item := range []struct {
 		nodes   int
 		timeout time.Duration
@@ -300,7 +300,7 @@ func runImportMixedVersion(
 	u.run(ctx, t)
 }
 
-func registerImportMixedVersion(r *testRegistryImpl) {
+func registerImportMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "import/mixed-versions",
 		Owner: registry.OwnerBulkIO,
@@ -320,7 +320,7 @@ func registerImportMixedVersion(r *testRegistryImpl) {
 	})
 }
 
-func registerImportDecommissioned(r *testRegistryImpl) {
+func registerImportDecommissioned(r registry.Registry) {
 	runImportDecommissioned := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		warehouses := 100
 		if local {

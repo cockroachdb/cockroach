@@ -564,7 +564,7 @@ func runTPCHVec(
 
 const tpchVecNodeCount = 3
 
-func registerTPCHVec(r *testRegistryImpl) {
+func registerTPCHVec(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "tpchvec/perf",
 		Owner:   registry.OwnerSQLQueries,

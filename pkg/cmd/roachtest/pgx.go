@@ -25,7 +25,7 @@ var supportedPGXTag = "v4.11.0"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
-func registerPgx(r *testRegistryImpl) {
+func registerPgx(r registry.Registry) {
 	runPgx := func(
 		ctx context.Context,
 		t test.Test,

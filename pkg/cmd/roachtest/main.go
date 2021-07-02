@@ -278,7 +278,7 @@ type cliCfg struct {
 	versionsBinaryOverride map[string]string
 }
 
-func runTests(register func(*testRegistryImpl), cfg cliCfg) error {
+func runTests(register func(registry.Registry), cfg cliCfg) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}

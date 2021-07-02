@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerAcceptance(r *testRegistryImpl) {
+func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
 		name       string
 		fn         func(ctx context.Context, t test.Test, c cluster.Cluster)

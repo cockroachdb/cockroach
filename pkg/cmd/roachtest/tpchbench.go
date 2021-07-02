@@ -149,7 +149,7 @@ func downloadFile(filename string, url string) (*os.File, error) {
 	return out, err
 }
 
-func registerTPCHBenchSpec(r *testRegistryImpl, b tpchBenchSpec) {
+func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 	nameParts := []string{
 		"tpchbench",
 		b.benchType,
@@ -175,7 +175,7 @@ func registerTPCHBenchSpec(r *testRegistryImpl, b tpchBenchSpec) {
 	})
 }
 
-func registerTPCHBench(r *testRegistryImpl) {
+func registerTPCHBench(r registry.Registry) {
 	specs := []tpchBenchSpec{
 		{
 			Nodes:           3,

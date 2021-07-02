@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerSequenceUpgrade(r *testRegistryImpl) {
+func registerSequenceUpgrade(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "version/sequence-upgrade",
 		Owner:   registry.OwnerSQLSchema,

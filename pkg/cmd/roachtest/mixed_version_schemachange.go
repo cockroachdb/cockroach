@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
-func registerSchemaChangeMixedVersions(r *testRegistryImpl) {
+func registerSchemaChangeMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "schemachange/mixed-versions",
 		Owner: registry.OwnerSQLSchema,

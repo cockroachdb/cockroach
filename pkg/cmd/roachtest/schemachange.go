@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerSchemaChangeDuringKV(r *testRegistryImpl) {
+func registerSchemaChangeDuringKV(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    `schemachange/during/kv`,
 		Owner:   registry.OwnerSQLSchema,
@@ -291,11 +291,11 @@ func findIndexProblem(
 	return nil
 }
 
-func registerSchemaChangeIndexTPCC1000(r *testRegistryImpl) {
+func registerSchemaChangeIndexTPCC1000(r registry.Registry) {
 	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*2))
 }
 
-func registerSchemaChangeIndexTPCC100(r *testRegistryImpl) {
+func registerSchemaChangeIndexTPCC100(r registry.Registry) {
 	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5), 100, time.Minute*15))
 }
 
@@ -327,12 +327,12 @@ func makeIndexAddTpccTest(
 	}
 }
 
-func registerSchemaChangeBulkIngest(r *testRegistryImpl) {
+func registerSchemaChangeBulkIngest(r registry.Registry) {
 	r.Add(makeSchemaChangeBulkIngestTest(r, 5, 100000000, time.Minute*20))
 }
 
 func makeSchemaChangeBulkIngestTest(
-	r *testRegistryImpl, numNodes, numRows int, length time.Duration,
+	r registry.Registry, numNodes, numRows int, length time.Duration,
 ) registry.TestSpec {
 	return registry.TestSpec{
 		Name:    "schemachange/bulkingest",
@@ -412,7 +412,7 @@ func makeSchemaChangeBulkIngestTest(
 	}
 }
 
-func registerSchemaChangeDuringTPCC1000(r *testRegistryImpl) {
+func registerSchemaChangeDuringTPCC1000(r registry.Registry) {
 	r.Add(makeSchemaChangeDuringTPCC(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*3))
 }
 

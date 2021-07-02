@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerTPCE(r *testRegistryImpl) {
+func registerTPCE(r registry.Registry) {
 	type tpceOptions struct {
 		customers int
 		nodes     int

@@ -637,7 +637,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
-func registerCDC(r *testRegistryImpl) {
+func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:            "cdc/tpcc-1000",
 		Owner:           registry.OwnerCDC,

@@ -29,7 +29,7 @@ import (
 var repoOwner = "richardjcai"
 var supportedBranch = "allowing_passing_certs_through_pg_env"
 
-func registerNodeJSPostgres(r *testRegistryImpl) {
+func registerNodeJSPostgres(r registry.Registry) {
 	runNodeJSPostgres := func(
 		ctx context.Context,
 		t test.Test,
