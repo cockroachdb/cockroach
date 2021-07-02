@@ -20,13 +20,8 @@ const nonTemplatePanic = "do not call from non-template code"
 // Remove unused warnings.
 var (
 	_ = COPYVAL
-	_ = SET
-	_ = COPYSLICE
 	_ = APPENDSLICE
 	_ = APPENDVAL
-	_ = LEN
-	_ = ZERO
-	_ = WINDOW
 	_ = SETVARIABLESIZE
 )
 
@@ -38,16 +33,6 @@ func COPYVAL(dest, src interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
-// SET is a template function.
-func SET(target, i, new interface{}) {
-	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-}
-
-// COPYSLICE is a template function.
-func COPYSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
-	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-}
-
 // APPENDSLICE is a template function.
 func APPENDSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
@@ -56,23 +41,6 @@ func APPENDSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
 // APPENDVAL is a template function.
 func APPENDVAL(target, v interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-}
-
-// LEN is a template function.
-func LEN(target interface{}) interface{} {
-	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-	return nil
-}
-
-// ZERO is a template function.
-func ZERO(target interface{}) {
-	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-}
-
-// WINDOW is a template function.
-func WINDOW(target, start, end interface{}) interface{} {
-	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-	return nil
 }
 
 // SETVARIABLESIZE is a template function.
