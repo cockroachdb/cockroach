@@ -117,7 +117,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		}
 	}()
 
-	m := newMonitor(ctx, c)
+	m := newMonitor(ctx, t, c)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv`)
 		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h`)
