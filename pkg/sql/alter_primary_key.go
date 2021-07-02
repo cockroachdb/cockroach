@@ -133,6 +133,9 @@ func (p *planner) AlterPrimaryKey(
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q is being dropped", col.GetName())
 		}
+		if col.IsInaccessible() {
+			return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use inaccessible column %q in primary key", col.GetName())
+		}
 		if col.IsNullable() {
 			return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", col.GetName())
 		}
