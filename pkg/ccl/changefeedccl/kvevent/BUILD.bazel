@@ -12,9 +12,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",

@@ -265,10 +265,15 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	buf := kvevent.MakeChanBuffer()
+	cfg := ca.flowCtx.Cfg
+
+	buf := kvevent.NewMemBuffer(
+		kvFeedMemMon.MakeBoundAccount(),
+		&ca.metrics.KVFeedMetrics,
+		kvevent.WithNodeIOThrottler(&cfg.Settings.SV),
+	)
 	kvfeedCfg := makeKVFeedCfg(ctx, ca.flowCtx.Cfg, ca.kvFeedMemMon,
 		ca.spec, spans, buf, ca.metrics, ca.knobs.FeedKnobs)
-	cfg := ca.flowCtx.Cfg
 
 	ca.eventProducer = &bufEventProducer{buf}
 
@@ -434,6 +439,7 @@ func (ca *changeAggregator) close() {
 			}
 		}
 		ca.memAcc.Close(ca.Ctx)
+		ca.eventProducer.Close(ca.Ctx)
 		if ca.kvFeedMemMon != nil {
 			ca.kvFeedMemMon.Stop(ca.Ctx)
 		}
@@ -577,10 +583,12 @@ func (ca *changeAggregator) ConsumerClosed() {
 type kvEventProducer interface {
 	// GetEvent returns the next kv event.
 	GetEvent(ctx context.Context) (kvevent.Event, error)
+	// Close closes producer.
+	Close(ctx context.Context)
 }
 
 type bufEventProducer struct {
-	kvevent.Reader
+	kvevent.Buffer
 }
 
 var _ kvEventProducer = &bufEventProducer{}
@@ -588,6 +596,11 @@ var _ kvEventProducer = &bufEventProducer{}
 // GetEvent implements kvEventProducer interface
 func (p *bufEventProducer) GetEvent(ctx context.Context) (kvevent.Event, error) {
 	return p.Get(ctx)
+}
+
+// Close implements kvEventProducer interface.
+func (p *bufEventProducer) Close(ctx context.Context) {
+	p.Buffer.Close(ctx)
 }
 
 type kvEventConsumer interface {

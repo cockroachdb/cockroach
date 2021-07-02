@@ -14,8 +14,10 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -27,21 +29,43 @@ import (
 // from a mon.BoundAccount and blocks if no resources are available.
 type blockingBuffer struct {
 	blockingBufferQuotaPool
-	signalCh chan struct{}
-	mu       struct {
+	signalCh      chan struct{}
+	nodeThrottler *cdcutils.Throttler
+	mu            struct {
 		syncutil.Mutex
 		closed bool
 		queue  bufferEntryQueue
 	}
 }
 
+// BufferOption is a configuration option for mem buffer.
+type BufferOption interface {
+	apply(b *blockingBuffer)
+}
+
+type optionFn func(b *blockingBuffer)
+
+func (o optionFn) apply(b *blockingBuffer) {
+	o(b)
+}
+
+// WithNodeIOThrottler returns an option to set node level IO throttler for the buffer.
+func WithNodeIOThrottler(sv *settings.Values) BufferOption {
+	return optionFn(func(b *blockingBuffer) {
+		b.nodeThrottler = cdcutils.NodeLevelThrottler(sv)
+	})
+}
+
 // NewMemBuffer returns a new in-memory buffer which will store events.
 // It will grow the bound account to buffer more messages but will block if it
 // runs out of space. If ever any entry exceeds the allocatable size of the
 // account, an error will be returned when attempting to buffer it.
-func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics) Buffer {
+func NewMemBuffer(acc mon.BoundAccount, metrics *Metrics, opts ...BufferOption) Buffer {
 	bb := &blockingBuffer{
 		signalCh: make(chan struct{}),
+	}
+	for _, opt := range opts {
+		opt.apply(bb)
 	}
 	bb.acc = acc
 	bb.metrics = metrics
@@ -76,6 +100,11 @@ func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
 				res.release(got)
 				return true
 			})
+			if b.nodeThrottler != nil {
+				if err := b.nodeThrottler.AcquireMessageQuota(ctx, ev.ApproximateSize()); err != nil {
+					return Event{}, err
+				}
+			}
 			return e, nil
 		}
 
