@@ -489,18 +489,6 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 	return copyVal(b.CanonicalTypeFamily, dest, src)
 }
 
-// slice is a function that should only be used in templates.
-func (b *argWidthOverloadBase) slice(target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily:
-		// Bytes-like vector doesn't support slicing.
-		colexecerror.InternalError(errors.AssertionFailedf("slice method is attempted to be generated on Bytes vector"))
-	case typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
-	}
-	return fmt.Sprintf("%s[%s:%s]", target, start, end)
-}
-
 // sliceable returns whether the vector of canonicalTypeFamily can be sliced
 // (i.e. whether it is a Golang's slice).
 func sliceable(canonicalTypeFamily types.Family) bool {
@@ -515,39 +503,6 @@ func sliceable(canonicalTypeFamily types.Family) bool {
 // Sliceable is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Sliceable() bool {
 	return sliceable(b.CanonicalTypeFamily)
-}
-
-// CopySlice is a function that should only be used in templates.
-func (b *argWidthOverloadBase) CopySlice(
-	target, src, destIdx, srcStartIdx, srcEndIdx string,
-) string {
-	var tmpl string
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, typeconv.DatumVecCanonicalTypeFamily:
-		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
-	case types.DecimalFamily:
-		tmpl = `{
-  __tgt_slice := {{.Tgt}}[{{.TgtIdx}}:]
-  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
-  for __i := range __src_slice {
-    __tgt_slice[__i].Set(&__src_slice[__i])
-  }
-}`
-	default:
-		tmpl = `copy({{.Tgt}}[{{.TgtIdx}}:], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}])`
-	}
-	args := map[string]string{
-		"Tgt":      target,
-		"Src":      src,
-		"TgtIdx":   destIdx,
-		"SrcStart": srcStartIdx,
-		"SrcEnd":   srcEndIdx,
-	}
-	var buf strings.Builder
-	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
-		colexecerror.InternalError(err)
-	}
-	return buf.String()
 }
 
 // AppendSlice is a function that should only be used in templates.
@@ -610,15 +565,6 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
 
-// Window is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Window(target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily:
-		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
-	}
-	return b.slice(target, start, end)
-}
-
 // setVariableSize is a function that should only be used in templates. It
 // returns a string that contains a code snippet for computing the size of the
 // object named 'value' if it has variable size and assigns it to the variable
@@ -664,10 +610,8 @@ var (
 	_    = awob.GoTypeSliceName
 	_    = awob.CopyVal
 	_    = awob.Sliceable
-	_    = awob.CopySlice
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
-	_    = awob.Window
 	_    = awob.SetVariableSize
 	_    = awob.IsBytesLike
 )

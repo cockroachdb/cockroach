@@ -132,8 +132,8 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 				}
 			}
 		} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
-			expectedDatum := expectedVec.Datum().Slice(0 /* start */, expected.Length())
-			resultDatum := actualVec.Datum().Slice(0 /* start */, actual.Length())
+			expectedDatum := expectedVec.Datum().Window(0 /* start */, expected.Length())
+			resultDatum := actualVec.Datum().Window(0 /* start */, actual.Length())
 			require.Equal(t, expectedDatum.Len(), resultDatum.Len())
 			for i := 0; i < expectedDatum.Len(); i++ {
 				if !expectedNulls.NullAt(i) {
