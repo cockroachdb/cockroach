@@ -263,6 +263,12 @@ type LocalOnlySessionData struct {
 	// format.
 	ExperimentalComputedColumnRewrites string
 
+	// CopyPartitioningWhenDeinterleavingTable indicates that when running an
+	// ALTER PRIMARY KEY that retains the same columns but removes any
+	// interleaving that zone configurations and partitioning from the root
+	// of that interleave should be applied to the new primary index.
+	CopyPartitioningWhenDeinterleavingTable bool
+
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //

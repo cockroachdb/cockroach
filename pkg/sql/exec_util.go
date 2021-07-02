@@ -421,6 +421,12 @@ var experimentalComputedColumnRewrites = settings.RegisterValidatedStringSetting
 	},
 )
 
+var copyPartitioningWhenDeinterleavingTable = settings.RegisterBoolSetting(
+	`sql.defaults.copy_partitioning_when_deinterleaving_table.enabled`,
+	`default value for enable_copying_partitioning_when_deinterleaving_table session variable`,
+	false,
+).WithPublic()
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2444,9 +2450,15 @@ func (m *sessionDataMutator) initSequenceCache() {
 	m.data.SequenceCache = sessiondata.SequenceCache{}
 }
 
-// SetStubCatalogTableEnabled sets default value for stub_catalog_tables.
+// SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.
 func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
 	m.data.StubCatalogTablesEnabled = enabled
+}
+
+// SetCopyPartitioningWhenDeinterleavingTable sets the value for
+// CopyPartitioningWhenDeinterleavingTable.
+func (m *sessionDataMutator) SetCopyPartitioningWhenDeinterleavingTable(b bool) {
+	m.data.CopyPartitioningWhenDeinterleavingTable = b
 }
 
 func (m *sessionDataMutator) SetExperimentalComputedColumnRewrites(val string) {
