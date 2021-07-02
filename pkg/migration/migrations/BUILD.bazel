@@ -4,6 +4,7 @@ go_library(
     name = "migrations",
     srcs = [
         "delete_deprecated_namespace_tabledesc.go",
+        "fix_descriptor_migration.go",
         "foreign_key_representation_upgrade.go",
         "join_tokens.go",
         "migrations.go",
@@ -20,6 +21,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/systemschema",
@@ -27,6 +29,7 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/sqlmigrations",
         "//pkg/util/encoding",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -35,9 +38,9 @@ go_library(
 
 go_test(
     name = "migrations_test",
-    size = "medium",
     srcs = [
         "delete_deprecated_namespace_tabledesc_external_test.go",
+        "fix_descriptor_migration_external_test.go",
         "foreign_key_representation_upgrade_external_test.go",
         "main_test.go",
         "protected_ts_meta_migration_external_test.go",

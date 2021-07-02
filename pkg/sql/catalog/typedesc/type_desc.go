@@ -69,6 +69,10 @@ type Mutable struct {
 	// ClusterVersion represents the version of the type descriptor read
 	// from the store.
 	ClusterVersion *immutable
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
@@ -972,4 +976,10 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 		ret[id] = struct{}{}
 	}
 	return ret, nil
+}
+
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *Mutable) HasPostDeserializationChanges() bool {
+	return desc.changed
 }

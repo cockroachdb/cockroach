@@ -10,11 +10,12 @@ func _() {
 	var x [1]struct{}
 	_ = x[InitialVersion-0]
 	_ = x[OwnerVersion-1]
+	_ = x[Version21_2-2]
 }
 
-const _PrivilegeDescVersion_name = "InitialVersionOwnerVersion"
+const _PrivilegeDescVersion_name = "InitialVersionOwnerVersionVersion21_2"
 
-var _PrivilegeDescVersion_index = [...]uint8{0, 14, 26}
+var _PrivilegeDescVersion_index = [...]uint8{0, 14, 26, 37}
 
 func (i PrivilegeDescVersion) String() string {
 	if i >= PrivilegeDescVersion(len(_PrivilegeDescVersion_index)-1) {
