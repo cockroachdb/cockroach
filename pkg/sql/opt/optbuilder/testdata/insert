@@ -1233,3 +1233,38 @@ insert defvals2
       └── projections
            ├── ARRAY[NULL] [as=arr1_default:7]
            └── ARRAY[NULL] [as=arr2_default:8]
+
+# Regression test for #67100. Do not prune check columns for INSERTs even if the
+# expression does not reference any mutating columns.
+
+exec-ddl
+CREATE TABLE t67100 (
+  a INT,
+  CHECK (false),
+  CHECK (0 > 1),
+  CHECK (true AND 0 > 1)
+)
+----
+
+build
+INSERT INTO t67100 VALUES (1)
+----
+insert t67100
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    └── rowid_default:6 => rowid:2
+ ├── check columns: check1:7 check2:8 check3:9
+ └── project
+      ├── columns: check1:7!null check2:8!null check3:9!null column1:5!null rowid_default:6
+      ├── project
+      │    ├── columns: rowid_default:6 column1:5!null
+      │    ├── values
+      │    │    ├── columns: column1:5!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── unique_rowid() [as=rowid_default:6]
+      └── projections
+           ├── false [as=check1:7]
+           ├── 0 > 1 [as=check2:8]
+           └── true AND (0 > 1) [as=check3:9]
