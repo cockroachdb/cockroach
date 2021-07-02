@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -168,6 +169,20 @@ func (s *Storage) Start(ctx context.Context) {
 // true, the session may no longer be alive, but if it returns false, the
 // session definitely is not alive.
 func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive bool, err error) {
+	return s.isAlive(ctx, sid, sync)
+}
+
+type readType byte
+
+const (
+	_ readType = iota
+	sync
+	async
+)
+
+func (s *Storage) isAlive(
+	ctx context.Context, sid sqlliveness.SessionID, syncOrAsync readType,
+) (alive bool, _ error) {
 	s.mu.Lock()
 	if !s.mu.started {
 		s.mu.Unlock()
@@ -201,9 +216,19 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 	// cache. If it isn't found, we know it's dead and we can add that to the
 	// deadSessions cache.
 	resChan, _ := s.g.DoChan(string(sid), func() (interface{}, error) {
+
+		// Note that we use a new `context` here to avoid a situation where a cancellation
+		// of the first context cancels other callers to the `acquireNodeLease()` method,
+		// because of its use of `singleflight.Group`. See issue #41780 for how this has
+		// happened.
+		newCtx, cancel := s.stopper.WithCancelOnQuiesce(
+			logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
+		)
+		defer cancel()
+
 		// store the result underneath the singleflight to avoid the need
 		// for additional synchronization.
-		live, expiration, err := s.deleteOrFetchSession(ctx, sid, prevExpiration)
+		live, expiration, err := s.deleteOrFetchSession(newCtx, sid, prevExpiration)
 		if err != nil {
 			return nil, err
 		}
@@ -218,12 +243,22 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 		return live, nil
 	})
 	s.mu.Unlock()
-	res := <-resChan
-	if res.Err != nil {
-		return false, err
-	}
 	s.metrics.IsAliveCacheMisses.Inc(1)
-	return res.Val.(bool), nil
+
+	// If we do not want to wait for the result, assume that the session is
+	// indeed alive.
+	if syncOrAsync == async {
+		return true, nil
+	}
+	select {
+	case res := <-resChan:
+		if res.Err != nil {
+			return false, res.Err
+		}
+		return res.Val.(bool), nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
 }
 
 // deleteOrFetchSession returns whether the query session currently exists by
@@ -378,6 +413,24 @@ func (s *Storage) Update(
 	}
 	s.metrics.WriteSuccesses.Inc(1)
 	return sessionExists, nil
+}
+
+// CachedReader returns an implementation of sqlliveness.Reader which does
+// not synchronously read from the store. Calls to IsAlive will return the
+// currently known state of the session, but will trigger an asynchronous
+// refresh of the state of the session if it is not known.
+func (s *Storage) CachedReader() sqlliveness.Reader {
+	return (*cachedStorage)(s)
+}
+
+// cachedStorage implements sqlliveness.Storage but does not read from the
+// underlying store synchronously during IsAlive.
+type cachedStorage Storage
+
+func (s *cachedStorage) IsAlive(
+	ctx context.Context, sid sqlliveness.SessionID,
+) (alive bool, err error) {
+	return (*Storage)(s).isAlive(ctx, sid, async)
 }
 
 func (s *Storage) makeTablePrefix() roachpb.Key {
