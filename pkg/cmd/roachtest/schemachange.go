@@ -41,7 +41,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			m := newMonitor(ctx, t, c, c.All())
+			m := c.NewMonitor(ctx, t, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
 				if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
@@ -67,7 +67,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 				}()
 			}
 
-			m = newMonitor(ctx, t, c, c.All())
+			m = c.NewMonitor(ctx, t, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
 				return waitForSchemaChanges(ctx, t.L(), db)
@@ -370,7 +370,7 @@ func makeSchemaChangeBulkIngestTest(
 
 			c.Run(ctx, workloadNode, cmdWrite)
 
-			m := newMonitor(ctx, t, c, crdbNodes)
+			m := c.NewMonitor(ctx, t, crdbNodes)
 
 			indexDuration := length
 			if c.IsLocal() {
