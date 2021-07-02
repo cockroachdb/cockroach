@@ -255,7 +255,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 			Target:  crdbNodes.RandNode,
 			Stopper: time.After(chaosDuration),
 		}
-		m.Go(ch.Runner(c, m))
+		m.Go(ch.Runner(c, t, m))
 	}
 	m.Wait()
 

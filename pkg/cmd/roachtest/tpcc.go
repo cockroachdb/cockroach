@@ -240,7 +240,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	if opts.Chaos != nil {
 		chaos := opts.Chaos()
-		m.Go(chaos.Runner(c, m))
+		m.Go(chaos.Runner(c, t, m))
 	}
 	if opts.During != nil {
 		m.Go(opts.During)
@@ -1110,7 +1110,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				Target:  roachNodes.RandNode,
 				Stopper: loadDone,
 			}
-			m.Go(ch.Runner(c, m))
+			m.Go(ch.Runner(c, t, m))
 		}
 		if b.Distribution == multiRegion {
 			rampDur = 3 * time.Minute
