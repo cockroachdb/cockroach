@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -294,7 +296,8 @@ func readMysqlCreateTable(
 	input io.Reader,
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
-	startingID, parentID descpb.ID,
+	startingID descpb.ID,
+	parentDB catalog.DatabaseDescriptor,
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
@@ -331,7 +334,7 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := descpb.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals, owner, walltime)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentDB, id, name, i.TableSpec, fks, seqVals, owner, walltime)
 			if err != nil {
 				return nil, err
 			}
@@ -372,7 +375,8 @@ func mysqlTableToCockroach(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	p sql.JobExecContext,
-	parentID, id descpb.ID,
+	parentDB catalog.DatabaseDescriptor,
+	id descpb.ID,
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
@@ -425,7 +429,7 @@ func mysqlTableToCockroach(
 				ctx,
 				seqName,
 				opts,
-				parentID,
+				parentDB.GetID(),
 				keys.PublicSchemaID,
 				id,
 				time,
@@ -441,7 +445,7 @@ func mysqlTableToCockroach(
 				ctx,
 				seqName,
 				opts,
-				parentID,
+				parentDB.GetID(),
 				keys.PublicSchemaID,
 				id,
 				time,
@@ -504,7 +508,10 @@ func mysqlTableToCockroach(
 	if p != nil {
 		semaCtxPtr = p.SemaCtx()
 	}
-	desc, err := MakeTestingSimpleTableDescriptor(ctx, semaCtxPtr, evalCtx.Settings, stmt, parentID, keys.PublicSchemaID, id, fks, time.WallTime)
+	desc, err := MakeSimpleTableDescriptor(
+		ctx, semaCtxPtr, evalCtx.Settings, stmt, parentDB,
+		schemadesc.GetPublicSchema(), id, fks, time.WallTime,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -540,7 +547,12 @@ func mysqlTableToCockroach(
 			}
 
 			d.Table = toTable
-			fkDefs = append(fkDefs, delayedFK{desc, d})
+			fkDefs = append(fkDefs, delayedFK{
+				db:  parentDB,
+				sc:  schemadesc.GetPublicSchema(),
+				tbl: desc,
+				def: d,
+			})
 		}
 	}
 	fks.resolver.tableNameToDesc[desc.Name] = desc
@@ -565,6 +577,8 @@ func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
 }
 
 type delayedFK struct {
+	db  catalog.DatabaseDescriptor
+	sc  catalog.SchemaDescriptor
 	tbl *tabledesc.Mutable
 	def *tree.ForeignKeyConstraintTableDef
 }
@@ -573,8 +587,10 @@ func addDelayedFKs(
 	ctx context.Context, defs []delayedFK, resolver fkResolver, evalCtx *tree.EvalContext,
 ) error {
 	for _, def := range defs {
+		backrefs := map[descpb.ID]*tabledesc.Mutable{}
 		if err := sql.ResolveFK(
-			ctx, nil, &resolver, def.tbl, def.def, map[descpb.ID]*tabledesc.Mutable{}, sql.NewTable,
+			ctx, nil, &resolver, def.db, def.sc, def.tbl, def.def,
+			backrefs, sql.NewTable,
 			tree.ValidationDefault, evalCtx,
 		); err != nil {
 			return err
