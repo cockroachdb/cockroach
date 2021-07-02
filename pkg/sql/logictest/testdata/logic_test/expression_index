@@ -329,6 +329,10 @@ CREATE INDEX err ON other ((t.a + 10))
 statement error column \"crdb_internal_idx_expr\" does not exist
 SELECT * FROM t WHERE crdb_internal_idx_expr > 0
 
+# An inaccessible column cannot be used in a view.
+statement error column \"crdb_internal_idx_expr\" does not exist
+CREATE VIEW v(a) AS SELECT crdb_internal_idx_expr FROM t
+
 statement ok
 CREATE TABLE pk (
   k INT PRIMARY KEY,
