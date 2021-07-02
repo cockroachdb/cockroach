@@ -51,7 +51,7 @@ func runQuitTransfersLeases(
 }
 
 func (q *quitTest) init(ctx context.Context) {
-	q.args = startArgs(
+	q.args = option.StartArgs(
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",               // iterate fast for rebalancing
 		"-a", "--vmodule=store=1,replica=1,replica_proposal=1", // verbosity to troubleshoot drains
 	)
@@ -353,7 +353,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 	// until the process exits.
 	registerTest("signal", "v19.2.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
 		c.Stop(ctx, c.Node(nodeID),
-			roachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
+			option.RoachprodArgOption{"--sig", "15", "--wait"}, // graceful shutdown
 		)
 	})
 
@@ -379,7 +379,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		// before terminating. Otherwise the SIGKILL below will truncate
 		// the log.
 		c.Stop(ctx, c.Node(nodeID),
-			roachprodArgOption{"--sig", "1"},
+			option.RoachprodArgOption{"--sig", "1"},
 		)
 		// We use SIGKILL to terminate nodes here. Of course, an operator
 		// should not do this and instead terminate with SIGTERM even
@@ -394,7 +394,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		// becomes broken, the test wouldn't help identify which one needs
 		// attention.)
 		c.Stop(ctx, c.Node(nodeID),
-			roachprodArgOption{"--sig", "9", "--wait"})
+			option.RoachprodArgOption{"--sig", "9", "--wait"})
 	})
 }
 
@@ -411,7 +411,7 @@ func runQuit(
 		t.Fatal(err)
 	}
 	c.Stop(ctx, c.Node(nodeID),
-		roachprodArgOption{"--sig", "0", "--wait"}, // no shutdown, just wait for exit
+		option.RoachprodArgOption{"--sig", "0", "--wait"}, // no shutdown, just wait for exit
 	)
 	return buf
 }
