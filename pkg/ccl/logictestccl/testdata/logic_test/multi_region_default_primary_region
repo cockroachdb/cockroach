@@ -1,9 +1,10 @@
 # LogicTest: multiregion-9node-3region-3azs
 
-# Test invalid default primary region name.
-
 statement ok
-SET CLUSTER SETTING sql.defaults.primary_region = "invalid-region-name"
+SET CLUSTER SETTING sql.defaults.primary_region = "invalid-region-name";
+SET CLUSTER SETTING sql.multiregion.drop_final_region.enabled = 'off'
+
+# Test invalid default primary region name.
 
 statement error region "invalid-region-name" does not exist
 CREATE DATABASE db
@@ -28,10 +29,25 @@ database  region          primary  zones
 db        ap-southeast-2  true     {ap-az1,ap-az2,ap-az3}
 
 statement ok
-CREATE DATABASE db_explicit_primary_region PRIMARY REGION "us-east-1"
+CREATE DATABASE db_explicit_primary_region PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2"
 
 query TTBT colnames
 SHOW REGIONS FROM DATABASE db_explicit_primary_region
 ----
-database                    region     primary  zones
-db_explicit_primary_region  us-east-1  true     {us-az1,us-az2,us-az3}
+database                    region          primary  zones
+db_explicit_primary_region  us-east-1       true     {us-az1,us-az2,us-az3}
+db_explicit_primary_region  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+
+# Test that we cannot drop the PRIMARY REGION.
+
+statement error databases in this cluster must have at least 1 region
+ALTER DATABASE db DROP REGION "ap-southeast-2"
+
+statement error cannot drop region "us-east-1"
+ALTER DATABASE db_explicit_primary_region DROP REGION "us-east-1"
+
+statement ok
+ALTER DATABASE db_explicit_primary_region DROP REGION "ap-southeast-2"
+
+statement error databases in this cluster must have at least 1 region
+ALTER DATABASE db_explicit_primary_region DROP REGION "us-east-1"
