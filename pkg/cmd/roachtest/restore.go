@@ -285,10 +285,9 @@ func registerRestoreNodeShutdown(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       "restore/nodeShutdown/worker",
-		Owner:      OwnerBulkIO,
-		Cluster:    r.MakeClusterSpec(4),
-		MinVersion: "v21.1.0",
+		Name:    "restore/nodeShutdown/worker",
+		Owner:   OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -300,10 +299,9 @@ func registerRestoreNodeShutdown(r *testRegistryImpl) {
 	})
 
 	r.Add(TestSpec{
-		Name:       "restore/nodeShutdown/coordinator",
-		Owner:      OwnerBulkIO,
-		Cluster:    r.MakeClusterSpec(4),
-		MinVersion: "v21.1.0",
+		Name:    "restore/nodeShutdown/coordinator",
+		Owner:   OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2

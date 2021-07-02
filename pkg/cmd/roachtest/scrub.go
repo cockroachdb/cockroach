@@ -91,6 +91,5 @@ func makeScrubTPCCTest(
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }

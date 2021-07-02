@@ -124,12 +124,11 @@ func registerTPCCOverloadSpec(r *testRegistryImpl, s tpccOLAPSpec) {
 	name := fmt.Sprintf("overload/tpcc_olap/nodes=%d/cpu=%d/w=%d/c=%d",
 		s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
 	r.Add(TestSpec{
-		Name:       name,
-		Owner:      OwnerKV,
-		Cluster:    r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
-		Run:        s.run,
-		MinVersion: "v19.2.0",
-		Timeout:    20 * time.Minute,
+		Name:    name,
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
+		Run:     s.run,
+		Timeout: 20 * time.Minute,
 	})
 }
 

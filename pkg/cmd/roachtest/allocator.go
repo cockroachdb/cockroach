@@ -91,12 +91,11 @@ func registerAllocator(r *testRegistryImpl) {
 		},
 	})
 	r.Add(TestSpec{
-		Name:       `replicate/wide`,
-		Owner:      OwnerKV,
-		Timeout:    10 * time.Minute,
-		Cluster:    r.MakeClusterSpec(9, spec.CPU(1)),
-		MinVersion: "v19.2.0",
-		Run:        runWideReplication,
+		Name:    `replicate/wide`,
+		Owner:   OwnerKV,
+		Timeout: 10 * time.Minute,
+		Cluster: r.MakeClusterSpec(9, spec.CPU(1)),
+		Run:     runWideReplication,
 	})
 }
 

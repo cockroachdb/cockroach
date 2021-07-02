@@ -42,7 +42,6 @@ func registerSchemaChangeRandomLoad(r *testRegistryImpl) {
 			spec.Geo(),
 			spec.Zones(geoZonesStr),
 		),
-		MinVersion: "v20.1.0",
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
@@ -82,10 +81,9 @@ func registerRandomLoadBenchSpec(r *testRegistryImpl, b randomLoadBenchSpec) {
 	name := strings.Join(nameParts, "/")
 
 	r.Add(TestSpec{
-		Name:       name,
-		Owner:      OwnerSQLSchema,
-		Cluster:    r.MakeClusterSpec(b.Nodes),
-		MinVersion: "v20.1.0",
+		Name:    name,
+		Owner:   OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(b.Nodes),
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,

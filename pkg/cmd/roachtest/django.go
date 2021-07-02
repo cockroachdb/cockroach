@@ -215,11 +215,10 @@ func registerDjango(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		MinVersion: "v20.2.0",
-		Name:       "django",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1, spec.CPU(16)),
-		Tags:       []string{`default`, `orm`},
+		Name:    "django",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDjango(ctx, t, c)
 		},

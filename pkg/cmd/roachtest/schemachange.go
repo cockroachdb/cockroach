@@ -321,7 +321,6 @@ func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Dur
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }
 
@@ -338,7 +337,6 @@ func makeSchemaChangeBulkIngestTest(
 		Cluster: r.MakeClusterSpec(numNodes),
 		Timeout: length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
-		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
 			// The payload column will be randomized and thus uncorrelated with the primary key (a, b, c).
@@ -470,7 +468,6 @@ func makeSchemaChangeDuringTPCC(
 				SetupType: usingImport,
 			})
 		},
-		MinVersion: "v19.1.0",
 	}
 }
 

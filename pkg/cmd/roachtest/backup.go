@@ -101,10 +101,9 @@ func registerBackupNodeShutdown(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:      OwnerBulkIO,
-		Cluster:    backupNodeRestartSpec,
-		MinVersion: "v21.1.0",
+		Name:    fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
+		Owner:   OwnerBulkIO,
+		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -122,10 +121,9 @@ func registerBackupNodeShutdown(r *testRegistryImpl) {
 		},
 	})
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:      OwnerBulkIO,
-		Cluster:    backupNodeRestartSpec,
-		MinVersion: "v21.1.0",
+		Name:    fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
+		Owner:   OwnerBulkIO,
+		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -184,10 +182,9 @@ func registerBackup(r *testRegistryImpl) {
 
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:      OwnerBulkIO,
-		Cluster:    backup2TBSpec,
-		MinVersion: "v2.1.0",
+		Name:    fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
+		Owner:   OwnerBulkIO,
+		Cluster: backup2TBSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if local {
@@ -220,10 +217,9 @@ func registerBackup(r *testRegistryImpl) {
 
 	KMSSpec := r.MakeClusterSpec(3)
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
-		Owner:      OwnerBulkIO,
-		Cluster:    KMSSpec,
-		MinVersion: "v20.2.0",
+		Name:    fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
+		Owner:   OwnerBulkIO,
+		Cluster: KMSSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if cloud == spec.GCE {
 				t.Skip("backupKMS roachtest is only configured to run on AWS", "")

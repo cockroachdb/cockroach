@@ -100,10 +100,9 @@ func registerFlowable(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       "flowable",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1),
-		MinVersion: "v19.1.0",
+		Name:    "flowable",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runFlowable(ctx, t, c)
 		},

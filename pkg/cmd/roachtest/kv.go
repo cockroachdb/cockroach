@@ -220,16 +220,10 @@ func registerKV(r *testRegistryImpl) {
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
 		}
 
-		minVersion := "v2.0.0"
-		if opts.encryption {
-			minVersion = "v2.1.0"
-		}
-
 		r.Add(TestSpec{
-			Name:       strings.Join(nameParts, "/"),
-			Owner:      OwnerKV,
-			MinVersion: minVersion,
-			Cluster:    r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
+			Name:    strings.Join(nameParts, "/"),
+			Owner:   OwnerKV,
+			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
@@ -241,10 +235,9 @@ func registerKV(r *testRegistryImpl) {
 func registerKVContention(r *testRegistryImpl) {
 	const nodes = 4
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("kv/contention/nodes=%d", nodes),
-		Owner:      OwnerKV,
-		MinVersion: "v20.1.0",
-		Cluster:    r.MakeClusterSpec(nodes + 1),
+		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(nodes + 1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
@@ -310,10 +303,9 @@ func registerKVContention(r *testRegistryImpl) {
 
 func registerKVQuiescenceDead(r *testRegistryImpl) {
 	r.Add(TestSpec{
-		Name:       "kv/quiescence/nodes=3",
-		Owner:      OwnerKV,
-		Cluster:    r.MakeClusterSpec(4),
-		MinVersion: "v2.1.0",
+		Name:    "kv/quiescence/nodes=3",
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -807,10 +799,9 @@ func registerKVRangeLookups(r *testRegistryImpl) {
 			panic("unexpected")
 		}
 		r.Add(TestSpec{
-			Name:       fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
-			Owner:      OwnerKV,
-			MinVersion: "v19.2.0",
-			Cluster:    r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
+			Owner:   OwnerKV,
+			Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},

@@ -165,10 +165,9 @@ func registerTPCHBenchSpec(r *testRegistryImpl, b tpchBenchSpec) {
 	}
 
 	r.Add(TestSpec{
-		Name:       strings.Join(nameParts, "/"),
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.MakeClusterSpec(numNodes),
-		MinVersion: minVersion,
+		Name:    strings.Join(nameParts, "/"),
+		Owner:   OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},

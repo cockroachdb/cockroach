@@ -49,12 +49,6 @@ type TestSpec struct {
 	// associated cluster expires. The timeout is always truncated to 10m before
 	// the test's cluster expires.
 	Timeout time.Duration
-	// MinVersion indicates the minimum cockroach version that is required for
-	// the test to be run. If MinVersion is less than the version specified
-	// --cockroach-version, Skip will be populated causing the test to be
-	// skipped.
-	MinVersion string
-	minVersion *version.Version
 	// Tags is a set of tags associated with the test that allow grouping
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.

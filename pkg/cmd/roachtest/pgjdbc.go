@@ -190,11 +190,10 @@ func registerPgjdbc(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		MinVersion: "v20.2.0",
-		Name:       "pgjdbc",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1),
-		Tags:       []string{`default`, `driver`},
+		Name:    "pgjdbc",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgjdbc(ctx, t, c)
 		},

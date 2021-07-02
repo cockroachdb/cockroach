@@ -96,11 +96,10 @@ func registerPop(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       "pop",
-		Owner:      OwnerSQLExperience,
-		MinVersion: "v20.2.0",
-		Cluster:    r.MakeClusterSpec(1),
-		Tags:       []string{`default`, `orm`},
-		Run:        runPop,
+		Name:    "pop",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
+		Run:     runPop,
 	})
 }

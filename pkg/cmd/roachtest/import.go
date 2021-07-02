@@ -58,10 +58,9 @@ func registerImportNodeShutdown(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       "import/nodeShutdown/worker",
-		Owner:      OwnerBulkIO,
-		Cluster:    r.MakeClusterSpec(4),
-		MinVersion: "v21.1.0",
+		Name:    "import/nodeShutdown/worker",
+		Owner:   OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx)
@@ -73,10 +72,9 @@ func registerImportNodeShutdown(r *testRegistryImpl) {
 		},
 	})
 	r.Add(TestSpec{
-		Name:       "import/nodeShutdown/coordinator",
-		Owner:      OwnerBulkIO,
-		Cluster:    r.MakeClusterSpec(4),
-		MinVersion: "v21.1.0",
+		Name:    "import/nodeShutdown/coordinator",
+		Owner:   OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx)
@@ -306,8 +304,7 @@ func registerImportMixedVersion(r *testRegistryImpl) {
 		Name:  "import/mixed-versions",
 		Owner: OwnerBulkIO,
 		// Mixed-version support was added in 21.1.
-		MinVersion: "v21.1.0",
-		Cluster:    r.MakeClusterSpec(4),
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {
@@ -348,10 +345,9 @@ func registerImportDecommissioned(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       "import/decommissioned",
-		Owner:      OwnerBulkIO,
-		MinVersion: "v21.1.0",
-		Cluster:    r.MakeClusterSpec(4),
-		Run:        runImportDecommissioned,
+		Name:    "import/decommissioned",
+		Owner:   OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(4),
+		Run:     runImportDecommissioned,
 	})
 }

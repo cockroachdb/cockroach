@@ -129,10 +129,9 @@ func registerRebalanceLoad(r *testRegistryImpl) {
 	concurrency := 128
 
 	r.Add(TestSpec{
-		Name:       `rebalance/by-load/leases`,
-		Owner:      OwnerKV,
-		Cluster:    r.MakeClusterSpec(4), // the last node is just used to generate load
-		MinVersion: "v2.1.0",
+		Name:    `rebalance/by-load/leases`,
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
 				concurrency = 32
@@ -142,10 +141,9 @@ func registerRebalanceLoad(r *testRegistryImpl) {
 		},
 	})
 	r.Add(TestSpec{
-		Name:       `rebalance/by-load/replicas`,
-		Owner:      OwnerKV,
-		Cluster:    r.MakeClusterSpec(7), // the last node is just used to generate load
-		MinVersion: "v2.1.0",
+		Name:    `rebalance/by-load/replicas`,
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
 				concurrency = 32

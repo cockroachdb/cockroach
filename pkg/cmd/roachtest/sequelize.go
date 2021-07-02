@@ -147,11 +147,10 @@ func registerSequelize(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		MinVersion: "v20.2.0",
-		Name:       "sequelize",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1),
-		Tags:       []string{`default`, `orm`},
+		Name:    "sequelize",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequelize(ctx, t, c)
 		},

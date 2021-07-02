@@ -37,10 +37,9 @@ func registerDecommission(r *testRegistryImpl) {
 		duration := time.Hour
 
 		r.Add(TestSpec{
-			Name:       fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Cluster:    r.MakeClusterSpec(4),
+			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
+			Owner:   OwnerKV,
+			Cluster: r.MakeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if local {
 					duration = 5 * time.Minute
@@ -53,11 +52,10 @@ func registerDecommission(r *testRegistryImpl) {
 	{
 		numNodes := 6
 		r.Add(TestSpec{
-			Name:       "decommission/randomized",
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Timeout:    10 * time.Minute,
-			Cluster:    r.MakeClusterSpec(numNodes),
+			Name:    "decommission/randomized",
+			Owner:   OwnerKV,
+			Timeout: 10 * time.Minute,
+			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
@@ -66,10 +64,9 @@ func registerDecommission(r *testRegistryImpl) {
 	{
 		numNodes := 4
 		r.Add(TestSpec{
-			Name:       "decommission/mixed-versions",
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Cluster:    r.MakeClusterSpec(numNodes),
+			Name:    "decommission/mixed-versions",
+			Owner:   OwnerKV,
+			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
 			},

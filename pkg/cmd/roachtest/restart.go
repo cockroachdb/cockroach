@@ -90,7 +90,6 @@ func registerRestart(r *testRegistryImpl) {
 		Owner:   OwnerKV,
 		Cluster: r.MakeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
-		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRestart(ctx, t, c, 2*time.Minute)
 		},

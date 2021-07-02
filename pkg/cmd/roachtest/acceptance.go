@@ -96,7 +96,6 @@ func registerAcceptance(r *testRegistryImpl) {
 			spec.Cluster = r.MakeClusterSpec(numNodes)
 			spec.Skip = tc.skip
 			spec.Name = specTemplate.Name + "/" + tc.name
-			spec.MinVersion = tc.minVersion
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}

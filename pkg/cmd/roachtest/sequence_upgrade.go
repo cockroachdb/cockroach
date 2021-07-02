@@ -20,10 +20,9 @@ import (
 
 func registerSequenceUpgrade(r *testRegistryImpl) {
 	r.Add(TestSpec{
-		Name:       "version/sequence-upgrade",
-		Owner:      OwnerSQLSchema,
-		MinVersion: "v21.1.0",
-		Cluster:    r.MakeClusterSpec(1),
+		Name:    "version/sequence-upgrade",
+		Owner:   OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequenceUpgradeMigration(ctx, t, c)
 		},

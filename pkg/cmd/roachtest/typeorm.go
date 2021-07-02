@@ -173,11 +173,10 @@ func registerTypeORM(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       "typeorm",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1),
-		MinVersion: "v20.2.0",
-		Tags:       []string{`default`, `orm`},
+		Name:    "typeorm",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTypeORM(ctx, t, c)
 		},
