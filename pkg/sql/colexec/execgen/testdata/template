@@ -399,3 +399,46 @@ func frobnicateColumn_typesDOTInterval2_0(col coldata.Vec) {
 }
 ----
 ----
+
+# Don't drop comments.
+template
+package main
+
+func a() {
+  b(true)
+  b(false)
+}
+
+
+// execgen:template<t>
+// execgen:inline
+func b(t bool) int {
+  if t {
+    //gcassert:bce
+  }
+  col[i] = 20
+}
+----
+----
+package main
+
+func a() {
+	b_true()
+	b_false()
+}
+
+// execgen:inline
+const _ = "template_b"
+
+// execgen:inline
+func b_true() int {
+	//gcassert:bce
+	col[i] = 20
+}
+
+// execgen:inline
+func b_false() int {
+	col[i] = 20
+}
+----
+----
