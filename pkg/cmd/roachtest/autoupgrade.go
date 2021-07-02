@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -123,7 +124,7 @@ func registerAutoUpgrade(r registry.Registry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(i))
-			c.Start(ctx, c.Node(i), startArgsDontEncrypt)
+			c.Start(ctx, c.Node(i), option.StartArgsDontEncrypt)
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -145,7 +146,7 @@ func registerAutoUpgrade(r registry.Registry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Node(nodes))
-		c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
+		c.Start(ctx, c.Node(nodes), option.StartArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +189,7 @@ func registerAutoUpgrade(r registry.Registry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, c.Node(nodes-1), startArgsDontEncrypt)
+		c.Start(ctx, c.Node(nodes-1), option.StartArgsDontEncrypt)
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}

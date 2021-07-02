@@ -26,7 +26,7 @@ import (
 func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	skip.WithIssue(t, 58165)
 	args := func(attr string) option.Option {
-		return startArgs(
+		return option.StartArgs(
 			"-a=--attrs="+attr,
 			"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms", // speed up replication
 		)

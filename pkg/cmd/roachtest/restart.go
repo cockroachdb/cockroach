@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -28,7 +29,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=raft_log_queue=3`))
+	c.Start(ctx, crdbNodes, option.StartArgs(`--args=--vmodule=raft_log_queue=3`))
 
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.

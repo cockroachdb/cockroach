@@ -38,7 +38,7 @@ func runConnectionLatencyTest(
 	err = c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
 	require.NoError(t, err)
 
-	err = c.StartE(ctx, startArgs("--secure"))
+	err = c.StartE(ctx, option.StartArgs("--secure"))
 	require.NoError(t, err)
 
 	certsDir := "certs"

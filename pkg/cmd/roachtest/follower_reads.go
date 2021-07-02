@@ -754,7 +754,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	const curVersion = ""
 
 	// Start the cluster at the old version.
-	args := startArgs("--binary=" + uploadVersion(ctx, t, c, c.All(), predecessorVersion))
+	args := option.StartArgs("--binary=" + uploadVersion(ctx, t, c, c.All(), predecessorVersion))
 	c.Start(ctx, c.All(), args)
 	topology := topologySpec{multiRegion: false}
 	data := initFollowerReadsDB(ctx, t, c, topology)

@@ -32,8 +32,8 @@ func registerEngineSwitch(r registry.Registry) {
 		loadNode := c.Node(c.Spec().NodeCount)
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-		pebbleArgs := startArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
-		rocksdbArgs := startArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
+		pebbleArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
+		rocksdbArgs := option.StartArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
 		c.Start(ctx, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
 		if local {

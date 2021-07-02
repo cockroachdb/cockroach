@@ -59,7 +59,7 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt, option.RoachprodArgOption{"--sequential=false"})
 	}
 }
 
