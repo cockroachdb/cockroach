@@ -108,7 +108,7 @@ func registerInterleaved(r registry.Registry) {
 		)
 
 		t.Status("running workload")
-		m := newMonitor(ctx, c, cockroachNodes)
+		m := newMonitor(ctx, t, c, cockroachNodes)
 
 		runLocality := func(node option.NodeListOption, cmd string) {
 			m.Go(func(ctx context.Context) error {

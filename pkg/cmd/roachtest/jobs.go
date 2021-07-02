@@ -43,7 +43,7 @@ func jobSurvivesNodeShutdown(
 
 	jobIDCh := make(chan string, 1)
 
-	m := newMonitor(ctx, c)
+	m := newMonitor(ctx, t, c)
 	m.Go(func(ctx context.Context) error {
 		defer close(jobIDCh)
 		t.Status(`running job`)

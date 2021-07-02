@@ -2381,7 +2381,11 @@ func getDiskUsageInBytes(
 }
 
 type monitor struct {
-	t         test.Test
+	t interface {
+		Fatal(...interface{})
+		Failed() bool
+		WorkerStatus(...interface{})
+	}
 	l         *logger.Logger
 	nodes     string
 	ctx       context.Context
@@ -2390,11 +2394,20 @@ type monitor struct {
 	expDeaths int32 // atomically
 }
 
-func newMonitor(ctx context.Context, ci cluster.Cluster, opts ...option.Option) *monitor {
-	c := ci.(*clusterImpl) // TODO(tbg): pass `t` to `newMonitor` and avoid need for `MakeNodes`
+func newMonitor(
+	ctx context.Context,
+	t interface {
+		Fatal(...interface{})
+		Failed() bool
+		WorkerStatus(...interface{})
+		L() *logger.Logger
+	},
+	c cluster.Cluster,
+	opts ...option.Option,
+) *monitor {
 	m := &monitor{
-		t:     c.t,
-		l:     c.l,
+		t:     t,
+		l:     t.L(),
 		nodes: c.MakeNodes(opts...),
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
@@ -2423,21 +2436,26 @@ var errTestFatal = errors.New("t.Fatal() was called")
 func (m *monitor) Go(fn func(context.Context) error) {
 	m.g.Go(func() (err error) {
 		defer func() {
-			if r := recover(); r != nil {
-				if r != errTestFatal {
-					// Pass any regular panics through.
-					panic(r)
-				}
-				// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
-				// errTestFatal sentinel we transform the panic into an error return so
-				// that the wrapped errgroup cancels itself.
-				err = errTestFatal
+			r := recover()
+			if r == nil {
+				return
 			}
+			rErr, ok := r.(error)
+			if !ok {
+				rErr = errors.Errorf("recovered panic: %v", r)
+			}
+			// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
+			// errTestFatal sentinel we transform the panic into an error return so
+			// that the wrapped errgroup cancels itself. The "panic" will then be
+			// returned by `m.WaitE()`.
+			//
+			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
+			// enables that use case. But it also offers protection against accidental
+			// panics (NPEs and such) which should not bubble up to the runtime.
+			err = rErr
 		}()
-		if impl, ok := m.t.(*testImpl); ok {
-			// Automatically clear the worker status message when the goroutine exits.
-			defer impl.WorkerStatus()
-		}
+		// Automatically clear the worker status message when the goroutine exits.
+		defer m.t.WorkerStatus()
 		return fn(m.ctx)
 	})
 }

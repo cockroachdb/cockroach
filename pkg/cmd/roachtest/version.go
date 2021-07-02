@@ -61,7 +61,7 @@ func registerVersion(r registry.Registry) {
 			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
 		}
 
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m := newMonitor(ctx, t, c, c.Range(1, nodes))
 		for _, cmd := range workloads {
 			cmd := cmd // loop-local copy
 			m.Go(func(ctx context.Context) error {

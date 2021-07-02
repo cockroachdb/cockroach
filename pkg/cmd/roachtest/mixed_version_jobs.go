@@ -51,12 +51,12 @@ type backgroundStepper struct {
 }
 
 // launch spawns the function the background step was initialized with.
-func (s *backgroundStepper) launch(ctx context.Context, _ test.Test, u *versionUpgradeTest) {
+func (s *backgroundStepper) launch(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 	nodes := s.nodes
 	if nodes == nil {
 		nodes = u.c.All()
 	}
-	s.m = newMonitor(ctx, u.c, nodes)
+	s.m = newMonitor(ctx, t, u.c, nodes)
 	_, s.m.cancel = context.WithCancel(ctx)
 	s.m.Go(func(ctx context.Context) error {
 		return s.run(ctx, u)
