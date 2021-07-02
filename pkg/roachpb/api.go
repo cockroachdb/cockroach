@@ -647,9 +647,6 @@ func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // Method implements the Request interface.
-func (*WriteBatchRequest) Method() Method { return WriteBatch }
-
-// Method implements the Request interface.
 func (*ExportRequest) Method() Method { return Export }
 
 // Method implements the Request interface.
@@ -874,12 +871,6 @@ func (lt *LeaseInfoRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
 	shallowCopy := *ccr
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (r *WriteBatchRequest) ShallowCopy() Request {
-	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -1264,7 +1255,6 @@ func (*TransferLeaseRequest) flags() int {
 func (*RecomputeStatsRequest) flags() int                { return isWrite | isAlone }
 func (*ComputeChecksumRequest) flags() int               { return isWrite }
 func (*CheckConsistencyRequest) flags() int              { return isAdmin | isRange }
-func (*WriteBatchRequest) flags() int                    { return isWrite | isRange }
 func (*ExportRequest) flags() int                        { return isRead | isRange | updatesTSCache }
 func (*AdminScatterRequest) flags() int                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRange | isAlone }
