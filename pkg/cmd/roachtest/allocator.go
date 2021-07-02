@@ -64,7 +64,7 @@ func registerAllocator(r registry.Registry) {
 					t.Fatal(err)
 				}
 				defer l.Close()
-				_ = execCmd(ctx, t.L(), roachprod, "ssh", c.MakeNodes(c.Node(node)), "--", cmd)
+				_ = c.RunE(ctx, c.Node(node), cmd)
 			}()
 		}
 
