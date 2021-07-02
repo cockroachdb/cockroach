@@ -1582,16 +1582,6 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	return ch
 }
 
-// loggedCommand runs a command with output redirected to the logs instead of to os.Stdout
-// (which doesn't go anywhere I've been able to find) Don't use this if you're
-// going to call cmd.CombinedOutput or cmd.Output.
-func loggedCommand(ctx context.Context, l *logger.Logger, arg0 string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, arg0, args...)
-	cmd.Stdout = l.Stdout
-	cmd.Stderr = l.Stderr
-	return cmd
-}
-
 // Put a local file to all of the machines in a cluster.
 // Put is DEPRECATED. Use PutE instead.
 func (c *clusterImpl) Put(ctx context.Context, src, dest string, opts ...option.Option) {
