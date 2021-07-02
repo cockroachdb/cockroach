@@ -56,7 +56,7 @@ type Chaos struct {
 // setting off the monitor. The process returns without an error after the chaos
 // duration.
 func (ch *Chaos) Runner(
-	c cluster.Cluster, t test.Test, m *monitorImpl,
+	c cluster.Cluster, t test.Test, m cluster.Monitor,
 ) func(context.Context) error {
 	return func(ctx context.Context) (err error) {
 		l, err := t.L().ChildLogger("CHAOS")
