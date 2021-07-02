@@ -129,6 +129,18 @@ CREATE TABLE err (a INT, INDEX ((a + z)))
 statement error index element expression cannot reference computed columns
 CREATE TABLE err (a INT, comp INT AS (a + 10) STORED, INDEX ((comp + 10)))
 
+# TODO(mgartner): Postgres does not allow unique constraints with expressions,
+# but does allow unique indexes with expressions. We may want to err in this
+# case to be consistent with Postgres. See #65825.
+statement ok
+CREATE TABLE err (a INT, UNIQUE ((a + 10)))
+
+# TODO(mgartner): Postgres does not allow unique constraints with expressions,
+# but does allow unique indexes with expressions. We may want to err in this
+# case to be consistent with Postgres. See #65825.
+statement ok
+ALTER TABLE t ADD CONSTRAINT err UNIQUE ((a + 10))
+
 statement ok
 DROP TABLE t
 
@@ -186,7 +198,7 @@ statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot b
 ALTER TABLE t ALTER COLUMN crdb_internal_idx_expr_4 SET NOT NULL
 
 # Referencing an inaccessible column in a UNIQUE constraint is not allowed.
-statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced by a unique constraint
+statement error column \"crdb_internal_idx_expr_4\" is inaccessible and cannot be referenced
 ALTER TABLE t ADD CONSTRAINT err UNIQUE (crdb_internal_idx_expr_4)
 
 # Referencing an inaccessible column in a computed column expression is not
