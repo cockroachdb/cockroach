@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -30,7 +31,7 @@ const statementTimeout = time.Minute
 func registerTLP(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    "tlp",
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Timeout: time.Minute * 5,
 		Tags:    nil,
 		Cluster: r.MakeClusterSpec(1),

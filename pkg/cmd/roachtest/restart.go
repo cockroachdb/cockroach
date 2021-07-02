@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -87,7 +88,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 func registerRestart(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    "restart/down-for-2m",
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

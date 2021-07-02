@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -130,7 +131,7 @@ func registerRebalanceLoad(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    `rebalance/by-load/leases`,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
@@ -142,7 +143,7 @@ func registerRebalanceLoad(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    `rebalance/by-load/replicas`,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {

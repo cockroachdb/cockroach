@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -59,7 +60,7 @@ func registerImportNodeShutdown(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "import/nodeShutdown/worker",
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -73,7 +74,7 @@ func registerImportNodeShutdown(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    "import/nodeShutdown/coordinator",
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -134,7 +135,7 @@ func registerImportTPCC(r *testRegistryImpl) {
 		timeout := 5 * time.Hour
 		r.Add(TestSpec{
 			Name:    testName,
-			Owner:   OwnerBulkIO,
+			Owner:   registry.OwnerBulkIO,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Timeout: timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -146,7 +147,7 @@ func registerImportTPCC(r *testRegistryImpl) {
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -175,7 +176,7 @@ func registerImportTPCH(r *testRegistryImpl) {
 		item := item
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
-			Owner:   OwnerBulkIO,
+			Owner:   registry.OwnerBulkIO,
 			Cluster: r.MakeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -302,7 +303,7 @@ func runImportMixedVersion(
 func registerImportMixedVersion(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:  "import/mixed-versions",
-		Owner: OwnerBulkIO,
+		Owner: registry.OwnerBulkIO,
 		// Mixed-version support was added in 21.1.
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -346,7 +347,7 @@ func registerImportDecommissioned(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "import/decommissioned",
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
 		Run:     runImportDecommissioned,
 	})

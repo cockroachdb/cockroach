@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -326,7 +327,7 @@ func runJobsMixedVersions(
 func registerJobsMixedVersions(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:  "jobs/mixed-versions",
-		Owner: OwnerBulkIO,
+		Owner: registry.OwnerBulkIO,
 		// Jobs infrastructure was unstable prior to 20.1 in terms of the behavior
 		// of `PAUSE/CANCEL JOB` commands which were best effort and relied on the
 		// job itself to detect the request. These were fixed by introducing new job

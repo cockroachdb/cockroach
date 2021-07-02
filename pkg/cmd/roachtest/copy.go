@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
@@ -174,7 +175,7 @@ func registerCopy(r *testRegistryImpl) {
 		tc := tc
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)

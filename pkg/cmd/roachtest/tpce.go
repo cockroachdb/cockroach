@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
@@ -111,7 +112,7 @@ func registerTPCE(r *testRegistryImpl) {
 		opts := opts
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", opts.customers, opts.nodes),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Tags:    opts.tags,
 			Timeout: opts.timeout,
 			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),

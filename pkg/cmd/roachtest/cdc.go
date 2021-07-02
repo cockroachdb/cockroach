@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -639,7 +640,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 func registerCDC(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:            "cdc/tpcc-1000",
-		Owner:           OwnerCDC,
+		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -654,7 +655,7 @@ func registerCDC(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:            "cdc/tpcc-1000/sink=null",
-		Owner:           OwnerCDC,
+		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
@@ -671,7 +672,7 @@ func registerCDC(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:            "cdc/initial-scan",
-		Owner:           OwnerCDC,
+		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

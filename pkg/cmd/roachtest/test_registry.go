@@ -26,24 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Owner is a valid entry for the Owners field of a roachtest. They should be
-// teams, not individuals.
-type Owner string
-
-// The allowable values of Owner.
-const (
-	OwnerSQLExperience Owner = `sql-experience`
-	OwnerBulkIO        Owner = `bulk-io`
-	OwnerCDC           Owner = `cdc`
-	OwnerKV            Owner = `kv`
-	OwnerMultiRegion   Owner = `multiregion`
-	OwnerServer        Owner = `server`
-	OwnerSQLQueries    Owner = `sql-queries`
-	OwnerSQLSchema     Owner = `sql-schema`
-	OwnerStorage       Owner = `storage`
-)
-
-func ownerToAlias(o Owner) team.Alias {
+func ownerToAlias(o registry.Owner) team.Alias {
 	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
 }
 

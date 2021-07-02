@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -43,7 +44,7 @@ func registerLoadSplits(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// This number was determined experimentally. Often, but not always,
@@ -86,7 +87,7 @@ func registerLoadSplits(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
@@ -106,7 +107,7 @@ func registerLoadSplits(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
@@ -212,7 +213,7 @@ func registerLargeRange(r *testRegistryImpl) {
 	const numNodes = 6
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

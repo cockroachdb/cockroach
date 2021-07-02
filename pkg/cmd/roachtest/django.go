@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -216,7 +217,7 @@ func registerDjango(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "django",
-		Owner:   OwnerSQLExperience,
+		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
 		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

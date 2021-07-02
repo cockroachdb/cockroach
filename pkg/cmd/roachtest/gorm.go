@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
@@ -127,7 +128,7 @@ PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v 2>&1 | %s/bin/go-junit-rep
 
 	r.Add(TestSpec{
 		Name:    "gorm",
-		Owner:   OwnerSQLExperience,
+		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `orm`},
 		Run:     runGORM,

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -102,7 +103,7 @@ func registerBackupNodeShutdown(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -122,7 +123,7 @@ func registerBackupNodeShutdown(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -183,7 +184,7 @@ func registerBackup(r *testRegistryImpl) {
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: backup2TBSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
@@ -218,7 +219,7 @@ func registerBackup(r *testRegistryImpl) {
 	KMSSpec := r.MakeClusterSpec(3)
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: KMSSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if cloud == spec.GCE {
@@ -336,7 +337,7 @@ func registerBackup(r *testRegistryImpl) {
 	// verifies them with a fingerprint.
 	r.Add(TestSpec{
 		Name:    `backupTPCC`,
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

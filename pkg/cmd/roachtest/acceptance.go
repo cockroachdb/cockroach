@@ -15,11 +15,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 func registerAcceptance(r *testRegistryImpl) {
-	testCases := map[Owner][]struct {
+	testCases := map[registry.Owner][]struct {
 		name       string
 		fn         func(ctx context.Context, t test.Test, c cluster.Cluster)
 		skip       string
@@ -27,7 +28,7 @@ func registerAcceptance(r *testRegistryImpl) {
 		numNodes   int
 		timeout    time.Duration
 	}{
-		OwnerKV: {
+		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
 			{name: "event-log", fn: runEventLog},
 			{name: "gossip/peerings", fn: runGossipPeerings},
@@ -58,7 +59,7 @@ func registerAcceptance(r *testRegistryImpl) {
 				timeout:    30 * time.Minute,
 			},
 		},
-		OwnerServer: {
+		registry.OwnerServer: {
 			{name: "build-info", fn: runBuildInfo},
 			{name: "build-analyze", fn: runBuildAnalyze},
 			{name: "cli/node-status", fn: runCLINodeStatus},

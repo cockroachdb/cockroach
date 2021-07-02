@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -131,7 +132,7 @@ func registerCancel(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%s,nodes=%d", queries, numNodes),
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, true /* useDistsql */)
@@ -140,7 +141,7 @@ func registerCancel(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("cancel/tpch/local/queries=%s,nodes=%d", queries, numNodes),
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, false /* useDistsql */)

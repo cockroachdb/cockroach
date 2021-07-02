@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -38,7 +39,7 @@ func registerDecommission(r *testRegistryImpl) {
 
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(4),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if local {
@@ -53,7 +54,7 @@ func registerDecommission(r *testRegistryImpl) {
 		numNodes := 6
 		r.Add(TestSpec{
 			Name:    "decommission/randomized",
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Timeout: 10 * time.Minute,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -65,7 +66,7 @@ func registerDecommission(r *testRegistryImpl) {
 		numNodes := 4
 		r.Add(TestSpec{
 			Name:    "decommission/mixed-versions",
-			Owner:   OwnerKV,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())

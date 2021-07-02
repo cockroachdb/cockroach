@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -90,7 +91,7 @@ func registerKVBenchSpec(r *testRegistryImpl, b kvBenchSpec) {
 		// TODO(andrei): output something to roachperf and start running them
 		// nightly.
 		Tags:    []string{"manual"},
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: nodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
@@ -136,7 +137,7 @@ func verifyTableData(node int, expected [][]int) versionStep {
 func registerSecondaryIndexesMultiVersionCluster(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    "schemachange/secondary-index-multi-version",
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(*t.BuildVersion())

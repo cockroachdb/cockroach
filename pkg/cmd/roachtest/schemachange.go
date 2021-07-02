@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -27,7 +28,7 @@ import (
 func registerSchemaChangeDuringKV(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    `schemachange/during/kv`,
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
@@ -301,7 +302,7 @@ func registerSchemaChangeIndexTPCC100(r *testRegistryImpl) {
 func makeIndexAddTpccTest(spec spec.ClusterSpec, warehouses int, length time.Duration) TestSpec {
 	return TestSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -333,7 +334,7 @@ func makeSchemaChangeBulkIngestTest(
 ) TestSpec {
 	return TestSpec{
 		Name:    "schemachange/bulkingest",
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Timeout: length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
@@ -418,7 +419,7 @@ func makeSchemaChangeDuringTPCC(
 ) TestSpec {
 	return TestSpec{
 		Name:    "schemachange/during/tpcc",
-		Owner:   OwnerSQLSchema,
+		Owner:   registry.OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

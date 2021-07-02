@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -22,7 +23,7 @@ import (
 func registerSchemaChangeMixedVersions(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:  "schemachange/mixed-versions",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// This tests the work done for 20.1 that made schema changes jobs and in
 		// addition prevented making any new schema changes on a mixed cluster in
 		// order to prevent bugs during upgrades.

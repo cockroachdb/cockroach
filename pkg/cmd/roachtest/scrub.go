@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -54,7 +55,7 @@ func makeScrubTPCCTest(
 
 	return TestSpec{
 		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{

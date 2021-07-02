@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -27,7 +28,7 @@ func registerQueue(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/17229",
 		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runQueue(ctx, t, c)

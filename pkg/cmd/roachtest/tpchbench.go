@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
@@ -166,7 +167,7 @@ func registerTPCHBenchSpec(r *testRegistryImpl, b tpchBenchSpec) {
 
 	r.Add(TestSpec{
 		Name:    strings.Join(nameParts, "/"),
-		Owner:   OwnerSQLQueries,
+		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)

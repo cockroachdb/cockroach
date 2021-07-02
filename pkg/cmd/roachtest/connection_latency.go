@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
@@ -96,7 +97,7 @@ func registerConnectionLatencyTest(r *testRegistryImpl) {
 	numNodes := 3
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("connection_latency/nodes=%d", numNodes),
-		Owner:   OwnerSQLExperience,
+		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(numNodes + 1), // Add one for load node.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1)
@@ -110,7 +111,7 @@ func registerConnectionLatencyTest(r *testRegistryImpl) {
 	loadNodes := numZones
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
-		Owner:   OwnerSQLExperience,
+		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones)

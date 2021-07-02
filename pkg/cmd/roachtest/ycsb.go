@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -77,7 +78,7 @@ func registerYCSB(r *testRegistryImpl) {
 			wl, cpus := wl, cpus
 			r.Add(TestSpec{
 				Name:    name,
-				Owner:   OwnerKV,
+				Owner:   registry.OwnerKV,
 				Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -92,7 +93,7 @@ func registerHotSpotSplits(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Owner: OwnerKV,
+		Owner: registry.OwnerKV,
 		// Test OOMs below this version because of scans over the large rows.
 		// No problem in 20.1 thanks to:
 		// https://github.com/cockroachdb/cockroach/pull/45323.
