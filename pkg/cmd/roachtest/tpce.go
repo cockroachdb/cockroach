@@ -48,7 +48,7 @@ func registerTPCE(r registry.Registry) {
 		))
 
 		t.Status("installing docker")
-		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
+		if err := c.Install(ctx, loadNode, "docker"); err != nil {
 			t.Fatal(err)
 		}
 
