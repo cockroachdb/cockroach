@@ -95,7 +95,7 @@ func runConnectionLatencyTest(
 func registerConnectionLatencyTest(r *testRegistryImpl) {
 	// Single region test.
 	numNodes := 3
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("connection_latency/nodes=%d", numNodes),
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(numNodes + 1), // Add one for load node.
@@ -109,7 +109,7 @@ func registerConnectionLatencyTest(r *testRegistryImpl) {
 	numMultiRegionNodes := 9
 	numZones := len(geoZones)
 	loadNodes := numZones
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion", numMultiRegionNodes),
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),

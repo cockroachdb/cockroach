@@ -344,7 +344,7 @@ func registerJepsen(r *testRegistryImpl) {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
-			s := TestSpec{
+			s := registry.TestSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
 				Owner: registry.OwnerKV,

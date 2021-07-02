@@ -173,7 +173,7 @@ func registerCopy(r *testRegistryImpl) {
 
 	for _, tc := range testcases {
 		tc := tc
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(tc.nodes),

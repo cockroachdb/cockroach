@@ -165,7 +165,7 @@ func registerTPCHBenchSpec(r *testRegistryImpl, b tpchBenchSpec) {
 		minVersion = "v19.1.0" // needed for import
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    strings.Join(nameParts, "/"),
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),

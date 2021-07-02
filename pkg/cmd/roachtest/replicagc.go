@@ -26,7 +26,7 @@ import (
 
 func registerReplicaGC(r *testRegistryImpl) {
 	for _, restart := range []bool{true, false} {
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(6),

@@ -638,7 +638,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 func registerCDC(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/tpcc-1000",
 		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -653,7 +653,7 @@ func registerCDC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/tpcc-1000/sink=null",
 		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -670,7 +670,7 @@ func registerCDC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/initial-scan",
 		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -686,7 +686,7 @@ func registerCDC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/sink-chaos",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -702,7 +702,7 @@ func registerCDC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/crdb-chaos",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -720,7 +720,7 @@ func registerCDC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  "cdc/ledger",
 		Owner: `cdc`,
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
@@ -739,7 +739,7 @@ func registerCDC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -781,7 +781,7 @@ func registerCDC(r *testRegistryImpl) {
 			},
 		})
 	*/
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(1),
@@ -790,7 +790,7 @@ func registerCDC(r *testRegistryImpl) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/bank",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4),
@@ -799,7 +799,7 @@ func registerCDC(r *testRegistryImpl) {
 			runCDCBank(ctx, t, c)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:            "cdc/schemareg",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(1),

@@ -212,7 +212,7 @@ func registerVersion(r *testRegistryImpl) {
 	}
 
 	for _, n := range []int{3, 5} {
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("version/mixed/nodes=%d", n),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(n + 1),

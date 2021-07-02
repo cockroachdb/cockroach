@@ -149,7 +149,7 @@ func registerGopg(r *testRegistryImpl) {
 		)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "gopg",
 		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),

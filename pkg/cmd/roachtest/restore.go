@@ -285,7 +285,7 @@ func registerRestoreNodeShutdown(r *testRegistryImpl) {
 		}
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/worker",
 		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
@@ -299,7 +299,7 @@ func registerRestoreNodeShutdown(r *testRegistryImpl) {
 		},
 	})
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/coordinator",
 		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
@@ -381,7 +381,7 @@ func registerRestore(r *testRegistryImpl) {
 			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
 		}
 
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    testName,
 			Owner:   registry.OwnerBulkIO,
 			Cluster: r.MakeClusterSpec(item.nodes, clusterOpts...),

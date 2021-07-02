@@ -91,7 +91,7 @@ func registerHotSpotSplits(r *testRegistryImpl) {
 	numNodes := 4
 	concurrency := 128
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
 		Owner: registry.OwnerKV,
 		// Test OOMs below this version because of scans over the large rows.

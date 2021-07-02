@@ -442,10 +442,12 @@ func testRunnerLogger(
 	return l, teeOpt
 }
 
-func testsToRun(ctx context.Context, r testRegistryImpl, filter *registry.TestFilter) []TestSpec {
+func testsToRun(
+	ctx context.Context, r testRegistryImpl, filter *registry.TestFilter,
+) []registry.TestSpec {
 	tests := r.GetTests(ctx, filter)
 
-	var notSkipped []TestSpec
+	var notSkipped []registry.TestSpec
 	for _, s := range tests {
 		if s.Skip == "" {
 			notSkipped = append(notSkipped, s)

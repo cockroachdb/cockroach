@@ -22,7 +22,7 @@ import (
 )
 
 func registerSchemaChangeInvertedIndex(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "schemachange/invertedindex",
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(5),

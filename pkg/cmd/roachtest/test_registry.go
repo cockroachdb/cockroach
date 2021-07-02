@@ -31,7 +31,7 @@ func ownerToAlias(o registry.Owner) team.Alias {
 }
 
 type testRegistryImpl struct {
-	m            map[string]*TestSpec
+	m            map[string]*registry.TestSpec
 	cloud        string
 	instanceType string // optional
 	zones        string
@@ -49,7 +49,7 @@ func makeTestRegistry(
 		instanceType: instanceType,
 		zones:        zones,
 		preferSSD:    preferSSD,
-		m:            make(map[string]*TestSpec),
+		m:            make(map[string]*registry.TestSpec),
 	}
 	v := buildTag
 	if v == "" {
@@ -66,7 +66,7 @@ func makeTestRegistry(
 }
 
 // Add adds a test to the registry.
-func (r *testRegistryImpl) Add(spec TestSpec) {
+func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
@@ -97,7 +97,7 @@ func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) s
 const testNameRE = "^[a-zA-Z0-9-_=/,]+$"
 
 // prepareSpec validates a spec and does minor massaging of its fields.
-func (r *testRegistryImpl) prepareSpec(spec *TestSpec) error {
+func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if matched, err := regexp.MatchString(testNameRE, spec.Name); err != nil || !matched {
 		return fmt.Errorf("%s: Name must match this regexp: %s", spec.Name, testNameRE)
 	}
@@ -133,10 +133,12 @@ func (r *testRegistryImpl) prepareSpec(spec *TestSpec) error {
 // GetTests returns all the tests that match the given regexp.
 // Skipped tests are included, and tests that don't match their minVersion spec
 // are also included but marked as skipped.
-func (r testRegistryImpl) GetTests(ctx context.Context, filter *registry.TestFilter) []TestSpec {
-	var tests []TestSpec
+func (r testRegistryImpl) GetTests(
+	ctx context.Context, filter *registry.TestFilter,
+) []registry.TestSpec {
+	var tests []registry.TestSpec
 	for _, t := range r.m {
-		if !t.matchOrSkip(filter) {
+		if !t.MatchOrSkip(filter) {
 			continue
 		}
 		tests = append(tests, *t)
@@ -148,7 +150,7 @@ func (r testRegistryImpl) GetTests(ctx context.Context, filter *registry.TestFil
 }
 
 // List lists tests that match one of the filters.
-func (r testRegistryImpl) List(ctx context.Context, filters []string) []TestSpec {
+func (r testRegistryImpl) List(ctx context.Context, filters []string) []registry.TestSpec {
 	filter := registry.NewTestFilter(filters)
 	tests := r.GetTests(ctx, filter)
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })

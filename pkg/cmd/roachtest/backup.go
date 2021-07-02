@@ -101,7 +101,7 @@ func registerBackupNodeShutdown(r *testRegistryImpl) {
 		return importBankData(ctx, rows, t, c)
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
 		Owner:   registry.OwnerBulkIO,
 		Cluster: backupNodeRestartSpec,
@@ -121,7 +121,7 @@ func registerBackupNodeShutdown(r *testRegistryImpl) {
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
 		Owner:   registry.OwnerBulkIO,
 		Cluster: backupNodeRestartSpec,
@@ -182,7 +182,7 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 func registerBackup(r *testRegistryImpl) {
 
 	backup2TBSpec := r.MakeClusterSpec(10)
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
 		Owner:   registry.OwnerBulkIO,
 		Cluster: backup2TBSpec,
@@ -217,7 +217,7 @@ func registerBackup(r *testRegistryImpl) {
 	})
 
 	KMSSpec := r.MakeClusterSpec(3)
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
 		Owner:   registry.OwnerBulkIO,
 		Cluster: KMSSpec,
@@ -335,7 +335,7 @@ func registerBackup(r *testRegistryImpl) {
 	// backupTPCC continuously runs TPCC, takes a full backup after some time,
 	// and incremental after more time. It then restores the two backups and
 	// verifies them with a fingerprint.
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `backupTPCC`,
 		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(3),

@@ -72,7 +72,7 @@ func registerAcceptance(r *testRegistryImpl) {
 		},
 	}
 	tags := []string{"default", "quick"}
-	specTemplate := TestSpec{
+	specTemplate := registry.TestSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
 		// blank issue for the "acceptance" parent test. Make sure to

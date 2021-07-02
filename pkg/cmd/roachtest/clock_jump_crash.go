@@ -132,7 +132,7 @@ func registerClockJumpTests(r *testRegistryImpl) {
 
 	for i := range testCases {
 		tc := testCases[i]
-		s := TestSpec{
+		s := registry.TestSpec{
 			Name:  "clock/jump/" + tc.name,
 			Owner: registry.OwnerKV,
 			// These tests muck with NTP, therefore we don't want the cluster reused

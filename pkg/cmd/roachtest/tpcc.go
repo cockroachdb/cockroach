@@ -298,7 +298,7 @@ func maxSupportedTPCCWarehouses(
 
 func registerTPCC(r *testRegistryImpl) {
 	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16))
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
@@ -307,7 +307,7 @@ func registerTPCC(r *testRegistryImpl) {
 		Tags:    []string{`default`, `release_qualification`},
 		Cluster: headroomSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*TestSpec).Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -319,7 +319,7 @@ func registerTPCC(r *testRegistryImpl) {
 	})
 	mixedHeadroomSpec := r.MakeClusterSpec(5, spec.CPU(16))
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional
 		// node and on a mixed version cluster which runs its long-running
 		// migrations while TPCC runs. It simulates a real production
@@ -334,7 +334,7 @@ func registerTPCC(r *testRegistryImpl) {
 			crdbNodes := c.Range(1, 4)
 			workloadNode := c.Node(5)
 
-			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*TestSpec).Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			if local {
 				headroomWarehouses = 10
@@ -405,7 +405,7 @@ func registerTPCC(r *testRegistryImpl) {
 			).run(ctx, t)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpcc-nowait/nodes=3/w=1",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
@@ -418,7 +418,7 @@ func registerTPCC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "weekly/tpcc/headroom",
 		Owner:   registry.OwnerKV,
 		Tags:    []string{`weekly`},
@@ -536,7 +536,7 @@ func registerTPCC(r *testRegistryImpl) {
 
 		for i := range multiRegionTests {
 			tc := multiRegionTests[i]
-			r.Add(TestSpec{
+			r.Add(registry.TestSpec{
 				Name:  tc.name,
 				Owner: registry.OwnerMultiRegion,
 				// Add an extra node which serves as the workload nodes.
@@ -598,7 +598,7 @@ func registerTPCC(r *testRegistryImpl) {
 		}
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpcc/w=100/nodes=3/chaos=true",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4),
@@ -625,7 +625,7 @@ func registerTPCC(r *testRegistryImpl) {
 			})
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "tpcc/interleaved/nodes=3/cpu=16/w=500",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
@@ -852,7 +852,7 @@ func registerTPCCBenchSpec(r *testRegistryImpl, b tpccBenchSpec) {
 		minVersion = "v19.1.0" // needed for import
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    name,
 		Owner:   registry.OwnerKV,
 		Cluster: nodes,

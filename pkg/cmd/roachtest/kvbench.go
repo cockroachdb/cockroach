@@ -83,7 +83,7 @@ func registerKVBenchSpec(r *testRegistryImpl, b kvBenchSpec) {
 
 	name := strings.Join(nameParts, "/")
 	nodes := r.MakeClusterSpec(b.Nodes+1, opts...)
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name: name,
 		// These tests don't have pass/fail conditions so we don't want to run them
 		// nightly. Currently they're only good for printing the results of a search

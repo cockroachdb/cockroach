@@ -139,7 +139,7 @@ func registerSQLSmith(r *testRegistryImpl) {
 		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
-		until := time.After(t.Spec().(*TestSpec).Timeout / 2)
+		until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
 		done := ctx.Done()
 		for i := 1; ; i++ {
 			if i%10000 == 0 {
@@ -242,7 +242,7 @@ func registerSQLSmith(r *testRegistryImpl) {
 	}
 
 	register := func(setup, setting string) {
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:   registry.OwnerSQLQueries,

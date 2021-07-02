@@ -37,7 +37,7 @@ func registerDecommission(r *testRegistryImpl) {
 		numNodes := 4
 		duration := time.Hour
 
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(4),
@@ -52,7 +52,7 @@ func registerDecommission(r *testRegistryImpl) {
 	}
 	{
 		numNodes := 6
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    "decommission/randomized",
 			Owner:   registry.OwnerKV,
 			Timeout: 10 * time.Minute,
@@ -64,7 +64,7 @@ func registerDecommission(r *testRegistryImpl) {
 	}
 	{
 		numNodes := 4
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    "decommission/mixed-versions",
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(numNodes),

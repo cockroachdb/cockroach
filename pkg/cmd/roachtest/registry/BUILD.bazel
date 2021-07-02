@@ -6,7 +6,13 @@ go_library(
         "filter.go",
         "owners.go",
         "tag.go",
+        "test_spec.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/cmd/roachtest/test",
+    ],
 )

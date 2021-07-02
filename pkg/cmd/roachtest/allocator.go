@@ -75,7 +75,7 @@ func registerAllocator(r *testRegistryImpl) {
 		m.Wait()
 	}
 
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `replicate/up/1to3`,
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(3),
@@ -83,7 +83,7 @@ func registerAllocator(r *testRegistryImpl) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(5),
@@ -91,7 +91,7 @@ func registerAllocator(r *testRegistryImpl) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    `replicate/wide`,
 		Owner:   registry.OwnerKV,
 		Timeout: 10 * time.Minute,

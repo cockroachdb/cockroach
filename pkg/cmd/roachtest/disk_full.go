@@ -23,7 +23,7 @@ import (
 )
 
 func registerDiskFull(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "disk-full",
 		Owner:   registry.OwnerStorage,
 		Cluster: r.MakeClusterSpec(5),

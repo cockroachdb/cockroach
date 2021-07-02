@@ -221,7 +221,7 @@ func registerKV(r *testRegistryImpl) {
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
 		}
 
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    strings.Join(nameParts, "/"),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
@@ -235,7 +235,7 @@ func registerKV(r *testRegistryImpl) {
 
 func registerKVContention(r *testRegistryImpl) {
 	const nodes = 4
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(nodes + 1),
@@ -303,7 +303,7 @@ func registerKVContention(r *testRegistryImpl) {
 }
 
 func registerKVQuiescenceDead(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "kv/quiescence/nodes=3",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4),
@@ -384,7 +384,7 @@ func registerKVQuiescenceDead(r *testRegistryImpl) {
 }
 
 func registerKVGracefulDraining(r *testRegistryImpl) {
-	r.Add(TestSpec{
+	r.Add(registry.TestSpec{
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4),
@@ -600,7 +600,7 @@ func registerKVSplits(r *testRegistryImpl) {
 		{false, 30000, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
 			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
@@ -665,7 +665,7 @@ func registerKVScalability(r *testRegistryImpl) {
 	if false {
 		for _, p := range []int{0, 95} {
 			p := p
-			r.Add(TestSpec{
+			r.Add(registry.TestSpec{
 				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Owner:   registry.OwnerKV,
 				Cluster: r.MakeClusterSpec(7, spec.CPU(8)),
@@ -799,7 +799,7 @@ func registerKVRangeLookups(r *testRegistryImpl) {
 		default:
 			panic("unexpected")
 		}
-		r.Add(TestSpec{
+		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
