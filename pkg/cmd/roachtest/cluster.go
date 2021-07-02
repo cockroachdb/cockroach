@@ -2331,6 +2331,12 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	return nil
 }
 
+func (c *clusterImpl) Monitor(
+	ctx context.Context, t test.Test, opts ...option.Option,
+) cluster.Monitor {
+	return newMonitor(ctx, t, c, opts...)
+}
+
 // getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
 func getDiskUsageInBytes(
 	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int,
@@ -2380,7 +2386,7 @@ func getDiskUsageInBytes(
 	return size * 1024, nil
 }
 
-type monitor struct {
+type monitorImpl struct {
 	t interface {
 		Fatal(...interface{})
 		Failed() bool
@@ -2404,8 +2410,8 @@ func newMonitor(
 	},
 	c cluster.Cluster,
 	opts ...option.Option,
-) *monitor {
-	m := &monitor{
+) *monitorImpl {
+	m := &monitorImpl{
 		t:     t,
 		l:     t.L(),
 		nodes: c.MakeNodes(opts...),
@@ -2417,23 +2423,23 @@ func newMonitor(
 
 // ExpectDeath lets the monitor know that a node is about to be killed, and that
 // this should be ignored.
-func (m *monitor) ExpectDeath() {
+func (m *monitorImpl) ExpectDeath() {
 	m.ExpectDeaths(1)
 }
 
 // ExpectDeaths lets the monitor know that a specific number of nodes are about
 // to be killed, and that they should be ignored.
-func (m *monitor) ExpectDeaths(count int32) {
+func (m *monitorImpl) ExpectDeaths(count int32) {
 	atomic.AddInt32(&m.expDeaths, count)
 }
 
-func (m *monitor) ResetDeaths() {
+func (m *monitorImpl) ResetDeaths() {
 	atomic.StoreInt32(&m.expDeaths, 0)
 }
 
 var errTestFatal = errors.New("t.Fatal() was called")
 
-func (m *monitor) Go(fn func(context.Context) error) {
+func (m *monitorImpl) Go(fn func(context.Context) error) {
 	m.g.Go(func() (err error) {
 		defer func() {
 			r := recover()
@@ -2460,7 +2466,7 @@ func (m *monitor) Go(fn func(context.Context) error) {
 	})
 }
 
-func (m *monitor) WaitE() error {
+func (m *monitorImpl) WaitE() error {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return errors.New("already failed")
@@ -2469,7 +2475,7 @@ func (m *monitor) WaitE() error {
 	return errors.Wrap(m.wait(roachprod, "monitor", m.nodes), "monitor failure")
 }
 
-func (m *monitor) Wait() {
+func (m *monitorImpl) Wait() {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -2482,7 +2488,7 @@ func (m *monitor) Wait() {
 	}
 }
 
-func (m *monitor) wait(args ...string) error {
+func (m *monitorImpl) wait(args ...string) error {
 	// It is surprisingly difficult to get the cancellation semantics exactly
 	// right. We need to watch for the "workers" group (m.g) to finish, or for
 	// the monitor command to emit an unexpected node failure, or for the monitor
