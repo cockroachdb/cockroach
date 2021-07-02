@@ -236,7 +236,7 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 	m.Wait()
 }
 
-func registerNetwork(r *testRegistryImpl) {
+func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 
 	r.Add(registry.TestSpec{

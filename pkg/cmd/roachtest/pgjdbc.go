@@ -25,7 +25,7 @@ var supportedPGJDBCTag = "REL42.2.19"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
 
-func registerPgjdbc(r *testRegistryImpl) {
+func registerPgjdbc(r registry.Registry) {
 	runPgjdbc := func(
 		ctx context.Context,
 		t test.Test,

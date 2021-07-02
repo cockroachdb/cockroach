@@ -85,7 +85,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	}
 }
 
-func registerRestart(r *testRegistryImpl) {
+func registerRestart(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "restart/down-for-2m",
 		Owner:   registry.OwnerKV,

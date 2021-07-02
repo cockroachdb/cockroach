@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerPebble(r *testRegistryImpl) {
+func registerPebble(r registry.Registry) {
 	pebble := os.Getenv("PEBBLE_BIN")
 	if pebble == "" {
 		pebble = "./pebble.linux"

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerTPCDSVec(r *testRegistryImpl) {
+func registerTPCDSVec(r registry.Registry) {
 	const (
 		timeout                         = 5 * time.Minute
 		withStatsSlowerWarningThreshold = 1.25

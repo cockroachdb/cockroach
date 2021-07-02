@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func registerAlterPK(r *testRegistryImpl) {
+func registerAlterPK(r registry.Registry) {
 
 	setupTest := func(ctx context.Context, t test.Test, c cluster.Cluster) (option.NodeListOption, option.NodeListOption) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)

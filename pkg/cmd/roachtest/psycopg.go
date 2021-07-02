@@ -23,7 +23,7 @@ var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d
 var supportedPsycopgTag = "2_8_6"
 
 // This test runs psycopg full test suite against a single cockroach node.
-func registerPsycopg(r *testRegistryImpl) {
+func registerPsycopg(r registry.Registry) {
 	runPsycopg := func(
 		ctx context.Context,
 		t test.Test,

@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerGossip(r *testRegistryImpl) {
+func registerGossip(r registry.Registry) {
 	runGossipChaos := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		args := startArgs("--args=--vmodule=*=1")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())

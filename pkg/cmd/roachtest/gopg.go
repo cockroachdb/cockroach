@@ -30,7 +30,7 @@ var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+
 var gopgSupportedTag = "v10.9.0"
 
 // This test runs gopg full test suite against a single cockroach node.
-func registerGopg(r *testRegistryImpl) {
+func registerGopg(r registry.Registry) {
 	const (
 		destPath        = `/mnt/data1/go-pg/pg`
 		resultsDirPath  = `~/logs/report/gopg-results`

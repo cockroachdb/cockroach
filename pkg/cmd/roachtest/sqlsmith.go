@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerSQLSmith(r *testRegistryImpl) {
+func registerSQLSmith(r registry.Registry) {
 	setups := map[string]sqlsmith.Setup{
 		"empty":       sqlsmith.Setups["empty"],
 		"seed":        sqlsmith.Setups["seed"],

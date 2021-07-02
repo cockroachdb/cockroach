@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerAllocator(r *testRegistryImpl) {
+func registerAllocator(r registry.Registry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 

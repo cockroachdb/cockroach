@@ -220,7 +220,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 		l.Printf("%s\n", strings.Join(s, ", "))
 	}
 }
-func registerRestoreNodeShutdown(r *testRegistryImpl) {
+func registerRestoreNodeShutdown(r registry.Registry) {
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster) (string, error) {
 			t.L().Printf("connecting to gateway")
@@ -353,7 +353,7 @@ func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
 				AS OF SYSTEM TIME '2021-05-21 14:40:22'"`)
 }
 
-func registerRestore(r *testRegistryImpl) {
+func registerRestore(r registry.Registry) {
 	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
 
 	for _, item := range []struct {

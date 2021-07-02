@@ -26,7 +26,7 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func registerEngineSwitch(r *testRegistryImpl) {
+func registerEngineSwitch(r registry.Registry) {
 	runEngineSwitch := func(ctx context.Context, t test.Test, c cluster.Cluster, additionalArgs ...string) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		loadNode := c.Node(c.Spec().NodeCount)

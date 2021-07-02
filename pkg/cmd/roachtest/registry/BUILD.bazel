@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "filter.go",
         "owners.go",
+        "registry_interface.go",
         "tag.go",
         "test_spec.go",
     ],

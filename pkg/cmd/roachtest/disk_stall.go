@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskStalledDetection(r *testRegistryImpl) {
+func registerDiskStalledDetection(r registry.Registry) {
 	for _, affectsLogDir := range []bool{false, true} {
 		for _, affectsDataDir := range []bool{false, true} {
 			// Grab copies of the args because we'll pass them into a closure.

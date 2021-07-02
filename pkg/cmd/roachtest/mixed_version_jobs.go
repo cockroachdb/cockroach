@@ -324,7 +324,7 @@ func runJobsMixedVersions(
 	u.run(ctx, t)
 }
 
-func registerJobsMixedVersions(r *testRegistryImpl) {
+func registerJobsMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "jobs/mixed-versions",
 		Owner: registry.OwnerBulkIO,

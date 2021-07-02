@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerSyncTest(r *testRegistryImpl) {
+func registerSyncTest(r registry.Registry) {
 	const nemesisScript = `#!/usr/bin/env bash
 
 if [[ $1 == "on" ]]; then

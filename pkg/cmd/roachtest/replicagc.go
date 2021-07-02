@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerReplicaGC(r *testRegistryImpl) {
+func registerReplicaGC(r registry.Registry) {
 	for _, restart := range []bool{true, false} {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),

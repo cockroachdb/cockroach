@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func registerNIndexes(r *testRegistryImpl, secondaryIndexes int) {
+func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 	const nodes = 6
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	if cloud == spec.AWS {
@@ -134,11 +134,11 @@ func registerNIndexes(r *testRegistryImpl, secondaryIndexes int) {
 	})
 }
 
-func registerIndexes(r *testRegistryImpl) {
+func registerIndexes(r registry.Registry) {
 	registerNIndexes(r, 2)
 }
 
-func registerIndexesBench(r *testRegistryImpl) {
+func registerIndexesBench(r registry.Registry) {
 	for i := 0; i <= 100; i++ {
 		registerNIndexes(r, i)
 	}

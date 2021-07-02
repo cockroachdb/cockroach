@@ -337,7 +337,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 	}
 }
 
-func registerQuitTransfersLeases(r *testRegistryImpl) {
+func registerQuitTransfersLeases(r registry.Registry) {
 	registerTest := func(name, minver string, method func(context.Context, test.Test, cluster.Cluster, int)) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("transfer-leases/%s", name),
@@ -416,7 +416,7 @@ func runQuit(
 	return buf
 }
 
-func registerQuitAllNodes(r *testRegistryImpl) {
+func registerQuitAllNodes(r registry.Registry) {
 	// This test verifies that 'cockroach quit' can terminate all nodes
 	// in the cluster: normally as long as there's quorum, then with a
 	// short --drain-wait for the remaining nodes under quorum.

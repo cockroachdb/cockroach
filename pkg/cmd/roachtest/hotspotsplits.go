@@ -25,7 +25,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerHotSpotSplits(r *testRegistryImpl) {
+func registerHotSpotSplits(r registry.Registry) {
 	// This test sets up a cluster and runs kv on it with high concurrency and a large block size
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.

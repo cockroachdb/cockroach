@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskFull(r *testRegistryImpl) {
+func registerDiskFull(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "disk-full",
 		Owner:   registry.OwnerStorage,

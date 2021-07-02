@@ -56,7 +56,7 @@ type kvBenchSpec struct {
 	LatencyThresholdMs     float64
 }
 
-func registerKVBenchSpec(r *testRegistryImpl, b kvBenchSpec) {
+func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 	nameParts := []string{
 		"kv0bench",
 		fmt.Sprintf("nodes=%d", b.Nodes),
@@ -99,7 +99,7 @@ func registerKVBenchSpec(r *testRegistryImpl, b kvBenchSpec) {
 	})
 }
 
-func registerKVBench(r *testRegistryImpl) {
+func registerKVBench(r registry.Registry) {
 	specs := []kvBenchSpec{
 		{
 			Nodes:                  5,

@@ -20,7 +20,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func registerInconsistency(r *testRegistryImpl) {
+func registerInconsistency(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "inconsistency",
 		Owner:   registry.OwnerKV,

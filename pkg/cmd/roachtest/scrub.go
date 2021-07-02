@@ -22,18 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerScrubIndexOnlyTPCC(r *testRegistryImpl) {
+func registerScrubIndexOnlyTPCC(r registry.Registry) {
 	// numScrubRuns is set assuming a single SCRUB run (index only) takes ~1 min
 	r.Add(makeScrubTPCCTest(r, 5, 100, 30*time.Minute, "index-only", 20))
 }
 
-func registerScrubAllChecksTPCC(r *testRegistryImpl) {
+func registerScrubAllChecksTPCC(r registry.Registry) {
 	// numScrubRuns is set assuming a single SCRUB run (all checks) takes ~2 min
 	r.Add(makeScrubTPCCTest(r, 5, 100, 30*time.Minute, "all-checks", 10))
 }
 
 func makeScrubTPCCTest(
-	r *testRegistryImpl,
+	r registry.Registry,
 	numNodes, warehouses int,
 	length time.Duration,
 	optionName string,

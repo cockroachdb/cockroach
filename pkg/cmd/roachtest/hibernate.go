@@ -66,7 +66,7 @@ var (
 // This test runs one of hibernate's test suite against a single cockroach
 // node.
 
-func registerHibernate(r *testRegistryImpl, opt hibernateOptions) {
+func registerHibernate(r registry.Registry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
 		t test.Test,

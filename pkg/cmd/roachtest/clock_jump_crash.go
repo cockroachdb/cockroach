@@ -93,7 +93,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func registerClockJumpTests(r *testRegistryImpl) {
+func registerClockJumpTests(r registry.Registry) {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",

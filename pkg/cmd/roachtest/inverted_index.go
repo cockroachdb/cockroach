@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerSchemaChangeInvertedIndex(r *testRegistryImpl) {
+func registerSchemaChangeInvertedIndex(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "schemachange/invertedindex",
 		Owner:   registry.OwnerSQLSchema,

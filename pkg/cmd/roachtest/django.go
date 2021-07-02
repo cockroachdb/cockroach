@@ -27,7 +27,7 @@ var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<
 var djangoSupportedTag = "cockroach-3.2.x"
 var djangoCockroachDBSupportedTag = "3.2.1"
 
-func registerDjango(r *testRegistryImpl) {
+func registerDjango(r registry.Registry) {
 	runDjango := func(
 		ctx context.Context,
 		t test.Test,

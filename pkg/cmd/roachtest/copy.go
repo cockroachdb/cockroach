@@ -26,7 +26,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func registerCopy(r *testRegistryImpl) {
+func registerCopy(r registry.Registry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.

@@ -10,10 +10,12 @@
 
 package main
 
-func registerTests(r *testRegistryImpl) {
+import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+
+func registerTests(r registry.Registry) {
 	// Helpful shell pipeline to generate the list below:
 	//
-	// grep -h -E 'func register[^(]+\(.*testRegistryImpl\) {' pkg/cmd/roachtest/*.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
+	// grep -h -E 'func register[^(]+\(.registry.Registry\) {' pkg/cmd/roachtest/*.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
 
 	registerAcceptance(r)
 	registerActiveRecord(r)
@@ -115,7 +117,7 @@ func registerTests(r *testRegistryImpl) {
 	registerMultiTenantUpgrade(r)
 }
 
-func registerBenchmarks(r *testRegistryImpl) {
+func registerBenchmarks(r registry.Registry) {
 	// Helpful shell pipeline to generate the list below:
 	//
 	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'

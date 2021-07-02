@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerEncryption(r *testRegistryImpl) {
+func registerEncryption(r registry.Registry) {
 	// Note that no workload is run in this roachtest because kv roachtest
 	// ideally runs with encryption turned on to see the performance impact and
 	// to test the correctness of encryption at rest.

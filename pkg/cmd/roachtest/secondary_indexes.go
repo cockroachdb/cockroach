@@ -134,7 +134,7 @@ func verifyTableData(node int, expected [][]int) versionStep {
 	}
 }
 
-func registerSecondaryIndexesMultiVersionCluster(r *testRegistryImpl) {
+func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "schemachange/secondary-index-multi-version",
 		Owner:   registry.OwnerSQLSchema,

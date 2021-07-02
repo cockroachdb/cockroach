@@ -296,7 +296,7 @@ func maxSupportedTPCCWarehouses(
 	return warehouses
 }
 
-func registerTPCC(r *testRegistryImpl) {
+func registerTPCC(r registry.Registry) {
 	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16))
 	r.Add(registry.TestSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
@@ -807,7 +807,7 @@ func (s tpccBenchSpec) startOpts() []option.Option {
 	return opts
 }
 
-func registerTPCCBenchSpec(r *testRegistryImpl, b tpccBenchSpec) {
+func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	nameParts := []string{
 		"tpccbench",
 		fmt.Sprintf("nodes=%d", b.Nodes),
@@ -1245,7 +1245,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	}
 }
 
-func registerTPCCBench(r *testRegistryImpl) {
+func registerTPCCBench(r registry.Registry) {
 	specs := []tpccBenchSpec{
 		{
 			Nodes: 3,

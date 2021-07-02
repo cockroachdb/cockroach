@@ -29,7 +29,7 @@ var activerecordAdapterVersion = "v6.1.2"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
-func registerActiveRecord(r *testRegistryImpl) {
+func registerActiveRecord(r registry.Registry) {
 	runActiveRecord := func(
 		ctx context.Context,
 		t test.Test,
