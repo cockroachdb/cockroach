@@ -1911,3 +1911,38 @@ upsert decimals
       └── projections
            ├── round(upsert_a:22) = upsert_a:22 [as=check1:26]
            └── upsert_b:23[0] > 1 [as=check2:27]
+
+# Regression test for #67100. Do not prune check columns for UPSERTs even if the
+# expression does not reference any mutating columns.
+
+exec-ddl
+CREATE TABLE t67100 (
+  a INT,
+  CHECK (false),
+  CHECK (0 > 1),
+  CHECK (true AND 0 > 1)
+)
+----
+
+build
+UPSERT INTO t67100 VALUES (1)
+----
+upsert t67100
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:4 => a:1
+ │    └── column5:5 => rowid:2
+ ├── check columns: check1:6 check2:7 check3:8
+ └── project
+      ├── columns: check1:6!null check2:7!null check3:8!null column1:4!null column5:5
+      ├── project
+      │    ├── columns: column5:5 column1:4!null
+      │    ├── values
+      │    │    ├── columns: column1:4!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── unique_rowid() [as=column5:5]
+      └── projections
+           ├── false [as=check1:6]
+           ├── 0 > 1 [as=check2:7]
+           └── true AND (0 > 1) [as=check3:8]

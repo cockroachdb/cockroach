@@ -837,9 +837,15 @@ func findRoundingFunction(
 }
 
 // addCheckConstraintCols synthesizes a boolean output column for each check
-// constraint defined on the target table. The mutation operator will report
-// a constraint violation error if the value of the column is false.
-func (mb *mutationBuilder) addCheckConstraintCols() {
+// constraint defined on the target table. The mutation operator will report a
+// constraint violation error if the value of the column is false.
+//
+// Synthesized check columns are not necessary for UPDATE mutations if the
+// columns referenced in the check expression are not being mutated. If isUpdate
+// is true, check columns that do not reference mutation columns are not added
+// to checkColIDs, which allows pruning normalization rules to remove the
+// unnecessary projected column.
+func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
@@ -860,12 +866,11 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 			referencedCols := &opt.ColSet{}
 			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
 
-			// Synthesized check columns are only necessary if the columns
-			// referenced in the check expression are being mutated. If they are
-			// not being mutated, we do not add the newly built column to
-			// checkColIDs. This allows pruning normalization rules to remove
-			// the unnecessary projected column.
-			if referencedCols.Intersects(mutationCols) {
+			// If the mutation is not an UPDATE, track the synthesized check
+			// columns in checkColIDS. If the mutation is an UPDATE, only track
+			// the check columns if the columns referenced in the check
+			// expression are being mutated.
+			if !isUpdate || referencedCols.Intersects(mutationCols) {
 				mb.checkColIDs[i] = scopeCol.id
 			}
 		}
