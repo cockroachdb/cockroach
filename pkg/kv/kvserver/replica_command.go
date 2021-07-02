@@ -2759,9 +2759,6 @@ func (s *Store) relocateReplicas(
 				// Done.
 				return rangeDesc, ctx.Err()
 			}
-			if fn := s.cfg.TestingKnobs.BeforeRelocateOne; fn != nil {
-				fn(ops, leaseTarget, err)
-			}
 
 			opss := [][]roachpb.ReplicationChange{ops}
 			success := true
@@ -2781,6 +2778,10 @@ func (s *Store) relocateReplicas(
 				rangeDesc = *newDesc
 			}
 			if success {
+				if fn := s.cfg.TestingKnobs.OnRelocatedOne; fn != nil {
+					fn(ops, leaseTarget)
+				}
+
 				break
 			}
 		}
