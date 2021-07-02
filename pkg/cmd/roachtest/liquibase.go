@@ -106,11 +106,10 @@ func registerLiquibase(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		MinVersion: "v20.2.0",
-		Name:       "liquibase",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1),
-		Tags:       []string{`default`, `tool`},
+		Name:    "liquibase",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `tool`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLiquibase(ctx, t, c)
 		},

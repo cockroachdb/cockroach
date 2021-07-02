@@ -565,10 +565,9 @@ const tpchVecNodeCount = 3
 
 func registerTPCHVec(r *testRegistryImpl) {
 	r.Add(TestSpec{
-		Name:       "tpchvec/perf",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.MakeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v19.2.0",
+		Name:    "tpchvec/perf",
+		Owner:   OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(false /* disableStatsCreation */), baseTestRun)
 		},
@@ -580,37 +579,33 @@ func registerTPCHVec(r *testRegistryImpl) {
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		// 19.2 version doesn't have disk spilling nor memory monitoring, so
 		// there is no point in running this config on that version.
-		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun)
 		},
 	})
 
 	r.Add(TestSpec{
-		Name:       "tpchvec/smithcmp",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.MakeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v20.1.0",
+		Name:    "tpchvec/smithcmp",
+		Owner:   OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
 		},
 	})
 
 	r.Add(TestSpec{
-		Name:       "tpchvec/perf_no_stats",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.MakeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v20.2.0",
+		Name:    "tpchvec/perf_no_stats",
+		Owner:   OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(true /* disableStatsCreation */), baseTestRun)
 		},
 	})
 
 	r.Add(TestSpec{
-		Name:       "tpchvec/bench",
-		Owner:      OwnerSQLQueries,
-		Cluster:    r.MakeClusterSpec(tpchVecNodeCount),
-		MinVersion: "v20.2.0",
+		Name:    "tpchvec/bench",
+		Owner:   OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Skip: "This config can be used to perform some benchmarking and is not " +
 			"meant to be run on a nightly basis",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

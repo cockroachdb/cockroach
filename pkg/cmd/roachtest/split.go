@@ -42,10 +42,9 @@ func registerLoadSplits(r *testRegistryImpl) {
 	const numNodes = 3
 
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
-		Cluster:    r.MakeClusterSpec(numNodes),
+		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// This number was determined experimentally. Often, but not always,
 			// more splits will happen.
@@ -86,10 +85,9 @@ func registerLoadSplits(r *testRegistryImpl) {
 		},
 	})
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
-		Cluster:    r.MakeClusterSpec(numNodes),
+		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
@@ -107,10 +105,9 @@ func registerLoadSplits(r *testRegistryImpl) {
 		},
 	})
 	r.Add(TestSpec{
-		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
-		Cluster:    r.MakeClusterSpec(numNodes),
+		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
+		Owner:   OwnerKV,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB

@@ -128,22 +128,6 @@ func (r *testRegistryImpl) prepareSpec(spec *TestSpec) error {
 		return fmt.Errorf("%s: must specify a ClusterReusePolicy", spec.Name)
 	}
 
-	if spec.MinVersion != "" {
-		v, err := version.Parse(spec.MinVersion)
-		if err != nil {
-			return fmt.Errorf("%s: unable to parse min-version: %s", spec.Name, err)
-		}
-		if v.PreRelease() != "" {
-			// Specifying a prerelease version as a MinVersion is too confusing
-			// to be useful. The comparison is not straightforward.
-			return fmt.Errorf("invalid version %s, cannot specify a prerelease (-xxx)", v)
-		}
-		// We append "-0" to the min-version spec so that we capture all
-		// prereleases of the specified version. Otherwise, "v2.1.0" would compare
-		// greater than "v2.1.0-alpha.x".
-		spec.minVersion = version.MustParse(spec.MinVersion + "-0")
-	}
-
 	// All tests must have an owner so the release team knows who signs off on
 	// failures and so the github issue poster knows who to assign it to.
 	if spec.Owner == `` {
@@ -172,12 +156,6 @@ func (r testRegistryImpl) GetTests(ctx context.Context, filter *testFilter) []Te
 	for _, t := range r.m {
 		if !t.matchOrSkip(filter) {
 			continue
-		}
-		if t.Skip == "" && t.minVersion != nil {
-			if !r.buildVersion.AtLeast(t.minVersion) {
-				t.Skip = fmt.Sprintf("build-version (%s) < min-version (%s)",
-					r.buildVersion, t.minVersion)
-			}
 		}
 		tests = append(tests, *t)
 	}

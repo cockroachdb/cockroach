@@ -33,10 +33,9 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistryImpl) {
 	//    databases created in 20.1.
 	// TODO (lucy): Remove this test in 21.1.
 	r.Add(TestSpec{
-		Name:       "schemachange/database-version-upgrade",
-		Owner:      OwnerSQLSchema,
-		MinVersion: "v20.2.0",
-		Cluster:    r.MakeClusterSpec(3),
+		Name:    "schemachange/database-version-upgrade",
+		Owner:   OwnerSQLSchema,
+		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, *t.BuildVersion())
 		},

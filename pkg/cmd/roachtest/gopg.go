@@ -149,11 +149,10 @@ func registerGopg(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		Name:       "gopg",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1),
-		MinVersion: "v20.2.0",
-		Tags:       []string{`default`, `orm`},
+		Name:    "gopg",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGopg(ctx, t, c)
 		},

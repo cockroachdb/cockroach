@@ -105,12 +105,11 @@ func registerPebble(r *testRegistryImpl) {
 	for _, size := range []int{64, 1024} {
 		size := size
 		r.Add(TestSpec{
-			Name:       fmt.Sprintf("pebble/ycsb/size=%d", size),
-			Owner:      OwnerStorage,
-			Timeout:    2 * time.Hour,
-			MinVersion: "v20.1.0",
-			Cluster:    r.MakeClusterSpec(5, spec.CPU(16)),
-			Tags:       []string{"pebble"},
+			Name:    fmt.Sprintf("pebble/ycsb/size=%d", size),
+			Owner:   OwnerStorage,
+			Timeout: 2 * time.Hour,
+			Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
+			Tags:    []string{"pebble"},
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				run(ctx, t, c, size)
 			},
