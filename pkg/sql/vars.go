@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1352,6 +1353,27 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatBoolAsPostgresSetting(experimentalStreamReplicationEnabled.Get(sv))
+		},
+	},
+
+	// CockroachDB extension. See experimentalComputedColumnRewrites or
+	// ParseComputedColumnRewrites for a description of the format.
+	`experimental_computed_column_rewrites`: {
+		Hidden:       true,
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_computed_column_rewrites`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			_, err := schemaexpr.ParseComputedColumnRewrites(s)
+			if err != nil {
+				return err
+			}
+			m.SetExperimentalComputedColumnRewrites(s)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.ExperimentalComputedColumnRewrites
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return experimentalComputedColumnRewrites.Get(sv)
 		},
 	},
 }
