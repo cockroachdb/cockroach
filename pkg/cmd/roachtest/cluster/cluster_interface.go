@@ -112,7 +112,7 @@ type Cluster interface {
 	Reset(ctx context.Context) error
 	Reformat(ctx context.Context, node option.NodeListOption, args ...string)
 	Install(
-		ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
+		ctx context.Context, node option.NodeListOption, args ...string,
 	) error
 
 	// Methods whose inclusion on this interface is purely historical.
