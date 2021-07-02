@@ -37,7 +37,7 @@ func registerAllocator(r registry.Registry) {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
-		m := newMonitor(ctx, c, c.Range(1, start))
+		m := newMonitor(ctx, t, c, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
@@ -68,7 +68,7 @@ func registerAllocator(r registry.Registry) {
 			}()
 		}
 
-		m = newMonitor(ctx, c, c.All())
+		m = newMonitor(ctx, t, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
 			return waitForRebalance(ctx, t.L(), db, maxStdDev)

@@ -48,7 +48,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			conn := c.Conn(ctx, 1)
 
 			t.Status("running workload")
-			m := newMonitor(ctx, c, roachNodes)
+			m := newMonitor(ctx, t, c, roachNodes)
 			m.Go(func(ctx context.Context) error {
 				secondary := " --secondary-indexes=" + strconv.Itoa(secondaryIndexes)
 				initCmd := "./workload init indexes" + secondary + " {pgurl:1}"
