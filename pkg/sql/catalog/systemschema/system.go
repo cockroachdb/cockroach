@@ -1773,6 +1773,6 @@ func newCommentPrivilegeDescriptor(
 				Privileges: priv.ToBitField(),
 			},
 		},
-		Version: descpb.OwnerVersion,
+		Version: descpb.Version21_2,
 	}
 }

@@ -100,6 +100,7 @@ func (o oneLevelMapDescGetter) GetDesc(
 		bestEffort,
 		nil, /* dg */ // Not required for self-validation.
 		catalog.ValidationLevelSelfOnly,
+		true, /* shouldRunPostDeserializationChanges */
 	)
 }
 
