@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -106,7 +107,7 @@ func registerPebble(r *testRegistryImpl) {
 		size := size
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("pebble/ycsb/size=%d", size),
-			Owner:   OwnerStorage,
+			Owner:   registry.OwnerStorage,
 			Timeout: 2 * time.Hour,
 			Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
 			Tags:    []string{"pebble"},

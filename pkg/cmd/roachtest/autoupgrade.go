@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
@@ -245,7 +246,7 @@ func registerAutoUpgrade(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    `autoupgrade`,
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			pred, err := PredecessorVersion(*t.BuildVersion())

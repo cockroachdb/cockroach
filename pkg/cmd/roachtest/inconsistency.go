@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	_ "github.com/lib/pq"
 )
@@ -22,7 +23,7 @@ import (
 func registerInconsistency(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    "inconsistency",
-		Owner:   OwnerKV,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(3),
 		Run:     runInconsistency,
 	})

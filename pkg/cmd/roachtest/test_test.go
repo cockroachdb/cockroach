@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const OwnerUnitTest Owner = `unowned`
+const OwnerUnitTest registry.Owner = `unowned`
 
 const defaultParallelism = 10
 

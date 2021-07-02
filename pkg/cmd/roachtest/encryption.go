@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/errors"
 )
@@ -82,7 +83,7 @@ func registerEncryption(r *testRegistryImpl) {
 	for _, n := range []int{1} {
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("encryption/nodes=%d", n),
-			Owner:   OwnerStorage,
+			Owner:   registry.OwnerStorage,
 			Cluster: r.MakeClusterSpec(n),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEncryption(ctx, t, c)

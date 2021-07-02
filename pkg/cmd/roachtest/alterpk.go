@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -170,7 +171,7 @@ func registerAlterPK(r *testRegistryImpl) {
 	}
 	r.Add(TestSpec{
 		Name:  "alterpk-bank",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		Cluster: r.MakeClusterSpec(4),
@@ -178,7 +179,7 @@ func registerAlterPK(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:  "alterpk-tpcc-250",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		Cluster: r.MakeClusterSpec(4, spec.CPU(32)),
@@ -188,7 +189,7 @@ func registerAlterPK(r *testRegistryImpl) {
 	})
 	r.Add(TestSpec{
 		Name:  "alterpk-tpcc-500",
-		Owner: OwnerSQLSchema,
+		Owner: registry.OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),

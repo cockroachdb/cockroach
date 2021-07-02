@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/stretchr/testify/require"
 )
@@ -182,7 +183,7 @@ PGSSLCERT=%s/client.%s.crt PGSSLKEY=%s/client.%s.key PGSSLROOTCERT=%s/ca.crt yar
 
 	r.Add(TestSpec{
 		Name:    "node-postgres",
-		Owner:   OwnerSQLExperience,
+		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

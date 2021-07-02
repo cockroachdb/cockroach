@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -35,7 +36,7 @@ func registerDiskStalledDetection(r *testRegistryImpl) {
 					"disk-stalled/log=%t,data=%t",
 					affectsLogDir, affectsDataDir,
 				),
-				Owner:   OwnerStorage,
+				Owner:   registry.OwnerStorage,
 				Cluster: r.MakeClusterSpec(1),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)

@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
@@ -34,7 +35,7 @@ fi
 	r.Add(TestSpec{
 		Skip:  "#48603: broken on Pebble",
 		Name:  "synctest",
-		Owner: OwnerStorage,
+		Owner: registry.OwnerStorage,
 		// This test sets up a custom file system; we don't want the cluster reused.
 		Cluster: r.MakeClusterSpec(1, spec.ReuseNone()),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

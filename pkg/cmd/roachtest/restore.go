@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -286,7 +287,7 @@ func registerRestoreNodeShutdown(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "restore/nodeShutdown/worker",
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -300,7 +301,7 @@ func registerRestoreNodeShutdown(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "restore/nodeShutdown/coordinator",
-		Owner:   OwnerBulkIO,
+		Owner:   registry.OwnerBulkIO,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -382,7 +383,7 @@ func registerRestore(r *testRegistryImpl) {
 
 		r.Add(TestSpec{
 			Name:    testName,
-			Owner:   OwnerBulkIO,
+			Owner:   registry.OwnerBulkIO,
 			Cluster: r.MakeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

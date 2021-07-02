@@ -16,6 +16,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -191,7 +192,7 @@ func registerPgjdbc(r *testRegistryImpl) {
 
 	r.Add(TestSpec{
 		Name:    "pgjdbc",
-		Owner:   OwnerSQLExperience,
+		Owner:   registry.OwnerSQLExperience,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -244,7 +245,7 @@ func registerSQLSmith(r *testRegistryImpl) {
 		r.Add(TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
-			Owner:   OwnerSQLQueries,
+			Owner:   registry.OwnerSQLQueries,
 			Cluster: r.MakeClusterSpec(4),
 			Timeout: time.Minute * 20,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
