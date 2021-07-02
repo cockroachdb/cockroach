@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
-func registerSchemaChangeMixedVersions(r *testRegistry) {
+func registerSchemaChangeMixedVersions(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:  "schemachange/mixed-versions",
 		Owner: OwnerSQLSchema,
@@ -27,7 +27,7 @@ func registerSchemaChangeMixedVersions(r *testRegistry) {
 		// addition prevented making any new schema changes on a mixed cluster in
 		// order to prevent bugs during upgrades.
 		MinVersion: "v20.1.0",
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 100
 			concurrency := 5

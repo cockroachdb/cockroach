@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-func registerYCSB(r *testRegistry) {
+func registerYCSB(r *testRegistryImpl) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
 	cpusConfigs := []int{8, 32}
 
@@ -78,7 +78,7 @@ func registerYCSB(r *testRegistry) {
 			r.Add(TestSpec{
 				Name:    name,
 				Owner:   OwnerKV,
-				Cluster: r.makeClusterSpec(4, spec.CPU(cpus)),
+				Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},

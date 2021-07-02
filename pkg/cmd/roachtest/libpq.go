@@ -24,7 +24,7 @@ import (
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 var libPQSupportedTag = "v1.10.0"
 
-func registerLibPQ(r *testRegistry) {
+func registerLibPQ(r *testRegistryImpl) {
 	runLibPQ := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -142,7 +142,7 @@ func registerLibPQ(r *testRegistry) {
 		Name:       "lib/pq",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
 		Run:        runLibPQ,
 	})

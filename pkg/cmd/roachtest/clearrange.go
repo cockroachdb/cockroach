@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
-func registerClearRange(r *testRegistry) {
+func registerClearRange(r *testRegistryImpl) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
 		r.Add(TestSpec{
@@ -33,7 +33,7 @@ func registerClearRange(r *testRegistry) {
 			// to <3:30h but it varies.
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: "v19.1.0",
-			Cluster:    r.makeClusterSpec(10, spec.CPU(16)),
+			Cluster:    r.MakeClusterSpec(10, spec.CPU(16)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClearRange(ctx, t, c, checks)
 			},

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerTPCE(r *testRegistry) {
+func registerTPCE(r *testRegistryImpl) {
 	type tpceOptions struct {
 		customers int
 		nodes     int
@@ -114,7 +114,7 @@ func registerTPCE(r *testRegistry) {
 			Owner:   OwnerKV,
 			Tags:    opts.tags,
 			Timeout: opts.timeout,
-			Cluster: r.makeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
+			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runTPCE(ctx, t, c, opts)
 			},

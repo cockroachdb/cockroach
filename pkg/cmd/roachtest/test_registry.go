@@ -48,7 +48,7 @@ func ownerToAlias(o Owner) team.Alias {
 
 const defaultTag = "default"
 
-type testRegistry struct {
+type testRegistryImpl struct {
 	m            map[string]*TestSpec
 	cloud        string
 	instanceType string // optional
@@ -58,11 +58,11 @@ type testRegistry struct {
 	buildVersion version.Version
 }
 
-// makeTestRegistry constructs a testRegistry and configures it with opts.
+// makeTestRegistry constructs a testRegistryImpl and configures it with opts.
 func makeTestRegistry(
 	cloud string, instanceType string, zones string, preferSSD bool,
-) (testRegistry, error) {
-	r := testRegistry{
+) (testRegistryImpl, error) {
+	r := testRegistryImpl{
 		cloud:        cloud,
 		instanceType: instanceType,
 		zones:        zones,
@@ -74,17 +74,17 @@ func makeTestRegistry(
 		var err error
 		v, err = loadBuildVersion()
 		if err != nil {
-			return testRegistry{}, err
+			return testRegistryImpl{}, err
 		}
 	}
 	if err := r.setBuildVersion(v); err != nil {
-		return testRegistry{}, err
+		return testRegistryImpl{}, err
 	}
 	return r, nil
 }
 
 // Add adds a test to the registry.
-func (r *testRegistry) Add(spec TestSpec) {
+func (r *testRegistryImpl) Add(spec TestSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
@@ -96,7 +96,9 @@ func (r *testRegistry) Add(spec TestSpec) {
 	r.m[spec.Name] = &spec
 }
 
-func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
+// MakeClusterSpec makes a cluster spec. It should be used over `spec.MakeClusterSpec`
+// because this method also adds options baked into the registry.
+func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
 	// NB: we need to make sure that `opts` is appended at the end, so that it
 	// overrides the SSD and zones settings from the registry.
 	var finalOpts []spec.Option
@@ -113,7 +115,7 @@ func (r *testRegistry) makeClusterSpec(nodeCount int, opts ...spec.Option) spec.
 const testNameRE = "^[a-zA-Z0-9-_=/,]+$"
 
 // prepareSpec validates a spec and does minor massaging of its fields.
-func (r *testRegistry) prepareSpec(spec *TestSpec) error {
+func (r *testRegistryImpl) prepareSpec(spec *TestSpec) error {
 	if matched, err := regexp.MatchString(testNameRE, spec.Name); err != nil || !matched {
 		return fmt.Errorf("%s: Name must match this regexp: %s", spec.Name, testNameRE)
 	}
@@ -165,7 +167,7 @@ func (r *testRegistry) prepareSpec(spec *TestSpec) error {
 // GetTests returns all the tests that match the given regexp.
 // Skipped tests are included, and tests that don't match their minVersion spec
 // are also included but marked as skipped.
-func (r testRegistry) GetTests(ctx context.Context, filter *testFilter) []TestSpec {
+func (r testRegistryImpl) GetTests(ctx context.Context, filter *testFilter) []TestSpec {
 	var tests []TestSpec
 	for _, t := range r.m {
 		if !t.matchOrSkip(filter) {
@@ -186,14 +188,14 @@ func (r testRegistry) GetTests(ctx context.Context, filter *testFilter) []TestSp
 }
 
 // List lists tests that match one of the filters.
-func (r testRegistry) List(ctx context.Context, filters []string) []TestSpec {
+func (r testRegistryImpl) List(ctx context.Context, filters []string) []TestSpec {
 	filter := newFilter(filters)
 	tests := r.GetTests(ctx, filter)
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }
 
-func (r *testRegistry) setBuildVersion(buildTag string) error {
+func (r *testRegistryImpl) setBuildVersion(buildTag string) error {
 	v, err := version.Parse(buildTag)
 	if err != nil {
 		return err

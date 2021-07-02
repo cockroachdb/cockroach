@@ -85,10 +85,10 @@ func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluste
 	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
 }
 
-func registerBackupNodeShutdown(r *testRegistry) {
+func registerBackupNodeShutdown(r *testRegistryImpl) {
 	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
 	// the backup.
-	backupNodeRestartSpec := r.makeClusterSpec(4)
+	backupNodeRestartSpec := r.MakeClusterSpec(4)
 	loadBackupData := func(ctx context.Context, t test.Test, c cluster.Cluster) string {
 		// This aught to be enough since this isn't a performance test.
 		rows := rows15GiB
@@ -180,9 +180,9 @@ func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time
 	return tick
 }
 
-func registerBackup(r *testRegistry) {
+func registerBackup(r *testRegistryImpl) {
 
-	backup2TBSpec := r.makeClusterSpec(10)
+	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(TestSpec{
 		Name:       fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
 		Owner:      OwnerBulkIO,
@@ -218,7 +218,7 @@ func registerBackup(r *testRegistry) {
 		},
 	})
 
-	KMSSpec := r.makeClusterSpec(3)
+	KMSSpec := r.MakeClusterSpec(3)
 	r.Add(TestSpec{
 		Name:       fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
 		Owner:      OwnerBulkIO,
@@ -341,7 +341,7 @@ func registerBackup(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:    `backupTPCC`,
 		Owner:   OwnerBulkIO,
-		Cluster: r.makeClusterSpec(3),
+		Cluster: r.MakeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Randomize starting with encryption-at-rest enabled.

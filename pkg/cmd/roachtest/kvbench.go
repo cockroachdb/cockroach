@@ -55,7 +55,7 @@ type kvBenchSpec struct {
 	LatencyThresholdMs     float64
 }
 
-func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
+func registerKVBenchSpec(r *testRegistryImpl, b kvBenchSpec) {
 	nameParts := []string{
 		"kv0bench",
 		fmt.Sprintf("nodes=%d", b.Nodes),
@@ -81,7 +81,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 	}
 
 	name := strings.Join(nameParts, "/")
-	nodes := r.makeClusterSpec(b.Nodes+1, opts...)
+	nodes := r.MakeClusterSpec(b.Nodes+1, opts...)
 	r.Add(TestSpec{
 		Name: name,
 		// These tests don't have pass/fail conditions so we don't want to run them
@@ -98,7 +98,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 	})
 }
 
-func registerKVBench(r *testRegistry) {
+func registerKVBench(r *testRegistryImpl) {
 	specs := []kvBenchSpec{
 		{
 			Nodes:                  5,

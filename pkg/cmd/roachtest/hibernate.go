@@ -65,7 +65,7 @@ var (
 // This test runs one of hibernate's test suite against a single cockroach
 // node.
 
-func registerHibernate(r *testRegistry, opt hibernateOptions) {
+func registerHibernate(r *testRegistryImpl, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
 		t test.Test,
@@ -238,7 +238,7 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 		Name:       opt.testName,
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)

@@ -323,7 +323,7 @@ func runJobsMixedVersions(
 	u.run(ctx, t)
 }
 
-func registerJobsMixedVersions(r *testRegistry) {
+func registerJobsMixedVersions(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:  "jobs/mixed-versions",
 		Owner: OwnerBulkIO,
@@ -335,7 +335,7 @@ func registerJobsMixedVersions(r *testRegistry) {
 		// vice versa in order to detect regressions in the work done for 20.1.
 		MinVersion: "v20.1.0",
 		Skip:       "https://github.com/cockroachdb/cockroach/issues/57230",
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {

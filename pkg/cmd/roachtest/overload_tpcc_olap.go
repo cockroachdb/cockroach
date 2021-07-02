@@ -120,20 +120,20 @@ func verifyNodeLiveness(
 	}
 }
 
-func registerTPCCOverloadSpec(r *testRegistry, s tpccOLAPSpec) {
+func registerTPCCOverloadSpec(r *testRegistryImpl, s tpccOLAPSpec) {
 	name := fmt.Sprintf("overload/tpcc_olap/nodes=%d/cpu=%d/w=%d/c=%d",
 		s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
 	r.Add(TestSpec{
 		Name:       name,
 		Owner:      OwnerKV,
-		Cluster:    r.makeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
+		Cluster:    r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
 		Run:        s.run,
 		MinVersion: "v19.2.0",
 		Timeout:    20 * time.Minute,
 	})
 }
 
-func registerOverload(r *testRegistry) {
+func registerOverload(r *testRegistryImpl) {
 	specs := []tpccOLAPSpec{
 		{
 			CPUs:        8,

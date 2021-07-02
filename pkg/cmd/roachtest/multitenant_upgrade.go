@@ -28,11 +28,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func registerMultiTenantUpgrade(r *testRegistry) {
+func registerMultiTenantUpgrade(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:              "multitenant-upgrade",
 		MinVersion:        "v21.1.0",
-		Cluster:           r.makeClusterSpec(2),
+		Cluster:           r.MakeClusterSpec(2),
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

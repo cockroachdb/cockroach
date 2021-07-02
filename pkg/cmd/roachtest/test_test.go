@@ -36,7 +36,7 @@ const OwnerUnitTest Owner = `unowned`
 
 const defaultParallelism = 10
 
-func mkReg(t *testing.T) testRegistry {
+func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
 	r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestRunnerRun(t *testing.T) {
 		Name:    "pass",
 		Owner:   OwnerUnitTest,
 		Run:     func(ctx context.Context, t test.Test, c cluster.Cluster) {},
-		Cluster: r.makeClusterSpec(0),
+		Cluster: r.MakeClusterSpec(0),
 	})
 	r.Add(TestSpec{
 		Name:  "fail",
@@ -102,7 +102,7 @@ func TestRunnerRun(t *testing.T) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatal("failed")
 		},
-		Cluster: r.makeClusterSpec(0),
+		Cluster: r.MakeClusterSpec(0),
 	})
 
 	testCases := []struct {

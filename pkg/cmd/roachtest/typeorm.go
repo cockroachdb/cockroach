@@ -24,7 +24,7 @@ var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)
 var supportedTypeORMRelease = "0.2.32"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
-func registerTypeORM(r *testRegistry) {
+func registerTypeORM(r *testRegistryImpl) {
 	runTypeORM := func(
 		ctx context.Context,
 		t test.Test,
@@ -175,7 +175,7 @@ func registerTypeORM(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "typeorm",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

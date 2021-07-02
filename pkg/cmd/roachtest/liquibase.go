@@ -20,7 +20,7 @@ import (
 var supportedLiquibaseHarnessTag = "liquibase-test-harness-1.0.1"
 
 // This test runs the Liquibase test harness against a single cockroach node.
-func registerLiquibase(r *testRegistry) {
+func registerLiquibase(r *testRegistryImpl) {
 	runLiquibase := func(
 		ctx context.Context,
 		t test.Test,
@@ -109,7 +109,7 @@ func registerLiquibase(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "liquibase",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `tool`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLiquibase(ctx, t, c)

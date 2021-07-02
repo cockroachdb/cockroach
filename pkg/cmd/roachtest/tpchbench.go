@@ -148,7 +148,7 @@ func downloadFile(filename string, url string) (*os.File, error) {
 	return out, err
 }
 
-func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
+func registerTPCHBenchSpec(r *testRegistryImpl, b tpchBenchSpec) {
 	nameParts := []string{
 		"tpchbench",
 		b.benchType,
@@ -167,7 +167,7 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 	r.Add(TestSpec{
 		Name:       strings.Join(nameParts, "/"),
 		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(numNodes),
+		Cluster:    r.MakeClusterSpec(numNodes),
 		MinVersion: minVersion,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
@@ -175,7 +175,7 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 	})
 }
 
-func registerTPCHBench(r *testRegistry) {
+func registerTPCHBench(r *testRegistryImpl) {
 	specs := []tpchBenchSpec{
 		{
 			Nodes:           3,

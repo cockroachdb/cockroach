@@ -23,7 +23,7 @@ import (
 var popReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 var popSupportedTag = "v5.3.3"
 
-func registerPop(r *testRegistry) {
+func registerPop(r *testRegistryImpl) {
 	runPop := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
 			t.Fatal("cannot be run in local mode")
@@ -99,7 +99,7 @@ func registerPop(r *testRegistry) {
 		Name:       "pop",
 		Owner:      OwnerSQLExperience,
 		MinVersion: "v20.2.0",
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run:        runPop,
 	})

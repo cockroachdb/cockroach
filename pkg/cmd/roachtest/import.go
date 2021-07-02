@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerImportNodeShutdown(r *testRegistry) {
+func registerImportNodeShutdown(r *testRegistryImpl) {
 	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
 		startImport := func(c cluster.Cluster) (jobID string, err error) {
 			// partsupp is 11.2 GiB.
@@ -60,7 +60,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "import/nodeShutdown/worker",
 		Owner:      OwnerBulkIO,
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -75,7 +75,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "import/nodeShutdown/coordinator",
 		Owner:      OwnerBulkIO,
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -89,7 +89,7 @@ func registerImportNodeShutdown(r *testRegistry) {
 	})
 }
 
-func registerImportTPCC(r *testRegistry) {
+func registerImportTPCC(r *testRegistryImpl) {
 	runImportTPCC := func(ctx context.Context, t test.Test, c cluster.Cluster, testName string,
 		timeout time.Duration, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
@@ -137,7 +137,7 @@ func registerImportTPCC(r *testRegistry) {
 		r.Add(TestSpec{
 			Name:    testName,
 			Owner:   OwnerBulkIO,
-			Cluster: r.makeClusterSpec(numNodes),
+			Cluster: r.MakeClusterSpec(numNodes),
 			Timeout: timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
@@ -149,7 +149,7 @@ func registerImportTPCC(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 		Owner:   OwnerBulkIO,
-		Cluster: r.makeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
+		Cluster: r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
@@ -158,7 +158,7 @@ func registerImportTPCC(r *testRegistry) {
 	})
 }
 
-func registerImportTPCH(r *testRegistry) {
+func registerImportTPCH(r *testRegistryImpl) {
 	for _, item := range []struct {
 		nodes   int
 		timeout time.Duration
@@ -178,7 +178,7 @@ func registerImportTPCH(r *testRegistry) {
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
 			Owner:   OwnerBulkIO,
-			Cluster: r.makeClusterSpec(item.nodes),
+			Cluster: r.MakeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tick := initBulkJobPerfArtifacts(ctx, t.Name(), item.timeout)
@@ -301,13 +301,13 @@ func runImportMixedVersion(
 	u.run(ctx, t)
 }
 
-func registerImportMixedVersion(r *testRegistry) {
+func registerImportMixedVersion(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:  "import/mixed-versions",
 		Owner: OwnerBulkIO,
 		// Mixed-version support was added in 21.1.
 		MinVersion: "v21.1.0",
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := PredecessorVersion(*t.BuildVersion())
 			if err != nil {
@@ -322,7 +322,7 @@ func registerImportMixedVersion(r *testRegistry) {
 	})
 }
 
-func registerImportDecommissioned(r *testRegistry) {
+func registerImportDecommissioned(r *testRegistryImpl) {
 	runImportDecommissioned := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		warehouses := 100
 		if local {
@@ -351,7 +351,7 @@ func registerImportDecommissioned(r *testRegistry) {
 		Name:       "import/decommissioned",
 		Owner:      OwnerBulkIO,
 		MinVersion: "v21.1.0",
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		Run:        runImportDecommissioned,
 	})
 }

@@ -40,12 +40,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerFollowerReads(r *testRegistry) {
+func registerFollowerReads(r *testRegistryImpl) {
 	register := func(survival survivalGoal, locality localitySetting) {
 		r.Add(TestSpec{
 			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s", survival, locality),
 			Owner:   OwnerKV,
-			Cluster: r.makeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
+			Cluster: r.MakeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Wipe(ctx)
@@ -65,7 +65,7 @@ func registerFollowerReads(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:  "follower-reads/mixed-version/single-region",
 		Owner: OwnerKV,
-		Cluster: r.makeClusterSpec(
+		Cluster: r.MakeClusterSpec(
 			3, /* nodeCount */
 			spec.CPU(2),
 		),

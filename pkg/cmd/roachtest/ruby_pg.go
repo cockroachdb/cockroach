@@ -27,7 +27,7 @@ var rubyPGTestFailureRegex = regexp.MustCompile(`^rspec ./.*# .*`)
 var rubyPGVersion = "v1.2.3"
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
-func registerRubyPG(r *testRegistry) {
+func registerRubyPG(r *testRegistryImpl) {
 	runRubyPGTest := func(
 		ctx context.Context,
 		t test.Test,
@@ -202,7 +202,7 @@ func registerRubyPG(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Name:       "ruby-pg",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRubyPGTest(ctx, t, c)

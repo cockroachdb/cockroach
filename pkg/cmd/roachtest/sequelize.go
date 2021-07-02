@@ -22,7 +22,7 @@ var supportedSequelizeRelease = "v6.0.0-alpha.0"
 
 // This test runs sequelize's full test suite against a single cockroach node.
 
-func registerSequelize(r *testRegistry) {
+func registerSequelize(r *testRegistryImpl) {
 	runSequelize := func(
 		ctx context.Context,
 		t test.Test,
@@ -150,7 +150,7 @@ func registerSequelize(r *testRegistry) {
 		MinVersion: "v20.2.0",
 		Name:       "sequelize",
 		Owner:      OwnerSQLExperience,
-		Cluster:    r.makeClusterSpec(1),
+		Cluster:    r.MakeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequelize(ctx, t, c)

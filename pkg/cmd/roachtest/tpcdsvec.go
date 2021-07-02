@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerTPCDSVec(r *testRegistry) {
+func registerTPCDSVec(r *testRegistryImpl) {
 	const (
 		timeout                         = 5 * time.Minute
 		withStatsSlowerWarningThreshold = 1.25
@@ -174,7 +174,7 @@ func registerTPCDSVec(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "tpcdsvec",
 		Owner:      OwnerSQLQueries,
-		Cluster:    r.makeClusterSpec(3),
+		Cluster:    r.MakeClusterSpec(3),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCDSVec(ctx, t, c)

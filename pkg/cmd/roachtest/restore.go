@@ -219,7 +219,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 		l.Printf("%s\n", strings.Join(s, ", "))
 	}
 }
-func registerRestoreNodeShutdown(r *testRegistry) {
+func registerRestoreNodeShutdown(r *testRegistryImpl) {
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster) (string, error) {
 			t.L().Printf("connecting to gateway")
@@ -287,7 +287,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "restore/nodeShutdown/worker",
 		Owner:      OwnerBulkIO,
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -302,7 +302,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:       "restore/nodeShutdown/coordinator",
 		Owner:      OwnerBulkIO,
-		Cluster:    r.makeClusterSpec(4),
+		Cluster:    r.MakeClusterSpec(4),
 		MinVersion: "v21.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -354,7 +354,7 @@ func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
 				AS OF SYSTEM TIME '2021-05-21 14:40:22'"`)
 }
 
-func registerRestore(r *testRegistry) {
+func registerRestore(r *testRegistryImpl) {
 	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
 
 	for _, item := range []struct {
@@ -385,7 +385,7 @@ func registerRestore(r *testRegistry) {
 		r.Add(TestSpec{
 			Name:    testName,
 			Owner:   OwnerBulkIO,
-			Cluster: r.makeClusterSpec(item.nodes, clusterOpts...),
+			Cluster: r.MakeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// Randomize starting with encryption-at-rest enabled.

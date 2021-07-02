@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerAllocator(r *testRegistry) {
+func registerAllocator(r *testRegistryImpl) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 
@@ -77,7 +77,7 @@ func registerAllocator(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:    `replicate/up/1to3`,
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(3),
+		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
@@ -85,7 +85,7 @@ func registerAllocator(r *testRegistry) {
 	r.Add(TestSpec{
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(5),
+		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
@@ -94,7 +94,7 @@ func registerAllocator(r *testRegistry) {
 		Name:       `replicate/wide`,
 		Owner:      OwnerKV,
 		Timeout:    10 * time.Minute,
-		Cluster:    r.makeClusterSpec(9, spec.CPU(1)),
+		Cluster:    r.MakeClusterSpec(9, spec.CPU(1)),
 		MinVersion: "v19.2.0",
 		Run:        runWideReplication,
 	})

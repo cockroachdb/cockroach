@@ -84,11 +84,11 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	}
 }
 
-func registerRestart(r *testRegistry) {
+func registerRestart(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:    "restart/down-for-2m",
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(3),
+		Cluster: r.MakeClusterSpec(3),
 		// "cockroach workload is only in 19.1+"
 		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

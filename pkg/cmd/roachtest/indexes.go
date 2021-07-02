@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-func registerNIndexes(r *testRegistry, secondaryIndexes int) {
+func registerNIndexes(r *testRegistryImpl, secondaryIndexes int) {
 	const nodes = 6
 	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	if cloud == spec.AWS {
@@ -33,7 +33,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 	r.Add(TestSpec{
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
 		Owner:   OwnerKV,
-		Cluster: r.makeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
+		Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		MinVersion: `v19.1.0`,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -134,11 +134,11 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 	})
 }
 
-func registerIndexes(r *testRegistry) {
+func registerIndexes(r *testRegistryImpl) {
 	registerNIndexes(r, 2)
 }
 
-func registerIndexesBench(r *testRegistry) {
+func registerIndexesBench(r *testRegistryImpl) {
 	for i := 0; i <= 100; i++ {
 		registerNIndexes(r, i)
 	}
