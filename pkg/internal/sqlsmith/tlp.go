@@ -53,6 +53,13 @@ import (
 // If the resulting counts of the two queries are not equal, there is a logical
 // bug.
 func (s *Smither) GenerateTLP() (unpartitioned, partitioned string) {
+	// Set disableImpureFns to true so that generated predicates are immutable.
+	originalDisableImpureFns := s.disableImpureFns
+	s.disableImpureFns = true
+	defer func() {
+		s.disableImpureFns = originalDisableImpureFns
+	}()
+
 	f := tree.NewFmtCtx(tree.FmtParsable)
 
 	table, _, _, cols, ok := s.getSchemaTable()
