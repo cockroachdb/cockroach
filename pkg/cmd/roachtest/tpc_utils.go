@@ -33,7 +33,7 @@ func loadTPCHDataset(
 	t test.Test,
 	c cluster.Cluster,
 	sf int,
-	m *monitorImpl,
+	m cluster.Monitor,
 	roachNodes option.NodeListOption,
 ) error {
 	db := c.Conn(ctx, roachNodes[0])

@@ -89,7 +89,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"hex:016b1202000174786e2d0000000000000000000000000000000000 "+
 		"hex:120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20302a004a00")
 
-	m := newMonitor(ctx, t, c)
+	m := c.NewMonitor(ctx, t)
 	// If the consistency check "fails to fail", the verbose logging will help
 	// determine why.
 	c.Start(ctx, nodes, option.StartArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))

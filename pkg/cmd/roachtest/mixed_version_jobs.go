@@ -47,7 +47,7 @@ type backgroundStepper struct {
 	nodes  option.NodeListOption // nodes to monitor, defaults to c.All()
 
 	// Internal.
-	m *monitorImpl
+	m cluster.Monitor
 }
 
 // launch spawns the function the background step was initialized with.
@@ -56,15 +56,13 @@ func (s *backgroundStepper) launch(ctx context.Context, t test.Test, u *versionU
 	if nodes == nil {
 		nodes = u.c.All()
 	}
-	s.m = newMonitor(ctx, t, u.c, nodes)
-	_, s.m.cancel = context.WithCancel(ctx)
+	s.m = u.c.NewMonitor(ctx, t, nodes)
 	s.m.Go(func(ctx context.Context) error {
 		return s.run(ctx, u)
 	})
 }
 
 func (s *backgroundStepper) wait(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-	s.m.cancel()
 	// We don't care about the workload failing since we only use it to produce a
 	// few `RESTORE` jobs. And indeed workload will fail because it does not
 	// tolerate pausing of its jobs.

@@ -666,7 +666,7 @@ func importTPCCStep(
 		}
 		// Use a monitor so that we fail cleanly if the cluster crashes
 		// during import.
-		m := newMonitor(ctx, t, u.c, crdbNodes)
+		m := u.c.NewMonitor(ctx, t, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
 		})
@@ -685,7 +685,7 @@ func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption)
 
 		// Use a monitor so that we fail cleanly if the cluster crashes
 		// during import.
-		m := newMonitor(ctx, t, u.c, crdbNodes)
+		m := u.c.NewMonitor(ctx, t, crdbNodes)
 		m.Go(func(ctx context.Context) error {
 			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), binary, "workload", "fixtures", "import", "bank",
 				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")

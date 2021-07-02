@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -53,6 +54,7 @@ type Cluster interface {
 	StopE(ctx context.Context, opts ...option.Option) error
 	Stop(ctx context.Context, opts ...option.Option)
 	StopCockroachGracefullyOnNode(ctx context.Context, node int) error
+	NewMonitor(context.Context, test.Test, ...option.Option) Monitor
 
 	// Hostnames and IP addresses of the nodes.
 
