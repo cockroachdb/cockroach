@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package tests
 
 import (
 	"context"
 	"net/http"
-	"os/exec"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -21,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
-func runBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
+// RunBuildInfo is a test that sanity checks the build info.
+func RunBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx)
 
@@ -50,9 +50,9 @@ func runBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
-// runBuildAnalyze performs static analysis on the built binary to
+// RunBuildAnalyze performs static analysis on the built binary to
 // ensure it's built as expected.
-func runBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
+func RunBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	if c.IsLocal() {
 		// This test is linux-specific and needs to be able to install apt
@@ -86,8 +86,7 @@ func runBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.Node(1), "sudo apt-get update")
 	c.Run(ctx, c.Node(1), "sudo apt-get -qqy install pax-utils")
 
-	cmd := exec.CommandContext(ctx, roachprod, "run", c.MakeNodes(c.Node(1)), "scanelf -qe cockroach")
-	output, err := cmd.Output()
+	output, err := c.RunWithBuffer(ctx, t.L(), c.Node(1), "scanelf -qe cockroach")
 	if err != nil {
 		t.Fatalf("scanelf failed: %s", err)
 	}

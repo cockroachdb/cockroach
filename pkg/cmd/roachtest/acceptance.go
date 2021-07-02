@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 )
 
 func registerAcceptance(r registry.Registry) {
@@ -60,8 +61,8 @@ func registerAcceptance(r registry.Registry) {
 			},
 		},
 		registry.OwnerServer: {
-			{name: "build-info", fn: runBuildInfo},
-			{name: "build-analyze", fn: runBuildAnalyze},
+			{name: "build-info", fn: tests.RunBuildInfo},
+			{name: "build-analyze", fn: tests.RunBuildAnalyze},
 			{name: "cli/node-status", fn: runCLINodeStatus},
 			{name: "cluster-init", fn: runClusterInit},
 			{
