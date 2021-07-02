@@ -59,10 +59,10 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 		return nil
 	}
 
-	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "ntp"); err != nil {
+	if err := oi.c.Install(ctx, oi.c.All(), "ntp"); err != nil {
 		return err
 	}
-	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "gcc"); err != nil {
+	if err := oi.c.Install(ctx, oi.c.All(), "gcc"); err != nil {
 		return err
 	}
 	if err := oi.c.RunL(ctx, oi.t.L(), oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {

@@ -1930,10 +1930,13 @@ var _ = (&clusterImpl{}).Reformat
 
 // Install a package in a node
 func (c *clusterImpl) Install(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, args ...string,
+	ctx context.Context, node option.NodeListOption, args ...string,
 ) error {
-	return execCmd(ctx, l,
-		append([]string{roachprod, "install", c.MakeNodes(node), "--"}, args...)...)
+	l, _, err := c.loggerForCmd(node, append([]string{"install"}, args...)...)
+	if err != nil {
+		return err
+	}
+	return c.execRoachprodL(ctx, l, "install", node, args...)
 }
 
 var reOnlyAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9]+`)
@@ -1963,18 +1966,29 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 	return logFile
 }
 
-// RunE runs a command on the specified node, returning an error. The output
-// will be redirected to a file which is logged via the cluster-wide logger in
-// case of an error. Logs will sort chronologically. Failing invocations will
-// have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
+func (c *clusterImpl) loggerForCmd(
+	node option.NodeListOption, args ...string,
+) (*logger.Logger, string, error) {
 	logFile := cmdLogFileName(timeutil.Now(), node, args...)
 
 	// NB: we set no prefix because it's only going to a file anyway.
 	l, err := c.l.ChildLogger(logFile, logger.QuietStderr, logger.QuietStdout)
 	if err != nil {
+		return nil, "", err
+	}
+	return l, logFile, nil
+}
+
+// RunE runs a command on the specified node, returning an error. The output
+// will be redirected to a file which is logged via the cluster-wide logger in
+// case of an error. Logs will sort chronologically. Failing invocations will
+// have an additional marker file with a `.failed` extension instead of `.log`.
+func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
+	l, logFile, err := c.loggerForCmd(node, args...)
+	if err != nil {
 		return err
 	}
+
 	err = c.RunL(ctx, l, node, args...)
 	l.Printf("> result: %+v", err)
 	if err := ctx.Err(); err != nil {
@@ -1999,8 +2013,14 @@ func (c *clusterImpl) RunL(
 	if err := errors.Wrap(ctx.Err(), "cluster.RunL"); err != nil {
 		return err
 	}
+	return c.execRoachprodL(ctx, l, "run", node, args...)
+}
+
+func (c *clusterImpl) execRoachprodL(
+	ctx context.Context, l *logger.Logger, verb string, node option.NodeListOption, args ...string,
+) error {
 	return execCmd(ctx, l,
-		append([]string{roachprod, "run", c.MakeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, verb, c.MakeNodes(node), "--"}, args...)...)
 }
 
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
