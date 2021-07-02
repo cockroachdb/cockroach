@@ -31,7 +31,6 @@ import (
 func registerMultiTenantUpgrade(r *testRegistryImpl) {
 	r.Add(TestSpec{
 		Name:              "multitenant-upgrade",
-		MinVersion:        "v21.1.0",
 		Cluster:           r.MakeClusterSpec(2),
 		Owner:             OwnerKV,
 		NonReleaseBlocker: false,

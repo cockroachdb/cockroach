@@ -235,11 +235,10 @@ func registerHibernate(r *testRegistryImpl, opt hibernateOptions) {
 	}
 
 	r.Add(TestSpec{
-		Name:       opt.testName,
-		Owner:      OwnerSQLExperience,
-		MinVersion: "v20.2.0",
-		Cluster:    r.MakeClusterSpec(1),
-		Tags:       []string{`default`, `orm`},
+		Name:    opt.testName,
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
 		},

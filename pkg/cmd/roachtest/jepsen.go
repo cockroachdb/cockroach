@@ -346,8 +346,7 @@ func registerJepsen(r *testRegistryImpl) {
 			s := TestSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// We don't run jepsen on older releases due to the high rate of flakes.
-				MinVersion: "v20.1.0",
-				Owner:      OwnerKV,
+				Owner: OwnerKV,
 				// The Jepsen tests do funky things to machines, like muck with the
 				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when

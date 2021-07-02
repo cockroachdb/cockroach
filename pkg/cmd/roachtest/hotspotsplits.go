@@ -96,8 +96,7 @@ func registerHotSpotSplits(r *testRegistryImpl) {
 		// Test OOMs below this version because of scans over the large rows.
 		// No problem in 20.1 thanks to:
 		// https://github.com/cockroachdb/cockroach/pull/45323.
-		MinVersion: "v20.1.0",
-		Cluster:    r.MakeClusterSpec(numNodes),
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if local {
 				concurrency = 32

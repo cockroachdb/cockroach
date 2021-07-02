@@ -239,11 +239,10 @@ func registerActiveRecord(r *testRegistryImpl) {
 	}
 
 	r.Add(TestSpec{
-		MinVersion: "v20.2.0",
-		Name:       "activerecord",
-		Owner:      OwnerSQLExperience,
-		Cluster:    r.MakeClusterSpec(1),
-		Tags:       []string{`default`, `orm`},
-		Run:        runActiveRecord,
+		Name:    "activerecord",
+		Owner:   OwnerSQLExperience,
+		Cluster: r.MakeClusterSpec(1),
+		Tags:    []string{`default`, `orm`},
+		Run:     runActiveRecord,
 	})
 }
