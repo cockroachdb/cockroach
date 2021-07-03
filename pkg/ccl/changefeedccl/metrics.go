@@ -148,6 +148,13 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+
+	metaChangefeedFrontierUpdates = metric.Metadata{
+		Name:        "changefeed.frontier_updates",
+		Help:        "Number of change frontier updates across all feeds",
+		Measurement: "Updates",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of changefeeds.
@@ -165,6 +172,8 @@ type Metrics struct {
 	FlushNanos         *metric.Counter
 
 	Running *metric.Gauge
+
+	FrontierUpdates *metric.Counter
 
 	mu struct {
 		syncutil.Mutex
@@ -192,6 +201,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		EmitNanos:          metric.NewCounter(metaChangefeedEmitNanos),
 		FlushNanos:         metric.NewCounter(metaChangefeedFlushNanos),
 		Running:            metric.NewGauge(metaChangefeedRunning),
+		FrontierUpdates:    metric.NewCounter(metaChangefeedFrontierUpdates),
 	}
 	m.mu.resolved = make(map[int]hlc.Timestamp)
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization
