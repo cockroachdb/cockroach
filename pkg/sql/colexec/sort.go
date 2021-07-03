@@ -138,7 +138,7 @@ func (p *allSpooler) spool() {
 	}
 	p.spooled = true
 	for batch := p.Input.Next(); batch.Length() != 0; batch = p.Input.Next() {
-		p.allocator.PerformAppend(p.bufferedTuples.ColVecs(), func() {
+		p.allocator.PerformAppend(p.bufferedTuples, func() {
 			p.bufferedTuples.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 		})
 	}
